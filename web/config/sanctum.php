@@ -37,7 +37,8 @@ return [
     |
     */
 
-    'guard' => ['web'],
+    // Bearer tokens only: a Filament web session must never satisfy device-token abilities.
+    'guard' => [],
 
     /*
     |--------------------------------------------------------------------------
@@ -65,7 +66,10 @@ return [
     |
     */
 
-    'token_prefix' => env('SANCTUM_TOKEN_PREFIX', ''),
+    'token_prefix' => env('SANCTUM_TOKEN_PREFIX', 'eld_'),
+
+    // No SPA cookie flow: drop the /sanctum/csrf-cookie route.
+    'routes' => false,
 
     /*
     |--------------------------------------------------------------------------

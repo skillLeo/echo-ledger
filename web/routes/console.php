@@ -1,8 +1,22 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+declare(strict_types=1);
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+use Illuminate\Support\Facades\Schedule;
+
+/*
+| Shared-hosting scheduler. One cron entry drives everything (web/DEPLOY.md):
+|   * * * * * cd /path/to/web && php artisan schedule:run >> /dev/null 2>&1
+| The queue worker exits when empty; `withoutOverlapping(15)` keeps one worker even if a long sync job runs.
+*/
+
+Schedule::command('queue:work --stop-when-empty --max-time=55 --tries=3 --timeout=900')
+    ->everyMinute()
+    ->withoutOverlapping(15)
+    ->runInBackground();
+
+Schedule::command('stt:reconcile')->everyFiveMinutes()->withoutOverlapping(10);
+
+Schedule::command('model:prune')->daily()->withoutOverlapping(60);
+
+Schedule::command('sanctum:prune-expired --hours=24')->daily();

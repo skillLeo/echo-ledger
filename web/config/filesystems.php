@@ -33,8 +33,16 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            'serve' => true,
+            'serve' => false,
             'throw' => false,
+            'report' => false,
+        ],
+
+        // Encrypted recordings + upload parts. Never served directly.
+        'recordings' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/recordings'),
+            'throw' => true,
             'report' => false,
         ],
 

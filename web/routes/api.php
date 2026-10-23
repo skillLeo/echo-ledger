@@ -1,8 +1,55 @@
 <?php
 
-use Illuminate\Http\Request;
+declare(strict_types=1);
+
+use App\Http\Controllers\Api\ConfigController;
+use App\Http\Controllers\Api\DeviceController;
+use App\Http\Controllers\Api\LibraryController;
+use App\Http\Controllers\Api\RecordingController;
+use App\Http\Controllers\Api\SessionController;
+use App\Http\Controllers\Api\SttTokenController;
+use App\Http\Controllers\Api\SttWebhookController;
+use App\Http\Middleware\TouchDevice;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
+/*
+| EchoLedger REST API v1 — contract: docs/API.md.
+| Every route except pairing, signed audio and provider webhooks requires a device bearer token + ability.
+*/
+
+Route::post('devices/register', [DeviceController::class, 'register'])
+    ->middleware('throttle:pairing')->name('api.devices.register');
+
+Route::post('webhooks/stt/{provider}', SttWebhookController::class)
+    ->middleware('throttle:webhooks')->name('api.webhooks.stt');
+
+Route::get('recordings/{recording}/audio', [RecordingController::class, 'audio'])
+    ->middleware(['signed', 'throttle:device'])->name('api.recordings.audio');
+
+Route::middleware(['auth:sanctum', TouchDevice::class, 'throttle:device'])->group(function (): void {
+    Route::post('devices/rotate-token', [DeviceController::class, 'rotateToken'])->name('api.devices.rotate');
+
+    Route::get('config', [ConfigController::class, 'show'])->middleware('abilities:config:read')->name('api.config');
+    Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
+
+    Route::post('stt/token', SttTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token'])->name('api.stt.token');
+
+    Route::middleware('abilities:sessions:write')->group(function (): void {
+        Route::post('sessions', [SessionController::class, 'store'])->name('api.sessions.store');
+        Route::post('sessions/{id}/recordings', [SessionController::class, 'addRecording'])->name('api.sessions.recordings');
+        Route::post('sessions/{id}/transcripts', [SessionController::class, 'storeTranscript'])->name('api.sessions.transcripts');
+        Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->name('api.sessions.destroy');
+    });
+
+    Route::middleware(['abilities:recordings:upload', 'throttle:uploads'])->group(function (): void {
+        Route::get('recordings/{id}', [RecordingController::class, 'show'])->name('api.recordings.show');
+        Route::post('recordings/{id}/chunks', [RecordingController::class, 'chunk'])->name('api.recordings.chunks');
+        Route::post('recordings/{id}/complete', [RecordingController::class, 'complete'])->name('api.recordings.complete');
+    });
+
+    Route::middleware('abilities:library:read')->group(function (): void {
+        Route::get('library', [LibraryController::class, 'index'])->name('api.library');
+        Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');
+        Route::get('transcripts/{id}', [LibraryController::class, 'transcript'])->name('api.transcripts.show');
+    });
+});
