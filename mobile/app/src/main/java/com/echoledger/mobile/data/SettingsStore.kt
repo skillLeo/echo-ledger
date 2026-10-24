@@ -24,7 +24,9 @@ data class AppSettings(
     val captionsEnabled: Boolean = true,
     val consentAcknowledged: Boolean = false,
     val clientId: String? = null,
-    val micSource: String = "voice_communication"
+    val micSource: String = "voice_communication",
+    /** Require a fingerprint/face/PIN unlock when the app is opened. */
+    val appLockEnabled: Boolean = false
 ) {
     val paired: Boolean get() = serverUrl != null && deviceId != null
 }

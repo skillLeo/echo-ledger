@@ -1,67 +1,155 @@
 package com.echoledger.mobile.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
 
-/** Source device label — always icon + text. */
+/** Source device label — always icon + text, as a soft tinted chip. */
 @Composable
 fun SourceDeviceBadge(device: SourceDevice, label: String? = null) {
-    Badge(label ?: device.label, device.tint()) {
-        Icon(device.icon(), contentDescription = null, tint = device.tint(), modifier = Modifier.size(14.dp))
+    Chip(label ?: device.label, device.tint(), filled = true) {
+        Icon(device.icon(), contentDescription = null, tint = device.tint(), modifier = Modifier.size(13.dp))
     }
 }
 
 @Composable
 fun SourceAppBadge(app: SourceApp, label: String? = null) {
-    Badge(label ?: app.label, Brand.Muted) {
-        Icon(app.icon(), contentDescription = null, tint = Brand.Muted, modifier = Modifier.size(14.dp))
+    Chip(label ?: app.label, Brand.Muted, filled = false) {
+        Icon(app.icon(), contentDescription = null, tint = Brand.Muted, modifier = Modifier.size(13.dp))
     }
 }
 
 @Composable
-private fun Badge(text: String, color: Color, icon: @Composable () -> Unit) {
-    Surface(shape = RoundedCornerShape(50), color = Color.Transparent, border = BorderStroke(1.dp, color.copy(alpha = 0.35f))) {
+private fun Chip(text: String, color: Color, filled: Boolean, icon: @Composable () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = if (filled) color.copy(alpha = 0.14f) else Color.Transparent,
+        border = if (filled) null else BorderStroke(1.dp, color.copy(alpha = 0.30f))
+    ) {
         Row(
-            Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             icon()
-            Text(text, color = color, fontSize = 12.sp)
+            Text(text, color = color, fontSize = 12.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
 
+/** Raised card with a soft shadow and hairline border — the premium container used across the app. */
 @Composable
 fun SectionCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Brand.Surface),
+    Surface(
+        modifier = modifier.fillMaxWidth().shadow(
+            10.dp,
+            RoundedCornerShape(18.dp),
+            clip = false,
+            ambientColor = Color.Black,
+            spotColor = Color.Black
+        ),
+        shape = RoundedCornerShape(18.dp),
+        color = Brand.Surface,
         border = BorderStroke(1.dp, Brand.Border)
     ) {
         Column(Modifier.padding(PaddingValues(16.dp)), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+    }
+}
+
+/** Round source avatar with the source icon over its accent tint — the visual anchor of a library row. */
+@Composable
+fun SourceAvatar(device: SourceDevice, app: SourceApp, size: Int = 44) {
+    val accent = device.tint()
+    Box(
+        Modifier.size(size.dp).clip(RoundedCornerShape((size / 3).dp))
+            .background(accent.copy(alpha = 0.16f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(app.icon(), contentDescription = null, tint = accent, modifier = Modifier.size((size * 0.45f).dp))
+    }
+}
+
+/** Large page title with an optional trailing action, consistent across screens. */
+@Composable
+fun ScreenHeader(title: String, subtitle: String? = null, trailing: (@Composable () -> Unit)? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Brand.Text, letterSpacing = (-0.5).sp)
+            subtitle?.let { Text(it, color = Brand.Muted, fontSize = 13.sp) }
+        }
+        trailing?.invoke()
+    }
+}
+
+/** Centered empty/placeholder state with an icon in a soft circle. */
+@Composable
+fun EmptyState(icon: ImageVector, title: String, body: String? = null, modifier: Modifier = Modifier) {
+    Column(
+        modifier.fillMaxWidth().padding(top = 60.dp, start = 32.dp, end = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Box(Modifier.size(64.dp).clip(CircleShape).background(Brand.SurfaceAlt), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = Brand.Faint, modifier = Modifier.size(28.dp))
+        }
+        Text(title, color = Brand.Text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        body?.let {
+            Text(
+                it,
+                color = Brand.Muted,
+                fontSize = 13.sp,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        }
+    }
+}
+
+/** Full-width gradient primary button (the app's single strong call to action). */
+@Composable
+fun GradientButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, icon: ImageVector? = null) {
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(52.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (enabled) Brand.Gradient else androidx.compose.ui.graphics.SolidColor(Brand.SurfaceAlt))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            icon?.let {
+                Icon(it, contentDescription = null, tint = if (enabled) Color.White else Brand.Faint, modifier = Modifier.size(20.dp))
+            }
+            Text(text, color = if (enabled) Color.White else Brand.Faint, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        }
     }
 }
 

@@ -33,11 +33,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -218,14 +220,33 @@ fun PairingScreen(vm: MainViewModel) {
 fun LibraryScreen(vm: MainViewModel, onOpen: (LibraryItem) -> Unit) {
     val items by vm.library.collectAsState()
     var filter by remember { mutableStateOf<SourceDevice?>(null) }
-    val visible = items.filter { !it.deleted && (filter == null || SourceDevice.from(it.sourceDevice) == filter) }
+    var query by remember { mutableStateOf("") }
+    val q = query.trim().lowercase()
+    val visible = items.filter {
+        !it.deleted &&
+            (filter == null || SourceDevice.from(it.sourceDevice) == filter) &&
+            (
+                q.isEmpty() ||
+                    listOfNotNull(it.title, it.transcript?.preview, it.client?.name, SourceApp.from(it.sourceApp).label).any { s ->
+                        s.lowercase().contains(q)
+                    }
+                )
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Library", fontSize = 24.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, contentDescription = "Sync") }
+        Spacer(Modifier.height(8.dp))
+        ScreenHeader("Library", "Recordings from your phone, computer and the web") {
+            IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, contentDescription = "Sync", tint = Brand.Muted) }
         }
-        Text("Recordings from this phone, your computer and the web.", color = Brand.Muted, fontSize = 13.sp)
-        Row(Modifier.padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = { Text("Search transcripts and titles", color = Brand.Faint) },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Brand.Faint) },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+        )
+        Row(Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text("All") })
             SourceDevice.entries.forEach { d ->
                 FilterChip(selected = filter == d, onClick = {
@@ -234,7 +255,17 @@ fun LibraryScreen(vm: MainViewModel, onOpen: (LibraryItem) -> Unit) {
             }
         }
         if (visible.isEmpty()) {
-            Text("No recordings yet.", color = Brand.Muted, modifier = Modifier.padding(top = 40.dp).align(Alignment.CenterHorizontally))
+            EmptyState(
+                icon = Icons.AutoMirrored.Outlined.LibraryBooks,
+                title = if (q.isNotEmpty() || filter != null) "Nothing matches" else "No recordings yet",
+                body = if (q.isNotEmpty() ||
+                    filter != null
+                ) {
+                    "Try a different search or filter."
+                } else {
+                    "Calls, meetings and voice notes you capture will appear here."
+                }
+            )
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(visible, key = { it.id }) { item -> LibraryRow(item) { onOpen(item) } }
@@ -246,19 +277,46 @@ fun LibraryScreen(vm: MainViewModel, onOpen: (LibraryItem) -> Unit) {
 @Composable
 private fun LibraryRow(item: LibraryItem, onClick: () -> Unit) {
     SectionCard(Modifier.clickable(onClick = onClick)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            SourceAvatar(SourceDevice.from(item.sourceDevice), SourceApp.from(item.sourceApp))
+            Column(Modifier.weight(1f)) {
+                Text(item.title ?: "Untitled", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1)
+                Text(
+                    listOfNotNull(
+                        formatWhen(item.startedAt),
+                        formatDuration(item.durationMs).ifEmpty {
+                            null
+                        },
+                        item.client?.name
+                    ).joinToString(" · "),
+                    color = Brand.Muted,
+                    fontSize = 12.sp,
+                    maxLines = 1
+                )
+            }
+            StatusDot(item.status, item.transcript?.finalStatus)
+        }
+        item.transcript?.preview?.let {
+            Text(it, color = Brand.Muted, fontSize = 13.sp, maxLines = 2, lineHeight = 18.sp)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             SourceDeviceBadge(SourceDevice.from(item.sourceDevice), item.sourceDeviceLabel)
             SourceAppBadge(SourceApp.from(item.sourceApp), item.sourceAppLabel)
-            Spacer(Modifier.weight(1f))
-            Text(formatDuration(item.durationMs), color = Brand.Muted, fontSize = 12.sp)
         }
-        Text(item.title ?: "Untitled", fontWeight = FontWeight.SemiBold)
-        Text(
-            listOfNotNull(formatWhen(item.startedAt), item.client?.name, item.device?.name).joinToString(" · "),
-            color = Brand.Muted,
-            fontSize = 12.sp
-        )
-        item.transcript?.preview?.let { Text(it, color = Brand.Muted, fontSize = 13.sp, maxLines = 2) }
+    }
+}
+
+/** A small coloured dot summarising the recording's state. */
+@Composable
+private fun StatusDot(status: String?, finalStatus: String?) {
+    val (color, label) = when {
+        finalStatus == "failed" || status == "failed" -> Brand.Danger to "Failed"
+        status == "completed" || finalStatus == "completed" -> Brand.Success to "Ready"
+        else -> Brand.Warning to "Processing"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+        Box(Modifier.size(7.dp).clip(CircleShape).background(color))
+        Text(label, color = color, fontSize = 11.sp, fontWeight = FontWeight.Medium)
     }
 }
 
@@ -558,7 +616,7 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
                 )
                 OutlinedButton(onClick = { vm.connectShizuku() }) { Text("Connect via Shizuku") }
                 Text("Option B — computer with ADB: enable USB or Wireless debugging and run once after every reboot:", fontSize = 13.sp)
-                Text(vm.adbCommand(), fontSize = 11.sp, color = Brand.Cyan, modifier = Modifier.background(Brand.Surface2).padding(8.dp))
+                Text(vm.adbCommand(), fontSize = 11.sp, color = Brand.Cyan, modifier = Modifier.background(Brand.SurfaceAlt).padding(8.dp))
                 TextButton(onClick = {
                     scope.launch { clipboard.setClipEntry(ClipData.newPlainText("adb", vm.adbCommand()).toClipEntry()) }
                 }) { Text("Copy command") }
@@ -652,6 +710,18 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
                         )
                     }
                 }) { Text("Change") }
+            }
+        }
+        val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
+        if (activity != null && biometricAvailable(activity)) {
+            SectionCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("App lock", fontWeight = FontWeight.SemiBold)
+                        Text("Require fingerprint, face or PIN to open EchoLedger", color = Brand.Muted, fontSize = 12.sp)
+                    }
+                    Switch(checked = settings.appLockEnabled, onCheckedChange = { v -> vm.updateSettings { it.copy(appLockEnabled = v) } })
+                }
             }
         }
         SectionCard {

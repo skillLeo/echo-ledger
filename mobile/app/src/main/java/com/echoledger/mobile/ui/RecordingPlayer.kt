@@ -1,9 +1,6 @@
 package com.echoledger.mobile.ui
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.MediaPlayer
-import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +14,7 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -32,16 +30,43 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import com.echoledger.mobile.core.TranscriptText
 import kotlinx.coroutines.delay
 
 /**
- * Streams a recording from its temporary signed URL (docs/API.md "GET /api/sessions/{id}" → playback_url) with the
- * platform MediaPlayer; the server decrypts on the fly and nothing is written to the phone.
+ * Streams a recording from its temporary signed URL (docs/API.md "GET /api/sessions/{id}" -> playback_url) with
+ * Media3 ExoPlayer, which handles FLAC/Opus/WAV over HTTPS with range requests. The server decrypts on the fly;
+ * nothing is written to the phone.
  */
 @Stable
-class RecordingPlayerState(private val context: Context) {
-    private var player: MediaPlayer? = null
+class RecordingPlayerState(context: Context) {
+    private val player: ExoPlayer = ExoPlayer.Builder(context).build().apply {
+        setAudioAttributes(
+            AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_SPEECH).build(),
+            true
+        )
+        addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                ready = state == Player.STATE_READY || state == Player.STATE_BUFFERING
+                if (state == Player.STATE_READY) durationMs = duration.coerceAtLeast(0)
+                if (state == Player.STATE_ENDED) playing = false
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                playing = isPlaying
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                this@RecordingPlayerState.error = "This recording could not be played. Pull to refresh and try again."
+            }
+        })
+    }
 
     var ready by mutableStateOf(false)
         private set
@@ -55,67 +80,30 @@ class RecordingPlayerState(private val context: Context) {
         private set
 
     fun load(url: String) {
-        release()
         error = null
-        player = MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build()
-            )
-            setOnPreparedListener {
-                ready = true
-                durationMs = it.duration.toLong().coerceAtLeast(0)
-            }
-            setOnCompletionListener {
-                playing = false
-                positionMs = durationMs
-            }
-            setOnErrorListener { _, _, _ ->
-                error = "This recording could not be played. Pull to refresh and try again."
-                ready = false
-                playing = false
-                true
-            }
-            runCatching {
-                setDataSource(context, Uri.parse(url))
-                prepareAsync()
-            }.onFailure { error = "This recording could not be played." }
-        }
+        ready = false
+        positionMs = 0
+        durationMs = 0
+        player.setMediaItem(MediaItem.fromUri(url))
+        player.prepare()
     }
 
     fun toggle() {
-        val p = player?.takeIf { ready } ?: return
-        if (p.isPlaying) {
-            p.pause()
-            playing = false
-        } else {
-            if (positionMs >= durationMs && durationMs > 0) p.seekTo(0)
-            p.start()
-            playing = true
-        }
+        if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
+        if (player.isPlaying) player.pause() else player.play()
     }
 
     fun seekTo(ms: Long) {
-        val p = player?.takeIf { ready } ?: return
-        p.seekTo(ms.coerceIn(0, durationMs).toInt())
-        positionMs = ms.coerceIn(0, durationMs)
-        if (!p.isPlaying) {
-            p.start()
-            playing = true
-        }
+        player.seekTo(ms.coerceAtLeast(0))
+        positionMs = ms.coerceAtLeast(0)
+        player.play()
     }
 
     fun refreshPosition() {
-        player?.takeIf { ready }?.let { positionMs = it.currentPosition.toLong() }
+        positionMs = player.currentPosition.coerceAtLeast(0)
     }
 
-    fun release() {
-        player?.release()
-        player = null
-        ready = false
-        playing = false
-        positionMs = 0
-        durationMs = 0
-    }
+    fun release() = player.release()
 }
 
 @Composable
@@ -126,40 +114,53 @@ fun rememberRecordingPlayer(url: String?): RecordingPlayerState {
     LaunchedEffect(state.playing) {
         while (state.playing) {
             state.refreshPosition()
-            delay(250)
+            delay(200)
         }
     }
     DisposableEffect(Unit) { onDispose { state.release() } }
     return state
 }
 
-/** Play/pause, scrubber and elapsed/total time. */
+/** Play/pause, scrubber and elapsed/total time, in a premium card. */
 @Composable
 fun RecordingPlayer(state: RecordingPlayerState, modifier: Modifier = Modifier) {
     SectionCard(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             FilledIconButton(
                 onClick = { state.toggle() },
                 enabled = state.ready && state.error == null,
-                colors = IconButtonDefaults.filledIconButtonColors(containerColor = Brand.Violet),
-                modifier = Modifier.size(48.dp)
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = Brand.Violet,
+                    disabledContainerColor = Brand.SurfaceAlt
+                ),
+                modifier = Modifier.size(52.dp)
             ) {
                 when {
-                    state.error == null && !state.ready -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    state.error == null && !state.ready -> CircularProgressIndicator(
+                        modifier = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color = Brand.Muted
+                    )
+
                     state.playing -> Icon(Icons.Outlined.Pause, contentDescription = "Pause")
+
                     else -> Icon(Icons.Outlined.PlayArrow, contentDescription = "Play")
                 }
             }
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 Slider(
                     value = if (state.durationMs > 0) state.positionMs.toFloat() / state.durationMs else 0f,
                     onValueChange = { fraction -> if (state.durationMs > 0) state.seekTo((fraction * state.durationMs).toLong()) },
-                    enabled = state.ready && state.error == null
+                    enabled = state.ready && state.error == null,
+                    colors = SliderDefaults.colors(
+                        thumbColor = Brand.Cyan,
+                        activeTrackColor = Brand.Violet,
+                        inactiveTrackColor = Brand.SurfaceAlt
+                    )
                 )
                 Row {
                     Text(TranscriptText.stamp(state.positionMs), color = Brand.Muted, fontSize = 12.sp)
-                    Text("  /  ", color = Brand.Muted, fontSize = 12.sp)
-                    Text(TranscriptText.stamp(state.durationMs), color = Brand.Muted, fontSize = 12.sp)
+                    Text("  /  ${TranscriptText.stamp(state.durationMs)}", color = Brand.Faint, fontSize = 12.sp)
                 }
             }
         }
