@@ -33,12 +33,12 @@ class AdminPanelProvider extends PanelProvider
             ->brandName('EchoLedger')
             ->login()
             ->profile(isSimple: false)
-            // Required TOTP 2FA with one-time recovery codes (PLAN.md D3).
+            // Optional TOTP 2FA with one-time recovery codes: offered in the profile, not forced at login.
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable()->brandName('EchoLedger'),
-            ], isRequired: true)
-            ->revealablePasswords(false)
-            ->defaultThemeMode(ThemeMode::Dark)
+            ], isRequired: false)
+            ->revealablePasswords(true)
+            ->defaultThemeMode(ThemeMode::System)
             ->colors([
                 'primary' => Color::Violet,
                 'info' => Color::Cyan,

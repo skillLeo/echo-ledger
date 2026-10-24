@@ -34,7 +34,18 @@ final class AssembleRecordingJob implements ShouldQueue
         $recording->refresh();
 
         if ($recording->upload_status === UploadStatus::Ready) {
-            $coordinator->maybeStart($recording->captureSession);
+            // When assembly ran inline (small recording), submit the final transcript inline too so it is not
+            // waiting on the queue; a provider hiccup inside falls back to the queued path.
+            $sync = $this->job?->getConnectionName() === 'sync';
+            try {
+                $coordinator->maybeStart($recording->captureSession, $sync);
+            } catch (Throwable $e) {
+                if (! $sync) {
+                    throw $e;
+                }
+                report($e);
+                $coordinator->maybeStart($recording->captureSession); // retry via the queue
+            }
         }
     }
 

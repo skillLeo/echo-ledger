@@ -10,6 +10,7 @@ use App\Enums\UploadStatus;
 use App\Jobs\AssembleRecordingJob;
 use App\Models\CaptureSession;
 use App\Models\Recording;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -168,7 +169,13 @@ final class ChunkedUploadService
         return $missing;
     }
 
-    /** @return list<int> missing chunk indexes; empty means assembly was queued (idempotent). */
+    /**
+     * Recordings up to this size are assembled + transcribed inline on the `complete` request (seconds, not the
+     * up-to-a-minute wait for the next scheduled queue run). ~15 min of stereo FLAC. Larger ones use the queue.
+     */
+    public const SYNC_ASSEMBLE_MAX_BYTES = 20 * 1024 * 1024;
+
+    /** @return list<int> missing chunk indexes; empty means assembly was started (idempotent). */
     public function markComplete(Recording $recording): array
     {
         if ($recording->upload_status === UploadStatus::Ready || $recording->upload_status === UploadStatus::Assembling) {
@@ -179,6 +186,16 @@ final class ChunkedUploadService
             return $missing;
         }
         $recording->update(['upload_status' => UploadStatus::Assembling]);
+
+        if ($recording->declared_size_bytes <= self::SYNC_ASSEMBLE_MAX_BYTES) {
+            try {
+                Bus::dispatchNow(new AssembleRecordingJob($recording->id));
+
+                return [];
+            } catch (\Throwable $e) {
+                report($e); // fall through to the queue so the recording still gets processed
+            }
+        }
         AssembleRecordingJob::dispatch($recording->id);
 
         return [];

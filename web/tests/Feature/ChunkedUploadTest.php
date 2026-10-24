@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-use App\Jobs\AssembleRecordingJob;
 use App\Models\CaptureSession;
 use App\Services\ChunkedUploadService;
-use Illuminate\Support\Facades\Queue;
+use App\Services\CredentialVault;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -74,21 +74,24 @@ it('rejects a chunk that is the wrong size', function () {
         ->toThrow(HttpException::class);
 });
 
-it('reports missing chunks from markComplete until everything is uploaded', function () {
-    Queue::fake();
+it('reports missing chunks from markComplete, then assembles inline once everything is uploaded', function () {
+    app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_key');
+    Http::fake(['*' => Http::response(['id' => 'job_x', 'status' => 'queued', 'upload_url' => 'https://cdn.assemblyai.com/u'], 200)]);
     $uploads = app(ChunkedUploadService::class);
-    $bytes = random_bytes(250);
-    $recording = makeRecording(100, $bytes);
-    $slices = [substr($bytes, 0, 100), substr($bytes, 100, 100), substr($bytes, 200, 50)];
+    $bytes = random_bytes(2500); // above the "no audio" guard, below the sync-assemble cap
+    $recording = makeRecording(1000, $bytes);
+    $slices = [substr($bytes, 0, 1000), substr($bytes, 1000, 1000), substr($bytes, 2000, 500)];
 
     $uploads->storeChunk($recording->fresh(), 0, hash('sha256', $slices[0]), resourceFrom($slices[0]));
     expect($uploads->markComplete($recording->fresh()))->toBe([1, 2]);
 
     $uploads->storeChunk($recording->fresh(), 1, hash('sha256', $slices[1]), resourceFrom($slices[1]));
     $uploads->storeChunk($recording->fresh(), 2, hash('sha256', $slices[2]), resourceFrom($slices[2]));
-    expect($uploads->markComplete($recording->fresh()))->toBe([]);
 
-    Queue::assertPushed(AssembleRecordingJob::class, 1);
+    // Small recording: markComplete assembles + submits the transcript inline (no queue wait).
+    expect($uploads->markComplete($recording->fresh()))->toBe([]);
+    expect($recording->fresh()->upload_status->value)->toBe('ready');
+    expect($recording->captureSession->finalTranscript()->first()?->status->value)->toBe('submitted');
 });
 
 it('assembles, encrypts and decrypts back to the original bytes', function () {

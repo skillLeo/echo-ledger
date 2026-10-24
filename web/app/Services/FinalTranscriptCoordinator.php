@@ -15,6 +15,7 @@ use App\Enums\UploadStatus;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use Illuminate\Support\Facades\Bus;
 
 /**
  * Starts the final transcript once every declared artifact of a session is assembled and verified.
@@ -35,7 +36,7 @@ final class FinalTranscriptCoordinator
             ?? $this->settings->providerFor(self::useCaseFor($session));
     }
 
-    public function maybeStart(CaptureSession $session): ?Transcript
+    public function maybeStart(CaptureSession $session, bool $sync = false): ?Transcript
     {
         $recordings = $session->recordings()->get();
         $primary = $recordings->first(fn ($r) => $r->role === RecordingRole::Primary);
@@ -48,11 +49,11 @@ final class FinalTranscriptCoordinator
             return $existing; // already started (idempotent)
         }
 
-        return $this->start($session, $existing);
+        return $this->start($session, $existing, $sync);
     }
 
     /** (Re)starts transcription, e.g. from the admin "Retry" action. */
-    public function start(CaptureSession $session, ?Transcript $existing = null): Transcript
+    public function start(CaptureSession $session, ?Transcript $existing = null, bool $sync = false): Transcript
     {
         $provider = $this->providerFor($session);
         $attributes = [
@@ -70,7 +71,13 @@ final class FinalTranscriptCoordinator
         $transcript->fill($attributes)->save();
 
         $session->update(['status' => SessionStatus::Processing, 'final_provider' => $provider->value]);
-        TranscribeFinalJob::dispatch($transcript->id);
+        // Submit to the provider immediately on the fast path, so the transcript is not waiting for the next
+        // scheduled queue run; otherwise queue it (large recordings, or when assembly ran on the queue).
+        if ($sync) {
+            Bus::dispatchNow(new TranscribeFinalJob($transcript->id));
+        } else {
+            TranscribeFinalJob::dispatch($transcript->id);
+        }
 
         return $transcript;
     }
