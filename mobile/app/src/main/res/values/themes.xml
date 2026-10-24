@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="el_background">#FF0B0D12</color>
+    <color name="el_violet">#FF8B5CF6</color>
+    <color name="el_cyan">#FF22D3EE</color>
+
+    <style name="Theme.EchoLedger" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/el_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:colorAccent">@color/el_violet</item>
+    </style>
+
+    <style name="Theme.EchoLedger.Translucent" parent="android:Theme.Translucent.NoTitleBar">
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>

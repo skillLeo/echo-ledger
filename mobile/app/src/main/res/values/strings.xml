@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">EchoLedger</string>
+    <string name="share_label">Transcribe with EchoLedger</string>
+    <string name="tile_label">EchoLedger record</string>
+    <string name="widget_label">EchoLedger</string>
+    <string name="widget_description">Quick record, status and your latest transcript</string>
+    <string name="channel_recording">Recording</string>
+    <string name="channel_recording_desc">Shown while EchoLedger is capturing audio</string>
+    <string name="channel_decisions">Save recording</string>
+    <string name="channel_decisions_desc">Asks after a call whether to keep the recording</string>
+    <string name="channel_status">Status</string>
+    <string name="channel_status_desc">Upload and setup status</string>
+</resources>

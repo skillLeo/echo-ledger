@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Sound-wave "E" mark on the violet→cyan brand gradient background. -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M38,36h32v7H45v8h22v7H45v8h25v7H38z" />
+    <path android:fillColor="#B3FFFFFF" android:pathData="M76,44h4v20h-4z" />
+    <path android:fillColor="#80FFFFFF" android:pathData="M83,48h4v12h-4z" />
+</vector>
