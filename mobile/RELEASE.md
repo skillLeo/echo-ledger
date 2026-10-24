@@ -74,8 +74,9 @@ installed app.
 2. Open it and allow **Install unknown apps** for the browser or file manager when Android asks.
 3. On Android 14 and later, Play Protect may warn about an app from an unknown developer: choose **More details →
    Install anyway**. Android 15 can also ask for a one-time confirmation.
-4. Open EchoLedger and pair it from **Admin → Devices → Pair a device**: enter the server address and the code, or
-   paste the QR text.
+4. Open EchoLedger and pair it from **Admin → Devices → Pair a device**: tap **Scan QR code** and point the camera at
+   the code, or enter the server address and the code by hand. Scanning with the phone's own camera app only shows
+   the QR text; use the scanner inside EchoLedger.
 
 ADB alternative: `adb install -r app-release.apk`.
 

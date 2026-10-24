@@ -31,6 +31,7 @@
         "img-src": "'self' data: blob:",
         "font-src": "'self' data:",
         "connect-src": "ipc: http://ipc.localhost",
+        "media-src": "'self' https:",
         "object-src": "'none'"
       },
       "devCsp": {
@@ -40,6 +41,7 @@
         "img-src": "'self' data: blob:",
         "font-src": "'self' data:",
         "connect-src": "ipc: http://ipc.localhost ws://localhost:1420 ws://localhost:1421",
+        "media-src": "'self' https: http://localhost:8000 http://127.0.0.1:8000",
         "object-src": "'none'"
       },
       "freezePrototype": true

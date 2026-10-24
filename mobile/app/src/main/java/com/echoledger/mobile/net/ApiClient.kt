@@ -9,6 +9,7 @@ import com.echoledger.mobile.data.LibraryResponse
 import com.echoledger.mobile.data.RecordingUpload
 import com.echoledger.mobile.data.RegisterResponse
 import com.echoledger.mobile.data.ServerConfig
+import com.echoledger.mobile.data.SessionDetailDto
 import com.echoledger.mobile.data.SttTokenResponse
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.data.UploadState
@@ -135,6 +136,8 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     }
 
     suspend fun transcript(id: String): TranscriptDto = call(request("transcripts/$id").get().build(), TranscriptDto.serializer())!!
+
+    suspend fun sessionDetail(id: String): SessionDetailDto = call(request("sessions/$id").get().build(), SessionDetailDto.serializer())!!
 
     suspend fun deleteSession(id: String) {
         call(request("sessions/$id").delete().build(), null as KSerializer<Unit>?)

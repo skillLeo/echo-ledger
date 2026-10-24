@@ -86,6 +86,8 @@ export interface TranscriptDetail {
   language: string | null;
   text: string | null;
   segments: Segment[];
+  /** Set only when `status` is `failed`: the reason, written for the user. */
+  error?: string | null;
 }
 
 export type CaptionEvent =

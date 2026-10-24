@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.calls.Decisions
+import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
@@ -24,9 +25,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val graph = (app as EchoLedgerApp).graph
@@ -55,31 +53,41 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) { _pending.value = graph.recordings.all().filter { it.state != "uploaded" } }
     }
 
-    /** Pairs with the code or the pasted QR payload ({"v":1,"url":…,"code":…,"pins":[…]}). */
-    fun pair(serverUrl: String, codeOrPayload: String, deviceName: String) = viewModelScope.launch {
+    fun showMessage(text: String) {
+        _message.value = text
+    }
+
+    /** Pairs from the manual form: server address + one-time code, or the QR text pasted into the code field. */
+    fun pair(serverUrl: String, codeOrPayload: String, deviceName: String) {
+        val input = codeOrPayload.trim()
+        if (input.startsWith("{")) {
+            val payload = PairingPayload.parse(input)
+            if (payload == null) showMessage(NOT_A_PAIRING_QR) else pairWith(payload, deviceName)
+        } else {
+            pairWith(PairingPayload(serverUrl.trim().trimEnd('/'), input, emptyList()), deviceName)
+        }
+    }
+
+    /** Pairs with a scanned (or pasted) QR payload. Its pins already protect the registration request itself. */
+    fun pairWith(payload: PairingPayload, deviceName: String) = viewModelScope.launch {
         _busy.value = true
         try {
-            var url = serverUrl.trim()
-            var code = codeOrPayload.trim()
-            var pins = emptyList<String>()
-            if (code.startsWith("{")) {
-                val obj = com.echoledger.mobile.data.ApiJson.parseToJsonElement(code).jsonObject
-                url = obj["url"]?.jsonPrimitive?.contentOrNull ?: url
-                code = obj["code"]?.jsonPrimitive?.contentOrNull ?: ""
-                pins = (obj["pins"] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull }.orEmpty()
-            }
             val name = deviceName.ifBlank { "${Build.MANUFACTURER} ${Build.MODEL}".trim() }
             val response = withContext(Dispatchers.IO) {
-                ApiClient(url, pins, token = null).register(code, name, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE)
+                ApiClient(
+                    payload.url,
+                    payload.pins,
+                    token = null
+                ).register(payload.code, name, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE)
             }
             graph.settings.saveToken(response.token)
-            val finalPins = response.config.pins.ifEmpty { pins }
+            val finalPins = response.config.pins.ifEmpty { payload.pins }
             graph.settings.update {
-                it.copy(serverUrl = url.trimEnd('/'), pins = finalPins, deviceId = response.device.id, deviceName = response.device.name)
+                it.copy(serverUrl = payload.url, pins = finalPins, deviceId = response.device.id, deviceName = response.device.name)
             }
             graph.invalidateApi()
             refresh()
-            _message.value = "Paired with ${url.removePrefix("https://")}"
+            _message.value = "Paired with ${payload.url.removePrefix("https://")}"
         } catch (e: Exception) {
             _message.value = e.message ?: "Pairing failed"
         } finally {
@@ -111,6 +119,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { graph.api()?.transcript(id) }.getOrNull()
     }
 
+    /** Temporary signed streaming URL for the session's recording, or null when it is not (yet) playable. */
+    suspend fun playbackUrl(sessionId: String): String? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.sessionDetail(sessionId)?.playbackUrl }.getOrNull()
+    }
+
     fun delete(item: LibraryItem) = viewModelScope.launch {
         runCatching { withContext(Dispatchers.IO) { graph.api()?.deleteSession(item.id) } }
             .onSuccess { refresh() }
@@ -134,4 +147,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun adbCommand(): String = graph.helper.adbCommand()
+
+    companion object {
+        const val NOT_A_PAIRING_QR = "That isn't an EchoLedger pairing code. In your admin open Devices → Pair a device."
+    }
 }

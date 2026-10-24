@@ -178,8 +178,14 @@ data class TranscriptDto(
     val status: String,
     val language: String? = null,
     val text: String? = null,
-    val segments: List<SegmentDto> = emptyList()
+    val segments: List<SegmentDto> = emptyList(),
+    /** Set only when `status` is `failed`: the reason, written for the user. */
+    val error: String? = null
 )
+
+/** The part of GET /api/sessions/{id} the app needs: a temporary signed URL to stream the decrypted recording. */
+@Serializable
+data class SessionDetailDto(@SerialName("playback_url") val playbackUrl: String? = null)
 
 @Serializable
 data class DeviceTranscript(val kind: String, val provider: String, val language: String?, val segments: List<SegmentDto>)

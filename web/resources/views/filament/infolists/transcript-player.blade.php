@@ -24,6 +24,20 @@
                 this.active = i;
             },
             seek(i) { const a = this.$refs.audio; if (!a) return; a.currentTime = this.starts[i]; a.play(); },
+            segments: @js(array_map(fn (array $s): array => ['speaker' => $s['speaker'] ?? 'Speaker', 'start_ms' => (int) ($s['start_ms'] ?? 0), 'text' => $s['text'] ?? ''], $segments)),
+            copied: null,
+            // Same text format as the desktop and Android apps: '[m:ss] Speaker: text', speaker omitted when there is only one.
+            transcriptText(withTimes) {
+                const single = new Set(this.segments.map(s => s.speaker)).size <= 1;
+                const stamp = ms => { const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+                    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
+                return this.segments.map(s => (withTimes ? '[' + stamp(s.start_ms) + '] ' : '') + (single ? '' : s.speaker + ': ') + s.text).join('\n');
+            },
+            async copy(withTimes) {
+                try { await navigator.clipboard.writeText(this.transcriptText(withTimes)); this.copied = withTimes ? 'times' : 'text'; }
+                catch (e) { this.copied = 'failed'; }
+                setTimeout(() => this.copied = null, 2000);
+            },
         }">
         <style>
             .el-player { border: 1px solid rgba(255,255,255,.08); border-radius: 1rem; padding: 1rem;
@@ -39,6 +53,10 @@
             .el-player .el-spk { font-weight: 600; font-size: .8rem; padding-top: .1rem; }
             .el-player .el-spk-1 { color: #A78BFA; } .el-player .el-spk-2 { color: #22D3EE; }
             .el-player .el-empty { opacity: .6; font-size: .9rem; padding: .75rem 0; }
+            .el-player .el-actions { margin-left: auto; display: flex; gap: .4rem; }
+            .el-player .el-btn { font-size: .75rem; padding: .3rem .7rem; border-radius: .5rem; border: 1px solid rgba(255,255,255,.14);
+                background: rgba(255,255,255,.04); color: inherit; cursor: pointer; transition: background .15s; }
+            .el-player .el-btn:hover { background: rgba(139,92,246,.22); }
         </style>
 
         @if ($data['audio_url'])
@@ -50,6 +68,12 @@
         <div class="el-meta">
             <span>{{ $data['kind'] === 'live' ? 'Live captions (final transcript pending)' : 'Final transcript' }}</span>
             @if ($data['status'] && $data['status'] !== 'completed') <span>· {{ str_replace('_', ' ', $data['status']) }}</span> @endif
+            @if (count($segments) > 0)
+                <span class="el-actions">
+                    <button type="button" class="el-btn" x-on:click="copy(false)" x-text="copied === 'text' ? 'Copied' : 'Copy text'"></button>
+                    <button type="button" class="el-btn" x-on:click="copy(true)" x-text="copied === 'times' ? 'Copied' : (copied === 'failed' ? 'Copy failed' : 'Copy with timestamps')"></button>
+                </span>
+            @endif
         </div>
 
         @if (count($segments) === 0)

@@ -72,7 +72,8 @@ Run on **one Pixel (Android 15 or 16)** and **one Samsung (One UI on Android 14+
 | ID | Steps | Expected |
 |---|---|---|
 | A-01 | Install the release APK (signed per `mobile/RELEASE.md`). | `apksigner verify --print-certs` shows the release certificate; Play Protect flow completes; app opens to the pairing screen. |
-| A-02 | Pair with code and with the QR text. | Library loads with icon + text badges for Phone / Desktop / Web items. |
+| A-02 | Pair three ways: tap **Scan QR code** and scan the code shown in Admin → Devices → Pair a device; type the server address + code; paste the QR text into the code field. | The camera permission prompt appears once; a valid scan pairs immediately and the library loads with icon + text badges for Phone / Desktop / Web items. Scanning an unrelated QR code shows "That isn't an EchoLedger pairing code" and pairs nothing. |
+| A-02b | Deny the camera permission, then press Scan QR code; also press Back while the scanner is open. | A message explains that the code can be entered by hand; Back closes the scanner without pairing; the camera indicator turns off as soon as the scanner closes. |
 | A-03 | Inspect app storage (`adb shell run-as` on a debug build). | Recordings under `no_backup/recordings/*.elr` are not playable (encrypted); `library.bin` is not readable JSON; no plaintext `.ogg` remains in `cache/` after saving. |
 | A-04 | Pinning: point the app at a server whose certificate does not match the pins. | All API calls fail; the app shows the offline message; nothing is uploaded. |
 

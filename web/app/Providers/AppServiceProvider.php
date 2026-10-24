@@ -22,6 +22,7 @@ use App\Stt\SttManager;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -38,6 +39,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // docs/API.md returns single resources unwrapped ({"id": …}); Laravel would otherwise wrap them in {"data": …}.
+        JsonResource::withoutWrapping();
+
         // Short, stable morph names: tokens and Livewire payloads never carry PHP class names.
         Relation::enforceMorphMap([
             'user' => User::class,

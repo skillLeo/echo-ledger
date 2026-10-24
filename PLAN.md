@@ -201,7 +201,7 @@ syncs with the server.
 - [~] Glance widget: quick record, status, last transcript; floating caption bubble (`TYPE_APPLICATION_OVERLAY`, not focusable, not touchable, own lifecycle owner)
 
 ### 3.4 Network + data
-- [x] OkHttp with `CertificatePinner` (current + backup SPKI pins) for the server host only; device token sealed with Tink (Keystore-wrapped) in DataStore; pairing via code/QR payload
+- [x] OkHttp with `CertificatePinner` (current + backup SPKI pins) for the server host only; device token sealed with Tink (Keystore-wrapped) in DataStore; pairing via in-app QR scan (CameraX + on-device ZXing, validated payload whose pins protect the registration request) or server address + code
 - [x] STT token fetch + streaming client (AssemblyAI v3 / ElevenLabs realtime) for captions; WorkManager chunked resumable uploads; library sync with tombstones
 - [x] Compose UI: pairing, unified library with source icon + text, session detail/transcript, record, setup, settings
 

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type LibraryItem, type TranscriptDetail } from "../../lib/ipc";
-import { formatDuration, formatWhen, timestamp } from "../../lib/format";
+import { formatDuration, formatWhen, timestamp, transcriptText } from "../../lib/format";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { DesktopIcon, GlobeIcon, PhoneIcon, RefreshIcon, TrashIcon } from "../../components/Icons";
+import { CopyIcon, DesktopIcon, GlobeIcon, PhoneIcon, RefreshIcon, TrashIcon } from "../../components/Icons";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -17,6 +17,9 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
   const [source, setSource] = useState<SourceFilter>("all");
   const [selected, setSelected] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptDetail | null>(null);
+  const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  const [activeSegment, setActiveSegment] = useState(-1);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -46,9 +49,42 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
 
   useEffect(() => {
     setTranscript(null);
+    setPlaybackUrl(null);
+    setActiveSegment(-1);
     const id = current?.transcript?.final_transcript_id ?? current?.transcript?.live_transcript_id;
     if (id) api.transcript(id).then(setTranscript).catch(() => setTranscript(null));
+    // Temporary signed URL to the decrypted recording; the server streams it with Range support.
+    if (current) api.session(current.id).then((d) => setPlaybackUrl(typeof d.playback_url === "string" ? d.playback_url : null)).catch(() => setPlaybackUrl(null));
   }, [current?.id, current?.transcript?.final_transcript_id, current?.transcript?.live_transcript_id]);
+
+  const copy = async (withTimestamps: boolean) => {
+    if (!transcript) return;
+    try {
+      await navigator.clipboard.writeText(transcriptText(transcript.segments, withTimestamps));
+      notify(withTimestamps ? "Copied with timestamps" : "Copied");
+    } catch {
+      notify("Could not access the clipboard", true);
+    }
+  };
+
+  const seek = (ms: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = ms / 1000;
+    void audio.play().catch(() => undefined);
+  };
+
+  const onTimeUpdate = () => {
+    const audio = audioRef.current;
+    if (!audio || !transcript) return;
+    const t = audio.currentTime * 1000;
+    let index = -1;
+    for (let i = 0; i < transcript.segments.length; i++) {
+      if (transcript.segments[i].start_ms <= t) index = i;
+      else break;
+    }
+    setActiveSegment(index);
+  };
 
   const remove = async (id: string) => {
     if (!window.confirm("Delete this recording and transcript on every device? This cannot be undone.")) return;
@@ -107,19 +143,34 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
               </div>
               <h2 style={{ margin: "12px 0 2px" }}>{current.title}</h2>
               <div className="small muted">{formatWhen(current.started_at)} · {formatDuration(current.duration_ms)}{current.client ? ` · ${current.client.name}` : ""}</div>
+              {playbackUrl && (
+                <audio ref={audioRef} className="player" controls preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} data-testid="player" />
+              )}
               {transcript ? (
-                <>
-                  <div className="small muted" style={{ marginTop: 10 }}>{transcript.kind === "final" ? `Final transcript · ${transcript.provider}` : "Live captions (final transcript pending)"}</div>
-                  <div className="segments">
-                    {transcript.segments.map((s, i) => (
-                      <div key={i} className="segment">
-                        <span className="seg-time">{timestamp(s.start_ms)}</span>
-                        <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{s.speaker}</span>
-                        <span>{s.text}</span>
-                      </div>
-                    ))}
+                transcript.status === "failed" ? (
+                  <div className="notice error" style={{ marginTop: 12 }}>
+                    <strong>Transcription failed.</strong> {transcript.error ?? "The speech provider could not process this recording."}
                   </div>
-                </>
+                ) : (
+                  <>
+                    <div className="row" style={{ marginTop: 10 }}>
+                      <span className="small muted">{transcript.kind === "final" ? `Final transcript · ${transcript.provider}` : "Live captions (final transcript pending)"}</span>
+                      <span className="spacer" />
+                      <button className="btn ghost" onClick={() => copy(false)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy text</button>
+                      <button className="btn ghost" onClick={() => copy(true)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy with timestamps</button>
+                    </div>
+                    {transcript.segments.length === 0 && <div className="empty">The transcript is empty: no speech was detected.</div>}
+                    <div className="segments">
+                      {transcript.segments.map((s, i) => (
+                        <div key={i} className={`segment ${i === activeSegment ? "active" : ""} ${playbackUrl ? "seekable" : ""}`} onClick={() => seek(s.start_ms)} role={playbackUrl ? "button" : undefined}>
+                          <span className="seg-time">{timestamp(s.start_ms)}</span>
+                          <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{s.speaker}</span>
+                          <span>{s.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )
               ) : (
                 <div className="empty">{current.transcript?.final_status ? `Transcript ${current.transcript.final_status.replace("_", " ")}` : "Transcript not available yet."}</div>
               )}

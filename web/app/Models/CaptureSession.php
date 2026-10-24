@@ -105,9 +105,21 @@ class CaptureSession extends Model
         return $this->hasOne(Transcript::class)->where('kind', TranscriptKind::Live->value);
     }
 
+    /**
+     * The user's title, or a time-free fallback. Clients show the start time beside it in the viewer's own time
+     * zone; baking the server's UTC clock into the title made it disagree with that.
+     */
     public function displayTitle(): string
     {
-        return $this->title ?: $this->source_app->getLabel().' · '.$this->started_at->format('M j, H:i');
+        if ($this->title !== null && $this->title !== '') {
+            return $this->title;
+        }
+
+        return match ($this->source_app) {
+            SourceApp::VoiceNote => 'Voice note',
+            SourceApp::Other => 'Recording',
+            default => $this->source_app->getLabel().' call',
+        };
     }
 
     /**

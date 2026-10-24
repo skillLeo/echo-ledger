@@ -101,6 +101,11 @@ label.field { display: grid; gap: 6px; margin-bottom: 12px; color: var(--muted);
 .switch.on { background: var(--violet); }
 .switch.on::after { transform: translateX(18px); }
 .kbd { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 12px; background: #0f1118; border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; }
+.player { width: 100%; margin-top: 12px; border-radius: 10px; }
+.segment.seekable { cursor: pointer; }
+.segment.active { background: rgba(139, 92, 246, 0.22); box-shadow: inset 3px 0 0 #8b5cf6; }
+.notice { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; line-height: 1.5; }
+.notice.error { border-color: rgba(244, 63, 94, 0.5); background: rgba(244, 63, 94, 0.08); }
 .toast { position: fixed; bottom: 18px; right: 18px; background: var(--surface-2); border: 1px solid var(--border); padding: 10px 14px; border-radius: 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); max-width: 420px; }
 .toast.error { border-color: rgba(244, 63, 94, 0.5); }
 

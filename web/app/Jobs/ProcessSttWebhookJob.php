@@ -55,7 +55,13 @@ final class ProcessSttWebhookJob implements ShouldQueue
         }
 
         if ($result === null) {
-            $this->release(60); // provider not finished yet
+            // Provider not finished yet. Under inline (sync) execution release() would re-run immediately, so hand
+            // the retry to the real queue instead.
+            if ($this->job !== null && $this->job->getConnectionName() === 'sync') {
+                self::dispatch($this->webhookEventId)->delay(now()->addSeconds(60));
+            } else {
+                $this->release(60);
+            }
 
             return;
         }

@@ -34,10 +34,23 @@ export function formatWhen(iso?: string, now: Date = new Date()): string {
 }
 
 export function timestamp(ms: number): string {
-  const total = Math.floor(ms / 1000);
-  const m = Math.floor(total / 60);
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
+  const mm = h > 0 ? m.toString().padStart(2, "0") : `${m}`;
+  return `${h > 0 ? `${h}:` : ""}${mm}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Plain-text export of a transcript, identical on desktop, Android and the web console: one line per segment,
+ * `[m:ss] ` prefix when timestamps are requested, `Speaker: ` prefix unless there is only one speaker.
+ */
+export function transcriptText(segments: { speaker: string; start_ms: number; text: string }[], withTimestamps: boolean): string {
+  const single = new Set(segments.map((s) => s.speaker)).size <= 1;
+  return segments
+    .map((s) => `${withTimestamps ? `[${timestamp(s.start_ms)}] ` : ""}${single ? "" : `${s.speaker}: `}${s.text}`)
+    .join("\n");
 }
 
 /** Display form of an accelerator for the current platform. */

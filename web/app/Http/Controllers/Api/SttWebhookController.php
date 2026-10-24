@@ -13,6 +13,7 @@ use App\Stt\Exceptions\InvalidWebhookSignature;
 use App\Stt\SttManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Bus;
 use Throwable;
 
 /**
@@ -56,7 +57,15 @@ final class SttWebhookController extends Controller
         }
 
         if ($event->wasRecentlyCreated) {
-            ProcessSttWebhookJob::dispatch($event->id);
+            // Process inline: the provider only calls back once the result is ready, so the device sees the final
+            // transcript in seconds instead of waiting up to a minute for the next scheduled queue run. A transient
+            // provider error falls back to the queue, which cron drains and stt:reconcile backstops.
+            try {
+                Bus::dispatchNow(new ProcessSttWebhookJob($event->id));
+            } catch (Throwable $e) {
+                report($e);
+                ProcessSttWebhookJob::dispatch($event->id);
+            }
         }
 
         return response()->json(['received' => true]);

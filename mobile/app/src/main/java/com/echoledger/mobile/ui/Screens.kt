@@ -4,9 +4,11 @@ import android.Manifest
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -24,13 +26,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
@@ -47,18 +55,24 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
+import com.echoledger.mobile.core.TranscriptText
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.privilege.Capabilities
@@ -67,36 +81,136 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun PairingScreen(vm: MainViewModel) {
-    var url by remember { mutableStateOf("https://") }
-    var code by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
+    val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    var url by rememberSaveable { mutableStateOf("https://") }
+    var code by rememberSaveable { mutableStateOf("") }
+    var name by rememberSaveable { mutableStateOf("") }
+    var scanning by rememberSaveable { mutableStateOf(false) }
+    var cameraBlocked by rememberSaveable { mutableStateOf(false) }
+    var confirm by remember { mutableStateOf<PairingPayload?>(null) }
     val busy by vm.busy.collectAsState()
     val qr = code.trim().startsWith("{")
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Spacer(Modifier.height(40.dp))
-        Box(Modifier.size(44.dp).clip(CircleShape).background(Brand.Gradient))
-        Text("Pair this phone", fontSize = 26.sp, fontWeight = FontWeight.Bold)
-        Text(
-            "In your EchoLedger admin open Devices → Pair a device. Enter the server address and the one-time code, or paste the QR text.",
-            color = Brand.Muted
-        )
-        if (!qr) {
-            OutlinedTextField(url, {
-                url = it
-            }, label = { Text("Server address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    val cameraGranted = { ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED }
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            cameraBlocked = false
+            scanning = true
+        } else {
+            // "Don't ask again": the system dialog will not appear any more, so point at app settings instead.
+            val activity = context as? android.app.Activity
+            cameraBlocked = activity != null && !ActivityCompat.shouldShowRequestPermissionRationale(activity, Manifest.permission.CAMERA)
+            if (!cameraBlocked) vm.showMessage("Camera access is needed to scan. You can still enter the server address and code by hand.")
         }
-        OutlinedTextField(code, { code = it }, label = { Text("Pairing code") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(name, {
-            name = it
-        }, label = { Text("Name for this phone (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { vm.pair(url, code, name) }, enabled = !busy && code.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-            Text(if (busy) "Pairing…" else "Pair")
-        }
-        Text(
-            "Your access token is encrypted with the Android Keystore. Speech-provider keys never leave your server.",
-            color = Brand.Muted,
-            fontSize = 12.sp
+    }
+    // A process restart with the permission revoked would otherwise restore a scanner with no camera access.
+    if (scanning && !cameraGranted()) scanning = false
+    BackHandler(enabled = scanning) { scanning = false }
+
+    confirm?.let { payload ->
+        AlertDialog(
+            onDismissRequest = { confirm = null },
+            title = { Text("Pair with this server?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(payload.url.removePrefix("https://").removePrefix("http://"), fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Recordings and transcripts from this phone will be sent only to this server.",
+                        color = Brand.Muted,
+                        fontSize = 13.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    url = payload.url
+                    confirm = null
+                    vm.pairWith(payload, name)
+                }) { Text("Pair") }
+            },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } }
         )
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Spacer(Modifier.height(40.dp))
+            Box(Modifier.size(44.dp).clip(CircleShape).background(Brand.Gradient))
+            Text("Pair this phone", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "In your EchoLedger admin open Devices → Pair a device, then scan the QR code shown there.",
+                color = Brand.Muted
+            )
+            Button(
+                onClick = {
+                    focusManager.clearFocus()
+                    when {
+                        cameraGranted() -> scanning = true
+
+                        cameraBlocked -> context.startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+                        )
+
+                        else -> cameraPermission.launch(Manifest.permission.CAMERA)
+                    }
+                },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(if (busy) "Pairing…" else "Scan QR code", fontSize = 16.sp)
+            }
+            if (cameraBlocked) {
+                Text(
+                    "Camera access is turned off for EchoLedger. Tap Scan QR code to open the app settings and allow it, or enter the details by hand.",
+                    color = Brand.Muted,
+                    fontSize = 12.sp
+                )
+            }
+            Text(
+                "or enter the server address and one-time code",
+                color = Brand.Muted,
+                fontSize = 13.sp,
+                modifier = Modifier.align(Alignment.CenterHorizontally)
+            )
+            if (!qr) {
+                OutlinedTextField(url, {
+                    url = it
+                }, label = { Text("Server address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+            OutlinedTextField(code, { code = it }, label = { Text("Pairing code") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(name, {
+                name = it
+            }, label = { Text("Name for this phone (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = {
+                vm.pair(url, code, name)
+            }, enabled = !busy && code.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                Text(if (busy) "Pairing…" else "Pair")
+            }
+            Text(
+                "Your access token is encrypted with the Android Keystore. Speech-provider keys never leave your server.",
+                color = Brand.Muted,
+                fontSize = 12.sp
+            )
+        }
+        if (scanning) {
+            QrScanner(
+                accept = { text -> PairingPayload.parse(text) != null },
+                onResult = { text ->
+                    scanning = false
+                    PairingPayload.parse(text)?.let { confirm = it }
+                },
+                onCancel = { scanning = false },
+                onError = { message ->
+                    scanning = false
+                    vm.showMessage(message)
+                }
+            )
+        }
     }
 }
 
@@ -152,12 +266,33 @@ private fun LibraryRow(item: LibraryItem, onClick: () -> Unit) {
 fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
     var transcript by remember { mutableStateOf<TranscriptDto?>(null) }
     var loaded by remember { mutableStateOf(false) }
+    var playbackUrl by remember { mutableStateOf<String?>(null) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val clipboard = LocalClipboard.current
+    val player = rememberRecordingPlayer(playbackUrl)
     LaunchedEffect(item.id) {
         val id = item.transcript?.finalTranscriptId ?: item.transcript?.liveTranscriptId
         transcript = id?.let { vm.transcript(it) }
         loaded = true
+        playbackUrl = vm.playbackUrl(item.id)
     }
+    val t = transcript
+    val segments = t?.segments.orEmpty()
+    // Highlight the segment under the playhead; binary search keeps this cheap for long calls.
+    val activeIndex = if (player.playing || player.positionMs > 0) {
+        segments.indexOfLast { it.startMs <= player.positionMs }
+    } else {
+        -1
+    }
+    fun copy(withTimestamps: Boolean) {
+        scope.launch {
+            clipboard.setClipEntry(
+                ClipData.newPlainText("EchoLedger transcript", TranscriptText.render(segments, withTimestamps)).toClipEntry()
+            )
+            vm.showMessage(if (withTimestamps) "Copied with timestamps" else "Copied")
+        }
+    }
+
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
@@ -169,51 +304,89 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
                 }
             }) { Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = Brand.Danger) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            SourceDeviceBadge(SourceDevice.from(item.sourceDevice), item.sourceDeviceLabel)
-            SourceAppBadge(SourceApp.from(item.sourceApp), item.sourceAppLabel)
-        }
-        Text(item.title ?: "Untitled", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
-        Text("${formatWhen(item.startedAt)} · ${formatDuration(item.durationMs)}", color = Brand.Muted, fontSize = 13.sp)
-        Spacer(Modifier.height(12.dp))
-        val t = transcript
-        when {
-            !loaded -> Text("Loading transcript…", color = Brand.Muted)
-
-            t == null -> Text("Transcript ${item.transcript?.finalStatus?.replace('_', ' ') ?: "not available yet"}.", color = Brand.Muted)
-
-            else -> {
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxSize()) {
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SourceDeviceBadge(SourceDevice.from(item.sourceDevice), item.sourceDeviceLabel)
+                    SourceAppBadge(SourceApp.from(item.sourceApp), item.sourceAppLabel)
+                }
+                Text(item.title ?: "Untitled", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
                 Text(
-                    if (t.kind ==
-                        "final"
-                    ) {
-                        "Final transcript · ${t.provider}"
-                    } else {
-                        "Live captions (final pending)"
-                    },
+                    listOf(formatWhen(item.startedAt), formatDuration(item.durationMs), item.client?.name).filter {
+                        !it.isNullOrBlank()
+                    }.joinToString(" · "),
                     color = Brand.Muted,
-                    fontSize = 12.sp
+                    fontSize = 13.sp
                 )
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    items(t.segments) { s ->
-                        Row {
+                Spacer(Modifier.height(12.dp))
+            }
+            if (playbackUrl != null) {
+                item { RecordingPlayer(player) }
+                item { Spacer(Modifier.height(4.dp)) }
+            }
+            when {
+                !loaded -> item { Text("Loading transcript…", color = Brand.Muted) }
+
+                t == null -> item {
+                    val status = item.transcript?.finalStatus
+                    Text(
+                        when (status) {
+                            null -> "No transcript for this recording."
+                            "failed" -> "Transcription failed."
+                            else -> "Transcript ${status.replace('_', ' ')}. Pull to refresh in a moment."
+                        },
+                        color = Brand.Muted
+                    )
+                }
+
+                t.status == "failed" -> item {
+                    SectionCard {
+                        Text("Transcription failed", fontWeight = FontWeight.SemiBold, color = Brand.Danger)
+                        Text(t.error ?: "The speech provider could not process this recording.", color = Brand.Muted, fontSize = 13.sp)
+                    }
+                }
+
+                segments.isEmpty() -> item { Text("The transcript is empty: no speech was detected.", color = Brand.Muted) }
+
+                else -> {
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                formatDuration(s.startMs).ifEmpty {
-                                    "0:00"
-                                },
+                                if (t.kind == "final") "Final transcript · ${t.provider}" else "Live captions (final pending)",
                                 color = Brand.Muted,
                                 fontSize = 12.sp,
-                                modifier = Modifier.width(48.dp)
+                                modifier = Modifier.weight(1f)
                             )
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 6.dp)) {
+                            OutlinedButton(onClick = { copy(withTimestamps = false) }) {
+                                Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Copy text")
+                            }
+                            OutlinedButton(onClick = { copy(withTimestamps = true) }) {
+                                Icon(Icons.Outlined.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Copy with timestamps")
+                            }
+                        }
+                    }
+                    itemsIndexed(segments) { index, s ->
+                        val active = index == activeIndex
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (active) Brand.Violet.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent
+                                )
+                                .clickable(enabled = player.ready) { player.seekTo(s.startMs) }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            Text(TranscriptText.stamp(s.startMs), color = Brand.Muted, fontSize = 12.sp, modifier = Modifier.width(52.dp))
                             Text(
                                 s.speaker,
-                                color = if (s.channel ==
-                                    2
-                                ) {
-                                    Brand.Cyan
-                                } else {
-                                    androidx.compose.ui.graphics.Color(0xFFA78BFA)
-                                },
+                                color = if (s.channel == 2) Brand.Cyan else androidx.compose.ui.graphics.Color(0xFFA78BFA),
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 12.sp,
                                 modifier = Modifier.width(60.dp)
@@ -223,6 +396,7 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
                     }
                 }
             }
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }

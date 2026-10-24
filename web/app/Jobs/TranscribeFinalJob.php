@@ -34,6 +34,9 @@ final class TranscribeFinalJob implements ShouldQueue
     /** @var list<int> */
     public array $backoff = [60, 300];
 
+    /** Smaller than any real recording: an Ogg/Opus header alone is ~100 bytes, one second of speech is several KB. */
+    public const MIN_AUDIO_BYTES = 1024;
+
     public function __construct(public readonly string $transcriptId) {}
 
     public function handle(SttManager $stt, ChunkedUploadService $uploads, TranscriptStore $store): void
@@ -49,6 +52,14 @@ final class TranscribeFinalJob implements ShouldQueue
         $primary = $recordings->get(RecordingRole::Primary->value);
         if ($primary === null || ! $primary->isReady()) {
             $store->fail($transcript, 'Primary recording is missing or not ready.');
+
+            return;
+        }
+
+        // A container with (almost) no audio frames means capture produced nothing — typically the call-capture
+        // helper was not running. Fail with a clear message instead of a provider "transcoding failed" error.
+        if ($primary->declared_size_bytes < self::MIN_AUDIO_BYTES) {
+            $store->fail($transcript, 'No audio was captured in this recording. On Android, check Setup → Call capture (the helper must be running) and record again.');
 
             return;
         }
