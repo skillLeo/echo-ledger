@@ -21,7 +21,7 @@ final class CaptureSessionInfolist
                 Grid::make(['default' => 2, 'lg' => 6])->schema([
                     TextEntry::make('source_device')->label('Source')->badge(),
                     TextEntry::make('source_app')->label('App')->badge(),
-                    TextEntry::make('started_at')->label('Started')->dateTime('M j, Y · H:i'),
+                    TextEntry::make('started_at')->label('Started')->dateTime('M j, Y · g:i A'),
                     TextEntry::make('duration_ms')->label('Duration')
                         ->state(fn (CaptureSession $r): string => CaptureSessionsTable::duration($r->duration_ms) ?: '—'),
                     TextEntry::make('client.name')->label('Client')->placeholder('—'),

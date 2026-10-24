@@ -159,7 +159,15 @@ fun formatDuration(ms: Long?): String {
     return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
 }
 
-fun formatWhen(iso: String?): String = runCatching {
-    val instant = java.time.OffsetDateTime.parse(iso).toLocalDateTime()
-    instant.format(java.time.format.DateTimeFormatter.ofPattern("MMM d · HH:mm"))
+/**
+ * "Oct 24 · 9:32 AM" in the viewer's own time zone. The server sends UTC offsets; `toLocalDateTime()` would keep the
+ * UTC wall clock, so the instant is converted to [zone] first.
+ */
+fun formatWhen(
+    iso: String?,
+    zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+    locale: java.util.Locale = java.util.Locale.getDefault()
+): String = runCatching {
+    java.time.OffsetDateTime.parse(iso).atZoneSameInstant(zone)
+        .format(java.time.format.DateTimeFormatter.ofPattern("MMM d · h:mm a", locale))
 }.getOrDefault("")

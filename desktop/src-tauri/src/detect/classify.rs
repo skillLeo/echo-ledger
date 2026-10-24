@@ -32,12 +32,14 @@ pub fn classify_windows(image: &str, pfn: Option<&str>) -> Option<SourceApp> {
     let image = image.to_ascii_lowercase();
     if let Some(pfn) = pfn {
         // WhatsApp Inc. publisher prefix covers WhatsApp and WhatsApp Beta Store packages.
-        if pfn.starts_with("5319275A.") {
+        if pfn.starts_with("5319275A.") || pfn.to_ascii_lowercase().contains("whatsapp") {
             return Some(SourceApp::Whatsapp);
         }
     }
     match image.as_str() {
         "whatsapp.exe" | "whatsapp.root.exe" => Some(SourceApp::Whatsapp),
+        // Any other WhatsApp build (updated Store app, helper or beta executables).
+        name if name.contains("whatsapp") => Some(SourceApp::Whatsapp),
         "zoom.exe" => Some(SourceApp::Zoom),
         // Google Meet runs in a browser; browser mic use is labeled Meet (the user can relabel later).
         "chrome.exe" | "msedge.exe" | "brave.exe" | "firefox.exe" | "opera.exe" => Some(SourceApp::GoogleMeet),

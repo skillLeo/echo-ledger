@@ -192,6 +192,69 @@ pub fn active_capture_processes() -> Vec<(u32, String, Option<String>)> {
     out
 }
 
+/// Applications holding a microphone, each paired with the call app it is recognised as.
+///
+/// Many apps run their calls in a helper process: WhatsApp's Windows app hosts WebView2, so the microphone belongs to
+/// `msedgewebview2.exe`, not to `WhatsApp.Root.exe`. When a process is not recognised on its own, the nearest
+/// recognised ancestor decides, which attributes the helper to the application that launched it.
+pub fn active_capture_apps() -> Vec<(String, Option<crate::detect::classify::SourceApp>)> {
+    use crate::detect::classify::classify_windows;
+    let parents = parent_map();
+    active_capture_processes()
+        .into_iter()
+        .map(|(pid, image, pfn)| {
+            let app = classify_windows(&image, pfn.as_deref()).or_else(|| ancestor_app(pid, &parents));
+            (if image.is_empty() { "a protected process".to_string() } else { image }, app)
+        })
+        .collect()
+}
+
+fn ancestor_app(pid: u32, parents: &std::collections::HashMap<u32, u32>) -> Option<crate::detect::classify::SourceApp> {
+    ancestor_app_with(pid, parents, process_identity)
+}
+
+/// Walks up to 8 parents of `pid` and returns the first recognised call app. `identity` maps a pid to
+/// (image file name, package family name); injectable so the walk is testable without live processes.
+pub fn ancestor_app_with(
+    pid: u32,
+    parents: &std::collections::HashMap<u32, u32>,
+    identity: impl Fn(u32) -> (String, Option<String>),
+) -> Option<crate::detect::classify::SourceApp> {
+    let mut current = pid;
+    for _ in 0..8 {
+        let parent = *parents.get(&current)?;
+        if parent == 0 || parent == current {
+            return None; // reached the root, or a self-parented / stale entry
+        }
+        let (image, pfn) = identity(parent);
+        if let Some(app) = crate::detect::classify::classify_windows(&image, pfn.as_deref()) {
+            return Some(app);
+        }
+        current = parent;
+    }
+    None
+}
+
+/// pid → parent pid for every running process (a single toolhelp snapshot).
+fn parent_map() -> std::collections::HashMap<u32, u32> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS};
+
+    let mut map = std::collections::HashMap::new();
+    let Ok(snapshot) = (unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) }) else { return map };
+    let mut entry = PROCESSENTRY32W { dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
+    if unsafe { Process32FirstW(snapshot, &mut entry) }.is_ok() {
+        loop {
+            map.insert(entry.th32ProcessID, entry.th32ParentProcessID);
+            if unsafe { Process32NextW(snapshot, &mut entry) }.is_err() {
+                break;
+            }
+        }
+    }
+    let _ = unsafe { CloseHandle(snapshot) };
+    map
+}
+
 fn process_identity(pid: u32) -> (String, Option<String>) {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;

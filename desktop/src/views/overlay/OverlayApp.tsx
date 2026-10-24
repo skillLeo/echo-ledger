@@ -65,7 +65,7 @@ export default function OverlayApp() {
           <div className="overlay-tools" data-hit>
             <button className="icon-btn grip" title="Drag" onMouseDown={startDrag}><GripIcon size={14} /></button>
             <button className="icon-btn" title="Copy last 2 minutes" onClick={() => api.copyLastMinutes(2).catch(() => undefined)}><CopyIcon size={13} /></button>
-            <button className="icon-btn" title="Hide captions" onClick={() => api.toggleCaptions().catch(() => undefined)}><CloseIcon size={13} /></button>
+            <button className="icon-btn" title="Hide captions" aria-label="Hide captions" onClick={() => api.hideCaptions().catch(() => undefined)}><CloseIcon size={14} /></button>
           </div>
         </div>
         {state.message && <div className="caption-line small" style={{ color: "#fda4af" }}>{state.message}</div>}

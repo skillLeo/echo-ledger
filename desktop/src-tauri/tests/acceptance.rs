@@ -33,3 +33,20 @@ fn mocked_two_channel_capture_produces_aligned_equal_length_channels() {
     let energy: f64 = mic.iter().map(|&s| (s as f64).abs()).sum();
     assert!(energy > 0.0, "mic channel should not be silent");
 }
+
+/// A voice note spoken into the microphone must upload the MIC channel as mono audio (not the silent system one).
+#[test]
+fn mic_voice_note_uploads_a_mono_file_that_contains_the_microphone() {
+    use desktop_lib::audio::types::Channel;
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut recorder = Recorder::create_mono(dir.path(), Channel::Mic).expect("create recorder");
+    for chunk in MockSource::default().chunks().into_iter().filter(|c| c.channel == Channel::Mic) {
+        recorder.push(chunk).expect("push");
+    }
+    let output = recorder.finish().expect("finish");
+
+    assert_eq!(output.channels, 1, "a voice note is mono");
+    assert_eq!(output.primary.file_name().and_then(|n| n.to_str()), Some("voice-note.flac"));
+    assert!(std::fs::metadata(&output.primary).expect("primary file").len() > 1024, "a spoken note is far larger than the empty-audio floor");
+}

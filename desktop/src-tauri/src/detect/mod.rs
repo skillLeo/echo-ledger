@@ -15,9 +15,7 @@ use state::{MicUseEvent, MicUseStateMachine};
 pub fn detect_call_app() -> Option<SourceApp> {
     #[cfg(windows)]
     {
-        crate::audio::platform::windows::active_capture_processes()
-            .into_iter()
-            .find_map(|(_, image, pfn)| classify::classify_windows(&image, pfn.as_deref()))
+        crate::audio::platform::windows::active_capture_apps().into_iter().find_map(|(_, app)| app)
     }
     #[cfg(target_os = "macos")]
     {
@@ -26,6 +24,36 @@ pub fn detect_call_app() -> Option<SourceApp> {
     #[cfg(not(any(windows, target_os = "macos")))]
     {
         None
+    }
+}
+
+/// An application currently holding the microphone, and whether EchoLedger recognises it as a call app.
+/// Shown live on the Record screen so a missed call can be explained ("WhatsApp.exe — not recognised").
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct MicUser {
+    pub name: String,
+    /// `source_app` value ("whatsapp", "zoom", "google_meet", …) when recognised.
+    pub app: Option<String>,
+}
+
+pub fn mic_users() -> Vec<MicUser> {
+    #[cfg(windows)]
+    {
+        crate::audio::platform::windows::active_capture_apps()
+            .into_iter()
+            .map(|(name, app)| MicUser { app: app.map(|a| a.as_str().to_string()), name })
+            .collect()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        crate::audio::platform::macos::active_input_bundle_ids()
+            .into_iter()
+            .map(|id| MicUser { app: classify::classify_macos(&id).map(|a| a.as_str().to_string()), name: id })
+            .collect()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        Vec::new()
     }
 }
 

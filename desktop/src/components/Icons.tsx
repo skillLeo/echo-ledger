@@ -63,6 +63,18 @@ export const TrashIcon = (p: IconProps) => (
 export const ShieldIcon = (p: IconProps) => (
   <Svg {...p}><path d="M12 3 4.5 6v6c0 4.5 3.2 8.2 7.5 9 4.3-.8 7.5-4.5 7.5-9V6L12 3z" /><path d="m9 12 2 2 4-4" /></Svg>
 );
+export const SearchIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></Svg>
+);
+export const SunIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6" /></Svg>
+);
+export const MoonIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" /></Svg>
+);
+export const MonitorIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="3" y="4" width="18" height="12" rx="1.8" /><path d="M8 20h8M12 16v4" /></Svg>
+);
 
 export function SourceDeviceIcon({ source, ...p }: IconProps & { source?: string }) {
   if (source === "phone") return <PhoneIcon {...p} />;

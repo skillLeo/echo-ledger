@@ -31,6 +31,8 @@ pub enum RecordingMode {
     Call,
     /// Voice note playing on this computer: system audio only (never auto-started).
     VoiceNote,
+    /// Voice note spoken into the microphone: mic only, mono (never auto-started).
+    MicNote,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -91,6 +93,7 @@ impl CaptureController {
         let streams = match mode {
             RecordingMode::Call => Streams { mic: true, system: true },
             RecordingMode::VoiceNote => Streams { mic: false, system: true },
+            RecordingMode::MicNote => Streams { mic: true, system: false },
         };
         let backend = platform::start(streams, tx).map_err(|e| AppError::Audio(e.to_string()))?;
         let info = RecordingInfo {
@@ -105,7 +108,12 @@ impl CaptureController {
         let live: Arc<Mutex<LiveSinks>> = Arc::new(Mutex::new([None, None]));
         let live_version = Arc::new(AtomicU64::new(0));
         let levels = Arc::new(Mutex::new([0.0f32, 0.0]));
-        let thread = spawn_recorder(dir, mode == RecordingMode::VoiceNote, rx, live.clone(), live_version.clone(), levels.clone());
+        let mono = match mode {
+            RecordingMode::Call => None,
+            RecordingMode::VoiceNote => Some(Channel::System),
+            RecordingMode::MicNote => Some(Channel::Mic),
+        };
+        let thread = spawn_recorder(dir, mono, rx, live.clone(), live_version.clone(), levels.clone());
 
         *guard = Some(Active { info: info.clone(), backend, thread, live, live_version, levels });
         Ok(info)
@@ -132,7 +140,7 @@ impl CaptureController {
 
 fn spawn_recorder(
     dir: PathBuf,
-    mono: bool,
+    mono: Option<Channel>,
     rx: std::sync::mpsc::Receiver<AudioChunk>,
     live: Arc<Mutex<LiveSinks>>,
     live_version: Arc<AtomicU64>,
@@ -141,7 +149,10 @@ fn spawn_recorder(
     std::thread::Builder::new()
         .name("el-recorder".into())
         .spawn(move || {
-            let mut recorder = Recorder::create(&dir, mono)?;
+            let mut recorder = match mono {
+                Some(channel) => Recorder::create_mono(&dir, channel)?,
+                None => Recorder::create(&dir, false)?,
+            };
             let mut seen_version = u64::MAX;
             while let Ok(chunk) = rx.recv() {
                 let version = live_version.load(Ordering::SeqCst);

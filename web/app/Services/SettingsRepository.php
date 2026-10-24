@@ -37,6 +37,7 @@ final class SettingsRepository
         'whisper.chunk_seconds' => 600,
         'whisper.vad' => true,
         'app.pins' => [],                            // SPKI pins ("sha256/<base64>") handed to devices
+        'display.timezone' => 'UTC',                 // IANA zone the admin console shows times in
     ];
 
     /** @var array<string, mixed>|null */
@@ -91,6 +92,14 @@ final class SettingsRepository
     public function providerFor(SttUseCase $useCase): SttProviderKey
     {
         return SttProviderKey::tryFrom((string) $this->get('provider.'.$useCase->value)) ?? SttProviderKey::AssemblyAi;
+    }
+
+    /** The IANA time zone the admin console displays times in; falls back to UTC for anything unrecognised. */
+    public function displayTimezone(): string
+    {
+        $zone = (string) $this->get('display.timezone', 'UTC');
+
+        return in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC';
     }
 
     public function captionChannels(): string

@@ -6,7 +6,7 @@ export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 
 export interface RecordingInfo {
   clientRef: string;
-  mode: "call" | "voice_note";
+  mode: "call" | "voice_note" | "mic_note";
   sourceApp: string;
   clientId: string | null;
   startedAt: string;
@@ -43,6 +43,12 @@ export interface Settings {
   dictationOutput: "type" | "clipboard";
   clientId: string | null;
   consentAcknowledged: boolean;
+}
+
+/** An application holding the microphone; `app` is set when EchoLedger recognises it as a call app. */
+export interface MicUser {
+  name: string;
+  app: string | null;
 }
 
 export interface LibraryItem {
@@ -116,6 +122,9 @@ export const api = {
   startRecording: (sourceApp?: string) => invoke<AppStatus>("start_recording", { sourceApp: sourceApp ?? null }),
   stopRecording: () => invoke<AppStatus>("stop_recording"),
   toggleVoiceNote: () => invoke<AppStatus>("toggle_voice_note"),
+  toggleMicNote: () => invoke<AppStatus>("toggle_mic_note"),
+  hideCaptions: () => invoke<AppStatus>("hide_captions"),
+  micUsers: () => invoke<MicUser[]>("mic_users"),
   importVoiceNotes: (pathsList: string[]) => invoke<number>("import_voice_notes", { pathsList }),
   copyLastMinutes: (minutes = 2) => invoke<string>("copy_last_minutes", { minutes }),
   library: () => invoke<LibraryItem[]>("library_list"),

@@ -32,6 +32,12 @@ describe("formatWhen", () => {
     expect(formatWhen("2026-10-23T09:30:00", now).startsWith("Yesterday")).toBe(true);
   });
 
+  it("uses a 12-hour clock with AM/PM", () => {
+    expect(formatWhen("2026-10-24T09:30:00", now)).toMatch(/^Today · 9:30\s?AM$/);
+    expect(formatWhen("2026-10-24T18:05:00", now)).toMatch(/^Today · 6:05\s?PM$/);
+    expect(formatWhen("2026-10-24T00:10:00", now)).toMatch(/12:10\s?AM$/);
+  });
+
   it("falls back to a dated label and tolerates junk", () => {
     expect(formatWhen("2026-10-01T09:30:00", now).startsWith("Oct")).toBe(true);
     expect(formatWhen("not a date", now)).toBe("");

@@ -246,6 +246,10 @@ fn windows_images_and_packages_classify() {
     assert_eq!(classify_windows("chrome.exe", None), Some(SourceApp::GoogleMeet));
     assert_eq!(classify_windows("notepad.exe", None), None);
     assert_eq!(classify_windows("anything.exe", Some("5319275A.WhatsAppDesktop_cv1g1gvanyjgm")), Some(SourceApp::Whatsapp));
+    // Other WhatsApp builds are recognised by package family or executable name, not only the two known names.
+    assert_eq!(classify_windows("helper.exe", Some("WhatsAppInc.WhatsAppBeta_abc123")), Some(SourceApp::Whatsapp));
+    assert_eq!(classify_windows("WhatsApp.Beta.exe", None), Some(SourceApp::Whatsapp));
+    assert_eq!(classify_windows("notepad.exe", Some("Microsoft.WindowsNotepad_8wekyb3d8bbwe")), None);
     assert_eq!(SourceApp::Zoom.as_str(), "zoom");
 }
 
@@ -256,6 +260,45 @@ fn macos_bundle_ids_classify_with_business_before_consumer() {
     assert_eq!(classify_macos("us.zoom.xos.helper"), Some(SourceApp::Zoom));
     assert_eq!(classify_macos("com.google.Chrome"), Some(SourceApp::GoogleMeet));
     assert_eq!(classify_macos("com.apple.Terminal"), None);
+}
+
+// ---- Helper-process attribution (Windows) ----------------------------------------------------------------------
+
+#[cfg(windows)]
+mod helper_process {
+    use std::collections::HashMap;
+
+    use desktop_lib::audio::platform::windows::ancestor_app_with;
+    use desktop_lib::detect::classify::SourceApp;
+
+    fn identity(table: &[(u32, &str, Option<&str>)]) -> impl Fn(u32) -> (String, Option<String>) {
+        let rows: Vec<(u32, String, Option<String>)> = table.iter().map(|(p, i, f)| (*p, i.to_string(), f.map(str::to_string))).collect();
+        move |pid| rows.iter().find(|(p, _, _)| *p == pid).map(|(_, i, f)| (i.clone(), f.clone())).unwrap_or_default()
+    }
+
+    #[test]
+    fn a_webview2_helper_is_attributed_to_the_whatsapp_app_that_launched_it() {
+        // msedgewebview2 (audio) ← msedgewebview2 (browser) ← WhatsApp.Root.exe ← explorer.exe
+        let parents = HashMap::from([(300, 200), (200, 100), (100, 50), (50, 0)]);
+        let who = identity(&[(200, "msedgewebview2.exe", None), (100, "WhatsApp.Root.exe", Some("5319275A.51895FA4EA97F_cv1g1gvanyjgm")), (50, "explorer.exe", None)]);
+        assert_eq!(ancestor_app_with(300, &parents, who), Some(SourceApp::Whatsapp));
+    }
+
+    #[test]
+    fn a_helper_of_an_unrelated_app_stays_unrecognised() {
+        let parents = HashMap::from([(300, 200), (200, 50), (50, 0)]);
+        let who = identity(&[(200, "ms-teams.exe", None), (50, "explorer.exe", None)]);
+        assert_eq!(ancestor_app_with(300, &parents, who), None);
+    }
+
+    #[test]
+    fn the_walk_stops_on_cycles_and_unknown_pids() {
+        let looped = HashMap::from([(1, 2), (2, 1)]);
+        assert_eq!(ancestor_app_with(1, &looped, identity(&[])), None);
+        assert_eq!(ancestor_app_with(99, &HashMap::new(), identity(&[])), None);
+        let selfish = HashMap::from([(7, 7)]);
+        assert_eq!(ancestor_app_with(7, &selfish, identity(&[])), None);
+    }
 }
 
 // ---- Mic-use state machine -------------------------------------------------------------------------------------

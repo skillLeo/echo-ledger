@@ -19,6 +19,7 @@ use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
 use App\Stt\SttManager;
+use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
@@ -41,6 +42,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // docs/API.md returns single resources unwrapped ({"id": …}); Laravel would otherwise wrap them in {"data": …}.
         JsonResource::withoutWrapping();
+
+        // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
+        FilamentTimezone::set(fn (): string => app(SettingsRepository::class)->displayTimezone());
 
         // Short, stable morph names: tokens and Livewire payloads never carry PHP class names.
         Relation::enforceMorphMap([

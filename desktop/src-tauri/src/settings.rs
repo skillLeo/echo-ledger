@@ -42,7 +42,7 @@ impl Default for Settings {
             device_name: None,
             shortcuts: default_map(),
             captions_on_record: true,
-            auto_mode: false,
+            auto_mode: true, // recording calls is the core feature; the recording indicator and tray state stay visible
             content_protection: true,
             overlay_corner: Corner::BottomRight,
             autostart: false,

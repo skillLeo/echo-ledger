@@ -216,8 +216,22 @@ fun PairingScreen(vm: MainViewModel) {
     }
 }
 
+/** Shown on Android 14+ until the call-capture helper runs: without it WhatsApp calls are never recorded. */
 @Composable
-fun LibraryScreen(vm: MainViewModel, onOpen: (LibraryItem) -> Unit) {
+private fun CallSetupBanner(onSetup: () -> Unit) {
+    SectionCard(Modifier.clickable(onClick = onSetup)) {
+        Text("WhatsApp calls are not being recorded", fontWeight = FontWeight.SemiBold, color = Brand.Warning)
+        Text(
+            "Finish the one-time call-capture setup (about 2 minutes) so incoming and outgoing WhatsApp calls are saved and transcribed automatically.",
+            color = Brand.Muted,
+            fontSize = 13.sp
+        )
+        Text("Set up call recording →", color = Brand.Violet, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+    }
+}
+
+@Composable
+fun LibraryScreen(vm: MainViewModel, showCallSetup: Boolean, onSetup: () -> Unit, onOpen: (LibraryItem) -> Unit) {
     val items by vm.library.collectAsState()
     var filter by remember { mutableStateOf<SourceDevice?>(null) }
     var query by remember { mutableStateOf("") }
@@ -246,6 +260,10 @@ fun LibraryScreen(vm: MainViewModel, onOpen: (LibraryItem) -> Unit) {
             shape = RoundedCornerShape(14.dp),
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
         )
+        if (showCallSetup) {
+            Spacer(Modifier.height(12.dp))
+            CallSetupBanner(onSetup)
+        }
         Row(Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text("All") })
             SourceDevice.entries.forEach { d ->
@@ -553,6 +571,23 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
             SectionCard {
                 Text("Uploading ${queued.size} recording(s)…", fontWeight = FontWeight.SemiBold)
                 queued.mapNotNull { it.lastError }.firstOrNull()?.let { Text("Will retry: $it", color = Brand.Muted, fontSize = 12.sp) }
+                TextButton(onClick = { vm.retryPending() }) { Text("Retry now") }
+            }
+        }
+        val failedUploads = pending.filter { it.state == "failed" }
+        if (failedUploads.isNotEmpty()) {
+            SectionCard {
+                Text("${failedUploads.size} recording(s) could not be uploaded", fontWeight = FontWeight.SemiBold, color = Brand.Danger)
+                failedUploads.forEach { rec ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("${SourceApp.from(rec.sourceApp).label} · ${formatWhen(rec.startedAt)}", fontSize = 14.sp)
+                        rec.lastError?.let { Text(it, color = Brand.Muted, fontSize = 12.sp) }
+                        Row {
+                            TextButton(onClick = { vm.retryUpload(rec.id) }) { Text("Retry") }
+                            TextButton(onClick = { vm.decide(rec.id, keep = false) }) { Text("Discard", color = Brand.Danger) }
+                        }
+                    }
+                }
             }
         }
         Text(

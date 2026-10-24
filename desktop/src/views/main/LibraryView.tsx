@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type LibraryItem, type TranscriptDetail } from "../../lib/ipc";
 import { formatDuration, formatWhen, timestamp, transcriptText } from "../../lib/format";
+import { groupItems, itemState, searchItems, SORT_LABELS, sortItems, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { CopyIcon, DesktopIcon, GlobeIcon, PhoneIcon, RefreshIcon, TrashIcon } from "../../components/Icons";
+import { CopyIcon, DesktopIcon, GlobeIcon, PhoneIcon, RefreshIcon, SearchIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -11,10 +12,14 @@ export function filterItems(items: LibraryItem[], source: SourceFilter): Library
   return items.filter((i) => !i.deleted && (source === "all" || i.source_device === source));
 }
 
-/** Unified library: every recording from every device (phone items show here too), labeled icon + text. */
+const STATE_LABEL = { ready: "Ready", processing: "Processing", failed: "Failed" } as const;
+
+/** Unified library: every recording from every device, searchable by title and transcript text. */
 export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => void }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [source, setSource] = useState<SourceFilter>("all");
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("newest");
   const [selected, setSelected] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptDetail | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
@@ -44,8 +49,9 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const visible = useMemo(() => filterItems(items, source), [items, source]);
-  const current = visible.find((i) => i.id === selected) ?? null;
+  const filtered = useMemo(() => sortItems(searchItems(filterItems(items, source), query), sort), [items, source, query, sort]);
+  const groups = useMemo(() => groupItems(filtered, sort), [filtered, sort]);
+  const current = filtered.find((i) => i.id === selected) ?? null;
 
   useEffect(() => {
     setTranscript(null);
@@ -98,15 +104,26 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
     }
   };
 
+  const total = items.filter((i) => !i.deleted).length;
   return (
     <>
       <div className="row">
         <div>
           <h1 className="page-title">Library</h1>
-          <p className="page-sub">All recordings from your phone, this computer and the web.</p>
+          <p className="page-sub">{total === 0 ? "Recordings from your phone, this computer and the web will appear here." : `${total} recording${total === 1 ? "" : "s"} from your phone, this computer and the web.`}</p>
         </div>
         <div className="spacer" />
         <button className="btn" onClick={refresh} disabled={loading}><RefreshIcon size={16} />{loading ? "Syncing…" : "Sync"}</button>
+      </div>
+      <div className="toolbar">
+        <label className="searchbox">
+          <SearchIcon size={16} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search titles and transcripts" aria-label="Search recordings" />
+          {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search">×</button>}
+        </label>
+        <select className="select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort recordings">
+          {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => <option key={k} value={k}>{SORT_LABELS[k]}</option>)}
+        </select>
       </div>
       <div className="chips" role="tablist">
         {([["all", "All", null], ["phone", "Phone", <PhoneIcon key="p" size={13} />], ["desktop", "Desktop", <DesktopIcon key="d" size={13} />], ["web", "Web", <GlobeIcon key="w" size={13} />]] as const).map(([key, label, icon]) => (
@@ -115,20 +132,29 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
       </div>
       <div className="library">
         <div className="list" data-testid="library-list">
-          {visible.length === 0 && <div className="empty">No recordings yet.</div>}
-          {visible.map((item) => (
-            <button key={item.id} className={`item ${item.id === selected ? "selected" : ""}`} onClick={() => setSelected(item.id)}>
-              <div className="row">
-                <SourceDeviceBadge source={item.source_device} label={item.source_device_label} />
-                <SourceAppBadge app={item.source_app} label={item.source_app_label} />
-                <span className="spacer" />
-                <span className="small muted">{formatDuration(item.duration_ms)}</span>
-              </div>
-              <div className="item-title">{item.title}</div>
-              <div className="small muted">{formatWhen(item.started_at)}{item.client ? ` · ${item.client.name}` : ""}{item.device ? ` · ${item.device.name}` : ""}</div>
-              {item.transcript?.preview && <div className="item-preview">{item.transcript.preview}</div>}
-              {!item.transcript?.preview && <div className="small muted">{item.status === "completed" ? "Transcript ready" : `Status: ${item.status}`}</div>}
-            </button>
+          {filtered.length === 0 && (
+            <div className="empty">{query || source !== "all" ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
+          )}
+          {groups.map((group) => (
+            <div key={group.label ?? "all"} className="group">
+              {group.label && <div className="group-label">{group.label}</div>}
+              {group.items.map((item) => {
+                const state = itemState(item);
+                return (
+                  <button key={item.id} className={`item ${item.id === selected ? "selected" : ""}`} onClick={() => setSelected(item.id)}>
+                    <div className="row">
+                      <span className={`avatar ${item.source_device ?? "web"}`}><SourceAppIcon app={item.source_app} size={18} /></span>
+                      <div className="item-main">
+                        <div className="item-title">{item.title}</div>
+                        <div className="small muted">{formatWhen(item.started_at)}{item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ""}{item.client ? ` · ${item.client.name}` : ""}</div>
+                      </div>
+                      <span className={`pill ${state}`}>{STATE_LABEL[state]}</span>
+                    </div>
+                    {item.transcript?.preview && <div className="item-preview">{item.transcript.preview}</div>}
+                  </button>
+                );
+              })}
+            </div>
           ))}
         </div>
         <div className="detail card">

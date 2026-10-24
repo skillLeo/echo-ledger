@@ -26,7 +26,7 @@ final class CaptureSessionsTable
         return $table
             ->defaultSort('started_at', 'desc')
             ->columns([
-                TextColumn::make('started_at')->label('When')->dateTime('M j, Y · H:i')->sortable()
+                TextColumn::make('started_at')->label('When')->dateTime('M j, Y · g:i A')->sortable()
                     ->description(fn (CaptureSession $r): string => self::duration($r->duration_ms)),
                 TextColumn::make('source_device')->label('Source')->badge(),
                 TextColumn::make('source_app')->label('App')->badge(),

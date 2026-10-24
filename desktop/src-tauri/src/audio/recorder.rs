@@ -31,12 +31,23 @@ pub struct Recorder {
     t0_ns: Option<u64>,
     live: [Option<UnboundedSender<Vec<u8>>>; 2],
     levels: [f32; 2],
-    mono_system_only: bool,
+    /// `Some(channel)` = a single-channel recording whose upload file is that channel only (voice notes).
+    mono: Option<Channel>,
 }
 
 impl Recorder {
     /// `mono_system_only` = voice-note capture while playing (only the system channel matters).
     pub fn create(dir: &Path, mono_system_only: bool) -> Result<Self, String> {
+        Self::build(dir, mono_system_only.then_some(Channel::System))
+    }
+
+    /// Single-channel recording: `Channel::Mic` for a voice note spoken into the microphone,
+    /// `Channel::System` for audio playing on this computer.
+    pub fn create_mono(dir: &Path, channel: Channel) -> Result<Self, String> {
+        Self::build(dir, Some(channel))
+    }
+
+    fn build(dir: &Path, mono: Option<Channel>) -> Result<Self, String> {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         Ok(Self {
             dir: dir.to_path_buf(),
@@ -47,7 +58,7 @@ impl Recorder {
             t0_ns: None,
             live: [None, None],
             levels: [0.0, 0.0],
-            mono_system_only,
+            mono,
         })
     }
 
@@ -108,9 +119,9 @@ impl Recorder {
         let system_wav = self.dir.join("system.wav");
         let left = read_mono_i16(&mic_wav)?;
         let right = read_mono_i16(&system_wav)?;
-        let (primary, channels) = if self.mono_system_only {
+        let (primary, channels) = if let Some(channel) = self.mono {
             let path = self.dir.join("voice-note.flac");
-            encode_mono_flac(&right, &path)?;
+            encode_mono_flac(if channel == Channel::Mic { &left } else { &right }, &path)?;
             (path, 1)
         } else {
             let path = self.dir.join("recording.flac");

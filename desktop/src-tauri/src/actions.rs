@@ -51,15 +51,24 @@ pub fn emit_status(app: &AppHandle) {
     let _ = app.emit("app:status", crate::commands::status(app));
 }
 
-/// Live captions on/off. While recording, captions attach to the running capture; otherwise they open a
-/// capture-free preview of both channels (no files are written).
+/// Live captions on/off. Captions need audio, so turning them on while idle starts a recording (captions on);
+/// turning them off only hides captions — an ongoing recording keeps running and is saved as usual.
 pub async fn toggle_captions(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if state.live.is_live() {
         stop_captions(app);
         return Ok(());
     }
+    if !state.capture.is_recording() {
+        return start_call_recording_with(app, "other", false, true).await;
+    }
     start_captions(app).await
+}
+
+/// Empties the caption buffer and every caption window, so a new session never shows the previous one's lines.
+pub fn clear_captions(app: &AppHandle) {
+    app.state::<crate::AppState>().captions.lock().unwrap().clear();
+    app.state::<CaptionHub>().send(CAPTION_TARGETS, CaptionEvent::Clear);
 }
 
 pub fn stop_captions(app: &AppHandle) {
@@ -92,6 +101,12 @@ pub async fn start_captions(app: &AppHandle) -> AppResult<()> {
 }
 
 pub async fn start_call_recording(app: &AppHandle, source_app: &str, auto: bool) -> AppResult<()> {
+    let captions = app.state::<crate::AppState>().settings().captions_on_record;
+    start_call_recording_with(app, source_app, auto, captions).await
+}
+
+/// Starts a two-channel recording from a clean slate; `captions` decides whether live captions open with it.
+pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: bool, captions: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if state.capture.is_recording() {
         return Ok(());
@@ -100,20 +115,28 @@ pub async fn start_call_recording(app: &AppHandle, source_app: &str, auto: bool)
         return Err(AppError::NotPaired);
     }
     let client_id = state.settings().client_id.clone();
+    clear_captions(app); // a new recording never inherits the previous one's lines
     state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(auto, Ordering::SeqCst);
-    state.captions.lock().unwrap().clear();
     emit_status(app);
-    if state.settings().captions_on_record
-        && let Err(e) = start_captions(app).await
-    {
+    if captions && let Err(e) = start_captions(app).await {
         let _ = app.emit("app:error", e.to_string());
     }
     Ok(())
 }
 
+/// Voice note while audio plays on this computer (system audio only).
 pub async fn toggle_voice_note(app: &AppHandle) -> AppResult<()> {
+    toggle_note(app, RecordingMode::VoiceNote).await
+}
+
+/// Voice note spoken into the microphone (mic only, mono).
+pub async fn toggle_mic_note(app: &AppHandle) -> AppResult<()> {
+    toggle_note(app, RecordingMode::MicNote).await
+}
+
+async fn toggle_note(app: &AppHandle, mode: RecordingMode) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if state.capture.is_recording() {
         return stop_recording(app, false).await;
@@ -121,7 +144,8 @@ pub async fn toggle_voice_note(app: &AppHandle) -> AppResult<()> {
     if !state.is_paired() {
         return Err(AppError::NotPaired);
     }
-    state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::VoiceNote, "voice_note", state.settings().client_id.clone())?;
+    clear_captions(app);
+    state.capture.start(&paths::recordings(&state.data_dir), mode, "voice_note", state.settings().client_id.clone())?;
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(false, Ordering::SeqCst);
     emit_status(app);
@@ -151,11 +175,23 @@ pub async fn stop_recording(app: &AppHandle, from_auto: bool) -> AppResult<()> {
     set_overlay_visible(app, OVERLAY, false);
     *state.recording_started_at.lock().unwrap() = None;
     if let Some(finished) = finished {
-        enqueue(app, finished)?;
+        // A container with (almost) no audio frames means nothing was heard: tell the user instead of uploading a
+        // recording the server would reject (the server enforces the same floor).
+        let silent = std::fs::metadata(&finished.output.primary).map(|m| m.len() < MIN_AUDIO_BYTES).unwrap_or(true);
+        if silent {
+            let _ = std::fs::remove_dir_all(&finished.output.dir);
+            let _ = app.emit("app:error", "No sound was captured, so nothing was saved. Check your microphone and the audio device, then try again.");
+        } else {
+            enqueue(app, finished)?;
+        }
     }
+    clear_captions(app); // after enqueue (it reads the buffered turns), so the next session starts empty
     emit_status(app);
     Ok(())
 }
+
+/// Smaller than any real recording: the container headers alone are a few hundred bytes.
+const MIN_AUDIO_BYTES: u64 = 1024;
 
 fn enqueue(app: &AppHandle, finished: FinishedRecording) -> AppResult<()> {
     let state = app.state::<crate::AppState>();

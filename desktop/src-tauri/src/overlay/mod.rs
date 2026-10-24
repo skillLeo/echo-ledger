@@ -88,8 +88,13 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
         let mut ignoring: std::collections::HashMap<&'static str, bool> = std::collections::HashMap::new();
         let mut tick = tokio::time::interval(Duration::from_millis(33));
+        let mut ticks: u32 = 0;
         loop {
             tick.tick().await;
+            ticks = ticks.wrapping_add(1);
+            // Re-apply the desired state about once a second even when unchanged: the window can be put back to
+            // click-through elsewhere (e.g. when hiding), and a stale cache would otherwise leave it stuck.
+            let resync = ticks.is_multiple_of(30);
             let Ok(cursor) = app.cursor_position() else { continue };
             for label in [OVERLAY, DICTATION] {
                 let Some(window) = app.get_webview_window(label) else { continue };
@@ -102,7 +107,7 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
                         Err(_) => true,
                     }
                 };
-                if ignoring.get(label) != Some(&want_ignore) && window.set_ignore_cursor_events(want_ignore).is_ok() {
+                if (resync || ignoring.get(label) != Some(&want_ignore)) && window.set_ignore_cursor_events(want_ignore).is_ok() {
                     ignoring.insert(label, want_ignore);
                 }
             }

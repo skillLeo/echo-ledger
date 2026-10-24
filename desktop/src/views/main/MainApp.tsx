@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type AppStatus } from "../../lib/ipc";
-import { CaptionsIcon, LibraryIcon, MicIcon, SettingsIcon } from "../../components/Icons";
+import { CaptionsIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from "../../components/Icons";
+import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { PairingView } from "./PairingView";
 import { LibraryView } from "./LibraryView";
 import { RecordView } from "./RecordView";
@@ -13,6 +14,14 @@ export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
+  const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
+
+  const cycleTheme = () => {
+    const next = nextThemeChoice(theme);
+    saveThemeChoice(next);
+    applyTheme(next);
+    setTheme(next);
+  };
 
   const refreshStatus = useCallback(() => {
     api.status().then(setStatus).catch(() => undefined);
@@ -64,6 +73,10 @@ export default function MainApp() {
         </button>
         <button className={`nav-btn ${tab === "settings" ? "active" : ""}`} onClick={() => setTab("settings")}><SettingsIcon />Settings</button>
         <div className="sidebar-footer">
+          <button className="theme-toggle" onClick={cycleTheme} aria-label={`Theme: ${theme}. Click to change.`}>
+            {theme === "light" ? <SunIcon size={15} /> : theme === "dark" ? <MoonIcon size={15} /> : <MonitorIcon size={15} />}
+            {theme === "system" ? "Theme: System" : theme === "light" ? "Theme: Light" : "Theme: Dark"}
+          </button>
           <div className="row"><CaptionsIcon size={14} />{status.captionsLive ? "Captions live" : "Captions off"}</div>
           <div>{status.deviceName}</div>
           <div className="small">{status.pendingUploads > 0 ? `${status.pendingUploads} upload(s) pending` : "All uploads done"}</div>

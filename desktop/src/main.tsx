@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from "react";
 import ReactDOM from "react-dom/client";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import "./styles.css";
+import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 
 // One index.html for every window; the view is chosen from the window label.
 const MainApp = lazy(() => import("./views/main/MainApp"));
@@ -18,6 +19,10 @@ function currentLabel(): string {
 
 const label = currentLabel();
 document.documentElement.dataset.window = label;
+if (label === "main") {
+  applyTheme(getThemeChoice());
+  watchSystemTheme();
+}
 
 const View = label === "overlay" ? OverlayApp : label === "dictation" ? DictationApp : MainApp;
 

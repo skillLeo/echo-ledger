@@ -58,6 +58,7 @@ class Settings extends Page
             'provider_voice_note' => $all['provider.voice_note'],
             'captions_channels' => $all['captions.channels'],
             'default_language' => $all['default_language'],
+            'display_timezone' => $settings->displayTimezone(),
             'assemblyai_region' => $all['assemblyai.region'],
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
             'assemblyai_async_models' => $all['assemblyai.async_models'],
@@ -89,6 +90,10 @@ class Settings extends Page
                     ->helperText('Runs daily via model:prune. Default 30.'),
                 TextInput::make('default_language')->label('Default language')->maxLength(16)
                     ->helperText('Empty = auto-detect (recommended for mixed-language calls).'),
+                Select::make('display_timezone')->label('Time zone')
+                    ->options(array_combine(timezone_identifiers_list(), timezone_identifiers_list()))
+                    ->searchable()->required()
+                    ->helperText('Times in this console are shown in this zone, in 12-hour AM/PM format. Recordings are stored in UTC.'),
             ]),
             Section::make('Transcription engine per use-case')->description('Accuracy first. Keys live on API Credentials.')->columns(2)->schema([
                 Select::make('provider_live_captions')->label(SttUseCase::LiveCaptions->getLabel())->options($streaming)->required(),
@@ -156,6 +161,7 @@ class Settings extends Page
             'provider.voice_note' => $state['provider_voice_note'],
             'captions.channels' => $state['captions_channels'],
             'default_language' => filled($state['default_language'] ?? null) ? trim((string) $state['default_language']) : null,
+            'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',
             'assemblyai.region' => $state['assemblyai_region'],
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],

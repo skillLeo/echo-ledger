@@ -25,7 +25,7 @@ export function formatWhen(iso?: string, now: Date = new Date()): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   const sameDay = date.toDateString() === now.toDateString();
-  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
   if (sameDay) return `Today · ${time}`;
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);

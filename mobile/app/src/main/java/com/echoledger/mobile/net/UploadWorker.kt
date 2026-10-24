@@ -48,7 +48,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                             rec.mime,
                             rec.codec,
                             rec.channels,
-                            rec.sampleRate,
+                            rec.sampleRate.takeIf { it > 0 }, // 0 = unknown (shared voice notes): send "absent", not 0
                             rec.plainSize,
                             rec.sha256,
                             rec.durationMs.takeIf {
@@ -84,6 +84,16 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         } catch (e: NotPairedException) {
             graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
             Result.failure()
+        } catch (e: ApiException) {
+            if (isPermanent(e.status)) {
+                // The server understood and refused this recording (e.g. validation): retrying the same request can
+                // never succeed, so show it as failed with the reason instead of "uploading" forever.
+                graph.recordings.update(id) { it.copy(state = "failed", lastError = e.message) }
+                Result.failure()
+            } else {
+                graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
+                if (runAttemptCount < 12) Result.retry() else Result.failure()
+            }
         } catch (e: IOException) {
             graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
             if (runAttemptCount < 12) Result.retry() else Result.failure()
@@ -93,7 +103,20 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     companion object {
         private const val KEY_ID = "recording_id"
 
+        /** 4xx responses are final (bad request, validation, forbidden); 408/429 and 5xx are worth retrying. */
+        fun isPermanent(status: Int): Boolean = status in 400..499 && status != 408 && status != 429
+
         fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+        /** Restarts the upload immediately, replacing any run that is waiting out a retry back-off. */
+        fun retryNow(context: Context, recordingId: String) {
+            val request = OneTimeWorkRequestBuilder<UploadWorker>()
+                .setInputData(workDataOf(KEY_ID to recordingId))
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork("upload-$recordingId", ExistingWorkPolicy.REPLACE, request)
+        }
 
         fun enqueue(context: Context, recordingId: String) {
             val request = OneTimeWorkRequestBuilder<UploadWorker>()

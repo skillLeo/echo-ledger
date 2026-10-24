@@ -225,6 +225,26 @@ pub async fn toggle_voice_note(app: AppHandle) -> AppResult<AppStatus> {
     Ok(status(&app))
 }
 
+/// Record a voice note with the microphone (mono). Unlike `toggle_voice_note`, which captures audio playing here.
+#[tauri::command]
+pub async fn toggle_mic_note(app: AppHandle) -> AppResult<AppStatus> {
+    crate::actions::toggle_mic_note(&app).await?;
+    Ok(status(&app))
+}
+
+/// Which applications hold the microphone right now (for the live call-detection panel). Cheap, read-only.
+#[tauri::command]
+pub async fn mic_users() -> Vec<crate::detect::MicUser> {
+    tauri::async_runtime::spawn_blocking(crate::detect::mic_users).await.unwrap_or_default()
+}
+
+/// The overlay's close button: always hides captions, whatever state they are in (a recording keeps running).
+#[tauri::command]
+pub fn hide_captions(app: AppHandle) -> AppStatus {
+    crate::actions::stop_captions(&app);
+    status(&app)
+}
+
 #[tauri::command]
 pub fn import_voice_notes(app: AppHandle, paths_list: Vec<String>) -> AppResult<usize> {
     let mut count = 0;

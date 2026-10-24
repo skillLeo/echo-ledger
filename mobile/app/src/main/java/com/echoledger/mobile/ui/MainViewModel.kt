@@ -15,6 +15,7 @@ import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.net.ApiClient
 import com.echoledger.mobile.net.NotPairedException
+import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.privilege.HelperConnection
 import com.echoledger.mobile.widget.WidgetStateStore
 import kotlinx.coroutines.Dispatchers
@@ -128,6 +129,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { withContext(Dispatchers.IO) { graph.api()?.deleteSession(item.id) } }
             .onSuccess { refresh() }
             .onFailure { _message.value = it.message }
+    }
+
+    /** Retries one recording the server refused (e.g. after fixing the cause). */
+    fun retryUpload(id: String) = viewModelScope.launch(Dispatchers.IO) {
+        graph.recordings.update(id) { it.copy(state = "queued", lastError = null) }
+        UploadWorker.retryNow(getApplication(), id)
+        reloadLocal()
+    }
+
+    /** Restarts every upload that is waiting out a retry back-off, so opening the app never leaves one stuck. */
+    fun retryPending() = viewModelScope.launch(Dispatchers.IO) {
+        graph.recordings.all().filter { it.state == "queued" }.forEach { UploadWorker.retryNow(getApplication(), it.id) }
+        reloadLocal()
     }
 
     fun decide(id: String, keep: Boolean) = viewModelScope.launch(Dispatchers.IO) {

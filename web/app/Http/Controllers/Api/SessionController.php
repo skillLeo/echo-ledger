@@ -54,11 +54,31 @@ final class SessionController extends Controller
         ];
     }
 
+    /**
+     * A sample rate of 0 means "unknown" (a shared voice note has no known rate); treat it as absent rather than
+     * rejecting the whole upload. Older app versions send 0.
+     *
+     * @param  array<string, mixed>  $artifact
+     * @return array<string, mixed>
+     */
+    public static function normalizeArtifact(array $artifact): array
+    {
+        if (array_key_exists('sample_rate', $artifact) && (int) $artifact['sample_rate'] === 0) {
+            $artifact['sample_rate'] = null;
+        }
+
+        return $artifact;
+    }
+
     /** POST /api/sessions — idempotent on (device, client_ref). */
     public function store(Request $request, ChunkedUploadService $uploads, SettingsRepository $settings, SttManager $stt): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
+        $request->merge(['artifacts' => array_map(
+            fn ($artifact) => is_array($artifact) ? self::normalizeArtifact($artifact) : $artifact,
+            (array) $request->input('artifacts', []),
+        )]);
         $data = $request->validate([
             'client_ref' => ['required', 'string', 'max:64'],
             'source_app' => ['required', Rule::enum(SourceApp::class)],
@@ -132,6 +152,7 @@ final class SessionController extends Controller
     public function addRecording(Request $request, string $id, ChunkedUploadService $uploads): JsonResponse
     {
         $session = $this->findSession($request, $id);
+        $request->merge(self::normalizeArtifact($request->all()));
         $data = $request->validate(self::artifactRules());
         if ($session->recordings()->where('role', $data['role'])->exists()) {
             throw ValidationException::withMessages(['role' => 'This artifact role already exists for the session.']);

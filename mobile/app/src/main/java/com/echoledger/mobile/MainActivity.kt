@@ -41,7 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -91,7 +90,10 @@ class MainActivity : FragmentActivity() {
 
                 LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
                     recheck++
-                    if (settings.paired) vm.refresh()
+                    if (settings.paired) {
+                        vm.refresh()
+                        vm.retryPending() // an upload waiting out a back-off restarts as soon as the app is opened
+                    }
                 }
                 LaunchedEffect(message) {
                     message?.let {
@@ -127,8 +129,14 @@ class MainActivity : FragmentActivity() {
                                 label = "tab"
                             ) { current ->
                                 when (current) {
-                                    0 -> LibraryScreen(vm) { openItem = it }
+                                    0 -> LibraryScreen(
+                                        vm,
+                                        showCallSetup = caps.callCaptureSupportedByOs && !caps.helperConnected,
+                                        onSetup = { showSetup = true }
+                                    ) { openItem = it }
+
                                     1 -> RecordScreen(vm, caps, onSetup = { showSetup = true })
+
                                     else -> SettingsScreen(vm, onSetup = { showSetup = true })
                                 }
                             }
@@ -144,9 +152,9 @@ class MainActivity : FragmentActivity() {
 @androidx.compose.runtime.Composable
 private fun BottomNav(selected: Int, onSelect: (Int) -> Unit) {
     val items = listOf(
-        Triple("Library", Icons.AutoMirrored.Outlined.LibraryBooks as ImageVector, 0),
-        Triple("Record", Icons.Outlined.FiberManualRecord as ImageVector, 1),
-        Triple("Settings", Icons.Outlined.Settings as ImageVector, 2)
+        Triple("Library", Icons.AutoMirrored.Outlined.LibraryBooks, 0),
+        Triple("Record", Icons.Outlined.FiberManualRecord, 1),
+        Triple("Settings", Icons.Outlined.Settings, 2)
     )
     Surface(color = Brand.Surface, tonalElevation = 0.dp) {
         Row(
