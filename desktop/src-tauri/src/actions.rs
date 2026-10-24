@@ -105,10 +105,10 @@ pub async fn start_call_recording(app: &AppHandle, source_app: &str, auto: bool)
     state.auto_started.store(auto, Ordering::SeqCst);
     state.captions.lock().unwrap().clear();
     emit_status(app);
-    if state.settings().captions_on_record {
-        if let Err(e) = start_captions(app).await {
-            let _ = app.emit("app:error", e.to_string());
-        }
+    if state.settings().captions_on_record
+        && let Err(e) = start_captions(app).await
+    {
+        let _ = app.emit("app:error", e.to_string());
     }
     Ok(())
 }

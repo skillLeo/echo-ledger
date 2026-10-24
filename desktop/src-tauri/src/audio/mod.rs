@@ -113,11 +113,11 @@ impl CaptureController {
 
     /// Routes live PCM (16 kHz s16le mono) of `channel` to a caption stream, or detaches it.
     pub fn set_live_sink(&self, channel: Channel, sink: Option<UnboundedSender<Vec<u8>>>) {
-        if let Ok(guard) = self.active.lock() {
-            if let Some(active) = guard.as_ref() {
-                active.live.lock().unwrap()[channel.index()] = sink;
-                active.live_version.fetch_add(1, Ordering::SeqCst);
-            }
+        if let Ok(guard) = self.active.lock()
+            && let Some(active) = guard.as_ref()
+        {
+            active.live.lock().unwrap()[channel.index()] = sink;
+            active.live_version.fetch_add(1, Ordering::SeqCst);
         }
     }
 

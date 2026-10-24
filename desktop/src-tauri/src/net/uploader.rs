@@ -102,13 +102,13 @@ pub async fn upload(api: &ApiClient, pending: &PendingUpload) -> AppResult<Strin
 
     let mut files: Vec<(String, PathBuf)> = vec![("primary".into(), pending.primary.clone())];
     let mut artifacts = vec![artifact("primary", &pending.primary, pending.primary_channels, pending.duration_ms)?];
-    if required.iter().any(|r| r == "channel_1") {
-        if let (Some(mic), Some(sys)) = (&pending.mic_wav, &pending.system_wav) {
-            artifacts.push(artifact("channel_1", mic, 1, pending.duration_ms)?);
-            artifacts.push(artifact("channel_2", sys, 1, pending.duration_ms)?);
-            files.push(("channel_1".into(), mic.clone()));
-            files.push(("channel_2".into(), sys.clone()));
-        }
+    if required.iter().any(|r| r == "channel_1")
+        && let (Some(mic), Some(sys)) = (&pending.mic_wav, &pending.system_wav)
+    {
+        artifacts.push(artifact("channel_1", mic, 1, pending.duration_ms)?);
+        artifacts.push(artifact("channel_2", sys, 1, pending.duration_ms)?);
+        files.push(("channel_1".into(), mic.clone()));
+        files.push(("channel_2".into(), sys.clone()));
     }
 
     let created = api

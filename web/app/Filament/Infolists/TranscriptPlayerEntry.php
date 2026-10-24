@@ -33,7 +33,7 @@ class TranscriptPlayerEntry extends Entry
 
         return [
             'audio_url' => $primary?->isReady() ? route('admin.recordings.stream', ['recording' => $primary->id]) : null,
-            'segments' => array_values($shown->segments ?? []),
+            'segments' => $shown->segments ?? [],
             'kind' => $shown?->kind->value,
             'status' => $final?->status->value,
             'text' => $shown?->text,

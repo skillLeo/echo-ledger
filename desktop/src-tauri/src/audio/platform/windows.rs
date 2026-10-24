@@ -126,18 +126,18 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
     let result = (|| -> Result<(), String> {
         while !stop.load(Ordering::SeqCst) {
             // Follow default-device changes (headset unplug / Bluetooth switch) for endpoint streams.
-            if let Some(id) = &device_id {
-                if last_default_check.elapsed() > Duration::from_secs(1) {
-                    last_default_check = std::time::Instant::now();
-                    let current = match channel {
-                        Channel::Mic => enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications),
-                        Channel::System => enumerator.get_default_device(&Direction::Render),
-                    };
-                    if let Ok(device) = current {
-                        if device.get_id().ok().as_ref() != Some(id) {
-                            return Err("default device changed".into());
-                        }
-                    }
+            if let Some(id) = &device_id
+                && last_default_check.elapsed() > Duration::from_secs(1)
+            {
+                last_default_check = std::time::Instant::now();
+                let current = match channel {
+                    Channel::Mic => enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications),
+                    Channel::System => enumerator.get_default_device(&Direction::Render),
+                };
+                if let Ok(device) = current
+                    && device.get_id().ok().as_ref() != Some(id)
+                {
+                    return Err("default device changed".into());
                 }
             }
             if event.wait_for_event(200).is_err() {
@@ -150,7 +150,7 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
                     queue.range_mut(start..).for_each(|b| *b = 0); // wasapi does not zero-fill SILENT packets
                 }
                 let bytes: Vec<u8> = queue.drain(..).collect();
-                let samples: Vec<f32> = bytes.chunks_exact(4).map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]])).collect();
+                let samples: Vec<f32> = bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect();
                 let ts_ns = if info.flags.timestamp_error { None } else { Some(info.timestamp.saturating_mul(100)) };
                 if tx.send(AudioChunk { channel, samples, ts_ns, discontinuity: info.flags.data_discontinuity }).is_err() {
                     return Ok(()); // recorder gone

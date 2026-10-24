@@ -137,7 +137,7 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         if let Some(v) = patch.auto_mode { s.auto_mode = v; }
         if let Some(v) = patch.content_protection { s.content_protection = v; }
         if let Some(v) = patch.autostart { s.autostart = v; }
-        if let Some(v) = &patch.dictation_output { if v == "type" || v == "clipboard" { s.dictation_output = v.clone(); } }
+        if let Some(v) = &patch.dictation_output && (v == "type" || v == "clipboard") { s.dictation_output = v.clone(); }
         if let Some(v) = &patch.client_id { s.client_id = v.clone(); }
         if let Some(v) = patch.consent_acknowledged { s.consent_acknowledged = v; }
         if let Some(v) = patch.overlay_corner { s.overlay_corner = v; }
@@ -149,10 +149,10 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         let manager = app.autolaunch();
         let _ = if enable { manager.enable() } else { manager.disable() };
     }
-    if let Some(corner) = patch.overlay_corner {
-        if let Some(w) = app.get_webview_window(crate::overlay::OVERLAY) {
-            redock(&w, corner);
-        }
+    if let Some(corner) = patch.overlay_corner
+        && let Some(w) = app.get_webview_window(crate::overlay::OVERLAY)
+    {
+        redock(&w, corner);
     }
     crate::actions::emit_status(&app);
     Ok(updated)

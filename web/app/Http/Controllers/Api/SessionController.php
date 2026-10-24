@@ -9,6 +9,7 @@ use App\Enums\RecordingRole;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SttProviderKey;
+use App\Enums\SttUseCase;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Controller;
@@ -87,7 +88,7 @@ final class SessionController extends Controller
         }
 
         $sourceApp = SourceApp::from($data['source_app']);
-        $useCase = $sourceApp === SourceApp::VoiceNote ? \App\Enums\SttUseCase::VoiceNote : \App\Enums\SttUseCase::FinalTranscript;
+        $useCase = $sourceApp === SourceApp::VoiceNote ? SttUseCase::VoiceNote : SttUseCase::FinalTranscript;
         $chunkSize = ChunkedUploadService::advertisedChunkSize();
 
         $session = DB::transaction(function () use ($device, $data, $clientId, $sourceApp, $settings, $useCase, $uploads, $chunkSize): CaptureSession {

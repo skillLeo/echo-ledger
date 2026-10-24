@@ -47,10 +47,10 @@ pub fn duplicates(map: &HashMap<Action, String>) -> Vec<Action> {
     let mut seen: HashMap<Shortcut, Action> = HashMap::new();
     let mut dupes = Vec::new();
     for action in Action::ALL {
-        if let Some(Ok(shortcut)) = map.get(&action).map(|s| parse(s)) {
-            if seen.insert(shortcut, action).is_some() {
-                dupes.push(action);
-            }
+        if let Some(Ok(shortcut)) = map.get(&action).map(|s| parse(s))
+            && seen.insert(shortcut, action).is_some()
+        {
+            dupes.push(action);
         }
     }
     dupes

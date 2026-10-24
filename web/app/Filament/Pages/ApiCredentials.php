@@ -90,7 +90,6 @@ class ApiCredentials extends Page
                 'whispercpp' => 'whisper.cpp server',
                 'openai' => 'OpenAI (optional)',
                 'groq' => 'Groq (optional)',
-                default => $provider,
             })->columns(2)->collapsible()->schema($inputs);
         }
 

@@ -40,8 +40,9 @@ The platform consists of three applications that share one data model and one RE
   with its source device (Phone · Desktop · Web) and app (WhatsApp, Google Meet, Zoom, voice note …).
 - **Unobtrusive by default.** A translucent caption overlay that never takes focus, clicks pass through it, it
   hides from screen sharing, and it never interrupts a call with pop-ups.
-- **Provider freedom.** AssemblyAI, ElevenLabs Scribe, Azure Speech (MAI-Transcribe), a self-hosted
-  whisper.cpp server, or on-device Parakeet — selectable per use case from the admin console.
+- **Provider freedom.** AssemblyAI, ElevenLabs Scribe, Azure Speech (MAI-Transcribe) or a self-hosted
+  whisper.cpp server, selectable per use case from the admin console. The server side for on-device
+  Parakeet transcription is in place for a future release.
 - **Runs on shared hosting.** No daemons, Redis or WebSocket server: one cron entry drives the queue,
   webhook reconciliation and retention.
 
@@ -169,9 +170,9 @@ Call capture requires Android 14 or later and a one-time Shizuku or ADB setup; t
 |---|:-:|:-:|---|
 | AssemblyAI *(default)* | ✓ | ✓ | Universal streaming + multichannel async with keyterms, webhooks |
 | ElevenLabs Scribe | ✓ | ✓ | Scribe v2 multichannel, signed webhooks |
-| Azure Speech (MAI-Transcribe) | — desktop / ✓ planned | ✓ | Fast transcription, phrase lists |
+| Azure Speech (MAI-Transcribe) | — | ✓ | Fast transcription, phrase lists; use AssemblyAI or ElevenLabs for live captions |
 | whisper.cpp (self-hosted) | — | ✓ | Your own GPU/CPU server behind an authenticated proxy |
-| Parakeet (on-device) | — | ✓ | Fully offline, transcript produced on the device |
+| Parakeet (on-device) | — | server side ready | Device uploads its own transcript; the on-device engine is not bundled in this release |
 
 Providers are assigned per use case (live captions, dictation, calls, voice notes) in **Settings**. See
 [`docs/PROVIDERS.md`](docs/PROVIDERS.md) for credentials, costs and data-retention behaviour.

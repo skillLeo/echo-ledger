@@ -62,6 +62,7 @@ class Transcript extends Model
         return mb_strimwidth(trim((string) $this->text), 0, $length, '…');
     }
 
+    /** @return Builder<static> */
     public function prunable(): Builder
     {
         $days = app(SettingsRepository::class)->retentionDays();

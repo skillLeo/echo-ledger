@@ -23,7 +23,7 @@ final class RecordingUploadResource extends JsonResource
             'upload' => [
                 'chunk_size_bytes' => $recording->chunk_size_bytes,
                 'total_chunks' => $recording->total_chunks,
-                'received_chunks' => array_values($recording->received_chunks),
+                'received_chunks' => $recording->received_chunks,
                 'status' => $recording->upload_status->value,
             ],
         ];

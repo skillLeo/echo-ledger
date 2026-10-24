@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Device;
 use App\Models\User;
 
 return [
@@ -75,7 +76,7 @@ return [
 
         'devices' => [
             'driver' => 'eloquent',
-            'model' => App\Models\Device::class,
+            'model' => Device::class,
         ],
 
         // 'users' => [

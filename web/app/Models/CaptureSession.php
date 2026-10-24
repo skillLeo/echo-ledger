@@ -110,7 +110,11 @@ class CaptureSession extends Model
         return $this->title ?: $this->source_app->getLabel().' · '.$this->started_at->format('M j, H:i');
     }
 
-    /** Sessions (and tombstones) older than the retention window are purged with their files. */
+    /**
+     * Sessions (and tombstones) older than the retention window are purged with their files.
+     *
+     * @return Builder<self>
+     */
     public function prunable(): Builder
     {
         $days = app(SettingsRepository::class)->retentionDays();

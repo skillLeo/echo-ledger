@@ -1,9 +1,20 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ktlint)
 }
+
+// Release signing (mobile/RELEASE.md): mobile/keystore.properties, or ECHOLEDGER_* environment variables in CI.
+// Neither is committed; without them the release APK is built unsigned.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+
+fun signingValue(property: String, env: String): String? = keystoreProperties.getProperty(property) ?: System.getenv(env)
 
 android {
     namespace = "com.echoledger.mobile"
@@ -18,12 +29,23 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            signingValue("storeFile", "ECHOLEDGER_KEYSTORE")?.let { path ->
+                storeFile = file(path)
+                storePassword = signingValue("storePassword", "ECHOLEDGER_KEYSTORE_PASSWORD")
+                keyAlias = signingValue("keyAlias", "ECHOLEDGER_KEY_ALIAS")
+                keyPassword = signingValue("keyPassword", "ECHOLEDGER_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // Signing: see mobile/RELEASE.md (keystore never committed).
+            signingConfig = signingConfigs.getByName("release").takeIf { it.storeFile != null }
         }
     }
 

@@ -37,6 +37,7 @@ class WebhookEvent extends Model
         return $this->belongsTo(Transcript::class);
     }
 
+    /** @return Builder<static> */
     public function prunable(): Builder
     {
         $days = app(SettingsRepository::class)->retentionDays();

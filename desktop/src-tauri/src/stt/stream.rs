@@ -76,7 +76,7 @@ pub async fn run_session(
                         // ElevenLabs commits and keeps the socket open; allow the final commit to arrive.
                         let _ = tokio::time::timeout(Duration::from_secs(3), async {
                             while let Some(Ok(msg)) = rx.next().await {
-                                if let Message::Text(t) = msg { if let Some(ev) = protocol.parse(t.as_str()) { let done = matches!(ev, SttEvent::Final { .. }); on_event(ev); if done { break; } } }
+                                if let Message::Text(t) = msg && let Some(ev) = protocol.parse(t.as_str()) { let done = matches!(ev, SttEvent::Final { .. }); on_event(ev); if done { break; } }
                             }
                         }).await;
                         let _ = tx.send(Message::Close(None)).await;

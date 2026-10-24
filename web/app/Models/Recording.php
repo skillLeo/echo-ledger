@@ -68,6 +68,7 @@ class Recording extends Model
         return $this->upload_status === UploadStatus::Ready && $this->stored_path !== null;
     }
 
+    /** @return Builder<static> */
     public function prunable(): Builder
     {
         $days = app(SettingsRepository::class)->retentionDays();

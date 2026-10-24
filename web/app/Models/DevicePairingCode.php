@@ -32,6 +32,7 @@ class DevicePairingCode extends Model
         return $this->belongsTo(User::class);
     }
 
+    /** @return Builder<static> */
     public function prunable(): Builder
     {
         return static::query()->where('expires_at', '<', now()->subDay());

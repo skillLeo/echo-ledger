@@ -39,7 +39,7 @@ final class RecordingController extends Controller
         $recording = $uploads->storeChunk($recording, (int) $index, (string) $request->header('Upload-Chunk-Sha256', ''), $body);
 
         return response()->json([
-            'received_chunks' => array_values($recording->received_chunks),
+            'received_chunks' => $recording->received_chunks,
             'total_chunks' => $recording->total_chunks,
             'status' => $recording->upload_status->value,
         ]);
