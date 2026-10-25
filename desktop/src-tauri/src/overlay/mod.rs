@@ -1,30 +1,61 @@
-//! Caption overlay + dictation box windows. Created once, visible, unfocused and unfocusable (never `show()` or
-//! `set_focus()` afterwards — tao ≥ 0.37.1 would steal focus); "hidden" = empty content + click-through.
+//! Overlay-type windows: caption overlay, dictation box, recording pill and review card. Created once in the setup
+//! hook, visible, unfocused and unfocusable (never `show()` or `set_focus()` afterwards — tao ≥ 0.37.1 would steal
+//! focus); "hidden" = the view renders nothing and reports no hit regions, so the window is fully click-through.
 //! docs/research/desktop-tauri.md §2.
 
 pub mod geometry;
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, Monitor, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use geometry::{Corner, RectPx, WorkArea, cursor_in_regions, dock};
+use geometry::{Corner, PillPosition, RectPx, WorkArea, caption_overlay_size, cursor_in_regions, dock, pill_origin};
 
 pub const OVERLAY: &str = "overlay";
 pub const DICTATION: &str = "dictation";
+pub const PILL: &str = "pill";
+pub const REVIEW: &str = "review";
 
-const OVERLAY_SIZE: (f64, f64) = (460.0, 150.0);
+/// Every overlay-type window: same builder flags, click-through unless the cursor is over a reported region.
+pub const WINDOWS: [&str; 4] = [OVERLAY, DICTATION, PILL, REVIEW];
+
 const DICTATION_SIZE: (f64, f64) = (420.0, 110.0);
+const PILL_SIZE: (f64, f64) = (280.0, 44.0);
+const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
 const MARGIN_LOGICAL: f64 = 18.0;
+const PILL_MARGIN_LOGICAL: f64 = 12.0;
 
 /// Interactive rects per window label, pushed from React on layout change.
 #[derive(Default)]
-pub struct HitRegions(pub Mutex<std::collections::HashMap<String, Vec<RectPx>>>);
+pub struct HitRegions(pub Mutex<HashMap<String, Vec<RectPx>>>);
 
+/// What `create_overlays` needs from the settings.
+#[derive(Clone, Copy, Debug)]
+pub struct OverlaySetup {
+    pub corner: Corner,
+    pub content_protected: bool,
+    pub caption_lines: u8,
+    pub pill_position: Option<PillPosition>,
+}
+
+fn title(label: &str) -> &'static str {
+    match label {
+        OVERLAY => "EchoLedger captions",
+        DICTATION => "EchoLedger dictation",
+        PILL => "EchoLedger recording controls",
+        REVIEW => "EchoLedger review",
+        _ => "EchoLedger",
+    }
+}
+
+/// One builder for every overlay-type window. Flags verified against tauri-2.12.5
+/// `src/webview/webview_window.rs` (`focusable` 927, `content_protected` 952, `skip_taskbar` 641,
+/// `always_on_top` 615, `accept_first_mouse` 962).
 fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64), protected: bool) -> tauri::Result<WebviewWindow<R>> {
     WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
-        .title(if label == OVERLAY { "EchoLedger captions" } else { "EchoLedger dictation" })
+        .title(title(label))
         .inner_size(size.0, size.1)
         .transparent(true)
         .no_redirection_bitmap(true)
@@ -42,17 +73,28 @@ fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64), protecte
         .build()
 }
 
-/// Creates both overlays (call from an async context or the setup hook — never from a sync command).
-pub fn create_overlays<R: Runtime>(app: &AppHandle<R>, corner: Corner, content_protected: bool) -> tauri::Result<()> {
+/// Creates every overlay-type window that does not exist yet, all initially click-through (call from the setup
+/// hook or an async task — never from a sync command or an event handler).
+pub fn create_overlays<R: Runtime>(app: &AppHandle<R>, setup: OverlaySetup) -> tauri::Result<()> {
     if app.get_webview_window(OVERLAY).is_none() {
-        let window = build(app, OVERLAY, OVERLAY_SIZE, content_protected)?;
+        let window = build(app, OVERLAY, caption_overlay_size(setup.caption_lines), setup.content_protected)?;
         let _ = window.set_ignore_cursor_events(true);
-        redock(&window, corner);
+        redock(&window, setup.corner);
     }
     if app.get_webview_window(DICTATION).is_none() {
-        let window = build(app, DICTATION, DICTATION_SIZE, content_protected)?;
+        let window = build(app, DICTATION, DICTATION_SIZE, setup.content_protected)?;
         let _ = window.set_ignore_cursor_events(true);
-        redock(&window, top_center_corner(corner));
+        redock(&window, top_center_corner(setup.corner));
+    }
+    if app.get_webview_window(PILL).is_none() {
+        let window = build(app, PILL, PILL_SIZE, setup.content_protected)?;
+        let _ = window.set_ignore_cursor_events(true);
+        place_pill(&window, setup.pill_position);
+    }
+    if app.get_webview_window(REVIEW).is_none() {
+        let window = build(app, REVIEW, REVIEW_SIZE, setup.content_protected)?;
+        let _ = window.set_ignore_cursor_events(true);
+        dock_on_primary(&window, Corner::BottomRight);
     }
     Ok(())
 }
@@ -64,29 +106,71 @@ fn top_center_corner(corner: Corner) -> Corner {
     }
 }
 
+fn work_area(monitor: &Monitor) -> WorkArea {
+    let wa = monitor.work_area();
+    WorkArea { x: wa.position.x, y: wa.position.y, w: wa.size.width, h: wa.size.height }
+}
+
+fn margin_px(monitor: &Monitor, logical: f64) -> i32 {
+    (logical * monitor.scale_factor()).round() as i32
+}
+
 /// Docks a window into `corner` of its current monitor's work area (not the full monitor: taskbar-safe).
 pub fn redock<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
     let monitor = window.current_monitor().ok().flatten().or_else(|| window.primary_monitor().ok().flatten());
     let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else { return };
-    let wa = monitor.work_area();
-    let area = WorkArea { x: wa.position.x, y: wa.position.y, w: wa.size.width, h: wa.size.height };
-    let margin = (MARGIN_LOGICAL * monitor.scale_factor()).round() as i32;
-    let (x, y) = dock(area, (size.width, size.height), corner, margin);
+    let (x, y) = dock(work_area(&monitor), (size.width, size.height), corner, margin_px(&monitor, MARGIN_LOGICAL));
     let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
+/// Docks a window into `corner` of the primary monitor's work area (the review card: bottom-right, 18 px).
+fn dock_on_primary<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
+    let monitor = window.primary_monitor().ok().flatten().or_else(|| window.current_monitor().ok().flatten());
+    let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else { return };
+    let (x, y) = dock(work_area(&monitor), (size.width, size.height), corner, margin_px(&monitor, MARGIN_LOGICAL));
+    let _ = window.set_position(PhysicalPosition::new(x, y));
+}
+
+/// Puts the pill at its saved position when that is on a connected monitor, else top-centre of the primary work
+/// area with a 12 px margin.
+pub fn place_pill<R: Runtime>(window: &WebviewWindow<R>, saved: Option<PillPosition>) {
+    let monitors = window.available_monitors().unwrap_or_default();
+    let primary = window.primary_monitor().ok().flatten().or_else(|| monitors.first().cloned());
+    let (Some(primary), Ok(size)) = (primary, window.outer_size()) else { return };
+    let areas: Vec<WorkArea> = monitors.iter().map(work_area).collect();
+    let margin = margin_px(&primary, PILL_MARGIN_LOGICAL);
+    let (x, y) = pill_origin(saved, &areas, work_area(&primary), (size.width, size.height), margin);
+    let _ = window.set_position(PhysicalPosition::new(x, y));
+}
+
+/// The pill's current top-left corner, for saving after the user dragged it.
+pub fn pill_position<R: Runtime>(window: &WebviewWindow<R>) -> Option<PillPosition> {
+    window.outer_position().ok().map(|p| PillPosition { x: p.x, y: p.y })
+}
+
+/// Resizes the caption overlay for the "visible lines" setting and re-docks it (never `show()`).
+pub fn resize_captions<R: Runtime>(app: &AppHandle<R>, caption_lines: u8, corner: Corner) {
+    let Some(window) = app.get_webview_window(OVERLAY) else { return };
+    let (w, h) = caption_overlay_size(caption_lines);
+    // `set_size` and the size read back by `redock` go through the same event-loop queue, in order.
+    if window.set_size(LogicalSize::new(w, h)).is_ok() {
+        redock(&window, corner);
+    }
+}
+
 pub fn set_content_protection<R: Runtime>(app: &AppHandle<R>, protected: bool) {
-    for label in [OVERLAY, DICTATION] {
+    for label in WINDOWS {
         if let Some(w) = app.get_webview_window(label) {
             let _ = w.set_content_protected(protected);
         }
     }
 }
 
-/// ~30 Hz cursor poll: clickable only while the cursor is over an interactive region; toggles on transitions.
+/// ~30 Hz cursor poll: a window is clickable only while the cursor is over one of its interactive regions; the
+/// OS flag is changed on transitions only, plus a resync about once a second.
 pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
-        let mut ignoring: std::collections::HashMap<&'static str, bool> = std::collections::HashMap::new();
+        let mut ignoring: HashMap<&'static str, bool> = HashMap::new();
         let mut tick = tokio::time::interval(Duration::from_millis(33));
         let mut ticks: u32 = 0;
         loop {
@@ -95,17 +179,23 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
             // Re-apply the desired state about once a second even when unchanged: the window can be put back to
             // click-through elsewhere (e.g. when hiding), and a stale cache would otherwise leave it stuck.
             let resync = ticks.is_multiple_of(30);
+            let regions: HashMap<&'static str, Vec<RectPx>> = match app.state::<HitRegions>().0.lock() {
+                Ok(map) => WINDOWS.iter().filter_map(|l| map.get(*l).filter(|r| !r.is_empty()).map(|r| (*l, r.clone()))).collect(),
+                Err(_) => HashMap::new(),
+            };
+            // Nothing interactive and every window already click-through: no cursor query, no window calls.
+            if !resync && regions.is_empty() && WINDOWS.iter().all(|l| ignoring.get(l) == Some(&true)) {
+                continue;
+            }
             let Ok(cursor) = app.cursor_position() else { continue };
-            for label in [OVERLAY, DICTATION] {
+            for label in WINDOWS {
                 let Some(window) = app.get_webview_window(label) else { continue };
-                let regions = app.state::<HitRegions>().0.lock().map(|m| m.get(label).cloned().unwrap_or_default()).unwrap_or_default();
-                let want_ignore = if regions.is_empty() {
-                    true
-                } else {
-                    match window.inner_position() {
-                        Ok(origin) => !cursor_in_regions((cursor.x, cursor.y), (origin.x, origin.y), &regions),
+                let want_ignore = match regions.get(label) {
+                    None => true,
+                    Some(rects) => match window.inner_position() {
+                        Ok(origin) => !cursor_in_regions((cursor.x, cursor.y), (origin.x, origin.y), rects),
                         Err(_) => true,
-                    }
+                    },
                 };
                 if (resync || ignoring.get(label) != Some(&want_ignore)) && window.set_ignore_cursor_events(want_ignore).is_ok() {
                     ignoring.insert(label, want_ignore);

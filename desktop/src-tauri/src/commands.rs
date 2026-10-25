@@ -133,6 +133,8 @@ pub struct SettingsPatch {
     content_protection: Option<bool>,
     autostart: Option<bool>,
     dictation_output: Option<String>,
+    /// Missing = keep, `null` = clear ("No client"), a string = set (A6.DU4).
+    #[serde(default, deserialize_with = "double_option")]
     client_id: Option<Option<String>>,
     consent_acknowledged: Option<bool>,
     overlay_corner: Option<crate::overlay::geometry::Corner>,
@@ -146,6 +148,32 @@ pub struct SettingsPatch {
     caption_lines: Option<u8>,
 }
 
+/// A present key becomes `Some(value)`, so an explicit `null` reads as `Some(None)` and a missing key (via
+/// `#[serde(default)]`) as `None`. Plain `Option<Option<T>>` would read `null` as `None` too.
+fn double_option<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<String>>, D::Error> {
+    <Option<String> as serde::Deserialize>::deserialize(d).map(Some)
+}
+
+impl SettingsPatch {
+    /// Applies the keys present in the patch (validation of `captionLines` happens before).
+    fn apply(&self, s: &mut Settings) {
+        if let Some(v) = self.captions_on_record { s.captions_on_record = v; }
+        if let Some(v) = self.auto_mode { s.auto_mode = v; }
+        if let Some(v) = self.content_protection { s.content_protection = v; }
+        if let Some(v) = self.autostart { s.autostart = v; }
+        if let Some(v) = &self.dictation_output && (v == "type" || v == "clipboard") { s.dictation_output = v.clone(); }
+        if let Some(v) = &self.client_id { s.client_id = v.clone(); }
+        if let Some(v) = self.consent_acknowledged { s.consent_acknowledged = v; }
+        if let Some(v) = self.overlay_corner { s.overlay_corner = v; }
+        if let Some(v) = self.ask_unknown_apps { s.ask_unknown_apps = v; }
+        if let Some(v) = &self.site_rules { s.site_rules = v.clone(); }
+        if let Some(v) = self.browser_automation { s.browser_automation = v; }
+        if let Some(v) = self.ask_before_saving { s.ask_before_saving = v; }
+        if let Some(v) = self.decision_timeout { s.decision_timeout = v; }
+        if let Some(v) = self.caption_lines { s.caption_lines = v; }
+    }
+}
+
 #[tauri::command]
 pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settings> {
     use tauri_plugin_autostart::ManagerExt;
@@ -155,22 +183,7 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         return Err(AppError::msg("Choose 2, 3 or 5 lines."));
     }
     let state = app.state::<AppState>();
-    let updated = state.update_settings(|s| {
-        if let Some(v) = patch.captions_on_record { s.captions_on_record = v; }
-        if let Some(v) = patch.auto_mode { s.auto_mode = v; }
-        if let Some(v) = patch.content_protection { s.content_protection = v; }
-        if let Some(v) = patch.autostart { s.autostart = v; }
-        if let Some(v) = &patch.dictation_output && (v == "type" || v == "clipboard") { s.dictation_output = v.clone(); }
-        if let Some(v) = &patch.client_id { s.client_id = v.clone(); }
-        if let Some(v) = patch.consent_acknowledged { s.consent_acknowledged = v; }
-        if let Some(v) = patch.overlay_corner { s.overlay_corner = v; }
-        if let Some(v) = patch.ask_unknown_apps { s.ask_unknown_apps = v; }
-        if let Some(v) = &patch.site_rules { s.site_rules = v.clone(); }
-        if let Some(v) = patch.browser_automation { s.browser_automation = v; }
-        if let Some(v) = patch.ask_before_saving { s.ask_before_saving = v; }
-        if let Some(v) = patch.decision_timeout { s.decision_timeout = v; }
-        if let Some(v) = patch.caption_lines { s.caption_lines = v; }
-    })?;
+    let updated = state.update_settings(|s| patch.apply(s))?;
     let _ = app.emit("settings:changed", &updated);
     if patch.content_protection.is_some() {
         crate::overlay::set_content_protection(&app, updated.content_protection);
@@ -408,3 +421,6 @@ fn os_version() -> String {
         String::new()
     }
 }
+
+#[cfg(test)]
+mod tests;

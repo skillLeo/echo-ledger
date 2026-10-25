@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "controls",
+  "description": "Recording pill and review card: events and dragging only",
+  "windows": ["pill", "review"],
+  "platforms": ["windows", "macOS"],
+  "permissions": [
+    "core:event:default",
+    "core:window:default",
+    "core:window:allow-start-dragging"
+  ]
+}

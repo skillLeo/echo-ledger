@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use desktop_lib::overlay::{DICTATION, OVERLAY};
+use desktop_lib::overlay::{DICTATION, OVERLAY, PILL, REVIEW, WINDOWS};
 
 fn manifest_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -19,11 +19,17 @@ fn tauri_conf() -> Value {
     json("tauri.conf.json")
 }
 
+/// Every capability file, so a new one is held to the same rules.
 fn capability_files() -> Vec<(String, Value)> {
-    ["capabilities/default.json", "capabilities/overlay.json"]
-        .into_iter()
-        .map(|p| (p.to_string(), json(p)))
-        .collect()
+    let mut files: Vec<String> = std::fs::read_dir(manifest_dir().join("capabilities"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
+        .filter(|name| name.ends_with(".json"))
+        .map(|name| format!("capabilities/{name}"))
+        .collect();
+    files.sort();
+    assert!(files.len() >= 3, "{files:?}");
+    files.into_iter().map(|p| { let v = json(&p); (p, v) }).collect()
 }
 
 fn directive<'a>(csp: &'a Value, name: &str) -> &'a str {
@@ -98,10 +104,36 @@ fn capabilities_name_only_windows_that_exist() {
         for window in capability["windows"].as_array().unwrap() {
             let label = window.as_str().unwrap();
             assert!(
-                configured.contains(&label) || [OVERLAY, DICTATION].contains(&label),
+                configured.contains(&label) || [OVERLAY, DICTATION, PILL, REVIEW].contains(&label),
                 "{file} grants permissions to unknown window `{label}`"
             );
         }
+    }
+    assert_eq!(WINDOWS, [OVERLAY, DICTATION, PILL, REVIEW]);
+    assert_eq!((PILL, REVIEW), ("pill", "review"), "the labels the views and the IPC contract use");
+}
+
+#[test]
+fn the_control_windows_get_no_more_than_events_and_dragging() {
+    let controls = json("capabilities/controls.json");
+    assert_eq!(controls["identifier"], "controls");
+    assert_eq!(controls["windows"], serde_json::json!([PILL, REVIEW]));
+    assert_eq!(controls["platforms"], serde_json::json!(["windows", "macOS"]));
+    assert_eq!(
+        controls["permissions"],
+        serde_json::json!(["core:event:default", "core:window:default", "core:window:allow-start-dragging"])
+    );
+}
+
+#[test]
+fn every_overlay_type_window_is_covered_by_exactly_one_capability() {
+    for label in WINDOWS {
+        let holders: Vec<String> = capability_files()
+            .into_iter()
+            .filter(|(_, c)| c["windows"].as_array().unwrap().iter().any(|w| w == label))
+            .map(|(file, _)| file)
+            .collect();
+        assert_eq!(holders.len(), 1, "{label}: {holders:?}");
     }
 }
 
@@ -206,7 +238,6 @@ fn the_windows_installer_installs_per_user_without_elevation() {
 // ---- Versions --------------------------------------------------------------------------------------------------
 
 #[test]
-#[ignore = "A6.DR16: Cargo.toml, tauri.conf.json and package.json must carry the same version"]
 fn the_cargo_tauri_and_npm_versions_agree() {
     let cargo = env!("CARGO_PKG_VERSION");
     let tauri = tauri_conf()["version"].as_str().unwrap().to_string();
@@ -222,9 +253,38 @@ fn the_cargo_tauri_and_npm_versions_agree() {
 }
 
 #[test]
-fn the_updater_refuses_unsigned_releases() {
-    assert_eq!(
-        tauri_conf()["plugins"]["updater"]["requireSignedVersion"],
-        true
-    );
+fn this_release_is_version_1_1_0() {
+    assert_eq!(env!("CARGO_PKG_VERSION"), "1.1.0");
+    assert_eq!(tauri_conf()["version"], "1.1.0");
+}
+
+#[test]
+fn an_updater_when_configured_refuses_unsigned_releases() {
+    // v1.1 ships without the updater plugin (no endpoint, placeholder key, and it pulled in `zip` 4.6.1). When it
+    // comes back it must carry a real key and refuse unsigned releases.
+    let conf = tauri_conf();
+    let updater = &conf["plugins"]["updater"];
+    if updater.is_null() {
+        return;
+    }
+    assert_eq!(updater["requireSignedVersion"], true);
+    let key = updater["pubkey"].as_str().unwrap_or_default();
+    assert!(!key.is_empty() && !key.contains("REPLACE"), "placeholder updater key");
+}
+
+#[test]
+fn the_updater_plugin_is_not_built_in() {
+    let manifest = std::fs::read_to_string(manifest_dir().join("Cargo.toml")).unwrap();
+    assert!(!manifest.contains("tauri-plugin-updater"), "Cargo.toml still depends on the updater plugin");
+    for (file, needle) in [("src/lib.rs", "tauri_plugin_updater"), ("capabilities/default.json", "updater:")] {
+        let text = std::fs::read_to_string(manifest_dir().join(file)).unwrap();
+        assert!(!text.contains(needle), "{file} still refers to the updater");
+    }
+}
+
+#[test]
+fn the_installer_names_its_publisher() {
+    let conf = tauri_conf();
+    assert_eq!(conf["bundle"]["publisher"], "SkillLeo");
+    assert_eq!(conf["bundle"]["copyright"], "© 2026 SkillLeo");
 }
