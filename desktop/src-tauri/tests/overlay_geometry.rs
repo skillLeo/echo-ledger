@@ -1,7 +1,8 @@
 //! Overlay geometry across several monitors, DPI scales and negative desktop coordinates.
 
 use desktop_lib::overlay::geometry::{
-    Corner, RectPx, WorkArea, contains, cursor_in_regions, dock, nearest_corner,
+    Corner, PillPosition, RectPx, WorkArea, caption_overlay_size, clamp_into, contains,
+    cursor_in_regions, dock, nearest_corner, pill_origin, top_center,
 };
 
 /// Work areas of a plausible desk: a primary screen with a bottom taskbar, a monitor to its left, one above it,
@@ -474,4 +475,100 @@ fn hit_regions_deserialise_from_the_shape_the_ui_reports() {
     let regions: Vec<RectPx> =
         serde_json::from_str(r#"[{"x": 12.5, "y": 8, "w": 120, "h": 32.25}]"#).unwrap();
     assert_eq!(regions, vec![rect(12.5, 8.0, 120.0, 32.25)]);
+}
+
+// ---- Recording pill and caption overlay size -------------------------------------------------------------------
+
+const PRIMARY: WorkArea = WorkArea { x: 0, y: 0, w: 1920, h: 1040 };
+const LEFT: WorkArea = WorkArea { x: -1920, y: 0, w: 1920, h: 1080 };
+const ABOVE_4K: WorkArea = WorkArea { x: 0, y: -2160, w: 3840, h: 2160 };
+/// The pill at 100 % and 150 % scale (280 × 44 logical px).
+const PILL_100: (u32, u32) = (280, 44);
+const PILL_150: (u32, u32) = (420, 66);
+
+#[test]
+fn top_center_centres_horizontally_at_the_top_of_the_work_area() {
+    assert_eq!(top_center(PRIMARY, PILL_100, 12), (820, 12));
+    assert_eq!(top_center(LEFT, PILL_100, 12), (-1920 + 820, 12));
+    assert_eq!(top_center(ABOVE_4K, PILL_150, 18), (1710, -2160 + 18));
+    let shifted = WorkArea { x: 48, y: 30, w: 1872, h: 1050 }; // taskbar on the left, toolbar on top
+    assert_eq!(top_center(shifted, PILL_100, 12), (48 + 796, 42));
+}
+
+#[test]
+fn top_center_never_starts_left_of_a_work_area_narrower_than_the_window() {
+    let narrow = WorkArea { x: -500, y: 0, w: 200, h: 600 };
+    assert_eq!(top_center(narrow, PILL_100, 12), (-500, 12));
+}
+
+#[test]
+fn clamp_into_moves_a_window_back_inside_the_area() {
+    assert_eq!(clamp_into(PRIMARY, (1800, 1020), PILL_100), (1640, 996));
+    assert_eq!(clamp_into(PRIMARY, (-50, -10), PILL_100), (0, 0));
+    assert_eq!(clamp_into(PRIMARY, (600, 300), PILL_100), (600, 300), "already inside");
+    let tiny = WorkArea { x: 10, y: 10, w: 100, h: 20 };
+    assert_eq!(clamp_into(tiny, (50, 15), PILL_100), (10, 10), "top-left wins when the window is larger");
+}
+
+#[test]
+fn a_pill_without_a_saved_position_opens_at_the_top_centre_of_the_primary_screen() {
+    let areas = [LEFT, PRIMARY, ABOVE_4K];
+    assert_eq!(pill_origin(None, &areas, PRIMARY, PILL_100, 12), (820, 12));
+    assert_eq!(pill_origin(None, &areas, PRIMARY, PILL_150, 18), (750, 18));
+}
+
+#[test]
+fn a_saved_pill_position_on_a_connected_monitor_is_kept() {
+    let areas = [LEFT, PRIMARY, ABOVE_4K];
+    for saved in [
+        PillPosition { x: 100, y: 500 },
+        PillPosition { x: -1500, y: 700 },
+        PillPosition { x: 2000, y: -1000 },
+    ] {
+        assert_eq!(pill_origin(Some(saved), &areas, PRIMARY, PILL_100, 12), (saved.x, saved.y), "{saved:?}");
+    }
+}
+
+#[test]
+fn a_saved_pill_position_on_a_monitor_that_is_gone_falls_back_to_the_top_centre() {
+    // Saved on the left monitor, which is unplugged now.
+    let saved = PillPosition { x: -1500, y: 700 };
+    assert_eq!(pill_origin(Some(saved), &[PRIMARY], PRIMARY, PILL_100, 12), (820, 12));
+    // Saved in the gap between monitors (never inside a work area).
+    let gap = PillPosition { x: 500, y: 1060 };
+    assert_eq!(pill_origin(Some(gap), &[PRIMARY, LEFT], PRIMARY, PILL_100, 12), (820, 12));
+}
+
+#[test]
+fn a_saved_pill_position_near_an_edge_keeps_the_whole_pill_on_that_monitor() {
+    // The resolution went down since the pill was saved near the right edge.
+    let saved = PillPosition { x: 1900, y: 1030 };
+    assert_eq!(pill_origin(Some(saved), &[PRIMARY], PRIMARY, PILL_100, 12), (1640, 996));
+    // On the left monitor it is clamped inside the left monitor, not moved to the primary.
+    let saved = PillPosition { x: -10, y: 20 };
+    assert_eq!(pill_origin(Some(saved), &[LEFT, PRIMARY], PRIMARY, PILL_100, 12), (-280, 20));
+}
+
+#[test]
+fn the_pill_position_serialises_as_the_settings_file_stores_it() {
+    let p = PillPosition { x: -1520, y: 64 };
+    assert_eq!(serde_json::to_value(p).unwrap(), serde_json::json!({"x": -1520, "y": 64}));
+    assert_eq!(serde_json::from_str::<PillPosition>(r#"{"x": 5, "y": -7}"#).unwrap(), PillPosition { x: 5, y: -7 });
+}
+
+#[test]
+fn the_caption_overlay_height_follows_the_visible_lines_setting() {
+    assert_eq!(caption_overlay_size(2), (460.0, 118.0));
+    assert_eq!(caption_overlay_size(3), (460.0, 146.0));
+    assert_eq!(caption_overlay_size(5), (460.0, 202.0));
+    for other in [0, 1, 4, 6, 255] {
+        assert_eq!(caption_overlay_size(other), (460.0, 146.0), "{other} lines");
+    }
+}
+
+#[test]
+fn the_review_card_docks_bottom_right_of_the_primary_work_area() {
+    // 360 × 168 logical px with an 18 px margin, at 100 % and 150 %.
+    assert_eq!(dock(PRIMARY, (360, 168), Corner::BottomRight, 18), (1920 - 360 - 18, 1040 - 168 - 18));
+    assert_eq!(dock(PRIMARY, (540, 252), Corner::BottomRight, 27), (1920 - 540 - 27, 1040 - 252 - 27));
 }

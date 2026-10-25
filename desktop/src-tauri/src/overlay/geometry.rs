@@ -71,3 +71,44 @@ pub fn nearest_corner(area: WorkArea, pos: (i32, i32), size: (u32, u32)) -> Corn
 pub fn contains(area: WorkArea, point: (i32, i32)) -> bool {
     point.0 >= area.x && point.0 < area.x + area.w as i32 && point.1 >= area.y && point.1 < area.y + area.h as i32
 }
+
+/// Saved top-left corner of the recording pill, physical desktop px (`Settings.pillPosition`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PillPosition {
+    pub x: i32,
+    pub y: i32,
+}
+
+/// Top-left position that centres a window of `size` horizontally at the top of the work area, `margin` px down.
+pub fn top_center(area: WorkArea, size: (u32, u32), margin: i32) -> (i32, i32) {
+    let x = area.x + (area.w as i32 - size.0 as i32) / 2;
+    (x.max(area.x), area.y + margin)
+}
+
+/// Moves a window of `size` at `pos` the least distance needed to lie inside the work area (top-left wins when
+/// the window is larger than the area).
+pub fn clamp_into(area: WorkArea, pos: (i32, i32), size: (u32, u32)) -> (i32, i32) {
+    let max_x = area.x + area.w as i32 - size.0 as i32;
+    let max_y = area.y + area.h as i32 - size.1 as i32;
+    (pos.0.min(max_x).max(area.x), pos.1.min(max_y).max(area.y))
+}
+
+/// Where the recording pill goes: the saved position when its top-left lies in a current monitor's work area
+/// (kept fully inside that area), else top-centre of the primary work area `margin` px from the top. A saved
+/// position on a monitor that is no longer connected falls back, so the pill never opens off screen.
+pub fn pill_origin(saved: Option<PillPosition>, areas: &[WorkArea], primary: WorkArea, size: (u32, u32), margin: i32) -> (i32, i32) {
+    saved
+        .and_then(|p| areas.iter().find(|a| contains(**a, (p.x, p.y))).map(|a| clamp_into(*a, (p.x, p.y), size)))
+        .unwrap_or_else(|| top_center(primary, size, margin))
+}
+
+/// Caption overlay size (logical px) for the "visible lines" setting: 2 → 118, 3 → 146, 5 → 202 high, 460 wide.
+/// Any other value is treated as 3 (the default).
+pub fn caption_overlay_size(lines: u8) -> (f64, f64) {
+    let height = match lines {
+        2 => 118.0,
+        5 => 202.0,
+        _ => 146.0,
+    };
+    (460.0, height)
+}

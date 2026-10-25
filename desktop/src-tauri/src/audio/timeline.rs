@@ -18,6 +18,11 @@ pub fn nanos_to_frames(delta_ns: u64, rate: u32) -> u64 {
     ((delta_ns as u128 * rate as u128 + 500_000_000) / 1_000_000_000) as u64
 }
 
+/// Converts a frame count at `rate` to nanoseconds (inverse of [`nanos_to_frames`], rounded to the nearest ns).
+pub fn frames_to_nanos(frames: u64, rate: u32) -> u64 {
+    ((frames as u128 * 1_000_000_000 + rate as u128 / 2) / rate as u128) as u64
+}
+
 /// Places a packet of `len` frames whose first frame belongs at `target`, given the current write `cursor`.
 /// Differences within `tolerance` frames are absorbed (jitter) and the packet is appended as-is.
 pub fn place_packet(cursor: u64, target: u64, len: usize, tolerance: u64) -> Placement {

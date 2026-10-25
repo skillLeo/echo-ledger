@@ -372,7 +372,6 @@ fn empty_and_single_sample_blocks_are_accepted() {
 }
 
 #[test]
-#[ignore = "A6.DR14: a single NaN or infinite sample must not poison the resampler"]
 fn the_resampler_recovers_after_a_non_finite_sample() {
     // One bad sample from a driver must not turn the rest of the stream into NaN (which would be written as silence).
     let mut r = Resampler::new(48_000, 16_000);

@@ -244,7 +244,6 @@ async fn audio_sent_before_and_after_the_session_start_arrives_complete_and_in_o
 }
 
 #[tokio::test]
-#[ignore = "A6.DR1: audio buffered before Begin must be flushed without a frame shorter than 50 ms"]
 async fn audio_buffered_before_the_start_is_sent_in_provider_sized_frames() {
     // AssemblyAI closes the session (3007) on any chunk shorter than 50 ms, so the flush that follows `Begin` has to
     // hold back or pad a remainder instead of sending it as a short frame.
@@ -272,6 +271,45 @@ async fn audio_buffered_before_the_start_is_sent_in_provider_sized_frames() {
         sizes.iter().all(|&len| (1_600..=32_000).contains(&len)),
         "frame sizes sent to the provider: {sizes:?}"
     );
+}
+
+#[tokio::test]
+async fn a_remainder_held_back_after_the_start_joins_the_next_audio_and_the_last_one_is_padded() {
+    let log: Log = Arc::default();
+    let server_log = log.clone();
+    let (port, _server) = serve(move |ws| {
+        assemblyai_server(ws, server_log, Duration::from_millis(300), true, vec![])
+    })
+    .await;
+    let client = start_client(grant("assemblyai_v3", port, 50, vec![]));
+    let before = pcm_bytes(2_500, 5); // one frame and 900 bytes
+    let after = pcm_bytes(1_700, 8); // completes the second frame, leaves 1 000 bytes
+    client.pcm.send(before.clone()).unwrap();
+    wait_for("Begin", Duration::from_secs(5), || {
+        client.events().contains(&SttEvent::Started)
+    })
+    .await;
+    client.pcm.send(after.clone()).unwrap();
+    wait_for("two frames", Duration::from_secs(5), || {
+        binaries(&log).len() >= 2
+    })
+    .await;
+    client.finish(Duration::from_secs(5)).await.unwrap();
+
+    let frames = binaries(&log);
+    assert!(frames.iter().all(|f| f.len() == 1_600), "{:?}", frames.iter().map(Vec::len).collect::<Vec<_>>());
+    let received = frames.concat();
+    let sent = [before, after].concat();
+    assert_eq!(&received[..sent.len()], &sent[..], "contiguous and in order");
+    assert_eq!(received.len(), 4_800, "the last 1 000 bytes are padded to a whole frame");
+    assert!(received[sent.len()..].iter().all(|&b| b == 0), "padding is silence");
+    let terminate_at = log
+        .lock()
+        .unwrap()
+        .iter()
+        .position(|f| matches!(f, Frame::Text(t) if t.contains("Terminate")))
+        .expect("Terminate sent");
+    assert_eq!(terminate_at, 3, "the padded frame precedes Terminate");
 }
 
 #[tokio::test]
@@ -473,7 +511,6 @@ async fn closing_the_audio_channel_also_terminates_the_session() {
 }
 
 #[tokio::test]
-#[ignore = "A6.DR11: an AssemblyAI session must end even if Terminate is never answered"]
 async fn a_provider_that_never_confirms_the_end_does_not_hold_the_session_open_forever() {
     let log: Log = Arc::default();
     let server_log = log.clone();

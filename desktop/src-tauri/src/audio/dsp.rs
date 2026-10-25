@@ -40,6 +40,11 @@ pub fn rms(samples: &[f32]) -> f32 {
     (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt()
 }
 
+/// Replaces NaN and ±infinity with silence.
+pub fn finite_or_zero(sample: f32) -> f32 {
+    if sample.is_finite() { sample } else { 0.0 }
+}
+
 /// Streaming resampler: one-pole low-pass (anti-aliasing for downsampling) + linear interpolation.
 /// Good enough for speech recognition; WASAPI autoconvert usually delivers 16 kHz already.
 #[derive(Clone, Debug)]
@@ -72,12 +77,13 @@ impl Resampler {
 
     pub fn process(&mut self, input: &[f32]) -> Vec<f32> {
         if self.is_passthrough() {
-            return input.to_vec();
+            return input.to_vec(); // no filter state to poison; the writer maps NaN to 0 (`f32_to_i16`)
         }
+        // A NaN or infinite sample from a driver would stay in the filter state for ever (A6.DR14): treat it as 0.0.
         let filtered: Vec<f32> = input
             .iter()
             .map(|&x| {
-                self.lp_state += self.lp_alpha * (x - self.lp_state);
+                self.lp_state += self.lp_alpha * (finite_or_zero(x) - self.lp_state);
                 self.lp_state
             })
             .collect();

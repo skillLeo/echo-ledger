@@ -47,16 +47,40 @@ pub struct FinalTurn {
     pub end_ms: u64,
 }
 
+/// Recording-timeline times (ms) of a final turn. Provider times count from the stream start, which sits
+/// `base_offset` ms into the recording. A turn without provider timing is placed where it arrived (`arrived_ms`
+/// after the stream start), so turns from both channels keep their order (A6.DR11).
+pub fn turn_times(base_offset: u64, start_ms: Option<u64>, end_ms: Option<u64>, arrived_ms: u64) -> (u64, u64) {
+    match start_ms {
+        Some(start) => (base_offset + start, base_offset + end_ms.unwrap_or(start)),
+        None => (base_offset + arrived_ms, base_offset + arrived_ms),
+    }
+}
+
 /// Rolling buffer of final turns (pure; unit-tested).
 #[derive(Default)]
 pub struct CaptionBuffer {
     turns: VecDeque<FinalTurn>,
+    /// Start time given to the last turn that arrived without provider timing.
+    last_untimed_start: Option<u64>,
 }
 
 impl CaptionBuffer {
     const MAX_TURNS: usize = 5_000;
 
-    pub fn push(&mut self, turn: FinalTurn) {
+    pub fn push(&mut self, mut turn: FinalTurn) {
+        // A turn without provider timing has no length (ElevenLabs commits carry no word times). Such turns get
+        // strictly increasing start times in arrival order, so `segments()` keeps the conversation order across
+        // both channels instead of listing all of Me before all of Client (A6.DR11).
+        if turn.end_ms <= turn.start_ms {
+            if let Some(last) = self.last_untimed_start
+                && turn.start_ms <= last
+            {
+                turn.start_ms = last + 1;
+                turn.end_ms = turn.start_ms;
+            }
+            self.last_untimed_start = Some(turn.start_ms);
+        }
         if self.turns.len() >= Self::MAX_TURNS {
             self.turns.pop_front();
         }
@@ -94,6 +118,7 @@ impl CaptionBuffer {
 
     pub fn clear(&mut self) {
         self.turns.clear();
+        self.last_untimed_start = None;
     }
 
     pub fn len(&self) -> usize {

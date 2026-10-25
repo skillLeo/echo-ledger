@@ -364,7 +364,6 @@ fn segments_do_not_consume_the_buffer() {
 }
 
 #[test]
-#[ignore = "A6.DR11: live turns without provider timing must keep the order of the conversation"]
 fn turns_without_provider_timing_keep_the_order_of_the_conversation() {
     // ElevenLabs commits carry no timestamps, so every turn is recorded with the same start and end (the offset of
     // the stream). The live transcript must still read as a conversation, not as all of Me followed by all of Client.
@@ -396,5 +395,50 @@ fn turns_without_provider_timing_keep_the_order_of_the_conversation() {
             "Great, let's start.",
             "Go ahead."
         ]
+    );
+}
+
+#[test]
+fn untimed_turns_get_increasing_start_times_and_timed_turns_are_left_alone() {
+    let mut buf = CaptionBuffer::default();
+    buf.push(turn(1, Channel::Mic, "a", 7_000, 7_000));
+    buf.push(turn(2, Channel::System, "b", 7_000, 7_000));
+    buf.push(turn(3, Channel::Mic, "timed", 2_000, 2_500));
+    buf.push(turn(4, Channel::System, "c", 6_000, 6_000));
+    let starts: Vec<(String, u64)> = buf
+        .segments()
+        .into_iter()
+        .map(|s| (s.text, s.start_ms))
+        .collect();
+    assert_eq!(
+        starts,
+        [
+            ("timed".to_string(), 2_000),
+            ("a".to_string(), 7_000),
+            ("b".to_string(), 7_001),
+            ("c".to_string(), 7_002)
+        ]
+    );
+    buf.clear();
+    buf.push(turn(5, Channel::Mic, "fresh", 100, 100));
+    assert_eq!(
+        buf.segments()[0].start_ms,
+        100,
+        "a new recording starts over"
+    );
+}
+
+#[test]
+fn turn_times_use_provider_timing_or_the_arrival_time() {
+    use desktop_lib::stt::captions::turn_times;
+    assert_eq!(
+        turn_times(5_000, Some(200), Some(900), 1_500),
+        (5_200, 5_900)
+    );
+    assert_eq!(turn_times(5_000, Some(200), None, 1_500), (5_200, 5_200));
+    assert_eq!(
+        turn_times(5_000, None, None, 1_500),
+        (6_500, 6_500),
+        "no provider timing: placed where it arrived"
     );
 }

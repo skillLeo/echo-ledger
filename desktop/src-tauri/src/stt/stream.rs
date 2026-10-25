@@ -60,6 +60,8 @@ pub async fn run_session(
     let mut pending: Vec<u8> = Vec::new();
     let max_buffer = frame_bytes * 200; // ≤ 10 s buffered before Begin
     let mut terminating = false;
+    // Once Terminate is sent, the provider gets this long to confirm before the socket is closed (A6.DR11).
+    let mut terminate_deadline: Option<tokio::time::Instant> = None;
     let mut idle = tokio::time::interval(Duration::from_secs(5));
 
     loop {
@@ -67,11 +69,11 @@ pub async fn run_session(
             changed = stop.changed(), if !terminating => {
                 if changed.is_err() || *stop.borrow() {
                     terminating = true;
-                    let bye = match protocol {
-                        Protocol::AssemblyAiV3 => Message::text(ASSEMBLYAI_TERMINATE),
-                        Protocol::ElevenLabsRealtime => Message::text(elevenlabs_audio_message(&[], true)),
-                    };
-                    let _ = tx.send(bye).await;
+                    if started {
+                        let _ = flush_remainder(&mut tx, protocol, &mut pending, frame_bytes).await;
+                    }
+                    let _ = stop_now(&mut tx, protocol).await;
+                    terminate_deadline = Some(tokio::time::Instant::now() + TERMINATE_WAIT);
                     if protocol == Protocol::ElevenLabsRealtime {
                         // ElevenLabs commits and keeps the socket open; allow the final commit to arrive.
                         let _ = tokio::time::timeout(Duration::from_secs(3), async {
@@ -94,12 +96,13 @@ pub async fn run_session(
                                     for init in &grant.init_messages {
                                         tx.send(Message::text(init.to_string())).await.map_err(|e| e.to_string())?;
                                     }
-                                    if !pending.is_empty() {
-                                        let buffered = std::mem::take(&mut pending);
-                                        for frame in buffered.chunks(frame_bytes) {
-                                            send_audio(&mut tx, protocol, frame).await?;
-                                        }
+                                    // Whole frames only: AssemblyAI ends the session (3007) on a chunk shorter than
+                                    // 50 ms, so a remainder waits in `pending` for the next audio (A6.DR1).
+                                    let whole = pending.len() - pending.len() % frame_bytes;
+                                    for frame in pending[..whole].chunks(frame_bytes) {
+                                        send_audio(&mut tx, protocol, frame).await?;
                                     }
+                                    pending.drain(..whole);
                                 }
                                 SttEvent::Terminated => { on_event(event); let _ = tx.send(Message::Close(None)).await; return Ok(()); }
                                 _ => {}
@@ -126,8 +129,20 @@ pub async fn run_session(
                             pending.drain(..excess);
                         }
                     }
-                    None => { let _ = stop_now(&mut tx, protocol).await; terminating = true; }
+                    None => {
+                        if started {
+                            let _ = flush_remainder(&mut tx, protocol, &mut pending, frame_bytes).await;
+                        }
+                        let _ = stop_now(&mut tx, protocol).await;
+                        terminating = true;
+                        terminate_deadline = Some(tokio::time::Instant::now() + TERMINATE_WAIT);
+                    }
                 }
+            }
+            _ = tokio::time::sleep_until(terminate_deadline.unwrap_or_else(tokio::time::Instant::now)), if terminate_deadline.is_some() => {
+                // The provider never confirmed the end: close and return instead of holding the session open.
+                let _ = tx.send(Message::Close(None)).await;
+                return Ok(());
             }
             _ = idle.tick(), if started && !terminating && protocol == Protocol::ElevenLabsRealtime => {
                 // ElevenLabs closes after 15 s without frames; keep the session alive with silence.
@@ -137,6 +152,24 @@ pub async fn run_session(
             }
         }
     }
+}
+
+/// How long a stopped session waits for the provider's end-of-session message.
+const TERMINATE_WAIT: Duration = Duration::from_secs(3);
+
+/// At the end of a session: sends what is left in `pending` padded with silence to a whole frame, so the last
+/// words reach the provider without a short frame (A6.DR1).
+async fn flush_remainder(tx: &mut WsSink, protocol: Protocol, pending: &mut Vec<u8>, frame_bytes: usize) -> Result<(), String> {
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let padded = pending.len().div_ceil(frame_bytes) * frame_bytes;
+    pending.resize(padded, 0);
+    for frame in pending.chunks(frame_bytes) {
+        send_audio(tx, protocol, frame).await?;
+    }
+    pending.clear();
+    Ok(())
 }
 
 type WsSink = futures_util::stream::SplitSink<tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>, Message>;

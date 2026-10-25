@@ -113,7 +113,6 @@ fn frame_counts_around_the_encoder_block_size_all_roundtrip() {
 }
 
 #[test]
-#[ignore = "A6.DR9: a final block of 1 to 15 samples must not become the STREAMINFO minimum block size"]
 fn a_final_block_of_only_a_few_samples_still_gives_a_stream_strict_decoders_accept() {
     // 4 096 frames per block: lengths just past a block boundary leave a final block of 1..15 samples, which the
     // encoder records as the stream's minimum block size; the format requires at least 16.
@@ -525,7 +524,6 @@ fn a_dropped_live_sink_is_detached_without_failing_the_recording() {
 }
 
 #[test]
-#[ignore = "A6.DR6: a first packet without a timestamp must not anchor the recording at clock zero"]
 fn a_first_packet_without_a_timestamp_does_not_inflate_the_recording() {
     // Device clocks report time since boot. If the very first packet carries no timestamp (WASAPI sets a
     // timestamp-error flag now and then), the later, stamped packets must not be placed "ten seconds in".

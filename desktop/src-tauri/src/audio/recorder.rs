@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::dsp::{f32_to_i16, rms};
-use super::timeline::Timeline;
+use super::timeline::{Timeline, frames_to_nanos};
 use super::types::{AudioChunk, Channel, TARGET_RATE};
-use super::writer::{MonoWav, encode_mono_flac, encode_stereo_flac, read_mono_i16};
+use super::writer::{MonoWav, encode_mono_flac_from_wav, encode_stereo_flac_from_wavs};
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct RecordingOutput {
@@ -78,12 +78,19 @@ impl Recorder {
         if chunk.samples.is_empty() {
             return Ok(());
         }
-        let t0 = *self.t0_ns.get_or_insert(chunk.ts_ns.unwrap_or(0));
         let (timeline, wav) = match chunk.channel {
             Channel::Mic => (&mut self.mic_tl, &mut self.mic),
             Channel::System => (&mut self.sys_tl, &mut self.sys),
         };
-        let placement = timeline.place(t0, chunk.ts_ns, chunk.samples.len());
+        // T0 comes from the first *timestamped* packet, chosen so that packet lands at its channel's cursor. Packets
+        // without a timestamp before it were appended at the cursor; anchoring them at clock zero would place the
+        // stamped ones (device time since boot) hours into the file (A6.DR6).
+        if self.t0_ns.is_none()
+            && let Some(ts) = chunk.ts_ns
+        {
+            self.t0_ns = Some(ts.saturating_sub(frames_to_nanos(timeline.cursor(), TARGET_RATE)));
+        }
+        let placement = timeline.place(self.t0_ns.unwrap_or(0), chunk.ts_ns, chunk.samples.len());
         if placement.pad > 0 {
             wav.write_silence(placement.pad)?;
         }
@@ -117,15 +124,14 @@ impl Recorder {
 
         let mic_wav = self.dir.join("mic.wav");
         let system_wav = self.dir.join("system.wav");
-        let left = read_mono_i16(&mic_wav)?;
-        let right = read_mono_i16(&system_wav)?;
+        // Encoded straight from the WAVs, one block at a time (A6.DR10): flat memory for any length.
         let (primary, channels) = if let Some(channel) = self.mono {
             let path = self.dir.join("voice-note.flac");
-            encode_mono_flac(if channel == Channel::Mic { &left } else { &right }, &path)?;
+            encode_mono_flac_from_wav(if channel == Channel::Mic { &mic_wav } else { &system_wav }, &path)?;
             (path, 1)
         } else {
             let path = self.dir.join("recording.flac");
-            encode_stereo_flac(&left, &right, &path)?;
+            encode_stereo_flac_from_wavs(&mic_wav, &system_wav, &path)?;
             (path, 2)
         };
 

@@ -54,7 +54,6 @@ fn words_that_merely_contain_a_filler_are_untouched() {
 }
 
 #[test]
-#[ignore = "NEW: dictation clean-up mangles decimals, web addresses, file extensions, units, the pronoun I and non-Latin sentence ends"]
 fn the_unit_mm_is_not_mistaken_for_a_filler() {
     assert_eq!(clean("a gap of 5 mm is fine"), "A gap of 5 mm is fine.");
 }
@@ -96,7 +95,6 @@ fn the_pronoun_i_is_capitalised_including_contractions() {
 }
 
 #[test]
-#[ignore = "NEW: dictation clean-up mangles decimals, web addresses, file extensions, units, the pronoun I and non-Latin sentence ends"]
 fn the_pronoun_i_is_capitalised_next_to_punctuation() {
     assert_eq!(clean("so do i."), "So do I.");
     assert_eq!(clean("well, i, for one, agree"), "Well, I, for one, agree.");
@@ -122,7 +120,6 @@ fn already_capitalised_text_is_preserved() {
 }
 
 #[test]
-#[ignore = "NEW: dictation clean-up mangles decimals, web addresses, file extensions, units, the pronoun I and non-Latin sentence ends"]
 fn decimals_and_versions_do_not_start_a_new_sentence() {
     assert_eq!(
         clean("the price is 3.5 million"),
@@ -135,7 +132,6 @@ fn decimals_and_versions_do_not_start_a_new_sentence() {
 }
 
 #[test]
-#[ignore = "NEW: dictation clean-up mangles decimals, web addresses, file extensions, units, the pronoun I and non-Latin sentence ends"]
 fn web_addresses_and_file_names_keep_their_case() {
     assert_eq!(
         clean("open google.com for details"),
@@ -148,7 +144,6 @@ fn web_addresses_and_file_names_keep_their_case() {
 }
 
 #[test]
-#[ignore = "NEW: dictation clean-up mangles decimals, web addresses, file extensions, units, the pronoun I and non-Latin sentence ends"]
 fn a_space_before_a_dot_that_starts_a_word_is_kept() {
     assert_eq!(clean("save it as a .pdf file"), "Save it as a .pdf file.");
 }
@@ -165,14 +160,12 @@ fn a_full_stop_is_added_only_when_the_text_has_no_sentence_ending() {
 }
 
 #[test]
-#[ignore = "NEW: dictation clean-up mangles decimals, web addresses, file extensions, units, the pronoun I and non-Latin sentence ends"]
 fn a_trailing_comma_does_not_become_a_comma_and_a_full_stop() {
     let out = clean("first we plan,");
     assert!(!out.contains(",."), "{out:?}");
 }
 
 #[test]
-#[ignore = "NEW: dictation clean-up mangles decimals, web addresses, file extensions, units, the pronoun I and non-Latin sentence ends"]
 fn closing_punctuation_from_other_scripts_is_recognised() {
     for (text, ending) in [
         ("میں کل آؤں گا۔", '۔'),
