@@ -79,7 +79,7 @@ class DictationTokens(private val api: ApiClient) {
 
     companion object {
         val PROTOCOLS = setOf("assemblyai_v3", "elevenlabs_realtime")
-        const val BUDGET = "Monthly transcription limit reached"
+        const val BUDGET = "Monthly limit reached — raise it in Settings"
         const val UNAVAILABLE = "Dictation is unavailable right now"
         const val OFFLINE = "No connection. Try again when you are online."
         const val NOT_PAIRED = "Pair EchoLedger with your server first"

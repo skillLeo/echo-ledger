@@ -4,9 +4,14 @@ declare(strict_types=1);
 
 use App\Enums\SessionStatus;
 use App\Models\CaptureSession;
+use App\Models\Plan;
 use App\Models\UsageLedgerEntry;
+use App\Models\User;
+use App\Models\Workspace;
 use App\Services\ChunkedUploadService;
+use App\Services\PairingService;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\Workspaces;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
@@ -117,6 +122,23 @@ function produceError(object $test, string $code): TestResponse
             return $test->deleteJson('/api/devices/'.$test->device->id);
         case 'nothing_to_export':
             return $test->postJson('/api/sessions/export', ['ids' => [ENVELOPE_MISSING_ID], 'format' => 'txt']);
+        case 'storage_limit_reached':
+            Plan::personal()->update(['storage_bytes' => 1]);
+
+            return $test->createSession($test->bytes);
+        case 'device_limit_reached':
+            app('auth')->forgetGuards();
+            $code = app(PairingService::class)->createCode($test->device->user);
+            Plan::personal()->update(['max_devices' => 1]);
+
+            return $test->flushHeaders()->postJson('/api/devices/register', ['pairing_code' => $code, 'name' => 'Second', 'platform' => 'android']);
+        case 'not_allowed':
+            $member = withoutWorkspace(User::factory()->create());
+            app(Workspaces::class)->addMember(Workspace::query()->findOrFail($test->device->workspace_id), $member);
+            [, $memberToken] = $test->enroll($member->fresh());
+            $theirs = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
+
+            return $test->asToken($memberToken)->deleteJson("/api/sessions/{$theirs->id}");
         case 'too_many_labels':
             $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
 
@@ -160,7 +182,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(27);
+        ->and(count(documentedErrorCodes()))->toBe(30);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

@@ -47,12 +47,15 @@ Every addition below is marked **(since v1.1)**.
 |---|---|---|---|
 | 401 | `unauthenticated` | Token missing, expired or revoked | Stop syncing and uploading, keep local recordings, show the unpaired state |
 | 403 | `missing_ability` | Token lacks the route's ability | Permanent: do not retry |
-| 403 | `budget_exceeded` | Monthly transcription limit reached (message `Monthly transcription limit reached`) | Keep recording without captions; show the message; do not retry until `usage.limit_reached` is false |
+| 403 | `budget_exceeded` | Monthly limit reached: the server cap (message `Monthly transcription limit reached`) or, since B20, the workspace plan's minutes (message `Monthly limit reached — raise it in Settings`) | Keep recording without captions; show the message; do not retry until `usage.limit_reached` is false |
+| 403 | `storage_limit_reached` | Since B20: a new recording would pass the workspace plan's storage (message `Storage limit reached — raise it in Settings`) | Permanent for this upload: keep the recording on the device, show the message |
+| 403 | `device_limit_reached` | Since B20: pairing would pass the workspace plan's devices (message `Device limit reached — raise it in Settings`) | Show the message; do not retry |
+| 403 | `not_allowed` | Since B20: the role does not allow it — a member deleting, restoring or erasing someone else's recording, or a non-admin device changing the shared vocabulary | Permanent; show the message |
 | 404 | `not_found` | Unknown route | Permanent |
 | 404 | `session_not_found` | Session unknown, deleted, or (finish, stt/token) not created by this device | finish: create a new session with a new `client_ref`; delete: treat as done |
 | 404 | `recording_not_found` | Recording unknown or its session was deleted | Drop the upload slot |
 | 404 | `transcript_not_found` | Transcript unknown or its session was deleted | Refresh the library |
-| 404 | `client_not_found` | `client_id` unknown or owned by someone else | Clear the selected client and retry once without it |
+| 404 | `client_not_found` | `client_id` unknown or in another workspace | Clear the selected client and retry once without it |
 | 404 | `device_not_found` | `DELETE devices/{id}`: the device is unknown or someone else's | Refresh the device list |
 | 405 | `method_not_allowed` | Wrong HTTP method | Permanent |
 | 409 | `upload_complete` | Chunk sent after the recording started assembling | Stop sending chunks; poll `GET /api/recordings/{id}` |
@@ -108,6 +111,16 @@ hint for `no_audio` (desktop: check the microphone and the audio device; Android
 | `recording_missing` | `The recording is missing or not ready.` |
 
 ---
+
+### Workspaces (since B20)
+
+Every device, client, recording and usage row belongs to one workspace; a device token acts for the workspace it was
+paired into (the console user's current workspace when the code was made). Everything a device reads or changes is
+limited to that workspace: an id from another workspace answers exactly like an unknown id (`404`). Members of a
+workspace share its library. A member deletes, restores and erases only recordings they made (`403 not_allowed`
+otherwise); owners may do this for any recording. Plan limits (minutes per month, storage, devices) answer
+`403 budget_exceeded`, `403 storage_limit_reached` and `403 device_limit_reached`. The shared vocabulary (no
+`client_id`) is server-wide and only a super admin's device may change it.
 
 ## Pairing & configuration
 
@@ -165,9 +178,11 @@ abilities of the token that asked for it, never more **(since v1.1)**.
   - `minutes`: billable provider minutes, one decimal (audio minutes × billed channels, summed over the usage
     ledger; on-device and self-hosted engines are not billable). `cost_usd`: estimate from the console price
     table, two decimals.
-  - `limit_minutes` / `limit_usd`: the monthly limits set in the console, `null` when not set.
+  - Since B20 `minutes` and `cost_usd` are those of the device's workspace (a single-workspace server sees no change).
+  - `limit_minutes` / `limit_usd`: the server-wide monthly limits set in the console, `null` when not set.
   - `warn`: `true` once usage reaches `warn_at_percent` (80) of any set limit. `limit_reached`: `true` once usage
-    reaches 100 % of any set limit. While `limit_reached` is true, `stt/token` answers `403 budget_exceeded` and
+    reaches 100 % of any set limit: the server limits on the whole server's usage, or the workspace plan's monthly
+    minutes on the workspace's usage. While `limit_reached` is true, `stt/token` answers `403 budget_exceeded` and
     new final transcripts fail with `error_code` `budget_exceeded`. Both are `false` when no limit is set.
 
 ### `GET /api/clients` — `library:read`

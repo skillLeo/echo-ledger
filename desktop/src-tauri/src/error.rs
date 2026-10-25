@@ -10,7 +10,7 @@ pub enum AppError {
     Network(String),
     /// A non-2xx answer other than 401. `code` is the machine-readable `code` of docs/API.md (since v1.1);
     /// `retry_after_secs` is the `Retry-After` header in seconds (always present on a 429).
-    #[error("Server returned {status}: {message}{}", retry_hint(.retry_after_secs))]
+    #[error("{}", server_text(*.status, .message, .code.as_deref(), .retry_after_secs))]
     Server { status: u16, message: String, code: Option<String>, retry_after_secs: Option<u64> },
     #[error("Audio error: {0}")]
     Audio(String),
@@ -26,6 +26,16 @@ pub enum AppError {
 
 fn retry_hint(retry_after_secs: &Option<u64>) -> String {
     retry_after_secs.map(|n| format!(" Try again in {n} s.")).unwrap_or_default()
+}
+
+/// Answers whose `message` is written for people (plan limits and roles, docs/API.md): shown as they are.
+const PLAIN_CODES: [&str; 4] = ["budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed"];
+
+fn server_text(status: u16, message: &str, code: Option<&str>, retry_after_secs: &Option<u64>) -> String {
+    match code {
+        Some(c) if PLAIN_CODES.contains(&c) && !message.trim().is_empty() => message.to_string(),
+        _ => format!("Server returned {status}: {message}{}", retry_hint(retry_after_secs)),
+    }
 }
 
 impl AppError {
@@ -125,3 +135,25 @@ impl serde::Serialize for AppError {
 }
 
 pub type AppResult<T> = Result<T, AppError>;
+
+#[cfg(test)]
+mod server_text_tests {
+    use super::AppError;
+
+    fn server(status: u16, message: &str, code: Option<&str>) -> AppError {
+        AppError::Server { status, message: message.into(), code: code.map(String::from), retry_after_secs: None }
+    }
+
+    #[test]
+    fn plan_limit_answers_read_as_plain_sentences() {
+        assert_eq!(server(403, "Storage limit reached — raise it in Settings", Some("storage_limit_reached")).to_string(), "Storage limit reached — raise it in Settings");
+        assert_eq!(server(403, "Device limit reached — raise it in Settings", Some("device_limit_reached")).to_string(), "Device limit reached — raise it in Settings");
+        assert_eq!(server(403, "Only the workspace owner can delete recordings made by someone else.", Some("not_allowed")).to_string(), "Only the workspace owner can delete recordings made by someone else.");
+    }
+
+    #[test]
+    fn other_answers_keep_the_status() {
+        assert_eq!(server(422, "The pairing code is invalid.", Some("validation_failed")).to_string(), "Server returned 422: The pairing code is invalid.");
+        assert_eq!(server(403, "", Some("storage_limit_reached")).to_string(), "Server returned 403: ");
+    }
+}

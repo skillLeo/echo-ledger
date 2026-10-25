@@ -66,7 +66,7 @@ class CaptionTokens(private val api: ApiClient) {
     }
 
     companion object {
-        const val BUDGET = "Monthly transcription limit reached"
+        const val BUDGET = "Monthly limit reached — raise it in Settings"
         const val SESSION_ENDED = "Live captions stopped. Recording continues."
         const val UNAVAILABLE = "Live captions are unavailable right now. Recording continues."
     }

@@ -27,7 +27,7 @@ pub fn now_ms() -> u64 {
 }
 
 /// Shown (caption status and `app:error`) when the server refuses tokens for the month (docs/API.md).
-pub const BUDGET_REACHED: &str = "Monthly transcription limit reached";
+pub const BUDGET_REACHED: &str = "Monthly limit reached — raise it in Settings";
 /// `409 session_not_recording`: the open session is no longer recording or older than 4 hours.
 pub const CAPTIONS_TOO_LONG: &str = "Live captions stopped: this recording is too long for captions. Recording continues.";
 /// Network trouble or a provider outage while starting captions.
