@@ -540,7 +540,7 @@ pub async fn pending_assign_client(app: &AppHandle, id: &str, client_id: Option<
 
 /// Shows the main window on a view (tray "Review recordings", the card's Open / Rename).
 pub fn navigate(app: &AppHandle, view: &str, pending_id: Option<String>, rename: bool) {
-    let payload = crate::commands::NavigatePayload { view: view.to_string(), pending_id, rename };
+    let payload = crate::commands::NavigatePayload { view: view.to_string(), pending_id, rename, recording_id: None };
     crate::tray::show_main(app);
     let _ = app.emit_to("main", "main:navigate", payload);
 }
@@ -979,4 +979,55 @@ async fn run_upload_cycle(app: &AppHandle) {
         let _ = app.emit("app:toast", format!("Uploaded {uploaded} recording(s) for transcription"));
     }
     emit_status(app);
+}
+
+/// How long after an OS notification bringing the app forward opens its recording.
+const NOTIFIED_WINDOW: Duration = Duration::from_secs(600);
+
+/// Another start of the app (a second launch, or a click on one of our notifications): show the window and, when a
+/// notification about a recording went out in the last ten minutes, open that recording.
+pub fn show_main_from_outside(app: &AppHandle) {
+    crate::tray::show_main(app);
+    let target = app.state::<crate::AppState>().notified.lock().unwrap_or_else(|p| p.into_inner()).take();
+    if let Some((id, at)) = target
+        && at.elapsed() < NOTIFIED_WINDOW
+    {
+        let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: Some(id) };
+        let _ = app.emit_to("main", "main:navigate", payload);
+    }
+}
+
+/// Polls the activity centre every minute and shows new notifications (B18), outside the quiet hours.
+pub fn spawn_activity_poll(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+            let _ = poll_activity(&app).await;
+        }
+    });
+}
+
+async fn poll_activity(app: &AppHandle) -> AppResult<()> {
+    use tauri_plugin_notification::NotificationExt;
+    let state = app.state::<crate::AppState>();
+    let answer = state.api()?.activity(20).await?;
+    let items: Vec<crate::activity::ActivityItem> = serde_json::from_value(answer.get("data").cloned().unwrap_or_default()).unwrap_or_default();
+    let path = paths::activity_seen(&state.data_dir);
+    let mut seen = crate::activity::Seen::load(&path);
+    let fresh = seen.fresh(&items);
+    let _ = seen.save(&path);
+    let _ = app.emit("activity:updated", answer.get("unread_count").and_then(serde_json::Value::as_u64).unwrap_or(0));
+    let settings = state.settings();
+    let now = chrono::Local::now();
+    let minutes = now.format("%H").to_string().parse::<u32>().unwrap_or(0) * 60 + now.format("%M").to_string().parse::<u32>().unwrap_or(0);
+    if fresh.is_empty() || !settings.activity_notifications || crate::activity::in_quiet_hours(settings.quiet_hours, &settings.quiet_from, &settings.quiet_to, minutes) {
+        return Ok(());
+    }
+    if let Some(id) = fresh.iter().rev().find_map(|i| i.session_id.clone()) {
+        *state.notified.lock().unwrap_or_else(|p| p.into_inner()) = Some((id, Instant::now()));
+    }
+    for (title, body) in crate::activity::notification_text(&fresh, state.lock.is_locked()) {
+        let _ = app.notification().builder().title(title).body(body).show();
+    }
+    Ok(())
 }

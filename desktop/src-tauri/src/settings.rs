@@ -247,6 +247,12 @@ pub struct Settings {
     pub app_lock: bool,
     /// Minutes without use before the app locks; 0 = only when it starts or with Lock now.
     pub lock_after_minutes: u32,
+    /// Show new activity (transcript ready, upload failed, ...) as OS notifications (B18).
+    pub activity_notifications: bool,
+    /// No OS notifications between [Self::quiet_from] and [Self::quiet_to] (local "HH:MM").
+    pub quiet_hours: bool,
+    pub quiet_from: String,
+    pub quiet_to: String,
 }
 
 impl Default for Settings {
@@ -284,6 +290,10 @@ impl Default for Settings {
             dictation_snippets: Vec::new(),
             app_lock: false,
             lock_after_minutes: 5,
+            activity_notifications: true,
+            quiet_hours: false,
+            quiet_from: "22:00".into(),
+            quiet_to: "07:00".into(),
         }
     }
 }
@@ -313,6 +323,8 @@ impl Settings {
                 "dictationReplacements" => parsable_list::<crate::dictation::rules::Replacement>(value),
                 "dictationSnippets" => parsable_list::<crate::dictation::rules::Snippet>(value),
                 "captionLines" => Value::from(caption_lines_or_default(value.as_u64())),
+                "quietFrom" => Value::from(value.as_str().filter(|t| crate::activity::parse_hhmm(t).is_some()).unwrap_or("22:00")),
+                "quietTo" => Value::from(value.as_str().filter(|t| crate::activity::parse_hhmm(t).is_some()).unwrap_or("07:00")),
                 "lockAfterMinutes" => Value::from(value.as_u64().and_then(|m| u32::try_from(m).ok()).filter(|m| crate::lock::LOCK_AFTER_CHOICES.contains(m)).unwrap_or(5)),
                 _ => value,
             };

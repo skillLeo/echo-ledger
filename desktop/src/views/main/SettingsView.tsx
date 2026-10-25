@@ -6,7 +6,7 @@ import { SourceAppIcon } from "../../components/Icons";
 import { SelectRow, Toggle } from "./SettingsControls";
 import { AutoRecordApps, CaptionStyleCard, MicrophoneCard } from "./CaptureSettings";
 import { DictationCard } from "./DictationSettings";
-import { SecurityCard, StorageCard } from "./SecuritySettings";
+import { NotificationsCard, SecurityCard, StorageCard } from "./SecuritySettings";
 
 const ACTIONS: [ShortcutAction, string][] = [
   ["toggle_captions", "Show / hide live captions"],
@@ -173,6 +173,7 @@ export function SettingsView({ status, run, onUnpaired }: {
       </div>
       <DictationCard settings={settings} patch={patch} />
       <SecurityCard settings={settings} patch={patch} run={run} />
+      <NotificationsCard settings={settings} patch={patch} />
       <StorageCard />
 
       <AutoRecordApps settings={settings} patch={patch} />

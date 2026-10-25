@@ -141,3 +141,23 @@ export function StorageCard() {
     </div>
   );
 }
+
+/** Settings → Notifications (B18): OS notifications for new activity, and quiet hours. */
+export function NotificationsCard({ settings, patch }: { settings: Settings; patch: (p: SettingsPatch) => Promise<boolean> }) {
+  const fromId = useId();
+  const toId = useId();
+  return (
+    <div className="card notifications-settings">
+      <b>Notifications</b>
+      <Toggle label="Show notifications" hint="Transcript ready, upload failed, a new device or the monthly limit. Clicking one opens the recording."
+        on={settings.activityNotifications} onChange={(v) => void patch({ activityNotifications: v })} />
+      <Toggle label="Quiet hours" hint="No notifications in this time. They still wait in the bell." on={settings.quietHours} onChange={(v) => void patch({ quietHours: v })} />
+      <div className="row organise-field">
+        <label htmlFor={fromId} className="small muted">From</label>
+        <input id={fromId} className="input" type="time" value={settings.quietFrom} disabled={!settings.quietHours} onChange={(e) => e.target.value && void patch({ quietFrom: e.target.value })} />
+        <label htmlFor={toId} className="small muted">to</label>
+        <input id={toId} className="input" type="time" value={settings.quietTo} disabled={!settings.quietHours} onChange={(e) => e.target.value && void patch({ quietTo: e.target.value })} />
+      </div>
+    </div>
+  );
+}

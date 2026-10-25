@@ -323,6 +323,18 @@ impl ApiClient {
         let resp = self.authed(self.http.get(self.url("storage")))?.send().await?;
         Self::parse(resp).await
     }
+    /// `GET /api/activity?limit=` (since v1.1): the activity centre, newest first.
+    pub async fn activity(&self, limit: u32) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("activity")).query(&[("limit", limit.to_string())]))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/activity/read` (since v1.1): those ids, or everything when `None`.
+    pub async fn mark_activity_read(&self, ids: Option<&[String]>) -> AppResult<serde_json::Value> {
+        let body = ids.map_or_else(|| json!({}), |ids| json!({ "ids": ids }));
+        let resp = self.authed(self.http.post(self.url("activity/read")))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
     /// `GET /api/sessions/{id}/shares`.
     pub async fn list_shares(&self, session_id: &str) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.get(self.url(&format!("sessions/{session_id}/shares"))))?.send().await?;

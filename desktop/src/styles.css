@@ -391,3 +391,13 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .lock-card { display: grid; gap: 12px; width: min(380px, 100% - 32px); text-align: center; }
 .lock-card form { justify-content: center; gap: 8px; }
 .activity { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; }
+
+/* Activity centre (B18). */
+.brand { display: flex; align-items: center; gap: 6px; }
+.activity-bell { position: relative; }
+.activity-bell .badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; border-radius: 8px; background: var(--danger); color: #fff; font-size: 10px; display: grid; place-items: center; padding: 0 4px; }
+.activity-panel { position: absolute; left: 0; top: 36px; z-index: 20; width: 320px; max-height: 420px; overflow: auto; }
+.activity-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
+.activity-item { display: grid; gap: 2px; width: 100%; text-align: left; background: transparent; border: 1px solid var(--border); border-radius: 10px; padding: 8px; color: var(--text); cursor: pointer; }
+.activity-item.unread { border-color: rgba(139, 92, 246, 0.6); }
+.activity-title { font-weight: 600; font-size: 13px; }

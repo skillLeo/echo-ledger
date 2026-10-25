@@ -184,6 +184,10 @@ pub struct SettingsPatch {
     dictation_snippets: Option<Vec<crate::dictation::rules::Snippet>>,
     app_lock: Option<bool>,
     lock_after_minutes: Option<u32>,
+    activity_notifications: Option<bool>,
+    quiet_hours: Option<bool>,
+    quiet_from: Option<String>,
+    quiet_to: Option<String>,
 }
 
 /// A present key becomes `Some(value)`, so an explicit `null` reads as `Some(None)` and a missing key (via
@@ -221,6 +225,10 @@ impl SettingsPatch {
         if let Some(v) = &self.dictation_snippets { s.dictation_snippets = crate::dictation::rules::clean_snippets(v); }
         if let Some(v) = self.app_lock { s.app_lock = v; }
         if let Some(v) = self.lock_after_minutes && crate::lock::LOCK_AFTER_CHOICES.contains(&v) { s.lock_after_minutes = v; }
+        if let Some(v) = self.activity_notifications { s.activity_notifications = v; }
+        if let Some(v) = self.quiet_hours { s.quiet_hours = v; }
+        if let Some(v) = &self.quiet_from && crate::activity::parse_hhmm(v).is_some() { s.quiet_from = v.clone(); }
+        if let Some(v) = &self.quiet_to && crate::activity::parse_hhmm(v).is_some() { s.quiet_to = v.clone(); }
     }
 }
 
@@ -237,6 +245,9 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         && mode != "push_to_talk"
     {
         return Err(AppError::msg("Choose press to start or hold to talk."));
+    }
+    if [&patch.quiet_from, &patch.quiet_to].into_iter().flatten().any(|t| crate::activity::parse_hhmm(t).is_none()) {
+        return Err(AppError::msg("Use a time like 22:00."));
     }
     if let Some(minutes) = patch.lock_after_minutes
         && !crate::lock::LOCK_AFTER_CHOICES.contains(&minutes)
@@ -547,6 +558,8 @@ pub struct NavigatePayload {
     pub view: String,
     pub pending_id: Option<String>,
     pub rename: bool,
+    /// A recording to open in the library (an OS notification was clicked, B18).
+    pub recording_id: Option<String>,
 }
 
 pub fn recording_state_now(app: &AppHandle) -> RecordingState {
@@ -846,6 +859,20 @@ pub async fn bin_erase(state: State<'_, AppState>, id: String) -> AppResult<()> 
 #[tauri::command]
 pub async fn storage_info(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
     state.api()?.storage().await
+}
+/// The activity centre (B18): newest notifications with the unread count.
+#[tauri::command]
+pub async fn activity_list(state: State<'_, AppState>, limit: Option<u32>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.activity(limit.unwrap_or(30).clamp(1, 100)).await
+}
+
+/// Marks the given notifications read, or all of them.
+#[tauri::command]
+pub async fn activity_read(app: AppHandle, ids: Option<Vec<String>>) -> AppResult<serde_json::Value> {
+    let answer = app.state::<AppState>().api()?.mark_activity_read(ids.as_deref()).await?;
+    let _ = app.emit("activity:updated", answer.get("unread_count").and_then(serde_json::Value::as_u64).unwrap_or(0));
+    Ok(answer)
 }
 fn main_window_handle(app: &AppHandle) -> isize {
     #[cfg(windows)]

@@ -108,6 +108,11 @@ pub mod paths {
         data_dir.join("library.json")
     }
 
+    /// Activity notifications already shown as OS notifications (B18).
+    pub fn activity_seen(data_dir: &std::path::Path) -> PathBuf {
+        data_dir.join("activity_seen.json")
+    }
+
     /// The app lock's PIN hash (B16); kept out of the settings the UI reads.
     pub fn app_lock(data_dir: &std::path::Path) -> PathBuf {
         data_dir.join("app_lock.json")

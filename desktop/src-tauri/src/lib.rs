@@ -1,6 +1,7 @@
 //! EchoLedger desktop. Tray app: dual-channel capture, live captions overlay, dictation, auto mode, uploads.
 
 mod actions;
+pub mod activity;
 pub mod audio;
 mod commands;
 pub mod detect;
@@ -69,6 +70,8 @@ pub struct AppState {
     pub capture_test: AtomicBool,
     /// App lock (B16): locked at start when the lock is on.
     pub lock: lock::Lock,
+    /// The recording of the last OS notification, opened when that notification brings the app forward (B18).
+    pub notified: Mutex<Option<(String, Instant)>>,
 }
 
 impl AppState {
@@ -110,6 +113,7 @@ impl AppState {
             ticker_running: AtomicBool::new(false),
             capture_test: AtomicBool::new(false),
             lock: lock::Lock::new(settings_locked),
+            notified: Mutex::new(None),
         }
     }
 
@@ -167,7 +171,7 @@ pub fn run() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| tray::show_main(app))) // must be first
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| actions::show_main_from_outside(app))) // must be first
         .plugin(shortcuts::plugin())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
         .plugin(tauri_plugin_notification::init())
@@ -205,6 +209,7 @@ pub fn run() {
             actions::spawn_upload_worker(handle.clone());
             actions::restore_pending(&handle);
             commands::spawn_idle_lock(handle.clone());
+            actions::spawn_activity_poll(handle.clone());
 
             // Fetch server config (caption policy, pins rotation) and the library in the background.
             let startup = handle.clone();
@@ -298,6 +303,8 @@ pub fn run() {
             commands::session_restore,
             commands::bin_erase,
             commands::storage_info,
+            commands::activity_list,
+            commands::activity_read,
             commands::session_organise,
             commands::sessions_bulk,
             commands::sessions_export,

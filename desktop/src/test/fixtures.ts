@@ -94,6 +94,10 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     dictationSnippets: [],
     appLock: false,
     lockAfterMinutes: 5,
+    activityNotifications: true,
+    quietHours: false,
+    quietFrom: "22:00",
+    quietTo: "07:00",
     ...overrides,
   };
 }

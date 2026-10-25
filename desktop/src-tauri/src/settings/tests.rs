@@ -65,6 +65,10 @@ fn customised() -> Settings {
         dictation_snippets: vec![crate::dictation::rules::Snippet { trigger: "sig".into(), text: "Regards".into() }],
         app_lock: true,
         lock_after_minutes: 15,
+        activity_notifications: false,
+        quiet_hours: true,
+        quiet_from: "23:30".into(),
+        quiet_to: "06:15".into(),
     }
 }
 // ---- Defaults --------------------------------------------------------------------------------------------------
@@ -125,6 +129,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
     assert_eq!(
         keys,
         [
+            "activityNotifications",
             "appLock",
             "askBeforeSaving",
             "askUnknownApps",
@@ -153,13 +158,16 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "overlayCorner",
             "pillPosition",
             "pins",
+            "quietFrom",
+            "quietHours",
+            "quietTo",
             "serverUrl",
             "shortcuts",
             "siteRules",
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 32, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 36, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "en+ur");
@@ -560,4 +568,11 @@ fn app_lock_settings_load_tolerantly() {
     assert_eq!(Settings::from_value(json!({"lockAfterMinutes": 7})).lock_after_minutes, 5, "not a choice: the default");
     assert_eq!(Settings::from_value(json!({"lockAfterMinutes": "soon"})).lock_after_minutes, 5);
     assert!(!Settings::default().app_lock);
+}
+
+#[test]
+fn quiet_hours_load_tolerantly() {
+    let s = Settings::from_value(json!({"quietHours": true, "quietFrom": "21:45", "quietTo": "25:00"}));
+    assert!(s.quiet_hours && s.activity_notifications);
+    assert_eq!((s.quiet_from.as_str(), s.quiet_to.as_str()), ("21:45", "07:00"), "an impossible time falls back");
 }

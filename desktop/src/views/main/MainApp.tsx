@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, listenTo, type AppStatus, type LockStatus } from "../../lib/ipc";
 import { activityReporter, LockScreen } from "./LockScreen";
+import { ActivityBell } from "./ActivityCentre";
 import { AlertIcon, CaptionsIcon, CloseIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { PairingView } from "./PairingView";
@@ -82,6 +83,7 @@ export default function MainApp() {
         setTab(nav.view);
         const id = nav.pendingId;
         if (id) setFocus({ id, rename: !!nav.rename, seq: ++navigations.current });
+        if (nav.recordingId) setOpenRequest({ id: nav.recordingId, ms: 0, seq: ++navigations.current });
       }),
     ];
     return () => {
@@ -134,7 +136,7 @@ export default function MainApp() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark" />EchoLedger</div>
+        <div className="brand"><span className="brand-mark" />EchoLedger<span className="spacer" /><ActivityBell onOpenRecording={(id) => { setTab("library"); setOpenRequest({ id, ms: 0, seq: ++navigations.current }); }} /></div>
         <button className={`nav-btn ${tab === "library" ? "active" : ""}`} onClick={() => setTab("library")}><LibraryIcon />Library</button>
         <button className={`nav-btn ${tab === "record" ? "active" : ""}`} onClick={() => setTab("record")}>
           <MicIcon />Record {status.recording && <span className="status-dot live" style={{ marginLeft: "auto" }} />}

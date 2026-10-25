@@ -81,6 +81,21 @@ export interface Settings {
   dictationSnippets: DictationSnippet[];
   appLock: boolean;
   lockAfterMinutes: LockAfterMinutes;
+  activityNotifications: boolean;
+  quietHours: boolean;
+  quietFrom: string;
+  quietTo: string;
+}
+
+/** One notification of the activity centre (B18). */
+export interface ActivityItem {
+  id: string;
+  kind: string | null;
+  title: string;
+  body: string;
+  session_id: string | null;
+  read: boolean;
+  at: string | null;
 }
 
 /** App lock (B16): Windows Hello / Touch ID or the PIN; 0 minutes = only when the app starts. */
@@ -175,6 +190,10 @@ export interface SettingsPatch {
   dictationSnippets?: DictationSnippet[];
   appLock?: boolean;
   lockAfterMinutes?: LockAfterMinutes;
+  activityNotifications?: boolean;
+  quietHours?: boolean;
+  quietFrom?: string;
+  quietTo?: string;
 }
 
 /** A bookmark just made on the current recording (`recording:marked`); `count` is how many it has now. */
@@ -473,6 +492,8 @@ export interface NavigatePayload {
   view: "library" | "record" | "settings";
   pendingId: string | null;
   rename: boolean;
+  /** A recording to open (an OS notification was clicked, B18). */
+  recordingId?: string | null;
 }
 
 /** Events the core emits to the webviews and the payload each one carries (none = `null`). */
@@ -498,6 +519,7 @@ export interface EventPayloads {
   "dictation:state": { active: boolean; sounds: boolean; mode: DictationMode };
   "dictation:level": number;
   "lock:changed": LockStatus;
+  "activity:updated": number;
 }
 
 export type AppEvent = keyof EventPayloads;
@@ -585,6 +607,8 @@ export const api = {
   restoreSession: (id: string) => invoke<{ data: LibraryItem }>("session_restore", { id }),
   eraseFromBin: (id: string) => invoke<void>("bin_erase", { id }),
   storage: () => invoke<StorageInfo>("storage_info"),
+  activity: (limit = 30) => invoke<{ data: ActivityItem[]; unread_count: number }>("activity_list", { limit }),
+  markActivityRead: (ids: string[] | null = null) => invoke<{ unread_count: number }>("activity_read", { ids }),
   clearDictationHistory: () => invoke<void>("dictation_history_clear"),
 };
 
