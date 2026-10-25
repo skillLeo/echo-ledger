@@ -532,13 +532,13 @@ describe("caption style (B4)", () => {
   });
 
   it("turns the style into overlay variables, keeping theme colours when none are chosen", () => {
-    expect(captionStyleVars(null)).toEqual({ "--caption-font": "15px", "--caption-bg": "rgba(12, 14, 20, 0.85)" });
+    expect(captionStyleVars(null)).toEqual({ "--caption-font": "15px", "--caption-alpha": "0.85" });
     expect(captionStyleVars({ ...style, size: "large", opacity: 60, meColor: "#22c55e" })).toEqual({
       "--caption-font": "19px",
-      "--caption-bg": "rgba(12, 14, 20, 0.6)",
+      "--caption-alpha": "0.6",
       "--caption-me": "#22c55e",
     });
-    expect(captionStyleVars({ ...style, opacity: 10 })).toMatchObject({ "--caption-bg": "rgba(12, 14, 20, 0.4)" });
+    expect(captionStyleVars({ ...style, opacity: 10 })).toMatchObject({ "--caption-alpha": "0.4" });
   });
 
   it("is idle only with auto-hide on and the quiet time passed", () => {

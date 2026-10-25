@@ -1,5 +1,5 @@
-// Light / dark / system theme for the main window. The choice is stored locally (never sent anywhere);
-// overlay windows are transparent and always use the dark palette.
+// Light / dark / system theme for every window. The choice is stored locally (never sent anywhere) and shared by the
+// windows of the app (same origin), so the caption overlay, pill, review card and dictation bar follow the main window.
 
 export type ThemeChoice = "system" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
@@ -40,8 +40,11 @@ export function saveThemeChoice(choice: ThemeChoice): void {
   }
 }
 
-/** Re-applies the theme when the OS appearance changes while "system" is selected. */
+/** Re-applies the theme when the OS appearance changes while "system" is selected, and when another window changes the choice. */
 export function watchSystemTheme(): void {
+  window.addEventListener("storage", (e) => {
+    if (e.key === KEY || e.key === null) applyTheme(getThemeChoice());
+  });
   if (typeof window.matchMedia !== "function") return;
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
     if (getThemeChoice() === "system") applyTheme("system");

@@ -19,3 +19,6 @@ local.properties
 .env
 .env.*
 !.env.example
+
+# Design review screenshots (local only)
+/design-review/

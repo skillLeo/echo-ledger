@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, screen } from "@testing-library/react";
 
-// The entry point picks the view from the window label and themes only the main window.
+// The entry point picks the view from the window label; every window follows the saved theme (C1).
 async function boot(label: string | Error) {
   vi.resetModules();
   document.body.innerHTML = '<div id="root"></div>';
@@ -42,30 +42,30 @@ describe("entry point", () => {
     expect(document.documentElement.dataset.theme).toBe("light");
   });
 
-  it("renders the caption overlay for the overlay window without applying a theme", async () => {
+  it("renders the caption overlay for the overlay window in the saved theme", async () => {
     window.localStorage.setItem("echoledger-theme", "light");
     await boot("overlay");
     expect(await screen.findByText("overlay view")).toBeInTheDocument();
     expect(document.documentElement.dataset.window).toBe("overlay");
-    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 
   it("renders the dictation box for the dictation window", async () => {
     await boot("dictation");
     expect(await screen.findByText("dictation view")).toBeInTheDocument();
     expect(document.documentElement.dataset.window).toBe("dictation");
-    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(document.documentElement.dataset.theme).toBeDefined();
   });
 
   it.each([
     ["pill", "pill view"],
     ["review", "review view"],
-  ])("renders the %s window's view without applying a theme", async (label, text) => {
+  ])("renders the %s window's view in the saved theme", async (label, text) => {
     window.localStorage.setItem("echoledger-theme", "light");
     await boot(label);
     expect(await screen.findByText(text)).toBeInTheDocument();
     expect(document.documentElement.dataset.window).toBe(label);
-    expect(document.documentElement.dataset.theme).toBeUndefined();
+    expect(document.documentElement.dataset.theme).toBe("light");
   });
 
   it("treats an unknown window label as the main window", async () => {

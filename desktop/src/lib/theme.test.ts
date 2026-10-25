@@ -130,6 +130,19 @@ describe("theme", () => {
       expect(document.documentElement.dataset.theme).toBe("dark");
     });
 
+    it("follows a theme change made in another window (C1: overlays follow the main window)", () => {
+      mockSystemTheme(false);
+      watchSystemTheme();
+      saveThemeChoice("light");
+      window.dispatchEvent(new StorageEvent("storage", { key: "echoledger-theme", newValue: "light" }));
+      expect(document.documentElement.dataset.theme).toBe("light");
+      saveThemeChoice("dark");
+      window.dispatchEvent(new StorageEvent("storage", { key: "unrelated", newValue: "x" }));
+      expect(document.documentElement.dataset.theme).toBe("light");
+      window.dispatchEvent(new StorageEvent("storage", { key: "echoledger-theme", newValue: "dark" }));
+      expect(document.documentElement.dataset.theme).toBe("dark");
+    });
+
     it("does nothing without matchMedia", () => {
       vi.stubGlobal("matchMedia", undefined);
       expect(() => watchSystemTheme()).not.toThrow();

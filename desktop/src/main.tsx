@@ -29,10 +29,8 @@ function currentLabel(): string {
 
 const label = currentLabel();
 document.documentElement.dataset.window = label;
-if (label === "main") {
-  applyTheme(getThemeChoice());
-  watchSystemTheme();
-}
+applyTheme(getThemeChoice());
+watchSystemTheme();
 
 const View = WINDOW_VIEWS.get(label) ?? MainApp;
 

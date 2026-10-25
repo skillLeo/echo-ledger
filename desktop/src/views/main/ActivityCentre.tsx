@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type ActivityItem } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
+import { BellIcon } from "../../components/Icons";
 
 export function ActivityBell({ onOpenRecording }: { onOpenRecording: (id: string) => void }) {
   const [unread, setUnread] = useState(0);
@@ -53,7 +54,7 @@ export function ActivityBell({ onOpenRecording }: { onOpenRecording: (id: string
   return (
     <div className="activity-bell">
       <button type="button" className="btn ghost" aria-expanded={open} aria-label={unread > 0 ? `Activity, ${unread} unread` : "Activity"} onClick={() => setOpen(!open)}>
-        <span aria-hidden="true">🔔</span>{unread > 0 && <span className="badge">{unread > 99 ? "99+" : unread}</span>}
+        <BellIcon size={18} />{unread > 0 && <span className="badge">{unread > 99 ? "99+" : unread}</span>}
       </button>
       {open && (
         <div className="card activity-panel" role="dialog" aria-label="Activity" ref={panel}>

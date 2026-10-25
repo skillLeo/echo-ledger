@@ -178,6 +178,20 @@
 ## Next steps (in order)
 1. **Next: Phase 6 design polish (use Opus 5.5 High)** — C1-C9.
 2. Then Phase 7 QA (P7.1-P7.3, write the user guide), then Phase 8 release (P8.1-P8.4, with the B20 deploy notes below).
+## Phase 6 audit
+- Screens. Desktop main window: Library (list, detail and player, decision and upload queue, bin), Record, Settings (10 groups), first-run wizard, pairing, lock screen, command palette, activity bell, toasts and banners. Desktop overlays: captions, control pill, review card (and "ask" chip), dictation bar; tray menu. Web: login (passkey), dashboard (checklist, stats, chart), sessions list (smart-view tabs), session page (player, share links, history, compare), search, clients (+ keyterms), recently deleted, security, devices, API credentials, settings (8 tabs), usage, workspace, profile, public share pages. Phone: library, session (player, tools, organise), record, call setup, settings hub + 8 groups, dictation, security and activity, onboarding, pairing, lock screen, QR scanner, home-screen widget.
+- Screenshot tooling: desktop `desktop/screenshots/harness.html` (Vite dev, mocked Tauri IPC through `@tauri-apps/api/mocks`); phone `ScreenshotsTest` (Robolectric native graphics, writes `app/build/screenshots`); web = browser driver against `php artisan serve` on a scratch SQLite seeded with `--seed`. Shots go to `design-review/` (git-ignored).
+- Problems, most visible first:
+  1. Overlays (captions, pill, review, dictation): gradient top stripe and glowing gradient buttons look third-party; always dark (ignore light theme); caption body shows a half-cut line at the top; toolbar buttons 36 px and always visible; pill crams 9 controls, source name truncated ("Go…"), meters are two odd bars, icons of mixed weight; the four do not read as one set.
+  2. Desktop library: every control boxed (toolbar has 5 bordered controls), 3 chip rows, heavy item cards; detail header cramped ("Copy text" wraps), "Final transcript · assemblyai" (technical), thin empty waveform bar; bell in a big boxed button.
+  3. Web dashboard: the setup checklist renders as unstyled text (no theme build: our Blade Tailwind classes never compile) — same risk on every custom Blade view (usage, search, player, share log).
+  4. Web sessions/player: tall two-line rows, table overflows at 1280 px and at phone width, empty toolbar row, breadcrumb "Sessions > List", oversized page titles, native `<audio>` player, "Engine assemblyai", "Language en".
+  5. Phone: dark only (no light theme, no dynamic colour); library header crams subtitle + 4 actions (subtitle wraps 4 lines); 3 chip rows before the list; heavy cards repeat device/app as badges; session page puts "Organise" above the transcript; gradient REC orb.
+  6. Desktop settings: section label touches the group nav (no gutter), title duplicated (GENERAL / General), cards touch; quiet-hours time fields full width; subtitle "certificate pinned".
+  7. Desktop record and onboarding: glowing REC orb, raw "chrome.exe", technical copy ("never takes focus; clicks pass through", file extension list); wizard Continue / Skip misaligned, steps look like filter chips.
+  8. Main window has no window material (no Mica / vibrancy), font stack starts with Inter (not bundled), polls status every 1.5 s even when hidden.
+  9. All apps: no shared spacing / radius / motion tokens (radii 9-14 px mixed, transitions 0.12 s), several hard-coded colours.
+
 ## B20 design (workspaces, roles, plan limits, usage)
 - **New tables:** `plans` (key, name, `monthly_minutes`, `storage_bytes`, `max_devices`; null = no limit), `workspaces` (name, `plan_id`), `workspace_user` (workspace, user, `role` owner|member, unique pair); `users.current_workspace_id` (nullable, null on delete).
 - **Get `workspace_id`:** the five root tables that own user data: `devices`, `device_pairing_codes`, `clients`, `capture_sessions`, `usage_ledger`. Their `user_id` stays (creator / device owner; notifications and per-user rules use it).

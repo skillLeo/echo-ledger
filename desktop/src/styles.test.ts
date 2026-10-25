@@ -108,10 +108,10 @@ describe("library layout down to the minimum window (A6.DU5)", () => {
 
   it("fits the two columns from 1030 px, a scrollbar included", () => {
     const sidebar = Number.parseFloat(prop(".app", "grid-template-columns").split(" ")[0]);
-    const padding = prop(".content", "padding").split(" ").map(Number.parseFloat);
+    const padding = resolve(prop(".content", "padding"), "dark").split(" ").map(Number.parseFloat);
     const horizontal = 2 * (padding[1] ?? padding[0]);
     const columns = [...prop(".library", "grid-template-columns").matchAll(/minmax\((\d+)px/g)].map((m) => Number(m[1]));
-    const gap = Number.parseFloat(prop(".library", "gap"));
+    const gap = Number.parseFloat(resolve(prop(".library", "gap"), "dark"));
     expect(columns).toHaveLength(2);
     expect(sidebar + horizontal + columns[0] + gap + columns[1] + 17).toBeLessThanOrEqual(1030);
   });
@@ -131,7 +131,7 @@ describe("long text never breaks the layout (A6.DU8)", () => {
     for (const selector of [".item-preview", ".detail-title", ".seg-text", ".notice", ".toast", ".dictation-text"]) {
       expect(prop(selector, "overflow-wrap"), selector).toBe("anywhere");
     }
-    expect(prop(".segment", "grid-template-columns")).toBe("52px 64px minmax(0, 1fr)");
+    expect(prop(".segment", "grid-template-columns")).toBe("48px 72px minmax(0, 1fr)");
     expect(prop(".list", "min-width")).toBe("0px");
     expect(prop(".detail", "min-width")).toBe("0px");
   });
@@ -173,10 +173,10 @@ describe("long text never breaks the layout (A6.DU8)", () => {
 });
 
 describe("colour contrast meets WCAG AA in both themes (A6.DU7)", () => {
-  const surfaces = ["--bg", "--sidebar", "--surface-solid", "--surface-2", "--input-bg"];
+  const surfaces = ["--bg", "--surface", "--surface-2"];
 
   it.each(THEMES)("text colours on every %s surface", (theme) => {
-    for (const fg of ["--text", "--muted", "--faint", "--danger", "--success", "--warning"]) {
+    for (const fg of ["--text", "--text-muted", "--text-faint", "--danger", "--success", "--warning"]) {
       for (const bg of surfaces) {
         const ratio = contrast(colour(theme, fg).rgb, colour(theme, bg).rgb);
         expect(ratio, `${theme}: ${fg} on ${bg} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
@@ -185,7 +185,7 @@ describe("colour contrast meets WCAG AA in both themes (A6.DU7)", () => {
   });
 
   it.each(THEMES)("status pills on their tint (%s)", (theme) => {
-    const card = colour(theme, "--surface-solid").rgb;
+    const card = colour(theme, "--surface").rgb;
     for (const state of ["ready", "processing", "failed"]) {
       const selector = `.pill.${state}`;
       const background = over(colour(theme, selector, "background"), card);
@@ -195,7 +195,7 @@ describe("colour contrast meets WCAG AA in both themes (A6.DU7)", () => {
   });
 
   it.each(THEMES)("speaker labels and timestamps, also on the playing row (%s)", (theme) => {
-    const card = colour(theme, "--surface-solid").rgb;
+    const card = colour(theme, "--surface").rgb;
     const playing = over(colour(theme, ".segment.active", "background"), card);
     for (const fg of [colour(theme, ".spk-1"), colour(theme, ".spk-2"), colour(theme, ".seg-time")]) {
       expect(contrast(fg.rgb, card)).toBeGreaterThanOrEqual(AA);
@@ -204,32 +204,31 @@ describe("colour contrast meets WCAG AA in both themes (A6.DU7)", () => {
   });
 
   it.each(THEMES)("source badges (%s)", (theme) => {
-    const badge = over(colour(theme, ".badge", "background"), colour(theme, "--surface-solid").rgb);
+    const badge = over(colour(theme, ".badge", "background"), colour(theme, "--surface").rgb);
     for (const selector of [".badge.phone", ".badge.desktop", ".badge.web"]) {
       const ratio = contrast(colour(theme, selector).rgb, badge);
       expect(ratio, `${theme}: ${selector} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
     }
   });
 
-  it("white text on primary buttons and on the record button", () => {
+  it.each(THEMES)("white text on primary buttons and on the record button (%s)", (theme) => {
     const white: Rgb = [255, 255, 255];
-    const stops = (gradient: string) => [...gradient.matchAll(/#[0-9a-f]{6}|rgba?\([^)]+\)/gi)].map((m) => parseColour(m[0]).rgb);
-    for (const background of [resolve(prop(".btn.primary", "background"), "dark"), resolve(prop(".record-btn.idle", "background"), "dark"), prop(".record-btn", "background")]) {
-      const colours = stops(background);
-      expect(colours.length, background).toBeGreaterThanOrEqual(2);
-      for (const stop of colours) expect(contrast(white, stop), background).toBeGreaterThanOrEqual(AA);
+    for (const selector of [".btn.primary", ".record-btn.idle", ".record-btn"]) {
+      const background = colour(theme, selector, "background").rgb;
+      expect(contrast(white, background), `${theme}: ${selector}`).toBeGreaterThanOrEqual(AA);
     }
   });
 
   it.each(THEMES)("the decision and upload counts on their tint (%s)", (theme) => {
-    const background = over(colour(theme, ".queue-count", "background"), colour(theme, "--surface-solid").rgb);
+    const background = over(colour(theme, ".queue-count", "background"), colour(theme, "--surface").rgb);
     const ratio = contrast(colour(theme, ".queue-count").rgb, background);
     expect(ratio, `${theme}: .queue-count is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
   });
 
   it.each(THEMES)("switch tracks stand out from the card (non-text 3:1, %s)", (theme) => {
-    const card = colour(theme, "--surface-solid").rgb;
-    expect(contrast(colour(theme, ".switch", "background").rgb, card)).toBeGreaterThanOrEqual(3);
+    const card = colour(theme, "--surface").rgb;
+    // Off: an outlined track (Windows 11 / Fluent style); on: a filled track.
+    expect(contrast(colour(theme, ".switch", "border-color").rgb, card)).toBeGreaterThanOrEqual(3);
     expect(contrast(colour(theme, ".switch.on", "background").rgb, card)).toBeGreaterThanOrEqual(3);
   });
 });

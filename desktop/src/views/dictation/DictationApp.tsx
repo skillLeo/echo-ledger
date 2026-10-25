@@ -60,7 +60,7 @@ export default function DictationApp() {
         <div className="flow-bar" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(level) * 100)}>
           <span style={{ width: `${Math.round(meterLevel(level) * 100)}%` }} />
         </div>
-        {message && <div className="caption-line small" style={{ color: "#fda4af" }}>{message}</div>}
+        {message && <div className="caption-line small caption-message">{message}</div>}
         <div ref={textRef} className="caption-line dictation-text">{finals.join(" ")} <span className="partial" style={{ opacity: 0.7 }}>{partial}</span></div>
       </div>
     </div>

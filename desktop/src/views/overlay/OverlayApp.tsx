@@ -58,12 +58,12 @@ export function captionFontPx(size: CaptionSize | undefined): number {
   return size === "small" ? 13 : size === "large" ? 19 : 15;
 }
 
-/** The overlay's style variables: text size, card opacity and speaker colours (theme colours when unset). */
+/** The overlay's style variables: text size, card opacity (over the theme's glass colour) and speaker colours (theme colours when unset). */
 export function captionStyleVars(style: CaptionStyle | null): CSSProperties {
   const opacity = Math.min(100, Math.max(40, style?.opacity ?? 85)) / 100;
   const vars: Record<string, string> = {
     "--caption-font": `${captionFontPx(style?.size)}px`,
-    "--caption-bg": `rgba(12, 14, 20, ${opacity})`,
+    "--caption-alpha": `${opacity}`,
   };
   if (style?.meColor) vars["--caption-me"] = style.meColor;
   if (style?.clientColor) vars["--caption-client"] = style.clientColor;
@@ -221,7 +221,7 @@ export default function OverlayApp() {
           onScroll={onScroll}
           style={{ maxHeight: `calc(${lines} * var(--caption-line-height))` }}
         >
-          {state.message && <div className="caption-line small" style={{ color: "#fda4af" }}>{state.message}</div>}
+          {state.message && <div className="caption-line small caption-message">{state.message}</div>}
           {state.lines.length === 0 && partials.length === 0 && !state.message && <div className="caption-line partial">Listening…</div>}
           {state.lines.map((line) => (
             <div className={`caption-line ch-${line.channel === 2 ? 2 : 1}`} key={line.id}><span className={`who spk-${line.channel === 2 ? 2 : 1}`}>{line.speaker}</span>{line.text}</div>

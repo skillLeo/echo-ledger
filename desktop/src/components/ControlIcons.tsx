@@ -1,12 +1,13 @@
 // Glyphs for the recording pill and the review card, in the same 24 px outline style as Icons.tsx. Media controls
 // (pause, play, stop) are filled so they stay legible at 14 px on the translucent surfaces.
 import type { ReactNode, SVGProps } from "react";
+import { ICON_STROKE } from "./Icons";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 function Svg({ size = 16, children, ...rest }: IconProps & { children: ReactNode }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE}
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...rest}>
       {children}
     </svg>
@@ -23,7 +24,7 @@ export const StopIcon = (p: IconProps) => (
   <Svg {...p}><rect x="6" y="6" width="12" height="12" rx="2.6" fill="currentColor" stroke="none" /></Svg>
 );
 export const MinimizeIcon = (p: IconProps) => (
-  <Svg {...p}><path d="M6 12h12" strokeWidth={2} /></Svg>
+  <Svg {...p}><path d="M6 12h12" /></Svg>
 );
 export const MoreIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="6" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="18" cy="12" r="1.6" fill="currentColor" stroke="none" /></Svg>
@@ -38,7 +39,7 @@ export const UserIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="12" cy="8.5" r="3.6" /><path d="M5 20a7 7 0 0 1 14 0" /></Svg>
 );
 export const CheckIcon = (p: IconProps) => (
-  <Svg {...p}><path d="m5 12.5 4.5 4.5L19 7.5" strokeWidth={2} /></Svg>
+  <Svg {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></Svg>
 );
 export const PencilIcon = (p: IconProps) => (
   <Svg {...p}><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3zM14.5 7.5l2 2" /></Svg>

@@ -3,9 +3,12 @@ import type { SVGProps } from "react";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
+/** One stroke width for every icon in the app (C1); the control icons use the same value. */
+export const ICON_STROKE = 1.75;
+
 function Svg({ size = 18, children, ...rest }: IconProps & { children: React.ReactNode }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE}
       strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...rest}>
       {children}
     </svg>
@@ -100,3 +103,6 @@ export function SourceAppIcon({ app, ...p }: IconProps & { app?: string }) {
     default: return <DotsIcon {...p} />;
   }
 }
+export const BellIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M6 9.5a6 6 0 1 1 12 0c0 4.2 1.6 6.1 2.3 6.8a.4.4 0 0 1-.3.7H4a.4.4 0 0 1-.3-.7C4.4 15.6 6 13.7 6 9.5z" /><path d="M10 20.2a2.2 2.2 0 0 0 4 0" /></Svg>
+);
