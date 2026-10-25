@@ -82,9 +82,21 @@
                 android:value="Keeps the call-transcription pipeline ready so audio captured by the privileged capture helper during a call is saved when the call ends." />
         </service>
 
+        <!-- Voice keyboard (dictation into any app). Streams the microphone for transcription only; never records. -->
         <service
-            android:name=".tile.RecordTileService"
+            android:name=".dictation.VoiceKeyboardService"
             android:exported="true"
+            android:label="@string/voice_keyboard_label"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+        <service
+            android:name=".tile.RecordTileService"            android:exported="true"
             android:icon="@drawable/ic_stat_rec"
             android:label="@string/tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">

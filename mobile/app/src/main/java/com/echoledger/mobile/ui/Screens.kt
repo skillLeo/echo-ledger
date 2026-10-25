@@ -842,6 +842,16 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
     val live by RecordingService.live.collectAsState()
     var confirmUnpair by remember { mutableStateOf(false) }
     var capturePage by rememberSaveable { mutableStateOf(false) }
+    var dictationPage by rememberSaveable { mutableStateOf(false) }
+    if (dictationPage) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        BackHandler { dictationPage = false }
+        DictationSettingsPage(vm, settings, remember { com.echoledger.mobile.dictation.DictationHistory.of(context) }) {
+            dictationPage =
+                false
+        }
+        return
+    }
     if (capturePage) {
         BackHandler { capturePage = false }
         CaptureSettingsPage(vm, settings, helperConnected = helper.connected, recording = live.active, onSetup = onSetup) {
@@ -895,6 +905,15 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
                 Column(Modifier.weight(1f)) {
                     Text("Capture and captions", fontWeight = FontWeight.SemiBold)
                     Text("Auto-record apps, caption style, microphone test and permissions", color = Brand.Muted, fontSize = 12.sp)
+                }
+                Text("›", color = Brand.Muted, fontSize = 22.sp)
+            }
+        }
+        SectionCard(Modifier.clickable(onClickLabel = "Open dictation settings") { dictationPage = true }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Dictation", fontWeight = FontWeight.SemiBold)
+                    Text("Voice keyboard, words and snippets, recent dictations", color = Brand.Muted, fontSize = 12.sp)
                 }
                 Text("›", color = Brand.Muted, fontSize = 22.sp)
             }

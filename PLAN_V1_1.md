@@ -307,9 +307,13 @@ Severity in brackets. Each item lists the platform; the matching regression test
 
 ### Phase 4 — dictation
 
-- [ ] B14 Dictation 2.0 (D, P): push-to-talk and toggle, insert at cursor with clipboard restore, dictionary and
+- [~] B14 Dictation 2.0 (D, P): push-to-talk and toggle, insert at cursor with clipboard restore, dictionary and
       replacements, voice snippets, rule-based clean-up, history, start/stop sounds, flow bar; never creates a
       recording session or a Keep/Discard prompt.
+
+  Built and covered by automated tests (desktop core and UI, Android); the device checks are docs/MANUAL_QA.md
+  section 10. On Android dictation is a voice keyboard (input method) that works in any app; its token is a
+  dictation token without a session, and the streamed time is reported as dictation usage.
 
 ### Phase 5 — organisation, security, SaaS foundations
 

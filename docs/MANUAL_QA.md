@@ -259,3 +259,32 @@ automated suite; these checks need real devices and calls.
 | T-A2 | Export → PDF (print) and Word; Share link with a password. | The print dialog saves a correctly shaped PDF; Word opens in a document app; the link opens as on the web. |
 | T-A3 | Library search for a spoken word. | "In transcripts" shows the line; tapping it plays from that moment. |
 | T-A4 | Settings → Transcription: Urdu; add a vocabulary term. | New recordings are sent with Urdu; the term appears for the selected client in the console. |
+
+## 10. v1.1 — dictation
+
+Dictation must never create a recording, a library item or a Keep / Discard prompt. Check the library and the
+notification shade after every step.
+
+### 10.1 Desktop
+
+| ID | Steps | Expected |
+|---|---|---|
+| DI-D1 | Settings → Dictation: Press to start. In Notepad, press the shortcut, say "hello team new paragraph thanks", press again. | A start sound, the flow bar moves while you speak, then a stop sound; "Hello team." and "Thanks." appear on separate paragraphs at the cursor. |
+| DI-D2 | Switch to Hold to talk; hold the shortcut, speak, let go. | Text is inserted when you let go; a very short tap inserts nothing. |
+| DI-D3 | Windows: copy some text, keep the output on "Type into the focused app", then dictate into an app running as administrator (typing into it is blocked). | The text is pasted instead, and about a second later the earlier clipboard content is back. |
+| DI-D4 | Add the replacement "echo ledger → EchoLedger" and the snippet "insert signature"; dictate both. | The spelling is fixed and the signature text is inserted, line breaks included. |
+| DI-D5 | Turn Clean up off and dictate "um so yes". | The text is inserted as spoken, without capitals or a full stop. |
+| DI-D6 | Recent dictations: Copy one, then Clear history; restart the app. | Copy puts the text on the clipboard; the list stays empty after the restart. |
+| DI-D7 | Turn Start and stop sounds off. | Dictation is silent. |
+
+### 10.2 Android
+
+| ID | Steps | Expected |
+|---|---|---|
+| DI-A1 | Settings → Dictation → Turn on the voice keyboard; enable "EchoLedger voice keyboard", then pick it in a messaging app. | The keyboard shows the microphone, space, delete, enter and switch keyboard. |
+| DI-A2 | Tap the microphone, say "send the invoice new line thanks", tap again. | Beeps at start and stop, the flow bar and phrase update live, the text lands at the cursor on two lines. |
+| DI-A3 | Choose Hold to talk; hold the microphone, speak, let go. | The text is inserted on release. |
+| DI-A4 | Revoke the microphone permission, open the keyboard. | "Allow the microphone in EchoLedger" opens the app; the microphone stays disabled. |
+| DI-A5 | Airplane mode, then tap the microphone. | A short "No connection" message; nothing is inserted and nothing is recorded. |
+| DI-A6 | Replacements, snippets, clean-up off and Recent dictations (copy, clear). | Same results as DI-D4 to DI-D6. |
+| DI-A7 | Switch keyboard button. | Returns to the previous keyboard (or shows the keyboard picker). |

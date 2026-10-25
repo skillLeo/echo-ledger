@@ -46,7 +46,13 @@ data class AppSettings(
     /** Microphone kind for recordings made on this phone (`builtin`, `wired`, `bluetooth`, `usb`); null = automatic. */
     val inputDevice: String? = null,
     /** Language of new recordings: null (the client's or the console default, else automatic), `en`, `ur`, `hi` or `en+ur`. */
-    val transcriptionLanguage: String? = null
+    val transcriptionLanguage: String? = null,
+    /** Voice keyboard (B14): `toggle` (tap to start, tap to insert) or `push_to_talk` (hold the mic). */
+    val dictationMode: String = "toggle",
+    val dictationCleanup: Boolean = true,
+    val dictationSounds: Boolean = true,
+    val dictationReplacements: List<com.echoledger.mobile.dictation.Replacement> = emptyList(),
+    val dictationSnippets: List<com.echoledger.mobile.dictation.Snippet> = emptyList()
 ) {
     val serverIsV1_1: Boolean get() = serverApiVersion != null
     val paired: Boolean get() = serverUrl != null && deviceId != null

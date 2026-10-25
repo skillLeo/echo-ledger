@@ -11,4 +11,6 @@
     <string name="channel_decisions_desc">Asks after a call whether to keep the recording</string>
     <string name="channel_status">Status</string>
     <string name="channel_status_desc">Upload and setup status</string>
+    <string name="voice_keyboard_label">EchoLedger voice keyboard</string>
+    <string name="voice_keyboard_subtype">Dictation</string>
 </resources>
