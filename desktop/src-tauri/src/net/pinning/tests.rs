@@ -346,7 +346,6 @@ fn tls_configurations_advertise_http2_and_http1() {
 }
 
 #[test]
-#[ignore = "A6.DR3: a configured pin set in which no pin parses must be refused, not treated as no pinning"]
 fn a_pin_set_that_cannot_be_parsed_does_not_silently_turn_pinning_off() {
     init();
     for pins in [
@@ -358,5 +357,54 @@ fn a_pin_set_that_cannot_be_parsed_does_not_silently_turn_pinning_off() {
             result.is_err(),
             "pins {pins:?} configured, none usable, yet a WebPKI-only client was built"
         );
+    }
+}
+
+#[test]
+fn an_unusable_pin_set_names_the_way_out() {
+    init();
+    let error = server_tls_config(&["sha256/@@@@".to_string()]).unwrap_err();
+    assert_eq!(error, INVALID_PINS);
+    let error = build_http_client("https://ledger.example.test", &["garbage".to_string()]).unwrap_err();
+    assert_eq!(error, INVALID_PINS, "the HTTP client is never built without its pins");
+}
+
+#[test]
+fn one_usable_pin_among_broken_ones_keeps_pinning_on() {
+    init();
+    let good = format!(
+        "sha256/{}",
+        base64::engine::general_purpose::STANDARD.encode([7u8; 32])
+    );
+    assert!(server_tls_config(&["garbage".to_string(), good]).is_ok());
+    assert!(server_tls_config(&[]).is_ok(), "no pins configured: WebPKI only");
+}
+
+#[test]
+fn loopback_detection_compares_hosts_not_prefixes() {
+    for url in [
+        "http://localhost",
+        "http://localhost:8000/api",
+        "HTTP://LOCALHOST:8000",
+        "http://127.0.0.1:8080",
+        "http://[::1]:9000",
+        "  http://localhost:8000  ",
+    ] {
+        assert!(is_local_dev(url), "{url}");
+    }
+    for url in [
+        "http://localhost.attacker.example",
+        "http://localhost@attacker.example",
+        "http://localhost:80@attacker.example",
+        "http://user@localhost",
+        "http://user:pass@127.0.0.1",
+        "http://127.0.0.1.attacker.example",
+        "http://localhostile.example",
+        "https://localhost",
+        "ws://localhost",
+        "localhost:8000",
+        "",
+    ] {
+        assert!(!is_local_dev(url), "{url}");
     }
 }

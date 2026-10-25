@@ -57,7 +57,7 @@ impl LiveCaptions {
         let api = state.api()?;
         let client_id = state.settings().client_id.clone();
         let names: Vec<&str> = channels.iter().map(|c| c.grant_name()).collect();
-        let token = api.stt_token(use_case, &names, client_id.as_deref()).await?;
+        let token = api.stt_token(use_case, &names, client_id.as_deref(), None).await?;
         if token.mode != "cloud" || token.grants.is_empty() {
             let message = match token.mode.as_str() {
                 "off" => "Live captions are turned off in admin Settings.",
@@ -88,7 +88,7 @@ impl LiveCaptions {
             tauri::async_runtime::spawn(async move {
                 let hub_app = handle.clone();
                 let result = stream::run_session(grant, pcm_rx, stop_rx, move |event| {
-                    on_stt_event(&hub_app, channel, targets, record_turns, base_offset, event);
+                    on_stt_event(&hub_app, channel, targets, record_turns, (base_offset, stream_start), event);
                 })
                 .await;
                 if let Err(e) = result {
@@ -113,15 +113,16 @@ impl LiveCaptions {
     }
 }
 
-fn on_stt_event(app: &AppHandle, channel: Channel, targets: &[&str], record_turns: bool, base_offset: u64, event: SttEvent) {
+/// `stream`: the stream's offset into the recording (ms) and the instant the stream started.
+fn on_stt_event(app: &AppHandle, channel: Channel, targets: &[&str], record_turns: bool, stream: (u64, Instant), event: SttEvent) {
     let hub = app.state::<CaptionHub>();
     let speaker = channel.speaker().to_string();
     let index = (channel.index() + 1) as u8;
     match event {
         SttEvent::Partial { text } => hub.send(targets, CaptionEvent::Partial { speaker, channel: index, text }),
         SttEvent::Final { text, start_ms, end_ms } => {
-            let start = base_offset + start_ms.unwrap_or(0);
-            let end = base_offset + end_ms.unwrap_or(start_ms.unwrap_or(0));
+            let arrived_ms = stream.1.elapsed().as_millis() as u64;
+            let (start, end) = captions::turn_times(stream.0, start_ms, end_ms, arrived_ms);
             if record_turns {
                 let state = app.state::<crate::AppState>();
                 state.captions.lock().unwrap().push(FinalTurn { wall_ms: now_ms(), channel, text: text.clone(), start_ms: start, end_ms: end });

@@ -1,0 +1,9 @@
+{
+  "message": "The session id field is required for live captions.",
+  "code": "session_required",
+  "errors": {
+    "session_id": [
+      "The session id field is required for live captions."
+    ]
+  }
+}

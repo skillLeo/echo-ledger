@@ -47,6 +47,12 @@ pub struct ServerConfig {
     pub captions: CaptionsConfig,
     #[serde(default)]
     pub pins: Vec<String>,
+    /// `"1.1"` on v1.1 servers, absent on v1 servers (docs/API.md "Conventions").
+    #[serde(default, deserialize_with = "lenient")]
+    pub api_version: Option<String>,
+    /// This month's usage and limit (since v1.1). A malformed block never breaks the config.
+    #[serde(default, deserialize_with = "lenient")]
+    pub usage: Option<UsageDto>,
 }
 
 impl ServerConfig {
@@ -56,6 +62,66 @@ impl ServerConfig {
             .and_then(|p| p.required_artifacts.clone())
             .unwrap_or_else(|| vec!["primary".to_string()])
     }
+
+    /// True when the server speaks the v1.1 contract (open sessions, `session_id` on `stt/token`, `POST /api/usage`).
+    /// Absent `api_version` means a v1 server: the app then uses the v1 flows.
+    pub fn is_v1_1(&self) -> bool {
+        let Some(version) = self.api_version.as_deref() else { return false };
+        let mut parts = version.trim().split('.').map(|p| p.parse::<u32>());
+        match (parts.next(), parts.next()) {
+            (Some(Ok(major)), Some(Ok(minor))) => (major, minor) >= (1, 1),
+            (Some(Ok(major)), None) => major >= 2,
+            _ => false,
+        }
+    }
+}
+
+/// Deserialises an optional value, turning a value of the wrong shape into `None` instead of failing the parent.
+fn lenient<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(value.and_then(|v| serde_json::from_value(v).ok()))
+}
+
+/// Monthly limit state shown on every screen (`AppStatus.budget`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BudgetState {
+    Ok,
+    Warn,
+    Reached,
+}
+
+impl BudgetState {
+    /// From the last `config.usage`; `blocked` (a `403 budget_exceeded` since that config) forces `Reached`.
+    pub fn from_usage(usage: Option<&UsageDto>, blocked: bool) -> Self {
+        match usage {
+            _ if blocked => Self::Reached,
+            Some(u) if u.limit_reached => Self::Reached,
+            Some(u) if u.warn => Self::Warn,
+            _ => Self::Ok,
+        }
+    }
+}
+
+/// `config.usage` (docs/API.md "GET /api/config", since v1.1).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UsageDto {
+    pub month: String,
+    pub time_zone: String,
+    pub period_start: String,
+    pub period_end: String,
+    pub minutes: f64,
+    pub cost_usd: f64,
+    pub limit_minutes: Option<u64>,
+    pub limit_usd: Option<f64>,
+    pub warn_at_percent: u8,
+    pub warn: bool,
+    pub limit_reached: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -127,6 +193,78 @@ pub struct CreateSessionRequest {
     pub artifacts: Vec<ArtifactDto>,
 }
 
+/// Open session (since v1.1): `POST /api/sessions` without the `artifacts` key, status `recording`. Created only
+/// when live captions need a token.
+#[derive(Clone, Debug, Serialize)]
+pub struct OpenSessionRequest {
+    pub client_ref: String,
+    pub source_app: String,
+    pub client_id: Option<String>,
+    pub title: Option<String>,
+    pub started_at: String,
+    pub language: Option<String>,
+}
+
+/// `POST /api/sessions/{id}/finish` (since v1.1). `client_id` is sent only when `Some`: a present key (even
+/// `null`) replaces the stored client, an absent key keeps it.
+#[derive(Clone, Debug, Serialize)]
+pub struct FinishSessionRequest {
+    pub ended_at: String,
+    pub duration_ms: u64,
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<Option<String>>,
+    pub artifacts: Vec<ArtifactDto>,
+}
+
+/// One streaming period (socket open to close) for `POST /api/usage` (since v1.1); queued in `usage.json`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct UsageReport {
+    /// UUID v4 generated on the device; the server stores each id once.
+    pub report_id: String,
+    /// `live_captions` | `dictation`
+    pub use_case: String,
+    pub provider: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    pub streamed_ms: u64,
+    /// Provider sockets in the period, 1-2.
+    pub channels: u8,
+    pub ended_at: String,
+}
+
+/// The stored report as the server returns it (`201` new, `200` with `duplicate: true` for a repeat).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UsageReceipt {
+    pub id: Option<String>,
+    pub report_id: String,
+    pub use_case: String,
+    pub provider: String,
+    pub session_id: Option<String>,
+    pub streamed_ms: u64,
+    pub channels: u8,
+    pub billed_ms: Option<u64>,
+    pub cost_usd: Option<f64>,
+    pub occurred_at: Option<String>,
+    pub duplicate: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct UsageAnswer {
+    #[serde(default)]
+    pub report: UsageReceipt,
+    #[serde(default, deserialize_with = "lenient")]
+    pub usage: Option<UsageDto>,
+}
+
+/// `202` answer of `POST /api/recordings/{id}/complete`: `assembling` or `ready`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct CompleteResponse {
+    #[serde(default)]
+    pub status: String,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct UploadState {
     pub chunk_size_bytes: u64,
@@ -134,6 +272,9 @@ pub struct UploadState {
     #[serde(default)]
     pub received_chunks: Vec<u64>,
     pub status: String,
+    /// A readable reason when `status` is `failed` (since v1.1), otherwise `null`.
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

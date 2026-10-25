@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use common::{Action, MockServer, Reply, Router, fixture, query_pairs, query_value, sha256_hex};
 use desktop_lib::error::AppError;
-use desktop_lib::net::api::ApiClient;
+use desktop_lib::net::api::{ApiClient, ApiClientCache, with_client_fallback};
 use desktop_lib::net::models::*;
 
 const TOKEN: &str = "7|eld_TOKEN_PLACEHOLDER";
@@ -24,7 +24,9 @@ fn anonymous(server: &MockServer) -> ApiClient {
 
 fn server_error(result: Result<impl std::fmt::Debug, AppError>) -> (u16, String) {
     match result {
-        Err(AppError::Server { status, message }) => (status, message),
+        Err(AppError::Server {
+            status, message, ..
+        }) => (status, message),
         other => panic!("expected a server error, got {other:?}"),
     }
 }
@@ -78,7 +80,6 @@ fn https_and_loopback_http_are_accepted() {
 }
 
 #[test]
-#[ignore = "A6.DR2: only real loopback hosts may use plain HTTP; look-alike hosts and userinfo must be refused"]
 fn hosts_that_merely_start_like_loopback_are_not_treated_as_local() {
     common::init_tls();
     let tricky = [
@@ -201,6 +202,7 @@ async fn stt_token_requests_name_the_channels_and_the_sample_rate() {
             "live_captions",
             &["me", "client"],
             Some("01JB8Q4C1D2E3F4G5H6J7K8M9N"),
+            None,
         )
         .await
         .unwrap();
@@ -212,10 +214,183 @@ async fn stt_token_requests_name_the_channels_and_the_sample_rate() {
     );
 
     client(&server)
-        .stt_token("dictation", &["me"], None)
+        .stt_token("dictation", &["me"], None, None)
         .await
         .unwrap();
     assert_eq!(server.requests()[1].json()["client_id"], Value::Null);
+}
+
+#[tokio::test]
+async fn live_caption_tokens_name_the_open_session_when_there_is_one() {
+    let server = MockServer::start(Router::new().fixed(
+        "POST",
+        "/api/stt/token",
+        Reply::json(200, fixture("stt_token_assemblyai.json")),
+    ));
+    client(&server)
+        .stt_token(
+            "live_captions",
+            &["me", "client"],
+            None,
+            Some("01JB8QA0M1X2C3V4B5N6M7K8J9"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        server.requests()[0].json(),
+        json!({"use_case": "live_captions", "session_id": "01JB8QA0M1X2C3V4B5N6M7K8J9", "channels": ["me", "client"], "client_id": null, "sample_rate": 16000})
+    );
+}
+
+#[tokio::test]
+async fn an_open_session_is_a_session_request_without_artifacts() {
+    let server = MockServer::start(Router::new().fixed(
+        "POST",
+        "/api/sessions",
+        Reply::json(201, fixture("server/sessions_store_201_open.json")),
+    ));
+    let request = OpenSessionRequest {
+        client_ref: "3f2b6c1e-8d4a-4d3e-9a51-2c7f0e9b1a22".into(),
+        source_app: "google_meet".into(),
+        client_id: None,
+        title: None,
+        started_at: "2026-10-24T09:00:00Z".into(),
+        language: None,
+    };
+    let created = client(&server).open_session(&request).await.unwrap();
+    assert_eq!(created.session.rest["status"], "recording");
+    assert!(created.recordings.is_empty());
+    let sent = server.requests()[0].json();
+    assert_eq!(
+        sent,
+        json!({"client_ref": "3f2b6c1e-8d4a-4d3e-9a51-2c7f0e9b1a22", "source_app": "google_meet", "client_id": null, "title": null, "started_at": "2026-10-24T09:00:00Z", "language": null})
+    );
+    assert!(
+        sent.get("artifacts").is_none(),
+        "the artifacts key is what makes a create one-shot"
+    );
+}
+
+fn finish_request(client_id: Option<Option<String>>) -> FinishSessionRequest {
+    FinishSessionRequest {
+        ended_at: "2026-10-24T09:42:10Z".into(),
+        duration_ms: 2_530_000,
+        title: Some("Budget review".into()),
+        client_id,
+        artifacts: vec![ArtifactDto {
+            role: "primary".into(),
+            mime: "audio/flac".into(),
+            codec: Some("flac".into()),
+            channels: 2,
+            sample_rate: Some(16_000),
+            size_bytes: 10_485_760,
+            sha256: "ab".repeat(32),
+            duration_ms: Some(2_530_000),
+        }],
+    }
+}
+
+#[tokio::test]
+async fn finish_posts_the_artifacts_to_the_open_session() {
+    let server = MockServer::start(Router::new().fixed(
+        "POST",
+        "/api/sessions/01JB8QA0M1X2C3V4B5N6M7K8J9/finish",
+        Reply::json(200, fixture("server/sessions_finish_200.json")),
+    ));
+    let c = client(&server);
+    let finished = c
+        .finish_session(
+            "01JB8QA0M1X2C3V4B5N6M7K8J9",
+            &finish_request(Some(Some("01JB8Q4C1D2E3F4G5H6J7K8M9N".into()))),
+        )
+        .await
+        .unwrap();
+    assert_eq!(finished.recordings.len(), 1);
+    assert_eq!(finished.session.rest["status"], "uploading");
+    let sent = server.requests()[0].json();
+    assert_eq!(sent["client_id"], "01JB8Q4C1D2E3F4G5H6J7K8M9N");
+    assert_eq!(sent["title"], "Budget review");
+    assert_eq!(sent["artifacts"][0]["role"], "primary");
+
+    // A present null clears the stored client; an absent key keeps it.
+    c.finish_session("01JB8QA0M1X2C3V4B5N6M7K8J9", &finish_request(Some(None)))
+        .await
+        .unwrap();
+    let cleared = server.requests()[1].json();
+    assert!(cleared.get("client_id").is_some_and(Value::is_null));
+    c.finish_session("01JB8QA0M1X2C3V4B5N6M7K8J9", &finish_request(None))
+        .await
+        .unwrap();
+    assert!(server.requests()[2].json().get("client_id").is_none());
+}
+
+#[tokio::test]
+async fn a_finish_for_a_lost_session_carries_its_code() {
+    let server = MockServer::start(Router::new().fixed(
+        "POST",
+        "/api/sessions/GONE/finish",
+        Reply::json(404, fixture("server/sessions_finish_404.json")),
+    ));
+    let error = client(&server)
+        .finish_session("GONE", &finish_request(None))
+        .await
+        .unwrap_err();
+    assert_eq!(error.code(), Some("session_not_found"));
+    assert_eq!(error.status(), Some(404));
+    assert!(error.is_permanent());
+}
+
+#[tokio::test]
+async fn usage_reports_are_posted_and_duplicates_are_success() {
+    let server = MockServer::start(Router::new().route("POST", "/api/usage", |_, nth| {
+        Action::Reply(if nth == 0 {
+            Reply::json(201, fixture("server/usage_201.json"))
+        } else {
+            Reply::json(200, fixture("server/usage_200_duplicate.json"))
+        })
+    }));
+    let report = UsageReport {
+        report_id: "6c0d0b2e-2a4e-4c8e-9a9f-0c3f1f5b7d11".into(),
+        use_case: "live_captions".into(),
+        provider: "assemblyai".into(),
+        session_id: Some("01JB8QA0M1X2C3V4B5N6M7K8J9".into()),
+        streamed_ms: 61_000,
+        channels: 2,
+        ended_at: "2026-10-24T09:43:00Z".into(),
+    };
+    let c = client(&server);
+    let first = c.report_usage(&report).await.unwrap();
+    assert!(!first.report.duplicate);
+    assert_eq!(first.report.billed_ms, Some(122_000));
+    assert_eq!(first.usage.as_ref().map(|u| u.month.as_str()), Some("2026-10"));
+    let again = c.report_usage(&report).await.unwrap();
+    assert!(again.report.duplicate);
+    assert_eq!(
+        server.requests()[0].json(),
+        json!({"report_id": "6c0d0b2e-2a4e-4c8e-9a9f-0c3f1f5b7d11", "use_case": "live_captions", "provider": "assemblyai", "session_id": "01JB8QA0M1X2C3V4B5N6M7K8J9", "streamed_ms": 61000, "channels": 2, "ended_at": "2026-10-24T09:43:00Z"})
+    );
+}
+
+#[tokio::test]
+async fn complete_reports_whether_the_file_is_ready_or_still_assembling() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", "/api/recordings/A/complete", Reply::json(202, json!({"status": "assembling"})))
+            .fixed("POST", "/api/recordings/R/complete", Reply::json(202, json!({"status": "ready"})))
+            .fixed("POST", "/api/recordings/E/complete", Reply::empty(202))
+            .fixed("POST", "/api/recordings/V/complete", Reply::json(422, fixture("server/recordings_complete_422_verification_failed.json"))),
+    );
+    let c = client(&server);
+    assert_eq!(c.complete("A").await.unwrap().status, "assembling");
+    assert_eq!(c.complete("R").await.unwrap().status, "ready");
+    assert_eq!(
+        c.complete("E").await.unwrap().status,
+        "assembling",
+        "no readable status: assume the file is not safe yet"
+    );
+    let error = c.complete("V").await.unwrap_err();
+    assert_eq!(error.code(), Some("verification_failed"));
+    assert!(!error.is_permanent(), "a failed verification means: send it again");
 }
 
 #[tokio::test]
@@ -230,7 +405,7 @@ async fn a_503_from_the_token_endpoint_carries_the_admin_hint() {
     ));
     let (status, message) = server_error(
         client(&server)
-            .stt_token("live_captions", &["me"], None)
+            .stt_token("live_captions", &["me"], None, None)
             .await,
     );
     assert_eq!(
@@ -562,7 +737,6 @@ async fn a_401_means_the_device_was_revoked_for_every_authenticated_call() {
 }
 
 #[tokio::test]
-#[ignore = "A6.DR4: a 429 error must carry the Retry-After delay"]
 async fn a_rate_limit_error_exposes_the_retry_after_delay() {
     // docs/API.md: 429 must be honoured with Retry-After; the caller can only do that if the error carries it.
     let server = MockServer::start(Router::new().fixed(
@@ -576,6 +750,139 @@ async fn a_rate_limit_error_exposes_the_retry_after_delay() {
         text.contains("37"),
         "the Retry-After value is lost: {text:?}"
     );
+    assert_eq!(error.retry_after_secs(), Some(37));
+    assert_eq!(
+        text,
+        "Server returned 429: Too Many Attempts. Try again in 37 s."
+    );
+}
+
+#[tokio::test]
+async fn the_error_code_and_retry_after_come_from_the_documented_places() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed(
+                "GET",
+                "/api/config",
+                Reply::json(429, fixture("server/errors_429_retry_after.json")).header("Retry-After", "7"),
+            )
+            .fixed(
+                "GET",
+                "/api/library",
+                Reply::json(429, json!({"message": "Too Many Attempts.", "code": "rate_limited"}))
+                    .header("Retry-After", "Wed, 21 Oct 2026 07:28:00 GMT"),
+            )
+            .fixed(
+                "GET",
+                "/api/clients",
+                Reply::json(422, json!({"message": "x", "code": ["not", "a", "string"]})),
+            ),
+    );
+    let c = client(&server);
+    let limited = c.config().await.unwrap_err();
+    assert_eq!(
+        (limited.status(), limited.code(), limited.retry_after_secs()),
+        (Some(429), Some("rate_limited"), Some(7))
+    );
+    let dated = c.library(None, None).await.unwrap_err();
+    assert_eq!(dated.retry_after_secs(), None, "an HTTP-date is ignored");
+    assert_eq!(dated.to_string(), "Server returned 429: Too Many Attempts.");
+    let odd = c.clients().await.unwrap_err();
+    assert_eq!(odd.code(), None);
+}
+
+#[test]
+fn permanent_and_transient_errors_follow_the_documented_table() {
+    let server = |status: u16, code: Option<&str>| AppError::Server {
+        status,
+        message: "m".into(),
+        code: code.map(String::from),
+        retry_after_secs: None,
+    };
+    for permanent in [
+        server(400, None),
+        server(403, Some("missing_ability")),
+        server(403, Some("budget_exceeded")),
+        server(404, Some("session_not_found")),
+        server(404, None),
+        server(409, Some("upload_complete")),
+        server(413, Some("too_large")),
+        server(422, Some("validation_failed")),
+        server(422, None),
+        AppError::NotPaired,
+    ] {
+        assert!(permanent.is_permanent(), "{permanent:?}");
+    }
+    for transient in [
+        server(408, None),
+        server(429, Some("rate_limited")),
+        server(422, Some("upload_incomplete")),
+        server(422, Some("verification_failed")),
+        server(500, None),
+        server(502, Some("provider_error")),
+        server(503, Some("provider_not_configured")),
+        AppError::Network("connection refused".into()),
+        AppError::msg("anything else"),
+    ] {
+        assert!(!transient.is_permanent(), "{transient:?}");
+    }
+}
+
+#[test]
+fn the_app_keeps_one_http_client_until_its_inputs_change() {
+    common::init_tls();
+    let cache = ApiClientCache::default();
+    let pins = vec![format!("sha256/{}", "A".repeat(43) + "=")];
+    let a = cache.get("https://ledger.example.test", &pins, "t1").unwrap();
+    let b = cache.get("https://ledger.example.test", &pins, "t1").unwrap();
+    assert_eq!(cache.builds(), 1, "the same inputs reuse the client");
+    assert_eq!(a.base_url(), b.base_url());
+    cache.get("https://ledger.example.test", &pins, "t2").unwrap();
+    assert_eq!(cache.builds(), 2, "a new token builds a new client");
+    cache.get("https://ledger.example.test", &[], "t2").unwrap();
+    assert_eq!(cache.builds(), 3, "new pins build a new client");
+    cache.get("https://other.example.test", &[], "t2").unwrap();
+    cache.get("https://other.example.test", &[], "t2").unwrap();
+    assert_eq!(cache.builds(), 4, "a new server builds a new client");
+    cache.clear();
+    cache.get("https://other.example.test", &[], "t2").unwrap();
+    assert_eq!(cache.builds(), 5);
+    assert!(
+        cache.get("https://other.example.test", &["garbage".into()], "t2").is_err(),
+        "unusable pins are refused, not cached"
+    );
+    assert_eq!(cache.builds(), 5);
+}
+
+#[tokio::test]
+async fn a_deleted_client_is_dropped_and_the_call_repeated_once_without_it() {
+    let server = MockServer::start(Router::new().route("POST", "/api/stt/token", |r, _| {
+        Action::Reply(if r.json()["client_id"].is_null() {
+            Reply::json(200, fixture("stt_token_assemblyai.json"))
+        } else {
+            Reply::json(404, json!({"message": "Client not found.", "code": "client_not_found"}))
+        })
+    }));
+    let c = client(&server);
+    let (token, cleared) = with_client_fallback(Some("01DELETEDCLIENT0000000000".to_string()), |client_id| {
+        let c = c.clone();
+        async move { c.stt_token("dictation", &["me"], client_id.as_deref(), None).await }
+    })
+    .await
+    .unwrap();
+    assert_eq!(token.grants.len(), 2);
+    assert_eq!(cleared.as_deref(), Some("01DELETEDCLIENT0000000000"));
+    assert_eq!(server.requests().len(), 2);
+
+    // Without a client, or for another error, nothing is repeated.
+    let (_, cleared) = with_client_fallback(None, |client_id| {
+        let c = c.clone();
+        async move { c.stt_token("dictation", &["me"], client_id.as_deref(), None).await }
+    })
+    .await
+    .unwrap();
+    assert_eq!(cleared, None);
+    assert_eq!(server.requests().len(), 3);
 }
 
 // ---- Malformed and failing responses ---------------------------------------------------------------------------

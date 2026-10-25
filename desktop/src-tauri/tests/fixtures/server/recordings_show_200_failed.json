@@ -1,0 +1,11 @@
+{
+  "id": "01jb8qa1p2q3r4s5t6v7w8x9yz",
+  "role": "primary",
+  "upload": {
+    "chunk_size_bytes": 5242880,
+    "total_chunks": 2,
+    "received_chunks": [],
+    "status": "failed",
+    "error": "The uploaded file did not match its checksum. Send it again."
+  }
+}

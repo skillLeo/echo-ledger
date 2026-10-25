@@ -64,9 +64,16 @@ fn roots() -> Arc<RootCertStore> {
     Arc::new(RootCertStore { roots: webpki_roots::TLS_SERVER_ROOTS.to_vec() })
 }
 
-/// rustls config for the EchoLedger server. With no pins configured it falls back to WebPKI only.
+/// Shown when a pin set is configured but none of its entries is a usable SHA-256 digest.
+pub const INVALID_PINS: &str = "The certificate pins from the server are invalid. Pair this computer again.";
+
+/// rustls config for the EchoLedger server. With no pins configured it falls back to WebPKI only; a configured
+/// pin set that yields no usable pin is refused (fail closed, A6.DR3) instead of silently turning pinning off.
 pub fn server_tls_config(pins: &[String]) -> Result<rustls::ClientConfig, String> {
     let parsed = parse_pins(pins);
+    if parsed.is_empty() && !pins.is_empty() {
+        return Err(INVALID_PINS.to_string());
+    }
     let mut config = if parsed.is_empty() {
         rustls::ClientConfig::builder().with_root_certificates(roots()).with_no_client_auth()
     } else {
@@ -85,10 +92,16 @@ pub fn public_tls_config() -> Arc<rustls::ClientConfig> {
     Arc::new(rustls::ClientConfig::builder().with_root_certificates(roots()).with_no_client_auth())
 }
 
-/// True for plain-HTTP local development servers, where TLS/pinning cannot apply.
+/// True for plain-HTTP local development servers, where TLS/pinning cannot apply. The URL is parsed (WHATWG rules,
+/// `url` crate via `reqwest::Url`) and only the exact loopback hosts `localhost`, `127.0.0.1` and `[::1]` qualify,
+/// on any port and without userinfo: `http://localhost.attacker.example` or `http://localhost@attacker.example`
+/// are remote hosts (A6.DR2).
 pub fn is_local_dev(base_url: &str) -> bool {
-    let lower = base_url.to_ascii_lowercase();
-    lower.starts_with("http://localhost") || lower.starts_with("http://127.0.0.1") || lower.starts_with("http://[::1]")
+    let Ok(url) = reqwest::Url::parse(base_url.trim()) else { return false };
+    url.scheme() == "http"
+        && url.username().is_empty()
+        && url.password().is_none()
+        && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"))
 }
 
 pub fn build_http_client(base_url: &str, pins: &[String]) -> Result<reqwest::Client, String> {

@@ -576,6 +576,8 @@ fn errors_serialise_to_plain_messages() {
             AppError::Server {
                 status: 422,
                 message: "The pairing code is invalid.".into(),
+                code: None,
+                retry_after_secs: None,
             },
             "Server returned 422: The pairing code is invalid.",
         ),
@@ -592,4 +594,174 @@ fn errors_serialise_to_plain_messages() {
     for (error, text) in cases {
         assert_eq!(serde_json::to_value(&error).unwrap(), json!(text));
     }
+}
+
+#[test]
+fn a_rate_limit_message_says_when_to_try_again() {
+    let error = AppError::Server {
+        status: 429,
+        message: "Too Many Attempts.".into(),
+        code: Some("rate_limited".into()),
+        retry_after_secs: Some(7),
+    };
+    assert_eq!(
+        serde_json::to_value(&error).unwrap(),
+        json!("Server returned 429: Too Many Attempts. Try again in 7 s.")
+    );
+    assert_eq!(error.code(), Some("rate_limited"));
+}
+
+// ---- v1.1 answers (docs/API.md examples) ----------------------------------------------------------------------
+
+#[test]
+fn a_v1_1_config_names_its_version_and_this_months_usage() {
+    let config: ServerConfig = parse("server/config_200_v1_1.json");
+    assert_eq!(config.api_version.as_deref(), Some("1.1"));
+    assert!(config.is_v1_1());
+    let usage = config.usage.as_ref().expect("usage block");
+    assert_eq!(
+        (usage.month.as_str(), usage.time_zone.as_str()),
+        ("2026-10", "Asia/Karachi")
+    );
+    assert_eq!(usage.period_start, "2026-09-30T19:00:00+00:00");
+    assert_eq!(usage.period_end, "2026-10-31T19:00:00+00:00");
+    assert_eq!((usage.minutes, usage.cost_usd), (812.5, 6.42));
+    assert_eq!((usage.limit_minutes, usage.limit_usd), (Some(3_000), None));
+    assert_eq!(usage.warn_at_percent, 80);
+    assert!(!usage.warn && !usage.limit_reached);
+    assert_eq!(config.upload.accepted_mimes.len(), 14);
+    assert_eq!(BudgetState::from_usage(Some(usage), false), BudgetState::Ok);
+}
+
+#[test]
+fn a_config_without_a_version_is_a_v1_server() {
+    let config: ServerConfig = parse("config.json");
+    assert_eq!(config.api_version, None);
+    assert!(config.usage.is_none());
+    assert!(!config.is_v1_1());
+    for (version, newer) in [
+        ("1.1", true),
+        ("1.2", true),
+        ("2", true),
+        ("2.0", true),
+        ("1.0", false),
+        ("1", false),
+        ("", false),
+        ("next", false),
+    ] {
+        let mut v = fixture("config.json");
+        v["api_version"] = json!(version);
+        let config: ServerConfig = serde_json::from_value(v).unwrap();
+        assert_eq!(config.is_v1_1(), newer, "{version:?}");
+    }
+}
+
+#[test]
+fn a_malformed_usage_block_or_version_never_breaks_the_config() {
+    let mut v = fixture("server/config_200_v1_1.json");
+    v["usage"] = json!("not an object");
+    v["api_version"] = json!(1.1);
+    let config: ServerConfig = serde_json::from_value(v).expect("the rest of the config still parses");
+    assert!(config.usage.is_none() && config.api_version.is_none());
+    let mut v = fixture("server/config_200_v1_1.json");
+    v["usage"] = json!({"month": "2026-11"});
+    let config: ServerConfig = serde_json::from_value(v).unwrap();
+    let usage = config.usage.unwrap();
+    assert_eq!(usage.month, "2026-11");
+    assert_eq!((usage.limit_minutes, usage.limit_reached), (None, false));
+}
+
+#[test]
+fn the_budget_state_follows_the_usage_block_and_a_refused_token() {
+    let mut usage = UsageDto::default();
+    assert_eq!(BudgetState::from_usage(None, false), BudgetState::Ok);
+    assert_eq!(BudgetState::from_usage(Some(&usage), false), BudgetState::Ok);
+    usage.warn = true;
+    assert_eq!(BudgetState::from_usage(Some(&usage), false), BudgetState::Warn);
+    usage.limit_reached = true;
+    assert_eq!(BudgetState::from_usage(Some(&usage), false), BudgetState::Reached);
+    assert_eq!(
+        BudgetState::from_usage(None, true),
+        BudgetState::Reached,
+        "a 403 budget_exceeded wins until the next config"
+    );
+    assert_eq!(serde_json::to_value(BudgetState::Reached).unwrap(), json!("reached"));
+}
+
+#[test]
+fn open_and_finished_sessions_parse_like_a_create() {
+    let open: CreateSessionResponse = parse("server/sessions_store_201_open.json");
+    assert_eq!(open.session.rest["status"], "recording");
+    assert!(open.recordings.is_empty());
+    assert_eq!(open.required_artifacts, ["primary"]);
+    let finished: CreateSessionResponse = parse("server/sessions_finish_200.json");
+    assert_eq!(finished.session.id, open.session.id);
+    assert_eq!(finished.session.rest["status"], "uploading");
+    let slot = &finished.recordings[0].upload;
+    assert_eq!((slot.status.as_str(), slot.total_chunks, slot.error.as_deref()), ("pending", 2, None));
+}
+
+#[test]
+fn a_failed_upload_carries_its_reason_and_no_chunks() {
+    let failed: RecordingUpload = parse("server/recordings_show_200_failed.json");
+    assert_eq!(failed.upload.status, "failed");
+    assert!(failed.upload.received_chunks.is_empty());
+    assert_eq!(
+        failed.upload.error.as_deref(),
+        Some("The uploaded file did not match its checksum. Send it again.")
+    );
+    let older: RecordingUpload = parse("server/recordings_show_200_ready.json");
+    assert_eq!(older.upload.error, None, "v1 answers have no error field");
+}
+
+#[test]
+fn usage_answers_parse_new_and_duplicate_reports() {
+    let new: UsageAnswer = parse("server/usage_201.json");
+    assert!(!new.report.duplicate);
+    assert_eq!(new.report.report_id, "6c0d0b2e-2a4e-4c8e-9a9f-0c3f1f5b7d11");
+    assert_eq!((new.report.streamed_ms, new.report.channels, new.report.billed_ms), (61_000, 2, Some(122_000)));
+    assert_eq!(new.usage.as_ref().unwrap().limit_minutes, Some(3_000));
+    let repeat: UsageAnswer = parse("server/usage_200_duplicate.json");
+    assert!(repeat.report.duplicate);
+}
+
+#[test]
+fn usage_reports_serialise_with_the_documented_keys() {
+    let report = UsageReport {
+        report_id: "6c0d0b2e-2a4e-4c8e-9a9f-0c3f1f5b7d11".into(),
+        use_case: "dictation".into(),
+        provider: "elevenlabs".into(),
+        session_id: None,
+        streamed_ms: 4_200,
+        channels: 1,
+        ended_at: "2026-10-24T09:43:00Z".into(),
+    };
+    assert_eq!(
+        serde_json::to_value(&report).unwrap(),
+        json!({"report_id": "6c0d0b2e-2a4e-4c8e-9a9f-0c3f1f5b7d11", "use_case": "dictation", "provider": "elevenlabs", "session_id": null, "streamed_ms": 4200, "channels": 1, "ended_at": "2026-10-24T09:43:00Z"})
+    );
+}
+
+#[test]
+fn v1_1_error_answers_carry_their_codes() {
+    for (name, code, message) in [
+        ("sessions_finish_404", "session_not_found", "Session not found."),
+        ("stt_token_403_budget_exceeded", "budget_exceeded", "Monthly transcription limit reached"),
+        ("stt_token_409_session_not_recording", "session_not_recording", "Live captions need an open recording session."),
+        ("stt_token_422_session_required", "session_required", "The session id field is required for live captions."),
+        ("recordings_complete_422_verification_failed", "verification_failed", "The uploaded file did not match its checksum. Send it again."),
+        ("errors_429_retry_after", "rate_limited", "Too Many Attempts."),
+    ] {
+        let body = fixture(&format!("server/{name}.json"));
+        assert_eq!((body["code"].as_str(), body["message"].as_str()), (Some(code), Some(message)), "{name}");
+    }
+    let required = fixture("server/stt_token_422_session_required.json");
+    assert_eq!(required["errors"]["session_id"][0], "The session id field is required for live captions.");
+}
+
+#[test]
+fn a_failed_final_transcript_names_its_error_code() {
+    let t = fixture("server/transcripts_show_200_final_failed_no_audio.json");
+    assert_eq!((t["status"].as_str(), t["error_code"].as_str()), (Some("failed"), Some("no_audio")));
+    assert_eq!(t["error"], "No audio was captured in this recording.");
 }

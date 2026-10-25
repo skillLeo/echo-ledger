@@ -88,7 +88,9 @@ fn anonymous(server: &MockServer) -> ApiClient {
 
 fn server_error<T: std::fmt::Debug>(result: Result<T, AppError>) -> (u16, String) {
     match result {
-        Err(AppError::Server { status, message }) => (status, message),
+        Err(AppError::Server {
+            status, message, ..
+        }) => (status, message),
         other => panic!("expected a server error, got {other:?}"),
     }
 }
@@ -1141,6 +1143,7 @@ async fn the_client_runs_a_whole_session_lifecycle_against_server_responses() {
             "live_captions",
             &["me", "client"],
             Some("01m5qa084edsznvjc59xnyt37x"),
+            None,
         )
         .await
         .unwrap();
@@ -1339,12 +1342,12 @@ async fn server_errors_become_the_message_the_user_sees() {
                 .create_session(&request_for(&parse("sessions_store_201")))
                 .await
                 .map(|_| ()),
-            ("POST", p) if p.ends_with("/complete") => api.complete("r1").await,
+            ("POST", p) if p.ends_with("/complete") => api.complete("r1").await.map(|_| ()),
             ("POST", p) if p.ends_with("/chunks") => {
                 api.upload_chunk("r1", 1, vec![0], "ab").await.map(|_| ())
             }
             ("POST", "/api/stt/token") => {
-                api.stt_token("dictation", &["me"], None).await.map(|_| ())
+                api.stt_token("dictation", &["me"], None, None).await.map(|_| ())
             }
             ("POST", p) if p.ends_with("/transcripts") => {
                 let t = DeviceTranscript {

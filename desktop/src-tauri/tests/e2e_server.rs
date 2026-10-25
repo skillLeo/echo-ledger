@@ -50,9 +50,9 @@ use std::time::{Duration, Instant};
 use desktop_lib::audio::recorder::{Recorder, RecordingOutput};
 use desktop_lib::audio::types::{AudioChunk, Channel, TARGET_RATE};
 use desktop_lib::error::AppError;
-use desktop_lib::net::api::ApiClient;
+use desktop_lib::net::api::{ApiClient, with_client_fallback};
 use desktop_lib::net::models::{
-    ArtifactDto, CreateSessionRequest, LibraryItem, RegisterResponse, SegmentDto,
+    ArtifactDto, CreateSessionRequest, LibraryItem, OpenSessionRequest, RegisterResponse, SegmentDto,
 };
 use desktop_lib::net::sync::LibraryCache;
 use desktop_lib::net::uploader::{PendingUpload, UploadQueue, file_sha256, sha256_hex, upload};
@@ -615,6 +615,33 @@ fn pending_call(out: &RecordingOutput, source_app: &str) -> PendingUpload {
         live_provider: None,
         attempts: 0,
         last_error: None,
+        ..PendingUpload::default()
+    }
+}
+
+/// The open session a v1.1 server requires before it hands out a live-caption token (`None` on a v1 server).
+async fn caption_session(api: &ApiClient) -> Option<String> {
+    let config = api.config().await.expect("config");
+    if !config.is_v1_1() {
+        return None;
+    }
+    let opened = api
+        .open_session(&OpenSessionRequest {
+            client_ref: uuid::Uuid::new_v4().to_string(),
+            source_app: "other".into(),
+            client_id: None,
+            title: None,
+            started_at: chrono::Utc::now().to_rfc3339(),
+            language: None,
+        })
+        .await
+        .expect("open session for captions");
+    Some(opened.session.id)
+}
+
+async fn close_caption_session(api: &ApiClient, session: Option<String>) {
+    if let Some(id) = session {
+        let _ = api.delete_session(&id).await;
     }
 }
 
@@ -1130,10 +1157,12 @@ e2e_test!(
     |cfg, case| {
         let id = identity(cfg).await;
         let api = api_for(cfg, &id.token);
+        let session = caption_session(&api).await;
         let live = api
-            .stt_token("live_captions", &["me", "client"], None)
+            .stt_token("live_captions", &["me", "client"], None, session.as_deref())
             .await
             .expect("stt token");
+        close_caption_session(&api, session).await;
         assert_eq!(live.mode, "cloud");
         let channels: Vec<&str> = live.grants.iter().map(|g| g.channel.as_str()).collect();
         assert_eq!(channels, vec!["me", "client"]);
@@ -1147,7 +1176,7 @@ e2e_test!(
             assert!(grant.max_session_seconds.unwrap_or(0) > 0);
         }
         let dictation = api
-            .stt_token("dictation", &["me", "client"], None)
+            .stt_token("dictation", &["me", "client"], None, None)
             .await
             .expect("dictation token");
         let channels: Vec<&str> = dictation
@@ -2035,7 +2064,6 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.DR5: .oga, .aac and .amr imports must be declared with a MIME type the server accepts"]
     every_audio_type_the_app_can_import_is_accepted_by_the_server,
     600,
     |cfg, case| {
@@ -2419,7 +2447,6 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.DR4: a rate-limited chunk must wait for the Retry-After delay"]
     a_rate_limited_chunk_waits_for_the_retry_after_the_server_asked_for,
     600,
     |cfg, case| {
@@ -2735,7 +2762,7 @@ async fn every_call_is_not_paired(cfg: &Config, token: Option<&str>) -> Vec<Stri
     check("clients", is_not_paired(&api.clients().await));
     check(
         "stt_token",
-        is_not_paired(&api.stt_token("live_captions", &["me"], None).await),
+        is_not_paired(&api.stt_token("live_captions", &["me"], None, None).await),
     );
     check(
         "create_session",
@@ -2936,7 +2963,8 @@ e2e_test!(
         let config = api.config().await.expect("config:read");
         assert_eq!(config.device.id, device.id, "same device");
         api.library(None, None).await.expect("library:read");
-        api.stt_token("live_captions", &["me"], None)
+        // Dictation needs no open session, so this checks the ability alone.
+        api.stt_token("dictation", &["me"], None, None)
             .await
             .expect("stt:token");
         let created = api
@@ -3350,7 +3378,7 @@ e2e_test!(
                 "session (quote)",
                 api.session("%27%20OR%201=1").await.map(|_| ()),
             ),
-            ("complete", api.complete(unknown).await),
+            ("complete", api.complete(unknown).await.map(|_| ())),
         ] {
             let error = result.expect_err(what);
             assert_eq!(server_status(&error), Some(404), "{what}: {error}");
@@ -3395,10 +3423,12 @@ e2e_test!(
         assert_eq!(listed["keyterm_count"], 2);
 
         // Live captions get the client's vocabulary.
+        let session = caption_session(&api).await;
         let grants = api
-            .stt_token("live_captions", &["me", "client"], Some(&client_id))
+            .stt_token("live_captions", &["me", "client"], Some(&client_id), session.as_deref())
             .await
             .expect("stt token for a client");
+        close_caption_session(&api, session).await;
         assert_eq!(grants.keyterms, vec!["Acme Holdings", "Farah Khan"]);
         for grant in &grants.grants {
             assert_eq!(
@@ -3432,7 +3462,6 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.DR7: a client deleted in the console must not block uploads or caption starts"]
     a_client_deleted_in_the_console_does_not_block_uploads_or_live_captions,
     300,
     |cfg, case| {
@@ -3458,9 +3487,20 @@ e2e_test!(
         pending.client_id = Some(client_id.clone());
         let started = Instant::now();
         let upload_result = upload(&api, &pending).await;
-        let captions_result = api
-            .stt_token("live_captions", &["me", "client"], Some(&client_id))
-            .await;
+        // The app's caption start: the selected client is dropped when the server no longer knows it.
+        let session = caption_session(&api).await;
+        let captions_result = with_client_fallback(Some(client_id.clone()), |client| {
+            let (api, session) = (api.clone(), session.clone());
+            async move {
+                api.stt_token("live_captions", &["me", "client"], client.as_deref(), session.as_deref())
+                    .await
+            }
+        })
+        .await;
+        close_caption_session(&api, session).await;
+        if let Ok((_, cleared)) = &captions_result {
+            assert_eq!(cleared.as_deref(), Some(client_id.as_str()), "the deleted client is forgotten");
+        }
         if let Ok(session_id) = &upload_result {
             let _ = api.delete_session(session_id).await;
         }
@@ -3576,7 +3616,6 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.W3: complete must not accept a file that failed verification (client side: A6.DR8)"]
     a_corrupt_upload_is_reported_as_failed_and_not_as_uploaded,
     300,
     |cfg, case| {
@@ -3628,7 +3667,6 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.DR15: a clock step back during a call must not make the recording unsendable"]
     a_clock_step_back_during_a_call_does_not_make_the_recording_unsendable,
     120,
     |cfg, case| {
@@ -3654,7 +3692,6 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.DR4: a 404 for a deleted session is permanent and must not be retried"]
     deleting_a_session_while_it_is_still_uploading_ends_the_upload_without_retrying_a_404,
     400,
     |cfg, case| {
@@ -3788,7 +3825,9 @@ e2e_test!(
         let mut limited: Option<String> = None;
         for _ in 0..8 {
             match api.register("7777-7777", "Nobody", "windows", "e2e").await {
-                Err(AppError::Server { status, message }) => {
+                Err(AppError::Server {
+                    status, message, ..
+                }) => {
                     statuses.push(status);
                     if status == 429 {
                         limited = Some(message);

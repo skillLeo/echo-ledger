@@ -441,7 +441,6 @@ async fn the_real_page_shape_from_the_server_syncs_cleanly() {
 }
 
 #[tokio::test]
-#[ignore = "A6.DR15: library refresh must stop when the server repeats next_cursor"]
 async fn a_server_that_keeps_returning_the_same_cursor_cannot_trap_the_client() {
     let server = MockServer::start(Router::new().fixed(
         "GET",
@@ -466,6 +465,100 @@ async fn a_server_that_keeps_returning_the_same_cursor_cannot_trap_the_client() 
         outcome.is_ok(),
         "refresh was still paging after {} requests",
         server.requests().len()
+    );
+    assert_eq!(server.requests().len(), 2, "the repeated cursor is not followed");
+    assert_eq!(ids(&cache.items), ["a"]);
+}
+
+#[tokio::test]
+async fn a_cursor_cycle_over_several_pages_also_ends() {
+    let server = MockServer::start(Router::new().route("GET", "/api/library", |r, _| {
+        let next = match query_value(r.query(), "cursor").as_deref() {
+            None => "c1",
+            Some("c1") => "c2",
+            _ => "c1",
+        };
+        Action::Reply(page(vec![], Some(next), "2026-10-24T09:00:00+00:00"))
+    }));
+    let mut cache = LibraryCache::default();
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        cache.refresh(&client(&server)),
+    )
+    .await
+    .expect("no endless paging")
+    .unwrap();
+    assert_eq!(server.requests().len(), 3);
+}
+
+#[tokio::test]
+async fn an_invalid_cursor_restarts_paging_once_without_a_cursor() {
+    let server = MockServer::start(Router::new().route("GET", "/api/library", |r, nth| {
+        Action::Reply(match query_value(r.query(), "cursor") {
+            Some(_) => Reply::json(
+                422,
+                json!({"message": "The cursor is invalid.", "code": "invalid_cursor"}),
+            ),
+            None if nth == 0 => page(
+                vec![raw("a", "2026-10-24T08:00:00+00:00", "2026-10-24T08:00:00+00:00")],
+                Some("broken"),
+                "2026-10-24T09:00:00+00:00",
+            ),
+            None => page(
+                vec![raw("a", "2026-10-24T08:00:00+00:00", "2026-10-24T08:00:00+00:00")],
+                Some("broken-again"),
+                "2026-10-24T09:00:05+00:00",
+            ),
+        })
+    }));
+    let mut cache = LibraryCache::default();
+    let result = cache.refresh(&client(&server)).await;
+    let error = result.expect_err("a second invalid cursor is reported");
+    assert_eq!(error.code(), Some("invalid_cursor"));
+    let requests = server.requests();
+    assert_eq!(requests.len(), 4, "first page, bad cursor, restart, bad cursor");
+    assert_eq!(query_value(requests[2].query(), "cursor"), None);
+    assert_eq!(cache.since, None, "since only advances after a complete sync");
+}
+
+#[tokio::test]
+async fn a_server_clock_that_stepped_back_does_not_move_the_sync_position_back() {
+    let server = MockServer::start(Router::new().fixed(
+        "GET",
+        "/api/library",
+        page(vec![], None, "2026-10-24T08:59:00+00:00"),
+    ));
+    let mut cache = LibraryCache {
+        since: Some("2026-10-24T09:00:00+00:00".into()),
+        items: vec![],
+    };
+    cache.refresh(&client(&server)).await.unwrap();
+    assert_eq!(cache.since.as_deref(), Some("2026-10-24T09:00:00+00:00"));
+}
+
+#[test]
+fn the_next_sync_position_only_moves_forward() {
+    use desktop_lib::net::sync::next_since;
+    assert_eq!(
+        next_since(None, "2026-10-24T09:00:00+00:00".into()),
+        "2026-10-24T09:00:00+00:00"
+    );
+    assert_eq!(
+        next_since(Some("2026-10-24T09:00:00+00:00"), "2026-10-24T09:00:01+00:00".into()),
+        "2026-10-24T09:00:01+00:00"
+    );
+    assert_eq!(
+        next_since(Some("2026-10-24T09:00:00+00:00"), "2026-10-24T09:00:00+00:00".into()),
+        "2026-10-24T09:00:00+00:00"
+    );
+    assert_eq!(
+        next_since(Some("2026-10-24T14:00:00+05:00"), "2026-10-24T08:59:59Z".into()),
+        "2026-10-24T14:00:00+05:00",
+        "instants are compared, not strings"
+    );
+    assert_eq!(
+        next_since(Some("garbage"), "2026-10-24T09:00:00+00:00".into()),
+        "2026-10-24T09:00:00+00:00"
     );
 }
 #[tokio::test]
@@ -565,4 +658,6 @@ fn data_directory_layout() {
     assert_eq!(paths::library(base), base.join("library.json"));
     assert_eq!(paths::uploads(base), base.join("uploads.json"));
     assert_eq!(paths::recordings(base), base.join("recordings"));
+    assert_eq!(paths::usage(base), base.join("usage.json"));
+    assert_eq!(paths::discards(base), base.join("discards.json"));
 }

@@ -115,7 +115,6 @@ fn other_urls_are_not_local() {
 }
 
 #[test]
-#[ignore = "A6.DR2: the loopback check must parse the URL, not compare string prefixes"]
 fn look_alike_hosts_are_not_local() {
     let wrongly_local: Vec<&str> = [
         "http://localhost.attacker.example/",
@@ -255,7 +254,6 @@ async fn a_server_with_a_self_signed_certificate_is_refused_with_or_without_pins
 }
 
 #[tokio::test]
-#[ignore = "A6.DR12: TLS and pin failures must be reported as such, not as a generic network error"]
 async fn a_tls_failure_is_distinguishable_from_the_server_being_offline() {
     // A user whose pin no longer matches (or who sits behind an interception proxy) needs to be told that the
     // certificate is the problem, not that "the network" failed.
@@ -276,6 +274,62 @@ async fn a_tls_failure_is_distinguishable_from_the_server_being_offline() {
             || message.contains("ssl")
             || message.contains("unknownissuer"),
         "the error carries no TLS detail: {message:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_pinned_client_reports_a_rejected_certificate_as_such() {
+    let server = start_tls_server();
+    let client = ApiClient::new(
+        &format!("https://127.0.0.1:{}", server.port),
+        &[format!("sha256/{}", b64([9u8; 32]))],
+        Some("tok".into()),
+    )
+    .unwrap();
+    match client.config().await {
+        Err(AppError::Network(message)) => assert!(
+            message.contains("certificate"),
+            "no certificate detail: {message:?}"
+        ),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn an_offline_server_is_not_blamed_on_the_certificate() {
+    common::init_tls();
+    let port = {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    };
+    let client = ApiClient::new(
+        &format!("https://127.0.0.1:{port}"),
+        &[],
+        Some("tok".into()),
+    )
+    .unwrap();
+    match client.config().await {
+        Err(AppError::Network(message)) => assert!(
+            !message.contains("certificate"),
+            "a refused connection is not a certificate problem: {message:?}"
+        ),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_pin_set_that_cannot_be_used_refuses_to_build_a_client() {
+    common::init_tls();
+    let error = ApiClient::new(
+        "https://ledger.example.test",
+        &["sha256/short".to_string(), "garbage".to_string()],
+        None,
+    )
+    .err()
+    .expect("no client without usable pins");
+    assert_eq!(
+        error.to_string(),
+        "The certificate pins from the server are invalid. Pair this computer again."
     );
 }
 

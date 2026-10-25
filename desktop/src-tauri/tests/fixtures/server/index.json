@@ -94,6 +94,11 @@
     "path": "/api/config",
     "status": 200
   },
+  "config_200_v1_1": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 200
+  },
   "config_200_with_pins": {
     "method": "GET",
     "path": "/api/config",
@@ -164,6 +169,12 @@
     "path": "/api/devices/register",
     "status": 429,
     "retry_after": 55
+  },
+  "errors_429_retry_after": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 429,
+    "retry_after": 7
   },
   "errors_429_stt_token": {
     "method": "POST",
@@ -251,7 +262,17 @@
     "path": "/api/recordings/{id}/complete",
     "status": 422
   },
+  "recordings_complete_422_verification_failed": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/complete",
+    "status": 422
+  },
   "recordings_show_200_all_chunks": {
+    "method": "GET",
+    "path": "/api/recordings/{id}",
+    "status": 200
+  },
+  "recordings_show_200_failed": {
     "method": "GET",
     "path": "/api/recordings/{id}",
     "status": 200
@@ -309,6 +330,16 @@
   "sessions_delete_404_twice": {
     "method": "DELETE",
     "path": "/api/sessions/{id}",
+    "status": 404
+  },
+  "sessions_finish_200": {
+    "method": "POST",
+    "path": "/api/sessions/{id}/finish",
+    "status": 200
+  },
+  "sessions_finish_404": {
+    "method": "POST",
+    "path": "/api/sessions/{id}/finish",
     "status": 404
   },
   "sessions_recordings_store_201": {
@@ -372,6 +403,11 @@
     "status": 200
   },
   "sessions_store_201_minimal": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 201
+  },
+  "sessions_store_201_open": {
     "method": "POST",
     "path": "/api/sessions",
     "status": 201
@@ -441,7 +477,22 @@
     "path": "/api/stt/token",
     "status": 200
   },
+  "stt_token_403_budget_exceeded": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 403
+  },
+  "stt_token_409_session_not_recording": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 409
+  },
   "stt_token_422_invalid": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 422
+  },
+  "stt_token_422_session_required": {
     "method": "POST",
     "path": "/api/stt/token",
     "status": 422
@@ -452,6 +503,11 @@
     "status": 200
   },
   "transcripts_show_200_final_failed": {
+    "method": "GET",
+    "path": "/api/transcripts/{id}",
+    "status": 200
+  },
+  "transcripts_show_200_final_failed_no_audio": {
     "method": "GET",
     "path": "/api/transcripts/{id}",
     "status": 200
@@ -495,5 +551,15 @@
     "method": "POST",
     "path": "/api/sessions/{id}/transcripts",
     "status": 422
+  },
+  "usage_200_duplicate": {
+    "method": "POST",
+    "path": "/api/usage",
+    "status": 200
+  },
+  "usage_201": {
+    "method": "POST",
+    "path": "/api/usage",
+    "status": 201
   }
 }
