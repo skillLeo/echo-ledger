@@ -1,7 +1,7 @@
 // Settings → Privacy & security (plan B16): the app lock with Windows Hello / Touch ID and a PIN, the devices paired
 // with the server (revoke the others) and the recent audit log.
 import { useEffect, useId, useState } from "react";
-import { api, errorMessage, type LockAfterMinutes, type LockStatus, type SecurityDevice, type SecurityEvent, type Settings, type SettingsPatch } from "../../lib/ipc";
+import { api, errorMessage, type LockAfterMinutes, type LockStatus, type SecurityDevice, type SecurityEvent, type Settings, type SettingsPatch, type StorageInfo } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { SelectRow, Toggle } from "./SettingsControls";
 import { SYSTEM_LABEL } from "./LockScreen";
@@ -97,6 +97,46 @@ export function SecurityCard({ settings, patch, run }: { settings: Settings; pat
         <ul className="activity" aria-label="Recent activity">
           {events.slice(0, 15).map((e) => <li key={e.id} className="small"><span className="muted">{formatWhen(e.at)}</span> {eventLine(e)}</li>)}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/** "1.5 GB" style sizes. */
+export function fileSize(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
+}
+
+/** Settings → Storage and retention (B17): the storage meter and how long recordings are kept. */
+export function StorageCard() {
+  const [info, setInfo] = useState<StorageInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    api.storage().then(setInfo, (e) => setError(errorMessage(e)));
+  }, []);
+  const used = info && info.disk_total_bytes && info.disk_free_bytes !== null ? 1 - info.disk_free_bytes / info.disk_total_bytes : null;
+  return (
+    <div className="card storage-settings">
+      <b>Storage and retention</b>
+      {error && <p className="small muted">{error}</p>}
+      {info && (
+        <>
+          <p className="small">Recordings on the server: {fileSize(info.recordings_bytes)} in {info.recordings_count} file{info.recordings_count === 1 ? "" : "s"}.</p>
+          {used !== null && (
+            <div className="flow-bar" role="meter" aria-label="Server disk used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(used * 100)}>
+              <span style={{ width: `${Math.round(used * 100)}%` }} />
+            </div>
+          )}
+          {used !== null && <p className="small muted">Server disk {Math.round(used * 100)}% used · {fileSize(info.disk_free_bytes ?? 0)} free.</p>}
+          <p className="small muted">Recordings are deleted after {info.retention_days} days unless kept or their client keeps them longer. Deleted recordings can be restored for 48 hours.</p>
+        </>
       )}
     </div>
   );

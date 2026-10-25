@@ -250,6 +250,8 @@ export interface LibraryItem {
   /** Pinned to the top and recording labels (since v1.1, B15). */
   pinned?: boolean;
   labels?: string[];
+  /** Never deleted by retention (B17). */
+  keep?: boolean;
   transcript?: {
     final_status: string | null;
     final_transcript_id: string | null;
@@ -274,8 +276,27 @@ export interface SessionOrganisePatch {
   client_id?: string | null;
   pinned?: boolean;
   labels?: string[];
+  /** Never deleted by retention (B17). */
+  keep?: boolean;
 }
-export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "delete";
+export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "delete";
+/** A recording in the 48-hour undo bin (B17). */
+export interface BinItem {
+  id: string;
+  title: string;
+  client: { id: string; name: string } | null;
+  started_at: string;
+  duration_ms: number | null;
+  deleted_at: string;
+  erase_at: string;
+}
+export interface StorageInfo {
+  recordings_bytes: number;
+  recordings_count: number;
+  disk_free_bytes: number | null;
+  disk_total_bytes: number | null;
+  retention_days: number;
+}
 export type BulkExportFormat = "txt" | "md" | "srt" | "vtt" | "json" | "docx";
 
 export interface Segment {
@@ -560,6 +581,10 @@ export const api = {
   setLockPin: (pin: string) => invoke<LockStatus>("lock_set_pin", { pin }),
   securityOverview: () => invoke<{ devices: SecurityDevice[]; events: SecurityEvent[] }>("security_overview"),
   revokeDevice: (id: string) => invoke<void>("device_revoke", { id }),
+  bin: () => invoke<{ data: BinItem[] }>("bin_list"),
+  restoreSession: (id: string) => invoke<{ data: LibraryItem }>("session_restore", { id }),
+  eraseFromBin: (id: string) => invoke<void>("bin_erase", { id }),
+  storage: () => invoke<StorageInfo>("storage_info"),
   clearDictationHistory: () => invoke<void>("dictation_history_clear"),
 };
 

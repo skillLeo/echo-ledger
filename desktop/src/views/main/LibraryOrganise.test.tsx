@@ -167,7 +167,7 @@ describe("bulk bar", () => {
     const { onDone, notify } = renderBar();
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(callsOf("sessions_bulk")).toHaveLength(0);
-    fireEvent.click(screen.getByRole("button", { name: "Delete 2 on every device" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete 2 (restorable for 48 hours)" }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
     expect(notify).toHaveBeenCalledWith("2 deleted");
   });

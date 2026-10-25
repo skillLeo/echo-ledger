@@ -819,6 +819,34 @@ pub async fn device_revoke(state: State<'_, AppState>, id: String) -> AppResult<
     ensure_unlocked(&state)?;
     state.api()?.revoke_device(&id).await
 }
+/// Recordings deleted in the last 48 hours (B17).
+#[tauri::command]
+pub async fn bin_list(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.bin().await
+}
+
+/// Restores a recording from the undo bin and syncs the library so it is back everywhere.
+#[tauri::command]
+pub async fn session_restore(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    let item = app.state::<AppState>().api()?.restore_session(&id).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(item)
+}
+
+/// Erases a binned recording now.
+#[tauri::command]
+pub async fn bin_erase(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    ensure_unlocked(&state)?;
+    state.api()?.erase_from_bin(&id).await
+}
+
+/// The storage meter and the retention in days.
+#[tauri::command]
+pub async fn storage_info(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    state.api()?.storage().await
+}
 fn main_window_handle(app: &AppHandle) -> isize {
     #[cfg(windows)]
     {
@@ -831,9 +859,9 @@ fn main_window_handle(app: &AppHandle) -> isize {
     }
 }
 /// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
-pub const SESSION_PATCH_KEYS: [&str; 4] = ["title", "client_id", "pinned", "labels"];
+pub const SESSION_PATCH_KEYS: [&str; 5] = ["title", "client_id", "pinned", "keep", "labels"];
 pub const CLIENT_PATCH_KEYS: [&str; 4] = ["name", "color", "avatar", "pinned"];
-pub const BULK_ACTIONS: [&str; 6] = ["move", "label", "unlabel", "pin", "unpin", "delete"];
+pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
 /// The server takes at most this many recordings per bulk action.
 pub const MAX_BULK: usize = 200;

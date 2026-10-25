@@ -1,7 +1,8 @@
 // Library organisation on the desktop (plan B15): pin, labels and client folder of one recording, and bulk actions
 // for the selected recordings. Every change goes to the server; the library refreshes when it answers.
-import { useId, useState } from "react";
-import { api, errorMessage, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem } from "../../lib/ipc";
+import { useEffect, useId, useState } from "react";
+import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem } from "../../lib/ipc";
+import { formatWhen } from "../../lib/format";
 import { folderBadge, MAX_LABEL_CHARS, sortFolders, withLabel } from "../../lib/organise";
 
 type Notify = (message: string, error?: boolean) => void;
@@ -103,6 +104,10 @@ export function OrganisePanel({ item, clients, knownLabels, notify, onClientCrea
         onClick={() => void save({ pinned: !item.pinned }, item.pinned ? "Unpinned" : "Pinned")}>
         <span aria-hidden="true">{item.pinned ? "★" : "☆"}</span>{item.pinned ? "Pinned" : "Pin"}
       </button>
+      <button type="button" className="btn ghost" aria-pressed={!!item.keep} disabled={busy} title="Kept recordings are never deleted automatically"
+        onClick={() => void save({ keep: !item.keep }, item.keep ? "No longer kept" : "Kept forever")}>
+        {item.keep ? "Kept forever" : "Keep forever"}
+      </button>
       <FolderPicker label="Client" value={item.client?.id ?? ""} clients={clients} disabled={busy} notify={notify} onCreated={onClientCreated}
         onPick={(clientId) => void save({ client_id: clientId }, "Moved")} />
       <div className="chips labels" role="list" aria-label="Labels">
@@ -185,17 +190,69 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
           <div className="row organise-field">
             <button type="button" className="btn ghost" disabled={busy} onClick={() => void run("pin")}>Pin</button>
             <button type="button" className="btn ghost" disabled={busy} onClick={() => void run("unpin")}>Unpin</button>
+            <button type="button" className="btn ghost" disabled={busy} onClick={() => void run("keep")}>Keep forever</button>
+            <button type="button" className="btn ghost" disabled={busy} onClick={() => void run("unkeep")}>Stop keeping</button>
             <label htmlFor={formatId} className="sr-only">Export format</label>
             <select id={formatId} className="select" value={format} disabled={busy} onChange={(e) => setFormat(e.target.value as BulkExportFormat)}>
               {EXPORT_FORMATS.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
             </select>
             <button type="button" className="btn ghost" disabled={busy} onClick={() => void exportZip()}>Export transcripts</button>
             {confirmDelete ? (
-              <button type="button" className="btn danger" disabled={busy} onClick={() => void run("delete")}>{`Delete ${count} on every device`}</button>
+              <button type="button" className="btn danger" disabled={busy} onClick={() => void run("delete")}>{`Delete ${count} (restorable for 48 hours)`}</button>
             ) : (
               <button type="button" className="btn danger ghost" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</button>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** "erased in 5 hours" from the erase time; "erased soon" in the last minutes. */
+export function eraseIn(eraseAt: string, now: number = Date.now()): string {
+  const hours = Math.floor((Date.parse(eraseAt) - now) / 3_600_000);
+  return hours >= 1 ? `erased in ${hours} hour${hours === 1 ? "" : "s"}` : "erased soon";
+}
+
+/** Recently deleted (B17): the 48-hour undo bin with Restore and Delete now. */
+export function BinPanel({ notify, onClose }: { notify: Notify; onClose: () => void }) {
+  const [items, setItems] = useState<BinItem[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = () => api.bin().then((r) => setItems(r.data ?? []), (e) => { setItems([]); notify(errorMessage(e), true); });
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const act = async (id: string, fn: () => Promise<unknown>, done: string) => {
+    setBusy(id);
+    try {
+      await fn();
+      notify(done);
+      await load();
+    } catch (e) {
+      notify(errorMessage(e), true);
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="card bin-panel" role="region" aria-label="Recently deleted">
+      <div className="row"><b>Recently deleted</b><span className="spacer" /><button type="button" className="btn ghost small" onClick={onClose}>Close</button></div>
+      <p className="small muted">Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.</p>
+      {items === null ? <p className="small muted">Loading…</p> : items.length === 0 ? <p className="small muted">Nothing deleted in the last 48 hours.</p> : (
+        <div className="site-list" role="list">
+          {items.map((b) => (
+            <div className="site-rule" role="listitem" key={b.id}>
+              <div className="site-main">
+                <div className="site-pattern">{b.title}</div>
+                <div className="small muted">{formatWhen(b.started_at)}{b.client ? ` · ${b.client.name}` : ""} · {eraseIn(b.erase_at)}</div>
+              </div>
+              <button type="button" className="btn small" disabled={busy === b.id} onClick={() => void act(b.id, () => api.restoreSession(b.id), "Restored")}>Restore</button>
+              <button type="button" className="btn danger ghost small" disabled={busy === b.id}
+                onClick={() => { if (window.confirm("Erase this recording now? This cannot be undone.")) void act(b.id, () => api.eraseFromBin(b.id), "Erased"); }}>Delete now</button>
+            </div>
+          ))}
         </div>
       )}
     </div>

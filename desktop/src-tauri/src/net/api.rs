@@ -300,6 +300,29 @@ impl ApiClient {
         let resp = self.authed(self.http.delete(self.url(&format!("devices/{id}"))))?.send().await?;
         Self::ok_empty(resp).await
     }
+    /// `GET /api/bin` (since v1.1): recordings deleted in the last 48 hours.
+    pub async fn bin(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("bin")))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/sessions/{id}/restore` (since v1.1): out of the undo bin.
+    pub async fn restore_session(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("sessions/{id}/restore"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/bin/{id}` (since v1.1): erase now instead of after 48 hours.
+    pub async fn erase_from_bin(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("bin/{id}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `GET /api/storage` (since v1.1): the storage meter and the retention in days.
+    pub async fn storage(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("storage")))?.send().await?;
+        Self::parse(resp).await
+    }
     /// `GET /api/sessions/{id}/shares`.
     pub async fn list_shares(&self, session_id: &str) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.get(self.url(&format!("sessions/{session_id}/shares"))))?.send().await?;

@@ -11,7 +11,7 @@ import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, SMART_VIEWS, smartViewCounts, type SmartView } from "../../lib/organise";
-import { BulkBar, OrganisePanel } from "./LibraryOrganise";
+import { BinPanel, BulkBar, OrganisePanel } from "./LibraryOrganise";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -48,6 +48,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [clients, setClients] = useState<ClientFolder[]>([]);
   const [clientsLoaded, setClientsLoaded] = useState(false);
   const [selecting, setSelecting] = useState(false);
+  const [binOpen, setBinOpen] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [query, setQuery] = useState("");
@@ -347,7 +348,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm("Delete this recording and transcript on every device? This cannot be undone.")) return;
+    if (!window.confirm("Delete this recording and transcript on every device? You can restore it from Recently deleted for 48 hours.")) return;
     try {
       await api.deleteSession(id);
       setSelected(null);
@@ -392,6 +393,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
           </select>
         )}
         <button type="button" className="btn ghost" aria-pressed={selecting} onClick={() => (selecting ? endSelecting() : setSelecting(true))}>{selecting ? "Cancel selection" : "Select"}</button>
+        <button type="button" className="btn ghost" aria-pressed={binOpen} onClick={() => setBinOpen(!binOpen)}>Recently deleted</button>
       </div>
       <div className="chips views" role="group" aria-label="Smart views">
         {SMART_VIEWS.map(([key, text]) => (
@@ -417,6 +419,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       )}
       <div className="library">
         <div className="list" data-testid="library-list">
+          {binOpen && <BinPanel notify={notify} onClose={() => setBinOpen(false)} />}
           {selecting && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} />}
           <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />
           {found.length > 0 && (

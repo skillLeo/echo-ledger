@@ -712,7 +712,7 @@ describe("LibraryView delete", () => {
     await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     fireEvent.click(within(detail()).getByRole("button", { name: "Delete" }));
-    expect(confirm).toHaveBeenCalledWith("Delete this recording and transcript on every device? This cannot be undone.");
+    expect(confirm).toHaveBeenCalledWith("Delete this recording and transcript on every device? You can restore it from Recently deleted for 48 hours.");
     expect(callsOf("delete_session")).toHaveLength(0);
     expect(within(detail()).getByText("Hello, this is Sam.")).toBeInTheDocument();
   });
