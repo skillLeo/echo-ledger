@@ -243,7 +243,8 @@ fn caption_buffer_windows_by_wall_clock_and_sorts_segments() {
 fn windows_images_and_packages_classify() {
     assert_eq!(classify_windows("Zoom.exe", None), Some(SourceApp::Zoom));
     assert_eq!(classify_windows("WhatsApp.exe", None), Some(SourceApp::Whatsapp));
-    assert_eq!(classify_windows("chrome.exe", None), Some(SourceApp::GoogleMeet));
+    assert_eq!(classify_windows("chrome.exe", None), None, "browsers are identified by site, not by name");
+    assert_eq!(classify_windows("ms-teams.exe", None), Some(SourceApp::MicrosoftTeams));
     assert_eq!(classify_windows("notepad.exe", None), None);
     assert_eq!(classify_windows("anything.exe", Some("5319275A.WhatsAppDesktop_cv1g1gvanyjgm")), Some(SourceApp::Whatsapp));
     // Other WhatsApp builds are recognised by package family or executable name, not only the two known names.
@@ -258,7 +259,7 @@ fn macos_bundle_ids_classify_with_business_before_consumer() {
     assert_eq!(classify_macos("net.whatsapp.WhatsAppSMB.desktop"), Some(SourceApp::WhatsappBusiness));
     assert_eq!(classify_macos("net.whatsapp.WhatsApp"), Some(SourceApp::Whatsapp));
     assert_eq!(classify_macos("us.zoom.xos.helper"), Some(SourceApp::Zoom));
-    assert_eq!(classify_macos("com.google.Chrome"), Some(SourceApp::GoogleMeet));
+    assert_eq!(classify_macos("com.google.Chrome"), None, "browsers are identified by site, not by name");
     assert_eq!(classify_macos("com.apple.Terminal"), None);
 }
 
@@ -287,8 +288,15 @@ mod helper_process {
     #[test]
     fn a_helper_of_an_unrelated_app_stays_unrecognised() {
         let parents = HashMap::from([(300, 200), (200, 50), (50, 0)]);
-        let who = identity(&[(200, "ms-teams.exe", None), (50, "explorer.exe", None)]);
+        let who = identity(&[(200, "slack.exe", None), (50, "explorer.exe", None)]);
         assert_eq!(ancestor_app_with(300, &parents, who), None);
+    }
+
+    #[test]
+    fn a_helper_of_teams_is_attributed_to_teams() {
+        let parents = HashMap::from([(300, 200), (200, 50), (50, 0)]);
+        let who = identity(&[(200, "ms-teams.exe", None), (50, "explorer.exe", None)]);
+        assert_eq!(ancestor_app_with(300, &parents, who), Some(SourceApp::MicrosoftTeams));
     }
 
     #[test]

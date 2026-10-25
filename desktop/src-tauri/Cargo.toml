@@ -1,6 +1,6 @@
 [package]
 name = "echoledger-desktop"
-version = "0.1.0"
+version = "1.1.0"
 description = "EchoLedger desktop: live captions, dictation and dual-channel call capture"
 authors = ["EchoLedger"]
 edition = "2024"
@@ -23,7 +23,6 @@ tauri-plugin-autostart = "=2.7.0"
 tauri-plugin-notification = "=2.7.0"
 tauri-plugin-positioner = { version = "=2.4.0", features = ["tray-icon"] }
 tauri-plugin-store = "=2.5.0"
-tauri-plugin-updater = "=2.14.0"
 tauri-plugin-opener = "=2.7.2"
 tauri-plugin-clipboard-manager = "=2.5.0"
 serde = { version = "1", features = ["derive"] }
@@ -54,6 +53,7 @@ windows = { version = "0.62.2", features = [
   "Win32_System_Threading",
   "Win32_System_Diagnostics_ToolHelp",
   "Win32_Storage_Packaging_Appx",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

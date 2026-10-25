@@ -10,7 +10,8 @@ use crate::AppState;
 use crate::error::{AppError, AppResult};
 use crate::net::api::ApiClient;
 use crate::net::sync::{LibraryCache, paths};
-use crate::net::uploader::UploadQueue;
+pub use crate::net::models::BudgetState;
+use crate::net::uploader::{UploadItem, UploadQueue};
 use crate::overlay::geometry::{RectPx, WorkArea, nearest_corner};
 use crate::overlay::{HitRegions, redock};
 use crate::settings::Settings;
@@ -33,12 +34,18 @@ pub struct AppStatus {
     pub shortcut_errors: Vec<(Action, String)>,
     pub levels: [f32; 2],
     pub platform: &'static str,
+    pub failed_uploads: usize,
+    pub budget: BudgetState,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
     let state = app.state::<AppState>();
     let settings = state.settings();
     let queue = UploadQueue::load(&paths::uploads(&state.data_dir));
+    let budget = {
+        let config = state.server_config.lock().unwrap_or_else(|p| p.into_inner());
+        BudgetState::from_usage(config.as_ref().and_then(|c| c.usage.as_ref()), state.budget_blocked.load(std::sync::atomic::Ordering::SeqCst))
+    };
     let recording = state.capture.info();
     crate::tray::set_recording_tooltip(app, recording.is_some(), state.live.is_live());
     AppStatus {
@@ -50,11 +57,13 @@ pub fn status(app: &AppHandle) -> AppStatus {
         captions_live: state.live.is_live(),
         dictation_active: crate::dictation::is_active(app),
         auto_mode: settings.auto_mode,
-        pending_uploads: queue.items.len(),
-        upload_errors: queue.items.iter().filter_map(|i| i.last_error.clone()).collect(),
+        pending_uploads: queue.active(),
+        upload_errors: queue.items.iter().filter(|i| !i.is_failed()).filter_map(|i| i.last_error.clone()).collect(),
         shortcut_errors: state.shortcut_errors.lock().unwrap().clone(),
         levels: state.capture.levels(),
         platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" },
+        failed_uploads: queue.failed(),
+        budget,
     }
 }
 
@@ -101,6 +110,7 @@ pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     let state = app.state::<AppState>();
     state.token_store.forget().map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = None;
+    state.api_cache.clear();
     state.update_settings(|s| {
         s.device_id = None;
         s.device_name = None;
@@ -126,11 +136,24 @@ pub struct SettingsPatch {
     client_id: Option<Option<String>>,
     consent_acknowledged: Option<bool>,
     overlay_corner: Option<crate::overlay::geometry::Corner>,
+    ask_unknown_apps: Option<bool>,
+    /// Full replacement of the user rules (built-ins are never stored).
+    site_rules: Option<Vec<crate::detect::sites::SiteRule>>,
+    browser_automation: Option<bool>,
+    ask_before_saving: Option<crate::settings::AskBeforeSaving>,
+    decision_timeout: Option<crate::settings::DecisionTimeout>,
+    /// 2, 3 or 5; anything else is refused.
+    caption_lines: Option<u8>,
 }
 
 #[tauri::command]
 pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settings> {
     use tauri_plugin_autostart::ManagerExt;
+    if let Some(lines) = patch.caption_lines
+        && !crate::settings::CAPTION_LINES.contains(&lines)
+    {
+        return Err(AppError::msg("Choose 2, 3 or 5 lines."));
+    }
     let state = app.state::<AppState>();
     let updated = state.update_settings(|s| {
         if let Some(v) = patch.captions_on_record { s.captions_on_record = v; }
@@ -141,7 +164,14 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         if let Some(v) = &patch.client_id { s.client_id = v.clone(); }
         if let Some(v) = patch.consent_acknowledged { s.consent_acknowledged = v; }
         if let Some(v) = patch.overlay_corner { s.overlay_corner = v; }
+        if let Some(v) = patch.ask_unknown_apps { s.ask_unknown_apps = v; }
+        if let Some(v) = &patch.site_rules { s.site_rules = v.clone(); }
+        if let Some(v) = patch.browser_automation { s.browser_automation = v; }
+        if let Some(v) = patch.ask_before_saving { s.ask_before_saving = v; }
+        if let Some(v) = patch.decision_timeout { s.decision_timeout = v; }
+        if let Some(v) = patch.caption_lines { s.caption_lines = v; }
     })?;
+    let _ = app.emit("settings:changed", &updated);
     if patch.content_protection.is_some() {
         crate::overlay::set_content_protection(&app, updated.content_protection);
     }
@@ -149,7 +179,10 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         let manager = app.autolaunch();
         let _ = if enable { manager.enable() } else { manager.disable() };
     }
-    if let Some(corner) = patch.overlay_corner
+    if patch.caption_lines.is_some() {
+        // Resizes and re-docks in the setting's corner (never `show()`).
+        crate::overlay::resize_captions(&app, updated.caption_lines, updated.overlay_corner);
+    } else if let Some(corner) = patch.overlay_corner
         && let Some(w) = app.get_webview_window(crate::overlay::OVERLAY)
     {
         redock(&w, corner);
@@ -163,9 +196,11 @@ pub fn set_shortcut(app: AppHandle, action: Action, accelerator: String) -> AppR
     shortcuts::rebind(&app, action, &accelerator).map_err(AppError::Message)?;
     let state = app.state::<AppState>();
     state.shortcut_errors.lock().unwrap().retain(|(a, _)| *a != action);
-    state.update_settings(|s| {
+    let settings = state.update_settings(|s| {
         s.shortcuts.insert(action, accelerator.trim().to_string());
-    })
+    })?;
+    let _ = app.emit("settings:changed", &settings);
+    Ok(settings)
 }
 
 #[tauri::command]
@@ -173,6 +208,7 @@ pub fn reset_shortcuts(app: AppHandle) -> AppResult<Settings> {
     let state = app.state::<AppState>();
     let settings = state.update_settings(|s| s.shortcuts = shortcuts::default_map())?;
     *state.shortcut_errors.lock().unwrap() = shortcuts::register_all(&app, &settings.shortcuts);
+    let _ = app.emit("settings:changed", &settings);
     Ok(settings)
 }
 
@@ -196,7 +232,8 @@ pub fn overlay_snap(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
     let corner = nearest_corner(area, (pos.x, pos.y), (size.width, size.height));
     redock(&window, corner);
     if window.label() == crate::overlay::OVERLAY {
-        app.state::<AppState>().update_settings(|s| s.overlay_corner = corner)?;
+        let settings = app.state::<AppState>().update_settings(|s| s.overlay_corner = corner)?;
+        let _ = app.emit("settings:changed", &settings);
     }
     Ok(())
 }
@@ -232,10 +269,29 @@ pub async fn toggle_mic_note(app: AppHandle) -> AppResult<AppStatus> {
     Ok(status(&app))
 }
 
-/// Which applications hold the microphone right now (for the live call-detection panel). Cheap, read-only.
+/// Which applications hold the microphone and what auto mode decided for each (the Record screen explainer).
+/// Served from the auto-mode loop's last observation (refreshed every second); never polls the system itself.
 #[tauri::command]
-pub async fn mic_users() -> Vec<crate::detect::MicUser> {
-    tauri::async_runtime::spawn_blocking(crate::detect::mic_users).await.unwrap_or_default()
+pub async fn mic_users(app: AppHandle) -> Vec<crate::detect::MicUser> {
+    app.state::<AppState>().detect.mic_users()
+}
+
+/// Payload of `ask:show`: the unknown-app chip (A1.5).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AskPayload {
+    pub id: String,
+    pub name: String,
+    pub site: Option<String>,
+    pub seconds: u64,
+}
+
+/// The unknown-app chip's answer: `record`, `ignore` or `always_ignore`.
+#[tauri::command]
+pub async fn ask_answer(app: AppHandle, id: String, answer: String) -> AppResult<()> {
+    crate::detect::answer_ask(&app, &id, &answer).await?;
+    crate::actions::emit_status(&app);
+    Ok(())
 }
 
 /// The overlay's close button: always hides captions, whatever state they are in (a recording keeps running).
@@ -312,6 +368,25 @@ pub async fn delete_session(app: AppHandle, id: String) -> AppResult<()> {
 #[tauri::command]
 pub async fn list_clients(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
     state.api()?.clients().await
+}
+
+/// The upload queue, oldest first.
+#[tauri::command]
+pub fn upload_list(app: AppHandle) -> Vec<UploadItem> {
+    let state = app.state::<AppState>();
+    UploadQueue::load(&paths::uploads(&state.data_dir)).ui_items()
+}
+
+/// Puts a failed upload back in the queue (one more automatic full restart is allowed again).
+#[tauri::command]
+pub fn upload_retry(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::retry_upload(&app, &id)
+}
+
+/// Deletes a queued upload and its local audio; a session already created on the server is deleted too.
+#[tauri::command]
+pub async fn upload_discard(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::discard_upload(&app, &id)
 }
 
 #[tauri::command]

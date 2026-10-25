@@ -28,11 +28,15 @@ struct RawPacket {
     ts_ns: u64,
 }
 
+/// Signature of the IOProc block (`AudioDeviceIOBlock` in AudioHardware.h): now, input data, input time, output
+/// data, output time.
+type IoBlock = dyn Fn(NonNull<AudioTimeStamp>, NonNull<AudioBufferList>, NonNull<AudioTimeStamp>, NonNull<AudioBufferList>, NonNull<AudioTimeStamp>);
+
 pub struct MacBackend {
     aggregate: AudioObjectID,
     tap: AudioObjectID,
     proc_id: AudioDeviceIOProcID,
-    _block: RcBlock<dyn Fn(NonNull<AudioTimeStamp>, NonNull<AudioBufferList>, NonNull<AudioTimeStamp>, NonNull<AudioBufferList>, NonNull<AudioTimeStamp>)>,
+    _block: RcBlock<IoBlock>,
     _queue: dispatch2::DispatchRetained<DispatchQueue>,
     worker: Option<JoinHandle<()>>,
     stopped: bool,
@@ -282,8 +286,19 @@ impl Drop for MacBackend {
     }
 }
 
-/// Bundle IDs of processes currently capturing audio input (auto mode). Polled; listeners are unreliable.
-pub fn active_input_bundle_ids() -> Vec<String> {
+/// One Core Audio process object (macOS 14.4+): who it is and whether it runs audio input / output.
+struct AudioProcess {
+    pid: u32,
+    bundle: String,
+    input: bool,
+    output: bool,
+}
+
+/// Every process object Core Audio knows (`kAudioHardwarePropertyProcessObjectList`) with
+/// `kAudioProcessPropertyPID`, `kAudioProcessPropertyBundleID`, `kAudioProcessPropertyIsRunningInput` and
+/// `kAudioProcessPropertyIsRunningOutput` (objc2-core-audio-0.3.2 `src/generated/AudioHardware.rs` lines 1082,
+/// 1758-1768). Polled; property listeners are unreliable for other processes.
+fn audio_processes() -> Vec<AudioProcess> {
     let mut out = Vec::new();
     unsafe {
         let system_object = kAudioObjectSystemObject as AudioObjectID;
@@ -299,24 +314,98 @@ pub fn active_input_bundle_ids() -> Vec<String> {
         {
             return out;
         }
-        let own_pid = std::process::id();
         for id in ids {
-            if get_u32(id, kAudioProcessPropertyIsRunningInput, kAudioObjectPropertyScopeGlobal, None) != Some(1) {
-                continue;
-            }
-            if get_u32(id, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal, None) == Some(own_pid) {
-                continue;
-            }
+            let Some(pid) = get_u32(id, kAudioProcessPropertyPID, kAudioObjectPropertyScopeGlobal, None) else { continue };
+            let input = get_u32(id, kAudioProcessPropertyIsRunningInput, kAudioObjectPropertyScopeGlobal, None) == Some(1);
+            let output = get_u32(id, kAudioProcessPropertyIsRunningOutput, kAudioObjectPropertyScopeGlobal, None) == Some(1);
             let baddr = address(kAudioProcessPropertyBundleID, kAudioObjectPropertyScopeGlobal);
             let mut bundle: *const CFString = std::ptr::null();
             let mut bsize = std::mem::size_of::<*const CFString>() as u32;
-            if AudioObjectGetPropertyData(id, NonNull::from(&baddr), 0, std::ptr::null(), NonNull::from(&mut bsize), NonNull::from(&mut bundle).cast()) == 0
+            let bundle = if AudioObjectGetPropertyData(id, NonNull::from(&baddr), 0, std::ptr::null(), NonNull::from(&mut bsize), NonNull::from(&mut bundle).cast()) == 0
                 && !bundle.is_null()
             {
+                // The getter follows the Create rule: we own the returned CFString.
                 let owned: CFRetained<CFString> = CFRetained::from_raw(NonNull::new_unchecked(bundle as *mut CFString));
-                out.push(owned.to_string());
+                owned.to_string()
+            } else {
+                String::new()
+            };
+            out.push(AudioProcess { pid, bundle, input, output });
+        }
+    }
+    out
+}
+
+/// Active-tab URLs of a running browser through Apple Events (`osascript`, 1 s timeout). Needs the Automation
+/// permission (`NSAppleEventsUsageDescription` in Info.plist); without it the script fails and the list is empty.
+fn tab_urls(application: &str, safari: bool) -> Vec<String> {
+    use std::io::Read;
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let tab = if safari { "current tab" } else { "active tab" };
+    let script = format!("tell application \"{application}\" to get URL of {tab} of every window");
+    let Ok(mut child) = Command::new("/usr/bin/osascript").arg("-e").arg(&script).stdout(Stdio::piped()).stderr(Stdio::null()).spawn() else {
+        return Vec::new();
+    };
+    let deadline = Instant::now() + Duration::from_secs(1);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) if status.success() => break,
+            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
+            Ok(Some(_)) => return Vec::new(),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Vec::new();
             }
         }
     }
+    let mut text = String::new();
+    if let Some(mut stdout) = child.stdout.take() {
+        let _ = stdout.read_to_string(&mut text);
+    }
+    crate::detect::sites::parse_osascript_list(&text)
+}
+
+/// The applications that hold a microphone, grouped with their helper processes by bundle id, each with whether
+/// it also plays audio. Tab URLs are read only when `read_urls` (Settings → browser automation) is on.
+/// NOT VERIFIED ON HARDWARE: docs/MANUAL_QA.md lists the check.
+pub fn observe_trees(read_urls: bool) -> Vec<crate::detect::decide::TreeAudio> {
+    use crate::detect::classify::{app_bundle_id, browser_script, is_browser_bundle};
+    use crate::detect::decide::TreeAudio;
+
+    let own = std::process::id();
+    let processes: Vec<AudioProcess> = audio_processes().into_iter().filter(|p| p.pid != own).collect();
+    if !processes.iter().any(|p| p.input) {
+        return Vec::new();
+    }
+    let key = |p: &AudioProcess| if p.bundle.is_empty() { format!("pid:{}", p.pid) } else { app_bundle_id(&p.bundle).to_ascii_lowercase() };
+    let mut trees: Vec<(String, TreeAudio)> = Vec::new();
+    for p in processes.iter().filter(|p| p.input) {
+        let k = key(p);
+        match trees.iter_mut().find(|(group, _)| *group == k) {
+            Some((_, tree)) => tree.root_pid = tree.root_pid.min(p.pid),
+            None => {
+                let name = if p.bundle.is_empty() { "a protected process".to_string() } else { app_bundle_id(&p.bundle).to_string() };
+                trees.push((k, TreeAudio { root_pid: p.pid, name, pfn: None, capture_active: true, render_active: false, titles: Vec::new(), urls: Vec::new() }));
+            }
+        }
+    }
+    for p in processes.iter().filter(|p| p.output) {
+        let k = key(p);
+        if let Some((_, tree)) = trees.iter_mut().find(|(group, _)| *group == k) {
+            tree.render_active = true;
+        }
+    }
+    let mut out: Vec<TreeAudio> = trees.into_iter().map(|(_, t)| t).collect();
+    if read_urls {
+        for tree in out.iter_mut().filter(|t| is_browser_bundle(&t.name)) {
+            if let Some((application, safari)) = browser_script(&tree.name) {
+                tree.urls = tab_urls(application, safari);
+            }
+        }
+    }
+    out.sort_by_key(|t| t.root_pid);
     out
 }

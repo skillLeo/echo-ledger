@@ -93,26 +93,97 @@ fn recording_modes_and_backends_use_the_names_the_ui_switches_on() {
 #[test]
 fn mic_users_serialise_with_a_name_and_an_optional_call_app() {
     let recognised = serde_json::to_value(MicUser {
-        name: "WhatsApp.exe".into(),
-        app: Some("whatsapp".into()),
+        name: "chrome.exe".into(),
+        app: Some("google_meet".into()),
+        holds_mic: true,
+        plays_audio: true,
+        site: Some("meet.google.com".into()),
+        decision: "auto_record".into(),
+        reason: None,
     })
     .unwrap();
-    let unknown = serde_json::to_value(MicUser {
-        name: "a protected process".into(),
+    let ignored = serde_json::to_value(MicUser {
+        name: "chrome.exe".into(),
         app: None,
+        holds_mic: true,
+        plays_audio: false,
+        site: None,
+        decision: "ignored".into(),
+        reason: Some("unknown_site".into()),
     })
     .unwrap();
     assert_eq!(
         recognised,
-        json!({"name": "WhatsApp.exe", "app": "whatsapp"})
+        json!({"name": "chrome.exe", "app": "google_meet", "holdsMic": true, "playsAudio": true,
+               "site": "meet.google.com", "decision": "auto_record", "reason": Value::Null})
     );
     assert_eq!(
-        unknown,
-        json!({"name": "a protected process", "app": Value::Null})
+        ignored,
+        json!({"name": "chrome.exe", "app": Value::Null, "holdsMic": true, "playsAudio": false,
+               "site": Value::Null, "decision": "ignored", "reason": "unknown_site"})
     );
-    let mut declared = interface_members(&ipc_ts(), "MicUser");
-    declared.sort();
-    assert_eq!(declared, ["app", "name"]);
+    let mut keys: Vec<String> = recognised.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    assert_eq!(keys, interface_members(&ipc_ts(), "MicUser"));
+}
+
+#[test]
+fn the_explainer_built_by_the_core_uses_the_decision_and_reason_names_the_ui_declares() {
+    use desktop_lib::detect::decide::{TreeAudio, decide};
+    use desktop_lib::detect::explain;
+
+    let chrome = |render: bool, title: &str| TreeAudio {
+        root_pid: 42,
+        name: "chrome.exe".into(),
+        pfn: None,
+        capture_active: true,
+        render_active: render,
+        titles: vec![title.into()],
+        urls: vec![],
+    };
+    let meet = chrome(true, "Meet - abc-defg-hij - Google Chrome");
+    let unknown = chrome(false, "Some page - Google Chrome");
+    let built = [meet, unknown].map(|t| serde_json::to_value(explain(&t, &decide(&t, &[], false, true), &[], None)).unwrap());
+    assert_eq!(
+        built[0],
+        json!({"name": "chrome.exe", "app": "google_meet", "holdsMic": true, "playsAudio": true,
+               "site": "meet.google.com", "decision": "auto_record", "reason": Value::Null})
+    );
+    assert_eq!(
+        built[1],
+        json!({"name": "chrome.exe", "app": Value::Null, "holdsMic": true, "playsAudio": false,
+               "site": Value::Null, "decision": "ignored", "reason": "unknown_site"})
+    );
+    let ts = ipc_ts();
+    for name in ["auto_record", "recording", "ignored", "ask", "off", "dictation", "unknown_site", "unknown_app", "never_record", "auto_off"] {
+        assert!(ts.contains(&format!("\"{name}\"")), "{name} not declared in ipc.ts");
+    }
+    for (reason, name) in [
+        (desktop_lib::detect::decide::IgnoreReason::Dictation, "dictation"),
+        (desktop_lib::detect::decide::IgnoreReason::UnknownSite, "unknown_site"),
+        (desktop_lib::detect::decide::IgnoreReason::UnknownApp, "unknown_app"),
+        (desktop_lib::detect::decide::IgnoreReason::NeverRecord, "never_record"),
+        (desktop_lib::detect::decide::IgnoreReason::AutoOff, "auto_off"),
+    ] {
+        assert_eq!(serde_json::to_value(reason).unwrap(), json!(name));
+        assert_eq!(reason.as_str(), name);
+    }
+}
+
+#[test]
+fn site_rules_serialise_with_the_members_the_ui_declares() {
+    let rule = desktop_lib::detect::sites::builtin_rules().remove(0);
+    let v = serde_json::to_value(&rule).unwrap();
+    let mut keys: Vec<String> = v.as_object().unwrap().keys().cloned().collect();
+    keys.sort();
+    assert_eq!(keys, interface_members(&ipc_ts(), "SiteRule"));
+    assert_eq!(
+        v,
+        json!({"id": "builtin.meet", "app": "google_meet", "host": "meet.google.com", "titlePrefix": "Meet - ",
+               "titleContains": "Google Meet", "titleEquals": Value::Null, "priority": 30, "enabled": true})
+    );
+    let back: desktop_lib::detect::sites::SiteRule = serde_json::from_value(v).unwrap();
+    assert_eq!(back, rule);
 }
 
 #[test]

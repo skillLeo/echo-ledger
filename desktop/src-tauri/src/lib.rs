@@ -47,6 +47,12 @@ pub struct AppState {
     pub upload_notify: tokio::sync::Notify,
     pub queue_lock: Mutex<()>,
     pub shortcut_errors: Mutex<Vec<(shortcuts::Action, String)>>,
+    /// Auto-mode detection: last observation for the explainer, call/ask trackers, open unknown-app chips.
+    pub detect: detect::DetectState,
+    /// The one HTTP client, rebuilt only when server URL, pins or token change (A6.DR15).
+    api_cache: net::api::ApiClientCache,
+    /// Set by a `403 budget_exceeded`; cleared by the next config fetch (`AppStatus.budget`).
+    pub budget_blocked: AtomicBool,
 }
 
 impl AppState {
@@ -77,6 +83,9 @@ impl AppState {
             upload_notify: tokio::sync::Notify::new(),
             queue_lock: Mutex::new(()),
             shortcut_errors: Mutex::new(Vec::new()),
+            detect: detect::DetectState::default(),
+            api_cache: net::api::ApiClientCache::default(),
+            budget_blocked: AtomicBool::new(false),
         }
     }
 
@@ -103,7 +112,23 @@ impl AppState {
         let settings = self.settings();
         let url = settings.server_url.ok_or(AppError::NotPaired)?;
         let token = self.token.lock().unwrap().clone().ok_or(AppError::NotPaired)?;
-        ApiClient::new(&url, &settings.pins, Some(token))
+        self.api_cache.get(&url, &settings.pins, &token)
+    }
+
+    /// Stores a freshly fetched server config: rotates the pins when the server sent a usable set, and lifts a
+    /// budget block (the config's `usage` is authoritative again).
+    pub fn apply_config(&self, config: ServerConfig) {
+        if !net::pinning::parse_pins(&config.pins).is_empty() && self.settings().pins != config.pins {
+            let pins = config.pins.clone();
+            let _ = self.update_settings(|s| s.pins = pins);
+        }
+        self.budget_blocked.store(false, std::sync::atomic::Ordering::SeqCst);
+        *self.server_config.lock().unwrap_or_else(|p| p.into_inner()) = Some(config);
+    }
+
+    /// True when the last server config says the server speaks the v1.1 contract.
+    pub fn server_is_v1_1(&self) -> bool {
+        self.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().is_some_and(ServerConfig::is_v1_1)
     }
 
     /// Caption channel policy from the last server config ("both" | "client_only" | "off").
@@ -114,7 +139,7 @@ impl AppState {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Explicit crypto provider before any TLS use (reqwest/updater/websocket would otherwise disagree).
+    // Explicit crypto provider before any TLS use (reqwest/websocket would otherwise disagree).
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     let app = tauri::Builder::default()
@@ -124,7 +149,6 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(overlay::HitRegions::default())
@@ -138,7 +162,15 @@ pub fn run() {
             let settings = app.state::<AppState>().settings();
 
             tray::create(&handle)?;
-            overlay::create_overlays(&handle, settings.overlay_corner, settings.content_protection)?;
+            overlay::create_overlays(
+                &handle,
+                overlay::OverlaySetup {
+                    corner: settings.overlay_corner,
+                    content_protected: settings.content_protection,
+                    caption_lines: settings.caption_lines,
+                    pill_position: settings.pill_position,
+                },
+            )?;
             overlay::spawn_clickthrough_poll(handle.clone());
             let errors = shortcuts::register_all(&handle, &settings.shortcuts);
             *app.state::<AppState>().shortcut_errors.lock().unwrap() = errors;
@@ -151,13 +183,10 @@ pub fn run() {
                 let state = startup.state::<AppState>();
                 if let Ok(api) = state.api() {
                     if let Ok(config) = api.config().await {
-                        if !config.pins.is_empty() {
-                            let pins = config.pins.clone();
-                            let _ = state.update_settings(|s| s.pins = pins);
-                        }
-                        *state.server_config.lock().unwrap() = Some(config);
+                        state.apply_config(config);
                     }
                     let _ = commands::refresh_library_inner(&startup).await;
+                    state.upload_notify.notify_one(); // send what is still queued from the last run
                 }
             });
 
@@ -199,6 +228,7 @@ pub fn run() {
             commands::toggle_mic_note,
             commands::hide_captions,
             commands::mic_users,
+            commands::ask_answer,
             commands::import_voice_notes,
             commands::copy_last_minutes,
             commands::library_list,
@@ -207,6 +237,9 @@ pub fn run() {
             commands::transcript_detail,
             commands::delete_session,
             commands::list_clients,
+            commands::upload_list,
+            commands::upload_retry,
+            commands::upload_discard,
         ])
         .build(tauri::generate_context!())
         .expect("error while building EchoLedger");

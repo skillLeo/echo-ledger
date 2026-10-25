@@ -6,6 +6,8 @@
   <string>EchoLedger records your side of calls and dictation so it can transcribe them.</string>
   <key>NSAudioCaptureUsageDescription</key>
   <string>EchoLedger captures the other participants' audio during calls so the transcript includes both sides.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>EchoLedger reads the address of the browser tab that uses your microphone, to tell a call from dictation.</string>
   <key>LSUIElement</key>
   <true/>
 </dict>

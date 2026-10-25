@@ -160,13 +160,21 @@ mod windows_apis {
     fn listing_microphone_users_never_fails_and_only_names_real_processes() {
         for user in mic_users() {
             assert!(!user.name.is_empty());
+            assert!(user.holds_mic, "only trees holding the microphone are listed");
+            assert!(
+                ["auto_record", "recording", "ignored", "ask", "off"].contains(&user.decision.as_str()),
+                "{}",
+                user.decision
+            );
             if let Some(app) = &user.app {
                 assert!(
                     [
                         "whatsapp",
                         "whatsapp_business",
+                        "whatsapp_web",
                         "google_meet",
                         "zoom",
+                        "microsoft_teams",
                         "voice_note",
                         "other"
                     ]

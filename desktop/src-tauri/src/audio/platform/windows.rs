@@ -3,7 +3,7 @@
 //! default render device. Mic: default communications capture device. Both request 16 kHz mono f32 with
 //! AUTOCONVERTPCM, event-driven shared mode, and timestamps from GetBuffer's QPC position (100 ns units).
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
@@ -163,13 +163,17 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
     result
 }
 
-/// Active capture sessions on every capture endpoint: (pid, image file name, package family name).
-/// Used by auto mode to see which app holds the microphone.
-pub fn active_capture_processes() -> Vec<(u32, String, Option<String>)> {
+/// Pids with an Active audio session on any active endpoint of `direction` (EchoLedger and the idle process
+/// excluded). Sessions come from `IAudioSessionManager2::GetSessionEnumerator` / `IAudioSessionEnumerator`, the pid
+/// from `IAudioSessionControl2::GetProcessId` (wasapi-0.26.0 `src/api.rs`: `get_device_collection` line 375,
+/// `get_iaudiosessionmanager` 601, `get_audiosessionenumerator`/`get_count`/`get_session` 1690-1712,
+/// `get_state`/`get_process_id` 1813-1851).
+pub fn active_session_pids(direction: Direction) -> Vec<u32> {
     let mut out = Vec::new();
     let _ = initialize_mta();
     let Ok(enumerator) = DeviceEnumerator::new() else { return out };
-    let Ok(collection) = enumerator.get_device_collection(&Direction::Capture) else { return out };
+    let Ok(collection) = enumerator.get_device_collection(&direction) else { return out };
+    let own = std::process::id();
     let count = collection.get_nbr_devices().unwrap_or(0);
     for i in 0..count {
         let Ok(device) = collection.get_device_at_index(i) else { continue };
@@ -182,35 +186,199 @@ pub fn active_capture_processes() -> Vec<(u32, String, Option<String>)> {
                 continue;
             }
             let Ok(pid) = control.get_process_id() else { continue };
-            if pid == 0 || pid == std::process::id() {
-                continue;
+            if pid != 0 && pid != own && !out.contains(&pid) {
+                out.push(pid);
             }
-            let (image, pfn) = process_identity(pid);
-            out.push((pid, image, pfn));
         }
     }
     out
 }
 
-/// Applications holding a microphone, each paired with the call app it is recognised as.
-///
-/// Many apps run their calls in a helper process: WhatsApp's Windows app hosts WebView2, so the microphone belongs to
-/// `msedgewebview2.exe`, not to `WhatsApp.Root.exe`. When a process is not recognised on its own, the nearest
-/// recognised ancestor decides, which attributes the helper to the application that launched it.
-pub fn active_capture_apps() -> Vec<(String, Option<crate::detect::classify::SourceApp>)> {
-    use crate::detect::classify::classify_windows;
-    let parents = parent_map();
-    active_capture_processes()
+/// Active capture sessions on every capture endpoint: (pid, image file name, package family name).
+pub fn active_capture_processes() -> Vec<(u32, String, Option<String>)> {
+    active_session_pids(Direction::Capture)
         .into_iter()
-        .map(|(pid, image, pfn)| {
-            let app = classify_windows(&image, pfn.as_deref()).or_else(|| ancestor_app(pid, &parents));
-            (if image.is_empty() { "a protected process".to_string() } else { image }, app)
+        .map(|pid| {
+            let (image, pfn) = process_identity(pid);
+            (pid, image, pfn)
         })
         .collect()
 }
 
-fn ancestor_app(pid: u32, parents: &std::collections::HashMap<u32, u32>) -> Option<crate::detect::classify::SourceApp> {
-    ancestor_app_with(pid, parents, process_identity)
+/// Is `identity` a call app or a browser (the processes a tree is anchored on)?
+fn recognised(identity: &(String, Option<String>)) -> bool {
+    crate::detect::classify::classify_windows(&identity.0, identity.1.as_deref()).is_some() || crate::detect::classify::is_browser_image(&identity.0)
+}
+
+/// From `pid`, climbs while the parent has the same image name (case-insensitive) and returns the top-most one.
+fn top_same_name(pid: u32, image: &str, parents: &HashMap<u32, u32>, identity: &impl Fn(u32) -> (String, Option<String>)) -> u32 {
+    let mut top = pid;
+    if image.is_empty() {
+        return top;
+    }
+    for _ in 0..MAX_ANCESTORS {
+        let Some(&parent) = parents.get(&top) else { break };
+        if parent == 0 || parent == top || parent == pid {
+            break; // root, self-parented or a cycle
+        }
+        if !identity(parent).0.eq_ignore_ascii_case(image) {
+            break;
+        }
+        top = parent;
+    }
+    top
+}
+
+/// How far the parent walks go (helpers sit 1-4 levels below the app; the bound keeps stale tables cheap).
+const MAX_ANCESTORS: usize = 8;
+
+/// The root of the application tree `pid` belongs to. Anchor: the process itself if it is a call app or a browser,
+/// else the nearest of up to 8 ancestors that is; the root is then the top-most same-name ancestor of the anchor
+/// (a Chrome utility process → the Chrome browser process; WebView2 → WhatsApp). Without an anchor: the top-most
+/// same-name ancestor of `pid` (multi-process apps), else `pid`. `identity` maps a pid to (image file name, package
+/// family name) and is injectable for tests.
+pub fn resolve_root_with(pid: u32, parents: &HashMap<u32, u32>, identity: impl Fn(u32) -> (String, Option<String>)) -> u32 {
+    let own = identity(pid);
+    let mut anchor = recognised(&own).then_some((pid, own.0.clone()));
+    if anchor.is_none() {
+        let mut current = pid;
+        for _ in 0..MAX_ANCESTORS {
+            let Some(&parent) = parents.get(&current) else { break };
+            if parent == 0 || parent == current || parent == pid {
+                break;
+            }
+            let who = identity(parent);
+            if recognised(&who) {
+                anchor = Some((parent, who.0));
+                break;
+            }
+            current = parent;
+        }
+    }
+    match anchor {
+        Some((at, image)) => top_same_name(at, &image, parents, &identity),
+        None => top_same_name(pid, &own.0, parents, &identity),
+    }
+}
+
+/// Is `pid` the process `ancestor` or one of its descendants within 8 levels (EchoLedger's own WebView2
+/// processes; windows of a browser tree)?
+fn descends_from(pid: u32, ancestor: u32, parents: &HashMap<u32, u32>) -> bool {
+    let mut current = pid;
+    for _ in 0..=MAX_ANCESTORS {
+        if current == ancestor {
+            return true;
+        }
+        match parents.get(&current) {
+            Some(&parent) if parent != 0 && parent != current => current = parent,
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// The application trees that hold a microphone, each with whether it also plays audio and, for the roots
+/// `need_titles` accepts (browsers), its visible window titles. Does nothing beyond the capture enumeration when no
+/// other process holds a microphone.
+pub fn observe_trees(need_titles: impl Fn(&str) -> bool) -> Vec<crate::detect::decide::TreeAudio> {
+    use crate::detect::decide::TreeAudio;
+
+    let capture = active_session_pids(Direction::Capture);
+    if capture.is_empty() {
+        return Vec::new();
+    }
+    let render = active_session_pids(Direction::Render);
+    let parents = parent_map();
+    let own = std::process::id();
+    let cache: std::cell::RefCell<HashMap<u32, (String, Option<String>)>> = Default::default();
+    let identity = |pid: u32| cache.borrow_mut().entry(pid).or_insert_with(|| process_identity(pid)).clone();
+
+    let mut trees: Vec<TreeAudio> = Vec::new();
+    for pid in capture {
+        if descends_from(pid, own, &parents) {
+            continue;
+        }
+        let root = resolve_root_with(pid, &parents, identity);
+        if trees.iter().any(|t| t.root_pid == root) {
+            continue;
+        }
+        let (image, pfn) = identity(root);
+        let name = if image.is_empty() { "a protected process".to_string() } else { image };
+        trees.push(TreeAudio { root_pid: root, name, pfn, capture_active: true, render_active: false, titles: Vec::new(), urls: Vec::new() });
+    }
+    for pid in render {
+        if descends_from(pid, own, &parents) {
+            continue;
+        }
+        let root = resolve_root_with(pid, &parents, identity);
+        if let Some(tree) = trees.iter_mut().find(|t| t.root_pid == root) {
+            tree.render_active = true;
+        }
+    }
+    let wanted: Vec<u32> = trees.iter().filter(|t| need_titles(&t.name)).map(|t| t.root_pid).collect();
+    if !wanted.is_empty() {
+        for (pid, title) in visible_window_titles() {
+            // Cheap filter first (the parent walk), then the exact root (a Zoom window launched by Chrome is Zoom's).
+            if !wanted.iter().any(|root| descends_from(pid, *root, &parents)) {
+                continue;
+            }
+            let root = resolve_root_with(pid, &parents, identity);
+            if let Some(tree) = trees.iter_mut().find(|t| t.root_pid == root && wanted.contains(&root))
+                && !tree.titles.contains(&title)
+            {
+                tree.titles.push(title);
+            }
+        }
+    }
+    trees.sort_by_key(|t| t.root_pid);
+    trees
+}
+
+/// (owning pid, title) of every visible top-level window with a non-empty title. `EnumWindows`, `IsWindowVisible`,
+/// `GetWindowTextLengthW`, `GetWindowTextW`, `GetWindowThreadProcessId` (windows-0.62.2
+/// `Win32/UI/WindowsAndMessaging/mod.rs` lines 652, 1350, 1174, 1179, 1184). One UTF-16 buffer is reused.
+fn visible_window_titles() -> Vec<(u32, String)> {
+    use windows::Win32::Foundation::{HWND, LPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible};
+    use windows::core::BOOL;
+
+    struct Collect {
+        buf: Vec<u16>,
+        out: Vec<(u32, String)>,
+    }
+
+    unsafe extern "system" fn each(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        // SAFETY: `lparam` is the `&mut Collect` passed to EnumWindows below, alive for the whole enumeration.
+        let ctx = unsafe { &mut *(lparam.0 as *mut Collect) };
+        if !unsafe { IsWindowVisible(hwnd) }.as_bool() {
+            return BOOL::from(true);
+        }
+        let len = unsafe { GetWindowTextLengthW(hwnd) };
+        if len <= 0 {
+            return BOOL::from(true);
+        }
+        let need = len as usize + 1;
+        if ctx.buf.len() < need {
+            ctx.buf.resize(need, 0);
+        }
+        let copied = unsafe { GetWindowTextW(hwnd, &mut ctx.buf[..need]) };
+        if copied <= 0 {
+            return BOOL::from(true);
+        }
+        let mut pid = 0u32;
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+        if pid != 0 {
+            let title = String::from_utf16_lossy(&ctx.buf[..copied as usize]);
+            if !title.trim().is_empty() {
+                ctx.out.push((pid, title));
+            }
+        }
+        BOOL::from(true)
+    }
+
+    let mut ctx = Collect { buf: vec![0u16; 256], out: Vec::new() };
+    let _ = unsafe { EnumWindows(Some(each), LPARAM(&mut ctx as *mut Collect as isize)) };
+    ctx.out
 }
 
 /// Walks up to 8 parents of `pid` and returns the first recognised call app. `identity` maps a pid to

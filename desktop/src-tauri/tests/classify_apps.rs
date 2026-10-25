@@ -1,7 +1,9 @@
 //! Call-app classification: every executable, package and bundle identity the auto-record feature has to
 //! recognise, plus the near misses it has to leave alone.
 
-use desktop_lib::detect::classify::{SourceApp, classify_macos, classify_windows};
+use desktop_lib::detect::classify::{
+    SourceApp, app_bundle_id, browser_script, classify_macos, classify_windows, is_browser_bundle, is_browser_image,
+};
 
 fn win(image: &str) -> Option<SourceApp> {
     classify_windows(image, None)
@@ -79,10 +81,11 @@ fn zoom_is_recognised_by_image_name_only() {
     }
 }
 
-// ---- Browsers (Google Meet) ------------------------------------------------------------------------------------
+// ---- Browsers: identified by site, never by process name (A1.3) ------------------------------------------------
 
 #[test]
-fn mainstream_browsers_are_labelled_google_meet() {
+fn browsers_are_not_a_call_app_by_themselves() {
+    // A browser holding the microphone may be dictation into any website; only the site decides (detect::sites).
     for image in [
         "chrome.exe",
         "Chrome.exe",
@@ -91,8 +94,12 @@ fn mainstream_browsers_are_labelled_google_meet() {
         "brave.exe",
         "firefox.exe",
         "opera.exe",
+        "vivaldi.exe",
+        "chromium.exe",
+        "arc.exe",
     ] {
-        assert_eq!(win(image), Some(SourceApp::GoogleMeet), "{image}");
+        assert_eq!(win(image), None, "{image}");
+        assert!(is_browser_image(image), "{image} is a browser");
     }
 }
 
@@ -106,17 +113,20 @@ fn browser_launchers_and_proxies_are_not_the_audio_process() {
         "iexplore.exe",
     ] {
         assert_eq!(win(image), None, "{image}");
+        assert!(!is_browser_image(image), "{image} is not a browser process");
+    }
+    for image in ["msedgewebview2.exe", "WhatsApp.exe", "Zoom.exe", "", "chrome", "chrome.exe.bak"] {
+        assert!(!is_browser_image(image), "{image:?}");
     }
 }
 
 #[test]
-#[ignore = "A1.3: Vivaldi and Chromium must be recognised as browsers, like Chrome"]
 fn other_chromium_browsers_are_classified_like_chrome() {
     // Whatever a browser process maps to, every supported Chromium browser has to map to the same thing.
     let chrome = win("chrome.exe");
     let different: Vec<&str> = ["vivaldi.exe", "chromium.exe"]
         .into_iter()
-        .filter(|image| win(image) != chrome)
+        .filter(|image| win(image) != chrome || !is_browser_image(image))
         .collect();
     assert!(
         different.is_empty(),
@@ -127,13 +137,21 @@ fn other_chromium_browsers_are_classified_like_chrome() {
 // ---- Teams and the negatives -----------------------------------------------------------------------------------
 
 #[test]
-fn teams_calls_are_not_auto_detected() {
-    assert_eq!(win("ms-teams.exe"), None);
-    assert_eq!(win("Teams.exe"), None);
+fn teams_is_recognised_by_image_or_package() {
+    assert_eq!(win("ms-teams.exe"), Some(SourceApp::MicrosoftTeams));
+    assert_eq!(win("MS-TEAMS.EXE"), Some(SourceApp::MicrosoftTeams));
+    assert_eq!(win("Teams.exe"), Some(SourceApp::MicrosoftTeams));
     assert_eq!(
         classify_windows("ms-teams.exe", Some("MSTeams_8wekyb3d8bbwe")),
-        None
+        Some(SourceApp::MicrosoftTeams)
     );
+    assert_eq!(
+        classify_windows("msedgewebview2.exe", Some("MSTeams_8wekyb3d8bbwe")),
+        Some(SourceApp::MicrosoftTeams),
+        "a WebView2 helper inside the Teams package"
+    );
+    assert_eq!(win("teams-helper.exe"), None);
+    assert_eq!(win("msteams.exe"), None);
 }
 
 #[test]
@@ -232,7 +250,7 @@ fn macos_zoom_bundles_including_helpers() {
 }
 
 #[test]
-fn macos_browsers_are_labelled_google_meet() {
+fn macos_browsers_are_not_a_call_app_by_themselves() {
     for id in [
         "com.google.Chrome",
         "com.google.Chrome.helper",
@@ -243,8 +261,14 @@ fn macos_browsers_are_labelled_google_meet() {
         "com.brave.Browser",
         "org.mozilla.firefox",
         "company.thebrowser.Browser",
+        "com.operasoftware.Opera",
+        "com.vivaldi.Vivaldi",
     ] {
-        assert_eq!(classify_macos(id), Some(SourceApp::GoogleMeet), "{id}");
+        assert_eq!(classify_macos(id), None, "{id}");
+        assert!(is_browser_bundle(id), "{id} is a browser");
+    }
+    for id in ["com.apple.Terminal", "com.google.drivefs", "org.mozilla.thunderbird", "", "com"] {
+        assert!(!is_browser_bundle(id), "{id:?}");
     }
 }
 
@@ -254,7 +278,6 @@ fn macos_negatives_and_teams() {
         "com.apple.Terminal",
         "com.apple.FaceTime",
         "com.tinyspeck.slackmacgap",
-        "com.microsoft.teams2",
         "com.microsoft.Word",
         "com.spotify.client",
         "",
@@ -262,10 +285,11 @@ fn macos_negatives_and_teams() {
     ] {
         assert_eq!(classify_macos(id), None, "{id:?}");
     }
+    assert_eq!(classify_macos("com.microsoft.teams2"), Some(SourceApp::MicrosoftTeams));
+    assert_eq!(classify_macos("com.microsoft.teams2.helper"), Some(SourceApp::MicrosoftTeams));
 }
 
 #[test]
-#[ignore = "A1.3: the macOS browser list must include Opera, as on Windows"]
 fn browsers_recognised_on_windows_are_recognised_on_macos_too() {
     // Opera is treated like Chrome on Windows; its macOS bundle has to be treated like Chrome's there.
     assert_eq!(win("opera.exe"), win("chrome.exe"));
@@ -273,33 +297,61 @@ fn browsers_recognised_on_windows_are_recognised_on_macos_too() {
         classify_macos("com.operasoftware.Opera"),
         classify_macos("com.google.Chrome")
     );
+    assert_eq!(is_browser_image("opera.exe"), is_browser_bundle("com.operasoftware.Opera"));
+}
+
+#[test]
+fn macos_helpers_group_with_their_app_and_scriptable_browsers_are_known() {
+    assert_eq!(app_bundle_id("com.google.Chrome.helper.Renderer"), "com.google.Chrome");
+    assert_eq!(app_bundle_id("com.google.Chrome.helper"), "com.google.Chrome");
+    assert_eq!(app_bundle_id("us.zoom.xos"), "us.zoom.xos");
+    assert_eq!(app_bundle_id(".helper"), ".helper");
+    assert_eq!(browser_script("com.google.Chrome"), Some(("Google Chrome", false)));
+    assert_eq!(browser_script("com.apple.Safari"), Some(("Safari", true)));
+    assert_eq!(browser_script("company.thebrowser.Browser"), Some(("Arc", false)));
+    assert_eq!(browser_script("org.mozilla.firefox"), None, "Firefox has no tab scripting");
 }
 
 // ---- Vocabulary shared with the server -------------------------------------------------------------------------
 
-const ALL: [SourceApp; 6] = [
+const ALL: [SourceApp; 8] = [
     SourceApp::Whatsapp,
     SourceApp::WhatsappBusiness,
+    SourceApp::WhatsappWeb,
     SourceApp::GoogleMeet,
     SourceApp::Zoom,
+    SourceApp::MicrosoftTeams,
     SourceApp::VoiceNote,
     SourceApp::Other,
 ];
 
 #[test]
 fn source_app_wire_names_match_the_api_vocabulary() {
+    assert_eq!(ALL, SourceApp::ALL);
     let names: Vec<&str> = ALL.iter().map(|a| a.as_str()).collect();
     assert_eq!(
         names,
         [
             "whatsapp",
             "whatsapp_business",
+            "whatsapp_web",
             "google_meet",
             "zoom",
+            "microsoft_teams",
             "voice_note",
             "other"
         ]
     );
+    let labels: Vec<&str> = ALL.iter().map(|a| a.label()).collect();
+    assert_eq!(
+        labels,
+        ["WhatsApp", "WhatsApp Business", "WhatsApp Web", "Google Meet", "Zoom", "Microsoft Teams", "Voice note", "Other"]
+    );
+    for app in ALL {
+        assert_eq!(SourceApp::from_wire(app.as_str()), Some(app));
+    }
+    assert_eq!(SourceApp::from_wire("skype"), None);
+    assert_eq!(SourceApp::from_wire("Zoom"), None, "wire values are lower case");
     for app in ALL {
         assert_eq!(
             serde_json::to_value(app).unwrap(),

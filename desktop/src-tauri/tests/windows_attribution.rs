@@ -79,13 +79,16 @@ fn zoom_helpers_belong_to_zoom() {
 }
 
 #[test]
-fn a_teams_webview_is_not_a_recognised_call_app() {
+fn a_teams_webview_is_attributed_to_teams() {
     let who = identities(&[
         (20, "msedgewebview2.exe", None),
         (10, "ms-teams.exe", Some("MSTeams_8wekyb3d8bbwe")),
         (5, "explorer.exe", None),
     ]);
-    assert_eq!(ancestor_app_with(30, &parents(&[30, 20, 10, 5]), who), None);
+    assert_eq!(
+        ancestor_app_with(30, &parents(&[30, 20, 10, 5]), who),
+        Some(SourceApp::MicrosoftTeams)
+    );
 }
 
 #[test]
@@ -104,12 +107,19 @@ fn an_unrelated_webview_app_is_not_attributed_to_anything() {
 
 #[test]
 fn the_nearest_recognised_ancestor_decides() {
-    // WhatsApp opened a link in Chrome, which hosts the call: the browser is the nearer, recognised owner.
-    let who = identities(&[(20, "chrome.exe", None), (10, "WhatsApp.exe", None)]);
+    // WhatsApp opened a Zoom link and Zoom hosts the call: Zoom is the nearer, recognised owner.
+    let who = identities(&[(20, "Zoom.exe", None), (10, "WhatsApp.exe", None)]);
     assert_eq!(
         ancestor_app_with(30, &parents(&[30, 20, 10]), who),
-        Some(SourceApp::GoogleMeet)
+        Some(SourceApp::Zoom)
     );
+}
+
+#[test]
+fn a_browser_ancestor_names_no_call_app() {
+    // Browsers are identified by site (detect::sites); the ancestor walk passes over them.
+    let who = identities(&[(20, "chrome.exe", None), (10, "explorer.exe", None)]);
+    assert_eq!(ancestor_app_with(30, &parents(&[30, 20, 10]), who), None);
 }
 
 #[test]

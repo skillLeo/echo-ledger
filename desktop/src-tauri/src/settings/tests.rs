@@ -29,6 +29,22 @@ fn customised() -> Settings {
         dictation_output: "clipboard".into(),
         client_id: Some("01JB8Q4C1D2E3F4G5H6J7K8M9N".into()),
         consent_acknowledged: true,
+        ask_before_saving: AskBeforeSaving::AutoOnly,
+        decision_timeout: DecisionTimeout::Wait,
+        caption_lines: 5,
+        pill_position: Some(PillPosition { x: -1_520, y: 64 }),
+        ask_unknown_apps: true,
+        site_rules: vec![crate::detect::sites::SiteRule {
+            id: "6f1c2d3e-4b5a-4c7d-8e9f-0a1b2c3d4e5f".into(),
+            app: "never".into(),
+            host: Some("notes.example.test".into()),
+            title_prefix: None,
+            title_contains: Some("Private notes".into()),
+            title_equals: None,
+            priority: 100,
+            enabled: true,
+        }],
+        browser_automation: true,
     }
 }
 // ---- Defaults --------------------------------------------------------------------------------------------------
@@ -53,6 +69,13 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert_eq!(s.dictation_output, "type");
     assert_eq!(s.shortcuts, default_map());
     assert_eq!(s.shortcuts.len(), 4);
+    assert!(!s.ask_unknown_apps, "the unknown-app chip is off by default");
+    assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
+    assert!(!s.browser_automation, "reading browser tabs is opt-in");
+    assert_eq!(s.ask_before_saving, AskBeforeSaving::Always);
+    assert_eq!(s.decision_timeout, DecisionTimeout::Keep);
+    assert_eq!(s.caption_lines, 3);
+    assert_eq!(s.pill_position, None, "the pill starts at the top centre");
 }
 
 #[test]
@@ -73,21 +96,35 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
     assert_eq!(
         keys,
         [
+            "askBeforeSaving",
+            "askUnknownApps",
             "autoMode",
             "autostart",
+            "browserAutomation",
+            "captionLines",
             "captionsOnRecord",
             "clientId",
             "consentAcknowledged",
             "contentProtection",
+            "decisionTimeout",
             "deviceId",
             "deviceName",
             "dictationOutput",
             "overlayCorner",
+            "pillPosition",
             "pins",
             "serverUrl",
-            "shortcuts"
+            "shortcuts",
+            "siteRules"
         ]
     );
+    assert_eq!(keys.len(), 20, "section 4.7 of the IPC contract");
+    assert_eq!(v["askBeforeSaving"], "auto_only");
+    assert_eq!(v["decisionTimeout"], "wait");
+    assert_eq!(v["captionLines"], 5);
+    assert_eq!(v["pillPosition"], json!({"x": -1_520, "y": 64}));
+    assert_eq!(v["siteRules"][0]["titleContains"], "Private notes");
+    assert!(v["siteRules"][0]["titleEquals"].is_null());
     assert_eq!(v["overlayCorner"], "top_left");
     assert_eq!(v["shortcuts"]["voice_note"], "Ctrl+Alt+V");
     assert_eq!(
@@ -252,7 +289,6 @@ fn explicit_nulls_for_optional_fields_are_accepted() {
 }
 
 #[test]
-#[ignore = "A6.DR13: an unknown shortcut action in settings.json must not discard the whole file"]
 fn a_shortcut_for_an_action_this_version_does_not_know_does_not_discard_the_pairing() {
     // Opening a settings file written by a newer build (or one edited by hand) must not reset the server URL and pins.
     let d = dir();
@@ -273,7 +309,6 @@ fn a_shortcut_for_an_action_this_version_does_not_know_does_not_discard_the_pair
 }
 
 #[test]
-#[ignore = "A6.DR13: an unknown overlay corner in settings.json must not discard the whole file"]
 fn an_overlay_corner_this_version_does_not_know_does_not_discard_the_pairing() {
     let d = dir();
     let path = d.path().join("settings.json");
@@ -288,6 +323,100 @@ fn an_overlay_corner_this_version_does_not_know_does_not_discard_the_pairing() {
         Some("https://ledger.example.com"),
         "the whole file was thrown away"
     );
+}
+
+#[test]
+fn an_unknown_shortcut_action_is_dropped_and_the_known_ones_are_kept() {
+    let s = Settings::from_value(json!({
+        "shortcuts": {"toggle_captions": "Ctrl+Shift+K", "pause_recording": "Ctrl+Shift+P", "voice_note": 42}
+    }));
+    assert_eq!(s.shortcuts.len(), 1, "{:?}", s.shortcuts);
+    assert_eq!(s.shortcuts[&Action::ToggleCaptions], "Ctrl+Shift+K");
+}
+
+#[test]
+fn one_bad_value_costs_only_its_own_key() {
+    let s = Settings::from_value(json!({
+        "serverUrl": "https://ledger.example.com",
+        "autoMode": "sometimes",
+        "askBeforeSaving": "on_tuesdays",
+        "decisionTimeout": "discard",
+        "pillPosition": {"x": "left", "y": 3},
+        "contentProtection": false
+    }));
+    assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"));
+    assert!(s.auto_mode, "an invalid value falls back to the default");
+    assert_eq!(s.ask_before_saving, AskBeforeSaving::Always);
+    assert_eq!(s.decision_timeout, DecisionTimeout::Discard);
+    assert_eq!(s.pill_position, None);
+    assert!(!s.content_protection);
+}
+
+#[test]
+fn caption_lines_other_than_two_three_or_five_load_as_three() {
+    for (stored, expected) in [
+        (json!(2), 2),
+        (json!(3), 3),
+        (json!(5), 5),
+        (json!(4), 3),
+        (json!(0), 3),
+        (json!(300), 3),
+        (json!(-2), 3),
+        (json!("5"), 3),
+        (json!(null), 3),
+    ] {
+        let s = Settings::from_value(json!({"captionLines": stored.clone(), "autoMode": false}));
+        assert_eq!(s.caption_lines, expected, "{stored}");
+        assert!(!s.auto_mode, "{stored}: the rest of the file is kept");
+    }
+    assert_eq!(caption_lines_or_default(Some(5)), 5);
+    assert_eq!(caption_lines_or_default(Some(6)), 3);
+    assert_eq!(caption_lines_or_default(None), 3);
+}
+
+#[test]
+fn site_rules_that_do_not_parse_are_dropped_one_by_one() {
+    let good = json!({"id": "6f1c2d3e-4b5a-4c7d-8e9f-0a1b2c3d4e5f", "app": "never", "host": "notes.example.test",
+        "titlePrefix": null, "titleContains": null, "titleEquals": null, "priority": 100, "enabled": true});
+    let s = Settings::from_value(json!({
+        "serverUrl": "https://ledger.example.com",
+        "siteRules": [good.clone(), {"id": "x", "app": "zoom"}, "garbage", {"id": "y", "app": "zoom", "host": null,
+            "titlePrefix": null, "titleContains": null, "titleEquals": null, "priority": 900, "enabled": true}]
+    }));
+    assert_eq!(s.site_rules.len(), 1);
+    assert_eq!(serde_json::to_value(&s.site_rules[0]).unwrap(), good);
+    assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"));
+    assert!(Settings::from_value(json!({"siteRules": {"not": "a list"}})).site_rules.is_empty());
+}
+
+#[test]
+fn a_settings_file_from_version_one_loads_with_the_new_defaults() {
+    let d = dir();
+    let path = d.path().join("settings.json");
+    std::fs::write(
+        &path,
+        r#"{"serverUrl": "https://ledger.example.com", "pins": [], "deviceId": "01JB8Q3R0Z5V1K7M9N2P4S6T8W",
+            "deviceName": "Office", "shortcuts": {"toggle_captions": "CommandOrControl+Shift+Space"},
+            "captionsOnRecord": true, "autoMode": true, "contentProtection": true, "overlayCorner": "top_right",
+            "autostart": false, "dictationOutput": "type", "clientId": null, "consentAcknowledged": true}"#,
+    )
+    .unwrap();
+    let s = Settings::load(&path);
+    assert_eq!(s.device_name.as_deref(), Some("Office"));
+    assert_eq!(s.overlay_corner, Corner::TopRight);
+    assert_eq!(
+        (s.ask_before_saving, s.decision_timeout, s.caption_lines, s.pill_position),
+        (AskBeforeSaving::Always, DecisionTimeout::Keep, 3, None)
+    );
+}
+
+#[test]
+fn the_pill_position_survives_a_save_and_load_including_negative_coordinates() {
+    let d = dir();
+    let path = d.path().join("settings.json");
+    let s = Settings { pill_position: Some(PillPosition { x: -2_400, y: -300 }), ..Settings::default() };
+    s.save(&path).unwrap();
+    assert_eq!(Settings::load(&path).pill_position, Some(PillPosition { x: -2_400, y: -300 }));
 }
 
 #[test]
