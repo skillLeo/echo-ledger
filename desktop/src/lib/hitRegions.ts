@@ -2,8 +2,9 @@
 // the 30 Hz cursor poll can make everything else click-through.
 //
 // The overlay is bottom-anchored, so its buttons MOVE whenever the caption text wraps onto another line. Regions are
-// therefore re-measured on every DOM change (throttled to one measurement per frame) plus a slow safety timer, and
-// each region is padded a few pixels so buttons are easy to hit. A stale region means clicks pass straight through.
+// therefore re-measured on every DOM change, resize and scroll (throttled to one measurement per frame) plus a slow
+// safety timer, and each region is padded a few pixels so buttons are easy to hit. A stale region means clicks pass
+// straight through.
 import { useEffect } from "react";
 import { api, type RectPx } from "./ipc";
 
@@ -42,11 +43,14 @@ export function useHitRegions(deps: unknown[]): void {
     const mutations = new MutationObserver(schedule);
     mutations.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
     window.addEventListener("resize", schedule);
+    // `scroll` does not bubble from scroll areas, so listen in the capture phase to see every one of them.
+    document.addEventListener("scroll", schedule, { capture: true, passive: true });
     const safetyTimer = window.setInterval(report, 750);
     return () => {
       resize.disconnect();
       mutations.disconnect();
       window.removeEventListener("resize", schedule);
+      document.removeEventListener("scroll", schedule, { capture: true });
       window.clearInterval(safetyTimer);
       if (frame) window.cancelAnimationFrame(frame);
     };
