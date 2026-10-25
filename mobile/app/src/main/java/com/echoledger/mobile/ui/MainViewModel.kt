@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.calls.Decisions
+import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.ClientDto
@@ -227,6 +228,66 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _message.value = it.message ?: "The term could not be added." }
     }
 
+    // ---- Organising the library (B15) ------------------------------------------------------------------------------
+
+    /** Pins, moves or relabels one recording; the library syncs afterwards. False (with a message) when it failed. */
+    suspend fun organise(
+        id: String,
+        pinned: Boolean? = null,
+        clientId: String? = null,
+        clearClient: Boolean = false,
+        labels: List<String>? = null
+    ): Boolean {
+        val ok = withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels) ?: error("Not paired") }
+                .onFailure { _message.value = it.message ?: "The change could not be saved." }.isSuccess
+        }
+        if (ok) refresh()
+        return ok
+    }
+
+    /** One action for the selected recordings; how many changed, or null (with a message) when it failed. */
+    suspend fun bulk(ids: List<String>, action: String, clientId: String? = null, label: String? = null): Int? {
+        val changed = withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.bulk(ids.take(Organise.MAX_BULK), action, clientId, label) ?: error("Not paired") }
+                .onFailure { _message.value = it.message ?: "The change could not be saved." }.getOrNull()
+        }
+        if (changed != null) {
+            _message.value =
+                if (action == "delete") {
+                    "$changed deleted"
+                } else if (changed == 1) {
+                    "1 recording updated"
+                } else {
+                    "$changed recordings updated"
+                }
+            refresh()
+        }
+        return changed
+    }
+
+    /** The finished transcripts of the selected recordings as one zip in the private cache (`exports/`). */
+    suspend fun exportSelected(ids: List<String>, format: String): File? = withContext(Dispatchers.IO) {
+        try {
+            val api = graph.api() ?: return@withContext null
+            val (bytes, name) = api.exportSessions(ids.take(Organise.MAX_BULK), format)
+            val dir = File(getApplication<Application>().cacheDir, "exports").apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            File(dir, name).apply { writeBytes(bytes) }
+        } catch (e: Exception) {
+            _message.value = e.message ?: "The export failed."
+            null
+        }
+    }
+
+    /** A new client folder, added to the list right away. */
+    suspend fun createClient(name: String): ClientDto? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.createClient(name.trim()) }
+            .onFailure { _message.value = it.message ?: "The client could not be created." }.getOrNull()
+            ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
+    }
     fun delete(item: LibraryItem) = viewModelScope.launch {
         runCatching { withContext(Dispatchers.IO) { graph.api()?.deleteSession(item.id) } }
             .onSuccess { refresh() }

@@ -1,6 +1,9 @@
 package com.echoledger.mobile.net
 
 import com.echoledger.mobile.data.ApiJson
+import com.echoledger.mobile.data.BulkAnswer
+import com.echoledger.mobile.data.ClientDto
+import com.echoledger.mobile.data.ClientResponse
 import com.echoledger.mobile.data.ClientsResponse
 import com.echoledger.mobile.data.CompleteAnswer
 import com.echoledger.mobile.data.CreateSessionRequest
@@ -212,6 +215,58 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
 
     suspend fun revokeShare(id: String) {
         call(request("shares/$id").delete().build(), null as KSerializer<Unit>?)
+    }
+
+    /**
+     * `PATCH /api/sessions/{id}` (since v1.1): pin, client folder or labels. Only the arguments given are sent;
+     * [clearClient] sends `client_id: null` (no client).
+     */
+    suspend fun updateSession(
+        id: String,
+        pinned: Boolean? = null,
+        clientId: String? = null,
+        clearClient: Boolean = false,
+        labels: List<String>? = null
+    ) {
+        val body = buildJsonObject {
+            pinned?.let { put("pinned", it) }
+            if (clearClient) put("client_id", kotlinx.serialization.json.JsonNull) else clientId?.let { put("client_id", it) }
+            labels?.let { list -> put("labels", buildJsonArray { list.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) }
+        }.toString().toRequestBody(jsonType)
+        call(request("sessions/$id").patch(body).build(), null as KSerializer<Unit>?)
+    }
+
+    /** `POST /api/sessions/bulk` (since v1.1): one action for up to 200 recordings; how many changed. */
+    suspend fun bulk(ids: List<String>, action: String, clientId: String? = null, label: String? = null): Int {
+        val body = buildJsonObject {
+            put("ids", buildJsonArray { ids.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+            put("action", action)
+            put("client_id", clientId?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
+            label?.let { put("label", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("sessions/bulk").post(body).build(), BulkAnswer.serializer())!!.changed
+    }
+
+    /** `POST /api/sessions/export` (since v1.1): the finished transcripts of many recordings in one zip file. */
+    suspend fun exportSessions(ids: List<String>, format: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            put("ids", buildJsonArray { ids.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+            put("format", format)
+        }.toString().toRequestBody(jsonType)
+        val req = Request.Builder().url(url("sessions/export")).apply {
+            token?.let { header("Authorization", "Bearer $it") }
+        }.post(body).build()
+        http.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) parse(resp, null as KSerializer<Unit>?)
+            val name = ExportNames.fromDisposition(resp.header("Content-Disposition")) ?: "EchoLedger transcripts.zip"
+            resp.body.bytes() to name
+        }
+    }
+
+    /** `POST /api/clients` (since v1.1): a new client folder. */
+    suspend fun createClient(name: String): ClientDto {
+        val body = buildJsonObject { put("name", name) }.toString().toRequestBody(jsonType)
+        return call(request("clients").post(body).build(), ClientResponse.serializer())!!.data
     }
 
     /** `POST /api/vocabulary/keyterms`: for the client, or for every recording without one. */

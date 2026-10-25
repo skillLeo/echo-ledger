@@ -12,7 +12,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,6 +74,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -83,7 +88,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.core.Bookmarks
+import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
+import com.echoledger.mobile.core.SmartView
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
 import com.echoledger.mobile.core.TranscriptText
@@ -257,6 +264,14 @@ fun LibraryScreen(
     val syncing by vm.syncing.collectAsState()
     var filter by remember { mutableStateOf<SourceDevice?>(null) }
     var tagFilter by remember { mutableStateOf<String?>(null) }
+    var view by remember { mutableStateOf(SmartView.ALL) }
+    var folder by remember { mutableStateOf<String?>(null) }
+    var labelFilter by remember { mutableStateOf<String?>(null) }
+    var selecting by remember { mutableStateOf(false) }
+    var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val clients by vm.clients.collectAsState()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
     var found by remember { mutableStateOf<List<SearchItemDto>>(emptyList()) }
@@ -271,8 +286,14 @@ fun LibraryScreen(
     }
     val tags = Bookmarks.tags(items)
     val anyBookmarks = items.any { !it.deleted && it.markerCount > 0 }
+    val folders = Organise.folders(items, clients)
+    val labels = Organise.labels(items)
+    val counts = Organise.counts(items)
     val visible = items.filter {
         !it.deleted &&
+            Organise.inView(it, view) &&
+            Organise.inFolder(it, folder) &&
+            Organise.hasLabel(it, labelFilter) &&
             (filter == null || SourceDevice.from(it.sourceDevice) == filter) &&
             Bookmarks.matches(it, tagFilter) &&
             (
@@ -292,7 +313,13 @@ fun LibraryScreen(
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(8.dp))
         ScreenHeader("Library", "Recordings from your phone, computer and the web") {
-            IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, contentDescription = "Sync", tint = Brand.Muted) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = {
+                    selecting = !selecting
+                    picked = emptySet()
+                }) { Text(if (selecting) "Cancel" else "Select") }
+                IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, contentDescription = "Sync", tint = Brand.Muted) }
+            }
         }
         OutlinedTextField(
             value = query,
@@ -325,6 +352,32 @@ fun LibraryScreen(
                 tags.forEach { tag -> FilterChip(selected = tagFilter == tag, onClick = { tagFilter = tag }, label = { Text(tag) }) }
             }
         }
+        SmartViewChips(counts, view) { view = it }
+        FolderLabelFilters(folders, labels, folder, labelFilter, { folder = it }, { labelFilter = it })
+        if (selecting) {
+            val ids = picked.filter { id -> items.any { it.id == id && !it.deleted } }
+            fun run(action: String, clientId: String? = null, label: String? = null) = scope.launch {
+                if (vm.bulk(ids, action, clientId, label) != null && action == "delete") {
+                    selecting = false
+                    picked = emptySet()
+                }
+            }
+            BulkPanel(
+                count = ids.size,
+                folders = folders,
+                onMove = { run("move", clientId = it) },
+                onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { run("move", clientId = it.id) } } },
+                onLabel = { label, add -> run(if (add) "label" else "unlabel", label = label) },
+                onPin = { run(if (it) "pin" else "unpin") },
+                onExport = { format -> scope.launch { vm.exportSelected(ids, format)?.let { shareFile(context, it) } } },
+                onDelete = { run("delete") },
+                onDone = {
+                    selecting = false
+                    picked = emptySet()
+                }
+            )
+            Spacer(Modifier.height(8.dp))
+        }
         if (visible.isEmpty() && items.isEmpty() && syncing && !vm.hasSynced()) {
             Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -335,7 +388,13 @@ fun LibraryScreen(
         } else if (visible.isEmpty()) {
             EmptyState(
                 icon = Icons.AutoMirrored.Outlined.LibraryBooks,
-                title = if (q.isNotEmpty() || filter != null || tagFilter != null) "Nothing matches" else "No recordings yet",
+                title = if (q.isNotEmpty() || filter != null || tagFilter != null || view != SmartView.ALL || folder != null ||
+                    labelFilter != null
+                ) {
+                    "Nothing matches"
+                } else {
+                    "No recordings yet"
+                },
                 body = if (q.isNotEmpty() ||
                     filter != null
                 ) {
@@ -349,19 +408,40 @@ fun LibraryScreen(
             if (found.isNotEmpty()) {
                 item(key = "search-hits") { SearchResultsSection(found) { result, ms -> onOpenAt(result.session, ms) } }
             }
-            items(visible, key = { it.id }) { item -> LibraryRow(item) { onOpen(item) } }
+            items(visible, key = { it.id }) { item ->
+                LibraryRow(item, picked = if (selecting) item.id in picked else null, onLongClick = {
+                    selecting = true
+                    picked = picked + item.id
+                }) {
+                    if (selecting) picked = if (item.id in picked) picked - item.id else picked + item.id else onOpen(item)
+                }
+            }
             item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
 
 @Composable
-private fun LibraryRow(item: LibraryItem, onClick: () -> Unit) {
-    SectionCard(Modifier.clickable(onClick = onClick)) {
+private fun LibraryRow(item: LibraryItem, picked: Boolean? = null, onLongClick: () -> Unit = {}, onClick: () -> Unit) {
+    val selection = Modifier.semantics {
+        if (picked != null) {
+            selected = picked
+            stateDescription = if (picked) "Selected" else "Not selected"
+        }
+    }
+    SectionCard(
+        Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Select").then(selection)
+            .then(if (picked == true) Modifier.border(2.dp, Brand.Cyan, RoundedCornerShape(16.dp)) else Modifier)
+    ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             SourceAvatar(SourceDevice.from(item.sourceDevice), SourceApp.from(item.sourceApp))
             Column(Modifier.weight(1f)) {
-                Text(item.title ?: "Untitled", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1)
+                Text(
+                    (if (item.pinned) "★ " else "") + (item.title ?: "Untitled"),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    maxLines = 1
+                )
                 Text(
                     listOfNotNull(
                         formatWhen(item.startedAt),
@@ -385,6 +465,7 @@ private fun LibraryRow(item: LibraryItem, onClick: () -> Unit) {
             SourceDeviceBadge(SourceDevice.from(item.sourceDevice), item.sourceDeviceLabel)
             SourceAppBadge(SourceApp.from(item.sourceApp), item.sourceAppLabel)
         }
+        if (item.labels.isNotEmpty()) Text(item.labels.joinToString("  ") { "# $it" }, color = Brand.Muted, fontSize = 12.sp, maxLines = 1)
     }
 }
 
@@ -491,6 +572,21 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                 item { RecordingPlayer(player) }
                 item { PlayerOptions(player) }
                 item { Spacer(Modifier.height(4.dp)) }
+            }
+            item {
+                val clientList by vm.clients.collectAsState()
+                val library by vm.library.collectAsState()
+                val live = library.firstOrNull { it.id == item.id } ?: item
+                OrganiseSection(
+                    live,
+                    Organise.folders(library, clientList),
+                    Organise.labels(library),
+                    onPin = { scope.launch { vm.organise(item.id, pinned = it) } },
+                    onMove = { id -> scope.launch { vm.organise(item.id, clientId = id, clearClient = id == null) } },
+                    onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { vm.organise(item.id, clientId = it.id) } } },
+                    onLabels = { scope.launch { vm.organise(item.id, labels = it) } }
+                )
+                Spacer(Modifier.height(8.dp))
             }
             item {
                 ExportShareRow(vm, item.id, t?.id?.takeIf { t.status == "completed" && t.kind == "final" }, hasAudio = playbackUrl != null)

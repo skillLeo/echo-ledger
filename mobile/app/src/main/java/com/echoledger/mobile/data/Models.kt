@@ -220,11 +220,14 @@ data class LibraryItem(
     @SerialName("updated_at") val updatedAt: String,
     /** Bookmarks on the recording and the distinct tags among them (since v1.1). */
     @SerialName("marker_count") val markerCount: Int = 0,
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
+    /** Pinned to the top and the recording's labels (since v1.1, B15). */
+    val pinned: Boolean = false,
+    val labels: List<String> = emptyList()
 )
 
 @Serializable
-data class NamedRef(val id: String, val name: String)
+data class NamedRef(val id: String, val name: String, val color: String? = null, val avatar: String? = null)
 
 @Serializable
 data class TranscriptSummary(
@@ -335,7 +338,22 @@ data class SessionMarkerDto(val id: String, @SerialName("at_ms") val atMs: Long,
 data class DeviceTranscript(val kind: String, val provider: String, val language: String?, val segments: List<SegmentDto>)
 
 @Serializable
-data class ClientDto(val id: String, val name: String, @SerialName("keyterm_count") val keytermCount: Int = 0)
+data class ClientDto(
+    val id: String,
+    val name: String,
+    @SerialName("keyterm_count") val keytermCount: Int = 0,
+    /** Client folder look (since v1.1, B15): `#rrggbb`, one emoji or two letters, listed first when pinned. */
+    val color: String? = null,
+    val avatar: String? = null,
+    val pinned: Boolean = false,
+    @SerialName("session_count") val sessionCount: Int = 0
+)
+
+@Serializable
+data class ClientResponse(val data: ClientDto)
+
+@Serializable
+data class BulkAnswer(val changed: Int = 0)
 
 @Serializable
 data class ClientsResponse(val data: List<ClientDto>)

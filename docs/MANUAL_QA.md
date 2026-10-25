@@ -288,3 +288,31 @@ notification shade after every step.
 | DI-A5 | Airplane mode, then tap the microphone. | A short "No connection" message; nothing is inserted and nothing is recorded. |
 | DI-A6 | Replacements, snippets, clean-up off and Recent dictations (copy, clear). | Same results as DI-D4 to DI-D6. |
 | DI-A7 | Switch keyboard button. | Returns to the previous keyboard (or shows the keyboard picker). |
+
+## 11. v1.1 — organising the library
+
+### 11.1 Console
+
+| ID | Steps | Expected |
+|---|---|---|
+| O-W1 | Sessions: open each tab (Today, This week, Waiting for decision, Bookmarked, Failed uploads, Pinned). | Each tab lists only its recordings; the badge matches the count. |
+| O-W2 | Select three sessions → Move to client, Add label, Pin; then Remove label and Unpin. | Client, labels and the star change on all three; phones and the desktop show it after their next sync. |
+| O-W3 | Select sessions with and without transcripts → Export transcripts (Word). | One zip downloads with a .docx per finished transcript; with none finished, a warning instead. |
+| O-W4 | Clients: give a client an avatar (two letters or an emoji) and pin it. | The folder shows the avatar and comes first everywhere. |
+
+### 11.2 Desktop
+
+| ID | Steps | Expected |
+|---|---|---|
+| O-D1 | Library: try each smart view chip, the Client folder and Label filters. | The list and counts match the console. |
+| O-D2 | Open a recording: Pin, choose a client (also New client…), add and remove labels. | The star and labels show on the card at once and in the console. |
+| O-D3 | Select → pick several recordings → Export transcripts → Word. | A zip lands in Downloads; Delete asks once more and removes them on every device. |
+
+### 11.3 Android
+
+| ID | Steps | Expected |
+|---|---|---|
+| O-A1 | Library: smart view chips, folder and label chips. | Same lists and counts as the desktop. |
+| O-A2 | Long-press a recording, tap two more, then Move to, Add label, Pin. | The changes show after the sync; Done leaves selection mode. |
+| O-A3 | Selection → Export as zip. | The share sheet offers the zip. |
+| O-A4 | Open a recording → Organise: pin, client, labels. | Saved and visible in the library list. |

@@ -317,8 +317,12 @@ Severity in brackets. Each item lists the platform; the matching regression test
 
 ### Phase 5 — organisation, security, SaaS foundations
 
-- [ ] B15 Clients and smart views (W, D, P): client folders (colour, avatar), tags, pins, bulk actions, smart views
+- [~] B15 Clients and smart views (W, D, P): client folders (colour, avatar), tags, pins, bulk actions, smart views
       (Today, This week, Waiting for decision, Bookmarked, Failed uploads).
+
+  Built and covered by automated tests (server on SQLite and MariaDB, console, desktop, Android); the device checks
+  are docs/MANUAL_QA.md section 11. Recording tags are called labels (`tags` already names bookmark tags in the
+  API). Bulk export is one zip of the finished transcripts.
 - [ ] B16 Security centre (W, D, P): desktop app lock (Windows Hello / Touch ID, PIN fallback), passkeys for web
       login (TOTP kept), devices and web sessions with revoke, audit log.
 - [ ] B17 Retention controls (W, D, P): 7 / 14 / 30 / custom days globally and per client, per-recording keep pin,
