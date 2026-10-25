@@ -40,10 +40,15 @@ final class SttManager
         return $this->driver($this->settings->providerFor($useCase));
     }
 
-    /** @return list<string> */
+    /**
+     * The client's keyterms, then the global vocabulary (duplicates dropped). Each provider trims the list to what it
+     * accepts, so the client's terms are kept first.
+     *
+     * @return list<string>
+     */
     public function keytermsFor(?Client $client): array
     {
-        return $client === null ? [] : KeytermPolicy::sanitize($client->keytermList());
+        return KeytermPolicy::sanitize([...($client?->keytermList() ?? []), ...app(SettingsRepository::class)->globalKeyterms()]);
     }
 
     /** @return list<string> roles devices should upload (docs/API.md GET /api/config) */

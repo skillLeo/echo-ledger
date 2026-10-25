@@ -22,6 +22,7 @@ use App\Stt\Data\Word;
 use App\Stt\Exceptions\InvalidWebhookSignature;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\KeytermPolicy;
+use App\Stt\LanguageChoice;
 use App\Stt\TranscriptNormalizer;
 use GuzzleHttp\Psr7\Utils;
 use Illuminate\Http\Client\PendingRequest;
@@ -130,8 +131,13 @@ final class AssemblyAiDriver implements SttProvider
             'punctuate' => true,
             'format_text' => true,
         ];
-        if ($request->language !== null && $request->language !== '') {
-            $body['language_code'] = $request->language;
+        // English + another language: Universal-2 code switching (two codes, one English); one language: its code;
+        // otherwise automatic detection. These three options are mutually exclusive (docs/research/stt-assemblyai.md).
+        if (LanguageChoice::assemblyAiCodeSwitch($request->language)) {
+            $body['language_codes'] = LanguageChoice::codes($request->language);
+            $body['speech_models'] = ['universal-2'];
+        } elseif (($single = LanguageChoice::single($request->language)) !== null) {
+            $body['language_code'] = $single;
         } else {
             $body['language_detection'] = true;
         }

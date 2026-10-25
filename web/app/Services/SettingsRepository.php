@@ -8,6 +8,7 @@ use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Models\Setting;
 use App\Rules\CertificatePin;
+use App\Stt\KeytermPolicy;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -43,6 +44,8 @@ final class SettingsRepository
         'budget.monthly_minutes' => null,            // int >= 1, or null = no minutes limit
         'budget.monthly_usd' => null,                // decimal >= 0.01, or null = no US$ limit
         'markers.tags' => SessionMarkers::DEFAULT_TAGS,  // one-tap bookmark tags
+        'vocabulary.keyterms' => [],                   // keyterms for every recording, after the client's
+        'vocabulary.replacements' => [],               // text replacements for every final transcript
         'budget.warn_percent' => 80,                 // 1-100
         // US$ per audio hour per channel; pairs that are missing price 0 (provider list prices, 2026-10).
         'budget.prices' => [
@@ -161,6 +164,26 @@ final class SettingsRepository
     public function markerTags(): array
     {
         return SessionMarkers::presets($this->get('markers.tags', SessionMarkers::DEFAULT_TAGS));
+    }
+
+    /**
+     * Keyterms that apply to every recording (the client's come first).
+     *
+     * @return list<string>
+     */
+    public function globalKeyterms(): array
+    {
+        return KeytermPolicy::sanitize((array) $this->get('vocabulary.keyterms', []));
+    }
+
+    /**
+     * Text replacements for every final transcript.
+     *
+     * @return list<array{from: string, to: string, match_case: bool, whole_word: bool}>
+     */
+    public function globalReplacements(): array
+    {
+        return TextReplacements::rules($this->get('vocabulary.replacements', []));
     }
 
     /** Share of a limit (1-100 %) at which devices and the console start warning; 80 unless set. */

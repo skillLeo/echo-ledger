@@ -154,6 +154,16 @@ final class TranscriptEditor
         return $this->speakerNames($session->refresh());
     }
 
+    /**
+     * Saves whole segments (vocabulary replacements on a new transcript) with a revision, keeping the original.
+     *
+     * @param  list<array<string, mixed>>  $segments
+     */
+    public function saveSegments(Transcript $transcript, array $segments, string $source, ?string $author): Transcript
+    {
+        return $this->save($transcript, $segments, $source, $author);
+    }
+
     /** @param list<array<string, mixed>> $segments */
     private function save(Transcript $transcript, array $segments, string $source, ?string $author): Transcript
     {

@@ -77,7 +77,7 @@ Every addition below is marked **(since v1.1)**.
 | session `status` | `recording`, `uploading`, `processing`, `completed`, `failed` |
 | recording `role` | `primary` (stereo or mono file used for playback + multichannel providers), `channel_1` (mono "Me"), `channel_2` (mono "Client") |
 | upload `status` | `pending`, `uploading`, `assembling`, `ready`, `failed` |
-| transcript `kind` / `status` | `live`, `final` / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
+| transcript `kind` / `status` | `live`, `final`, `alternate` (since v1.1) / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
 | provider | `assemblyai`, `elevenlabs`, `azure_mai`, `whispercpp_local`, `parakeet_local` |
 | use case | `live_captions`, `dictation`, `final_transcript`, `voice_note` |
 | transcript `error_code` (since v1.1, set when `status` is `failed`) | `no_audio`, `budget_exceeded`, `provider_unreachable`, `provider_rejected`, `provider_not_configured`, `provider_timeout`, `interrupted`, `recording_missing` |
@@ -448,7 +448,10 @@ v1.1, `null` unless `failed`), `"markers"` and `"pauses"` (since v1.1, shapes as
 (temporary signed URL, 30 min).
 
 ### `GET /api/transcripts/{id}` — `library:read`
-`200 {"id","session_id","kind","provider","status","language","text","segments":[Segment],"error","error_code","created_at","completed_at","edited_at"}`
+`200 {"id","session_id","kind","provider","status","language","model","text","segments":[Segment],"error","error_code","created_at","completed_at","edited_at"}`
+- `model` (since v1.1) is the model the engine reports it used (for example `universal-2`), or `null`.
+- `kind` `alternate` (since v1.1) is a second engine's version made from the console for comparison; the library
+  always points at the `final` one.
 - `edited_at` (since v1.1) is set while the text differs from the provider's original.
 - `error` / `error_code` are `null` unless `status` is `failed` (`error_code` since v1.1; values in the
   enumeration table). A transcript that is `pending`, `submitted` or `processing` has no text yet: clients show
@@ -514,6 +517,29 @@ ShareLink: `{"id","session_id","has_password","include_audio","expires_at","revo
 
 ### `DELETE /api/shares/{id}` — `sessions:write` (since v1.1)
 `204`. The link stops working at once (`404 share_not_found` for a link of another owner).
+
+### Languages (since v1.1)
+A session's `language` (create, open), a client's language and the console default accept `null` (automatic),
+one ISO 639-1 code (`en`, `ur`, `hi`, …) or two codes joined by `+` for calls that switch languages (`en+ur`).
+The session's choice wins, then the client's, then the default. AssemblyAI transcribes `en+ur` with Universal-2
+code switching (two codes, one of them English), one code with that language and nothing with automatic detection;
+the other engines get the single code or detect the language themselves. Live captions always detect the language.
+
+### Vocabulary (since v1.1)
+Keyterms (names and jargon) of the session's client come first, then the global ones; each engine receives as many
+as it accepts. Text replacements ("always write X as Y") run on every new final transcript, the client's rules
+first; the provider's text stays restorable (`POST /api/transcripts/{id}/restore`).
+
+### `GET /api/vocabulary?client_id=` — `library:read` (since v1.1)
+`200 {"keyterms": [...], "replacements": [{"from","to","match_case","whole_word"}], "client": {"id","keyterms","replacements"} | null}`.
+
+### `POST /api/vocabulary/keyterms` — `sessions:write` (since v1.1)
+`{"term": "Farah Khan", "client_id": "optional"}` → `201 {"keyterms": [...]}` (the list it was added to; a
+duplicate is not added twice). Terms are at most 50 characters and 5 words; 200 per list (`409 vocabulary_full`).
+
+### `POST /api/vocabulary/replacements` — `sessions:write` (since v1.1)
+`{"from": "acme limited", "to": "Acme Ltd", "match_case": false, "whole_word": true, "client_id": "optional"}` →
+`201 {"replacements": [...]}`. The newest rule comes first; at most 200 rules of 100 characters each.
 
 ### `DELETE /api/sessions/{id}` — `sessions:write`
 `204`. The session becomes a tombstone; its recordings (files) and transcripts are erased immediately. A provider

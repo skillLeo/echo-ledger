@@ -22,6 +22,7 @@ use App\Stt\Exceptions\InvalidWebhookSignature;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\KeytermPolicy;
+use App\Stt\LanguageChoice;
 use App\Stt\ProviderEndpoints;
 use App\Stt\TranscriptNormalizer;
 use Illuminate\Http\Client\PendingRequest;
@@ -90,8 +91,8 @@ final class ElevenLabsDriver implements SttProvider
                 'audio_format=pcm_16000',
                 'commit_strategy=vad',
             ];
-            if ($request->language !== null && $request->language !== '') {
-                $query[] = 'language_code='.rawurlencode($request->language);
+            if (LanguageChoice::single($request->language) !== null) {
+                $query[] = 'language_code='.rawurlencode(LanguageChoice::single($request->language));
             }
             foreach ($keyterms as $term) {
                 $query[] = 'keyterms='.rawurlencode($term);
@@ -130,8 +131,8 @@ final class ElevenLabsDriver implements SttProvider
             $parts[] = ['name' => 'webhook_metadata', 'contents' => json_encode(
                 ['transcript_id' => $request->transcript->id, 'session_id' => $request->session->id], JSON_THROW_ON_ERROR)];
         }
-        if ($request->language !== null && $request->language !== '') {
-            $parts[] = ['name' => 'language_code', 'contents' => $request->language];
+        if (LanguageChoice::single($request->language) !== null) {
+            $parts[] = ['name' => 'language_code', 'contents' => LanguageChoice::single($request->language)];
         }
         foreach (KeytermPolicy::forProvider($request->keyterms, $this->capabilities(), false) as $term) {
             $parts[] = ['name' => 'keyterms', 'contents' => $term]; // repeated field, never keyterms[0]

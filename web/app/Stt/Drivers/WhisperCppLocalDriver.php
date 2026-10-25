@@ -22,6 +22,7 @@ use App\Stt\Data\Word;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\Exceptions\UnsupportedFeature;
+use App\Stt\LanguageChoice;
 use App\Stt\ProviderEndpoints;
 use App\Stt\Support\WavFile;
 use App\Stt\TranscriptNormalizer;
@@ -93,7 +94,7 @@ final class WhisperCppLocalDriver implements SttProvider
         }
 
         return SubmitResult::completed(new NormalizedTranscript(TranscriptNormalizer::plainText($segments), $segments,
-            $request->language, ['engine' => 'whisper.cpp', 'audio_channels' => count($inputs)]));
+            LanguageChoice::single($request->language), ['engine' => 'whisper.cpp', 'audio_channels' => count($inputs)]));
     }
 
     /**
@@ -166,7 +167,7 @@ final class WhisperCppLocalDriver implements SttProvider
             }
             $response = $http->attach('file', $stream, 'audio')->post($baseUrl.'/inference', array_filter([
                 'response_format' => 'verbose_json',
-                'language' => $request->language ?: 'auto',
+                'language' => LanguageChoice::single($request->language) ?: 'auto',
                 'temperature' => '0.0',
                 'temperature_inc' => '0.2',
                 'vad' => $this->settings->get('whisper.vad', true) ? 'true' : 'false',

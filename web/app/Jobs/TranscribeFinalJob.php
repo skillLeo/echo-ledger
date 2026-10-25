@@ -8,10 +8,12 @@ use App\Enums\RecordingRole;
 use App\Enums\SessionStatus;
 use App\Enums\SttProviderKey;
 use App\Enums\TranscriptErrorCode;
+use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
 use App\Services\ChunkedUploadService;
 use App\Services\ProviderCopyEraser;
+use App\Services\SettingsRepository;
 use App\Services\TranscriptStore;
 use App\Services\Usage\BudgetGuard;
 use App\Services\Usage\UsageLedger;
@@ -20,6 +22,7 @@ use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\SubmitResult;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\ProviderNotConfigured;
+use App\Stt\LanguageChoice;
 use App\Stt\SttManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -103,7 +106,10 @@ final class TranscribeFinalJob implements ShouldQueue
                 channel1Mime: $useChannels ? $channel1->mime : null,
                 channel2Mime: $useChannels ? $channel2->mime : null,
                 keyterms: $stt->keytermsFor($session->client),
-                language: $session->language ?: ($session->client?->language ?: null),
+                // The transcript's own choice (set when it is started or re-transcribed), then the session's, the client's
+                // and the console default.
+                language: LanguageChoice::normalize($transcript->language) ?? LanguageChoice::normalize($session->language)
+                    ?? LanguageChoice::normalize($session->client?->language) ?? LanguageChoice::normalize(app(SettingsRepository::class)->get('default_language')),
                 webhookUrl: $stt->webhookUrl($provider, $transcript->id),
             );
 
@@ -211,7 +217,9 @@ final class TranscribeFinalJob implements ShouldQueue
                 'error' => mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000),
                 'error_code' => TranscriptErrorCode::Interrupted->value,
             ]);
-            $transcript->captureSession->update(['status' => SessionStatus::Failed]);
+            if ($transcript->kind === TranscriptKind::Final) {
+                $transcript->captureSession->update(['status' => SessionStatus::Failed]);
+            }
         }
     }
 }

@@ -23,6 +23,7 @@ use App\Stt\Data\Word;
 use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\Exceptions\UnsupportedFeature;
 use App\Stt\KeytermPolicy;
+use App\Stt\LanguageChoice;
 use App\Stt\ProviderEndpoints;
 use App\Stt\Support\WavFile;
 use App\Stt\TranscriptNormalizer;
@@ -120,11 +121,11 @@ final class AzureMaiDriver implements SttProvider
 
         if ($this->usesMai() && $request->hasChannelArtifacts()) {
             foreach ([1 => [$request->channel1Path, $request->channel1Mime], 2 => [$request->channel2Path, $request->channel2Mime]] as $channel => [$path, $mime]) {
-                $phrasesJson = $this->transcribe((string) $path, (string) $mime, $this->maiDefinition($phrases, $request->language));
+                $phrasesJson = $this->transcribe((string) $path, (string) $mime, $this->maiDefinition($phrases, LanguageChoice::single($request->language)));
                 array_push($segments, ...$this->mapPhrases($phrasesJson, $channel, 2));
             }
         } elseif ($this->usesMai() && ! $request->isStereo()) {
-            $phrasesJson = $this->transcribe($request->primaryPath, $request->primary->mime, $this->maiDefinition($phrases, $request->language));
+            $phrasesJson = $this->transcribe($request->primaryPath, $request->primary->mime, $this->maiDefinition($phrases, LanguageChoice::single($request->language)));
             $segments = $this->mapPhrases($phrasesJson, 1, 1);
         } elseif ($this->usesMai() && WavFile::isWav($request->primaryPath)) {
             // Stereo WAV without channel artifacts: split it locally (pure PHP), then one MAI request per channel.
@@ -133,7 +134,7 @@ final class AzureMaiDriver implements SttProvider
             try {
                 WavFile::open($request->primaryPath)->splitStereo($left, $right);
                 foreach ([1 => $left, 2 => $right] as $channel => $path) {
-                    array_push($segments, ...$this->mapPhrases($this->transcribe($path, 'audio/wav', $this->maiDefinition($phrases, $request->language)), $channel, 2));
+                    array_push($segments, ...$this->mapPhrases($this->transcribe($path, 'audio/wav', $this->maiDefinition($phrases, LanguageChoice::single($request->language))), $channel, 2));
                 }
             } finally {
                 @unlink($left);
@@ -146,8 +147,8 @@ final class AzureMaiDriver implements SttProvider
             if ($request->isStereo()) {
                 $definition['channels'] = [0, 1];
             }
-            if ($request->language !== null && $request->language !== '') {
-                $definition['locales'] = [$request->language];
+            if (LanguageChoice::single($request->language) !== null) {
+                $definition['locales'] = [LanguageChoice::single($request->language)];
             }
             if ($phrases !== []) {
                 $definition['phraseList'] = ['phrases' => $phrases];
@@ -163,7 +164,7 @@ final class AzureMaiDriver implements SttProvider
         }
 
         return SubmitResult::completed(new NormalizedTranscript(TranscriptNormalizer::plainText($segments), $segments,
-            $request->language, ['model' => $model, 'audio_channels' => $stereo ? 2 : 1]));
+            LanguageChoice::single($request->language), ['model' => $model, 'audio_channels' => $stereo ? 2 : 1]));
     }
 
     /**

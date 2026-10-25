@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\SttTokenController;
 use App\Http\Controllers\Api\SttWebhookController;
 use App\Http\Controllers\Api\TranscriptEditController;
 use App\Http\Controllers\Api\UsageController;
+use App\Http\Controllers\Api\VocabularyController;
 use App\Http\Middleware\TouchDevice;
 use Illuminate\Support\Facades\Route;
 
@@ -53,6 +54,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');
             Route::post('sessions/{id}/shares', [ShareController::class, 'store'])->name('api.sessions.shares.store');
             Route::delete('shares/{id}', [ShareController::class, 'destroy'])->name('api.shares.destroy');
+            Route::post('vocabulary/keyterms', [VocabularyController::class, 'addKeyterm'])->name('api.vocabulary.keyterms');
+            Route::post('vocabulary/replacements', [VocabularyController::class, 'addReplacement'])->name('api.vocabulary.replacements');
             Route::patch('transcripts/{id}', [TranscriptEditController::class, 'update'])->name('api.transcripts.update');
             Route::post('transcripts/{id}/replace', [TranscriptEditController::class, 'replace'])->name('api.transcripts.replace');
             Route::post('transcripts/{id}/restore', [TranscriptEditController::class, 'restore'])->name('api.transcripts.restore');
@@ -66,6 +69,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('transcripts/{id}/revisions', [TranscriptEditController::class, 'revisions'])->name('api.transcripts.revisions');
             Route::get('transcripts/{id}/export', [ExportController::class, 'show'])->name('api.transcripts.export');
             Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->name('api.sessions.shares');
+            Route::get('vocabulary', [VocabularyController::class, 'show'])->name('api.vocabulary');
         });
     });
 
