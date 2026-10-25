@@ -283,3 +283,101 @@ describe("pill hit regions", () => {
     await waitFor(() => expect(lastRegions()).toEqual([]));
   });
 });
+
+describe("bookmarks and the silent-other-side warning on the pill", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    setWindowLabel("pill");
+    vi.stubGlobal("ResizeObserver", NoopResizeObserver);
+    respondAll({
+      overlay_set_hit_regions: undefined,
+      mark_moment: { atMs: 65_000, tag: null, note: null, count: 1 },
+      tag_last_mark: undefined,
+      undo_mark: undefined,
+      marker_tags: ["Requirement", "Budget", "Deadline"],
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const marked = (overrides = {}) => emitEvent("recording:marked", { atMs: 65_000, tag: null, note: null, count: 1, ...overrides });
+
+  it("has a Mark button that bookmarks the recording", async () => {
+    await renderPill();
+    fireEvent.click(button("Bookmark this moment"));
+    await waitFor(() => expect(callsOf("mark_moment")).toHaveLength(1));
+  });
+
+  it("shows the bookmark time with the tag presets after a bookmark, also one made by the shortcut", async () => {
+    await renderPill();
+    await marked();
+    await flushAsync();
+    const tray = screen.getByTestId("mark-tray");
+    expect(tray).toHaveTextContent("Bookmarked 1:05");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Budget" })).toHaveAttribute("aria-pressed", "false"));
+  });
+
+  it("tags the bookmark with one click and clears the tag with a second", async () => {
+    await renderPill();
+    await marked();
+    await flushAsync();
+    fireEvent.click(await screen.findByRole("button", { name: "Budget" }));
+    expect(callsOf("tag_last_mark").at(-1)).toEqual({ tag: "Budget", note: null });
+    expect(screen.getByRole("button", { name: "Budget" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Budget" }));
+    expect(callsOf("tag_last_mark").at(-1)).toEqual({ tag: null, note: null });
+  });
+
+  it("undoes the bookmark and closes the tray", async () => {
+    await renderPill();
+    await marked();
+    await flushAsync();
+    fireEvent.click(button("Undo"));
+    expect(callsOf("undo_mark")).toHaveLength(1);
+    expect(screen.queryByTestId("mark-tray")).not.toBeInTheDocument();
+  });
+
+  it("closes the tray by itself after a few seconds", async () => {
+    await renderPill();
+    vi.useFakeTimers();
+    await act(async () => {
+      await marked();
+    });
+    expect(screen.getByTestId("mark-tray")).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(6_100);
+    });
+    expect(screen.queryByTestId("mark-tray")).not.toBeInTheDocument();
+  });
+
+  it("warns when the other side has been silent and hides the warning when it is heard again", async () => {
+    await renderPill();
+    await emitEvent("capture:far_side", { silent: true, seconds: 30 });
+    expect(screen.getByRole("alert")).toHaveTextContent("Not hearing the other side for 30 s");
+    await emitEvent("capture:far_side", { silent: false, seconds: 0 });
+    expect(screen.queryByTestId("far-side-warning")).not.toBeInTheDocument();
+  });
+
+  it("lets the user dismiss the warning, and shows nothing while paused", async () => {
+    await renderPill();
+    await emitEvent("capture:far_side", { silent: true, seconds: 31 });
+    fireEvent.click(button("Dismiss warning"));
+    expect(screen.queryByTestId("far-side-warning")).not.toBeInTheDocument();
+    await emitEvent("recording:state", makeRecordingState({ paused: true }));
+    await emitEvent("capture:far_side", { silent: true, seconds: 40 });
+    expect(screen.queryByTestId("far-side-warning")).not.toBeInTheDocument();
+  });
+
+  it("forgets the tray and the warning when the recording ends", async () => {
+    await renderPill();
+    await marked();
+    await emitEvent("capture:far_side", { silent: true, seconds: 30 });
+    await emitEvent("recording:state", makeRecordingState({ active: false, sourceApp: null, mode: null }));
+    await emitEvent("recording:state", makeRecordingState());
+    expect(screen.queryByTestId("mark-tray")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("far-side-warning")).not.toBeInTheDocument();
+  });
+});

@@ -16,10 +16,13 @@ pub enum Action {
     CopyLast2Min,
     Dictation,
     VoiceNote,
+    /// Bookmark the current recording (B3).
+    Mark,
 }
 
 impl Action {
-    pub const ALL: [Action; 5] = [Action::ToggleCaptions, Action::ToggleSaving, Action::CopyLast2Min, Action::Dictation, Action::VoiceNote];
+    pub const ALL: [Action; 6] =
+        [Action::ToggleCaptions, Action::ToggleSaving, Action::CopyLast2Min, Action::Dictation, Action::VoiceNote, Action::Mark];
 
     /// Spec defaults (Cmd on macOS). Ctrl+Shift+C/R collide with browser DevTools/hard-reload, hence configurable.
     pub fn default_accelerator(self) -> Option<&'static str> {
@@ -29,6 +32,7 @@ impl Action {
             Action::CopyLast2Min => Some("CommandOrControl+Shift+C"),
             Action::Dictation => Some("CommandOrControl+Shift+D"),
             Action::VoiceNote => None,
+            Action::Mark => Some("CommandOrControl+Shift+B"),
         }
     }
 }

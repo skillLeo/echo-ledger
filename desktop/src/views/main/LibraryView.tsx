@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type LibraryItem, type TranscriptDetail } from "../../lib/ipc";
 import { formatDuration, formatWhen, timestamp, transcriptText } from "../../lib/format";
-import { groupItems, itemState, searchItems, SORT_LABELS, sortItems, type SortKey } from "../../lib/library";
+import { bookmarksOf, filterByTag, groupItems, itemState, libraryTags, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
 import { CopyIcon, DesktopIcon, GlobeIcon, PhoneIcon, RefreshIcon, SearchIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
+import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
@@ -34,6 +35,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [source, setSource] = useState<SourceFilter>("all");
+  const [tag, setTag] = useState<string | null>(null);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
   const [selected, setSelected] = useState<string | null>(null);
@@ -69,7 +72,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filtered = useMemo(() => sortItems(searchItems(filterItems(items, source), query), sort), [items, source, query, sort]);
+  const tags = useMemo(() => libraryTags(items), [items]);
+  const anyBookmarks = useMemo(() => items.some((i) => !i.deleted && (i.marker_count ?? 0) > 0), [items]);
+  const filtered = useMemo(() => sortItems(searchItems(filterByTag(filterItems(items, source), tag), query), sort), [items, source, tag, query, sort]);
   const groups = useMemo(() => groupItems(filtered, sort), [filtered, sort]);
   const current = filtered.find((i) => i.id === selected) ?? null;
 
@@ -81,6 +86,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
     const latest = () => token === selection.current;
     setTranscript(null);
     setPlaybackUrl(null);
+    setBookmarks([]);
     setPlaybackError(null);
     setActiveSegment(-1);
     playbackRefreshed.current = false;
@@ -88,7 +94,16 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
     const id = (isTranscribing(finalStatus) && liveId) || finalId || liveId;
     if (id) api.transcript(id).then((t) => latest() && setTranscript(t)).catch(() => latest() && setTranscript(null));
     // Temporary signed URL to the decrypted recording; the server streams it with Range support.
-    if (current) api.session(current.id).then((d) => latest() && setPlaybackUrl(playbackUrlOf(d))).catch(() => latest() && setPlaybackUrl(null));
+    if (current) {
+      api
+        .session(current.id)
+        .then((d) => {
+          if (!latest()) return;
+          setPlaybackUrl(playbackUrlOf(d));
+          setBookmarks(bookmarksOf(d));
+        })
+        .catch(() => latest() && setPlaybackUrl(null));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, finalId, liveId, finalStatus]);
 
@@ -183,11 +198,20 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
           <button key={key} type="button" className={`chip ${source === key ? "active" : ""}`} aria-pressed={source === key} onClick={() => setSource(key)}>{icon}{label}</button>
         ))}
       </div>
+      {(anyBookmarks || tag !== null) && (
+        <div className="chips" role="group" aria-label="Filter by bookmark">
+          <button type="button" className={`chip ${tag === null ? "active" : ""}`} aria-pressed={tag === null} onClick={() => setTag(null)}>Any</button>
+          <button type="button" className={`chip ${tag === "*" ? "active" : ""}`} aria-pressed={tag === "*"} onClick={() => setTag("*")}><BookmarkIcon size={13} />Bookmarked</button>
+          {tags.map((t) => (
+            <button key={t} type="button" className={`chip ${tag === t ? "active" : ""}`} aria-pressed={tag === t} onClick={() => setTag(t)}>{t}</button>
+          ))}
+        </div>
+      )}
       <div className="library">
         <div className="list" data-testid="library-list">
           <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />
           {filtered.length === 0 && (
-            <div className="empty">{query || source !== "all" ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
+            <div className="empty">{query || source !== "all" || tag !== null ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
           )}
           {groups.map((group) => (
             <div key={group.label ?? "all"} className="group">
@@ -200,7 +224,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
                       <span className={`avatar ${item.source_device ?? "web"}`}><SourceAppIcon app={item.source_app} size={18} /></span>
                       <div className="item-main">
                         <div className="item-title">{item.title}</div>
-                        <div className="small muted">{formatWhen(item.started_at)}{item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ""}{item.client ? ` · ${item.client.name}` : ""}</div>
+                        <div className="small muted">{formatWhen(item.started_at)}{item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ""}{item.client ? ` · ${item.client.name}` : ""}{item.marker_count ? ` · ${item.marker_count} bookmark${item.marker_count === 1 ? "" : "s"}` : ""}</div>
                       </div>
                       <span className={`pill ${state}`}>{STATE_LABEL[state]}</span>
                     </div>
@@ -227,6 +251,18 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
                 <audio ref={audioRef} className="player" controls preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} onError={onPlaybackError} data-testid="player" />
               )}
               {playbackError && <div className="notice" style={{ marginTop: 12 }}>{playbackError}</div>}
+              {bookmarks.length > 0 && (
+                <div className="chips bookmarks" role="list" aria-label="Bookmarks" style={{ marginTop: 10 }}>
+                  {bookmarks.map((b) => {
+                    const text = `${timestamp(b.at_ms)}${b.tag ? ` ${b.tag}` : ""}`;
+                    return (
+                      <span role="listitem" key={b.id}>
+                        <button type="button" className="chip" title={b.note ?? undefined} disabled={!playbackUrl} onClick={() => seek(b.at_ms)}><BookmarkIcon size={12} />{text}</button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
               {transcript ? (
                 transcript.status === "failed" ? (
                   <div className="notice error" style={{ marginTop: 12 }}>

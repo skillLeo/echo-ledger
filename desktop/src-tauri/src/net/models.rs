@@ -53,6 +53,16 @@ pub struct ServerConfig {
     /// This month's usage and limit (since v1.1). A malformed block never breaks the config.
     #[serde(default, deserialize_with = "lenient")]
     pub usage: Option<UsageDto>,
+    /// Bookmark tag presets (since v1.1).
+    #[serde(default, deserialize_with = "lenient")]
+    pub markers: Option<MarkersConfig>,
+}
+
+/// `config.markers` (docs/API.md "GET /api/config").
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MarkersConfig {
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 impl ServerConfig {
@@ -180,6 +190,23 @@ pub struct ArtifactDto {
     pub duration_ms: Option<u64>,
 }
 
+/// A bookmark on the recording's timeline (since v1.1): recorded time, optional preset tag and short note.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MarkerDto {
+    pub at_ms: u64,
+    #[serde(default)]
+    pub tag: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+/// A paused stretch (since v1.1): at recorded time `at_ms` the recording paused for `paused_ms` of wall time.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PauseDto {
+    pub at_ms: u64,
+    pub paused_ms: u64,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct CreateSessionRequest {
     pub client_ref: String,
@@ -191,6 +218,11 @@ pub struct CreateSessionRequest {
     pub duration_ms: Option<u64>,
     pub language: Option<String>,
     pub artifacts: Vec<ArtifactDto>,
+    /// Sent only when there are some, so a v1 server never sees the keys.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub markers: Vec<MarkerDto>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pauses: Vec<PauseDto>,
 }
 
 /// Open session (since v1.1): `POST /api/sessions` without the `artifacts` key, status `recording`. Created only
@@ -215,6 +247,10 @@ pub struct FinishSessionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_id: Option<Option<String>>,
     pub artifacts: Vec<ArtifactDto>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub markers: Vec<MarkerDto>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub pauses: Vec<PauseDto>,
 }
 
 /// One streaming period (socket open to close) for `POST /api/usage` (since v1.1); queued in `usage.json`.

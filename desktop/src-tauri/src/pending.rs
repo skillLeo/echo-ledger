@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use crate::audio::{FinishedRecording, RecordingMode};
 use crate::error::{AppError, AppResult};
-use crate::net::models::SegmentDto;
+use crate::net::models::{MarkerDto, PauseDto, SegmentDto};
 use crate::net::sync::paths;
 use crate::net::uploader::{DiscardQueue, PendingUpload, UploadQueue};
 use crate::settings::{AskBeforeSaving, DecisionTimeout};
@@ -143,6 +143,10 @@ pub struct PendingDecision {
     live_provider: Option<String>,
     #[serde(default)]
     server_session_id: Option<String>,
+    #[serde(default)]
+    markers: Vec<MarkerDto>,
+    #[serde(default)]
+    pauses: Vec<PauseDto>,
 }
 
 impl PendingDecision {
@@ -174,6 +178,8 @@ impl PendingDecision {
             live_segments: input.live_segments,
             live_provider: input.live_provider,
             server_session_id: input.server_session_id,
+            markers: finished.markers.clone(),
+            pauses: finished.pauses.clone(),
         }
     }
 
@@ -223,6 +229,8 @@ impl PendingDecision {
             live_provider: self.live_provider.clone(),
             server_session_id: self.server_session_id.clone(),
             title: self.title.clone(),
+            markers: self.markers.clone(),
+            pauses: self.pauses.clone(),
             ..PendingUpload::default()
         }
     }

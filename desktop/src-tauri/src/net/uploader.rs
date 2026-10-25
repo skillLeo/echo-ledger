@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 
 use super::api::ApiClient;
 use super::models::{
-    ArtifactDto, CreateSessionRequest, CreateSessionResponse, DeviceTranscript, FinishSessionRequest, RecordingUpload, SegmentDto,
-    ServerConfig, UsageDto, UsageReport,
+    ArtifactDto, CreateSessionRequest, CreateSessionResponse, DeviceTranscript, FinishSessionRequest, MarkerDto, PauseDto,
+    RecordingUpload, SegmentDto, ServerConfig, UsageDto, UsageReport,
 };
 use crate::error::{AppError, AppResult};
 
@@ -95,6 +95,11 @@ pub struct PendingUpload {
     pub created_session_id: Option<String>,
     #[serde(default)]
     pub slots: Vec<UploadSlot>,
+    /// Bookmarks and pause gaps of the recording (since v1.1), sent with the create or finish call.
+    #[serde(default)]
+    pub markers: Vec<MarkerDto>,
+    #[serde(default)]
+    pub pauses: Vec<PauseDto>,
 }
 
 impl Default for PendingUpload {
@@ -121,6 +126,8 @@ impl Default for PendingUpload {
             full_restarts: 0,
             created_session_id: None,
             slots: vec![],
+            markers: vec![],
+            pauses: vec![],
         }
     }
 }
@@ -489,6 +496,8 @@ async fn open_slots(
                     title: item.title.clone(),
                     client_id: Some(item.client_id.clone()),
                     artifacts: artifacts.clone(),
+                    markers: item.markers.clone(),
+                    pauses: item.pauses.clone(),
                 };
                 api.finish_session(&open, &request).await
             }
@@ -503,6 +512,8 @@ async fn open_slots(
                     duration_ms: Some(item.duration_ms),
                     language: None,
                     artifacts: artifacts.clone(),
+                    markers: item.markers.clone(),
+                    pauses: item.pauses.clone(),
                 };
                 api.create_session(&request).await
             }

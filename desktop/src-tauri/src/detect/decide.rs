@@ -48,6 +48,8 @@ pub enum IgnoreReason {
     UnknownApp,
     NeverRecord,
     AutoOff,
+    /// The call app is switched off in Settings → Auto-record.
+    AppOff,
 }
 
 impl IgnoreReason {
@@ -58,7 +60,17 @@ impl IgnoreReason {
             IgnoreReason::UnknownApp => "unknown_app",
             IgnoreReason::NeverRecord => "never_record",
             IgnoreReason::AutoOff => "auto_off",
+            IgnoreReason::AppOff => "app_off",
         }
+    }
+}
+
+/// Per-app auto-record switches (`autoRecordApps`): a call app switched off is ignored by auto mode; recording it
+/// by hand still works. Apps missing from the map are on.
+pub fn apply_app_switches(verdict: Verdict, apps: &HashMap<String, bool>) -> Verdict {
+    match verdict {
+        Verdict::Record(app) if apps.get(app.as_str()) == Some(&false) => Verdict::Ignore(IgnoreReason::AppOff),
+        other => other,
     }
 }
 

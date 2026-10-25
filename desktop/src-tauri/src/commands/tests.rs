@@ -61,3 +61,31 @@ fn an_unknown_dictation_output_is_ignored() {
     patch(json!({"dictationOutput": "clipboard"})).apply(&mut s);
     assert_eq!(s.dictation_output, "clipboard");
 }
+
+#[test]
+fn app_switches_merge_and_leave_other_apps_alone() {
+    let mut s = Settings { auto_record_apps: HashMap::from([("zoom".to_string(), false)]), ..Settings::default() };
+    patch(json!({"autoRecordApps": {"whatsapp": false, "zoom": true}})).apply(&mut s);
+    assert_eq!(s.auto_record_apps, HashMap::from([("zoom".to_string(), true), ("whatsapp".to_string(), false)]));
+}
+
+#[test]
+fn the_caption_style_is_replaced_whole_and_the_microphone_choice_can_be_cleared() {
+    let mut s = Settings { input_device: Some("usb-mic".into()), ..Settings::default() };
+    patch(json!({"captionStyle": {"size": "small", "opacity": 50}})).apply(&mut s);
+    assert_eq!(s.caption_style.size, crate::settings::CaptionSize::Small);
+    assert_eq!(s.caption_style.opacity, 50);
+    assert_eq!(s.input_device.as_deref(), Some("usb-mic"), "a patch without inputDevice keeps it");
+    patch(json!({"inputDevice": null, "farSideWarning": false})).apply(&mut s);
+    assert_eq!(s.input_device, None);
+    assert!(!s.far_side_warning);
+}
+
+#[test]
+fn privacy_settings_open_the_right_system_page() {
+    assert_eq!(privacy_settings_url("microphone", false), Some("ms-settings:privacy-microphone"));
+    assert!(privacy_settings_url("microphone", true).unwrap().contains("Privacy_Microphone"));
+    assert!(privacy_settings_url("system_audio", true).unwrap().contains("Privacy_ScreenCapture"));
+    assert_eq!(privacy_settings_url("system_audio", false), None, "Windows needs no permission for system audio");
+    assert_eq!(privacy_settings_url("camera", true), None);
+}

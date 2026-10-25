@@ -71,3 +71,17 @@ describe("micTone", () => {
     expect(micTone({ decision })).toBe(tone);
   });
 });
+
+describe("per-app auto-record switches (B1)", () => {
+  it("says the app's switch is off", () => {
+    expect(decisionText({ decision: "ignored", reason: "app_off" })).toBe("Ignored: auto-record is off for this app");
+  });
+
+  it("knows every ignore reason the Rust core names", () => {
+    const decideRs = detectRs; // the reasons are listed in the MicUser doc comment of detect/mod.rs
+    const line = decideRs.split("\n").find((l) => l.includes("When ignored:")) ?? "";
+    const reasons = [...line.matchAll(/"([a-z_]+)"/g)].map((m) => m[1] as IgnoreReason);
+    expect(reasons).toContain("app_off");
+    for (const reason of reasons) expect(decisionText({ decision: "ignored", reason })).not.toBe("Ignored");
+  });
+});

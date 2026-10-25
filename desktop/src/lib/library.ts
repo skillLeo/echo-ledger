@@ -10,12 +10,12 @@ export const SORT_LABELS: Record<SortKey, string> = {
   title: "Title A–Z",
 };
 
-/** Case-insensitive match against the title, transcript preview, client, device and source labels. */
+/** Case-insensitive match against the title, transcript preview, client, device, source labels and bookmark tags. */
 export function searchItems(items: LibraryItem[], query: string): LibraryItem[] {
   const q = query.trim().toLowerCase();
   if (!q) return items;
   return items.filter((i) =>
-    [i.title, i.transcript?.preview, i.client?.name, i.device?.name, i.source_app_label, i.source_device_label].some((s) => s?.toLowerCase().includes(q)),
+    [i.title, i.transcript?.preview, i.client?.name, i.device?.name, i.source_app_label, i.source_device_label, ...(i.tags ?? [])].some((s) => s?.toLowerCase().includes(q)),
   );
 }
 
@@ -66,4 +66,39 @@ export function itemState(item: Pick<LibraryItem, "status" | "transcript">): Ite
   if (item.status === "failed" || item.transcript?.final_status === "failed") return "failed";
   if (item.status === "completed" || item.transcript?.final_status === "completed") return "ready";
   return "processing";
+}
+
+/** Every bookmark tag used in the library, sorted (the tag filter's chips). */
+export function libraryTags(items: LibraryItem[]): string[] {
+  const tags = new Set<string>();
+  for (const item of items) if (!item.deleted) for (const tag of item.tags ?? []) tags.add(tag);
+  return [...tags].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }));
+}
+
+/** The tag filter: `null` = everything, `"*"` = recordings with any bookmark, else recordings with that tag. */
+export function filterByTag(items: LibraryItem[], tag: string | null): LibraryItem[] {
+  if (tag === null) return items;
+  if (tag === "*") return items.filter((i) => (i.marker_count ?? 0) > 0);
+  return items.filter((i) => i.tags?.includes(tag));
+}
+
+export interface Bookmark {
+  id: string;
+  at_ms: number;
+  tag: string | null;
+  note: string | null;
+}
+
+/** The bookmarks of a session detail answer (`markers`), in time order; anything malformed is skipped. */
+export function bookmarksOf(detail: Record<string, unknown>): Bookmark[] {
+  const raw = Array.isArray(detail.markers) ? detail.markers : [];
+  return raw
+    .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null && typeof (m as Record<string, unknown>).at_ms === "number")
+    .map((m) => ({
+      id: typeof m.id === "string" ? m.id : String(m.at_ms),
+      at_ms: m.at_ms as number,
+      tag: typeof m.tag === "string" ? m.tag : null,
+      note: typeof m.note === "string" ? m.note : null,
+    }))
+    .sort((a, b) => a.at_ms - b.at_ms);
 }

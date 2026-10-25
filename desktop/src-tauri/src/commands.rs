@@ -147,6 +147,8 @@ pub fn get_settings(state: State<'_, AppState>) -> Settings {
 pub struct SettingsPatch {
     captions_on_record: Option<bool>,
     auto_mode: Option<bool>,
+    /// Switches to merge: app wire value → on/off; unknown apps are refused.
+    auto_record_apps: Option<HashMap<String, bool>>,
     content_protection: Option<bool>,
     autostart: Option<bool>,
     dictation_output: Option<String>,
@@ -163,6 +165,12 @@ pub struct SettingsPatch {
     decision_timeout: Option<crate::settings::DecisionTimeout>,
     /// 2, 3 or 5; anything else is refused.
     caption_lines: Option<u8>,
+    /// Full replacement; refused when a value is out of range.
+    caption_style: Option<crate::settings::CaptionStyle>,
+    /// Missing = keep, `null` = follow the system default, a string = that device.
+    #[serde(default, deserialize_with = "double_option")]
+    input_device: Option<Option<String>>,
+    far_side_warning: Option<bool>,
 }
 
 /// A present key becomes `Some(value)`, so an explicit `null` reads as `Some(None)` and a missing key (via
@@ -176,6 +184,7 @@ impl SettingsPatch {
     fn apply(&self, s: &mut Settings) {
         if let Some(v) = self.captions_on_record { s.captions_on_record = v; }
         if let Some(v) = self.auto_mode { s.auto_mode = v; }
+        if let Some(v) = &self.auto_record_apps { s.auto_record_apps.extend(v.iter().map(|(k, on)| (k.clone(), *on))); }
         if let Some(v) = self.content_protection { s.content_protection = v; }
         if let Some(v) = self.autostart { s.autostart = v; }
         if let Some(v) = &self.dictation_output && (v == "type" || v == "clipboard") { s.dictation_output = v.clone(); }
@@ -188,6 +197,9 @@ impl SettingsPatch {
         if let Some(v) = self.ask_before_saving { s.ask_before_saving = v; }
         if let Some(v) = self.decision_timeout { s.decision_timeout = v; }
         if let Some(v) = self.caption_lines { s.caption_lines = v; }
+        if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }
+        if let Some(v) = &self.input_device { s.input_device = v.clone(); }
+        if let Some(v) = self.far_side_warning { s.far_side_warning = v; }
     }
 }
 
@@ -199,6 +211,14 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
     {
         return Err(AppError::msg("Choose 2, 3 or 5 lines."));
     }
+    if let Some(problem) = patch.caption_style.as_ref().and_then(|s| s.problem()) {
+        return Err(AppError::msg(problem));
+    }
+    if let Some(apps) = &patch.auto_record_apps
+        && apps.keys().any(|app| crate::detect::classify::SourceApp::from_wire(app).is_none())
+    {
+        return Err(AppError::msg("That app cannot be recorded automatically."));
+    }
     let state = app.state::<AppState>();
     let updated = state.update_settings(|s| patch.apply(s))?;
     let _ = app.emit("settings:changed", &updated);
@@ -209,9 +229,13 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         let manager = app.autolaunch();
         let _ = if enable { manager.enable() } else { manager.disable() };
     }
-    if patch.caption_lines.is_some() {
+    if patch.input_device.is_some() {
+        // Used from the next recording or resume on; a recording in progress keeps its device.
+        crate::audio::platform::set_preferred_mic(updated.input_device.clone());
+    }
+    if patch.caption_lines.is_some() || patch.caption_style.is_some() {
         // Resizes and re-docks in the setting's corner (never `show()`).
-        crate::overlay::resize_captions(&app, updated.caption_lines, updated.overlay_corner);
+        crate::overlay::resize_captions(&app, updated.caption_lines, &updated.caption_style, updated.overlay_corner);
     } else if let Some(corner) = patch.overlay_corner
         && let Some(w) = app.get_webview_window(crate::overlay::OVERLAY)
     {
@@ -501,6 +525,104 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
 pub async fn pause_recording(app: AppHandle) -> AppResult<AppStatus> {
     crate::actions::pause_recording(&app).await?;
     Ok(status(&app))
+}
+
+/// The connected microphones for the device picker (B5), the default first.
+#[tauri::command]
+pub async fn input_devices() -> AppResult<Vec<crate::audio::platform::InputDevice>> {
+    tauri::async_runtime::spawn_blocking(crate::audio::platform::input_devices).await.map_err(|e| AppError::msg(e.to_string()))
+}
+
+/// The 10-second test recording (B5): both sides are recorded, `capture:test_level` reports the meters every
+/// 100 ms, and the result carries the recording to play back. Refused while recording or dictating.
+#[tauri::command]
+pub async fn test_capture(app: AppHandle, seconds: Option<u32>) -> AppResult<crate::audio::health::TestResult> {
+    let state = app.state::<AppState>();
+    if state.capture.is_recording() || crate::dictation::is_active(&app) {
+        return Err(AppError::msg("Finish the current recording before testing the microphone."));
+    }
+    if state.capture_test.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return Err(AppError::msg("A test recording is already running."));
+    }
+    let seconds = seconds.unwrap_or(crate::audio::health::TEST_SECONDS).clamp(3, 30);
+    let emitter = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::audio::health::run_test(seconds, |levels| {
+            let _ = emitter.emit("capture:test_level", levels);
+        })
+    })
+    .await;
+    state.capture_test.store(false, std::sync::atomic::Ordering::SeqCst);
+    result.map_err(|e| AppError::msg(e.to_string()))?.map_err(AppError::Audio)
+}
+
+/// What the permissions centre shows (B5).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionsStatus {
+    /// `allowed` | `denied` | `unknown`.
+    pub microphone: &'static str,
+    /// macOS: reading browser tabs through Automation is switched on in EchoLedger.
+    pub browser_automation: bool,
+    pub platform: &'static str,
+}
+
+#[tauri::command]
+pub async fn permissions_status(state: State<'_, AppState>) -> AppResult<PermissionsStatus> {
+    let microphone = tauri::async_runtime::spawn_blocking(crate::audio::health::microphone_permission).await.unwrap_or("unknown");
+    Ok(PermissionsStatus {
+        microphone,
+        browser_automation: state.settings().browser_automation,
+        platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" },
+    })
+}
+
+/// The system settings page for a permission: `microphone`, `system_audio` (macOS screen and system audio
+/// recording) or `automation` (macOS).
+pub fn privacy_settings_url(kind: &str, macos: bool) -> Option<&'static str> {
+    match (kind, macos) {
+        ("microphone", false) => Some("ms-settings:privacy-microphone"),
+        ("microphone", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"),
+        ("system_audio", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"),
+        ("automation", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+pub fn open_privacy_settings(app: AppHandle, kind: String) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let url = privacy_settings_url(&kind, cfg!(target_os = "macos")).ok_or_else(|| AppError::msg("There is no setting for that here."))?;
+    app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))
+}
+
+/// Bookmarks the current recording now (B3); `tag` is one of the presets or none.
+#[tauri::command]
+pub fn mark_moment(app: AppHandle, tag: Option<String>, note: Option<String>) -> AppResult<crate::actions::MarkPayload> {
+    crate::actions::mark_moment(&app, tag.as_deref(), note.as_deref())
+}
+
+/// Sets the tag (and optionally the note) of the latest bookmark: the pill's tag chips after a plain Mark.
+#[tauri::command]
+pub fn tag_last_mark(app: AppHandle, tag: Option<String>, note: Option<String>) -> AppResult<()> {
+    if app.state::<AppState>().capture.tag_last_mark(Some(tag.as_deref().unwrap_or("")), note.as_deref()) {
+        Ok(())
+    } else {
+        Err(AppError::msg("There is no bookmark to tag yet."))
+    }
+}
+
+/// Removes the latest bookmark of the current recording (Undo on the pill).
+#[tauri::command]
+pub fn undo_mark(app: AppHandle) -> AppResult<()> {
+    app.state::<AppState>().capture.undo_mark().map(|_| ()).ok_or_else(|| AppError::msg("There is no bookmark to undo."))
+}
+
+/// The bookmark tags offered during a call: the console's presets, else the defaults.
+#[tauri::command]
+pub fn marker_tags(state: State<'_, AppState>) -> Vec<String> {
+    let config = state.server_config.lock().unwrap_or_else(|p| p.into_inner());
+    crate::audio::notes::tag_presets(config.as_ref().and_then(|c| c.markers.as_ref()).map(|m| m.tags.as_slice()))
 }
 
 #[tauri::command]

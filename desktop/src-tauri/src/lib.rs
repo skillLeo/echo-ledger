@@ -64,6 +64,8 @@ pub struct AppState {
     pub review_run: Mutex<Vec<String>>,
     /// The once-a-second `recording:state` task is running.
     pub ticker_running: AtomicBool,
+    /// A test recording (B5) is running.
+    pub capture_test: AtomicBool,
 }
 
 impl AppState {
@@ -102,6 +104,7 @@ impl AppState {
             captions_on_resume: AtomicBool::new(false),
             review_run: Mutex::new(Vec::new()),
             ticker_running: AtomicBool::new(false),
+            capture_test: AtomicBool::new(false),
         }
     }
 
@@ -184,9 +187,12 @@ pub fn run() {
                     corner: settings.overlay_corner,
                     content_protected: settings.content_protection,
                     caption_lines: settings.caption_lines,
+                    caption_size: settings.caption_style.size,
+                    caption_width: settings.caption_style.width,
                     pill_position: settings.pill_position,
                 },
             )?;
+            audio::platform::set_preferred_mic(settings.input_device.clone());
             overlay::spawn_clickthrough_poll(handle.clone());
             let errors = shortcuts::register_all(&handle, &settings.shortcuts);
             *app.state::<AppState>().shortcut_errors.lock().unwrap() = errors;
@@ -259,6 +265,14 @@ pub fn run() {
             commands::upload_discard,
             commands::pause_recording,
             commands::resume_recording,
+            commands::mark_moment,
+            commands::tag_last_mark,
+            commands::undo_mark,
+            commands::marker_tags,
+            commands::input_devices,
+            commands::test_capture,
+            commands::permissions_status,
+            commands::open_privacy_settings,
             commands::cancel_recording,
             commands::set_pill_hidden,
             commands::pill_moved,

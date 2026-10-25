@@ -38,11 +38,129 @@ pub fn caption_lines_or_default(value: Option<u64>) -> u8 {
     value.and_then(|v| u8::try_from(v).ok()).filter(|v| CAPTION_LINES.contains(v)).unwrap_or(DEFAULT_CAPTION_LINES)
 }
 
+/// Caption text size (B4).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CaptionSize {
+    Small,
+    #[default]
+    Medium,
+    Large,
+}
+
+/// Caption overlay width (B4).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CaptionWidth {
+    Narrow,
+    #[default]
+    Normal,
+    Wide,
+}
+
+/// Accepted `autoHideSeconds`: never, or after 5 / 10 / 30 s without new captions.
+pub const CAPTION_AUTO_HIDE: [u16; 4] = [0, 5, 10, 30];
+pub const CAPTION_OPACITY_MIN: u8 = 40;
+pub const CAPTION_OPACITY_MAX: u8 = 100;
+
+/// How the caption overlay looks (B4). Hidden from screen sharing is `contentProtection`; the position is
+/// `overlayCorner` (or a drag); the line count is `captionLines`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CaptionStyle {
+    pub size: CaptionSize,
+    pub width: CaptionWidth,
+    /// Background opacity in percent, 40-100.
+    pub opacity: u8,
+    /// One running line per speaker without the speaker labels.
+    pub compact: bool,
+    /// Hide the overlay after this many seconds without new captions; 0 keeps it shown.
+    pub auto_hide_seconds: u16,
+    /// "#rrggbb", or none for the theme colour.
+    pub me_color: Option<String>,
+    pub client_color: Option<String>,
+}
+
+impl Default for CaptionStyle {
+    fn default() -> Self {
+        Self {
+            size: CaptionSize::Medium,
+            width: CaptionWidth::Normal,
+            opacity: 85,
+            compact: false,
+            auto_hide_seconds: 0,
+            me_color: None,
+            client_color: None,
+        }
+    }
+}
+
+/// `#rrggbb` (any case).
+pub fn is_hex_colour(value: &str) -> bool {
+    value.len() == 7 && value.starts_with('#') && value[1..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
+impl CaptionStyle {
+    /// Why this style cannot be saved, if it cannot.
+    pub fn problem(&self) -> Option<&'static str> {
+        if !(CAPTION_OPACITY_MIN..=CAPTION_OPACITY_MAX).contains(&self.opacity) {
+            return Some("Choose an opacity between 40 and 100 %.");
+        }
+        if !CAPTION_AUTO_HIDE.contains(&self.auto_hide_seconds) {
+            return Some("Choose never, 5, 10 or 30 seconds.");
+        }
+        if [&self.me_color, &self.client_color].iter().any(|c| c.as_deref().is_some_and(|c| !is_hex_colour(c))) {
+            return Some("Choose a colour like #3b82f6.");
+        }
+        None
+    }
+
+    /// The style with each out-of-range value replaced by its default (used when loading a file).
+    pub fn sanitized(mut self) -> Self {
+        let defaults = Self::default();
+        if !(CAPTION_OPACITY_MIN..=CAPTION_OPACITY_MAX).contains(&self.opacity) {
+            self.opacity = defaults.opacity;
+        }
+        if !CAPTION_AUTO_HIDE.contains(&self.auto_hide_seconds) {
+            self.auto_hide_seconds = 0;
+        }
+        self.me_color = self.me_color.filter(|c| is_hex_colour(c));
+        self.client_color = self.client_color.filter(|c| is_hex_colour(c));
+        self
+    }
+}
+
+/// Decodes `captionStyle` key by key, like the settings themselves: one bad value costs that value only.
+fn tolerant_caption_style(value: Value) -> Value {
+    let Value::Object(file) = value else { return serde_json::to_value(CaptionStyle::default()).unwrap_or(Value::Null) };
+    let Ok(Value::Object(mut merged)) = serde_json::to_value(CaptionStyle::default()) else { return Value::Null };
+    for (key, value) in file {
+        let previous = merged.insert(key.clone(), value);
+        if serde_json::from_value::<CaptionStyle>(Value::Object(merged.clone())).is_err() {
+            match previous {
+                Some(previous) => merged.insert(key, previous),
+                None => merged.remove(&key),
+            };
+        }
+    }
+    let style = serde_json::from_value::<CaptionStyle>(Value::Object(merged)).unwrap_or_default().sanitized();
+    serde_json::to_value(style).unwrap_or(Value::Null)
+}
+
 /// Keeps the shortcut entries this version knows (action name and a text accelerator).
 fn known_shortcuts(value: Value) -> Value {
     let Value::Object(map) = value else { return value };
     map.into_iter()
         .filter(|(action, accelerator)| accelerator.is_string() && serde_json::from_value::<Action>(Value::String(action.clone())).is_ok())
+        .collect::<serde_json::Map<_, _>>()
+        .into()
+}
+
+/// Keeps the auto-record switches of call apps this version knows, with a boolean value.
+fn known_app_switches(value: Value) -> Value {
+    let Value::Object(map) = value else { return Value::Object(serde_json::Map::new()) };
+    map.into_iter()
+        .filter(|(app, on)| on.is_boolean() && crate::detect::classify::SourceApp::from_wire(app).is_some())
         .collect::<serde_json::Map<_, _>>()
         .into()
 }
@@ -66,6 +184,8 @@ pub struct Settings {
     pub captions_on_record: bool,
     /// Detect WhatsApp / Zoom / Meet mic use and record automatically.
     pub auto_mode: bool,
+    /// Per call app (`source_app` wire value): `false` keeps auto mode from recording it. Missing apps are on.
+    pub auto_record_apps: HashMap<String, bool>,
     /// Hide overlays from screen sharing / recording (WDA_EXCLUDEFROMCAPTURE / NSWindowSharingNone).
     pub content_protection: bool,
     pub overlay_corner: Corner,
@@ -90,6 +210,13 @@ pub struct Settings {
     pub pill_position: Option<PillPosition>,
     /// macOS only: read browser tab addresses through Apple Events to identify call sites; ignored on Windows.
     pub browser_automation: bool,
+    /// Size, width, opacity, compact mode, auto-hide and speaker colours of the caption overlay.
+    pub caption_style: CaptionStyle,
+    /// Microphone to record (Windows endpoint id / macOS device UID); none follows the system default. A device
+    /// that is not connected falls back to the default.
+    pub input_device: Option<String>,
+    /// Warn when a call recording has not heard the other side for 30 seconds.
+    pub far_side_warning: bool,
 }
 
 impl Default for Settings {
@@ -102,6 +229,7 @@ impl Default for Settings {
             shortcuts: default_map(),
             captions_on_record: true,
             auto_mode: true, // recording calls is the core feature; the recording indicator and tray state stay visible
+            auto_record_apps: HashMap::new(),
             content_protection: true,
             overlay_corner: Corner::BottomRight,
             autostart: false,
@@ -115,6 +243,9 @@ impl Default for Settings {
             caption_lines: DEFAULT_CAPTION_LINES,
             pill_position: None,
             browser_automation: false,
+            caption_style: CaptionStyle::default(),
+            input_device: None,
+            far_side_warning: true,
         }
     }
 }
@@ -137,6 +268,8 @@ impl Settings {
             let value = match key.as_str() {
                 "shortcuts" => known_shortcuts(value),
                 "siteRules" => parsable_site_rules(value),
+                "autoRecordApps" => known_app_switches(value),
+                "captionStyle" => tolerant_caption_style(value),
                 "captionLines" => Value::from(caption_lines_or_default(value.as_u64())),
                 _ => value,
             };

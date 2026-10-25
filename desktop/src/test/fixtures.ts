@@ -65,6 +65,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
       toggle_saving: "CommandOrControl+Shift+R",
       copy_last2_min: "CommandOrControl+Shift+C",
       dictation: "CommandOrControl+Shift+D",
+      mark: "CommandOrControl+Shift+B",
     },
     captionsOnRecord: true,
     autoMode: true,
@@ -81,6 +82,10 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     captionLines: 3,
     pillPosition: null,
     browserAutomation: false,
+    autoRecordApps: {},
+    captionStyle: { size: "medium", width: "normal", opacity: 85, compact: false, autoHideSeconds: 0, meColor: null, clientColor: null },
+    inputDevice: null,
+    farSideWarning: true,
     ...overrides,
   };
 }

@@ -1,6 +1,7 @@
 //! Windows capture via the `wasapi` crate (docs/research/desktop-audio-native.md §2).
 //! System audio: process loopback EXCLUDING our own process tree (build ≥ 20348), else endpoint loopback of the
-//! default render device. Mic: default communications capture device. Both request 16 kHz mono f32 with
+//! default render device. Mic: the chosen microphone (`inputDevice`) while connected, else the default
+//! communications capture device. Both request 16 kHz mono f32 with
 //! AUTOCONVERTPCM, event-driven shared mode, and timestamps from GetBuffer's QPC position (100 ns units).
 
 use std::collections::{HashMap, VecDeque};
@@ -98,6 +99,7 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
     let format = WaveFormat::new(32, 32, &SampleType::Float, TARGET_RATE as usize, 1, None);
     let mode = StreamMode::EventsShared { autoconvert: true, buffer_duration_hns: 0 };
     let enumerator = DeviceEnumerator::new().map_err(|e| e.to_string())?;
+    let mut follow_default = true;
 
     let (mut client, device_id): (AudioClient, Option<String>) = match channel {
         Channel::System if process_loopback => {
@@ -110,9 +112,18 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
             (device.get_iaudioclient().map_err(|e| e.to_string())?, id)
         }
         Channel::Mic => {
-            let device = enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications).map_err(|e| e.to_string())?;
-            let id = device.get_id().ok();
-            (device.get_iaudioclient().map_err(|e| e.to_string())?, id)
+            // The chosen microphone while it is connected (then device changes are not followed), else the
+            // default communications device.
+            let chosen = super::choose_mic(&input_devices_with(&enumerator), super::preferred_mic().as_deref());
+            if let Some(device) = chosen.and_then(|id| enumerator.get_device(&id).ok()) {
+                follow_default = false;
+                let id = device.get_id().ok();
+                (device.get_iaudioclient().map_err(|e| e.to_string())?, id)
+            } else {
+                let device = enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications).map_err(|e| e.to_string())?;
+                let id = device.get_id().ok();
+                (device.get_iaudioclient().map_err(|e| e.to_string())?, id)
+            }
         }
     };
 
@@ -126,7 +137,7 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
     let result = (|| -> Result<(), String> {
         while !stop.load(Ordering::SeqCst) {
             // Follow default-device changes (headset unplug / Bluetooth switch) for endpoint streams.
-            if let Some(id) = &device_id
+            if let Some(id) = device_id.as_ref().filter(|_| follow_default)
                 && last_default_check.elapsed() > Duration::from_secs(1)
             {
                 last_default_check = std::time::Instant::now();
@@ -161,6 +172,27 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
     })();
     let _ = client.stop_stream();
     result
+}
+
+/// The active capture endpoints with their friendly names; the default communications device is marked.
+fn input_devices_with(enumerator: &DeviceEnumerator) -> Vec<super::InputDevice> {
+    let default = enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications).ok().and_then(|d| d.get_id().ok());
+    let Ok(collection) = enumerator.get_device_collection(&Direction::Capture) else { return Vec::new() };
+    (&collection)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter_map(|device| {
+            let id = device.get_id().ok()?;
+            let name = device.get_friendlyname().unwrap_or_else(|_| "Microphone".into());
+            Some(super::InputDevice { is_default: default.as_deref() == Some(id.as_str()), id, name })
+        })
+        .collect()
+}
+
+/// The connected microphones (`input_devices` command).
+pub fn input_devices() -> Vec<super::InputDevice> {
+    let _ = initialize_mta();
+    DeviceEnumerator::new().map(|e| input_devices_with(&e)).unwrap_or_default()
 }
 
 /// Pids with an Active audio session on any active endpoint of `direction` (EchoLedger and the idle process

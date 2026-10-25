@@ -46,3 +46,9 @@ export const PencilIcon = (p: IconProps) => (
 export const OpenIcon = (p: IconProps) => (
   <Svg {...p}><path d="M14 4h6v6M20 4l-8.5 8.5M18 14v4.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10" /></Svg>
 );
+export const BookmarkIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M7 4.5h10a1 1 0 0 1 1 1V20l-6-4-6 4V5.5a1 1 0 0 1 1-1z" /></Svg>
+);
+export const AlertIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M12 4 3 19.5h18L12 4zM12 10v4.5M12 17.2v.3" /></Svg>
+);

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
-import OverlayApp from "./OverlayApp";
+import OverlayApp, { captionFontPx, captionStyleVars, isIdle } from "./OverlayApp";
 import { callsOf, currentWindow, emitEvent, fail, listen, listenerCount, pushChannelMessage, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeSettings } from "../../test/fixtures";
 
@@ -277,11 +277,12 @@ describe("caption overlay layout", () => {
   it("sizes one caption row from the caption font so N rows show N lines", async () => {
     const { container } = await renderOverlay();
     const rowHeight = getComputedStyle(root(container)).getPropertyValue("--caption-line-height");
-    expect(rowHeight.replace(/\s+/g, "")).toBe("calc(15px*1.38+4px)");
+    expect(rowHeight.replace(/\s+/g, "")).toBe("calc(var(--caption-font)*1.38+4px)");
+    expect(root(container).style.getPropertyValue("--caption-font")).toBe("15px");
     await pushChannelMessage(final(1, "Me", "one row"));
     const line = body().querySelector(".caption-line") as HTMLElement;
     const lineStyle = getComputedStyle(line);
-    expect(lineStyle.fontSize).toBe("15px");
+    expect(lineStyle.fontSize.replace(/\s+/g, "")).toMatch(/^(15px|var\(--caption-font\))$/);
     expect(lineStyle.lineHeight).toBe("1.38");
     expect(lineStyle.marginTop).toBe("0px");
     expect(lineStyle.paddingTop).toBe("2px");
@@ -508,5 +509,77 @@ describe("overlay hit regions", () => {
     await waitFor(() => expect(lastRegions()).toEqual({ regions: [region(toolsRect), region(bodyRect), region(jumpRect)] }));
     fireEvent.click(screen.getByRole("button", { name: "Jump to live" }));
     await waitFor(() => expect(lastRegions()).toEqual({ regions: [region(toolsRect), region(bodyRect)] }));
+  });
+});
+
+describe("caption style (B4)", () => {
+  const style = makeSettings().captionStyle;
+
+  beforeEach(() => {
+    resetTauriMock();
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    respond("subscribe_captions", undefined);
+    respond("overlay_set_hit_regions", undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("maps text sizes to pixels", () => {
+    expect([captionFontPx("small"), captionFontPx("medium"), captionFontPx("large"), captionFontPx(undefined)]).toEqual([13, 15, 19, 15]);
+  });
+
+  it("turns the style into overlay variables, keeping theme colours when none are chosen", () => {
+    expect(captionStyleVars(null)).toEqual({ "--caption-font": "15px", "--caption-bg": "rgba(12, 14, 20, 0.85)" });
+    expect(captionStyleVars({ ...style, size: "large", opacity: 60, meColor: "#22c55e" })).toEqual({
+      "--caption-font": "19px",
+      "--caption-bg": "rgba(12, 14, 20, 0.6)",
+      "--caption-me": "#22c55e",
+    });
+    expect(captionStyleVars({ ...style, opacity: 10 })).toMatchObject({ "--caption-bg": "rgba(12, 14, 20, 0.4)" });
+  });
+
+  it("is idle only with auto-hide on and the quiet time passed", () => {
+    expect(isIdle(0, 0, 999_999)).toBe(false);
+    expect(isIdle(5, 1_000, 5_999)).toBe(false);
+    expect(isIdle(5, 1_000, 6_000)).toBe(true);
+  });
+
+  it("applies the stored style and restyles on settings:changed", async () => {
+    respond("get_settings", makeSettings({ captionStyle: { ...style, compact: true, clientColor: "#f59e0b" } }));
+    const { container } = await renderOverlay();
+    await waitFor(() => expect(root(container)).toHaveClass("compact"));
+    expect(root(container).style.getPropertyValue("--caption-client")).toBe("#f59e0b");
+    await emitEvent("settings:changed", makeSettings({ captionStyle: { ...style, size: "small" } }));
+    expect(root(container)).not.toHaveClass("compact");
+    expect(root(container).style.getPropertyValue("--caption-font")).toBe("13px");
+  });
+
+  it("colours lines by speaker so compact mode can drop the labels", async () => {
+    respond("get_settings", makeSettings());
+    await renderOverlay();
+    await pushChannelMessage(final(2, "Client", "hello"));
+    expect(body().querySelector(".caption-line.ch-2")).toHaveTextContent("hello");
+  });
+
+  it("hides after the quiet time and comes back with the next caption", async () => {
+    respond("get_settings", makeSettings({ captionStyle: { ...style, autoHideSeconds: 5 } }));
+    const { container } = await renderOverlay();
+    await waitFor(() => expect(callsOf("get_settings").length).toBeGreaterThan(0));
+    vi.useFakeTimers();
+    await act(async () => {
+      await pushChannelMessage({ kind: "status", live: true, recording: true, provider: null, message: null });
+    });
+    expect(root(container)).not.toHaveClass("overlay-idle");
+    await act(async () => {
+      vi.advanceTimersByTime(5_100);
+    });
+    expect(root(container)).toHaveClass("overlay-idle");
+    await act(async () => {
+      await pushChannelMessage(final(1, "Me", "back"));
+    });
+    expect(root(container)).not.toHaveClass("overlay-idle");
   });
 });

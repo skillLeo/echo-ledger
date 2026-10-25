@@ -45,6 +45,18 @@ fn customised() -> Settings {
             enabled: true,
         }],
         browser_automation: true,
+        auto_record_apps: HashMap::from([("zoom".to_string(), false)]),
+        caption_style: CaptionStyle {
+            size: CaptionSize::Large,
+            width: CaptionWidth::Wide,
+            opacity: 60,
+            compact: true,
+            auto_hide_seconds: 10,
+            me_color: Some("#22c55e".into()),
+            client_color: None,
+        },
+        input_device: Some("{0.0.1.00000000}.{4b3c5f0e-usb-headset}".into()),
+        far_side_warning: false,
     }
 }
 // ---- Defaults --------------------------------------------------------------------------------------------------
@@ -68,7 +80,7 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert_eq!(s.overlay_corner, Corner::BottomRight);
     assert_eq!(s.dictation_output, "type");
     assert_eq!(s.shortcuts, default_map());
-    assert_eq!(s.shortcuts.len(), 4);
+    assert_eq!(s.shortcuts.len(), 5, "voice note has no default shortcut");
     assert!(!s.ask_unknown_apps, "the unknown-app chip is off by default");
     assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
     assert!(!s.browser_automation, "reading browser tabs is opt-in");
@@ -76,6 +88,12 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert_eq!(s.decision_timeout, DecisionTimeout::Keep);
     assert_eq!(s.caption_lines, 3);
     assert_eq!(s.pill_position, None, "the pill starts at the top centre");
+    assert!(s.auto_record_apps.is_empty(), "every call app records automatically");
+    assert_eq!(s.caption_style, CaptionStyle::default());
+    assert_eq!((s.caption_style.size, s.caption_style.width, s.caption_style.opacity), (CaptionSize::Medium, CaptionWidth::Normal, 85));
+    assert_eq!(s.caption_style.auto_hide_seconds, 0, "captions stay shown");
+    assert_eq!(s.input_device, None, "the system default microphone");
+    assert!(s.far_side_warning, "the silent-other-side warning is on");
 }
 
 #[test]
@@ -99,9 +117,11 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "askBeforeSaving",
             "askUnknownApps",
             "autoMode",
+            "autoRecordApps",
             "autostart",
             "browserAutomation",
             "captionLines",
+            "captionStyle",
             "captionsOnRecord",
             "clientId",
             "consentAcknowledged",
@@ -110,6 +130,8 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "deviceId",
             "deviceName",
             "dictationOutput",
+            "farSideWarning",
+            "inputDevice",
             "overlayCorner",
             "pillPosition",
             "pins",
@@ -118,7 +140,12 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "siteRules"
         ]
     );
-    assert_eq!(keys.len(), 20, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 24, "section 4.7 of the IPC contract");
+    assert_eq!(v["autoRecordApps"], json!({"zoom": false}));
+    assert_eq!(
+        v["captionStyle"],
+        json!({"size": "large", "width": "wide", "opacity": 60, "compact": true, "autoHideSeconds": 10, "meColor": "#22c55e", "clientColor": null})
+    );
     assert_eq!(v["askBeforeSaving"], "auto_only");
     assert_eq!(v["decisionTimeout"], "wait");
     assert_eq!(v["captionLines"], 5);
@@ -431,4 +458,54 @@ fn settings_survive_many_save_load_cycles() {
     }
     assert_eq!(s.device_name.as_deref(), Some("device 49"));
     assert_eq!(s.pins.len(), 2);
+}
+
+#[test]
+fn auto_record_switches_keep_known_apps_with_a_boolean() {
+    let s = Settings::from_value(json!({
+        "autoRecordApps": {"zoom": false, "whatsapp": true, "skype": false, "google_meet": "no"},
+        "autoMode": false
+    }));
+    assert_eq!(s.auto_record_apps, HashMap::from([("zoom".to_string(), false), ("whatsapp".to_string(), true)]));
+    assert!(!s.auto_mode, "the rest of the file is kept");
+    assert!(Settings::from_value(json!({"autoRecordApps": ["zoom"]})).auto_record_apps.is_empty());
+}
+
+#[test]
+fn a_bad_caption_style_value_costs_that_value_only() {
+    let s = Settings::from_value(json!({
+        "captionStyle": {"size": "huge", "width": "wide", "opacity": 7, "compact": true, "autoHideSeconds": 12,
+            "meColor": "green", "clientColor": "#F59E0B"},
+        "farSideWarning": false
+    }));
+    let style = s.caption_style;
+    assert_eq!(style.size, CaptionSize::Medium, "unknown size → default");
+    assert_eq!(style.width, CaptionWidth::Wide);
+    assert_eq!(style.opacity, 85, "out of range → default");
+    assert!(style.compact);
+    assert_eq!(style.auto_hide_seconds, 0, "not one of 0 / 5 / 10 / 30 → never");
+    assert_eq!(style.me_color, None, "not #rrggbb → theme colour");
+    assert_eq!(style.client_color.as_deref(), Some("#F59E0B"));
+    assert!(!s.far_side_warning);
+    assert_eq!(Settings::from_value(json!({"captionStyle": "big"})).caption_style, CaptionStyle::default());
+}
+
+#[test]
+fn caption_style_problems_name_the_value_to_fix() {
+    let ok = CaptionStyle::default();
+    assert_eq!(ok.problem(), None);
+    assert!(CaptionStyle { opacity: 39, ..ok.clone() }.problem().unwrap().contains("opacity"));
+    assert!(CaptionStyle { opacity: 101, ..ok.clone() }.problem().is_some());
+    assert!(CaptionStyle { auto_hide_seconds: 7, ..ok.clone() }.problem().unwrap().contains("seconds"));
+    assert!(CaptionStyle { client_color: Some("#12345".into()), ..ok.clone() }.problem().unwrap().contains("colour"));
+    assert_eq!(CaptionStyle { opacity: 40, auto_hide_seconds: 30, me_color: Some("#ABCDEF".into()), ..ok }.problem(), None);
+    assert!(is_hex_colour("#00ff7A") && !is_hex_colour("00ff7A") && !is_hex_colour("#00ff7G"));
+}
+
+#[test]
+fn the_microphone_choice_is_kept_or_cleared() {
+    let s = Settings::from_value(json!({"inputDevice": "usb-mic"}));
+    assert_eq!(s.input_device.as_deref(), Some("usb-mic"));
+    assert_eq!(Settings::from_value(json!({"inputDevice": null})).input_device, None);
+    assert_eq!(Settings::from_value(json!({"inputDevice": 3})).input_device, None);
 }

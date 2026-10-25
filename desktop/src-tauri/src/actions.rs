@@ -29,6 +29,7 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
         (Action::ToggleSaving, true) => toggle_recording(&app).await,
         (Action::CopyLast2Min, true) => copy_last_minutes(&app, 2).map(|_| ()),
         (Action::VoiceNote, true) => toggle_voice_note(&app).await,
+        (Action::Mark, true) => mark_moment(&app, None, None).map(|_| ()),
         (Action::Dictation, true) => {
             if crate::dictation::is_active(&app) {
                 app.state::<crate::AppState>().dictation_stop_requested.store(true, Ordering::SeqCst);
@@ -51,6 +52,26 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
         eprintln!("[echoledger] {action:?}: {e}");
         let _ = app.emit("app:error", e.to_string());
     }
+}
+
+/// `recording:marked`: a bookmark was added to the current recording (the pill shows the tag presets and Undo).
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarkPayload {
+    pub at_ms: u64,
+    pub tag: Option<String>,
+    pub note: Option<String>,
+    /// Bookmarks in this recording so far.
+    pub count: usize,
+}
+
+/// Bookmarks the current recording at the recorded time now (B3), from the shortcut or the pill.
+pub fn mark_moment(app: &AppHandle, tag: Option<&str>, note: Option<&str>) -> AppResult<MarkPayload> {
+    let state = app.state::<crate::AppState>();
+    let marker = state.capture.mark(tag, note)?;
+    let payload = MarkPayload { at_ms: marker.at_ms, tag: marker.tag, note: marker.note, count: state.capture.markers().len() };
+    let _ = app.emit("recording:marked", &payload);
+    Ok(payload)
 }
 
 pub fn emit_status(app: &AppHandle) {

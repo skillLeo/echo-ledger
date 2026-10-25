@@ -2,7 +2,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type ShortcutAction = "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note";
+export type ShortcutAction = "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 export type AskBeforeSaving = "always" | "auto_only" | "never";
 export type DecisionTimeout = "keep" | "discard" | "wait";
@@ -10,7 +10,10 @@ export type TrayState = "idle" | "recording" | "paused" | "uploading" | "attenti
 export type BudgetState = "ok" | "warn" | "reached";
 export type AskAnswer = "record" | "ignore" | "always_ignore";
 export type MicDecision = "auto_record" | "recording" | "ignored" | "ask" | "off";
-export type IgnoreReason = "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off";
+export type IgnoreReason = "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off" | "app_off";
+export type CaptionSize = "small" | "medium" | "large";
+export type CaptionWidth = "narrow" | "normal" | "wide";
+export type PermissionState = "allowed" | "denied" | "unknown";
 export type UploadState = "queued" | "uploading" | "verifying" | "failed";
 
 export interface RecordingInfo {
@@ -66,12 +69,28 @@ export interface Settings {
   captionLines: number;
   pillPosition: PillPosition | null;
   browserAutomation: boolean;
+  autoRecordApps: Record<string, boolean>;
+  captionStyle: CaptionStyle;
+  inputDevice: string | null;
+  farSideWarning: boolean;
+}
+
+/** How the caption overlay looks. utoHideSeconds is 0 (never), 5, 10 or 30; colours are #rrggbb or null (theme). */
+export interface CaptionStyle {
+  size: CaptionSize;
+  width: CaptionWidth;
+  opacity: number;
+  compact: boolean;
+  autoHideSeconds: number;
+  meColor: string | null;
+  clientColor: string | null;
 }
 
 /**
  * The settings `update_settings` accepts (Rust `SettingsPatch`); a missing key keeps the stored value.
  * `clientId: null` clears the client, `siteRules` replaces every user rule, `captionLines` is 2, 3 or 5.
- * `pillPosition` is saved only by `pillMoved`.
+ * `pillPosition` is saved only by `pillMoved`. `autoRecordApps` merges per app; `captionStyle` replaces the style;
+ * `inputDevice: null` follows the system default microphone.
  */
 export interface SettingsPatch {
   captionsOnRecord?: boolean;
@@ -88,6 +107,47 @@ export interface SettingsPatch {
   siteRules?: SiteRule[];
   captionLines?: number;
   browserAutomation?: boolean;
+  autoRecordApps?: Record<string, boolean>;
+  captionStyle?: CaptionStyle;
+  inputDevice?: string | null;
+  farSideWarning?: boolean;
+}
+
+/** A bookmark just made on the current recording (`recording:marked`); `count` is how many it has now. */
+export interface MarkPayload {
+  atMs: number;
+  tag: string | null;
+  note: string | null;
+  count: number;
+}
+
+/** A microphone for the device picker; `id` is what `inputDevice` stores. */
+export interface InputDevice {
+  id: string;
+  name: string;
+  isDefault: boolean;
+}
+
+/** The 10-second test recording: loudest 100 ms per side (0-1), whether each side was heard, and a WAV to play. */
+export interface TestResult {
+  seconds: number;
+  micPeak: number;
+  systemPeak: number;
+  micHeard: boolean;
+  systemHeard: boolean;
+  wavBase64: string;
+}
+
+export interface PermissionsStatus {
+  microphone: PermissionState;
+  browserAutomation: boolean;
+  platform: "windows" | "macos" | "other";
+}
+
+/** `capture:far_side`: the other side has been silent for `seconds` (`silent`) or is heard again. */
+export interface FarSidePayload {
+  silent: boolean;
+  seconds: number;
 }
 
 /**
@@ -120,6 +180,9 @@ export interface LibraryItem {
   started_at?: string;
   duration_ms?: number | null;
   status?: string;
+  /** Bookmarks on the recording and the distinct tags among them (since v1.1). */
+  marker_count?: number;
+  tags?: string[];
   transcript?: {
     final_status: string | null;
     final_transcript_id: string | null;
@@ -261,6 +324,9 @@ export interface EventPayloads {
   "ask:hide": null;
   "uploads:changed": UploadItem[];
   "main:navigate": NavigatePayload;
+  "recording:marked": MarkPayload;
+  "capture:far_side": FarSidePayload;
+  "capture:test_level": [number, number];
 }
 
 export type AppEvent = keyof EventPayloads;
@@ -307,6 +373,14 @@ export const api = {
   uploadRetry: (id: string) => invoke<void>("upload_retry", { id }),
   uploadDiscard: (id: string) => invoke<void>("upload_discard", { id }),
   askAnswer: (id: string, answer: AskAnswer) => invoke<void>("ask_answer", { id, answer }),
+  markMoment: (tag: string | null = null, note: string | null = null) => invoke<MarkPayload>("mark_moment", { tag, note }),
+  tagLastMark: (tag: string | null, note: string | null = null) => invoke<void>("tag_last_mark", { tag, note }),
+  undoMark: () => invoke<void>("undo_mark"),
+  markerTags: () => invoke<string[]>("marker_tags"),
+  inputDevices: () => invoke<InputDevice[]>("input_devices"),
+  testCapture: (seconds?: number) => invoke<TestResult>("test_capture", { seconds: seconds ?? null }),
+  permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
+  openPrivacySettings: (kind: "microphone" | "system_audio" | "automation") => invoke<void>("open_privacy_settings", { kind }),
 };
 
 /**

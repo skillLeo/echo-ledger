@@ -273,6 +273,8 @@ async fn an_open_session_is_a_session_request_without_artifacts() {
 
 fn finish_request(client_id: Option<Option<String>>) -> FinishSessionRequest {
     FinishSessionRequest {
+        markers: vec![],
+        pauses: vec![],
         ended_at: "2026-10-24T09:42:10Z".into(),
         duration_ms: 2_530_000,
         title: Some("Budget review".into()),
@@ -485,6 +487,8 @@ async fn create_session_posts_the_request_as_json() {
         Reply::json(201, fixture("session_created.json")),
     ));
     let request = CreateSessionRequest {
+        markers: vec![],
+        pauses: vec![],
         client_ref: "ref-1".into(),
         source_app: "zoom".into(),
         client_id: None,

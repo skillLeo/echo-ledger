@@ -7,7 +7,9 @@
 
 pub mod clock;
 pub mod dsp;
+pub mod health;
 pub mod mock;
+pub mod notes;
 pub mod platform;
 pub mod recorder;
 pub mod timeline;
@@ -26,7 +28,9 @@ use serde::Serialize;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::error::{AppError, AppResult};
+use crate::net::models::{MarkerDto, PauseDto};
 use clock::RecordingClock;
+use notes::RecordingNotes;
 use platform::{CaptureBackend, Streams};
 use recorder::{Recorder, RecordingOutput};
 use types::{AudioChunk, BackendKind, Channel};
@@ -58,6 +62,9 @@ pub struct FinishedRecording {
     pub info: RecordingInfo,
     pub ended_at: DateTime<Utc>,
     pub output: RecordingOutput,
+    /// Bookmarks in time order and the pause gaps (recorded time).
+    pub markers: Vec<MarkerDto>,
+    pub pauses: Vec<PauseDto>,
 }
 
 type LiveSinks = [Option<UnboundedSender<Vec<u8>>>; 2];
@@ -72,6 +79,8 @@ pub struct RecorderLink {
     pub levels: Arc<Mutex<[f32; 2]>>,
     /// Bumped by every resume: packets that arrive after a pause marker are dropped until it changes.
     pub resume_epoch: Arc<AtomicU64>,
+    /// When system audio (the other side) was last above [`health::HEARD_LEVEL`].
+    pub system_heard: Arc<Mutex<Option<Instant>>>,
 }
 
 /// Sent through the keep-alive sender once a paused backend has stopped: every packet captured before the pause
@@ -110,8 +119,13 @@ pub fn recorder_loop(mut recorder: Recorder, rx: Receiver<AudioChunk>, link: &Re
             recorder.set_live_sink(Channel::System, sinks[1].clone());
             seen_version = version;
         }
+        let system = chunk.channel == Channel::System;
         recorder.push(chunk)?;
-        *link.levels.lock().unwrap_or_else(|p| p.into_inner()) = recorder.levels();
+        let levels = recorder.levels();
+        *link.levels.lock().unwrap_or_else(|p| p.into_inner()) = levels;
+        if system && levels[Channel::System.index()] >= health::HEARD_LEVEL {
+            *link.system_heard.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
+        }
     }
     recorder.finish()
 }
@@ -126,6 +140,9 @@ struct Active {
     thread: JoinHandle<Result<RecordingOutput, String>>,
     link: RecorderLink,
     clock: RecordingClock,
+    notes: RecordingNotes,
+    /// Start of the current running stretch (start or last resume), for the far-side silence check.
+    running_since: Instant,
 }
 
 #[derive(Default)]
@@ -172,6 +189,16 @@ impl CaptureController {
             .unwrap_or([0.0, 0.0])
     }
 
+    /// How long a running call recording has not heard the other side (since the last loud system packet, the
+    /// start or the last resume); `None` when no call records or it is paused.
+    pub fn far_side_silent_ms(&self) -> Option<u64> {
+        let guard = self.lock();
+        let active = guard.as_ref().filter(|a| a.info.mode == RecordingMode::Call && a.backend.is_some())?;
+        let heard = *active.link.system_heard.lock().unwrap_or_else(|p| p.into_inner());
+        let since = heard.map_or(active.running_since, |h| h.max(active.running_since));
+        Some(Instant::now().saturating_duration_since(since).as_millis() as u64)
+    }
+
     /// Forgets the client of the current recording when it is `client_id` (deleted on the server, A6.DR7).
     pub fn clear_client(&self, client_id: &str) {
         if let Some(active) = self.lock().as_mut()
@@ -208,7 +235,7 @@ impl CaptureController {
         };
         let thread = spawn_recorder(dir, mono, rx, link.clone());
 
-        *guard = Some(Active { info: info.clone(), streams, backend: Some(backend), keepalive: tx, thread, link, clock: RecordingClock::new(Instant::now()) });
+        *guard = Some(Active { info: info.clone(), streams, backend: Some(backend), keepalive: tx, thread, link, clock: RecordingClock::new(Instant::now()), notes: RecordingNotes::default(), running_since: Instant::now() });
         Ok(info)
     }
 
@@ -221,7 +248,9 @@ impl CaptureController {
         backend.stop(); // joins the capture threads: every captured packet is in the channel now
         drop(backend);
         let _ = active.keepalive.send(pause_marker());
-        active.clock.pause(Instant::now());
+        let now = Instant::now();
+        active.notes.paused(active.clock.elapsed_ms(now));
+        active.clock.pause(now);
         *active.link.levels.lock().unwrap_or_else(|p| p.into_inner()) = [0.0, 0.0];
         Ok(())
     }
@@ -238,7 +267,11 @@ impl CaptureController {
         match platform::start(active.streams, active.keepalive.clone()) {
             Ok(backend) => {
                 active.backend = Some(backend);
-                active.clock.resume(Instant::now());
+                let now = Instant::now();
+                let paused_ms = active.clock.paused_at.map_or(0, |at| now.saturating_duration_since(at).as_millis() as u64);
+                active.notes.resumed(paused_ms);
+                active.clock.resume(now);
+                active.running_since = now;
                 Ok(())
             }
             Err(e) => {
@@ -247,6 +280,29 @@ impl CaptureController {
                 Err(AppError::Audio(e.to_string()))
             }
         }
+    }
+
+    /// Bookmarks the current recording at the recorded time now (B3). Paused recordings take the pause point.
+    pub fn mark(&self, tag: Option<&str>, note: Option<&str>) -> AppResult<MarkerDto> {
+        let mut guard = self.lock();
+        let active = guard.as_mut().ok_or_else(|| AppError::msg("Nothing is recording."))?;
+        let at_ms = active.clock.elapsed_ms(Instant::now());
+        active.notes.mark(at_ms, tag, note).ok_or_else(|| AppError::msg("This recording already has 500 bookmarks."))
+    }
+
+    /// Sets the tag or note of the latest bookmark; false when the recording has none.
+    pub fn tag_last_mark(&self, tag: Option<&str>, note: Option<&str>) -> bool {
+        self.lock().as_mut().is_some_and(|a| a.notes.tag_last(tag, note))
+    }
+
+    /// Removes the latest bookmark of the current recording.
+    pub fn undo_mark(&self) -> Option<MarkerDto> {
+        self.lock().as_mut().and_then(|a| a.notes.undo_mark())
+    }
+
+    /// Bookmarks of the current recording so far, in the order they were made.
+    pub fn markers(&self) -> Vec<MarkerDto> {
+        self.lock().as_ref().map(|a| a.notes.markers.clone()).unwrap_or_default()
     }
 
     /// Routes live PCM (16 kHz s16le mono) of `channel` to a caption stream, or detaches it.
@@ -260,13 +316,14 @@ impl CaptureController {
     pub fn stop(&self) -> AppResult<Option<FinishedRecording>> {
         let active = self.lock().take();
         let Some(active) = active else { return Ok(None) };
-        let Active { info, backend, keepalive, thread, .. } = active;
+        let Active { info, backend, keepalive, thread, notes, .. } = active;
         if let Some(mut backend) = backend {
             backend.stop(); // drops the backend's senders
         }
         drop(keepalive); // the last sender: the recorder thread drains and finishes
         let output = thread.join().map_err(|_| AppError::Audio("recorder thread panicked".into()))?.map_err(AppError::Audio)?;
-        Ok(Some(FinishedRecording { info, ended_at: Utc::now(), output }))
+        let (markers, pauses) = notes.finish();
+        Ok(Some(FinishedRecording { info, ended_at: Utc::now(), output, markers, pauses }))
     }
 }
 

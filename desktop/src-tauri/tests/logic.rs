@@ -339,7 +339,8 @@ fn mic_use_recovers_if_the_app_briefly_drops_during_release() {
 #[test]
 fn default_shortcuts_have_no_collisions() {
     let map = default_map();
-    assert_eq!(map.len(), 4); // VoiceNote has no default
+    assert_eq!(map.len(), 5); // VoiceNote has no default
+    assert_eq!(map.get(&Action::Mark).map(String::as_str), Some("CommandOrControl+Shift+B"));
     assert!(duplicates(&map).is_empty());
     assert!(parse("CommandOrControl+Shift+Space").is_ok());
     assert!(parse("definitely not a shortcut").is_err());

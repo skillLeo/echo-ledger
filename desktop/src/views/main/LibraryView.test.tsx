@@ -779,3 +779,44 @@ describe("LibraryView with a realistic library", () => {
     expect(copied.split("\n")[599]).toBe("[49:55] Client: Sentence number 599.");
   });
 });
+
+describe("bookmarks in the library (B3)", () => {
+  const tagged: LibraryItem[] = [
+    { ...ITEMS[0], marker_count: 2, tags: ["Budget"] },
+    { ...ITEMS[3], marker_count: 1, tags: [] },
+    ITEMS[4],
+  ];
+
+  it("shows the bookmark count and filters by bookmark and by tag", async () => {
+    await renderLibrary(tagged);
+    expect(within(itemButton("Zoom with Acme")).getByText(/2 bookmarks/)).toBeInTheDocument();
+    const filters = screen.getByRole("group", { name: "Filter by bookmark" });
+    fireEvent.click(within(filters).getByRole("button", { name: "Bookmarked" }));
+    expect(titlesInList()).toEqual(["Zoom with Acme", "Voice note from Sam"]);
+    fireEvent.click(within(filters).getByRole("button", { name: "Budget" }));
+    expect(titlesInList()).toEqual(["Zoom with Acme"]);
+    expect(within(filters).getByRole("button", { name: "Budget" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(filters).getByRole("button", { name: "Any" }));
+    expect(titlesInList()).toHaveLength(3);
+  });
+
+  it("has no bookmark filter while nothing is bookmarked", async () => {
+    await renderLibrary();
+    expect(screen.queryByRole("group", { name: "Filter by bookmark" })).not.toBeInTheDocument();
+  });
+
+  it("lists the recording's bookmarks and seeks the player to one", async () => {
+    await renderLibrary(tagged);
+    respondWith("session_detail", ({ id }) => ({
+      id,
+      playback_url: "https://audio.example.test/rec.wav",
+      markers: [{ id: "m1", at_ms: 65_000, tag: "Budget", note: "max 5k", source: "device" }],
+    }));
+    await selectItem("Zoom with Acme");
+    const bookmarks = await screen.findByRole("list", { name: "Bookmarks" });
+    const chip = within(bookmarks).getByRole("button", { name: /1:05\s*Budget$/ });
+    expect(chip).toHaveAttribute("title", "max 5k");
+    fireEvent.click(chip);
+    expect(play).toHaveBeenCalled();
+  });
+});

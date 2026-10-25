@@ -3,6 +3,8 @@ import { api, listenTo, type AppStatus, type AskBeforeSaving, type Corner, type 
 import { acceleratorFromEvent, prettyShortcut, sourceAppLabel } from "../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
 import { SourceAppIcon } from "../../components/Icons";
+import { SelectRow, Toggle } from "./SettingsControls";
+import { AutoRecordApps, CaptionStyleCard, MicrophoneCard } from "./CaptureSettings";
 
 const ACTIONS: [ShortcutAction, string][] = [
   ["toggle_captions", "Show / hide live captions"],
@@ -10,36 +12,8 @@ const ACTIONS: [ShortcutAction, string][] = [
   ["copy_last2_min", "Copy the last 2 minutes of captions"],
   ["dictation", "Dictation box (press, speak, press again)"],
   ["voice_note", "Capture voice note playing now"],
+  ["mark", "Bookmark this moment of a recording"],
 ];
-
-function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
-  const hintId = useId();
-  return (
-    <div className="toggle">
-      <div><div>{label}</div>{hint && <div id={hintId} className="small muted">{hint}</div>}</div>
-      <button type="button" className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label={label} aria-describedby={hint ? hintId : undefined} onClick={() => onChange(!on)} />
-    </div>
-  );
-}
-
-/** A labelled select row in a settings card. */
-function SelectRow<T extends string>({ label, value, options, onChange, width = 220 }: {
-  label: string;
-  value: T;
-  options: readonly (readonly [T, string])[];
-  onChange: (value: T) => void;
-  width?: number;
-}) {
-  const id = useId();
-  return (
-    <div className="toggle">
-      <label htmlFor={id}>{label}</label>
-      <select id={id} className="input" style={{ width }} value={value} onChange={(e) => onChange(e.target.value as T)}>
-        {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
-      </select>
-    </div>
-  );
-}
 
 const ASK_BEFORE_SAVING: readonly (readonly [AskBeforeSaving, string])[] = [["always", "Always"], ["auto_only", "Only automatic calls"], ["never", "Never"]];
 const DECISION_TIMEOUT: readonly (readonly [DecisionTimeout, string])[] = [["keep", "Keep the recording"], ["discard", "Discard it"], ["wait", "Keep waiting"]];
@@ -197,7 +171,10 @@ export function SettingsView({ status, run, onUnpaired }: {
           </select>
         </div>
       </div>
+      <AutoRecordApps settings={settings} patch={patch} />
       <CallSites rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules: siteRules })} />
+      <CaptionStyleCard settings={settings} patch={patch} />
+      <MicrophoneCard settings={settings} patch={patch} disabled={!!status.recording || status.dictationActive} />
       <div className="card">
         <div className="row"><b>Global shortcuts</b><span className="spacer" /><button className="btn ghost small" onClick={async () => { const s = await run(api.resetShortcuts, "Shortcuts reset"); if (s) setSettings(s); }}>Reset defaults</button></div>
         {ACTIONS.map(([action, label]) => (

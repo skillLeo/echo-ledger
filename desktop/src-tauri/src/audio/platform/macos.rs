@@ -1,5 +1,5 @@
-//! macOS 14.4+ capture: a Core Audio process tap (all processes except EchoLedger) combined with the default
-//! input device in one private aggregate device, read by a single IOProc so mic and system audio share one
+//! macOS 14.4+ capture: a Core Audio process tap (all processes except EchoLedger) combined with the chosen
+//! microphone (`inputDevice`, else the default input device) in one private aggregate device, read by a single IOProc so mic and system audio share one
 //! clock (docs/research/desktop-audio-native.md §3).
 //!
 //! NOT VERIFIED ON HARDWARE (this repo is built on Windows): the input-buffer → channel mapping below assumes the
@@ -73,7 +73,46 @@ unsafe fn get_f64(object: AudioObjectID, selector: AudioObjectPropertySelector) 
 }
 
 unsafe fn device_uid(device: AudioObjectID) -> Option<String> {
-    let addr = address(kAudioDevicePropertyDeviceUID, kAudioObjectPropertyScopeGlobal);
+    unsafe { string_property(device, kAudioDevicePropertyDeviceUID) }
+}
+
+unsafe fn device_name(device: AudioObjectID) -> Option<String> {
+    unsafe { string_property(device, kAudioObjectPropertyName) }
+}
+
+/// The connected devices with input streams (`input_devices` command); the default input device is marked.
+pub fn input_devices() -> Vec<super::InputDevice> {
+    unsafe { input_devices_inner() }
+}
+
+unsafe fn input_devices_inner() -> Vec<super::InputDevice> {
+    let system_object = kAudioObjectSystemObject as AudioObjectID;
+    let default = unsafe { get_u32(system_object, kAudioHardwarePropertyDefaultInputDevice, kAudioObjectPropertyScopeGlobal, None) };
+    let addr = address(kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal);
+    let mut size: u32 = 0;
+    if unsafe { AudioObjectGetPropertyDataSize(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size)) } != 0 || size == 0 {
+        return Vec::new();
+    }
+    let mut ids: Vec<AudioObjectID> = vec![0; size as usize / std::mem::size_of::<AudioObjectID>()];
+    let status = unsafe {
+        AudioObjectGetPropertyData(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size), NonNull::new_unchecked(ids.as_mut_ptr().cast()))
+    };
+    if status != 0 {
+        return Vec::new();
+    }
+    ids.into_iter()
+        .filter(|&device| unsafe { input_stream_channels(device) }.iter().sum::<u32>() > 0)
+        .filter_map(|device| {
+            let id = unsafe { device_uid(device) }?;
+            let name = unsafe { device_name(device) }.unwrap_or_else(|| "Microphone".into());
+            Some(super::InputDevice { id, name, is_default: Some(device) == default })
+        })
+        .collect()
+}
+
+/// A CFString property of an audio object (the getter follows the Create rule).
+unsafe fn string_property(device: AudioObjectID, selector: AudioObjectPropertySelector) -> Option<String> {
+    let addr = address(selector, kAudioObjectPropertyScopeGlobal);
     let mut uid: *const CFString = std::ptr::null();
     let mut size = std::mem::size_of::<*const CFString>() as u32;
     let status = unsafe {
@@ -121,7 +160,9 @@ impl MacBackend {
             .ok_or_else(|| CaptureError::Device("no default output device".into()))?;
         let input = unsafe { get_u32(system_object, kAudioHardwarePropertyDefaultInputDevice, kAudioObjectPropertyScopeGlobal, None) };
         let output_uid = unsafe { device_uid(output) }.ok_or_else(|| CaptureError::Device("output device has no UID".into()))?;
-        let input_uid = if streams.mic { input.and_then(|d| unsafe { device_uid(d) }) } else { None };
+        // The chosen microphone while it is connected, else the default input device.
+        let chosen = if streams.mic { super::choose_mic(&input_devices(), super::preferred_mic().as_deref()) } else { None };
+        let input_uid = if streams.mic { chosen.or_else(|| input.and_then(|d| unsafe { device_uid(d) })) } else { None };
 
         // Exclude our own process object (0 if we have not done audio I/O yet — then nothing is excluded).
         let pid = std::process::id() as i32;

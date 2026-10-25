@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryItem } from "./ipc";
-import { dayGroup, groupItems, itemState, searchItems, sortItems } from "./library";
+import { bookmarksOf, dayGroup, filterByTag, groupItems, itemState, libraryTags, searchItems, sortItems } from "./library";
 
 function item(id: string, extra: Partial<LibraryItem> = {}): LibraryItem {
   return { id, deleted: false, updated_at: "2026-10-24T00:00:00Z", ...extra } as LibraryItem;
@@ -69,5 +69,37 @@ describe("itemState", () => {
     expect(itemState({ status: "processing" })).toBe("processing");
     expect(itemState({ status: "completed", transcript: { final_status: "failed", final_transcript_id: null, live_available: false, preview: null } })).toBe("failed");
     expect(itemState({ status: "failed" })).toBe("failed");
+  });
+});
+
+describe("bookmark tags (B3)", () => {
+  const items = [
+    { id: "a", deleted: false, updated_at: "", title: "Kickoff", marker_count: 3, tags: ["Budget", "Deadline"] },
+    { id: "b", deleted: false, updated_at: "", title: "Standup", marker_count: 1, tags: [] },
+    { id: "c", deleted: false, updated_at: "", title: "Review" },
+    { id: "d", deleted: true, updated_at: "", tags: ["Secret"] },
+  ] as LibraryItem[];
+
+  it("lists the tags in use, sorted, without deleted recordings", () => {
+    expect(libraryTags(items)).toEqual(["Budget", "Deadline"]);
+  });
+
+  it("filters by any bookmark or by one tag", () => {
+    expect(filterByTag(items, null)).toHaveLength(4);
+    expect(filterByTag(items, "*").map((i) => i.id)).toEqual(["a", "b"]);
+    expect(filterByTag(items, "Deadline").map((i) => i.id)).toEqual(["a"]);
+  });
+
+  it("finds recordings by tag in the search box", () => {
+    expect(searchItems(items, "budget").map((i) => i.id)).toEqual(["a"]);
+  });
+
+  it("reads bookmarks from the session detail in time order and skips broken ones", () => {
+    const detail = { markers: [{ id: "m2", at_ms: 9_000, tag: "Budget", note: null }, { id: "m1", at_ms: 1_000 }, { at_ms: "x" }, null] };
+    expect(bookmarksOf(detail)).toEqual([
+      { id: "m1", at_ms: 1_000, tag: null, note: null },
+      { id: "m2", at_ms: 9_000, tag: "Budget", note: null },
+    ]);
+    expect(bookmarksOf({})).toEqual([]);
   });
 });

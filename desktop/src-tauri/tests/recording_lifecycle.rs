@@ -11,7 +11,7 @@ use desktop_lib::audio::recorder::RecordingOutput;
 use desktop_lib::audio::types::{AudioChunk, Channel, TARGET_RATE};
 use desktop_lib::audio::writer::read_mono_i16;
 use desktop_lib::audio::{FinishedRecording, RecordingInfo, RecordingMode};
-use desktop_lib::net::models::SegmentDto;
+use desktop_lib::net::models::{MarkerDto, PauseDto, SegmentDto};
 use desktop_lib::net::uploader::{DiscardQueue, UploadQueue};
 use desktop_lib::pending::{self, Decision, DecisionFiles, DecisionInput, PendingDecision};
 use desktop_lib::settings::{AskBeforeSaving, DecisionTimeout};
@@ -152,6 +152,8 @@ fn finished_recording(root: &Path, name: &str) -> FinishedRecording {
     }
     let started_at = Utc.with_ymd_and_hms(2026, 10, 25, 8, 0, 0).unwrap();
     FinishedRecording {
+        markers: vec![MarkerDto { at_ms: 5_000, tag: Some("Budget".into()), note: None }],
+        pauses: vec![PauseDto { at_ms: 7_000, paused_ms: 3_000 }],
         info: RecordingInfo {
             client_ref: format!("ref-{name}"),
             mode: RecordingMode::Call,
@@ -198,6 +200,18 @@ fn decision(
             created_at,
         },
     )
+}
+
+#[test]
+fn bookmarks_and_pauses_survive_a_restart_and_go_with_the_upload() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    files.add(decision(root.path(), "m", None, Utc::now())).unwrap();
+
+    let upload = DecisionFiles::in_dir(root.path()).load().find("m").unwrap().to_upload();
+
+    assert_eq!(upload.markers, vec![MarkerDto { at_ms: 5_000, tag: Some("Budget".into()), note: None }]);
+    assert_eq!(upload.pauses, vec![PauseDto { at_ms: 7_000, paused_ms: 3_000 }]);
 }
 
 #[test]

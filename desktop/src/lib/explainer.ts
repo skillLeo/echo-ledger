@@ -9,6 +9,7 @@ const IGNORED: Record<IgnoreReason, string> = {
   unknown_app: "Ignored: not a call app",
   never_record: "Ignored: on your never-record list",
   auto_off: "Auto-record is off",
+  app_off: "Ignored: auto-record is off for this app",
 };
 
 /** The decision part of the line: `Decision: auto-record`, `Recording now`, `Ignored: …`, `Will ask you`, … */

@@ -285,8 +285,8 @@ button.segment { width: 100%; border: 0; background: transparent; color: inherit
 /* The card never grows past the window: the header stays put and only the caption body scrolls. One caption row
    (15px text at line-height 1.38 plus 2px padding above and below) is --caption-line-height tall, so a body
    max-height of N rows shows N lines; the view sets N (2, 3 or 5) inline. */
-.overlay-root { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 6px; box-sizing: border-box; --caption-line-height: calc(15px * 1.38 + 4px); }
-.overlay-card { width: 100%; display: flex; flex-direction: column; max-height: 100%; min-height: 0; background: rgba(12, 14, 20, 0.82); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 16px; padding: 10px 12px; box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45); position: relative; overflow: hidden; color: #f1f3f8; }
+.overlay-root { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding: 6px; box-sizing: border-box; --caption-font: 15px; --caption-line-height: calc(var(--caption-font) * 1.38 + 4px); }
+.overlay-card { width: 100%; display: flex; flex-direction: column; max-height: 100%; min-height: 0; background: var(--caption-bg, rgba(12, 14, 20, 0.82)); transition: opacity 0.4s; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 16px; padding: 10px 12px; box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45); position: relative; overflow: hidden; color: #f1f3f8; }
 .overlay-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 2px; background: var(--gradient); opacity: 0.9; }
 .overlay-head { flex: none; display: flex; align-items: center; gap: 8px; font-size: 11px; color: #9ba3b4; margin-bottom: 6px; }
 .overlay-tools { margin-left: auto; display: flex; gap: 6px; }
@@ -303,6 +303,15 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .caption-line .who { font-size: 11px; font-weight: 700; margin-right: 6px; letter-spacing: 0.3px; text-transform: uppercase; }
 .caption-line.partial { opacity: 0.72; }
 .overlay-hidden { display: none; }
+/* Caption style (B4): speaker colours, compact mode (colour instead of labels) and auto-hide. */
+.overlay-root .caption-line { font-size: var(--caption-font); }
+.overlay-root .who.spk-1 { color: var(--caption-me, #a78bfa); }
+.overlay-root .who.spk-2 { color: var(--caption-client, #22d3ee); }
+.overlay-root.compact .who { display: none; }
+.overlay-root.compact .caption-line.ch-1 { color: var(--caption-me, #ddd6fe); }
+.overlay-root.compact .caption-line.ch-2 { color: var(--caption-client, #a5f3fc); }
+.overlay-idle .overlay-card { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .overlay-card { transition: none; } }
 .dictation-card { display: block; min-height: 64px; }
 .listening { display: inline-flex; gap: 3px; align-items: flex-end; height: 12px; }
 .listening span { width: 3px; background: var(--cyan); border-radius: 2px; animation: bar 1s infinite ease-in-out; }

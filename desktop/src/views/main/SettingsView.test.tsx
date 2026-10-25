@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { SettingsView } from "./SettingsView";
 import { errorMessage, type AppStatus, type Settings, type SiteRule } from "../../lib/ipc";
 import { callsOf, emitEvent, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeSettings, makeSiteRule, makeStatus } from "../../test/fixtures";
+import { makeRecording, makeSettings, makeSiteRule, makeStatus } from "../../test/fixtures";
 import commandsRs from "../../../src-tauri/src/commands.rs?raw";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -545,5 +545,32 @@ describe("SettingsView call sites (A1.4)", () => {
     expect([...(screen.getByRole("combobox", { name: "App" }) as HTMLSelectElement).options].map((o) => o.text)).toEqual([
       "Google Meet", "Zoom", "Microsoft Teams", "WhatsApp Web", "Other", "Never record",
     ]);
+  });
+});
+
+describe("capture and control settings (B1, B3, B4, B5)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    respond("get_settings", makeSettings());
+    respond("list_clients", CLIENTS);
+    respond("input_devices", []);
+    respond("permissions_status", { microphone: "allowed", browserAutomation: false, platform: "windows" });
+  });
+
+  it("shows the auto-record apps, caption style and microphone cards", async () => {
+    render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
+    expect(await screen.findByText("Auto-record apps")).toBeInTheDocument();
+    expect(screen.getByText("Caption style")).toBeInTheDocument();
+    expect(screen.getByText("Microphone")).toBeInTheDocument();
+  });
+
+  it("offers a shortcut for bookmarking", async () => {
+    render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
+    expect(await screen.findByText("Bookmark this moment of a recording")).toBeInTheDocument();
+  });
+
+  it("disables the microphone test while recording", async () => {
+    render(<SettingsView status={makeStatus({ recording: makeRecording() })} run={makeRun().run} onUnpaired={vi.fn()} />);
+    expect(await screen.findByRole("button", { name: "Test 10 seconds" })).toBeDisabled();
   });
 });

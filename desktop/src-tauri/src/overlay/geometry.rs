@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::settings::{CaptionSize, CaptionWidth};
+
 /// Interactive region reported by React in physical px relative to the window's client area.
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
 pub struct RectPx {
@@ -105,10 +107,30 @@ pub fn pill_origin(saved: Option<PillPosition>, areas: &[WorkArea], primary: Wor
 /// Caption overlay size (logical px) for the "visible lines" setting: 2 → 118, 3 → 146, 5 → 202 high, 460 wide.
 /// Any other value is treated as 3 (the default).
 pub fn caption_overlay_size(lines: u8) -> (f64, f64) {
-    let height = match lines {
-        2 => 118.0,
-        5 => 202.0,
-        _ => 146.0,
+    caption_overlay_size_for(lines, CaptionSize::Medium, CaptionWidth::Normal)
+}
+
+/// Caption overlay size for lines, text size and width (B4). Width: narrow 380, normal 460, wide 640. The text
+/// part of the height scales with the text size (small 0.85, large 1.25); the 62 px of chrome stays.
+pub fn caption_overlay_size_for(lines: u8, size: CaptionSize, width: CaptionWidth) -> (f64, f64) {
+    let text = match lines {
+        2 => 56.0,
+        5 => 140.0,
+        _ => 84.0,
     };
-    (460.0, height)
+    let scale = match size {
+        CaptionSize::Small => 0.85,
+        CaptionSize::Medium => 1.0,
+        CaptionSize::Large => 1.25,
+    };
+    let wide = match width {
+        CaptionWidth::Narrow => 380.0,
+        CaptionWidth::Normal => 460.0,
+        CaptionWidth::Wide => 640.0,
+    };
+    (wide, (62.0 + text * scale_f(scale)).round())
+}
+
+fn scale_f(scale: f64) -> f64 {
+    scale
 }

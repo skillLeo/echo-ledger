@@ -1,22 +1,26 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { api, errorMessage, listenTo, type RecordingState } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
 import { elapsedAt, formatTimer, isTwoChannel, meterLevel, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { CaptionsIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
-import { MinimizeIcon, PauseIcon, PlayIcon, StopIcon } from "../../components/ControlIcons";
+import { AlertIcon, BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon } from "../../components/ControlIcons";
 import "../controls.css";
 
 /** How long a failed action's message replaces the source label. */
 const ERROR_MS = 4000;
 /** The drag runs in the OS move loop; the position is read this long after it started (contract 4.8). */
 const DRAG_SAVE_MS = 400;
+/** How long the bookmark tray stays after the last bookmark or tag. */
+export const MARK_TRAY_MS = 6000;
 
-type Action = "pause" | "stop" | "cancel" | "captions" | "hide";
+type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark";
 
 /**
- * Loom-style recording controls in the 280 x 44 `pill` window: REC + timer, source, Me/Client levels, Pause/Resume,
- * Stop (the review card follows), Cancel with an inline confirm, Captions on/off and Hide. The window never takes
+ * Loom-style recording controls in the 308 x 84 `pill` window: REC + timer, source, Me/Client levels, Pause/Resume,
+ * Stop (the review card follows), Cancel with an inline confirm, Mark, Captions on/off and Hide. Under the pill, a
+ * bookmark (from here or the shortcut) shows its tag presets and Undo for a few seconds, and a call that has not
+ * heard the other side for 30 s shows a warning. The window never takes
  * focus: every control works on click, and only the pill itself is reported as a hit region.
  */
 export default function PillApp() {
@@ -26,6 +30,10 @@ export default function PillApp() {
   const [now, setNow] = useState(() => Date.now());
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mark, setMark] = useState<MarkPayload | null>(null);
+  const [markAt, setMarkAt] = useState(0);
+  const [tags, setTags] = useState<string[]>([]);
+  const [farSide, setFarSide] = useState<FarSidePayload | null>(null);
   const busy = useRef<Action | null>(null);
   /** Set while Stop, Cancel or Hide runs, so a late once-a-second event cannot bring the pill back. */
   const closing = useRef(false);
@@ -39,7 +47,11 @@ export default function PillApp() {
     const show = state.active && !state.hidden;
     const keep = closing.current;
     setVisible((was) => (show && keep ? was : show));
-    if (!state.active) setConfirming(false);
+    if (!state.active) {
+      setConfirming(false);
+      setMark(null);
+      setFarSide(null);
+    }
   }, []);
 
   const refresh = useCallback(() => api.recordingState().then(apply).catch(() => undefined), [apply]);
@@ -55,6 +67,12 @@ export default function PillApp() {
         heardEvent = true;
         apply(state);
       }),
+      listenTo("recording:marked", (payload) => {
+        setMark(payload);
+        setMarkAt(Date.now());
+        api.markerTags().then(setTags).catch(() => undefined);
+      }),
+      listenTo("capture:far_side", (payload) => setFarSide(payload.silent ? payload : null)),
       listenTo("pill:visibility", (show) => {
         setVisible(show);
         if (show) void refresh();
@@ -94,7 +112,15 @@ export default function PillApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, [confirming]);
 
-  useHitRegions([shown, confirming]);
+  // The bookmark tray closes by itself; tagging keeps it open a little longer.
+  useEffect(() => {
+    if (!mark) return;
+    const timer = window.setTimeout(() => setMark(null), MARK_TRAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [mark, markAt]);
+
+  const tray = mark ? "mark" : farSide && running ? "warn" : null;
+  useHitRegions([shown, confirming, tray]);
 
   /** Runs one command at a time; on failure shows the message and resyncs with the core. */
   const run = async (action: Action, command: () => Promise<unknown>) => {
@@ -143,6 +169,21 @@ export default function PillApp() {
     if (!rec || busy.current) return;
     patch({ captions: !rec.captions });
     void run("captions", api.toggleCaptions);
+  };
+
+  const markNow = () => void run("mark", api.markMoment);
+
+  const tagMark = (tag: string) => {
+    if (!mark) return;
+    const next = mark.tag === tag ? null : tag;
+    setMark({ ...mark, tag: next });
+    setMarkAt(Date.now());
+    api.tagLastMark(next, mark.note).catch((e) => setError(errorMessage(e)));
+  };
+
+  const undoMark = () => {
+    setMark(null);
+    api.undoMark().catch((e) => setError(errorMessage(e)));
   };
 
   const hide = () => {
@@ -212,6 +253,7 @@ export default function PillApp() {
             </PillButton>
             <PillButton label="Stop and review" className="stop" onClick={stop}><StopIcon size={14} /></PillButton>
             <PillButton label="Cancel recording" onClick={() => setConfirming(true)}><TrashIcon size={15} /></PillButton>
+            <PillButton label="Bookmark this moment" onClick={markNow}><BookmarkIcon size={15} /></PillButton>
             <PillButton label={live.captions ? "Turn captions off" : "Turn captions on"} pressed={live.captions} onClick={toggleCaptions}>
               <CaptionsIcon size={15} />
             </PillButton>
@@ -219,6 +261,24 @@ export default function PillApp() {
           </span>
         )}
       </div>
+      {tray === "mark" && mark && (
+        <div className="mark-tray" data-hit data-testid="mark-tray" role="group" aria-label="Bookmark">
+          <span className="mark-done">Bookmarked {formatTimer(mark.atMs)}</span>
+          <span className="mark-tags">
+            {tags.map((tag) => (
+              <button type="button" key={tag} className="mark-tag" aria-pressed={mark.tag === tag} onClick={() => tagMark(tag)}>{tag}</button>
+            ))}
+          </span>
+          <button type="button" className="rec-text-btn" onClick={undoMark}>Undo</button>
+        </div>
+      )}
+      {tray === "warn" && farSide && (
+        <div className="mark-tray warn" data-hit data-testid="far-side-warning" role="alert">
+          <AlertIcon size={14} />
+          <span className="mark-text">Not hearing the other side for {farSide.seconds} s. Check the call's speaker or device.</span>
+          <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setFarSide(null)}><MinimizeIcon size={14} /></button>
+        </div>
+      )}
     </div>
   );
 }

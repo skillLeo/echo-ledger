@@ -18,7 +18,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::error::{AppError, AppResult};
 use classify::SourceApp;
-use decide::{AskTracker, CallTracker, IgnoreReason, TreeAudio, Verdict, decide, identify, is_browser_tree, pick_candidate};
+use decide::{AskTracker, CallTracker, IgnoreReason, TreeAudio, Verdict, apply_app_switches, decide, identify, is_browser_tree, pick_candidate};
 use sites::{NEVER, SiteRule, strip_browser_suffix, url_host};
 use state::MicUseEvent;
 
@@ -46,7 +46,7 @@ pub struct MicUser {
     pub site: Option<String>,
     /// "auto_record" | "recording" | "ignored" | "ask" | "off".
     pub decision: String,
-    /// When ignored: "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off".
+    /// When ignored: "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off" | "app_off".
     pub reason: Option<String>,
 }
 
@@ -140,6 +140,7 @@ pub struct DetectState {
     asks: Mutex<HashMap<String, AskTarget>>,
     call: Mutex<CallTracker>,
     ask: Mutex<AskTracker>,
+    far_side: Mutex<crate::audio::health::FarSideMonitor>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -180,7 +181,10 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
     let detect = &state.detect;
     let recording = state.capture.is_recording();
     let rules = &settings.site_rules;
-    let mut verdicts: Vec<Verdict> = trees.iter().map(|t| decide(t, rules, settings.ask_unknown_apps, settings.auto_mode)).collect();
+    let mut verdicts: Vec<Verdict> = trees
+        .iter()
+        .map(|t| apply_app_switches(decide(t, rules, settings.ask_unknown_apps, settings.auto_mode), &settings.auto_record_apps))
+        .collect();
 
     let (event, recorded, chip) = {
         let mut call = lock(&detect.call);
@@ -200,6 +204,11 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
         let chip = ask.tick(now_ms, trees, &verdicts, recording);
         (event, call.recorded(), chip)
     };
+
+    let silent_ms = state.capture.far_side_silent_ms();
+    if let Some(payload) = lock(&detect.far_side).tick(silent_ms, settings.far_side_warning) {
+        let _ = app.emit("capture:far_side", payload);
+    }
 
     *lock(&detect.users) = trees.iter().zip(&verdicts).map(|(t, v)| explain(t, v, rules, recorded.filter(|_| recording))).collect();
 

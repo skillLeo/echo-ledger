@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, Monitor, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use geometry::{Corner, PillPosition, RectPx, WorkArea, caption_overlay_size, cursor_in_regions, dock, pill_origin};
+use crate::settings::{CaptionSize, CaptionStyle, CaptionWidth};
+use geometry::{Corner, PillPosition, RectPx, WorkArea, caption_overlay_size_for, cursor_in_regions, dock, pill_origin};
 
 pub const OVERLAY: &str = "overlay";
 pub const DICTATION: &str = "dictation";
@@ -22,7 +23,7 @@ pub const REVIEW: &str = "review";
 pub const WINDOWS: [&str; 4] = [OVERLAY, DICTATION, PILL, REVIEW];
 
 const DICTATION_SIZE: (f64, f64) = (420.0, 110.0);
-const PILL_SIZE: (f64, f64) = (280.0, 44.0);
+const PILL_SIZE: (f64, f64) = (308.0, 84.0);
 const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
 const MARGIN_LOGICAL: f64 = 18.0;
 const PILL_MARGIN_LOGICAL: f64 = 12.0;
@@ -37,6 +38,8 @@ pub struct OverlaySetup {
     pub corner: Corner,
     pub content_protected: bool,
     pub caption_lines: u8,
+    pub caption_size: CaptionSize,
+    pub caption_width: CaptionWidth,
     pub pill_position: Option<PillPosition>,
 }
 
@@ -77,7 +80,7 @@ fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64), protecte
 /// hook or an async task — never from a sync command or an event handler).
 pub fn create_overlays<R: Runtime>(app: &AppHandle<R>, setup: OverlaySetup) -> tauri::Result<()> {
     if app.get_webview_window(OVERLAY).is_none() {
-        let window = build(app, OVERLAY, caption_overlay_size(setup.caption_lines), setup.content_protected)?;
+        let window = build(app, OVERLAY, caption_overlay_size_for(setup.caption_lines, setup.caption_size, setup.caption_width), setup.content_protected)?;
         let _ = window.set_ignore_cursor_events(true);
         redock(&window, setup.corner);
     }
@@ -148,10 +151,10 @@ pub fn pill_position<R: Runtime>(window: &WebviewWindow<R>) -> Option<PillPositi
     window.outer_position().ok().map(|p| PillPosition { x: p.x, y: p.y })
 }
 
-/// Resizes the caption overlay for the "visible lines" setting and re-docks it (never `show()`).
-pub fn resize_captions<R: Runtime>(app: &AppHandle<R>, caption_lines: u8, corner: Corner) {
+/// Resizes the caption overlay for the line count, text size and width settings and re-docks it (never `show()`).
+pub fn resize_captions<R: Runtime>(app: &AppHandle<R>, caption_lines: u8, style: &CaptionStyle, corner: Corner) {
     let Some(window) = app.get_webview_window(OVERLAY) else { return };
-    let (w, h) = caption_overlay_size(caption_lines);
+    let (w, h) = caption_overlay_size_for(caption_lines, style.size, style.width);
     // `set_size` and the size read back by `redock` go through the same event-loop queue, in order.
     if window.set_size(LogicalSize::new(w, h)).is_ok() {
         redock(&window, corner);
