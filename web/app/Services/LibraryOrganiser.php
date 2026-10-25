@@ -257,6 +257,7 @@ final class LibraryOrganiser
             if ($count === 0) {
                 throw new ApiError(409, 'nothing_to_export', 'None of these recordings has a finished transcript.');
             }
+            app(AuditLog::class)->record('sessions_exported', $userId, null, "{$count} transcripts exported as {$format}", ['format' => $format, 'count' => $count]);
 
             return ['body' => (string) file_get_contents($path), 'filename' => 'EchoLedger transcripts '.now($this->settings->displayTimezone())->format('Y-m-d').'.zip', 'count' => $count];
         } finally {

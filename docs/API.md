@@ -53,11 +53,13 @@ Every addition below is marked **(since v1.1)**.
 | 404 | `recording_not_found` | Recording unknown or its session was deleted | Drop the upload slot |
 | 404 | `transcript_not_found` | Transcript unknown or its session was deleted | Refresh the library |
 | 404 | `client_not_found` | `client_id` unknown or owned by someone else | Clear the selected client and retry once without it |
+| 404 | `device_not_found` | `DELETE devices/{id}`: the device is unknown or someone else's | Refresh the device list |
 | 405 | `method_not_allowed` | Wrong HTTP method | Permanent |
 | 409 | `upload_complete` | Chunk sent after the recording started assembling | Stop sending chunks; poll `GET /api/recordings/{id}` |
 | 409 | `session_not_recording` | `stt/token`: the session is not in status `recording`, or is 4 hours old or older | Captions are unavailable for this recording; keep recording |
 | 409 | `too_many_open_uploads` | 50 or more unfinished recordings exist for this device | Finish pending uploads, then retry |
 | 409 | `too_many_open_sessions` | 10 or more sessions of this device are still `recording` | Finish or discard them, then retry |
+| 409 | `current_device` | `DELETE devices/{id}` for the device making the request | Unpair from the device's own settings |
 | 409 | `nothing_to_export` | `sessions/export`: none of the chosen recordings has a finished transcript | Permanent for those recordings |
 | 413 | `too_large` | Body or declared size above the limit | Permanent |
 | 422 | `validation_failed` | Field errors in `errors` | Permanent for that request |
@@ -595,6 +597,33 @@ Decrypted audio, `Content-Type` = stored MIME, HTTP Range supported, `Cache-Cont
 `206` with `Content-Range: bytes <start>-<end>/<size>` for a satisfiable range; a range that starts at or past the
 end of the file is `416` with `Content-Range: bytes */<size>` **(since v1.1)**. The server decrypts to a private
 temporary file per request (never the whole recording in memory).
+
+---
+
+## Security centre (since v1.1)
+
+The console's Security page lists signed-in browsers, paired devices and the audit log. Device apps read the same
+devices and the latest 50 audit entries, and can revoke another device of the owner. Audit entries are kept for 365
+days and never contain passwords, keys or secrets; `actor` is `web` (console), `device` or `system`.
+
+Audited events: `login`, `passkey_login`, `login_failed`, `logout`, `web_session_revoked`, `session_deleted`,
+`transcript_exported`, `sessions_exported`, `share_created`, `share_revoked`, `device_paired`, `device_revoked`,
+`device_token_rotated`, `password_changed`, `mfa_enabled`, `mfa_disabled`, `passkey_added`, `passkey_removed`,
+`credentials_changed`.
+
+### `GET /api/security` — `config:read` (since v1.1)
+```json
+{"devices": [{"id": "01JB…", "name": "Pixel 9", "platform": "android", "app_version": "1.1.0",
+              "last_seen_at": "…", "paired_at": "…", "current": true}],
+ "events": [{"id": 812, "event": "session_deleted", "label": "Recording deleted",
+             "summary": "Recording deleted: Acme kickoff", "actor": "device", "device": "Work laptop", "at": "…"}]}
+```
+`device` names the device that did it (`"A removed device"` once it is revoked), `null` for the console and the
+system.
+
+### `DELETE /api/devices/{id}` — `sessions:write` (since v1.1)
+Revokes another paired device of the owner: its tokens stop working at once; its recordings stay. `204`;
+`404 device_not_found`; `409 current_device` for the device making the request (it unpairs itself in its settings).
 
 ---
 

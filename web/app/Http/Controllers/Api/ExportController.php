@@ -9,6 +9,7 @@ use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\Transcript;
+use App\Services\AuditLog;
 use App\Services\TranscriptExporter;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -41,6 +42,7 @@ final class ExportController extends Controller
             'timestamps' => $request->boolean('timestamps', true),
             'speakers' => $request->boolean('speakers', true),
         ]);
+        app(AuditLog::class)->record('transcript_exported', $device->user_id, $transcript->captureSession, "Transcript exported as {$data['format']}", ['format' => $data['format']]);
 
         return response($file['body'], 200, [
             'Content-Type' => $file['mime'],

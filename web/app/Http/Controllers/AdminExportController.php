@@ -8,6 +8,7 @@ use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Api\ExportController;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Services\AuditLog;
 use App\Services\TranscriptExporter;
 use Illuminate\Http\Response;
 
@@ -23,6 +24,7 @@ final class AdminExportController extends Controller
         abort_if(! $model instanceof Transcript || (string) $model->captureSession->user_id !== (string) $user->getKey(), 404);
         abort_if($model->captureSession->trashed() || $model->status !== TranscriptStatus::Completed, 404);
         $file = $exporter->export($model, $format);
+        app(AuditLog::class)->record('transcript_exported', (int) auth()->id(), $model->captureSession, "Transcript exported as {$format}", ['format' => $format]);
 
         return response($file['body'], 200, [
             'Content-Type' => $file['mime'],

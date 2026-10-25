@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\DevicePlatform;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
+use App\Services\AuditLog;
 use App\Services\DeviceConfigPayload;
 use App\Services\PairingService;
 use Illuminate\Http\JsonResponse;
@@ -46,6 +47,7 @@ final class DeviceController extends Controller
         $abilities = array_values(array_filter((array) $current->abilities, 'is_string'));
         $token = $pairing->issueToken($device, $abilities);
         $current->delete();
+        app(AuditLog::class)->record('device_token_rotated', $device->user_id, $device, "Device key renewed: {$device->name}");
 
         return response()->json([
             'token' => $token->plainTextToken,

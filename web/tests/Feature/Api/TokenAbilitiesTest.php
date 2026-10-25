@@ -49,6 +49,8 @@ function abilityRoutes(): array
         'smart views' => ['GET', '/api/library/views', 'library:read'],
         'create client' => ['POST', '/api/clients', 'sessions:write'],
         'update client' => ['PATCH', "/api/clients/{$id}", 'sessions:write'],
+        'security centre' => ['GET', '/api/security', 'config:read'],
+        'revoke device' => ['DELETE', "/api/devices/{$id}", 'sessions:write'],
         'add recording' => ['POST', "/api/sessions/{$id}/recordings", 'sessions:write'],
         'post transcript' => ['POST', "/api/sessions/{$id}/transcripts", 'sessions:write'],
         'delete session' => ['DELETE', "/api/sessions/{$id}", 'sessions:write'],

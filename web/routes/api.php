@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\LibraryController;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Http\Controllers\Api\RecordingController;
 use App\Http\Controllers\Api\SearchController;
+use App\Http\Controllers\Api\SecurityController;
 use App\Http\Controllers\Api\SessionController;
 use App\Http\Controllers\Api\ShareController;
 use App\Http\Controllers\Api\SttTokenController;
@@ -39,6 +40,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
         Route::post('devices/rotate-token', [DeviceController::class, 'rotateToken'])->name('api.devices.rotate');
 
         Route::get('config', [ConfigController::class, 'show'])->middleware('abilities:config:read')->name('api.config');
+        Route::get('security', [SecurityController::class, 'index'])->middleware('abilities:config:read')->name('api.security');
         Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
 
         Route::post('stt/token', SttTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token'])->name('api.stt.token');
@@ -54,6 +56,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->name('api.sessions.bulk');
             Route::post('clients', [OrganiseController::class, 'storeClient'])->name('api.clients.store');
             Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->name('api.clients.update');
+            Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
             Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->name('api.sessions.markers.destroy');
             Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');

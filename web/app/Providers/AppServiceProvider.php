@@ -17,6 +17,7 @@ use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
@@ -45,6 +46,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // docs/API.md returns single resources unwrapped ({"id": …}); Laravel would otherwise wrap them in {"data": …}.
         JsonResource::withoutWrapping();
+
+        // The security centre's audit log (B16).
+        AuditLog::listen();
 
         // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
         FilamentTimezone::set(fn (): string => app(SettingsRepository::class)->displayTimezone());
