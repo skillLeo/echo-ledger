@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\AdminMediaController;
+use App\Http\Controllers\PublicShareController;
 use App\Http\Middleware\EnsureSuperAdmin;
 use Illuminate\Support\Facades\Route;
 
@@ -12,3 +13,10 @@ Route::redirect('/', '/admin');
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
     ->middleware(['auth:web', EnsureSuperAdmin::class])
     ->name('admin.recordings.stream');
+
+// Share links (view-only): the token is the only key, so every route is throttled per IP.
+Route::middleware('throttle:share')->group(function (): void {
+    Route::get('/s/{token}', [PublicShareController::class, 'show'])->name('share.show');
+    Route::post('/s/{token}', [PublicShareController::class, 'unlock'])->middleware('throttle:share-password')->name('share.unlock');
+    Route::get('/s/{token}/audio', [PublicShareController::class, 'audio'])->name('share.audio');
+});

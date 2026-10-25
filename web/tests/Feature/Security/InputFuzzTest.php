@@ -264,6 +264,7 @@ it('survives malformed request bodies on every JSON endpoint', function (string 
     'PUT sessions/{id}/speakers' => ['PUT', '/api/sessions/'.Fx::MISSING_ID.'/speakers'],
     'PATCH transcripts/{id}' => ['PATCH', '/api/transcripts/'.Fx::MISSING_ID],
     'POST transcripts/{id}/replace' => ['POST', '/api/transcripts/'.Fx::MISSING_ID.'/replace'],
+    'POST sessions/{id}/shares' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/shares'],
     'POST stt/token' => ['POST', '/api/stt/token'],
     'POST usage' => ['POST', '/api/usage'],
     'POST devices/rotate-token' => ['POST', '/api/devices/rotate-token'],

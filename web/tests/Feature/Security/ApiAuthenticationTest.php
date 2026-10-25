@@ -35,6 +35,10 @@ function secDeviceGuardedRoutes(): array
         'POST transcripts/{id}/restore' => ['POST', '/api/transcripts/'.Fx::MISSING_ID.'/restore', 'sessions:write'],
         'GET transcripts/{id}/revisions' => ['GET', '/api/transcripts/'.Fx::MISSING_ID.'/revisions', 'library:read'],
         'GET search' => ['GET', '/api/search?q=invoice', 'library:read'],
+        'GET transcripts/{id}/export' => ['GET', '/api/transcripts/'.Fx::MISSING_ID.'/export?format=txt', 'library:read'],
+        'GET sessions/{id}/shares' => ['GET', '/api/sessions/'.Fx::MISSING_ID.'/shares', 'library:read'],
+        'POST sessions/{id}/shares' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/shares', 'sessions:write'],
+        'DELETE shares/{id}' => ['DELETE', '/api/shares/'.Fx::MISSING_ID, 'sessions:write'],
         'POST sessions/{id}/recordings' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/recordings', 'sessions:write'],
         'POST sessions/{id}/transcripts' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/transcripts', 'sessions:write'],
         'DELETE sessions/{id}' => ['DELETE', '/api/sessions/'.Fx::MISSING_ID, 'sessions:write'],
@@ -95,7 +99,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(24);
+    expect($guarded)->toBe(28);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

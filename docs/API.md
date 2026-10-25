@@ -486,6 +486,35 @@ that was never edited is returned unchanged.
 an empty name removes the rename) → `200 {"speaker_names": {…}}` (the effective names). With
 `remember_for_client` the names also become the defaults for the session's client.
 
+### `GET /api/transcripts/{id}/export` — `library:read` (since v1.1)
+`format` = `txt` | `md` | `srt` | `vtt` | `json` | `docx` | `html`, `timestamps` (default `1`) and `speakers`
+(default `1`). The answer is the file (`Content-Disposition: attachment`, named after the title and date) with
+the session's speaker names applied. `md` and `json` include the bookmarks; `docx` marks Urdu and other
+right-to-left lines as right-to-left; `html` is a print-ready page: the apps and browsers save it as PDF, which keeps
+Urdu and Hindi shaping right. `409 transcript_not_ready` until the transcript is `completed`.
+
+### Share links (since v1.1)
+A share link opens a view-only page at `/s/{token}` with the transcript (speaker names applied) and, when asked
+for, a player for the recording. The token (256 random bits) is shown once, when the link is made; the server keeps
+only its SHA-256. Links expire after 1 hour, 1 day or 7 days, may need a password, can be revoked at any time, and
+stop working when the recording is deleted. Every access is logged (`viewed`, `wrong_password`, `audio`) with a keyed
+hash of the IP address. The page is not indexed (`X-Robots-Tag: noindex`) and sends no referrer. Unknown, expired
+and revoked links all answer `404` with the same page; password attempts are limited to 10 per minute per address.
+
+### `POST /api/sessions/{id}/shares` — `sessions:write` (since v1.1)
+`{"expires_in": 86400, "password": "optional, 6-100 characters", "include_audio": false}` (`expires_in` is 3600,
+86400 or 604800) → `201 {ShareLink, "url": "https://…/s/…"}`. At most 20 active links per recording
+(`409 too_many_shares`).
+
+ShareLink: `{"id","session_id","has_password","include_audio","expires_at","revoked_at","active","view_count",
+"last_viewed_at","created_by","created_at"}`.
+
+### `GET /api/sessions/{id}/shares` — `library:read` (since v1.1)
+`200 {"data": [ShareLink]}`, newest first. The URL is not shown again.
+
+### `DELETE /api/shares/{id}` — `sessions:write` (since v1.1)
+`204`. The link stops working at once (`404 share_not_found` for a link of another owner).
+
 ### `DELETE /api/sessions/{id}` — `sessions:write`
 `204`. The session becomes a tombstone; its recordings (files) and transcripts are erased immediately. A provider
 job still running for it is cancelled and its provider-side copy deleted, retried by `stt:reconcile` until the

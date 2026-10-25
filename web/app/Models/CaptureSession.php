@@ -101,6 +101,12 @@ class CaptureSession extends Model
         return $this->hasOne(Recording::class)->where('role', RecordingRole::Primary->value);
     }
 
+    /** @return HasMany<ShareLink, $this> */
+    public function shareLinks(): HasMany
+    {
+        return $this->hasMany(ShareLink::class);
+    }
+
     /** @return HasMany<Transcript, $this> */
     public function transcripts(): HasMany
     {
