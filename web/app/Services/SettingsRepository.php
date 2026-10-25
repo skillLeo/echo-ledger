@@ -86,27 +86,31 @@ final class SettingsRepository
 
     public function retentionDays(): int
     {
-        return max(1, min(365, (int) $this->get('retention_days', 30)));
+        $days = $this->get('retention_days', 30);
+
+        return is_scalar($days) ? max(1, min(365, (int) $days)) : 30;
     }
 
     public function providerFor(SttUseCase $useCase): SttProviderKey
     {
-        return SttProviderKey::tryFrom((string) $this->get('provider.'.$useCase->value)) ?? SttProviderKey::AssemblyAi;
+        $value = $this->get('provider.'.$useCase->value);
+
+        return (is_string($value) ? SttProviderKey::tryFrom($value) : null) ?? SttProviderKey::AssemblyAi;
     }
 
     /** The IANA time zone the admin console displays times in; falls back to UTC for anything unrecognised. */
     public function displayTimezone(): string
     {
-        $zone = (string) $this->get('display.timezone', 'UTC');
+        $zone = $this->get('display.timezone', 'UTC');
 
-        return in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC';
+        return is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC';
     }
 
     public function captionChannels(): string
     {
-        $value = (string) $this->get('captions.channels', 'both');
+        $value = $this->get('captions.channels', 'both');
 
-        return in_array($value, ['both', 'client_only', 'off'], true) ? $value : 'both';
+        return is_string($value) && in_array($value, ['both', 'client_only', 'off'], true) ? $value : 'both';
     }
 
     /** @return list<string> */

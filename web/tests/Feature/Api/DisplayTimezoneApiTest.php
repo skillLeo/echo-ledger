@@ -48,7 +48,7 @@ describe('which zones are accepted', function () {
         $settings->set('display.timezone', ['Asia/Karachi']);
 
         expect($settings->displayTimezone())->toBe('UTC');
-    })->skip('A6.W16: a settings value that is not text causes a server error');
+    });
 
     it('defaults to UTC when the setting row does not exist', function () {
         Setting::query()->where('key', 'display.timezone')->delete();

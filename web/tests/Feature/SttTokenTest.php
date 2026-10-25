@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
@@ -16,8 +17,9 @@ it('returns short-lived grants and never leaks the provider key', function () {
 
     $device = Device::factory()->create();
     Sanctum::actingAs($device, Device::ABILITIES);
+    $session = CaptureSession::factory()->open()->create(['user_id' => $device->user_id, 'device_id' => $device->id]);
 
-    $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me', 'client']]);
+    $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $session->id, 'channels' => ['me', 'client']]);
 
     $response->assertOk()->assertJsonPath('provider', 'assemblyai');
     expect($response->json('grants'))->toHaveCount(2);
@@ -35,8 +37,9 @@ it('returns an off grant when captions are disabled server-side', function () {
     app(SettingsRepository::class)->set('captions.channels', 'off');
     $device = Device::factory()->create();
     Sanctum::actingAs($device, Device::ABILITIES);
+    $session = CaptureSession::factory()->open()->create(['user_id' => $device->user_id, 'device_id' => $device->id]);
 
-    $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])
+    $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $session->id])
         ->assertOk()
         ->assertJsonPath('mode', 'off')
         ->assertJsonPath('grants', []);

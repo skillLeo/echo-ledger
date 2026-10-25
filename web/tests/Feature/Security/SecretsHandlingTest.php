@@ -59,7 +59,7 @@ it('never puts a stored provider secret into an API response', function () {
         $this->api($token)->getJson("/api/sessions/{$session->id}"),
         $this->api($token)->getJson('/api/transcripts/'.$session->transcripts()->value('id')),
         $this->api($token)->getJson('/api/recordings/'.$session->recordings()->value('id')),
-        $this->api($token)->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => $client->id]),
+        $this->api($token)->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => Fx::session($device->user, $device, ['status' => 'recording'])->id, 'client_id' => $client->id]),
         $this->api($token)->postJson('/api/devices/rotate-token'),
         $this->api($token)->getJson('/api/sessions/'.Fx::MISSING_ID),
         $this->api($token)->postJson('/api/sessions', ['bad' => 'payload']),
@@ -76,9 +76,11 @@ it('never puts a stored provider secret into an API response', function () {
 it('returns only a short-lived provider token, never the long-lived API key, in a streaming grant', function () {
     secStoreSentinels();
     Http::fake(['*' => Http::response(['token' => 'temporary-streaming-token'], 200)]);
-    $token = Fx::token(Fx::device());
+    $device = Fx::device();
+    $token = Fx::token($device);
+    $open = Fx::session($device->user, $device, ['status' => 'recording']);
 
-    $response = $this->api($token)->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+    $response = $this->api($token)->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $open->id])->assertOk();
 
     expect($response->getContent())->toContain('temporary-streaming-token')->not->toContain(SEC_KEY_AAI)
         ->and($response->headers->get('Cache-Control'))->toContain('no-store');
@@ -88,9 +90,11 @@ it('returns only a short-lived provider token, never the long-lived API key, in 
 it('sends the provider key only to the provider and never in a URL', function () {
     secStoreSentinels();
     Http::fake(['*' => Http::response(['token' => 'temporary-streaming-token'], 200)]);
-    $token = Fx::token(Fx::device());
+    $device = Fx::device();
+    $token = Fx::token($device);
+    $open = Fx::session($device->user, $device, ['status' => 'recording']);
 
-    $this->api($token)->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+    $this->api($token)->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $open->id])->assertOk();
 
     Http::assertSent(fn ($request) => str_starts_with($request->url(), 'https://streaming.assemblyai.com/')
         && ! str_contains($request->url(), SEC_KEY_AAI)
@@ -114,7 +118,8 @@ it('keeps secrets, tokens and pairing codes out of the application log', functio
 
     $this->api()->postJson('/api/devices/register', ['pairing_code' => 'WRONG-CODE', 'name' => 'x', 'platform' => 'android'])->assertStatus(422);
     $this->api()->postJson('/api/devices/register', ['pairing_code' => $pairing, 'name' => 'Pixel', 'platform' => 'android'])->assertCreated();
-    $this->api($plainToken)->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => $client->id])->assertStatus(502);
+    $open = Fx::session($owner, $device, ['status' => 'recording']);
+    $this->api($plainToken)->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $open->id, 'client_id' => $client->id])->assertStatus(502);
     $this->api()->postJson('/api/webhooks/stt/assemblyai?rid=abc', ['transcript_id' => 'job'], ['X-EchoLedger-Webhook-Token' => 'LEAKY-TOKEN-VALUE-123'])->assertStatus(401);
     $this->api()->postJson('/api/webhooks/stt/elevenlabs', ['type' => 'x'], ['elevenlabs-signature' => 't=1,v0=LEAKY-SIGNATURE-456'])->assertStatus(401);
     $this->api($plainToken)->postJson('/api/devices/rotate-token')->assertOk();

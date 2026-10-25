@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
+use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LibraryItemResource;
 use App\Http\Resources\TranscriptResource;
@@ -15,8 +16,10 @@ use App\Models\Device;
 use App\Models\Transcript;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\Cursor;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
+use Throwable;
 
 final class LibraryController extends Controller
 {
@@ -26,7 +29,7 @@ final class LibraryController extends Controller
         /** @var Device $device */
         $device = $request->user();
         $data = $request->validate([
-            'since' => ['nullable', 'date'],
+            'since' => ['nullable', ...SessionController::instantRules()],
             'source' => ['nullable', 'string', 'max:40'],
             'source_app' => ['nullable', Rule::enum(SourceApp::class)],
             'client_id' => ['nullable', 'string', 'size:26'],
@@ -34,12 +37,18 @@ final class LibraryController extends Controller
             'cursor' => ['nullable', 'string', 'max:512'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
+        $cursor = empty($data['cursor']) ? null : self::decodeCursor($data['cursor']);
 
         $serverTime = now();
         $query = CaptureSession::query()->where('user_id', $device->user_id)->with(['device', 'client', 'transcripts']);
 
         if (! empty($data['since'])) {
-            $query->withTrashed()->where('updated_at', '>', Carbon::parse($data['since']));
+            // Any offset names an instant; the stored timestamps are UTC.
+            $query->withTrashed()->where('updated_at', '>', Carbon::parse($data['since'])->utc());
+        }
+        if (empty($data['status'])) {
+            // Open sessions (still recording) may yet be discarded: listed only when asked for; tombstones always sync.
+            $query->where(fn ($q) => $q->whereNotNull('deleted_at')->orWhere('status', '!=', SessionStatus::Recording->value));
         }
         if (! empty($data['source'])) {
             $sources = array_values(array_filter(array_map(
@@ -55,13 +64,40 @@ final class LibraryController extends Controller
         }
 
         $page = $query->orderByDesc('updated_at')->orderByDesc('id')
-            ->cursorPaginate((int) ($data['limit'] ?? 50), ['*'], 'cursor', $data['cursor'] ?? null);
+            ->cursorPaginate((int) ($data['limit'] ?? 50), ['*'], 'cursor', $cursor);
 
         return response()->json([
             'data' => LibraryItemResource::collection($page->getCollection())->resolve($request),
             'next_cursor' => $page->nextCursor()?->encode(),
             'server_time' => $serverTime->toAtomString(),
         ]);
+    }
+
+    /**
+     * Only cursors this endpoint issued are accepted: both sort fields present as text, a parsable timestamp and a
+     * boolean direction. Anything else is `422 invalid_cursor` (docs/API.md "Library & sync").
+     */
+    private static function decodeCursor(string $encoded): Cursor
+    {
+        $cursor = Cursor::fromEncoded($encoded);
+        $fields = $cursor instanceof Cursor ? $cursor->toArray() : [];
+        $updatedAt = $fields['updated_at'] ?? null;
+        $id = $fields['id'] ?? null;
+        // The direction is stored as decoded, whatever its type: a forged "yes" must not pass as a boolean.
+        $valid = $cursor instanceof Cursor && is_bool($fields['_pointsToNextItems'] ?? null)
+            && is_string($updatedAt) && $updatedAt !== '' && is_string($id) && $id !== '';
+        if ($valid) {
+            try {
+                Carbon::parse($updatedAt);
+            } catch (Throwable) {
+                $valid = false;
+            }
+        }
+        if (! $valid) {
+            throw new ApiError(422, 'invalid_cursor', 'The cursor is invalid.', ['errors' => ['cursor' => ['The cursor is invalid.']]]);
+        }
+
+        return $cursor;
     }
 
     /** GET /api/transcripts/{id} */

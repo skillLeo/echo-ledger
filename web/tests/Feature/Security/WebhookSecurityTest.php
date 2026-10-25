@@ -150,7 +150,7 @@ it('answers a rid parameter sent as an array with 401 instead of a server error'
 })->with([
     'array value' => ['rid[]=x'],
     'nested array' => ['rid[a][b]=x'],
-])->skip('A6.W16: an array rid parameter on the AssemblyAI webhook gives HTTP 500');
+]);
 
 it('rejects a job id that does not belong to the transcript', function () {
     $transcript = secTranscript('job_1');

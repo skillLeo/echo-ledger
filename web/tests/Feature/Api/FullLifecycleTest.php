@@ -51,14 +51,18 @@ describe('a phone call transcribed by AssemblyAI', function () {
         ClientKeyterm::query()->create(['client_id' => $client->id, 'term' => 'Farah Khan']);
         expect($this->asToken($phone)->getJson('/api/clients')->json('data.0.keyterm_count'))->toBe(1);
 
-        // 3. A call starts: captions need a streaming token that carries the client's vocabulary.
-        $grants = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me', 'client'], 'client_id' => $client->id, 'sample_rate' => 16000])->assertOk();
+        // 3. A call starts with captions on: the phone opens the session, then asks for a streaming token that
+        //    carries the client's vocabulary.
+        $opened = $this->postJson('/api/sessions', Fixtures::openSessionBody(['client_id' => $client->id, 'source_app' => 'whatsapp', 'client_ref' => 'call-001']))->assertCreated();
+        $sessionId = $opened->json('session.id');
+        expect($opened->json('session.status'))->toBe('recording')->and($opened->json('recordings'))->toBe([]);
+        $grants = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $sessionId, 'channels' => ['me', 'client'], 'client_id' => $client->id, 'sample_rate' => 16000])->assertOk();
         expect($grants->json('grants'))->toHaveCount(2)->and($grants->json('keyterms'))->toBe(['Farah Khan']);
 
-        // 4. The call ends: the phone creates the session and uploads the recording out of order.
+        // 4. The call ends: the phone finishes the session and uploads the recording out of order.
         $bytes = Fixtures::audio(11_000_000, 'LIFECYCLE-AUDIO');
-        $created = $this->createSession($bytes, ['client_id' => $client->id, 'source_app' => 'whatsapp', 'client_ref' => 'call-001'])->assertCreated();
-        $sessionId = $created->json('session.id');
+        $created = $this->postJson("/api/sessions/{$sessionId}/finish", Fixtures::finishBody($bytes))->assertOk();
+        expect($created->json('session.id'))->toBe($sessionId)->and($created->json('session.status'))->toBe('uploading');
         $recordingId = $created->json('recordings.0.id');
         $chunkSize = $created->json('recordings.0.upload.chunk_size_bytes');
         expect($created->json('recordings.0.upload.total_chunks'))->toBeGreaterThanOrEqual(3);

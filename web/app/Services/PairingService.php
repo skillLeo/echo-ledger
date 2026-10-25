@@ -88,8 +88,9 @@ final class PairingService
         });
     }
 
-    public function issueToken(Device $device): NewAccessToken
+    /** @param  list<string>|null  $abilities  null = the full device set; a rotation passes the old token's abilities */
+    public function issueToken(Device $device, ?array $abilities = null): NewAccessToken
     {
-        return $device->createToken('device', Device::ABILITIES, now()->addDays((int) config('echoledger.device_token_days', 365)));
+        return $device->createToken('device', $abilities ?? Device::ABILITIES, now()->addDays((int) config('echoledger.device_token_days', 365)));
     }
 }

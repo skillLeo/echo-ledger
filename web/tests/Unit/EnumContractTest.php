@@ -86,7 +86,7 @@ describe('docs/API.md enumerations match the code', function () {
         foreach (SourceApp::cases() as $case) {
             expect($row['text'])->toContain('`'.$case->value.'` "'.$case->getLabel().'"');
         }
-    })->skip('A1.7: docs/API.md already lists the source apps whatsapp_web and microsoft_teams, which the server does not have yet');
+    });
 
     it('lists the source devices with their labels and icon keys', function () {
         $row = collect(documentedEnumerations())->first(fn ($r, $name) => str_starts_with($name, '`source_device`'));

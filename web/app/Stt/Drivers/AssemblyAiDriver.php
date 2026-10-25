@@ -165,7 +165,9 @@ final class AssemblyAiDriver implements SttProvider
     {
         $secret = $this->vault->get('assemblyai', 'webhook_secret')
             ?? throw new InvalidWebhookSignature('AssemblyAI webhook secret is not configured.');
-        $rid = (string) $request->query('rid', '');
+        // A malformed recording id (for example `rid[]=x`) is a bad signature, never a server error.
+        $rid = $request->query('rid', '');
+        $rid = is_string($rid) ? $rid : '';
         $given = (string) $request->header(self::WEBHOOK_HEADER, '');
         if ($rid === '' || $given === '' || ! hash_equals(self::webhookToken($secret, $rid), $given)) {
             throw new InvalidWebhookSignature('Invalid AssemblyAI webhook token.');
@@ -173,8 +175,8 @@ final class AssemblyAiDriver implements SttProvider
 
         $payload = json_decode($request->getContent(), true);
         $payload = is_array($payload) ? $payload : [];
-        $jobId = (string) ($payload['transcript_id'] ?? '');
-        $status = (string) ($payload['status'] ?? '');
+        $jobId = is_scalar($payload['transcript_id'] ?? null) ? (string) $payload['transcript_id'] : '';
+        $status = is_scalar($payload['status'] ?? null) ? (string) $payload['status'] : '';
         if ($jobId === '') {
             throw new InvalidWebhookSignature('Webhook body has no transcript_id.');
         }

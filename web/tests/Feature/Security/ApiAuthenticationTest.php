@@ -24,7 +24,9 @@ function secDeviceGuardedRoutes(): array
         'GET config' => ['GET', '/api/config', 'config:read'],
         'GET clients' => ['GET', '/api/clients', 'library:read'],
         'POST stt/token' => ['POST', '/api/stt/token', 'stt:token'],
+        'POST usage' => ['POST', '/api/usage', 'stt:token'],
         'POST sessions' => ['POST', '/api/sessions', 'sessions:write'],
+        'POST sessions/{id}/finish' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/finish', 'sessions:write'],
         'POST sessions/{id}/recordings' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/recordings', 'sessions:write'],
         'POST sessions/{id}/transcripts' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/transcripts', 'sessions:write'],
         'DELETE sessions/{id}' => ['DELETE', '/api/sessions/'.Fx::MISSING_ID, 'sessions:write'],
@@ -85,7 +87,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(14);
+    expect($guarded)->toBe(16);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {
@@ -267,7 +269,7 @@ it('keeps a rotated token no more privileged than the token that asked for it', 
 
     // The replacement must not be able to do anything the limited token could not.
     $this->api($new)->postJson('/api/sessions', Fx::sessionPayload())->assertForbidden();
-})->skip('A6.W18: rotate-token widens a restricted token to the full ability set');
+});
 
 it('lets one device rotate its own token without touching a sibling device\'s token', function () {
     $user = Fx::user();

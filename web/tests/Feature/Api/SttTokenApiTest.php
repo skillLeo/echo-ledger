@@ -18,6 +18,8 @@ beforeEach(function () {
     $this->asToken($this->token);
     $this->configureAssemblyAi();
     Http::fake(['streaming.assemblyai.com/v3/token*' => Http::response(['token' => 'tmp_stream_token'], 200)]);
+    // Live captions need an open session of the calling device (docs/API.md, since v1.1).
+    $this->sessionId = $this->openSession();
 });
 
 /** @return array<string, string> parsed query of a grant's ws_url */
@@ -41,7 +43,7 @@ function clientWithTerms(object $test, array $terms, array $attributes = []): Cl
 
 describe('AssemblyAI', function () {
     it('mints one short-lived token and hands the same URL to every channel', function () {
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me', 'client']])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'channels' => ['me', 'client']])->assertOk();
 
         $grants = $response->json('grants');
         expect(array_column($grants, 'channel'))->toBe(['me', 'client'])
@@ -53,7 +55,7 @@ describe('AssemblyAI', function () {
     });
 
     it('builds a ws_url the device can open as is', function () {
-        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'sample_rate' => 48000])->assertOk()->json('grants.0.ws_url');
+        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'sample_rate' => 48000])->assertOk()->json('grants.0.ws_url');
 
         expect($url)->toStartWith('wss://streaming.assemblyai.com/v3/ws?')
             ->and(wsQuery($url))->toBe([
@@ -65,7 +67,7 @@ describe('AssemblyAI', function () {
     it('follows the configured streaming model', function () {
         app(SettingsRepository::class)->set('assemblyai.streaming_model', 'universal-streaming-english');
 
-        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->json('grants.0.ws_url');
+        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->json('grants.0.ws_url');
 
         expect(wsQuery($url)['speech_model'])->toBe('universal-streaming-english');
     });
@@ -73,14 +75,14 @@ describe('AssemblyAI', function () {
     it('expires the grant within a minute', function () {
         $this->freezeTime();
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertOk();
 
         expect(strtotime($response->json('expires_at')))->toBe(now()->addSeconds(60)->getTimestamp())
             ->and(strtotime($response->json('grants.0.redeem_by')))->toBe(now()->addSeconds(60)->getTimestamp());
     });
 
     it('is never cacheable', function () {
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertOk();
 
         expect($response->headers->get('Cache-Control'))->toContain('no-store');
     });
@@ -88,14 +90,14 @@ describe('AssemblyAI', function () {
     it('sends the client\'s keyterms in the opening configuration message', function () {
         $client = clientWithTerms($this, ['Acme Holdings', 'Farah Khan']);
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => $client->id])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'client_id' => $client->id])->assertOk();
 
         expect($response->json('keyterms'))->toBe(['Acme Holdings', 'Farah Khan'])
             ->and($response->json('grants.0.init_messages'))->toBe([['type' => 'UpdateConfiguration', 'keyterms_prompt' => ['Acme Holdings', 'Farah Khan']]]);
     });
 
     it('sends no opening message when there is nothing to tune', function () {
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertOk();
 
         expect($response->json('keyterms'))->toBe([])->and($response->json('grants.0.init_messages'))->toBe([]);
     });
@@ -107,7 +109,7 @@ describe('AssemblyAI', function () {
         }
         $client = clientWithTerms($this, $terms);
 
-        $sent = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => $client->id])->json('keyterms');
+        $sent = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'client_id' => $client->id])->json('keyterms');
 
         expect(count($sent))->toBe(100)
             ->and($sent)->toContain('Acme Holdings', 'padded term', 'AbC')
@@ -121,20 +123,20 @@ describe('AssemblyAI', function () {
         $stranger = Client::factory()->create();
         ClientKeyterm::query()->create(['client_id' => $stranger->id, 'term' => 'Secret Codename']);
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => $stranger->id]);
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'client_id' => $stranger->id]);
 
         $response->assertNotFound();
         expect($response->getContent())->not->toContain('Secret Codename');
     });
 
     it('answers 404 for a client that does not exist', function () {
-        $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => '01ARZ3NDEKTSV4RRFFQ69G5FAV'])->assertNotFound();
+        $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'client_id' => '01ARZ3NDEKTSV4RRFFQ69G5FAV'])->assertNotFound();
     });
 });
 
 describe('channel selection', function () {
     it('honours the requested channels once each, in order', function (array $requested, array $expected) {
-        $channels = array_column($this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => $requested])->assertOk()->json('grants'), 'channel');
+        $channels = array_column($this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'channels' => $requested])->assertOk()->json('grants'), 'channel');
 
         expect($channels)->toBe($expected);
     })->with([
@@ -146,7 +148,7 @@ describe('channel selection', function () {
     ]);
 
     it('defaults to both channels', function () {
-        expect(array_column($this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->json('grants'), 'channel'))->toBe(['me', 'client']);
+        expect(array_column($this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->json('grants'), 'channel'))->toBe(['me', 'client']);
     });
 
     it('serves dictation on the microphone channel only, whatever is asked', function (array $payload) {
@@ -158,7 +160,7 @@ describe('channel selection', function () {
     it('forces the client channel only when the admin restricts captions that way', function () {
         app(SettingsRepository::class)->set('captions.channels', 'client_only');
 
-        $live = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me', 'client']])->json('grants');
+        $live = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'channels' => ['me', 'client']])->json('grants');
         $dictation = $this->postJson('/api/stt/token', ['use_case' => 'dictation'])->json('grants');
 
         expect(array_column($live, 'channel'))->toBe(['client'])->and(array_column($dictation, 'channel'))->toBe(['me']);
@@ -167,7 +169,7 @@ describe('channel selection', function () {
     it('answers "off" without calling any provider when the admin disabled captions', function () {
         app(SettingsRepository::class)->set('captions.channels', 'off');
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertOk();
 
         expect($response->json())->toBe(['provider' => null, 'mode' => 'off', 'expires_at' => null, 'keyterms' => [], 'grants' => []]);
         Http::assertNothingSent();
@@ -187,7 +189,7 @@ describe('validation', function () {
     })->with([[[]], [['use_case' => 'final_transcript']], [['use_case' => 'voice_note']], [['use_case' => 'Live_Captions']], [['use_case' => 7]]]);
 
     it('rejects out-of-range options', function (array $payload, string $field) {
-        $this->postJson('/api/stt/token', ['use_case' => 'live_captions'] + $payload)->assertStatus(422)->assertJsonValidationErrors([$field]);
+        $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId] + $payload)->assertStatus(422)->assertJsonValidationErrors([$field]);
         Http::assertNothingSent();
     })->with([
         'unknown channel' => [['channels' => ['me', 'speaker']], 'channels.1'],
@@ -202,13 +204,13 @@ describe('validation', function () {
     ]);
 
     it('accepts every supported sample rate', function (int $rate) {
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'sample_rate' => $rate])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'sample_rate' => $rate])->assertOk();
 
         expect($response->json('grants.0.audio.sample_rate'))->toBe($rate);
     })->with([8000, 16000, 24000, 44100, 48000]);
 
     it('accepts null for the optional fields', function () {
-        $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => null, 'channels' => null, 'sample_rate' => null, 'language' => null])->assertOk();
+        $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'client_id' => null, 'channels' => null, 'sample_rate' => null, 'language' => null])->assertOk();
     });
 });
 
@@ -223,7 +225,7 @@ describe('ElevenLabs', function () {
     });
 
     it('mints a separate single-use token for every channel', function () {
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me', 'client']])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'channels' => ['me', 'client']])->assertOk();
 
         $grants = $response->json('grants');
         expect($response->json('provider'))->toBe('elevenlabs')
@@ -238,7 +240,7 @@ describe('ElevenLabs', function () {
     it('repeats the keyterms parameter rather than indexing it, and URL-encodes each', function () {
         $client = clientWithTerms($this, ['Acme & Sons', 'Farah Khan', 'naïve café']);
 
-        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me'], 'client_id' => $client->id])->json('grants.0.ws_url');
+        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'channels' => ['me'], 'client_id' => $client->id])->json('grants.0.ws_url');
 
         expect($url)->toStartWith('wss://api.elevenlabs.io/v1/speech-to-text/realtime?')
             ->and(substr_count($url, 'keyterms='))->toBe(3)
@@ -253,7 +255,7 @@ describe('ElevenLabs', function () {
         }
         $client = clientWithTerms($this, $terms);
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me'], 'client_id' => $client->id])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'channels' => ['me'], 'client_id' => $client->id])->assertOk();
 
         $sent = $response->json('keyterms');
         expect(count($sent))->toBe(50)->and($sent)->toContain('short term')->and($sent)->not->toContain('this one is longer than twenty characters');
@@ -266,7 +268,7 @@ describe('ElevenLabs', function () {
         app(SettingsRepository::class)->set('default_language', $default);
         $model = Client::factory()->create(['user_id' => $this->device->user_id, 'language' => $client]);
 
-        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me'], 'client_id' => $model->id, 'language' => $request])->json('grants.0.ws_url');
+        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'channels' => ['me'], 'client_id' => $model->id, 'language' => $request])->json('grants.0.ws_url');
 
         $query = wsQuery($url);
         $expected === null ? expect($query)->not->toHaveKey('language_code') : expect($query['language_code'])->toBe($expected);
@@ -280,7 +282,7 @@ describe('ElevenLabs', function () {
     it('follows the configured realtime model', function () {
         app(SettingsRepository::class)->set('elevenlabs.realtime_model_id', 'scribe_v2_realtime_custom');
 
-        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me']])->json('grants.0.ws_url');
+        $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'channels' => ['me']])->json('grants.0.ws_url');
 
         expect(wsQuery($url)['model_id'])->toBe('scribe_v2_realtime_custom');
     });
@@ -296,7 +298,7 @@ describe('Azure', function () {
     it('hands out a speech SDK token with its lifetime and refresh point', function () {
         $client = clientWithTerms($this, ['Acme Holdings']);
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'channels' => ['me', 'client'], 'client_id' => $client->id])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId, 'channels' => ['me', 'client'], 'client_id' => $client->id])->assertOk();
 
         expect($response->json('provider'))->toBe('azure_mai')
             ->and($response->json('grants.0'))->toMatchArray([
@@ -309,7 +311,7 @@ describe('Azure', function () {
     it('answers 503 with a configuration hint when the region is missing', function () {
         app(SettingsRepository::class)->set('azure.region', null);
 
-        $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertStatus(503)->assertJsonPath('message', fn (string $m) => str_contains($m, 'region'));
+        $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertStatus(503)->assertJsonPath('message', fn (string $m) => str_contains($m, 'region'));
     });
 });
 
@@ -317,7 +319,7 @@ describe('on-device providers', function () {
     it('returns an empty on-device answer so the app falls back to its local engine', function (string $provider) {
         app(SettingsRepository::class)->set('provider.live_captions', $provider);
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertOk();
 
         expect($response->json())->toBe(['provider' => $provider, 'mode' => 'on_device', 'expires_at' => null, 'keyterms' => [], 'grants' => []]);
         Http::assertNothingSent();
@@ -328,7 +330,7 @@ describe('provider failures', function () {
     it('answers 503 and names what to configure when the key is missing', function () {
         app(CredentialVault::class)->forget('assemblyai', 'api_key');
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertStatus(503);
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertStatus(503);
 
         expect($response->json('message'))->toContain('assemblyai.api_key');
         Http::assertNothingSent();
@@ -338,7 +340,7 @@ describe('provider failures', function () {
         $this->resetHttpFakes();
         Http::fake(['streaming.assemblyai.com/*' => Http::response(['error' => 'Invalid API key sk_provider_internal_detail'], 401)]);
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertStatus(502);
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertStatus(502);
 
         expect($response->getContent())->not->toContain('sk_provider_internal_detail')->not->toContain('aai_test_key_1234567890');
     });
@@ -347,7 +349,7 @@ describe('provider failures', function () {
         $this->resetHttpFakes();
         Http::fake(fn () => throw new ConnectionException('cURL error 6: Could not resolve host: streaming.assemblyai.com'));
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions']);
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId]);
 
         expect($response->getStatusCode())->toBeGreaterThanOrEqual(500)->toBeLessThan(600);
         expect($response->headers->get('Content-Type'))->toContain('application/json');
@@ -358,11 +360,11 @@ describe('provider failures', function () {
         $this->resetHttpFakes();
         Http::fake(fn () => throw new ConnectionException('cURL error 28: Operation timed out'));
 
-        $status = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->getStatusCode();
+        $status = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->getStatusCode();
 
         // 502/503/504 say "upstream trouble, retry"; a bare 500 reads as a server bug.
         expect($status)->toBeIn([502, 503, 504]);
-    })->skip('A6.W16: a provider connection failure on stt/token gives 500 instead of 502');
+    });
 });
 
 describe('secrecy', function () {
@@ -374,7 +376,7 @@ describe('secrecy', function () {
         app(SettingsRepository::class)->setMany(['provider.live_captions' => $provider, 'azure.region' => 'westeurope']);
         Http::fake(['*' => Http::response(['token' => 'short-lived'], 200)]);
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertOk();
 
         expect($response->getContent())->not->toContain('SECRET-');
         expect(json_encode($response->headers->all()))->not->toContain('SECRET-');
@@ -385,10 +387,10 @@ describe('limits', function () {
     it('allows thirty requests a minute per device and then answers 429', function () {
         $this->freezeTime();
         foreach (range(1, 30) as $_) {
-            $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+            $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertOk();
         }
 
-        $blocked = $this->postJson('/api/stt/token', ['use_case' => 'live_captions']);
+        $blocked = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId]);
 
         $blocked->assertStatus(429);
         expect((int) $blocked->headers->get('Retry-After'))->toBeGreaterThan(0);
@@ -397,17 +399,19 @@ describe('limits', function () {
     it('does not let one device\'s requests use up another\'s budget', function () {
         $this->freezeTime();
         foreach (range(1, 30) as $_) {
-            $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+            $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertOk();
         }
         [, $other] = $this->enroll();
 
-        $this->asToken($other)->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertOk();
+        $otherSession = $this->asToken($other)->openSession();
+
+        $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $otherSession])->assertOk();
     });
 
     it('requires the stt:token ability', function () {
         [, $limited] = $this->enroll($this->device->user, ['library:read', 'config:read']);
 
-        $this->asToken($limited)->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertForbidden();
+        $this->asToken($limited)->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertForbidden();
         Http::assertNothingSent();
     });
 });

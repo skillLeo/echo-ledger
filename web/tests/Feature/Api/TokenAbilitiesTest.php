@@ -25,7 +25,9 @@ function abilityRoutes(): array
         'config' => ['GET', '/api/config', 'config:read'],
         'clients' => ['GET', '/api/clients', 'library:read'],
         'stt token' => ['POST', '/api/stt/token', 'stt:token'],
+        'usage report' => ['POST', '/api/usage', 'stt:token'],
         'create session' => ['POST', '/api/sessions', 'sessions:write'],
+        'finish session' => ['POST', "/api/sessions/{$id}/finish", 'sessions:write'],
         'add recording' => ['POST', "/api/sessions/{$id}/recordings", 'sessions:write'],
         'post transcript' => ['POST', "/api/sessions/{$id}/transcripts", 'sessions:write'],
         'delete session' => ['DELETE', "/api/sessions/{$id}", 'sessions:write'],
@@ -259,7 +261,7 @@ describe('rotation', function () {
 
         expect(PersonalAccessToken::findToken($new)->abilities)->toBe(['library:read']);
         $this->asToken($new)->postJson('/api/sessions', [])->assertForbidden();
-    })->skip('A6.W18: rotate-token widens a restricted token to the full ability set');
+    });
 
     it('requires authentication', function () {
         $this->postJson('/api/devices/rotate-token')->assertUnauthorized();

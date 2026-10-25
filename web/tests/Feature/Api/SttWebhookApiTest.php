@@ -173,8 +173,7 @@ describe('AssemblyAI verification', function () {
 
         $response->assertUnauthorized();
         expect(WebhookEvent::query()->count())->toBe(0);
-    })->with(['an array' => 'rid[]=abc', 'a keyed array' => 'rid[a]=b', 'a nested array' => 'rid[][]=x'])
-        ->skip('A6.W16: an array rid parameter on the AssemblyAI webhook gives HTTP 500');
+    })->with(['an array' => 'rid[]=abc', 'a keyed array' => 'rid[a]=b', 'a nested array' => 'rid[][]=x']);
 
     it('does not log the token that was presented', function () {
         $logged = [];

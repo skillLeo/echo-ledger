@@ -108,6 +108,17 @@ trait InteractsWithDeviceApi
     }
 
     /**
+     * Open a session over HTTP (POST /api/sessions without artifacts), as a device does when captions start, and
+     * return its id.
+     *
+     * @param  array<string, mixed>  $overrides
+     */
+    public function openSession(array $overrides = []): string
+    {
+        return (string) $this->postJson('/api/sessions', Fixtures::openSessionBody($overrides))->assertCreated()->json('session.id');
+    }
+
+    /**
      * Upload every chunk of $bytes for one recording slot (in the given order) and return the last chunk response.
      *
      * @param  list<int>|null  $order  chunk indexes to send; defaults to ascending

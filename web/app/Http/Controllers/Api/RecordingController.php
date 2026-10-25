@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\RecordingUploadResource;
 use App\Models\Device;
@@ -13,6 +14,7 @@ use App\Services\RecordingCipher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 final class RecordingController extends Controller
@@ -29,11 +31,11 @@ final class RecordingController extends Controller
         $recording = $this->findRecording($request, $id);
         $index = $request->header('Upload-Chunk-Index');
         if ($index === null || ! ctype_digit((string) $index)) {
-            return response()->json(['message' => 'Upload-Chunk-Index header is required.'], 422);
+            throw ValidationException::withMessages(['index' => 'Upload-Chunk-Index header is required.']);
         }
         $body = $request->getContent(true);
         if (! is_resource($body)) {
-            return response()->json(['message' => 'Empty chunk body.'], 422);
+            throw ValidationException::withMessages(['chunk' => 'Empty chunk body.']);
         }
 
         $recording = $uploads->storeChunk($recording, (int) $index, (string) $request->header('Upload-Chunk-Sha256', ''), $body);
@@ -51,7 +53,7 @@ final class RecordingController extends Controller
         $recording = $this->findRecording($request, $id);
         $missing = $uploads->markComplete($recording);
         if ($missing !== []) {
-            return response()->json(['message' => 'Upload is incomplete.', 'missing_chunks' => $missing], 422);
+            throw new ApiError(422, 'upload_incomplete', 'Upload is incomplete.', ['missing_chunks' => $missing]);
         }
 
         return response()->json(['status' => $recording->refresh()->upload_status->value], 202);

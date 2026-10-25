@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\SessionStatus;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Recording;
@@ -83,7 +84,7 @@ describe('a valid request', function () {
             ->assertJsonPath('session.started_at', '2026-10-24T09:00:00+00:00');
 
         expect(CaptureSession::query()->sole()->ended_at->toIso8601String())->toBe('2026-10-24T09:30:00+00:00');
-    })->skip('A6.W21: timestamps with an offset are stored as UTC wall clock');
+    });
 
     it('accepts an end equal to the start and a zero duration', function () {
         $this->createSession($this->bytes, ['ended_at' => '2026-10-24T09:00:00Z', 'duration_ms' => 0])->assertCreated();
@@ -103,8 +104,10 @@ describe('a valid request', function () {
     })->with([
         ['whatsapp', 'WhatsApp call'],
         ['whatsapp_business', 'WhatsApp Business call'],
+        ['whatsapp_web', 'WhatsApp Web call'],
         ['google_meet', 'Google Meet call'],
         ['zoom', 'Zoom call'],
+        ['microsoft_teams', 'Microsoft Teams call'],
         ['voice_note', 'Voice note'],
         ['other', 'Recording'],
     ]);
@@ -217,7 +220,24 @@ describe('required fields', function () {
 
         $this->postJson('/api/sessions', $body)->assertStatus(422)->assertJsonValidationErrors([$field]);
         expect(CaptureSession::query()->count())->toBe(0);
-    })->with(['client_ref', 'source_app', 'started_at', 'artifacts']);
+    })->with(['client_ref', 'source_app', 'started_at']);
+
+    it('opens a session instead of rejecting the request when the artifacts key is absent (since v1.1)', function () {
+        $body = Fixtures::sessionBody($this->bytes);
+        unset($body['artifacts']);
+
+        $this->postJson('/api/sessions', $body)->assertCreated()
+            ->assertJsonPath('session.status', 'recording')
+            ->assertJsonPath('recordings', []);
+        expect(CaptureSession::query()->sole()->status)->toBe(SessionStatus::Recording)
+            ->and(Recording::query()->count())->toBe(0);
+    });
+
+    it('still rejects artifacts that are present but null', function () {
+        $this->postJson('/api/sessions', Fixtures::sessionBody($this->bytes, ['artifacts' => null]))
+            ->assertStatus(422)->assertJsonValidationErrors(['artifacts']);
+        expect(CaptureSession::query()->count())->toBe(0);
+    });
 
     it('rejects an artifact missing a required field', function (string $field) {
         $body = Fixtures::sessionBody($this->bytes);
@@ -228,8 +248,10 @@ describe('required fields', function () {
     })->with(['role', 'mime', 'channels', 'size_bytes', 'sha256']);
 
     it('rejects a completely empty body', function () {
+        // Without the artifacts key the request is an open session, so only the session fields are reported.
         $this->postJson('/api/sessions', [])->assertStatus(422)
-            ->assertJsonValidationErrors(['client_ref', 'source_app', 'started_at', 'artifacts']);
+            ->assertJsonValidationErrors(['client_ref', 'source_app', 'started_at'])
+            ->assertJsonMissingValidationErrors(['artifacts']);
     });
 
     it('treats empty strings and whitespace as missing', function (string $field) {
@@ -328,7 +350,15 @@ describe('artifacts', function () {
         expect(Recording::query()->count())->toBe(0);
     })->with([
         'sample rate text' => [['sample_rate' => 'high'], 'sample_rate'],
-    ])->skip('A6.W21: a sample_rate that is not a number is coerced to "unknown" and accepted');
+        'sample rate fraction' => [['sample_rate' => 0.5], 'sample_rate'],
+        'sample rate text zero with a unit' => [['sample_rate' => '0 Hz'], 'sample_rate'],
+    ]);
+
+    it('treats a sample rate sent as the text "0" as unknown, like the number 0', function () {
+        $this->createSession($this->bytes, [], ['sample_rate' => '0'])->assertCreated();
+
+        expect(Recording::query()->sole()->sample_rate)->toBeNull();
+    });
 
     it('rejects an oversized artifact', function () {
         $max = (int) config('echoledger.max_recording_bytes');

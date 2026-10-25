@@ -13,8 +13,10 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
 {
     case WhatsApp = 'whatsapp';
     case WhatsAppBusiness = 'whatsapp_business';
+    case WhatsAppWeb = 'whatsapp_web';
     case GoogleMeet = 'google_meet';
     case Zoom = 'zoom';
+    case MicrosoftTeams = 'microsoft_teams';
     case VoiceNote = 'voice_note';
     case Other = 'other';
 
@@ -23,8 +25,10 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
         return match ($this) {
             self::WhatsApp => 'WhatsApp',
             self::WhatsAppBusiness => 'WhatsApp Business',
+            self::WhatsAppWeb => 'WhatsApp Web',
             self::GoogleMeet => 'Google Meet',
             self::Zoom => 'Zoom',
+            self::MicrosoftTeams => 'Microsoft Teams',
             self::VoiceNote => 'Voice note',
             self::Other => 'Other',
         };
@@ -35,7 +39,9 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
         return match ($this) {
             self::WhatsApp => Heroicon::OutlinedChatBubbleLeftRight,
             self::WhatsAppBusiness => Heroicon::OutlinedBuildingStorefront,
+            self::WhatsAppWeb => Heroicon::OutlinedGlobeAlt,
             self::GoogleMeet, self::Zoom => Heroicon::OutlinedVideoCamera,
+            self::MicrosoftTeams => Heroicon::OutlinedUserGroup,
             self::VoiceNote => Heroicon::OutlinedMicrophone,
             self::Other => Heroicon::OutlinedEllipsisHorizontalCircle,
         };
@@ -44,8 +50,8 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
     public function getColor(): string
     {
         return match ($this) {
-            self::WhatsApp, self::WhatsAppBusiness => 'success',
-            self::GoogleMeet, self::Zoom => 'info',
+            self::WhatsApp, self::WhatsAppBusiness, self::WhatsAppWeb => 'success',
+            self::GoogleMeet, self::Zoom, self::MicrosoftTeams => 'info',
             self::VoiceNote => 'warning',
             self::Other => 'gray',
         };

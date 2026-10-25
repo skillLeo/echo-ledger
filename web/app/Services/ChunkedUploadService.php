@@ -7,8 +7,10 @@ namespace App\Services;
 use App\Enums\RecordingRole;
 use App\Enums\SessionStatus;
 use App\Enums\UploadStatus;
+use App\Exceptions\ApiError;
 use App\Jobs\AssembleRecordingJob;
 use App\Models\CaptureSession;
+use App\Models\Device;
 use App\Models\Recording;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -69,6 +71,22 @@ final class ChunkedUploadService
             'received_chunks' => [],
             'upload_status' => UploadStatus::Pending,
         ]);
+    }
+
+    /** A device may keep at most this many recordings waiting for chunks (docs/API.md `too_many_open_uploads`). */
+    public const MAX_OPEN_UPLOADS = 50;
+
+    /** Refuses new upload slots when the device already has too many unfinished ones. */
+    public function assertOpenUploadCapacity(Device $device, int $adding): void
+    {
+        $open = Recording::query()
+            ->whereIn('upload_status', [UploadStatus::Pending->value, UploadStatus::Uploading->value])
+            ->whereHas('captureSession', fn ($q) => $q->where('device_id', $device->id))
+            ->count();
+
+        if ($open + $adding > self::MAX_OPEN_UPLOADS) {
+            throw new ApiError(409, 'too_many_open_uploads', 'Too many unfinished uploads. Finish or delete some first.');
+        }
     }
 
     public function expectedChunkLength(Recording $recording, int $index): int

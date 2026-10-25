@@ -1,0 +1,169 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Enums\SessionStatus;
+use App\Enums\SourceApp;
+use App\Enums\SttUseCase;
+use App\Exceptions\ApiError;
+use App\Models\CaptureSession;
+use App\Models\Client;
+use App\Models\Device;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+
+/**
+ * Server side of the session lifecycle (docs/API.md "Session lifecycle"): open (status `recording`, only when a device
+ * needs a live-caption token), finish (artifacts → upload slots, status `uploading`) and the sweep of stale open
+ * sessions.
+ */
+final class SessionLifecycle
+{
+    /** A device may keep at most this many sessions in status `recording` (docs/API.md `too_many_open_sessions`). */
+    public const MAX_OPEN_SESSIONS = 10;
+
+    public function __construct(
+        private readonly SettingsRepository $settings,
+        private readonly ChunkedUploadService $uploads,
+    ) {}
+
+    /**
+     * Create the session of a recording that has just started (no artifacts yet).
+     *
+     * @param  array<string, mixed>  $data  validated create body without `artifacts`
+     */
+    public function open(Device $device, array $data): CaptureSession
+    {
+        $open = CaptureSession::query()->where('device_id', $device->id)->where('status', SessionStatus::Recording->value)->count();
+        if ($open >= self::MAX_OPEN_SESSIONS) {
+            throw new ApiError(409, 'too_many_open_sessions', 'Too many recordings are still open. Finish or discard some first.');
+        }
+
+        return $this->create($device, $data, SessionStatus::Recording);
+    }
+
+    /**
+     * Create a session and its upload slots in one step (the one-shot create).
+     *
+     * @param  array<string, mixed>  $data  validated create body with 1-3 `artifacts`
+     */
+    public function createWithArtifacts(Device $device, array $data): CaptureSession
+    {
+        $this->uploads->assertOpenUploadCapacity($device, count($data['artifacts']));
+
+        return DB::transaction(function () use ($device, $data): CaptureSession {
+            $session = $this->create($device, $data, SessionStatus::Uploading);
+            $chunkSize = ChunkedUploadService::advertisedChunkSize();
+            foreach ($data['artifacts'] as $artifact) {
+                $this->uploads->createRecording($session, $artifact, $chunkSize);
+            }
+
+            return $session;
+        });
+    }
+
+    /**
+     * Attach the artifacts of an open session and move it to `uploading`. Idempotent: a session that already left
+     * `recording` is returned unchanged.
+     *
+     * @param  array<string, mixed>  $data  validated finish body (`ended_at`, `duration_ms`, `artifacts`, optional `title` / `client_id`)
+     */
+    public function finish(Device $device, CaptureSession $session, array $data): CaptureSession
+    {
+        return DB::transaction(function () use ($device, $session, $data): CaptureSession {
+            /** @var CaptureSession $locked */
+            $locked = CaptureSession::query()->lockForUpdate()->findOrFail($session->id);
+            if ($locked->status !== SessionStatus::Recording) {
+                return $locked;
+            }
+
+            $attributes = [
+                'ended_at' => self::utc($data['ended_at']),
+                'duration_ms' => (int) $data['duration_ms'],
+                'status' => SessionStatus::Uploading,
+            ];
+            if (array_key_exists('title', $data)) {
+                $attributes['title'] = $data['title'];
+            }
+            if (array_key_exists('client_id', $data)) {
+                $attributes['client_id'] = $this->resolveClientId($device, $data['client_id']);
+            }
+
+            $this->uploads->assertOpenUploadCapacity($device, count($data['artifacts']));
+            $chunkSize = ChunkedUploadService::advertisedChunkSize();
+            foreach ($data['artifacts'] as $artifact) {
+                $this->uploads->createRecording($locked, $artifact, $chunkSize);
+            }
+            $locked->update($attributes);
+
+            return $locked;
+        });
+    }
+
+    /**
+     * Tombstone sessions left in `recording` for $hours or longer without any recording (the app crashed or was
+     * uninstalled). Returns the number swept.
+     */
+    public function sweepStale(int $hours = 6): int
+    {
+        $count = 0;
+        CaptureSession::query()
+            ->where('status', SessionStatus::Recording->value)
+            ->where('created_at', '<=', now()->subHours($hours))
+            ->doesntHave('recordings')
+            ->lazyById(200)
+            ->each(function (CaptureSession $session) use (&$count): void {
+                $session->delete();
+                $count++;
+            });
+
+        return $count;
+    }
+
+    /** The id of the caller's client, or null for an empty value; another owner's or an unknown id is a 404. */
+    public function resolveClientId(Device $device, mixed $clientId): ?string
+    {
+        if ($clientId === null || $clientId === '') {
+            return null;
+        }
+
+        $client = Client::query()->where('user_id', $device->user_id)->find($clientId);
+        if ($client === null) {
+            throw new ApiError(404, 'client_not_found', 'Client not found.');
+        }
+
+        return $client->id;
+    }
+
+    /** Any ISO-8601 instant (any offset) as the UTC instant it names. */
+    public static function utc(mixed $value): ?Carbon
+    {
+        return $value === null || $value === '' ? null : Carbon::parse((string) $value)->utc();
+    }
+
+    /** @param  array<string, mixed>  $data */
+    private function create(Device $device, array $data, SessionStatus $status): CaptureSession
+    {
+        $clientId = $this->resolveClientId($device, $data['client_id'] ?? null);
+        $sourceApp = SourceApp::from($data['source_app']);
+        $useCase = $sourceApp === SourceApp::VoiceNote ? SttUseCase::VoiceNote : SttUseCase::FinalTranscript;
+
+        return CaptureSession::query()->create([
+            'user_id' => $device->user_id,
+            'device_id' => $device->id,
+            'client_id' => $clientId,
+            'client_ref' => $data['client_ref'],
+            'source_device' => $device->sourceDevice(),
+            'source_app' => $sourceApp,
+            'title' => $data['title'] ?? null,
+            'language' => $data['language'] ?? null,
+            'started_at' => self::utc($data['started_at']),
+            'ended_at' => self::utc($data['ended_at'] ?? null),
+            'duration_ms' => $data['duration_ms'] ?? null,
+            'status' => $status,
+            'final_provider' => $this->settings->providerFor($useCase)->value,
+        ]);
+    }
+}

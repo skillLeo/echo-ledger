@@ -41,7 +41,7 @@ function secTenants(): array
     return [
         'alice' => $alice, 'bob' => $bob,
         'aliceToken' => Fx::token($aliceDevice), 'bobToken' => Fx::token($bobDevice),
-        'bobDevice' => $bobDevice,
+        'aliceDevice' => $aliceDevice, 'bobDevice' => $bobDevice,
         'bobSession' => $bobSession, 'bobAudio' => $bobAudio, 'bobTranscript' => $bobTranscript,
         'bobUploadSession' => $bobUploadSession, 'bobUpload' => $bobUpload,
         'bobClient' => Fx::client($bob, 'Bob Private Client'),
@@ -104,10 +104,11 @@ it('does not leak another owner\'s library items, clients or tombstones', functi
 
 it('does not honour another owner\'s client id when creating a session or minting streaming tokens', function () {
     $t = secTenants();
+    $aliceOpen = Fx::session($t['alice'], $t['aliceDevice'], ['status' => 'recording']);
     $before = CaptureSession::query()->count();
 
     $this->api($t['aliceToken'])->postJson('/api/sessions', Fx::sessionPayload(['client_id' => $t['bobClient']->id]))->assertNotFound();
-    $this->api($t['aliceToken'])->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => $t['bobClient']->id])->assertNotFound();
+    $this->api($t['aliceToken'])->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $aliceOpen->id, 'client_id' => $t['bobClient']->id])->assertNotFound();
     $this->api($t['aliceToken'])->getJson('/api/library?client_id='.$t['bobClient']->id)->assertOk()->assertJsonPath('data', []);
 
     expect(CaptureSession::query()->count())->toBe($before);
@@ -151,7 +152,7 @@ it('does not reveal internal class names in not-found responses', function () {
     $body = $this->api($t['aliceToken'])->getJson('/api/sessions/'.$t['bobSession']->id)->assertNotFound()->getContent();
 
     expect($body)->not->toContain('App\\\\Models')->not->toContain('App\\Models')->not->toContain($t['bobSession']->id);
-})->skip('A6.W17: 404 responses name internal model classes');
+});
 
 it('lets a second device of the same owner share the library as documented', function () {
     $owner = Fx::user();

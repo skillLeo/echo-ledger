@@ -155,7 +155,7 @@ it('survives a hand-crafted pagination cursor whose fields are null', function (
 
     expect($response->getStatusCode())->toBeLessThan(500);
     expect($response->getContent())->not->toContain('BOB PRIVATE')->not->toContain($bobSessionId);
-})->skip('A6.W6: a library cursor with null fields gives HTTP 500');
+});
 
 it('rejects since values that are not real dates and never throws on extreme ones', function () {
     [$token] = secLibrary();

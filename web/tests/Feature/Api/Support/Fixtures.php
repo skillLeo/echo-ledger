@@ -48,6 +48,40 @@ final class Fixtures
     }
 
     /**
+     * Body of an open session (no `artifacts` key), docs/API.md "Open session".
+     *
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    public static function openSessionBody(array $overrides = []): array
+    {
+        return array_merge([
+            'client_ref' => (string) Str::uuid(),
+            'source_app' => 'google_meet',
+            'client_id' => null,
+            'title' => null,
+            'started_at' => '2026-10-24T09:00:00Z',
+            'language' => null,
+        ], $overrides);
+    }
+
+    /**
+     * Body of POST /api/sessions/{id}/finish for one primary artifact of $bytes.
+     *
+     * @param  array<string, mixed>  $overrides
+     * @param  array<string, mixed>  $artifact
+     * @return array<string, mixed>
+     */
+    public static function finishBody(string $bytes, array $overrides = [], array $artifact = []): array
+    {
+        return array_merge([
+            'ended_at' => '2026-10-24T09:42:10Z',
+            'duration_ms' => 2530000,
+            'artifacts' => [self::artifact($bytes, $artifact)],
+        ], $overrides);
+    }
+
+    /**
      * Audio-looking bytes with a recognisable marker, so a test can prove the marker never reaches disk in clear.
      */
     public static function audio(int $length, string $marker = 'PLAINTEXT-MARKER-0042'): string

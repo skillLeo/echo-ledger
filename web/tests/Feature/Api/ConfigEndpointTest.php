@@ -159,7 +159,7 @@ describe('captions', function () {
         app(SettingsRepository::class)->set('captions.channels', ['both']);
 
         $this->getJson('/api/config')->assertOk()->assertJsonPath('captions.channels', 'both');
-    })->skip('A6.W16: a settings value that is not text causes a server error');
+    });
 });
 
 describe('retention', function () {

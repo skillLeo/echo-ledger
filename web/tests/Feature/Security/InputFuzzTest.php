@@ -88,7 +88,25 @@ it('survives hostile values in the session start and end times', function () {
     $failures = secFuzzSessionCreation(fn (array $payload) => $this->api($token)->postJson('/api/sessions', $payload), ['started_at', 'ended_at']);
 
     expect($failures)->toBe([]);
-})->skip('A6.W16: a numeric started_at or ended_at gives HTTP 500 instead of 422');
+});
+
+it('survives hostile values in every session finish field', function () {
+    $owner = Fx::user();
+
+    $failures = Fuzz::run(
+        function (array $payload) use ($owner) {
+            // A fresh device and open session per request, so earlier requests cannot fill the device's upload limit.
+            $device = Fx::device($owner);
+            $open = Fx::session($owner, $device, ['status' => 'recording', 'started_at' => '2026-10-24T09:00:00Z']);
+
+            return $this->api(Fx::token($device))->postJson("/api/sessions/{$open->id}/finish", $payload);
+        },
+        ['ended_at' => '2026-10-24T09:10:00Z', 'duration_ms' => 600000, 'title' => 'Budget review', 'client_id' => null, 'artifacts' => [Fx::artifact()]],
+        ['ended_at', 'duration_ms', 'title', 'client_id', 'artifacts', 'artifacts.0', 'artifacts.0.role', 'artifacts.0.sample_rate', 'artifacts.0.size_bytes'],
+    );
+
+    expect($failures)->toBe([]);
+});
 
 it('survives hostile values when adding a recording to a session', function () {
     $device = Fx::device();
@@ -151,7 +169,7 @@ it('survives hostile values in the text and confidence of a word in a transcript
     );
 
     expect($failures)->toBe([]);
-})->skip('A6.W16: a word text that is not a string, or a confidence that overflows to infinity, gives HTTP 500');
+});
 
 it('survives hostile values in every streaming token field', function () {
     app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_key_for_fuzzing');
@@ -159,11 +177,26 @@ it('survives hostile values in every streaming token field', function () {
     $device = Fx::device();
     $token = Fx::token($device);
     $client = Fx::client($device->user);
+    $open = Fx::session($device->user, $device, ['status' => 'recording']);
 
     $failures = Fuzz::run(
         fn (array $payload) => $this->api($token)->postJson('/api/stt/token', $payload),
-        ['use_case' => 'live_captions', 'client_id' => $client->id, 'channels' => ['me', 'client'], 'sample_rate' => 16000, 'language' => 'en'],
-        ['use_case', 'client_id', 'channels', 'channels.0', 'sample_rate', 'language'],
+        ['use_case' => 'live_captions', 'session_id' => $open->id, 'client_id' => $client->id, 'channels' => ['me', 'client'], 'sample_rate' => 16000, 'language' => 'en'],
+        ['use_case', 'session_id', 'client_id', 'channels', 'channels.0', 'sample_rate', 'language'],
+    );
+
+    expect($failures)->toBe([]);
+});
+
+it('survives hostile values in every usage report field', function () {
+    $device = Fx::device();
+    $token = Fx::token($device);
+
+    $failures = Fuzz::run(
+        fn (array $payload) => $this->api($token)->postJson('/api/usage', $payload),
+        ['report_id' => (string) Str::uuid(), 'use_case' => 'live_captions', 'provider' => 'assemblyai', 'session_id' => Fx::MISSING_ID,
+            'streamed_ms' => 61000, 'channels' => 2, 'ended_at' => '2026-10-24T09:43:00Z'],
+        ['report_id', 'use_case', 'provider', 'session_id', 'streamed_ms', 'channels', 'ended_at'],
     );
 
     expect($failures)->toBe([]);
@@ -226,7 +259,9 @@ it('survives malformed request bodies on every JSON endpoint', function (string 
     'POST sessions' => ['POST', '/api/sessions'],
     'POST sessions/{id}/recordings' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/recordings'],
     'POST sessions/{id}/transcripts' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/transcripts'],
+    'POST sessions/{id}/finish' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/finish'],
     'POST stt/token' => ['POST', '/api/stt/token'],
+    'POST usage' => ['POST', '/api/usage'],
     'POST devices/rotate-token' => ['POST', '/api/devices/rotate-token'],
     'POST devices/register' => ['POST', '/api/devices/register'],
 ]);
@@ -264,7 +299,7 @@ it('refuses a sample rate that is not a number when a session is created', funct
 
     $this->api($token)->postJson('/api/sessions', Fx::sessionPayload(['artifacts' => [Fx::artifact(['sample_rate' => 'abc'])]]))
         ->assertStatus(422);
-})->skip('A6.W21: a sample_rate that is not a number is coerced to "unknown" and accepted');
+});
 
 it('limits every free-text field so stored values cannot exceed their column sizes', function () {
     $device = Fx::device();

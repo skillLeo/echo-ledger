@@ -35,4 +35,15 @@ class CaptureSessionFactory extends Factory
             'final_provider' => 'assemblyai',
         ];
     }
+
+    /** An open session: the recording is still running (docs/API.md "Session lifecycle"). */
+    public function open(): static
+    {
+        return $this->state(fn (): array => [
+            'started_at' => now(),
+            'ended_at' => null,
+            'duration_ms' => null,
+            'status' => SessionStatus::Recording,
+        ]);
+    }
 }

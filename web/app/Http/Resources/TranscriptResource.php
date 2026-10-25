@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -26,9 +27,25 @@ final class TranscriptResource extends JsonResource
             'language' => $transcript->language,
             'text' => $transcript->text,
             'segments' => $transcript->segments ?? [],
-            'error' => $transcript->status->value === 'failed' ? $transcript->error : null,
+            ...self::failure($transcript),
             'created_at' => $transcript->created_at->toAtomString(),
             'completed_at' => $transcript->completed_at?->toAtomString(),
         ];
+    }
+
+    /**
+     * `error` and `error_code` (docs/API.md): set only while the transcript is failed, so a stale reason of an earlier
+     * attempt never reaches a device.
+     *
+     * @return array{error: string|null, error_code: string|null}
+     */
+    public static function failure(Transcript $transcript): array
+    {
+        if ($transcript->status !== TranscriptStatus::Failed) {
+            return ['error' => null, 'error_code' => null];
+        }
+        $code = $transcript->getAttribute('error_code');
+
+        return ['error' => $transcript->error, 'error_code' => is_string($code) && $code !== '' ? $code : null];
     }
 }

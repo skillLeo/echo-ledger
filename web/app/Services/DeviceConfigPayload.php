@@ -6,11 +6,15 @@ namespace App\Services;
 
 use App\Enums\SttUseCase;
 use App\Models\Device;
+use App\Services\Usage\UsageSummary;
 use App\Stt\SttManager;
 
 /** Body of GET /api/config (docs/API.md). Never contains secrets. */
 final class DeviceConfigPayload
 {
+    /** Contract version the server speaks; clients fall back to the v1 flows when it is absent. */
+    public const API_VERSION = '1.1';
+
     public function __construct(
         private readonly SettingsRepository $settings,
         private readonly SttManager $stt,
@@ -35,6 +39,7 @@ final class DeviceConfigPayload
         }
 
         return [
+            'api_version' => self::API_VERSION,
             'device' => [
                 'id' => $device->id,
                 'name' => $device->name,
@@ -51,6 +56,7 @@ final class DeviceConfigPayload
             'providers' => $providers,
             'captions' => ['channels' => $this->settings->captionChannels()],
             'pins' => $this->settings->pins(),
+            'usage' => app(UsageSummary::class)->toArray(),
         ];
     }
 }

@@ -69,7 +69,7 @@ describe('reading', function () {
     it('cannot learn the victim\'s keyterms through a streaming token', function () {
         $this->configureAssemblyAi();
 
-        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => $this->client->id]);
+        $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->openSession(), 'client_id' => $this->client->id]);
 
         $response->assertNotFound();
         expect($response->getContent())->not->toContain('Nightingale');
@@ -97,7 +97,7 @@ describe('reading', function () {
         $body = $this->getJson("/api/sessions/{$this->session}")->assertNotFound()->getContent();
 
         expect($body)->not->toContain('App\\\\Models')->not->toContain('CaptureSession');
-    })->skip('A6.W17: 404 responses name internal model classes');
+    });
 
     it('does not accept malformed ids as a way to probe', function (string $id) {
         foreach (["/api/sessions/{$id}", "/api/recordings/{$id}", "/api/transcripts/{$id}"] as $uri) {

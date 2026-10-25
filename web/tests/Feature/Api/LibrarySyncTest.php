@@ -167,7 +167,7 @@ describe('paging', function () {
         expect($response->getContent())->not->toContain($stranger->id)->not->toContain('Someone else');
     })->with([
         'nulls' => [['updated_at' => null, 'id' => null, '_pointsToNextItems' => false]],
-    ])->skip('A6.W6: a library cursor with null fields gives HTTP 500');
+    ]);
 
     it('keeps the number of queries flat as the library grows', function () {
         foreach (range(1, 30) as $i) {
@@ -285,7 +285,7 @@ describe('incremental sync', function () {
         $ids = array_column($this->getJson('/api/library?since='.urlencode($since))->json('data'), 'id');
 
         expect($ids)->toContain($session->id);
-    })->skip('A6.W6: since ignores a UTC offset');
+    });
 
     it('returns the server time in the same format as every updated_at, so string comparison is safe', function () {
         sessionAged($this->owner, 5);

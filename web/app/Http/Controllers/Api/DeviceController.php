@@ -41,8 +41,11 @@ final class DeviceController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $token = $pairing->issueToken($device);
-        $device->currentAccessToken()->delete();
+        $current = $device->currentAccessToken();
+        // The replacement carries exactly the abilities of the token that asked for it, never more.
+        $abilities = array_values(array_filter((array) $current->abilities, 'is_string'));
+        $token = $pairing->issueToken($device, $abilities);
+        $current->delete();
 
         return response()->json([
             'token' => $token->plainTextToken,

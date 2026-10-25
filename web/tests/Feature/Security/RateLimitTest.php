@@ -137,7 +137,7 @@ it('lets the uploads limiter, not the general device limit, govern chunk traffic
 
     // The `uploads` limiter allows 600 a minute. If a stricter limiter sits in front of it, it can never be reached.
     expect(array_count_values($statuses)[429] ?? 0)->toBe(0);
-})->skip('A6.W19: the stricter device limiter sits in front of the uploads limiter, so the uploads limit can never apply');
+});
 
 it('throttles the signed audio route by address', function () {
     $send = fn () => $this->api(null, false)->withServerVariables(['REMOTE_ADDR' => '203.0.113.30'])

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Enums\UploadStatus;
 use App\Models\Recording;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -25,6 +26,8 @@ final class RecordingUploadResource extends JsonResource
                 'total_chunks' => $recording->total_chunks,
                 'received_chunks' => $recording->received_chunks,
                 'status' => $recording->upload_status->value,
+                // A readable reason while the upload is failed (the client then sends the whole file again).
+                'error' => $recording->upload_status === UploadStatus::Failed ? $recording->error : null,
             ],
         ];
     }

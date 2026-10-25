@@ -26,7 +26,7 @@ final class SttWebhookController extends Controller
     {
         $key = SttProviderKey::tryFrom($provider);
         if (! in_array($key, [SttProviderKey::AssemblyAi, SttProviderKey::ElevenLabs], true)) {
-            return response()->json(['message' => 'Unknown provider.'], 404);
+            return response()->json(['message' => 'Not found.', 'code' => 'not_found'], 404);
         }
 
         try {
@@ -34,7 +34,7 @@ final class SttWebhookController extends Controller
         } catch (InvalidWebhookSignature $e) {
             logger()->warning('Rejected STT webhook', ['provider' => $provider, 'reason' => $e->getMessage(), 'ip' => $request->ip()]);
 
-            return response()->json(['message' => 'Invalid signature.'], 401);
+            return response()->json(['message' => 'Invalid signature.', 'code' => 'invalid_signature'], 401);
         }
 
         $transcript = $envelope->transcriptRef ? Transcript::query()->find($envelope->transcriptRef) : null;
@@ -42,7 +42,7 @@ final class SttWebhookController extends Controller
             return response()->json(['received' => true, 'ignored' => 'unknown transcript']); // 2xx: never retry
         }
         if ($envelope->jobId !== null && $transcript->provider_job_id !== null && $transcript->provider_job_id !== $envelope->jobId) {
-            return response()->json(['message' => 'Job id mismatch.'], 409);
+            return response()->json(['message' => 'Job id mismatch.', 'code' => 'conflict'], 409);
         }
 
         try {
@@ -53,7 +53,7 @@ final class SttWebhookController extends Controller
         } catch (Throwable $e) {
             report($e);
 
-            return response()->json(['message' => 'Temporary failure.'], 503);
+            return response()->json(['message' => 'Temporary failure.', 'code' => 'service_unavailable'], 503);
         }
 
         if ($event->wasRecentlyCreated) {

@@ -9,33 +9,35 @@ use App\Enums\RecordingRole;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SttProviderKey;
-use App\Enums\SttUseCase;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\LibraryItemResource;
 use App\Http\Resources\RecordingUploadResource;
 use App\Http\Resources\TranscriptResource;
 use App\Models\CaptureSession;
-use App\Models\Client;
 use App\Models\Device;
 use App\Models\Recording;
 use App\Models\Transcript;
 use App\Services\ChunkedUploadService;
 use App\Services\FinalTranscriptCoordinator;
-use App\Services\SettingsRepository;
+use App\Services\SessionLifecycle;
 use App\Services\TranscriptStore;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
 use App\Stt\SttManager;
 use App\Stt\TranscriptNormalizer;
+use Closure;
+use DateTimeInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 final class SessionController extends Controller
 {
@@ -56,85 +58,140 @@ final class SessionController extends Controller
 
     /**
      * A sample rate of 0 means "unknown" (a shared voice note has no known rate); treat it as absent rather than
-     * rejecting the whole upload. Older app versions send 0.
+     * rejecting the whole upload. Older app versions send 0. Nothing else is coerced: text or fractions fail validation.
      *
      * @param  array<string, mixed>  $artifact
      * @return array<string, mixed>
      */
     public static function normalizeArtifact(array $artifact): array
     {
-        if (array_key_exists('sample_rate', $artifact) && (int) $artifact['sample_rate'] === 0) {
+        if (array_key_exists('sample_rate', $artifact) && ($artifact['sample_rate'] === 0 || $artifact['sample_rate'] === '0')) {
             $artifact['sample_rate'] = null;
         }
 
         return $artifact;
     }
 
-    /** POST /api/sessions — idempotent on (device, client_ref). */
-    public function store(Request $request, ChunkedUploadService $uploads, SettingsRepository $settings, SttManager $stt): JsonResponse
+    /**
+     * POST /api/sessions — idempotent on (device, client_ref). With `artifacts`: one-shot create (status `uploading`);
+     * without the key: open session (status `recording`, docs/API.md "Session lifecycle").
+     */
+    public function store(Request $request, SessionLifecycle $lifecycle, SttManager $stt): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
-        $request->merge(['artifacts' => array_map(
-            fn ($artifact) => is_array($artifact) ? self::normalizeArtifact($artifact) : $artifact,
-            (array) $request->input('artifacts', []),
-        )]);
+        $withArtifacts = $request->exists('artifacts');
+        $this->normalizeArtifactsInput($request);
         $data = $request->validate([
             'client_ref' => ['required', 'string', 'max:64'],
             'source_app' => ['required', Rule::enum(SourceApp::class)],
             'client_id' => ['nullable', 'string', 'size:26'],
             'title' => ['nullable', 'string', 'max:200'],
-            'started_at' => ['required', 'date'],
-            'ended_at' => ['nullable', 'date', 'after_or_equal:started_at'],
+            'started_at' => ['required', ...self::instantRules()],
+            'ended_at' => ['nullable', ...self::instantRules(), self::notBefore($request->input('started_at'), 'started at')],
             'duration_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],
             'language' => ['nullable', 'string', 'max:16'],
-            'artifacts' => ['required', 'array', 'min:1', 'max:3'],
+            'artifacts' => ['sometimes', 'array', 'min:1', 'max:3'],
             ...self::artifactRules('artifacts.*.'),
         ]);
-
-        $roles = array_column($data['artifacts'], 'role');
-        if (! in_array(RecordingRole::Primary->value, $roles, true) || count($roles) !== count(array_unique($roles))) {
-            throw ValidationException::withMessages(['artifacts' => 'Exactly one primary artifact and unique roles are required.']);
+        if ($withArtifacts) {
+            $this->assertArtifactRoles($data['artifacts']);
         }
 
         $existing = CaptureSession::withTrashed()->where('device_id', $device->id)->where('client_ref', $data['client_ref'])->first();
         if ($existing !== null) {
+            // An app that lost the answer of an open session (or crashed) and now sends the one-shot create with the
+            // same client_ref finishes that session. A tombstone is returned unchanged.
+            if ($withArtifacts && ! $existing->trashed() && $existing->status === SessionStatus::Recording) {
+                $existing = $lifecycle->finish($device, $existing, $data);
+            }
+
             return $this->sessionCreatedResponse($existing, $stt, 200);
         }
 
-        $clientId = null;
-        if (! empty($data['client_id'])) {
-            $clientId = Client::query()->where('user_id', $device->user_id)->findOrFail($data['client_id'])->id;
-        }
-
-        $sourceApp = SourceApp::from($data['source_app']);
-        $useCase = $sourceApp === SourceApp::VoiceNote ? SttUseCase::VoiceNote : SttUseCase::FinalTranscript;
-        $chunkSize = ChunkedUploadService::advertisedChunkSize();
-
-        $session = DB::transaction(function () use ($device, $data, $clientId, $sourceApp, $settings, $useCase, $uploads, $chunkSize): CaptureSession {
-            $session = CaptureSession::query()->create([
-                'user_id' => $device->user_id,
-                'device_id' => $device->id,
-                'client_id' => $clientId,
-                'client_ref' => $data['client_ref'],
-                'source_device' => $device->sourceDevice(),
-                'source_app' => $sourceApp,
-                'title' => $data['title'] ?? null,
-                'language' => $data['language'] ?? null,
-                'started_at' => $data['started_at'],
-                'ended_at' => $data['ended_at'] ?? null,
-                'duration_ms' => $data['duration_ms'] ?? null,
-                'status' => SessionStatus::Uploading,
-                'final_provider' => $settings->providerFor($useCase)->value,
-            ]);
-            foreach ($data['artifacts'] as $artifact) {
-                $uploads->createRecording($session, $artifact, $chunkSize);
-            }
-
-            return $session;
-        });
+        $session = $withArtifacts ? $lifecycle->createWithArtifacts($device, $data) : $lifecycle->open($device, $data);
 
         return $this->sessionCreatedResponse($session, $stt, 201);
+    }
+
+    /** POST /api/sessions/{id}/finish — attach the artifacts of an open session (creator device only; idempotent). */
+    public function finish(Request $request, string $id, SessionLifecycle $lifecycle, SttManager $stt): JsonResponse
+    {
+        /** @var Device $device */
+        $device = $request->user();
+        $session = CaptureSession::query()->where('device_id', $device->id)->find($id);
+        if (! $session instanceof CaptureSession) {
+            throw new ApiError(404, 'session_not_found', 'Session not found.');
+        }
+
+        $this->normalizeArtifactsInput($request);
+        $data = $request->validate([
+            'ended_at' => ['required', ...self::instantRules(), self::notBefore($session->started_at, 'the start of the recording')],
+            'duration_ms' => ['required', 'integer', 'min:0', 'max:86400000'],
+            'title' => ['nullable', 'string', 'max:200'],
+            'client_id' => ['nullable', 'string', 'size:26'],
+            'artifacts' => ['required', 'array', 'min:1', 'max:3'],
+            ...self::artifactRules('artifacts.*.'),
+        ]);
+        $this->assertArtifactRoles($data['artifacts']);
+
+        return $this->sessionCreatedResponse($lifecycle->finish($device, $session, $data), $stt, 200);
+    }
+
+    /**
+     * An ISO-8601 instant sent as text (any offset). Numbers, lists and unparsable text are a 422, never a server error.
+     *
+     * @return list<mixed>
+     */
+    public static function instantRules(): array
+    {
+        return ['bail', 'string', 'date', static function (string $attribute, mixed $value, Closure $fail): void {
+            try {
+                Carbon::parse((string) $value);
+            } catch (Throwable) {
+                $fail('The :attribute field must be a valid date.');
+            }
+        }];
+    }
+
+    /**
+     * The instant must not be before $start. Laravel's after_or_equal would parse a numeric start field with a
+     * TypeError (a server error), so the comparison only runs when both sides are parsable text or a date.
+     */
+    private static function notBefore(mixed $start, string $startLabel): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail) use ($start, $startLabel): void {
+            if (! is_string($value) || (! is_string($start) && ! $start instanceof DateTimeInterface)) {
+                return;
+            }
+            try {
+                if (Carbon::parse($value)->lt(Carbon::parse($start))) {
+                    $fail("The :attribute field must be a date after or equal to {$startLabel}.");
+                }
+            } catch (Throwable) {
+                // An unparsable start is reported on its own field.
+            }
+        };
+    }
+
+    private function normalizeArtifactsInput(Request $request): void
+    {
+        $artifacts = $request->input('artifacts');
+        if (is_array($artifacts)) {
+            $request->merge(['artifacts' => array_map(
+                fn ($artifact) => is_array($artifact) ? self::normalizeArtifact($artifact) : $artifact,
+                $artifacts,
+            )]);
+        }
+    }
+
+    /** @param  array<int|string, mixed>  $artifacts  validated artifacts */
+    private function assertArtifactRoles(array $artifacts): void
+    {
+        $roles = array_column($artifacts, 'role');
+        if (! in_array(RecordingRole::Primary->value, $roles, true) || count($roles) !== count(array_unique($roles))) {
+            throw ValidationException::withMessages(['artifacts' => 'Exactly one primary artifact and unique roles are required.']);
+        }
     }
 
     private function sessionCreatedResponse(CaptureSession $session, SttManager $stt, int $status): JsonResponse
@@ -157,6 +214,9 @@ final class SessionController extends Controller
         if ($session->recordings()->where('role', $data['role'])->exists()) {
             throw ValidationException::withMessages(['role' => 'This artifact role already exists for the session.']);
         }
+        /** @var Device $device */
+        $device = $request->user();
+        $uploads->assertOpenUploadCapacity($device, 1);
         $recording = $uploads->createRecording($session, $data, ChunkedUploadService::advertisedChunkSize());
 
         return (new RecordingUploadResource($recording))->response()->setStatusCode(201);
@@ -177,6 +237,7 @@ final class SessionController extends Controller
             ])->values(),
             'transcripts' => $session->transcripts->map(fn (Transcript $t): array => [
                 'id' => $t->id, 'kind' => $t->kind->value, 'provider' => $t->provider, 'status' => $t->status->value, 'language' => $t->language,
+                ...TranscriptResource::failure($t),
             ])->values(),
             'playback_url' => $primary?->isReady() ? URL::temporarySignedRoute('api.recordings.audio',
                 now()->addMinutes((int) config('echoledger.playback_url_minutes', 30)), ['recording' => $primary->id]) : null,
@@ -206,6 +267,11 @@ final class SessionController extends Controller
             'segments.*.end_ms' => ['required', 'integer', 'gte:segments.*.start_ms'],
             'segments.*.text' => ['required', 'string', 'max:20000'],
             'segments.*.words' => ['nullable', 'array'],
+            'segments.*.words.*' => ['array'],
+            'segments.*.words.*.text' => ['nullable', 'string', 'max:1000'],
+            'segments.*.words.*.start_ms' => ['nullable', 'integer', 'min:0'],
+            'segments.*.words.*.end_ms' => ['nullable', 'integer', 'min:0'],
+            'segments.*.words.*.confidence' => ['nullable', 'numeric', 'between:0,1'],
         ]);
 
         $kind = TranscriptKind::from($data['kind']);
