@@ -163,7 +163,7 @@ it('streams audio to a super admin who has not turned on two-factor, because it 
     $recording = $this->readyRecording($session, 'RIFF-playable-bytes');
 
     $this->get(route('admin.recordings.stream', $recording))->assertOk();
-})->skip('A6.W1: the console audio route returns 403 to admins without two-factor, although two-factor is optional');
+});
 
 it('lets the session page play audio for a super admin without two-factor', function () {
     $admin = $this->signInAsAdmin();
@@ -175,7 +175,7 @@ it('lets the session page play audio for a super admin without two-factor', func
 
     // The <audio> element requests exactly this URL with the admin's session cookie.
     $this->get(route('admin.recordings.stream', $recording))->assertOk();
-})->skip('A6.W1: the console audio route returns 403 to admins without two-factor, although two-factor is optional');
+});
 
 it('answers 404 for audio that is deleted, not ready, or unknown', function () {
     $admin = $this->makeAdmin();
@@ -203,7 +203,7 @@ it('keeps one super admin from streaming another super admin\'s recording', func
     $this->actingAs($intruder, 'web');
 
     expect($this->get(route('admin.recordings.stream', $recording))->getStatusCode())->toBeIn([403, 404]);
-})->skip('A6.W2: the console audio route is not scoped to the recording owner');
+});
 
 // --- Request forgery and framing ----------------------------------------------------------------------------------
 

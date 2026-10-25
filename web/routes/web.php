@@ -3,12 +3,12 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\AdminMediaController;
-use App\Http\Middleware\EnsureAdminMfa;
+use App\Http\Middleware\EnsureSuperAdmin;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/admin');
 
 // Decrypted playback for the admin transcript player (HTTP Range supported).
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
-    ->middleware(['auth:web', EnsureAdminMfa::class])
+    ->middleware(['auth:web', EnsureSuperAdmin::class])
     ->name('admin.recordings.stream');

@@ -83,7 +83,7 @@ it('plays a recording for a signed-in super admin while the panel does not requi
 
     expect($panelRequiresMfa)->toBeFalse();
     $response->assertOk();
-})->skip('A6.W1: the console audio route returns 403 to admins without two-factor, although two-factor is optional');
+});
 
 it('streams decrypted audio to an enrolled super admin with safe headers and range support', function () {
     Fx::fakeRecordingsDisk();
@@ -111,7 +111,7 @@ it('does not play one admin\'s recording to another admin', function () {
     $status = $this->get('/admin-media/recordings/'.$recording->id)->getStatusCode();
 
     expect($status)->toBeIn([403, 404]);
-})->skip('A6.W2: the console audio route is not scoped to the recording owner');
+});
 
 it('answers 404 for audio that is missing, deleted or not ready', function () {
     Fx::fakeRecordingsDisk();
