@@ -15,6 +15,17 @@ import shortcutsRs from "../../src-tauri/src/shortcuts.rs?raw";
 import modelsRs from "../../src-tauri/src/net/models.rs?raw";
 import captionsRs from "../../src-tauri/src/stt/captions.rs?raw";
 
+// Every Rust source, for types whose module may move: a struct or enum is looked up by name across all files.
+const allRustSources = import.meta.glob<string>("../../src-tauri/src/**/*.rs", { query: "?raw", import: "default", eager: true });
+
+/** The Rust source declaring `pub struct|enum <name>` (fails with the name when no file declares it). */
+function rustSourceDeclaring(kind: "struct" | "enum", name: string): string {
+  const re = new RegExp(`pub ${kind} ${name}\\b`);
+  const found = Object.values(allRustSources).find((source) => re.test(source));
+  if (!found) throw new Error(`no Rust source declares pub ${kind} ${name}`);
+  return found;
+}
+
 const camel = (snake: string) => snake.replace(/_([a-z0-9])/g, (_m, c: string) => c.toUpperCase());
 /** serde's `rename_all = "snake_case"` for a variant name. */
 const serdeSnake = (variant: string) => variant.replace(/[A-Z]/g, (c, i: number) => (i > 0 ? "_" : "") + c.toLowerCase());
@@ -208,6 +219,24 @@ describe("wire types", () => {
     expect([...tsVariants.keys()].sort()).toEqual([...rustVariants.keys()].sort());
     for (const [kind, fields] of tsVariants) expect(sorted(fields), `CaptionEvent "${kind}"`).toEqual(sorted(rustVariants.get(kind)!));
   });
+
+  it("the TypeScript SettingsPatch declares exactly the fields the Rust SettingsPatch accepts", () => {
+    expect(sorted(tsInterfaceKeys("SettingsPatch"))).toEqual(sorted(settingsPatchKeys));
+  });
+
+  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "ReviewPayload", "AskPayload", "NavigatePayload"])(
+    "%s fields match the Rust struct",
+    (name) => {
+      expect(sorted(tsInterfaceKeys(name))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", name), name)));
+    },
+  );
+
+  it.each(["AskBeforeSaving", "DecisionTimeout", "TrayState", "BudgetState", "IgnoreReason"])(
+    "%s values match the serde names of the Rust enum",
+    (name) => {
+      expect(sorted(tsUnionValues(name))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", name), name)));
+    },
+  );
 
   it("every setting the UI patches is a field the Rust SettingsPatch accepts", () => {
     const sources = [settingsViewTsx, recordViewTsx].join("\n");

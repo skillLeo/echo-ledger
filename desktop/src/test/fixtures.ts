@@ -1,5 +1,20 @@
 // Builders for the wire types the UI receives from the Rust core.
-import type { AppStatus, LibraryItem, RecordingInfo, Segment, Settings, TranscriptDetail } from "../lib/ipc";
+import type {
+  AppStatus,
+  AskPayload,
+  LibraryItem,
+  MicUser,
+  NavigatePayload,
+  PendingItem,
+  RecordingInfo,
+  RecordingState,
+  ReviewPayload,
+  Segment,
+  Settings,
+  SiteRule,
+  TranscriptDetail,
+  UploadItem,
+} from "../lib/ipc";
 
 export function makeStatus(overrides: Partial<AppStatus> = {}): AppStatus {
   return {
@@ -16,6 +31,13 @@ export function makeStatus(overrides: Partial<AppStatus> = {}): AppStatus {
     shortcutErrors: [],
     levels: [0, 0],
     platform: "windows",
+    paused: false,
+    elapsedMs: 0,
+    pillHidden: false,
+    pendingDecisions: 0,
+    failedUploads: 0,
+    trayState: "idle",
+    budget: "ok",
     ...overrides,
   };
 }
@@ -52,8 +74,103 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     dictationOutput: "type",
     clientId: null,
     consentAcknowledged: false,
+    askBeforeSaving: "always",
+    decisionTimeout: "keep",
+    askUnknownApps: false,
+    siteRules: [],
+    captionLines: 3,
+    pillPosition: null,
+    browserAutomation: false,
     ...overrides,
   };
+}
+
+export function makeSiteRule(overrides: Partial<SiteRule> = {}): SiteRule {
+  return {
+    id: "user-1",
+    app: "google_meet",
+    host: "meet.example.test",
+    titlePrefix: null,
+    titleContains: null,
+    titleEquals: null,
+    priority: 100,
+    enabled: true,
+    ...overrides,
+  };
+}
+
+/** A browser identified as Google Meet that auto-records (the explainer's happy path). */
+export function makeMicUser(overrides: Partial<MicUser> = {}): MicUser {
+  return {
+    name: "chrome.exe",
+    app: "google_meet",
+    holdsMic: true,
+    playsAudio: true,
+    site: "meet.google.com",
+    decision: "auto_record",
+    reason: null,
+    ...overrides,
+  };
+}
+
+export function makeRecordingState(overrides: Partial<RecordingState> = {}): RecordingState {
+  return {
+    active: true,
+    paused: false,
+    elapsedMs: 65_000,
+    sourceApp: "zoom",
+    mode: "call",
+    captions: false,
+    levels: [0.4, 0.2],
+    auto: true,
+    hidden: false,
+    ...overrides,
+  };
+}
+
+/** A finished automatic Zoom call waiting for a decision, kept automatically in 60 s. */
+export function makePendingItem(id = "pend-1", overrides: Partial<PendingItem> = {}): PendingItem {
+  return {
+    id,
+    sourceApp: "zoom",
+    auto: true,
+    mode: "call",
+    title: null,
+    clientId: null,
+    clientName: null,
+    startedAt: "2026-10-24T09:00:00Z",
+    endedAt: "2026-10-24T09:12:30Z",
+    durationMs: 750_000,
+    firstLine: "Thanks for joining, shall we start with the invoice?",
+    deadlineAt: "2026-10-24T09:13:30Z",
+    ...overrides,
+  };
+}
+
+export function makeReviewPayload(overrides: Partial<ReviewPayload> = {}): ReviewPayload {
+  return { item: makePendingItem(), timeout: "keep", queueLength: 1, ...overrides };
+}
+
+export function makeAskPayload(overrides: Partial<AskPayload> = {}): AskPayload {
+  return { id: "ask-1", name: "chrome.exe", site: "call.example.test", seconds: 8, ...overrides };
+}
+
+export function makeUploadItem(id = "up-1", overrides: Partial<UploadItem> = {}): UploadItem {
+  return {
+    id,
+    sourceApp: "zoom",
+    title: null,
+    startedAt: "2026-10-24T09:00:00Z",
+    durationMs: 750_000,
+    state: "queued",
+    lastError: null,
+    attempts: 0,
+    ...overrides,
+  };
+}
+
+export function makeNavigate(overrides: Partial<NavigatePayload> = {}): NavigatePayload {
+  return { view: "library", pendingId: null, rename: false, ...overrides };
 }
 
 export function makeItem(id: string, overrides: Partial<LibraryItem> = {}): LibraryItem {

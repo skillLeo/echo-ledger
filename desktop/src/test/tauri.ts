@@ -1,5 +1,5 @@
-// Test double for the Tauri JS API: `invoke`, `Channel` and `listen` backed by in-memory registries, so views can be
-// rendered in jsdom and driven through the same commands and events the Rust core uses.
+// Test double for the Tauri JS API: `invoke`, `Channel`, `listen` and the current webview window, backed by in-memory
+// registries, so views can be rendered in jsdom and driven through the same commands and events the Rust core uses.
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 
@@ -37,12 +37,30 @@ export class Channel<T = unknown> {
   }
 }
 
+/** Stand-in for the current webview window: its label and the drag call the pill and overlay start. */
+export const currentWindow = {
+  label: "main",
+  startDragging: vi.fn(async (): Promise<void> => undefined),
+};
+
 export const coreModule = { invoke, Channel };
 export const eventModule = { listen };
+/** `vi.mock("@tauri-apps/api/webviewWindow", async () => (await import("../test/tauri")).windowModule)` */
+export const windowModule = { getCurrentWebviewWindow: () => currentWindow };
+
+/** Sets the label `getCurrentWebviewWindow()` reports (main, overlay, dictation, pill, review). */
+export function setWindowLabel(label: string): void {
+  currentWindow.label = label;
+}
 
 /** Registers a command that resolves to `value`. */
 export function respond(command: string, value: unknown): void {
   handlers.set(command, () => value);
+}
+
+/** Registers several commands at once: `{ app_status: makeStatus(), recording_state: makeRecordingState() }`. */
+export function respondAll(values: Record<string, unknown>): void {
+  for (const [command, value] of Object.entries(values)) respond(command, value);
 }
 
 /** Registers a command with custom behaviour (inspect arguments, return a pending promise, ...). */
@@ -93,4 +111,6 @@ export function resetTauriMock(): void {
   Channel.instances = [];
   invoke.mockClear();
   listen.mockClear();
+  currentWindow.label = "main";
+  currentWindow.startDragging.mockClear();
 }
