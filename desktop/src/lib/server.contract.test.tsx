@@ -279,6 +279,21 @@ describe("Library screen fed with server data", () => {
     await open("WhatsApp call");
     expect(await screen.findByText(/Transcription failed\./)).toBeInTheDocument();
     expect(screen.getByText(/Transcoding failed\. File does not appear to contain audio/)).toBeInTheDocument();
+    expect(screen.queryByText(/Check your microphone/)).not.toBeInTheDocument();
+  });
+
+  it("adds the desktop microphone hint to a no_audio failure (transcripts_show_200_final_failed_no_audio)", async () => {
+    const noAudio = fx("transcripts_show_200_final_failed_no_audio");
+    expect(noAudio.error_code).toBe("no_audio");
+    const failed = fx("transcripts_show_200_final_failed");
+    transcriptsById.set(failed.id as string, noAudio);
+    try {
+      await open("WhatsApp call");
+      expect(await screen.findByText(/No audio was captured in this recording\./)).toBeInTheDocument();
+      expect(screen.getByText("Check your microphone and the audio device, then try again.")).toBeInTheDocument();
+    } finally {
+      transcriptsById.set(failed.id as string, failed);
+    }
   });
 
   // A6.DU3: a transcript that is still submitted or processing is shown as "no speech was detected".

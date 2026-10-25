@@ -75,6 +75,12 @@ export const MoonIcon = (p: IconProps) => (
 export const MonitorIcon = (p: IconProps) => (
   <Svg {...p}><rect x="3" y="4" width="18" height="12" rx="1.8" /><path d="M8 20h8M12 16v4" /></Svg>
 );
+export const AlertIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7.5v5.5M12 16.5h.01" /></Svg>
+);
+export const ClockIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Svg>
+);
 
 export function SourceDeviceIcon({ source, ...p }: IconProps & { source?: string }) {
   if (source === "phone") return <PhoneIcon {...p} />;

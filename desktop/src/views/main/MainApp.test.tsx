@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeItem, makeNavigate, makePendingItem, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
 import type { AppStatus } from "../../lib/ipc";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -185,7 +185,8 @@ describe("MainApp navigation", () => {
     await renderPaired({ captionsLive: true, deviceName: "Studio PC", pendingUploads: 3 });
     expect(within(sidebar()).getByText("Captions live")).toBeInTheDocument();
     expect(within(sidebar()).getByText("Studio PC")).toBeInTheDocument();
-    expect(within(sidebar()).getByText("3 upload(s) pending")).toBeInTheDocument();
+    // A3.4: the footer mirrors the tray, which says "uploading" while anything is in the queue.
+    expect(within(sidebar()).getByText("Uploading…")).toBeInTheDocument();
   });
 
   it("reports captions off and all uploads done by default", async () => {
@@ -250,7 +251,7 @@ describe("MainApp events, toasts and polling", () => {
     await emitEvent("app:status", makeStatus({ captionsLive: true, pendingUploads: 1, deviceName: "Renamed PC" }));
     expect(within(sidebar()).getByText("Captions live")).toBeInTheDocument();
     expect(within(sidebar()).getByText("Renamed PC")).toBeInTheDocument();
-    expect(within(sidebar()).getByText("1 upload(s) pending")).toBeInTheDocument();
+    expect(within(sidebar()).getByText("Uploading…")).toBeInTheDocument();
   });
 
   it("shows app:error as an error toast and app:toast as a normal toast", async () => {
@@ -352,5 +353,147 @@ describe("MainApp action runner", () => {
     fireEvent.click(nav("Settings"));
     fireEvent.click(await screen.findByRole("button", { name: "Unpair" }));
     expect(await screen.findByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+  });
+});
+
+describe("MainApp monthly transcription limit (A5.2)", () => {
+  const banner = () => screen.queryByTestId("budget-banner");
+
+  it("shows nothing while the budget is fine", async () => {
+    await renderPaired({ budget: "ok" });
+    expect(banner()).not.toBeInTheDocument();
+    expect(document.querySelector(".content")).not.toHaveClass("has-banner");
+  });
+
+  it("keeps a banner up while the limit is reached, on every page, with no way to dismiss it", async () => {
+    await renderPaired({ budget: "reached" });
+    expect(banner()).toHaveTextContent("Monthly transcription limit reached. Recordings are kept but not transcribed.");
+    expect(banner()).toHaveClass("danger");
+    expect(within(banner()!).queryByRole("button")).not.toBeInTheDocument();
+    expect(document.querySelector(".content")).toHaveClass("has-banner");
+    fireEvent.click(nav("Record"));
+    expect(banner()).toHaveTextContent("Monthly transcription limit reached.");
+    fireEvent.click(nav("Settings"));
+    await screen.findByRole("heading", { name: "Settings" });
+    expect(banner()).toBeInTheDocument();
+  });
+
+  it("warns at 80% and lets the user dismiss the warning for the session", async () => {
+    await renderPaired({ budget: "warn" });
+    expect(banner()).toHaveTextContent("You have used 80% of this month's transcription limit.");
+    expect(banner()).toHaveClass("warn");
+    fireEvent.click(within(banner()!).getByRole("button", { name: "Dismiss" }));
+    expect(banner()).not.toBeInTheDocument();
+    expect(document.querySelector(".content")).not.toHaveClass("has-banner");
+    await emitEvent("app:status", makeStatus({ budget: "warn", captionsLive: true }));
+    expect(banner()).not.toBeInTheDocument();
+  });
+
+  it("replaces a dismissed warning with the limit-reached banner", async () => {
+    await renderPaired({ budget: "warn" });
+    fireEvent.click(within(banner()!).getByRole("button", { name: "Dismiss" }));
+    await emitEvent("app:status", makeStatus({ budget: "reached" }));
+    expect(banner()).toHaveTextContent("Monthly transcription limit reached.");
+    await emitEvent("app:status", makeStatus({ budget: "ok" }));
+    expect(banner()).not.toBeInTheDocument();
+  });
+
+  it("does not use the toast's status role, so toasts stay distinguishable", async () => {
+    await renderPaired({ budget: "reached" });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+});
+
+describe("MainApp sidebar mirrors the tray (A3.4)", () => {
+  it("says Paused while a recording is paused", async () => {
+    await renderPaired({ recording: makeRecording(), paused: true, trayState: "paused" });
+    expect(within(sidebar()).getByText("Paused")).toBeInTheDocument();
+    expect(sidebar().querySelector(".footer-state .status-dot")).toHaveClass("paused");
+  });
+
+  it("does not say Paused while recording", async () => {
+    await renderPaired({ recording: makeRecording(), trayState: "recording" });
+    expect(within(sidebar()).queryByText("Paused")).not.toBeInTheDocument();
+  });
+
+  it("counts the recordings waiting for a decision and opens the library from there", async () => {
+    await renderPaired({ pendingDecisions: 2, trayState: "attention" });
+    fireEvent.click(nav("Settings"));
+    await screen.findByRole("heading", { name: "Settings" });
+    fireEvent.click(within(sidebar()).getByRole("button", { name: "2 waiting for your decision" }));
+    expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
+    expect(nav("Library")).toHaveClass("active");
+  });
+
+  it("points at uploads that stopped", async () => {
+    await renderPaired({ failedUploads: 1, trayState: "attention" });
+    fireEvent.click(nav("Record"));
+    fireEvent.click(within(sidebar()).getByRole("button", { name: "Uploads that need you" }));
+    expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
+  });
+
+  it("shows no tray lines when idle", async () => {
+    await renderPaired();
+    expect(within(sidebar()).queryByText(/waiting for your decision/)).not.toBeInTheDocument();
+    expect(within(sidebar()).queryByText("Uploads that need you")).not.toBeInTheDocument();
+    expect(within(sidebar()).queryByText("Paused")).not.toBeInTheDocument();
+    expect(within(sidebar()).getByText("All uploads done")).toBeInTheDocument();
+  });
+});
+
+describe("MainApp main:navigate", () => {
+  beforeEach(() => {
+    Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+  });
+
+  it("listens for main:navigate and stops on unmount", async () => {
+    const { unmount } = await renderPaired();
+    await waitFor(() => expect(listenerCount("main:navigate")).toBe(1));
+    unmount();
+    await waitFor(() => expect(listenerCount("main:navigate")).toBe(0));
+  });
+
+  it("switches to the requested view", async () => {
+    await renderPaired();
+    await emitEvent("main:navigate", makeNavigate({ view: "settings" }));
+    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(nav("Settings")).toHaveClass("active");
+    await emitEvent("main:navigate", makeNavigate({ view: "record" }));
+    expect(screen.getByRole("heading", { name: "Record" })).toBeInTheDocument();
+  });
+
+  it("ignores an unknown view", async () => {
+    await renderPaired();
+    await emitEvent("main:navigate", { view: "elsewhere", pendingId: null, rename: false });
+    expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
+  });
+
+  it("opens the library on a waiting recording, highlights it and opens its title for renaming", async () => {
+    await renderPaired();
+    respond("pending_list", [makePendingItem("pend-1"), makePendingItem("pend-2", { sourceApp: "google_meet" })]);
+    fireEvent.click(nav("Record"));
+    await emitEvent("main:navigate", makeNavigate({ view: "library", pendingId: "pend-2", rename: true }));
+    expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
+    const row = await screen.findByTestId("pending-pend-2");
+    await waitFor(() => expect(row).toHaveClass("highlight"));
+    expect(screen.getByTestId("pending-pend-1")).not.toHaveClass("highlight");
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(within(row).getByRole("textbox", { name: "Title" })).toHaveFocus();
+  });
+
+  it("does not highlight or reopen the title again after leaving the library and coming back", async () => {
+    await renderPaired();
+    respond("pending_list", [makePendingItem("pend-1")]);
+    await emitEvent("main:navigate", makeNavigate({ view: "library", pendingId: "pend-1", rename: true }));
+    await waitFor(() => expect(screen.getByTestId("pending-pend-1")).toHaveClass("highlight"));
+    fireEvent.click(nav("Record"));
+    fireEvent.click(nav("Library"));
+    const row = await screen.findByTestId("pending-pend-1");
+    await flushAsync();
+    expect(row).not.toHaveClass("highlight");
+    expect(within(row).queryByRole("textbox")).not.toBeInTheDocument();
+    // A second request for the same recording works again.
+    await emitEvent("main:navigate", makeNavigate({ view: "library", pendingId: "pend-1", rename: false }));
+    await waitFor(() => expect(screen.getByTestId("pending-pend-1")).toHaveClass("highlight"));
   });
 });

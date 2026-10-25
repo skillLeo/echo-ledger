@@ -366,6 +366,24 @@ describe("LibraryView transcript", () => {
     expect(await within(detail()).findByText(/The speech provider could not process this recording\./)).toBeInTheDocument();
   });
 
+  // DR18 client (contract 5.3 item 5): the server says no audio was captured; the desktop says what to check.
+  it("adds the microphone hint to a failure with error_code no_audio", async () => {
+    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: "No audio was captured in this recording.", error_code: "no_audio" });
+    await renderLibrary();
+    await selectItem("Google Meet standup");
+    const notice = (await within(detail()).findByText(/Transcription failed\./)).closest(".notice") as HTMLElement;
+    expect(notice).toHaveTextContent("No audio was captured in this recording.");
+    expect(within(notice).getByText("Check your microphone and the audio device, then try again.")).toBeInTheDocument();
+  });
+
+  it.each([null, undefined, "budget_exceeded", "provider_error"])("adds no hint for error_code %s", async (code) => {
+    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: "Monthly transcription limit reached", error_code: code });
+    await renderLibrary();
+    await selectItem("Google Meet standup");
+    expect(await within(detail()).findByText(/Monthly transcription limit reached/)).toBeInTheDocument();
+    expect(within(detail()).queryByText(/Check your microphone/)).not.toBeInTheDocument();
+  });
+
   it("says so when a finished transcript has no speech and disables both copy buttons", async () => {
     await renderLibrary();
     await selectItem("Client briefing");

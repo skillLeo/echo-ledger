@@ -5,6 +5,8 @@ import { formatDuration, formatWhen, timestamp, transcriptText } from "../../lib
 import { groupItems, itemState, searchItems, SORT_LABELS, sortItems, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
 import { CopyIcon, DesktopIcon, GlobeIcon, PhoneIcon, RefreshIcon, SearchIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
+import { NO_AUDIO_HINT } from "../../lib/pending";
+import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -21,8 +23,15 @@ const isTranscribing = (status?: string | null): boolean => !!status && IN_FLIGH
 const PLAYBACK_EXPIRED = "Playback link expired. Open the recording again.";
 const playbackUrlOf = (detail: Record<string, unknown>): string | null => (typeof detail.playback_url === "string" ? detail.playback_url : null);
 
-/** Unified library: every recording from every device, searchable by title and transcript text. */
-export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => void }) {
+/**
+ * Unified library: every recording from every device, searchable by title and transcript text. Recordings waiting
+ * for a decision and uploads that need the user sit at the top of the list; `focus` brings one of them into view.
+ */
+export function LibraryView({ notify, focus = null, onFocusHandled }: {
+  notify: (t: string, e?: boolean) => void;
+  focus?: PendingFocus | null;
+  onFocusHandled?: () => void;
+}) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [source, setSource] = useState<SourceFilter>("all");
   const [query, setQuery] = useState("");
@@ -176,6 +185,7 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
       </div>
       <div className="library">
         <div className="list" data-testid="library-list">
+          <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />
           {filtered.length === 0 && (
             <div className="empty">{query || source !== "all" ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
           )}
@@ -221,6 +231,8 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
                 transcript.status === "failed" ? (
                   <div className="notice error" style={{ marginTop: 12 }}>
                     <strong>Transcription failed.</strong> {transcript.error ?? "The speech provider could not process this recording."}
+                    {/* The server says what happened; the desktop knows what to check (docs/API.md `error_code`). */}
+                    {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
                   </div>
                 ) : isTranscribing(transcript.status) ? (
                   <div className="empty">Transcribing…</div>

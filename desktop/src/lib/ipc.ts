@@ -147,6 +147,8 @@ export interface TranscriptDetail {
   segments: Segment[];
   /** Set only when `status` is `failed`: the reason, written for the user. */
   error?: string | null;
+  /** Machine-readable reason when `status` is `failed`, e.g. `no_audio` or `budget_exceeded`. */
+  error_code?: string | null;
 }
 
 export type CaptionEvent =

@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import { RecordView } from "./RecordView";
 import type { AppStatus, MicUser } from "../../lib/ipc";
 import { callsOf, fail, resetTauriMock, respond } from "../../test/tauri";
-import { makeRecording, makeStatus } from "../../test/fixtures";
+import { makeMicUser, makeRecording, makeStatus } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -220,7 +220,7 @@ describe("RecordView automatic call recording", () => {
   beforeEach(() => resetTauriMock());
 
   it.each([
-    [true, false, /^On: when WhatsApp, Zoom or a browser/],
+    [true, false, /^On: EchoLedger records a call when an app both uses your microphone and plays audio/],
     [false, true, /^Off: calls are only recorded when you press REC/],
   ])("with auto mode %s the switch sends autoMode=%s and the text matches", async (autoMode, next, text) => {
     await setup({ autoMode });
@@ -237,56 +237,81 @@ describe("RecordView call detection panel", () => {
   beforeEach(() => resetTauriMock());
   afterEach(() => vi.useRealTimers());
 
+  const rowOf = (name: string) => screen.getByText(name).closest(".mic-user") as HTMLElement;
+
   it("says nothing is using the microphone when the list is empty", async () => {
     await setup({}, []);
     expect(await screen.findByText("No app is using the microphone right now.")).toBeInTheDocument();
-    expect(screen.queryByText(/not a call app/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Holds mic/)).not.toBeInTheDocument();
   });
 
-  it("marks a recognised call app as such and tells the user it will record after about 3 seconds", async () => {
-    const { container } = await setup({ autoMode: true }, [{ name: "WhatsApp.exe", app: "whatsapp" }]);
-    expect(await screen.findByText("WhatsApp.exe")).toBeInTheDocument();
-    expect(screen.getByText("→ WhatsApp (will record after ~3 s)")).toBeInTheDocument();
-    expect(container.querySelector(".status-dot.live")).not.toBeNull();
-    expect(screen.queryByText(/not a call app/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/tell support/)).not.toBeInTheDocument();
+  it("shows the on-text from the contract while auto-record is on", async () => {
+    await setup({ autoMode: true });
+    expect(
+      screen.getByText(
+        "On: EchoLedger records a call when an app both uses your microphone and plays audio, for example WhatsApp, Zoom, Teams, or Google Meet in a browser. Dictation and voice typing are never recorded.",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("omits the countdown when auto mode is off", async () => {
-    await setup({ autoMode: false }, [{ name: "zoom.exe", app: "zoom" }]);
-    expect(await screen.findByText("→ Zoom")).toBeInTheDocument();
-    expect(screen.queryByText(/will record after/)).not.toBeInTheDocument();
-  });
-
-  it("labels every recognised app with its display name", async () => {
-    await setup({ autoMode: false }, [
-      { name: "a", app: "whatsapp_business" },
-      { name: "b", app: "google_meet" },
-      { name: "c", app: "mystery_app" },
-    ]);
-    expect(await screen.findByText("→ WhatsApp Business")).toBeInTheDocument();
-    expect(screen.getByText("→ Google Meet")).toBeInTheDocument();
-    expect(screen.getByText("→ mystery_app")).toBeInTheDocument();
-  });
-
-  it("marks an unrecognised app as not a call app and shows the report-it hint", async () => {
-    const { container } = await setup({}, [{ name: "obs64.exe", app: null }]);
-    expect(await screen.findByText("obs64.exe")).toBeInTheDocument();
-    const verdict = screen.getByText("→ not a call app, ignored");
-    expect(verdict).toHaveClass("muted");
-    expect(container.querySelector(".status-dot.live")).toBeNull();
-    expect(screen.getByText(/tell support its name above/)).toBeInTheDocument();
-  });
-
-  it("shows recognised and unrecognised users side by side without the hint", async () => {
-    await setup({ autoMode: true }, [
-      { name: "chrome.exe", app: "google_meet" },
-      { name: "obs64.exe", app: null },
-    ]);
+  // A1.8: one explainer line per app holding the microphone.
+  it("explains a Meet tab that will be recorded, with its site next to the process name", async () => {
+    const { container } = await setup({ autoMode: true }, [makeMicUser()]);
     expect(await screen.findByText("chrome.exe")).toBeInTheDocument();
-    expect(screen.getByText("→ Google Meet (will record after ~3 s)")).toBeInTheDocument();
-    expect(screen.getByText("→ not a call app, ignored")).toBeInTheDocument();
-    expect(screen.queryByText(/tell support/)).not.toBeInTheDocument();
+    const row = rowOf("chrome.exe");
+    expect(within(row).getByText("meet.google.com")).toBeInTheDocument();
+    expect(within(row).getByText("Holds mic ✓ · Playing audio ✓ · Identified as Google Meet · Decision: auto-record")).toBeInTheDocument();
+    expect(container.querySelector(".mic-user .status-dot")).toHaveClass("ok");
+  });
+
+  it("says Recording now for the app being recorded and marks it live", async () => {
+    const { container } = await setup({}, [makeMicUser({ name: "WhatsApp.exe", app: "whatsapp", site: null, decision: "recording" })]);
+    expect(await screen.findByText("Holds mic ✓ · Playing audio ✓ · Identified as WhatsApp · Recording now")).toBeInTheDocument();
+    expect(container.querySelector(".mic-user .status-dot")).toHaveClass("live");
+  });
+
+  it.each([
+    [{ app: "whatsapp", site: null, playsAudio: false, reason: "dictation" }, "Holds mic ✓ · Playing audio ✗ · Identified as WhatsApp · Ignored: dictation (no audio playing)"],
+    [{ app: null, site: null, playsAudio: true, reason: "unknown_site" }, "Holds mic ✓ · Playing audio ✓ · Ignored: unknown site"],
+    [{ name: "obs64.exe", app: null, site: null, playsAudio: false, reason: "unknown_app" }, "Holds mic ✓ · Playing audio ✗ · Ignored: not a call app"],
+    [{ app: null, site: "chatgpt.com", playsAudio: false, reason: "never_record" }, "Holds mic ✓ · Playing audio ✗ · Ignored: on your never-record list"],
+  ] as const)("explains an ignored app: %o", async (overrides, line) => {
+    const { container } = await setup({}, [makeMicUser({ ...overrides, decision: "ignored" } as Partial<MicUser>)]);
+    const why = await screen.findByText(line);
+    expect(why).toHaveClass("muted");
+    expect(container.querySelector(".mic-user .status-dot")).not.toHaveClass("live");
+    expect(container.querySelector(".mic-user .status-dot")).not.toHaveClass("ok");
+  });
+
+  it("says auto-record is off when it is", async () => {
+    await setup({ autoMode: false }, [makeMicUser({ decision: "off", reason: "auto_off" })]);
+    expect(await screen.findByText("Holds mic ✓ · Playing audio ✓ · Identified as Google Meet · Auto-record is off")).toBeInTheDocument();
+  });
+
+  it("says it will ask for an unrecognised app when the ask chip is on", async () => {
+    const { container } = await setup({}, [makeMicUser({ name: "Signal.exe", app: null, site: null, decision: "ask" })]);
+    expect(await screen.findByText("Holds mic ✓ · Playing audio ✓ · Will ask you")).toBeInTheDocument();
+    expect(container.querySelector(".mic-user .status-dot")).toHaveClass("ask");
+  });
+
+  it("labels identified apps with their display names", async () => {
+    await setup({}, [
+      makeMicUser({ name: "a", app: "whatsapp_business", site: null }),
+      makeMicUser({ name: "b", app: "microsoft_teams", site: null }),
+      makeMicUser({ name: "c", app: "whatsapp_web", site: "web.whatsapp.com" }),
+    ]);
+    expect(await screen.findByText(/Identified as WhatsApp Business/)).toBeInTheDocument();
+    expect(screen.getByText(/Identified as Microsoft Teams/)).toBeInTheDocument();
+    expect(screen.getByText(/Identified as WhatsApp Web/)).toBeInTheDocument();
+  });
+
+  it("lists several apps at once, one row each", async () => {
+    const { container } = await setup({}, [
+      makeMicUser(),
+      makeMicUser({ name: "a protected process", app: null, site: null, playsAudio: false, decision: "ignored", reason: "unknown_app" }),
+    ]);
+    expect(await screen.findByText("a protected process")).toBeInTheDocument();
+    expect(container.querySelectorAll(".mic-user")).toHaveLength(2);
   });
 
   it("polls immediately and then every two seconds, and stops after unmount", async () => {
@@ -318,16 +343,16 @@ describe("RecordView call detection panel", () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(screen.getByText("No app is using the microphone right now.")).toBeInTheDocument();
-    respond("mic_users", [{ name: "Teams.exe", app: null }]);
+    respond("mic_users", [makeMicUser({ name: "ms-teams.exe", app: "microsoft_teams", site: null })]);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
-    expect(screen.getByText("Teams.exe")).toBeInTheDocument();
+    expect(screen.getByText("ms-teams.exe")).toBeInTheDocument();
   });
 
   it("keeps the last known list when a poll fails", async () => {
     vi.useFakeTimers();
-    await setup({}, [{ name: "WhatsApp.exe", app: "whatsapp" }]);
+    await setup({}, [makeMicUser({ name: "WhatsApp.exe", app: "whatsapp", site: null })]);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -338,6 +363,56 @@ describe("RecordView call detection panel", () => {
     });
     expect(callsOf("mic_users")).toHaveLength(2);
     expect(screen.getByText("WhatsApp.exe")).toBeInTheDocument();
+  });
+});
+
+describe("RecordView pause, resume and cancel", () => {
+  beforeEach(() => resetTauriMock());
+  afterEach(() => vi.restoreAllMocks());
+
+  it("offers no pause or cancel while nothing is recording", async () => {
+    await setup();
+    expect(screen.queryByRole("button", { name: "Pause recording" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel recording" })).not.toBeInTheDocument();
+  });
+
+  it("pauses a running recording", async () => {
+    respond("pause_recording", makeStatus({ paused: true }));
+    await setup({ recording: makeRecording() });
+    expect(screen.getByText("Recording · Zoom")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Pause recording" }));
+    await waitFor(() => expect(callsOf("pause_recording")).toHaveLength(1));
+    expect(screen.queryByRole("button", { name: "Resume recording" })).not.toBeInTheDocument();
+  });
+
+  it("shows the paused state with an amber dot and resumes", async () => {
+    respond("resume_recording", makeStatus());
+    const { container } = await setup({ recording: makeRecording(), paused: true });
+    expect(screen.getByText("Paused · Zoom")).toBeInTheDocument();
+    expect(container.querySelector(".record-hero .status-dot")).toHaveClass("paused");
+    expect(container.querySelector(".record-hero .status-dot")).not.toHaveClass("live");
+    expect(screen.getByRole("button", { name: "Stop recording" })).toHaveTextContent("STOP");
+    fireEvent.click(screen.getByRole("button", { name: "Resume recording" }));
+    await waitFor(() => expect(callsOf("resume_recording")).toHaveLength(1));
+    expect(callsOf("pause_recording")).toHaveLength(0);
+  });
+
+  it("asks before cancelling and discards only when confirmed", async () => {
+    respond("cancel_recording", makeStatus());
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    await setup({ recording: makeRecording() });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel recording" }));
+    expect(confirm).toHaveBeenCalledWith("Discard this recording? It can't be undone.");
+    expect(callsOf("cancel_recording")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel recording" }));
+    await waitFor(() => expect(callsOf("cancel_recording")).toHaveLength(1));
+    expect(callsOf("stop_recording")).toHaveLength(0);
+  });
+
+  it("offers pause and cancel for voice notes too", async () => {
+    await setup({ recording: makeRecording({ mode: "mic_note", sourceApp: "voice_note" }) });
+    expect(screen.getByRole("button", { name: "Pause recording" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel recording" })).toBeInTheDocument();
   });
 });
 

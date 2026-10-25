@@ -1,20 +1,29 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type AppStatus } from "../../lib/ipc";
-import { CaptionsIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from "../../components/Icons";
+import { api, errorMessage, listenTo, type AppStatus } from "../../lib/ipc";
+import { AlertIcon, CaptionsIcon, CloseIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { PairingView } from "./PairingView";
 import { LibraryView } from "./LibraryView";
+import type { PendingFocus } from "./LibraryQueue";
 import { RecordView } from "./RecordView";
 import { SettingsView } from "./SettingsView";
 
 type Tab = "library" | "record" | "settings";
+const TABS: readonly Tab[] = ["library", "record", "settings"];
+
+const BUDGET_REACHED = "Monthly transcription limit reached. Recordings are kept but not transcribed.";
+const BUDGET_WARN = "You have used 80% of this month's transcription limit.";
 
 export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
+  const [focus, setFocus] = useState<PendingFocus | null>(null);
+  const navigations = useRef(0);
+  // The 80% notice can be dismissed until the app restarts; the limit-reached banner stays.
+  const [budgetWarnDismissed, setBudgetWarnDismissed] = useState(false);
 
   const cycleTheme = () => {
     const next = nextThemeChoice(theme);
@@ -22,6 +31,8 @@ export default function MainApp() {
     applyTheme(next);
     setTheme(next);
   };
+
+  const clearFocus = useCallback(() => setFocus(null), []);
 
   const refreshStatus = useCallback(() => {
     api.status().then(setStatus).catch(() => undefined);
@@ -34,6 +45,13 @@ export default function MainApp() {
       listen<AppStatus>("app:status", (e) => setStatus(e.payload)),
       listen<string>("app:error", (e) => setToast({ text: e.payload, error: true })),
       listen<string>("app:toast", (e) => setToast({ text: e.payload })),
+      // Tray "Review recordings (N)" and the review card's Open / Rename (contract 4.5).
+      listenTo("main:navigate", (nav) => {
+        if (!nav || !TABS.includes(nav.view)) return;
+        setTab(nav.view);
+        const id = nav.pendingId;
+        if (id) setFocus({ id, rename: !!nav.rename, seq: ++navigations.current });
+      }),
     ];
     return () => {
       window.clearInterval(timer);
@@ -87,13 +105,34 @@ export default function MainApp() {
             {theme === "light" ? <SunIcon size={15} /> : theme === "dark" ? <MoonIcon size={15} /> : <MonitorIcon size={15} />}
             {theme === "system" ? "Theme: System" : theme === "light" ? "Theme: Light" : "Theme: Dark"}
           </button>
+          {/* Mirrors the tray icon (A3.4): paused, decisions waiting, uploads stopped, uploading. */}
+          {status.recording && status.paused && <div className="row footer-state"><span className="status-dot paused" />Paused</div>}
+          {status.pendingDecisions > 0 && (
+            <button type="button" className="footer-link" onClick={() => setTab("library")}>
+              <span className="status-dot attention" />{status.pendingDecisions} waiting for your decision
+            </button>
+          )}
+          {status.failedUploads > 0 && (
+            <button type="button" className="footer-link" onClick={() => setTab("library")}>
+              <span className="status-dot failed" />Uploads that need you
+            </button>
+          )}
           <div className="row"><CaptionsIcon size={14} />{status.captionsLive ? "Captions live" : "Captions off"}</div>
           <div>{status.deviceName}</div>
-          <div className="small">{status.pendingUploads > 0 ? `${status.pendingUploads} upload(s) pending` : "All uploads done"}</div>
+          <div className="small">{status.pendingUploads > 0 ? "Uploading…" : "All uploads done"}</div>
         </div>
       </aside>
-      <main className="content">
-        {tab === "library" && <LibraryView notify={notify} />}
+      <main className={`content ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
+        {status.budget === "reached" && (
+          <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
+        )}
+        {status.budget === "warn" && !budgetWarnDismissed && (
+          <div className="banner warn" data-testid="budget-banner">
+            <AlertIcon size={16} /><span>{BUDGET_WARN}</span>
+            <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setBudgetWarnDismissed(true)}><CloseIcon size={14} /></button>
+          </div>
+        )}
+        {tab === "library" && <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} />}
         {tab === "record" && <RecordView status={status} run={run} />}
         {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} />}
       </main>

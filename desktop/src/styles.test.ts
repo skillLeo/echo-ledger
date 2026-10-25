@@ -154,6 +154,22 @@ describe("long text never breaks the layout (A6.DU8)", () => {
     expect(prop("button.segment", "text-align")).toBe("left");
     expect(prop("button.segment", "width")).toBe("100%");
   });
+
+  it("keeps waiting recordings and failed uploads inside the list column", () => {
+    expect(prop(".queue-item", "grid-template-columns")).toBe("minmax(0, 1fr)");
+    expect(prop(".queue-item", "min-width")).toBe("0px");
+    expect(prop(".queue-title", "text-overflow")).toBe("ellipsis");
+    expect(prop(".queue-actions", "flex-wrap")).toBe("wrap");
+    expect(prop(".queue-error", "overflow-wrap")).toBe("anywhere");
+    expect(prop(".mic-user-why", "overflow-wrap")).toBe("anywhere");
+    expect(prop(".site-pattern", "overflow-wrap")).toBe("anywhere");
+  });
+
+  it("gives the library less height while the budget banner is up, only in the two-column layout", () => {
+    const wide = media("(min-width: 1030px)");
+    expect(prop(".content.has-banner .library", "height", wide)).toBe("calc(100% - 224px)");
+    expect(prop(".content.has-banner .library", "height")).toBe("");
+  });
 });
 
 describe("colour contrast meets WCAG AA in both themes (A6.DU7)", () => {
@@ -203,6 +219,12 @@ describe("colour contrast meets WCAG AA in both themes (A6.DU7)", () => {
       expect(colours.length, background).toBeGreaterThanOrEqual(2);
       for (const stop of colours) expect(contrast(white, stop), background).toBeGreaterThanOrEqual(AA);
     }
+  });
+
+  it.each(THEMES)("the decision and upload counts on their tint (%s)", (theme) => {
+    const background = over(colour(theme, ".queue-count", "background"), colour(theme, "--surface-solid").rgb);
+    const ratio = contrast(colour(theme, ".queue-count").rgb, background);
+    expect(ratio, `${theme}: .queue-count is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
   });
 
   it.each(THEMES)("switch tracks stand out from the card (non-text 3:1, %s)", (theme) => {

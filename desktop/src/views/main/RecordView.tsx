@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type MicUser } from "../../lib/ipc";
 import { sourceAppLabel } from "../../lib/format";
+import { explainMicUser, micTone } from "../../lib/explainer";
+import { DISCARD_CONFIRM } from "../../lib/pending";
 import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
 
-/** Live view of which apps hold the microphone, so a missed call can be explained instead of silently lost. */
+/**
+ * Live view of which apps hold the microphone and what the core decided for each (A1.8), so a call that was not
+ * recorded can be explained instead of silently lost.
+ */
 function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined> }) {
   const [users, setUsers] = useState<MicUser[]>([]);
   useEffect(() => {
@@ -16,7 +21,6 @@ function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => 
       window.clearInterval(timer);
     };
   }, []);
-  const recognised = users.filter((u) => u.app);
   return (
     <div className="card" style={{ marginTop: 14 }}>
       <div className="row">
@@ -27,19 +31,23 @@ function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => 
       </div>
       <p className="small muted">
         {status.autoMode
-          ? "On: when WhatsApp, Zoom or a browser (Google Meet) starts using your microphone, EchoLedger records both sides and stops when the call ends."
-          : "Off: calls are only recorded when you press REC. Turn this on to record WhatsApp, Zoom and Meet calls automatically."}
+          ? "On: EchoLedger records a call when an app both uses your microphone and plays audio, for example WhatsApp, Zoom, Teams, or Google Meet in a browser. Dictation and voice typing are never recorded."
+          : "Off: calls are only recorded when you press REC. Turn this on to record WhatsApp, Zoom, Teams and Meet calls automatically."}
       </p>
-      <div className="small" style={{ marginTop: 6 }}>
-        {users.length === 0 && <span className="muted">No app is using the microphone right now.</span>}
+      <div className="mic-users" data-testid="mic-users">
+        {users.length === 0 && <span className="small muted">No app is using the microphone right now.</span>}
         {users.map((u, i) => (
-          <div key={i} className="row" style={{ gap: 8 }}>
-            <span className={`status-dot ${u.app ? "live" : ""}`} />
-            <span>{u.name}</span>
-            <span className={u.app ? "" : "muted"}>{u.app ? `→ ${sourceAppLabel(u.app)}${status.autoMode ? " (will record after ~3 s)" : ""}` : "→ not a call app, ignored"}</span>
+          <div key={`${u.name}-${i}`} className="mic-user">
+            <span className={`status-dot ${micTone(u)}`} aria-hidden="true" />
+            <div className="mic-user-main">
+              <div className="mic-user-name">
+                <span>{u.name}</span>
+                {u.site && <span className="muted">{u.site}</span>}
+              </div>
+              <div className={`small mic-user-why ${u.decision === "ignored" || u.decision === "off" ? "muted" : ""}`}>{explainMicUser(u)}</div>
+            </div>
           </div>
         ))}
-        {users.length > 0 && recognised.length === 0 && <div className="muted" style={{ marginTop: 4 }}>If this is your call app, tell support its name above so it can be added.</div>}
       </div>
     </div>
   );
@@ -54,7 +62,12 @@ const BACKEND_LABEL: Record<string, string> = {
 
 export function RecordView({ status, run }: { status: AppStatus; run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined> }) {
   const recording = status.recording;
+  const paused = !!recording && status.paused;
   const [mic, sys] = status.levels;
+  const what = recording ? (recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp)) : "";
+  const cancel = () => {
+    if (window.confirm(DISCARD_CONFIRM)) void run(api.cancelRecording);
+  };
   return (
     <>
       <h1 className="page-title">Record</h1>
@@ -66,8 +79,21 @@ export function RecordView({ status, run }: { status: AppStatus; run: <T>(fn: ()
             {recording ? "STOP" : "REC"}
           </button>
           <div style={{ display: "grid", gap: 8 }}>
-            <div className="row"><span className={`status-dot ${recording ? "live" : ""}`} />{recording ? `Recording · ${recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp)}` : "Not recording"}</div>
+            <div className="row">
+              <span className={`status-dot ${paused ? "paused" : recording ? "live" : ""}`} />
+              {recording ? `${paused ? "Paused" : "Recording"} · ${what}` : "Not recording"}
+            </div>
             {recording && <div className="small muted">{BACKEND_LABEL[recording.backend] ?? recording.backend}</div>}
+            {recording && (
+              <div className="record-controls">
+                {paused ? (
+                  <button type="button" className="btn compact" aria-label="Resume recording" onClick={() => run(api.resumeRecording)}>Resume</button>
+                ) : (
+                  <button type="button" className="btn compact" aria-label="Pause recording" onClick={() => run(api.pauseRecording)}>Pause</button>
+                )}
+                <button type="button" className="btn ghost compact danger" aria-label="Cancel recording" onClick={cancel}>Cancel</button>
+              </div>
+            )}
             <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter"><div style={{ width: `${Math.min(100, mic * 400)}%` }} /></div></div>
             <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter"><div style={{ width: `${Math.min(100, sys * 400)}%` }} /></div></div>
           </div>

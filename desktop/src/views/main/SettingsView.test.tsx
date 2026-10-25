@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { SettingsView } from "./SettingsView";
-import { errorMessage, type AppStatus, type Settings } from "../../lib/ipc";
-import { callsOf, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeSettings, makeStatus } from "../../test/fixtures";
+import { errorMessage, type AppStatus, type Settings, type SiteRule } from "../../lib/ipc";
+import { callsOf, emitEvent, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { makeSettings, makeSiteRule, makeStatus } from "../../test/fixtures";
 import commandsRs from "../../../src-tauri/src/commands.rs?raw";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -100,6 +100,7 @@ describe("SettingsView switches", () => {
     ["Hide overlays from screen sharing", "contentProtection", true],
     ["Start EchoLedger when I sign in", "autostart", false],
     ["I understand and will obtain consent where required", "consentAcknowledged", false],
+    ["Ask me when an unrecognised app uses the microphone", "askUnknownApps", false],
   ];
 
   it.each(switches)("%s reflects its state and sends the inverse as `%s`", async (label, key, initial) => {
@@ -184,8 +185,8 @@ describe("SettingsView selects", () => {
 
   // A6.DU4 (core side, DESKTOP-CORE): plain serde turns `"clientId": null` into `None` for an Option<Option<String>>
   // field, which update_settings reads as "keep". The field needs `#[serde(default, deserialize_with = ...)]` (or
-  // serde_with's double_option) so null arrives as Some(None). Un-skip once src-tauri/src/commands.rs has it.
-  it.skip("A6.DU4: the core SettingsPatch keeps an explicit clientId null apart from a missing key", () => {
+  // serde_with's double_option) so null arrives as Some(None).
+  it("A6.DU4: the core SettingsPatch keeps an explicit clientId null apart from a missing key", () => {
     const patch = commandsRs.slice(commandsRs.indexOf("pub struct SettingsPatch"), commandsRs.indexOf("\n}\n", commandsRs.indexOf("pub struct SettingsPatch")));
     const lines = patch.split("\n");
     const at = lines.findIndex((l) => /^\s*(pub\s+)?client_id: Option<Option<String>>,/.test(l));
@@ -223,7 +224,7 @@ describe("SettingsView selects", () => {
   it("describes a switch with its hint", async () => {
     await setup();
     expect(screen.getByRole("switch", { name: "Auto-record calls" })).toHaveAccessibleDescription(
-      "Starts when WhatsApp, Zoom or a browser (Meet) uses the mic; stops when it releases it.",
+      "Records a call when an app both uses your microphone and plays audio. Dictation and voice typing are never recorded.",
     );
     expect(screen.getByRole("switch", { name: "Start EchoLedger when I sign in" })).not.toHaveAttribute("aria-describedby");
   });
@@ -358,5 +359,191 @@ describe("SettingsView unpair", () => {
     fireEvent.click(screen.getByRole("button", { name: "Unpair" }));
     await waitFor(() => expect(errors).toEqual(["Keychain error: access denied"]));
     expect(onUnpaired).not.toHaveBeenCalled();
+  });
+});
+
+describe("SettingsView decisions and captions (A2.5, A2.6, A3.2)", () => {
+  beforeEach(() => resetTauriMock());
+
+  const optionsOf = (select: HTMLElement) => [...(select as HTMLSelectElement).options].map((o) => [o.value, o.text]);
+
+  it("offers the three ask-before-saving policies and saves the choice", async () => {
+    await setup({ askBeforeSaving: "always" });
+    const select = screen.getByRole("combobox", { name: "Ask before saving" });
+    expect(select).toHaveValue("always");
+    expect(optionsOf(select)).toEqual([["always", "Always"], ["auto_only", "Only automatic calls"], ["never", "Never"]]);
+    fireEvent.change(select, { target: { value: "auto_only" } });
+    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { askBeforeSaving: "auto_only" } }]));
+  });
+
+  it("offers the three timeout policies and saves the choice", async () => {
+    await setup({ decisionTimeout: "keep" });
+    const select = screen.getByRole("combobox", { name: "If I don't choose within 60 s" });
+    expect(select).toHaveValue("keep");
+    expect(optionsOf(select)).toEqual([["keep", "Keep the recording"], ["discard", "Discard it"], ["wait", "Keep waiting"]]);
+    fireEvent.change(select, { target: { value: "wait" } });
+    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { decisionTimeout: "wait" } }]));
+  });
+
+  it("shows the stored timeout policy", async () => {
+    await setup({ decisionTimeout: "discard", askBeforeSaving: "never" });
+    expect(screen.getByRole("combobox", { name: "If I don't choose within 60 s" })).toHaveValue("discard");
+    expect(screen.getByRole("combobox", { name: "Ask before saving" })).toHaveValue("never");
+  });
+
+  it("sends caption lines as a number (2, 3 or 5)", async () => {
+    await setup({ captionLines: 3 });
+    const select = screen.getByRole("combobox", { name: "Caption lines" });
+    expect(select).toHaveValue("3");
+    expect(optionsOf(select).map(([v]) => v)).toEqual(["2", "3", "5"]);
+    fireEvent.change(select, { target: { value: "5" } });
+    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { captionLines: 5 } }]));
+    expect(JSON.stringify(callsOf("update_settings")[0])).toBe('{"patch":{"captionLines":5}}');
+  });
+
+  it("reports the core's refusal of a caption line count and keeps the old value", async () => {
+    const { errors } = await setup({ captionLines: 2 });
+    respondWith("update_settings", () => Promise.reject("Choose 2, 3 or 5 lines."));
+    const select = screen.getByRole("combobox", { name: "Caption lines" });
+    fireEvent.change(select, { target: { value: "5" } });
+    await waitFor(() => expect(errors).toEqual(["Choose 2, 3 or 5 lines."]));
+    expect(select).toHaveValue("2");
+  });
+
+  it("describes the unrecognised-app ask chip", async () => {
+    await setup();
+    expect(screen.getByRole("switch", { name: "Ask me when an unrecognised app uses the microphone" })).toHaveAccessibleDescription("A small prompt appears for 8 seconds.");
+  });
+
+  it("offers reading browser tab addresses only on macOS", async () => {
+    const windows = await setup({}, { platform: "windows" });
+    expect(screen.queryByRole("switch", { name: "Read browser tab addresses" })).not.toBeInTheDocument();
+    windows.unmount();
+    resetTauriMock();
+    await setup({ browserAutomation: false }, { platform: "macos" });
+    const toggle = screen.getByRole("switch", { name: "Read browser tab addresses" });
+    expect(toggle).toHaveAccessibleDescription("Lets EchoLedger tell a Google Meet call from dictation. macOS asks for permission once.");
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(toggle);
+    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { browserAutomation: true } }]));
+  });
+
+  it("follows settings:changed from the core while open and stops listening on unmount", async () => {
+    const { unmount } = await setup({ decisionTimeout: "keep" });
+    await waitFor(() => expect(listenerCount("settings:changed")).toBe(1));
+    await emitEvent("settings:changed", makeSettings({ decisionTimeout: "discard" }));
+    expect(screen.getByRole("combobox", { name: "If I don't choose within 60 s" })).toHaveValue("discard");
+    unmount();
+    await waitFor(() => expect(listenerCount("settings:changed")).toBe(0));
+  });
+});
+
+describe("SettingsView call sites (A1.4)", () => {
+  beforeEach(() => resetTauriMock());
+
+  const lastRules = () => {
+    const calls = callsOf("update_settings");
+    return (calls[calls.length - 1].patch as { siteRules: SiteRule[] }).siteRules;
+  };
+  const siteList = (name: string) => screen.getByRole("list", { name });
+
+  it("lists the built-in call sites and the built-in never-record sites, all on", async () => {
+    await setup();
+    const calls = within(siteList("Call sites"));
+    for (const host of ["meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com", "web.whatsapp.com"]) {
+      expect(calls.getByRole("switch", { name: `Record calls on ${host}` })).toHaveAttribute("aria-checked", "true");
+    }
+    const never = within(siteList("Never record"));
+    for (const host of ["chatgpt.com", "claude.ai", "gemini.google.com"]) {
+      expect(never.getByRole("switch", { name: `Never record ${host}` })).toHaveAttribute("aria-checked", "true");
+    }
+    expect(calls.getByText("meet.google.com").closest(".site-rule")).toHaveTextContent("Google Meet");
+  });
+
+  it("switches a built-in off by saving a disabled user rule with its id", async () => {
+    await setup();
+    echoSettings(makeSettings());
+    const meet = screen.getByRole("switch", { name: "Record calls on meet.google.com" });
+    fireEvent.click(meet);
+    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
+    expect(lastRules()).toEqual([
+      { id: "builtin.meet", app: "google_meet", host: "meet.google.com", titlePrefix: "Meet - ", titleContains: "Google Meet", titleEquals: null, priority: 30, enabled: false },
+    ]);
+    await waitFor(() => expect(meet).toHaveAttribute("aria-checked", "false"));
+  });
+
+  it("switches a built-in back on by removing the override and keeps the other rules", async () => {
+    const mine = makeSiteRule({ id: "u-1", app: "zoom", host: "zoom.example.test" });
+    const override = { id: "builtin.never_gemini", app: "never", host: "gemini.google.com", titlePrefix: null, titleContains: null, titleEquals: null, priority: 100, enabled: false };
+    await setup({ siteRules: [mine, override] });
+    const gemini = screen.getByRole("switch", { name: "Never record gemini.google.com" });
+    expect(gemini).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(gemini);
+    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
+    expect(lastRules()).toEqual([mine]);
+  });
+
+  it("adds a call site typed as an address as a host rule for the chosen app", async () => {
+    await setup();
+    fireEvent.change(screen.getByRole("combobox", { name: "App" }), { target: { value: "other" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Address or title contains" }), { target: { value: "https://Meet.Example.test/room-42" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
+    const [rule] = lastRules();
+    expect(rule).toMatchObject({ app: "other", host: "meet.example.test", titleContains: null, titlePrefix: null, titleEquals: null, priority: 50, enabled: true });
+    expect(rule.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Address or title contains" })).toHaveValue(""));
+  });
+
+  it("adds a never-record entry typed as title text", async () => {
+    await setup({ siteRules: [makeSiteRule()] });
+    fireEvent.change(screen.getByRole("combobox", { name: "App" }), { target: { value: "never" } });
+    const field = screen.getByRole("textbox", { name: "Address or title contains" });
+    fireEvent.change(field, { target: { value: "Voice typing" } });
+    fireEvent.submit(field.closest("form")!);
+    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
+    const rules = lastRules();
+    expect(rules[0]).toEqual(makeSiteRule());
+    expect(rules[1]).toMatchObject({ app: "never", host: null, titleContains: "Voice typing", priority: 100, enabled: true });
+  });
+
+  it("disables Add for an empty field and ignores a rule the user already has", async () => {
+    await setup({ siteRules: [makeSiteRule({ app: "google_meet", host: "meet.example.test" })] });
+    const add = screen.getByRole("button", { name: "Add" });
+    expect(add).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Address or title contains" }), { target: { value: "MEET.example.test" } });
+    expect(add).toBeEnabled();
+    fireEvent.click(add);
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Address or title contains" })).toHaveValue(""));
+    expect(callsOf("update_settings")).toHaveLength(0);
+  });
+
+  it("lists the user's rules under their list and removes one", async () => {
+    const meet = makeSiteRule({ id: "u-meet", app: "google_meet", host: "meet.example.test" });
+    const chip = makeSiteRule({ id: "u-app", app: "never", host: null, titleEquals: "Recorder.exe", priority: 100 });
+    await setup({ siteRules: [meet, chip] });
+    expect(within(siteList("Call sites")).getByText("meet.example.test")).toBeInTheDocument();
+    expect(within(siteList("Never record")).getByText("Recorder.exe")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Recorder.exe" }));
+    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
+    expect(lastRules()).toEqual([meet]);
+  });
+
+  it("keeps the typed text when the core refuses the rules", async () => {
+    const { errors } = await setup();
+    respondWith("update_settings", () => Promise.reject("Settings could not be saved: disk full"));
+    const field = screen.getByRole("textbox", { name: "Address or title contains" });
+    fireEvent.change(field, { target: { value: "jitsi.example.test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(errors).toEqual(["Settings could not be saved: disk full"]));
+    expect(field).toHaveValue("jitsi.example.test");
+  });
+
+  it("gives the app select and the text field accessible names", async () => {
+    await setup();
+    expect(screen.getByRole("combobox", { name: "App" })).toHaveValue("google_meet");
+    expect([...(screen.getByRole("combobox", { name: "App" }) as HTMLSelectElement).options].map((o) => o.text)).toEqual([
+      "Google Meet", "Zoom", "Microsoft Teams", "WhatsApp Web", "Other", "Never record",
+    ]);
   });
 });
