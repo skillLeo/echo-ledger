@@ -14,6 +14,8 @@ async function boot(label: string | Error) {
   vi.doMock("./views/main/MainApp", () => ({ default: () => <div>main view</div> }));
   vi.doMock("./views/overlay/OverlayApp", () => ({ default: () => <div>overlay view</div> }));
   vi.doMock("./views/dictation/DictationApp", () => ({ default: () => <div>dictation view</div> }));
+  vi.doMock("./views/pill/PillApp", () => ({ default: () => <div>pill view</div> }));
+  vi.doMock("./views/review/ReviewApp", () => ({ default: () => <div>review view</div> }));
   await import("./main");
 }
 
@@ -53,6 +55,22 @@ describe("entry point", () => {
     expect(await screen.findByText("dictation view")).toBeInTheDocument();
     expect(document.documentElement.dataset.window).toBe("dictation");
     expect(document.documentElement.dataset.theme).toBeUndefined();
+  });
+
+  it.each([
+    ["pill", "pill view"],
+    ["review", "review view"],
+  ])("renders the %s window's view without applying a theme", async (label, text) => {
+    window.localStorage.setItem("echoledger-theme", "light");
+    await boot(label);
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    expect(document.documentElement.dataset.window).toBe(label);
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+  });
+
+  it("treats an unknown window label as the main window", async () => {
+    await boot("settings-popup");
+    expect(await screen.findByText("main view")).toBeInTheDocument();
   });
 
   it("treats a plain browser (no Tauri window) as the main window", async () => {

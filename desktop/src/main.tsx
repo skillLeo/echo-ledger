@@ -8,6 +8,16 @@ import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 const MainApp = lazy(() => import("./views/main/MainApp"));
 const OverlayApp = lazy(() => import("./views/overlay/OverlayApp"));
 const DictationApp = lazy(() => import("./views/dictation/DictationApp"));
+const PillApp = lazy(() => import("./views/pill/PillApp"));
+const ReviewApp = lazy(() => import("./views/review/ReviewApp"));
+
+/** Views of the windows the core creates in its setup hook; any other label is the main window. */
+const WINDOW_VIEWS = new Map([
+  ["overlay", OverlayApp],
+  ["dictation", DictationApp],
+  ["pill", PillApp],
+  ["review", ReviewApp],
+]);
 
 function currentLabel(): string {
   try {
@@ -24,7 +34,7 @@ if (label === "main") {
   watchSystemTheme();
 }
 
-const View = label === "overlay" ? OverlayApp : label === "dictation" ? DictationApp : MainApp;
+const View = WINDOW_VIEWS.get(label) ?? MainApp;
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
