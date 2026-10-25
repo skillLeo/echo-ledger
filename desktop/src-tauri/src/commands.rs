@@ -171,6 +171,9 @@ pub struct SettingsPatch {
     #[serde(default, deserialize_with = "double_option")]
     input_device: Option<Option<String>>,
     far_side_warning: Option<bool>,
+    /// Missing = keep, `null` = automatic, else one of `settings::LANGUAGES`.
+    #[serde(default, deserialize_with = "double_option")]
+    transcription_language: Option<Option<String>>,
 }
 
 /// A present key becomes `Some(value)`, so an explicit `null` reads as `Some(None)` and a missing key (via
@@ -200,6 +203,7 @@ impl SettingsPatch {
         if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }
         if let Some(v) = &self.input_device { s.input_device = v.clone(); }
         if let Some(v) = self.far_side_warning { s.far_side_warning = v; }
+        if let Some(v) = &self.transcription_language { s.transcription_language = crate::settings::language_or_none(v.as_deref()); }
     }
 }
 
@@ -210,6 +214,11 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         && !crate::settings::CAPTION_LINES.contains(&lines)
     {
         return Err(AppError::msg("Choose 2, 3 or 5 lines."));
+    }
+    if let Some(Some(language)) = &patch.transcription_language
+        && crate::settings::language_or_none(Some(language)).is_none()
+    {
+        return Err(AppError::msg("Choose Automatic, English, Urdu, Hindi or English + Urdu."));
     }
     if let Some(problem) = patch.caption_style.as_ref().and_then(|s| s.problem()) {
         return Err(AppError::msg(problem));
@@ -525,6 +534,135 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
 pub async fn pause_recording(app: AppHandle) -> AppResult<AppStatus> {
     crate::actions::pause_recording(&app).await?;
     Ok(status(&app))
+}
+
+/// A transcript search from the library or the command palette (`GET /api/search`).
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SearchQuery {
+    pub q: String,
+    pub client_id: Option<String>,
+    pub source_app: Option<String>,
+    pub source_device: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub tag: Option<String>,
+    pub bookmarked: bool,
+    pub page: Option<u32>,
+}
+
+impl SearchQuery {
+    /// The query parameters the server documents; empty filters are left out.
+    pub fn params(&self) -> Vec<(String, String)> {
+        let mut params = vec![("q".to_string(), self.q.trim().to_string())];
+        for (key, value) in [
+            ("client_id", &self.client_id),
+            ("source_app", &self.source_app),
+            ("source_device", &self.source_device),
+            ("from", &self.from),
+            ("to", &self.to),
+            ("tag", &self.tag),
+        ] {
+            if let Some(v) = value.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+                params.push((key.to_string(), v.to_string()));
+            }
+        }
+        if self.bookmarked {
+            params.push(("bookmarked".into(), "1".into()));
+        }
+        if let Some(page) = self.page.filter(|p| *p > 1) {
+            params.push(("page".into(), page.to_string()));
+        }
+        params
+    }
+}
+
+/// Searches every recording's title and transcript on the server.
+#[tauri::command]
+pub async fn search_library(state: State<'_, AppState>, query: SearchQuery) -> AppResult<serde_json::Value> {
+    if query.q.trim().chars().count() < 2 {
+        return Ok(serde_json::json!({ "data": [], "next_page": null }));
+    }
+    state.api()?.search(&query.params()).await
+}
+
+#[tauri::command]
+pub async fn transcript_edit(state: State<'_, AppState>, id: String, index: usize, text: String) -> AppResult<serde_json::Value> {
+    state.api()?.edit_transcript(&id, index, &text).await
+}
+
+#[tauri::command]
+pub async fn transcript_replace(state: State<'_, AppState>, id: String, find: String, replace: String, match_case: bool, whole_word: bool) -> AppResult<serde_json::Value> {
+    state.api()?.replace_in_transcript(&id, &find, &replace, match_case, whole_word).await
+}
+
+#[tauri::command]
+pub async fn transcript_restore(state: State<'_, AppState>, id: String) -> AppResult<serde_json::Value> {
+    state.api()?.restore_transcript(&id).await
+}
+
+#[tauri::command]
+pub async fn transcript_revisions(state: State<'_, AppState>, id: String) -> AppResult<serde_json::Value> {
+    state.api()?.transcript_revisions(&id).await
+}
+
+#[tauri::command]
+pub async fn speakers_rename(state: State<'_, AppState>, session_id: String, names: serde_json::Map<String, serde_json::Value>, remember_for_client: bool) -> AppResult<serde_json::Value> {
+    state.api()?.rename_speakers(&session_id, &names, remember_for_client).await
+}
+
+/// Where an export is saved: the Downloads folder (else the app data folder), with a free name.
+pub fn export_target(dir: &std::path::Path, filename: &str) -> std::path::PathBuf {
+    let path = dir.join(filename);
+    if !path.exists() {
+        return path;
+    }
+    let (stem, ext) = filename.rsplit_once('.').map_or((filename, ""), |(s, e)| (s, e));
+    (2..1000)
+        .map(|n| dir.join(if ext.is_empty() { format!("{stem} ({n})") } else { format!("{stem} ({n}).{ext}") }))
+        .find(|p| !p.exists())
+        .unwrap_or(path)
+}
+
+/// Saves an export to Downloads and returns its path; the print page (`html`) opens in the browser for PDF.
+#[tauri::command]
+pub async fn export_transcript(app: AppHandle, id: String, format: String, timestamps: bool, speakers: bool) -> AppResult<String> {
+    use tauri_plugin_opener::OpenerExt;
+    const FORMATS: [&str; 7] = ["txt", "md", "srt", "vtt", "json", "docx", "html"];
+    if !FORMATS.contains(&format.as_str()) {
+        return Err(AppError::msg("That export format is not available."));
+    }
+    let state = app.state::<AppState>();
+    let (bytes, filename) = state.api()?.export_transcript(&id, &format, timestamps, speakers).await?;
+    let dir = if format == "html" { std::env::temp_dir() } else { app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone()) };
+    let path = export_target(&dir, &filename);
+    std::fs::write(&path, bytes)?;
+    if format == "html" {
+        app.opener().open_path(path.to_string_lossy(), None::<&str>).map_err(|e| AppError::msg(e.to_string()))?;
+    }
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn share_create(state: State<'_, AppState>, session_id: String, expires_in: u64, password: Option<String>, include_audio: bool) -> AppResult<serde_json::Value> {
+    let password = password.filter(|p| !p.is_empty());
+    state.api()?.create_share(&session_id, expires_in, password.as_deref(), include_audio).await
+}
+
+#[tauri::command]
+pub async fn share_list(state: State<'_, AppState>, session_id: String) -> AppResult<serde_json::Value> {
+    state.api()?.list_shares(&session_id).await
+}
+
+#[tauri::command]
+pub async fn share_revoke(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    state.api()?.revoke_share(&id).await
+}
+
+/// "Add to vocabulary" after an edit: for the recording's client, else for every recording.
+#[tauri::command]
+pub async fn vocabulary_add(state: State<'_, AppState>, term: String, client_id: Option<String>) -> AppResult<serde_json::Value> {
+    state.api()?.add_keyterm(&term, client_id.as_deref()).await
 }
 
 /// The connected microphones for the device picker (B5), the default first.

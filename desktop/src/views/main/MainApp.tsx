@@ -8,6 +8,7 @@ import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
 import { RecordView } from "./RecordView";
 import { SettingsView } from "./SettingsView";
+import { CommandPalette } from "./CommandPalette";
 
 type Tab = "library" | "record" | "settings";
 const TABS: readonly Tab[] = ["library", "record", "settings"];
@@ -24,6 +25,20 @@ export default function MainApp() {
   const navigations = useRef(0);
   // The 80% notice can be dismissed until the app restarts; the limit-reached banner stays.
   const [budgetWarnDismissed, setBudgetWarnDismissed] = useState(false);
+  const [palette, setPalette] = useState(false);
+  const [openRequest, setOpenRequest] = useState<{ id: string; ms: number; seq: number } | null>(null);
+
+  // Ctrl / Cmd + K opens the command palette from anywhere in the window.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPalette((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const cycleTheme = () => {
     const next = nextThemeChoice(theme);
@@ -132,10 +147,15 @@ export default function MainApp() {
             <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setBudgetWarnDismissed(true)}><CloseIcon size={14} /></button>
           </div>
         )}
-        {tab === "library" && <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} />}
+        {tab === "library" && <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest} />}
         {tab === "record" && <RecordView status={status} run={run} />}
         {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} />}
       </main>
+      {palette && (
+        <CommandPalette status={status} onClose={() => setPalette(false)} onGo={setTab}
+          run={(fn, ok) => void run(fn, ok)}
+          onOpenRecording={(id, ms) => { setTab("library"); setOpenRequest({ id, ms, seq: ++navigations.current }); }} />
+      )}
       {toastView}
     </div>
   );

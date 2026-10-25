@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { api, listenTo, type AppStatus, type AskBeforeSaving, type Corner, type DecisionTimeout, type Settings, type ShortcutAction, type SiteRule } from "../../lib/ipc";
+import { api, listenTo, type AppStatus, type AskBeforeSaving, type Corner, type DecisionTimeout, type Settings, type ShortcutAction, type SiteRule, type TranscriptionLanguage } from "../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut, sourceAppLabel } from "../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
 import { SourceAppIcon } from "../../components/Icons";
@@ -18,6 +18,8 @@ const ACTIONS: [ShortcutAction, string][] = [
 const ASK_BEFORE_SAVING: readonly (readonly [AskBeforeSaving, string])[] = [["always", "Always"], ["auto_only", "Only automatic calls"], ["never", "Never"]];
 const DECISION_TIMEOUT: readonly (readonly [DecisionTimeout, string])[] = [["keep", "Keep the recording"], ["discard", "Discard it"], ["wait", "Keep waiting"]];
 const CAPTION_LINES = [["2", "2"], ["3", "3"], ["5", "5"]] as const;
+/** Automatic uses the client's language or the console default, else detects it. */
+const LANGUAGES: readonly (readonly ["" | TranscriptionLanguage, string])[] = [["", "Automatic"], ["en", "English"], ["ur", "Urdu"], ["hi", "Hindi"], ["en+ur", "English + Urdu"]];
 
 /**
  * Settings → Call sites (A1.4): the built-in rules with an on/off switch (off = a disabled user rule under the
@@ -145,6 +147,8 @@ export function SettingsView({ status, run, onUnpaired }: {
         )}
         <SelectRow label="Ask before saving" value={settings.askBeforeSaving} options={ASK_BEFORE_SAVING} onChange={(v) => patch({ askBeforeSaving: v })} />
         <SelectRow label="If I don't choose within 60 s" value={settings.decisionTimeout} options={DECISION_TIMEOUT} onChange={(v) => patch({ decisionTimeout: v })} />
+        <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={220}
+          onChange={(v) => patch({ transcriptionLanguage: v === "" ? null : v })} />
         <Toggle label="Show live captions while recording" on={settings.captionsOnRecord} onChange={(v) => patch({ captionsOnRecord: v })} />
         <SelectRow label="Caption lines" value={String(settings.captionLines) as "2" | "3" | "5"} options={CAPTION_LINES} width={180} onChange={(v) => patch({ captionLines: Number(v) })} />
         <Toggle label="Hide overlays from screen sharing" hint="Captions stay visible to you but not in Zoom/Meet screen shares." on={settings.contentProtection} onChange={(v) => patch({ contentProtection: v })} />

@@ -147,6 +147,14 @@ fn tolerant_caption_style(value: Value) -> Value {
     serde_json::to_value(style).unwrap_or(Value::Null)
 }
 
+/// The language choices offered (docs/API.md "Languages"); anything else is automatic.
+pub const LANGUAGES: [&str; 4] = ["en", "ur", "hi", "en+ur"];
+
+/// A stored or requested language: one of [`LANGUAGES`], else none (automatic).
+pub fn language_or_none(value: Option<&str>) -> Option<String> {
+    value.map(|v| v.trim().to_ascii_lowercase()).filter(|v| LANGUAGES.contains(&v.as_str()))
+}
+
 /// Keeps the shortcut entries this version knows (action name and a text accelerator).
 fn known_shortcuts(value: Value) -> Value {
     let Value::Object(map) = value else { return value };
@@ -217,6 +225,8 @@ pub struct Settings {
     pub input_device: Option<String>,
     /// Warn when a call recording has not heard the other side for 30 seconds.
     pub far_side_warning: bool,
+    /// Language of new recordings: none (the client's or the console default, else automatic), `en`, `ur`, `hi` or `en+ur`.
+    pub transcription_language: Option<String>,
 }
 
 impl Default for Settings {
@@ -246,6 +256,7 @@ impl Default for Settings {
             caption_style: CaptionStyle::default(),
             input_device: None,
             far_side_warning: true,
+            transcription_language: None,
         }
     }
 }
@@ -270,6 +281,7 @@ impl Settings {
                 "siteRules" => parsable_site_rules(value),
                 "autoRecordApps" => known_app_switches(value),
                 "captionStyle" => tolerant_caption_style(value),
+                "transcriptionLanguage" => language_or_none(value.as_str()).map_or(Value::Null, Value::from),
                 "captionLines" => Value::from(caption_lines_or_default(value.as_u64())),
                 _ => value,
             };

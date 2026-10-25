@@ -86,6 +86,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     captionStyle: { size: "medium", width: "normal", opacity: 85, compact: false, autoHideSeconds: 0, meColor: null, clientColor: null },
     inputDevice: null,
     farSideWarning: true,
+    transcriptionLanguage: null,
     ...overrides,
   };
 }

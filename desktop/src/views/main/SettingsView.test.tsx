@@ -574,3 +574,24 @@ describe("capture and control settings (B1, B3, B4, B5)", () => {
     expect(await screen.findByRole("button", { name: "Test 10 seconds" })).toBeDisabled();
   });
 });
+
+describe("transcription language (B12)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    respond("get_settings", makeSettings());
+    respond("list_clients", CLIENTS);
+    respond("input_devices", []);
+    respond("permissions_status", { microphone: "allowed", browserAutomation: false, platform: "windows" });
+    respondWith("update_settings", ({ patch }) => makeSettings(patch as Partial<Settings>));
+  });
+
+  it("offers the documented languages and sends null for Automatic", async () => {
+    render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
+    const select = await screen.findByLabelText("Transcription language");
+    expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(["Automatic", "English", "Urdu", "Hindi", "English + Urdu"]);
+    fireEvent.change(select, { target: { value: "en+ur" } });
+    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { transcriptionLanguage: "en+ur" } }));
+    fireEvent.change(select, { target: { value: "" } });
+    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { transcriptionLanguage: null } }));
+  });
+});

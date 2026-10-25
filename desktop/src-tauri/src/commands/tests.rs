@@ -89,3 +89,35 @@ fn privacy_settings_open_the_right_system_page() {
     assert_eq!(privacy_settings_url("system_audio", false), None, "Windows needs no permission for system audio");
     assert_eq!(privacy_settings_url("camera", true), None);
 }
+
+#[test]
+fn a_search_sends_only_the_filters_that_are_set() {
+    let query = SearchQuery { q: "  invoice due ".into(), tag: Some("Budget".into()), source_app: Some(" ".into()), bookmarked: true, page: Some(2), ..SearchQuery::default() };
+    assert_eq!(
+        query.params(),
+        vec![("q".to_string(), "invoice due".to_string()), ("tag".into(), "Budget".into()), ("bookmarked".into(), "1".into()), ("page".into(), "2".into())]
+    );
+    assert_eq!(SearchQuery { q: "x".into(), page: Some(1), ..SearchQuery::default() }.params().len(), 1, "page 1 is the default");
+}
+
+#[test]
+fn an_export_never_overwrites_a_file() {
+    let dir = tempfile::tempdir().unwrap();
+    assert_eq!(export_target(dir.path(), "Call.txt"), dir.path().join("Call.txt"));
+    std::fs::write(dir.path().join("Call.txt"), "x").unwrap();
+    std::fs::write(dir.path().join("Call (2).txt"), "x").unwrap();
+    assert_eq!(export_target(dir.path(), "Call.txt"), dir.path().join("Call (3).txt"));
+    std::fs::write(dir.path().join("Notes"), "x").unwrap();
+    assert_eq!(export_target(dir.path(), "Notes"), dir.path().join("Notes (2)"));
+}
+
+#[test]
+fn the_transcription_language_is_set_cleared_or_kept() {
+    let mut s = Settings::default();
+    patch(json!({"transcriptionLanguage": "EN+UR"})).apply(&mut s);
+    assert_eq!(s.transcription_language.as_deref(), Some("en+ur"));
+    patch(json!({"autoMode": true})).apply(&mut s);
+    assert_eq!(s.transcription_language.as_deref(), Some("en+ur"), "a patch without it keeps it");
+    patch(json!({"transcriptionLanguage": null})).apply(&mut s);
+    assert_eq!(s.transcription_language, None);
+}

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type LibraryItem, type TranscriptDetail } from "../../lib/ipc";
+import { api, errorMessage, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail } from "../../lib/ipc";
+import { activeIndex, activeWord, continuesTurn, KEY_SECONDS, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName } from "../../lib/player";
+import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, SpeakersPanel, Timeline, VocabularyHint } from "./TranscriptTools";
 import { formatDuration, formatWhen, timestamp, transcriptText } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, libraryTags, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
@@ -28,10 +30,12 @@ const playbackUrlOf = (detail: Record<string, unknown>): string | null => (typeo
  * Unified library: every recording from every device, searchable by title and transcript text. Recordings waiting
  * for a decision and uploads that need the user sit at the top of the list; `focus` brings one of them into view.
  */
-export function LibraryView({ notify, focus = null, onFocusHandled }: {
+export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null }: {
   notify: (t: string, e?: boolean) => void;
   focus?: PendingFocus | null;
   onFocusHandled?: () => void;
+  /** Open a recording at a moment (from the command palette). */
+  openRequest?: { id: string; ms: number; seq: number } | null;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [source, setSource] = useState<SourceFilter>("all");
@@ -43,6 +47,19 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
   const [transcript, setTranscript] = useState<TranscriptDetail | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [activeSegment, setActiveSegment] = useState(-1);
+  const [activeWordIndex, setActiveWordIndex] = useState(-1);
+  const [nowMs, setNowMs] = useState(0);
+  const [speakerNames, setSpeakerNames] = useState<Record<string, string>>({});
+  const [rate, setRate] = useState(1);
+  const [skipSilence, setSkipSilence] = useState(false);
+  const [follow, setFollow] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [panel, setPanel] = useState<"replace" | "speakers" | "history" | "share" | null>(null);
+  const [vocabTerms, setVocabTerms] = useState<string[]>([]);
+  const [found, setFound] = useState<SearchResult["data"]>([]);
+  const segmentsRef = useRef<HTMLDivElement | null>(null);
+  /** A moment to play once the recording opened from a search hit has loaded. */
+  const pendingSeek = useRef<number | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   /** Bumped on every selection change; an answer that belongs to an older selection is dropped (A6.DU2). */
@@ -76,7 +93,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
   const anyBookmarks = useMemo(() => items.some((i) => !i.deleted && (i.marker_count ?? 0) > 0), [items]);
   const filtered = useMemo(() => sortItems(searchItems(filterByTag(filterItems(items, source), tag), query), sort), [items, source, tag, query, sort]);
   const groups = useMemo(() => groupItems(filtered, sort), [filtered, sort]);
-  const current = filtered.find((i) => i.id === selected) ?? null;
+  // A recording opened from a transcript match stays open even when its title does not match the typed words.
+  const [hitSelected, setHitSelected] = useState<string | null>(null);
+  const current = filtered.find((i) => i.id === selected) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? null;
 
   const finalStatus = current?.transcript?.final_status ?? null;
   const finalId = current?.transcript?.final_transcript_id ?? null;
@@ -87,8 +106,14 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
     setTranscript(null);
     setPlaybackUrl(null);
     setBookmarks([]);
+    setSpeakerNames({});
     setPlaybackError(null);
     setActiveSegment(-1);
+    setActiveWordIndex(-1);
+    setNowMs(0);
+    setEditing(false);
+    setPanel(null);
+    setVocabTerms([]);
     playbackRefreshed.current = false;
     // While the final transcript is still being made, the live captions (when there are any) are worth reading.
     const id = (isTranscribing(finalStatus) && liveId) || finalId || liveId;
@@ -101,6 +126,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
           if (!latest()) return;
           setPlaybackUrl(playbackUrlOf(d));
           setBookmarks(bookmarksOf(d));
+          const names = d.speaker_names;
+          setSpeakerNames(names && typeof names === "object" && !Array.isArray(names) ? (names as Record<string, string>) : {});
         })
         .catch(() => latest() && setPlaybackUrl(null));
     }
@@ -130,10 +157,34 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
       .catch(expired);
   };
 
+  // Server search of every transcript once two characters are typed (the list below filters titles locally).
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setFound([]);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      api.searchLibrary({ q }).then((r) => alive && setFound(r.data)).catch(() => alive && setFound([]));
+    }, 350);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [query]);
+
+  useEffect(() => {
+    if (openRequest) openHit(openRequest.id, openRequest.ms);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest?.seq]);
+
+  const named = useMemo(() => (transcript ? transcript.segments.map((s) => ({ ...s, speaker: speakerName(speakerNames, s.speaker) })) : []), [transcript, speakerNames]);
+
   const copy = async (withTimestamps: boolean) => {
     if (!transcript) return;
     try {
-      await navigator.clipboard.writeText(transcriptText(transcript.segments, withTimestamps));
+      await navigator.clipboard.writeText(transcriptText(named, withTimestamps));
       notify(withTimestamps ? "Copied with timestamps" : "Copied");
     } catch {
       notify("Could not access the clipboard", true);
@@ -151,12 +202,125 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
     const audio = audioRef.current;
     if (!audio || !transcript) return;
     const t = audio.currentTime * 1000;
-    let index = -1;
-    for (let i = 0; i < transcript.segments.length; i++) {
-      if (transcript.segments[i].start_ms <= t) index = i;
-      else break;
+    if (skipSilence && !audio.paused) {
+      const target = skipTarget(transcript.segments, t);
+      if (target !== null) {
+        audio.currentTime = target / 1000;
+        return;
+      }
+    }
+    const index = activeIndex(transcript.segments, t);
+    setNowMs(t);
+    setActiveWordIndex(index >= 0 ? activeWord(transcript.segments[index].words, t) : -1);
+    if (index !== activeSegment && index >= 0 && follow && !editing) {
+      const row = segmentsRef.current?.querySelector<HTMLElement>(`[data-seg="${index}"]`);
+      row?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
     }
     setActiveSegment(index);
+  };
+
+  const onLoaded = () => {
+    const audio = audioRef.current;
+    if (audio) audio.playbackRate = rate;
+    if (pendingSeek.current !== null && audio) {
+      audio.currentTime = pendingSeek.current / 1000;
+      pendingSeek.current = null;
+      onTimeUpdate();
+    }
+  };
+
+  const changeRate = (next: number) => {
+    setRate(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
+  /** Space / K / J / L / arrows while the transcript area has focus. */
+  const onPlayerKey = (e: React.KeyboardEvent) => {
+    const audio = audioRef.current;
+    const target = e.target as HTMLElement;
+    const action = playerKey(e.key, target.tagName, target.isContentEditable);
+    if (!audio || !action) return;
+    e.preventDefault();
+    if (action === "toggle") {
+      if (audio.paused) void audio.play().catch(() => undefined);
+      else audio.pause();
+      return;
+    }
+    audio.currentTime = Math.max(0, audio.currentTime + KEY_SECONDS[action]);
+    onTimeUpdate();
+  };
+
+  const openHit = (id: string, ms: number) => {
+    pendingSeek.current = ms;
+    setHitSelected(id);
+    if (id === selected && audioRef.current) onLoaded();
+    setSelected(id);
+  };
+
+  const saveLine = async (index: number, text: string) => {
+    if (!transcript || text.trim() === transcript.segments[index].text) return;
+    const before = transcript.segments[index].text;
+    try {
+      setTranscript(await api.editTranscript(transcript.id, index, text));
+      setVocabTerms(newTerms(before, text));
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+
+  const replaceAll = async (find: string, replace: string, matchCase: boolean, wholeWord: boolean): Promise<number | null> => {
+    if (!transcript) return null;
+    try {
+      const result = await api.replaceInTranscript(transcript.id, find, replace, matchCase, wholeWord);
+      setTranscript(result.transcript);
+      return result.replaced;
+    } catch (e) {
+      notify(errorMessage(e), true);
+      return null;
+    }
+  };
+
+  const restore = async () => {
+    if (!transcript) return;
+    try {
+      setTranscript(await api.restoreTranscript(transcript.id));
+      setPanel(null);
+      notify("The original transcript is back");
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+
+  const saveSpeakers = async (names: Record<string, string | null>, remember: boolean): Promise<boolean> => {
+    if (!current) return false;
+    try {
+      setSpeakerNames((await api.renameSpeakers(current.id, names, remember)).speaker_names ?? {});
+      notify("Speaker names saved");
+      return true;
+    } catch (e) {
+      notify(errorMessage(e), true);
+      return false;
+    }
+  };
+
+  const exportAs = async (format: ExportFormat) => {
+    if (!transcript) return;
+    try {
+      const path = await api.exportTranscript(transcript.id, format);
+      notify(format === "html" ? "Opened the print page in your browser: choose Save as PDF there" : `Saved to ${path}`);
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+
+  const addToVocabulary = async (term: string) => {
+    try {
+      await api.addToVocabulary(term, current?.client?.id ?? null);
+      setVocabTerms((terms) => terms.filter((t) => t !== term));
+      notify(`Added “${term}” to the vocabulary`);
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
   };
 
   const remove = async (id: string) => {
@@ -210,6 +374,24 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
       <div className="library">
         <div className="list" data-testid="library-list">
           <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />
+          {found.length > 0 && (
+            <div className="group search-hits" role="region" aria-label="Matches in transcripts">
+              <div className="group-label">In transcripts</div>
+              {found.map((r) => (
+                <div key={r.session.id} className="hit-card">
+                  <div className="item-title">{r.session.title}</div>
+                  <div className="small muted">{formatWhen(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</div>
+                  {r.hits.map((h) => (
+                    <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="hit" onClick={() => openHit(r.session.id, h.start_ms)}
+                      aria-label={`Play ${r.session.title ?? "recording"} from ${timestamp(h.start_ms)}`}>
+                      <span className="seg-time">{timestamp(h.start_ms)}</span>
+                      <span className="hit-snippet" dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}</span>
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
           {filtered.length === 0 && (
             <div className="empty">{query || source !== "all" || tag !== null ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
           )}
@@ -235,7 +417,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
             </div>
           ))}
         </div>
-        <div className="detail card">
+        <div className="detail card" onKeyDown={onPlayerKey}>
           {!current && <div className="empty">Select a recording to read its transcript.</div>}
           {current && (
             <>
@@ -243,13 +425,17 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
                 <SourceDeviceBadge source={current.source_device} label={current.source_device_label} />
                 <SourceAppBadge app={current.source_app} label={current.source_app_label} />
                 <span className="spacer" />
+                <button className="btn ghost" aria-pressed={panel === "share"} onClick={() => setPanel(panel === "share" ? null : "share")}>Share</button>
                 <button className="btn danger ghost" onClick={() => remove(current.id)}><TrashIcon size={15} />Delete</button>
               </div>
               <h2 className="detail-title">{current.title}</h2>
               <div className="small muted">{formatWhen(current.started_at)} · {formatDuration(current.duration_ms)}{current.client ? ` · ${current.client.name}` : ""}</div>
               {playbackUrl && (
-                <audio ref={audioRef} className="player" controls preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} onError={onPlaybackError} data-testid="player" />
+                <audio ref={audioRef} className="player" controls preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} onError={onPlaybackError} onLoadedMetadata={onLoaded} data-testid="player" />
               )}
+              {playbackUrl && <PlayerControls rate={rate} onRate={changeRate} skipSilence={skipSilence} onSkipSilence={setSkipSilence} follow={follow} onFollow={setFollow} />}
+              {panel === "share" && <SharePanel sessionId={current.id} hasAudio={!!playbackUrl} notify={notify} onClose={() => setPanel(null)} />}
+              {transcript && <Timeline segments={transcript.segments} bookmarks={bookmarks} durationMs={Math.max(current.duration_ms ?? 0, ...transcript.segments.map((s) => s.end_ms))} nowMs={nowMs} onSeek={seek} />}
               {playbackError && <div className="notice" style={{ marginTop: 12 }}>{playbackError}</div>}
               {bookmarks.length > 0 && (
                 <div className="chips bookmarks" role="list" aria-label="Bookmarks" style={{ marginTop: 10 }}>
@@ -275,28 +461,57 @@ export function LibraryView({ notify, focus = null, onFocusHandled }: {
                 ) : (
                   <>
                     <div className="row" style={{ marginTop: 10 }}>
-                      <span className="small muted">{transcript.kind === "final" ? `Final transcript · ${transcript.provider}` : "Live captions (final transcript pending)"}</span>
+                      <span className="small muted">{transcript.kind === "final" ? `Final transcript · ${transcript.provider}${transcript.model ? ` · ${transcript.model}` : ""}${transcript.edited_at ? " · edited" : ""}` : "Live captions (final transcript pending)"}</span>
                       <span className="spacer" />
                       <button className="btn ghost" onClick={() => copy(false)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy text</button>
                       <button className="btn ghost" onClick={() => copy(true)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy with timestamps</button>
                     </div>
+                    {transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0 && (
+                      <div className="row small transcript-tools" role="toolbar" aria-label="Transcript tools">
+                        <button className="btn ghost" aria-pressed={editing} onClick={() => setEditing(!editing)}>{editing ? "Done editing" : "Edit text"}</button>
+                        <button className="btn ghost" aria-pressed={panel === "replace"} onClick={() => setPanel(panel === "replace" ? null : "replace")}>Find and replace</button>
+                        <button className="btn ghost" aria-pressed={panel === "speakers"} onClick={() => setPanel(panel === "speakers" ? null : "speakers")}>Speakers</button>
+                        <button className="btn ghost" aria-pressed={panel === "history"} onClick={() => setPanel(panel === "history" ? null : "history")}>History</button>
+                        <ExportMenu onExport={(format) => void exportAs(format)} />
+                      </div>
+                    )}
+                    {panel === "replace" && <ReplaceBar onReplace={replaceAll} onClose={() => setPanel(null)} />}
+                    {panel === "speakers" && <SpeakersPanel labels={speakerLabels(transcript.segments)} names={speakerNames} hasClient={!!current.client} onSave={saveSpeakers} onClose={() => setPanel(null)} />}
+                    {panel === "history" && <HistoryPanel transcriptId={transcript.id} edited={!!transcript.edited_at} onRestore={restore} onClose={() => setPanel(null)} />}
+                    <VocabularyHint terms={vocabTerms} clientName={current.client?.name ?? null} onAdd={(t) => void addToVocabulary(t)} onDismiss={() => setVocabTerms([])} />
                     {transcript.segments.length === 0 && <div className="empty">The transcript is empty: no speech was detected.</div>}
-                    <div className="segments">
+                    <div className="segments" ref={segmentsRef}>
                       {transcript.segments.map((s, i) => {
+                        // A turn shows its speaker once: following lines of the same speaker keep the label for screen
+                        // readers but hide it on screen (.cont), which groups the lines into a speaker block.
+                        const textCell = s.words && s.words.length > 0 && i === activeSegment
+                          ? s.words.map((w, wi) => <span key={wi} className={wi === activeWordIndex ? "word on" : "word"}>{w.text}{wi < s.words!.length - 1 ? " " : ""}</span>)
+                          : s.text;
                         const cells = (
                           <>
                             <span className="seg-time">{timestamp(s.start_ms)}</span>
-                            <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{s.speaker}</span>
-                            <span className="seg-text">{s.text}</span>
+                            <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{speakerName(speakerNames, s.speaker)}</span>
+                            <span className="seg-text" dir="auto">{textCell}</span>
                           </>
                         );
-                        const className = `segment ${i === activeSegment ? "active" : ""}`;
+                        const className = `segment ${i === activeSegment ? "active" : ""} ${continuesTurn(transcript.segments, i) ? "cont" : ""}`.replace(/\s+/g, " ").trim();
                         const playing = i === activeSegment ? "true" : undefined;
+                        if (editing) {
+                          return (
+                            <div key={`${i}-${s.text}`} className={`${className} editing`} data-seg={i}>
+                              <span className="seg-time">{timestamp(s.start_ms)}</span>
+                              <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{speakerName(speakerNames, s.speaker)}</span>
+                              <textarea className="input seg-edit" dir="auto" rows={2} defaultValue={s.text} aria-label={`Line at ${timestamp(s.start_ms)}`}
+                                onBlur={(e) => void saveLine(i, e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) (e.target as HTMLTextAreaElement).blur(); }} />
+                            </div>
+                          );
+                        }
                         // A row that seeks is a real button: it takes focus and Enter / Space activate it (A6.DU7).
                         return playbackUrl ? (
-                          <button key={i} type="button" className={`${className} seekable`} aria-current={playing} onClick={() => seek(s.start_ms)}>{cells}</button>
+                          <button key={i} type="button" className={`${className} seekable`} aria-current={playing} data-seg={i} onClick={() => seek(s.start_ms)}>{cells}</button>
                         ) : (
-                          <div key={i} className={className}>{cells}</div>
+                          <div key={i} className={className} data-seg={i}>{cells}</div>
                         );
                       })}
                     </div>

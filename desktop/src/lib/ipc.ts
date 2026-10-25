@@ -73,7 +73,11 @@ export interface Settings {
   captionStyle: CaptionStyle;
   inputDevice: string | null;
   farSideWarning: boolean;
+  transcriptionLanguage: TranscriptionLanguage | null;
 }
+
+/** Languages offered for new recordings; null is automatic (the client's or the console default). */
+export type TranscriptionLanguage = "en" | "ur" | "hi" | "en+ur";
 
 /** How the caption overlay looks. utoHideSeconds is 0 (never), 5, 10 or 30; colours are #rrggbb or null (theme). */
 export interface CaptionStyle {
@@ -111,6 +115,7 @@ export interface SettingsPatch {
   captionStyle?: CaptionStyle;
   inputDevice?: string | null;
   farSideWarning?: boolean;
+  transcriptionLanguage?: TranscriptionLanguage | null;
 }
 
 /** A bookmark just made on the current recording (`recording:marked`); `count` is how many it has now. */
@@ -198,6 +203,8 @@ export interface Segment {
   start_ms: number;
   end_ms: number;
   text: string;
+  /** Word timings when the engine gave them (an edited line has none). */
+  words?: { text: string; start_ms: number; end_ms: number }[];
 }
 
 export interface TranscriptDetail {
@@ -212,7 +219,66 @@ export interface TranscriptDetail {
   error?: string | null;
   /** Machine-readable reason when `status` is `failed`, e.g. `no_audio` or `budget_exceeded`. */
   error_code?: string | null;
+  /** The model the engine reports it used, e.g. `universal-2`. */
+  model?: string | null;
+  /** Set while the text differs from the engine's original. */
+  edited_at?: string | null;
 }
+
+/** A transcript search (`GET /api/search`); empty filters are not sent. */
+export interface SearchQuery {
+  q: string;
+  clientId?: string | null;
+  sourceApp?: string | null;
+  sourceDevice?: string | null;
+  from?: string | null;
+  to?: string | null;
+  tag?: string | null;
+  bookmarked?: boolean;
+  page?: number;
+}
+
+/** One matching line: jump to `start_ms`; `highlights` are [start, length] ranges in `snippet`. */
+export interface SearchHit {
+  transcript_id: string;
+  kind: string;
+  segment_index: number;
+  start_ms: number;
+  end_ms: number;
+  speaker: string;
+  snippet: string;
+  highlights: [number, number][];
+}
+
+export interface SearchResult {
+  data: { session: LibraryItem; hits: SearchHit[]; hit_count: number }[];
+  next_page: number | null;
+}
+
+/** A share link of a recording; `url` is only present right after it was made. */
+export interface ShareLink {
+  id: string;
+  session_id: string;
+  has_password: boolean;
+  include_audio: boolean;
+  expires_at: string | null;
+  revoked_at: string | null;
+  active: boolean;
+  view_count: number;
+  last_viewed_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  url?: string;
+}
+
+export interface TranscriptRevision {
+  id: string;
+  source: "original" | "edit" | "replace" | "restore";
+  author: string | null;
+  created_at: string;
+}
+
+export type ExportFormat = "docx" | "html" | "txt" | "md" | "srt" | "vtt" | "json";
 
 export type CaptionEvent =
   | { kind: "partial"; speaker: string; channel: number; text: string }
@@ -381,6 +447,20 @@ export const api = {
   testCapture: (seconds?: number) => invoke<TestResult>("test_capture", { seconds: seconds ?? null }),
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
   openPrivacySettings: (kind: "microphone" | "system_audio" | "automation") => invoke<void>("open_privacy_settings", { kind }),
+  searchLibrary: (query: SearchQuery) => invoke<SearchResult>("search_library", { query }),
+  editTranscript: (id: string, index: number, text: string) => invoke<TranscriptDetail>("transcript_edit", { id, index, text }),
+  replaceInTranscript: (id: string, find: string, replace: string, matchCase: boolean, wholeWord: boolean) =>
+    invoke<{ replaced: number; transcript: TranscriptDetail }>("transcript_replace", { id, find, replace, matchCase, wholeWord }),
+  restoreTranscript: (id: string) => invoke<TranscriptDetail>("transcript_restore", { id }),
+  transcriptRevisions: (id: string) => invoke<{ data: TranscriptRevision[] }>("transcript_revisions", { id }),
+  renameSpeakers: (sessionId: string, names: Record<string, string | null>, rememberForClient: boolean) =>
+    invoke<{ speaker_names: Record<string, string> }>("speakers_rename", { sessionId, names, rememberForClient }),
+  exportTranscript: (id: string, format: ExportFormat, timestamps = true, speakers = true) => invoke<string>("export_transcript", { id, format, timestamps, speakers }),
+  createShare: (sessionId: string, expiresIn: number, password: string | null, includeAudio: boolean) =>
+    invoke<ShareLink>("share_create", { sessionId, expiresIn, password, includeAudio }),
+  listShares: (sessionId: string) => invoke<{ data: ShareLink[] }>("share_list", { sessionId }),
+  revokeShare: (id: string) => invoke<void>("share_revoke", { id }),
+  addToVocabulary: (term: string, clientId: string | null) => invoke<{ keyterms: string[] }>("vocabulary_add", { term, clientId }),
 };
 
 /**

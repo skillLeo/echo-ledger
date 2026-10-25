@@ -820,3 +820,92 @@ describe("bookmarks in the library (B3)", () => {
     expect(play).toHaveBeenCalled();
   });
 });
+
+describe("transcript tools in the library (B6-B12)", () => {
+  const media = () => document.querySelector("audio") as HTMLAudioElement;
+  const withSession = (extra: Record<string, unknown>) =>
+    respondWith("session_detail", ({ id }) => ({ id, playback_url: "https://audio.example.test/rec.wav", ...extra }));
+
+  it("shows renamed speakers and groups a speaker's lines into one turn", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", segments: [
+      { channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "One." },
+      { channel: 1, speaker: "Me", start_ms: 1_000, end_ms: 2_000, text: "Two." },
+      { channel: 2, speaker: "Client", start_ms: 2_000, end_ms: 3_000, text: "Three." },
+    ] });
+    await renderLibrary();
+    withSession({ speaker_names: { Client: "Jane" } });
+    await selectItem("Zoom with Acme", "Three.");
+    const rows = [...detail().querySelectorAll(".segment")];
+    expect(rows.map((r) => r.classList.contains("cont"))).toEqual([false, true, false]);
+    expect(rows[2].querySelector(".seg-spk")).toHaveTextContent("Jane");
+  });
+
+  it("edits a line, then offers its new name for the client's vocabulary", async () => {
+    await renderLibrary();
+    respondWith("transcript_edit", ({ index, text }) => {
+      const t = TRANSCRIPTS["tr-a"];
+      return { ...t, edited_at: "2026-10-25T10:00:00Z", segments: t.segments.map((s, i) => (i === index ? { ...s, text: text as string } : s)) };
+    });
+    respond("vocabulary_add", { keyterms: ["Farah"] });
+    await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
+    fireEvent.click(within(detail()).getByRole("button", { name: "Edit text" }));
+    const line = within(detail()).getAllByRole("textbox")[0];
+    fireEvent.change(line, { target: { value: "Hello, this is Farah." } });
+    fireEvent.blur(line);
+    await flushAsync();
+    expect(callsOf("transcript_edit")[0]).toEqual({ id: "tr-a", index: 0, text: "Hello, this is Farah." });
+    fireEvent.click(within(detail()).getByRole("button", { name: "Farah" }));
+    await flushAsync();
+    expect(callsOf("vocabulary_add")[0]).toEqual({ term: "Farah", clientId: "c1" });
+  });
+
+  it("replaces words across the transcript and exports it", async () => {
+    respond("transcript_replace", { replaced: 1, transcript: { ...TRANSCRIPTS["tr-a"], segments: [{ ...TRANSCRIPTS["tr-a"].segments[0], text: "Hello, this is Samuel." }, ...TRANSCRIPTS["tr-a"].segments.slice(1)] } });
+    respond("export_transcript", "C:/Users/me/Downloads/Zoom with Acme 2026-10-24.docx");
+    const { notify } = await renderLibrary();
+    await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
+    fireEvent.click(within(detail()).getByRole("button", { name: "Find and replace" }));
+    fireEvent.change(within(detail()).getByLabelText("Find"), { target: { value: "Sam" } });
+    fireEvent.change(within(detail()).getByLabelText("Replace with"), { target: { value: "Samuel" } });
+    fireEvent.click(within(detail()).getByRole("button", { name: "Replace all" }));
+    expect(await within(detail()).findByText("Hello, this is Samuel.")).toBeInTheDocument();
+    fireEvent.change(within(detail()).getByLabelText("Export"), { target: { value: "docx" } });
+    await flushAsync();
+    expect(callsOf("export_transcript")[0]).toEqual({ id: "tr-a", format: "docx", timestamps: true, speakers: true });
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Saved to"));
+  });
+
+  it("finds a moment in any transcript and opens the recording there", async () => {
+    respond("search_library", { data: [{ session: ITEMS[2], hit_count: 1,
+      hits: [{ transcript_id: "tr-c", kind: "final", segment_index: 0, start_ms: 65_000, end_ms: 66_000, speaker: "Client", snippet: "the invoice is late", highlights: [[4, 7]] }] }], next_page: null });
+    await renderLibrary();
+    fireEvent.change(screen.getByLabelText("Search recordings"), { target: { value: "invoice" } });
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+    const region = await screen.findByRole("region", { name: "Matches in transcripts" });
+    expect(region.querySelector("mark")).toHaveTextContent("invoice");
+    fireEvent.click(within(region).getByRole("button", { name: /from 1:05/ }));
+    await flushAsync();
+    fireEvent.loadedMetadata(media());
+    expect(media().currentTime).toBe(65);
+  });
+
+  it("answers J, K and L while the transcript has focus", async () => {
+    await renderLibrary();
+    await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
+    media().currentTime = 30;
+    fireEvent.keyDown(detail(), { key: "l" });
+    expect(media().currentTime).toBe(40);
+    fireEvent.keyDown(detail(), { key: "j" });
+    fireEvent.keyDown(detail(), { key: "ArrowLeft" });
+    expect(media().currentTime).toBe(25);
+    fireEvent.keyDown(detail(), { key: "k" });
+    expect(play).toHaveBeenCalled();
+  });
+
+  it("changes the playback speed", async () => {
+    await renderLibrary();
+    await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
+    fireEvent.change(within(detail()).getByLabelText("Speed"), { target: { value: "1.5" } });
+    expect(media().playbackRate).toBe(1.5);
+  });
+});

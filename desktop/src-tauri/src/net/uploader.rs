@@ -100,6 +100,9 @@ pub struct PendingUpload {
     pub markers: Vec<MarkerDto>,
     #[serde(default)]
     pub pauses: Vec<PauseDto>,
+    /// Transcription language of the recording (none = automatic), sent when the session is created.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 impl Default for PendingUpload {
@@ -128,6 +131,7 @@ impl Default for PendingUpload {
             slots: vec![],
             markers: vec![],
             pauses: vec![],
+            language: None,
         }
     }
 }
@@ -510,7 +514,7 @@ async fn open_slots(
                     started_at: item.started_at.clone(),
                     ended_at: Some(ended_at.clone()),
                     duration_ms: Some(item.duration_ms),
-                    language: None,
+                    language: item.language.clone(),
                     artifacts: artifacts.clone(),
                     markers: item.markers.clone(),
                     pauses: item.pauses.clone(),

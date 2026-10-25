@@ -57,6 +57,7 @@ fn customised() -> Settings {
         },
         input_device: Some("{0.0.1.00000000}.{4b3c5f0e-usb-headset}".into()),
         far_side_warning: false,
+        transcription_language: Some("en+ur".into()),
     }
 }
 // ---- Defaults --------------------------------------------------------------------------------------------------
@@ -94,6 +95,7 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert_eq!(s.caption_style.auto_hide_seconds, 0, "captions stay shown");
     assert_eq!(s.input_device, None, "the system default microphone");
     assert!(s.far_side_warning, "the silent-other-side warning is on");
+    assert_eq!(s.transcription_language, None, "the client's or the console's language, else automatic");
 }
 
 #[test]
@@ -137,10 +139,12 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "pins",
             "serverUrl",
             "shortcuts",
-            "siteRules"
+            "siteRules",
+            "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 24, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 25, "section 4.7 of the IPC contract");
+    assert_eq!(v["transcriptionLanguage"], "en+ur");
     assert_eq!(v["autoRecordApps"], json!({"zoom": false}));
     assert_eq!(
         v["captionStyle"],
@@ -508,4 +512,11 @@ fn the_microphone_choice_is_kept_or_cleared() {
     assert_eq!(s.input_device.as_deref(), Some("usb-mic"));
     assert_eq!(Settings::from_value(json!({"inputDevice": null})).input_device, None);
     assert_eq!(Settings::from_value(json!({"inputDevice": 3})).input_device, None);
+}
+
+#[test]
+fn only_the_offered_languages_are_kept() {
+    for (stored, expected) in [(json!("ur"), Some("ur")), (json!(" HI "), Some("hi")), (json!("en+ur"), Some("en+ur")), (json!("fr"), None), (json!(5), None), (json!(null), None)] {
+        assert_eq!(Settings::from_value(json!({"transcriptionLanguage": stored.clone()})).transcription_language.as_deref(), expected, "{stored}");
+    }
 }

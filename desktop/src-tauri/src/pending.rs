@@ -106,6 +106,8 @@ pub struct DecisionInput {
     pub live_provider: Option<String>,
     pub server_session_id: Option<String>,
     pub created_at: DateTime<Utc>,
+    /// The transcription language chosen in Settings when the recording ended (none = automatic).
+    pub language: Option<String>,
 }
 
 /// One entry of `pending.json`. The UI fields are public; the files, the live transcript and the server session
@@ -147,6 +149,8 @@ pub struct PendingDecision {
     markers: Vec<MarkerDto>,
     #[serde(default)]
     pauses: Vec<PauseDto>,
+    #[serde(default)]
+    language: Option<String>,
 }
 
 impl PendingDecision {
@@ -180,6 +184,7 @@ impl PendingDecision {
             server_session_id: input.server_session_id,
             markers: finished.markers.clone(),
             pauses: finished.pauses.clone(),
+            language: input.language,
         }
     }
 
@@ -231,6 +236,7 @@ impl PendingDecision {
             title: self.title.clone(),
             markers: self.markers.clone(),
             pauses: self.pauses.clone(),
+            language: self.language.clone(),
             ..PendingUpload::default()
         }
     }

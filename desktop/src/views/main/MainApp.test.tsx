@@ -497,3 +497,21 @@ describe("MainApp main:navigate", () => {
     await waitFor(() => expect(screen.getByTestId("pending-pend-1")).toHaveClass("highlight"));
   });
 });
+
+describe("command palette (B9)", () => {
+  beforeEach(() => resetTauriMock());
+
+  it("opens with Ctrl+K or Cmd+K, closes with Escape, and goes where it is told", async () => {
+    await renderPaired();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const paletteInput = async () => within(await screen.findByRole("dialog", { name: "Command palette" })).getByRole("combobox");
+    const input = await paletteInput();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "K", metaKey: true });
+    fireEvent.change(await paletteInput(), { target: { value: "go to settings" } });
+    fireEvent.keyDown(await paletteInput(), { key: "Enter" });
+    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+  });
+});

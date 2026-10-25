@@ -165,7 +165,7 @@ async fn ensure_server_session(app: &AppHandle, info: &crate::audio::RecordingIn
         client_id: info.client_id.clone(),
         title: None,
         started_at: info.started_at.to_rfc3339(),
-        language: None,
+        language: state.settings().transcription_language,
     };
     let (response, cleared) = crate::net::api::with_client_fallback(info.client_id.clone(), |client| {
         let (api, mut request) = (api.clone(), request.clone());
@@ -352,7 +352,15 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     let mode = finished.info.mode;
     let decision = PendingDecision::from_recording(
         &finished,
-        DecisionInput { auto, client_name: None, live_segments, live_provider: provider, server_session_id: session, created_at: Utc::now() },
+        DecisionInput {
+            auto,
+            client_name: None,
+            live_segments,
+            live_provider: provider,
+            server_session_id: session,
+            created_at: Utc::now(),
+            language: settings.transcription_language.clone(),
+        },
     );
     let id = decision.id.clone();
     let created_at = decision.created_at;

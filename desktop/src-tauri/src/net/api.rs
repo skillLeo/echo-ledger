@@ -196,6 +196,83 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `GET /api/search` (since v1.1): `params` are the documented query parameters (`q`, filters, `page`).
+    pub async fn search(&self, params: &[(String, String)]) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("search")).query(params))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/transcripts/{id}`: new text for one line (timings stay).
+    pub async fn edit_transcript(&self, id: &str, index: usize, text: &str) -> AppResult<serde_json::Value> {
+        let body = json!({ "edits": [{ "index": index, "text": text }] });
+        let resp = self.authed(self.http.patch(self.url(&format!("transcripts/{id}"))))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/transcripts/{id}/replace`: `{replaced, transcript}`.
+    pub async fn replace_in_transcript(&self, id: &str, find: &str, replace: &str, match_case: bool, whole_word: bool) -> AppResult<serde_json::Value> {
+        let body = json!({ "find": find, "replace": replace, "match_case": match_case, "whole_word": whole_word });
+        let resp = self.authed(self.http.post(self.url(&format!("transcripts/{id}/replace"))))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/transcripts/{id}/restore`: back to the engine's original text.
+    pub async fn restore_transcript(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("transcripts/{id}/restore"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/transcripts/{id}/revisions`.
+    pub async fn transcript_revisions(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url(&format!("transcripts/{id}/revisions"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PUT /api/sessions/{id}/speakers`: `{speaker_names}`.
+    pub async fn rename_speakers(&self, session_id: &str, names: &serde_json::Map<String, serde_json::Value>, remember_for_client: bool) -> AppResult<serde_json::Value> {
+        let body = json!({ "names": names, "remember_for_client": remember_for_client });
+        let resp = self.authed(self.http.put(self.url(&format!("sessions/{session_id}/speakers"))))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/transcripts/{id}/export`: the file and the name the server gives it.
+    pub async fn export_transcript(&self, id: &str, format: &str, timestamps: bool, speakers: bool) -> AppResult<(Vec<u8>, String)> {
+        let query = [("format", format.to_string()), ("timestamps", u8::from(timestamps).to_string()), ("speakers", u8::from(speakers).to_string())];
+        let resp = self.authed(self.http.get(self.url(&format!("transcripts/{id}/export"))).query(&query))?.send().await?;
+        if !resp.status().is_success() {
+            return Err(Self::error(resp).await);
+        }
+        let disposition = resp.headers().get(reqwest::header::CONTENT_DISPOSITION).and_then(|v| v.to_str().ok()).unwrap_or_default().to_string();
+        let bytes = resp.bytes().await?.to_vec();
+        Ok((bytes, filename_from_disposition(&disposition).unwrap_or_else(|| format!("transcript.{format}"))))
+    }
+
+    /// `POST /api/sessions/{id}/shares`: the link (with its URL, shown once).
+    pub async fn create_share(&self, session_id: &str, expires_in: u64, password: Option<&str>, include_audio: bool) -> AppResult<serde_json::Value> {
+        let body = json!({ "expires_in": expires_in, "password": password, "include_audio": include_audio });
+        let resp = self.authed(self.http.post(self.url(&format!("sessions/{session_id}/shares"))))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/sessions/{id}/shares`.
+    pub async fn list_shares(&self, session_id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url(&format!("sessions/{session_id}/shares"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/shares/{id}`.
+    pub async fn revoke_share(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("shares/{id}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/vocabulary/keyterms`: "Add to vocabulary" (for the client, or for every recording).
+    pub async fn add_keyterm(&self, term: &str, client_id: Option<&str>) -> AppResult<serde_json::Value> {
+        let body = json!({ "term": term, "client_id": client_id });
+        let resp = self.authed(self.http.post(self.url("vocabulary/keyterms")))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
     pub async fn delete_session(&self, id: &str) -> AppResult<()> {
         let resp = self.authed(self.http.delete(self.url(&format!("sessions/{id}"))))?.send().await?;
         Self::ok_empty(resp).await
@@ -250,4 +327,42 @@ impl ApiClientCache {
     pub fn builds(&self) -> usize {
         self.builds.load(Ordering::Relaxed)
     }
+}
+
+/// The file name of a `Content-Disposition` header: the UTF-8 `filename*` when present, else `filename`. Path
+/// separators and other characters file systems refuse are removed.
+pub fn filename_from_disposition(header: &str) -> Option<String> {
+    let mut plain = None;
+    let mut extended = None;
+    for part in header.split(';').map(str::trim) {
+        if let Some(value) = part.strip_prefix("filename*=") {
+            let value = value.trim_matches('"');
+            let encoded = value.split_once("''").map_or(value, |(_, v)| v);
+            extended = Some(percent_decode(encoded));
+        } else if let Some(value) = part.strip_prefix("filename=") {
+            plain = Some(value.trim_matches('"').to_string());
+        }
+    }
+    let name: String = extended.or(plain)?.chars().filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && !c.is_control()).collect();
+    let name = name.trim().trim_start_matches('.').to_string();
+    (!name.is_empty()).then_some(name)
+}
+
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let Some(byte) = text.get(i + 1..i + 3).and_then(|hex| u8::from_str_radix(hex, 16).ok())
+        {
+            out.push(byte);
+            i += 3;
+            continue;
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }

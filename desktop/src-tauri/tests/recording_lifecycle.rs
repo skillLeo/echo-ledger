@@ -198,6 +198,7 @@ fn decision(
             live_provider: Some("assemblyai".into()),
             server_session_id: session.map(str::to_string),
             created_at,
+            language: Some("ur".into()),
         },
     )
 }
@@ -212,6 +213,7 @@ fn bookmarks_and_pauses_survive_a_restart_and_go_with_the_upload() {
 
     assert_eq!(upload.markers, vec![MarkerDto { at_ms: 5_000, tag: Some("Budget".into()), note: None }]);
     assert_eq!(upload.pauses, vec![PauseDto { at_ms: 7_000, paused_ms: 3_000 }]);
+    assert_eq!(upload.language.as_deref(), Some("ur"), "the language chosen when the recording ended");
 }
 
 #[test]
