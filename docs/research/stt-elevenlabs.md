@@ -1,7 +1,7 @@
 # ElevenLabs Scribe (alternative STT provider), with short OpenAI and Groq notes
 
 > Verified research note for EchoLedger, written 2026-10-24. Earlier planning assumptions were treated as hypotheses and checked (see §5.3).
-> **Rule:** every API fact carries a source label from the legend below. Each label points to a primary source opened during research. Anything I could not confirm is marked **UNVERIFIED**, with the reason.
+> **Rule:** every API fact carries a source label from the legend below. Each label points to a primary source. Anything that could not be confirmed is marked **UNVERIFIED**, with the reason.
 > The ElevenLabs docs serve raw markdown when you append `.md` to a page URL (index at https://elevenlabs.io/docs/llms.txt). Most quotes below come from those `.md` copies and from the OpenAPI JSON.
 
 ## Sources legend
