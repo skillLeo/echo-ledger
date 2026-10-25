@@ -14,6 +14,7 @@ import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.data.SearchItemDto
+import com.echoledger.mobile.data.SecurityResponse
 import com.echoledger.mobile.data.SessionDetailDto
 import com.echoledger.mobile.data.ShareLinkDto
 import com.echoledger.mobile.data.TranscriptDto
@@ -287,6 +288,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { graph.api()?.createClient(name.trim()) }
             .onFailure { _message.value = it.message ?: "The client could not be created." }.getOrNull()
             ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
+    }
+    // ---- Security centre (B16) -------------------------------------------------------------------------------------
+
+    /** Paired devices and the recent audit log; null when offline or unpaired. */
+    suspend fun security(): SecurityResponse? = withContext(Dispatchers.IO) { runCatching { graph.api()?.security() }.getOrNull() }
+
+    /** Revokes another paired device; false (with the server's reason) when it was refused. */
+    suspend fun revokeDevice(id: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.revokeDevice(id) ?: error("Not paired") }
+            .onSuccess { _message.value = "Device revoked" }
+            .onFailure { _message.value = it.message ?: "The device could not be revoked." }.isSuccess
     }
     fun delete(item: LibraryItem) = viewModelScope.launch {
         runCatching { withContext(Dispatchers.IO) { graph.api()?.deleteSession(item.id) } }

@@ -355,5 +355,30 @@ data class ClientResponse(val data: ClientDto)
 @Serializable
 data class BulkAnswer(val changed: Int = 0)
 
+/** `GET /api/security` (since v1.1, B16): paired devices and the recent audit log. */
+@Serializable
+data class SecurityResponse(val devices: List<SecurityDeviceDto> = emptyList(), val events: List<SecurityEventDto> = emptyList())
+
+@Serializable
+data class SecurityDeviceDto(
+    val id: String,
+    val name: String,
+    val platform: String = "",
+    @SerialName("app_version") val appVersion: String? = null,
+    @SerialName("last_seen_at") val lastSeenAt: String? = null,
+    val current: Boolean = false
+)
+
+@Serializable
+data class SecurityEventDto(
+    val id: Long,
+    val event: String,
+    val label: String = "",
+    val summary: String = "",
+    val actor: String = "system",
+    val device: String? = null,
+    val at: String = ""
+)
+
 @Serializable
 data class ClientsResponse(val data: List<ClientDto>)

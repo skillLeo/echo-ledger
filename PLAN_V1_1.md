@@ -323,8 +323,12 @@ Severity in brackets. Each item lists the platform; the matching regression test
   Built and covered by automated tests (server on SQLite and MariaDB, console, desktop, Android); the device checks
   are docs/MANUAL_QA.md section 11. Recording tags are called labels (`tags` already names bookmark tags in the
   API). Bulk export is one zip of the finished transcripts.
-- [ ] B16 Security centre (W, D, P): desktop app lock (Windows Hello / Touch ID, PIN fallback), passkeys for web
+- [~] B16 Security centre (W, D, P): desktop app lock (Windows Hello / Touch ID, PIN fallback), passkeys for web
       login (TOTP kept), devices and web sessions with revoke, audit log.
+
+  Built and covered by automated tests (server on SQLite and MariaDB, console, desktop, Android); the device checks
+  are docs/MANUAL_QA.md section 12. Passkeys use web-auth/webauthn-lib and are tied to the host of APP_URL. The
+  Android app lock is the A4 lock; the phone shows devices and activity.
 - [ ] B17 Retention controls (W, D, P): 7 / 14 / 30 / custom days globally and per client, per-recording keep pin,
       48-hour undo bin, storage meter.
 - [ ] B18 Notifications and activity centre (W, D, P): bell, OS notifications that open the recording, quiet hours.

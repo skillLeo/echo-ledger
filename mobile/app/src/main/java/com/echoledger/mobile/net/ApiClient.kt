@@ -15,6 +15,7 @@ import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.RecordingUpload
 import com.echoledger.mobile.data.RegisterResponse
 import com.echoledger.mobile.data.SearchResponse
+import com.echoledger.mobile.data.SecurityResponse
 import com.echoledger.mobile.data.ServerConfig
 import com.echoledger.mobile.data.SessionDetailDto
 import com.echoledger.mobile.data.ShareLinkDto
@@ -267,6 +268,14 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun createClient(name: String): ClientDto {
         val body = buildJsonObject { put("name", name) }.toString().toRequestBody(jsonType)
         return call(request("clients").post(body).build(), ClientResponse.serializer())!!.data
+    }
+
+    /** `GET /api/security` (since v1.1): paired devices and the recent audit log. */
+    suspend fun security(): SecurityResponse = call(request("security").get().build(), SecurityResponse.serializer())!!
+
+    /** `DELETE /api/devices/{id}` (since v1.1): revokes another paired device. */
+    suspend fun revokeDevice(id: String) {
+        call(request("devices/$id").delete().build(), null as KSerializer<Unit>?)
     }
 
     /** `POST /api/vocabulary/keyterms`: for the client, or for every recording without one. */

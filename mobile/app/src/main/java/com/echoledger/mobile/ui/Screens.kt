@@ -1016,6 +1016,7 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
         }
         DecisionTimeoutSection(vm, settings)
         AppLockSection(vm, settings)
+        SecuritySection(load = { vm.security() }, revoke = { vm.revokeDevice(it) })
         TranscriptionSection(vm, settings)
         SectionCard {
             Text("Client keyterms", fontWeight = FontWeight.SemiBold)

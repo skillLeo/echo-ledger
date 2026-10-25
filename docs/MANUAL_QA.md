@@ -316,3 +316,30 @@ notification shade after every step.
 | O-A2 | Long-press a recording, tap two more, then Move to, Add label, Pin. | The changes show after the sync; Done leaves selection mode. |
 | O-A3 | Selection → Export as zip. | The share sheet offers the zip. |
 | O-A4 | Open a recording → Organise: pin, client, labels. | Saved and visible in the library list. |
+
+## 12. v1.1 — security centre
+
+### 12.1 Console
+
+| ID | Steps | Expected |
+|---|---|---|
+| S-W1 | Security → Add a passkey (Windows Hello, Touch ID or a phone), sign out, then Sign in with a passkey on the login page. | Signed in without the password or the two-step code; the audit log shows "Signed in with a passkey". |
+| S-W2 | Remove the passkey; try it again. | The sign-in is refused with a plain message; the password still works. |
+| S-W3 | Sign in from a second browser; on Security, sign that browser out. | The other browser is back at the login page on its next click. |
+| S-W4 | Delete a recording, export a transcript, make and revoke a share link, change a provider key. | Each appears in the audit log with who did it; no key or password appears anywhere. |
+
+### 12.2 Desktop
+
+| ID | Steps | Expected |
+|---|---|---|
+| S-D1 | Settings → Privacy & security: set a PIN, turn on Lock EchoLedger, choose After 1 minute; wait. | The window shows "EchoLedger is locked"; Windows Hello (or Touch ID) is offered at once. |
+| S-D2 | While locked, record a call from the tray or auto-record. | Recording, captions and uploads carry on; the library stays hidden until unlocked. |
+| S-D3 | Type a wrong PIN five times. | The sixth try is refused with "Try again in 30 seconds"; the right PIN works after the wait. |
+| S-D4 | Revoke another device under Devices. | It disappears there and in the console; that device returns to pairing on its next sync. |
+
+### 12.3 Android
+
+| ID | Steps | Expected |
+|---|---|---|
+| S-A1 | Settings → Devices and activity. | Lists this phone and the other devices, and recent activity with who did it. |
+| S-A2 | Revoke another device (tap Revoke, then Revoke now). | It is gone from the list and the console. |
