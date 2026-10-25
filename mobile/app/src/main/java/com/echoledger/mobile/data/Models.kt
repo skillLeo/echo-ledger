@@ -223,7 +223,9 @@ data class LibraryItem(
     val tags: List<String> = emptyList(),
     /** Pinned to the top and the recording's labels (since v1.1, B15). */
     val pinned: Boolean = false,
-    val labels: List<String> = emptyList()
+    val labels: List<String> = emptyList(),
+    /** Never deleted by the retention rules (B17). */
+    val keep: Boolean = false
 )
 
 @Serializable
@@ -354,6 +356,30 @@ data class ClientResponse(val data: ClientDto)
 
 @Serializable
 data class BulkAnswer(val changed: Int = 0)
+
+/** `GET /api/bin` (since v1.1, B17): recordings deleted in the last 48 hours. */
+@Serializable
+data class BinItemDto(
+    val id: String,
+    val title: String = "",
+    val client: NamedRef? = null,
+    @SerialName("started_at") val startedAt: String? = null,
+    @SerialName("deleted_at") val deletedAt: String? = null,
+    @SerialName("erase_at") val eraseAt: String? = null
+)
+
+@Serializable
+data class BinResponse(val data: List<BinItemDto> = emptyList())
+
+/** `GET /api/storage` (since v1.1, B17): the storage meter. */
+@Serializable
+data class StorageDto(
+    @SerialName("recordings_bytes") val recordingsBytes: Long = 0,
+    @SerialName("recordings_count") val recordingsCount: Int = 0,
+    @SerialName("disk_free_bytes") val diskFreeBytes: Long? = null,
+    @SerialName("disk_total_bytes") val diskTotalBytes: Long? = null,
+    @SerialName("retention_days") val retentionDays: Int = 30
+)
 
 /** `GET /api/security` (since v1.1, B16): paired devices and the recent audit log. */
 @Serializable

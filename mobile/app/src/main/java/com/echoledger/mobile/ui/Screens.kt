@@ -268,6 +268,7 @@ fun LibraryScreen(
     var folder by remember { mutableStateOf<String?>(null) }
     var labelFilter by remember { mutableStateOf<String?>(null) }
     var selecting by remember { mutableStateOf(false) }
+    var binOpen by remember { mutableStateOf(false) }
     var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     val clients by vm.clients.collectAsState()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -314,6 +315,7 @@ fun LibraryScreen(
         Spacer(Modifier.height(8.dp))
         ScreenHeader("Library", "Recordings from your phone, computer and the web") {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { binOpen = !binOpen }) { Text("Deleted") }
                 TextButton(onClick = {
                     selecting = !selecting
                     picked = emptySet()
@@ -352,6 +354,10 @@ fun LibraryScreen(
                 tags.forEach { tag -> FilterChip(selected = tagFilter == tag, onClick = { tagFilter = tag }, label = { Text(tag) }) }
             }
         }
+        if (binOpen) {
+            BinSection(load = { vm.bin() }, restore = { vm.restore(it) }, erase = { vm.eraseNow(it) }, onClose = { binOpen = false })
+            Spacer(Modifier.height(8.dp))
+        }
         SmartViewChips(counts, view) { view = it }
         FolderLabelFilters(folders, labels, folder, labelFilter, { folder = it }, { labelFilter = it })
         if (selecting) {
@@ -374,7 +380,8 @@ fun LibraryScreen(
                 onDone = {
                     selecting = false
                     picked = emptySet()
-                }
+                },
+                onKeep = { run(if (it) "keep" else "unkeep") }
             )
             Spacer(Modifier.height(8.dp))
         }
@@ -539,7 +546,7 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
             }) { Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = Brand.Danger) }
             if (confirmDelete) {
                 ConfirmDialog(
-                    text = "Delete this recording? It is removed from every device.",
+                    text = "Delete this recording on every device? You can restore it from Recently deleted for 48 hours.",
                     confirmLabel = "Delete",
                     onConfirm = {
                         confirmDelete = false
@@ -584,7 +591,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                     onPin = { scope.launch { vm.organise(item.id, pinned = it) } },
                     onMove = { id -> scope.launch { vm.organise(item.id, clientId = id, clearClient = id == null) } },
                     onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { vm.organise(item.id, clientId = it.id) } } },
-                    onLabels = { scope.launch { vm.organise(item.id, labels = it) } }
+                    onLabels = { scope.launch { vm.organise(item.id, labels = it) } },
+                    onKeep = { scope.launch { vm.organise(item.id, keep = it) } }
                 )
                 Spacer(Modifier.height(8.dp))
             }
@@ -1017,6 +1025,7 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
         DecisionTimeoutSection(vm, settings)
         AppLockSection(vm, settings)
         SecuritySection(load = { vm.security() }, revoke = { vm.revokeDevice(it) })
+        StorageSection(load = { vm.storage() })
         TranscriptionSection(vm, settings)
         SectionCard {
             Text("Client keyterms", fontWeight = FontWeight.SemiBold)

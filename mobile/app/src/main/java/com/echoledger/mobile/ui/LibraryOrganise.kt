@@ -29,6 +29,7 @@ import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.SmartView
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
+import kotlinx.coroutines.launch
 
 /** The smart views with how many recordings each holds (B15). */
 @Composable
@@ -133,12 +134,22 @@ fun OrganiseSection(
     onPin: (Boolean) -> Unit,
     onMove: (String?) -> Unit,
     onCreateClient: (String) -> Unit,
-    onLabels: (List<String>) -> Unit
+    onLabels: (List<String>) -> Unit,
+    onKeep: (Boolean) -> Unit = {}
 ) {
     var label by remember { mutableStateOf("") }
     SectionCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Organise", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(
+                onClick = { onKeep(!item.keep) },
+                modifier = Modifier.semantics {
+                    contentDescription =
+                        if (item.keep) "Stop keeping" else "Keep forever"
+                }
+            ) {
+                Text(if (item.keep) "Kept forever" else "Keep forever", color = if (item.keep) Brand.Success else Brand.Muted)
+            }
             TextButton(
                 onClick = { onPin(!item.pinned) },
                 modifier = Modifier.semantics {
@@ -195,7 +206,8 @@ fun BulkPanel(
     onPin: (Boolean) -> Unit,
     onExport: (String) -> Unit,
     onDelete: () -> Unit,
-    onDone: () -> Unit
+    onDone: () -> Unit,
+    onKeep: (Boolean) -> Unit = {}
 ) {
     var label by remember { mutableStateOf("") }
     var format by remember { mutableStateOf("docx") }
@@ -231,6 +243,8 @@ fun BulkPanel(
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 TextButton(onClick = { onPin(true) }) { Text("Pin") }
                 TextButton(onClick = { onPin(false) }) { Text("Unpin") }
+                TextButton(onClick = { onKeep(true) }) { Text("Keep forever") }
+                TextButton(onClick = { onKeep(false) }) { Text("Stop keeping") }
             }
             Text("Export transcripts", color = Brand.Muted, fontSize = 12.sp)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -244,9 +258,65 @@ fun BulkPanel(
                     TextButton(onClick = {
                         confirmDelete = false
                         onDelete()
-                    }) { Text("Delete $count on every device", color = Brand.Danger) }
+                    }) { Text("Delete $count (restorable for 48 hours)", color = Brand.Danger) }
                 } else {
                     TextButton(onClick = { confirmDelete = true }) { Text("Delete", color = Brand.Danger) }
+                }
+            }
+        }
+    }
+}
+
+/** "erased in 5 hours" until the 48-hour bin ends. */
+fun eraseIn(eraseAt: String?, now: java.time.Instant = java.time.Instant.now()): String {
+    val at = eraseAt?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() } ?: return "erased soon"
+    val hours = java.time.Duration.between(now, at).toHours()
+    return if (hours >= 1) "erased in $hours hour${if (hours == 1L) "" else "s"}" else "erased soon"
+}
+
+/** Recently deleted (B17): the 48-hour undo bin with Restore, and Delete now after a second tap. */
+@Composable
+fun BinSection(
+    load: suspend () -> List<com.echoledger.mobile.data.BinItemDto>,
+    restore: suspend (String) -> Boolean,
+    erase: suspend (String) -> Boolean,
+    onClose: () -> Unit
+) {
+    var items by remember { mutableStateOf<List<com.echoledger.mobile.data.BinItemDto>?>(null) }
+    var confirming by remember { mutableStateOf<String?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(Unit) { items = load() }
+    SectionCard(Modifier.fillMaxWidth().semantics { contentDescription = "Recently deleted" }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Recently deleted", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = onClose) { Text("Close") }
+        }
+        Text(
+            "Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.",
+            color = Brand.Muted,
+            fontSize = 12.sp
+        )
+        val list = items
+        when {
+            list == null -> Text("Loading…", color = Brand.Muted, fontSize = 12.sp)
+
+            list.isEmpty() -> Text("Nothing deleted in the last 48 hours.", color = Brand.Muted, fontSize = 12.sp)
+
+            else -> list.forEach { b ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(b.title)
+                        Text(listOfNotNull(b.client?.name, eraseIn(b.eraseAt)).joinToString(" · "), color = Brand.Muted, fontSize = 12.sp)
+                    }
+                    TextButton(onClick = { scope.launch { if (restore(b.id)) items = load() } }) { Text("Restore") }
+                    if (confirming == b.id) {
+                        TextButton(onClick = {
+                            confirming = null
+                            scope.launch { if (erase(b.id)) items = load() }
+                        }) { Text("Erase now", color = Brand.Danger) }
+                    } else {
+                        TextButton(onClick = { confirming = b.id }) { Text("Delete now", color = Brand.Danger) }
+                    }
                 }
             }
         }

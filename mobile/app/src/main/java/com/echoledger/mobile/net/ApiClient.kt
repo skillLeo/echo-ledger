@@ -1,6 +1,7 @@
 package com.echoledger.mobile.net
 
 import com.echoledger.mobile.data.ApiJson
+import com.echoledger.mobile.data.BinResponse
 import com.echoledger.mobile.data.BulkAnswer
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.ClientResponse
@@ -20,6 +21,7 @@ import com.echoledger.mobile.data.ServerConfig
 import com.echoledger.mobile.data.SessionDetailDto
 import com.echoledger.mobile.data.ShareLinkDto
 import com.echoledger.mobile.data.ShareListResponse
+import com.echoledger.mobile.data.StorageDto
 import com.echoledger.mobile.data.SttTokenResponse
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.data.UploadState
@@ -227,10 +229,12 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         pinned: Boolean? = null,
         clientId: String? = null,
         clearClient: Boolean = false,
-        labels: List<String>? = null
+        labels: List<String>? = null,
+        keep: Boolean? = null
     ) {
         val body = buildJsonObject {
             pinned?.let { put("pinned", it) }
+            keep?.let { put("keep", it) }
             if (clearClient) put("client_id", kotlinx.serialization.json.JsonNull) else clientId?.let { put("client_id", it) }
             labels?.let { list -> put("labels", buildJsonArray { list.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) }
         }.toString().toRequestBody(jsonType)
@@ -269,6 +273,22 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         val body = buildJsonObject { put("name", name) }.toString().toRequestBody(jsonType)
         return call(request("clients").post(body).build(), ClientResponse.serializer())!!.data
     }
+
+    /** `GET /api/bin` (since v1.1): recordings deleted in the last 48 hours. */
+    suspend fun bin(): BinResponse = call(request("bin").get().build(), BinResponse.serializer())!!
+
+    /** `POST /api/sessions/{id}/restore` (since v1.1): out of the undo bin. */
+    suspend fun restoreSession(id: String) {
+        call(request("sessions/$id/restore").post(ByteArray(0).toRequestBody(jsonType)).build(), null as KSerializer<Unit>?)
+    }
+
+    /** `DELETE /api/bin/{id}` (since v1.1): erase now instead of after 48 hours. */
+    suspend fun eraseFromBin(id: String) {
+        call(request("bin/$id").delete().build(), null as KSerializer<Unit>?)
+    }
+
+    /** `GET /api/storage` (since v1.1): the storage meter. */
+    suspend fun storage(): StorageDto = call(request("storage").get().build(), StorageDto.serializer())!!
 
     /** `GET /api/security` (since v1.1): paired devices and the recent audit log. */
     suspend fun security(): SecurityResponse = call(request("security").get().build(), SecurityResponse.serializer())!!

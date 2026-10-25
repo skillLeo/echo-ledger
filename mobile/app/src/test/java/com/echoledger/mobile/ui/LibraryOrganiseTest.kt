@@ -240,7 +240,7 @@ class LibraryOrganiseTest : ScreenTest() {
         compose.onNodeWithText("Export as zip").performClick()
         compose.onNodeWithText("Delete").performClick()
         assertFalse(events.contains("delete"))
-        compose.onNodeWithText("Delete 2 on every device").performClick()
+        compose.onNodeWithText("Delete 2 (restorable for 48 hours)").performClick()
         compose.onNodeWithText("Done").performClick()
 
         assertEquals(listOf("move c1", "label Q4 true", "label Q4 false", "pin false", "export txt", "delete", "done"), events)

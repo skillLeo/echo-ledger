@@ -329,8 +329,12 @@ Severity in brackets. Each item lists the platform; the matching regression test
   Built and covered by automated tests (server on SQLite and MariaDB, console, desktop, Android); the device checks
   are docs/MANUAL_QA.md section 12. Passkeys use web-auth/webauthn-lib and are tied to the host of APP_URL. The
   Android app lock is the A4 lock; the phone shows devices and activity.
-- [ ] B17 Retention controls (W, D, P): 7 / 14 / 30 / custom days globally and per client, per-recording keep pin,
+- [~] B17 Retention controls (W, D, P): 7 / 14 / 30 / custom days globally and per client, per-recording keep pin,
       48-hour undo bin, storage meter.
+
+  Built and covered by automated tests (server on SQLite and MariaDB, console, desktop, Android); the device checks
+  are docs/MANUAL_QA.md section 13. Every delete now goes through the 48-hour bin (the provider copy is erased at
+  once; binned recordings are never played or shared); recordings deleted mid-upload are erased at once.
 - [ ] B18 Notifications and activity centre (W, D, P): bell, OS notifications that open the recording, quiet hours.
 - [ ] B19 Onboarding and system-style settings (W, D, P): first-run wizard, grouped searchable settings, shortcut
       editor with conflict detection, settings import/export without secrets.

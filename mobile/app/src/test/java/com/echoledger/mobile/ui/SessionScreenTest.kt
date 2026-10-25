@@ -314,7 +314,9 @@ class SessionScreenTest : ScreenTest() {
             0,
             server.requestsTo("DELETE", "/api/sessions/${ServerFixtures.SESSION_ID}").size
         )
-        compose.onNodeWithText("Delete this recording? It is removed from every device.").assertExists()
+        compose.onNodeWithText(
+            "Delete this recording on every device? You can restore it from Recently deleted for 48 hours."
+        ).assertExists()
         compose.onNodeWithText("Delete").performClick()
         pumpUntil("the delete request") { server.requestsTo("DELETE", "/api/sessions/${ServerFixtures.SESSION_ID}").isNotEmpty() }
 

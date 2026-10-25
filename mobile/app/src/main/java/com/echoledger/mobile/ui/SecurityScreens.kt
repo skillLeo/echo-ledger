@@ -98,3 +98,59 @@ fun SecuritySection(load: suspend () -> SecurityResponse?, revoke: suspend (Stri
         }
     }
 }
+
+/** "1.5 GB" style sizes. */
+fun fileSize(bytes: Long): String {
+    val units = listOf("B", "KB", "MB", "GB", "TB")
+    var value = bytes.toDouble()
+    var unit = 0
+    while (value >= 1024 && unit < units.lastIndex) {
+        value /= 1024
+        unit++
+    }
+    return if (unit == 0) "$bytes B" else String.format(java.util.Locale.ROOT, "%.1f %s", value, units[unit])
+}
+
+/** Settings → Storage and retention (B17): the storage meter and how long recordings are kept. */
+@Composable
+fun StorageSection(load: suspend () -> com.echoledger.mobile.data.StorageDto?) {
+    var info by remember { mutableStateOf<com.echoledger.mobile.data.StorageDto?>(null) }
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        info = load()
+        loaded = true
+    }
+    SectionCard {
+        Text("Storage and retention", fontWeight = FontWeight.SemiBold)
+        val current = info
+        when {
+            !loaded -> Text("Loading…", color = Brand.Muted, fontSize = 12.sp)
+
+            current == null -> Text("Connect to see the server's storage.", color = Brand.Muted, fontSize = 12.sp)
+
+            else -> {
+                Text(
+                    "Recordings on the server: ${fileSize(
+                        current.recordingsBytes
+                    )} in ${current.recordingsCount} file${if (current.recordingsCount == 1) "" else "s"}.",
+                    fontSize = 13.sp
+                )
+                val total = current.diskTotalBytes
+                val free = current.diskFreeBytes
+                if (total != null && free != null && total > 0) {
+                    val used = 1f - free.toFloat() / total
+                    androidx.compose.material3.LinearProgressIndicator(
+                        progress = { used },
+                        modifier = Modifier.semantics { contentDescription = "Server disk used" }
+                    )
+                    Text("Server disk ${(used * 100).toInt()}% used · ${fileSize(free)} free", color = Brand.Muted, fontSize = 12.sp)
+                }
+                Text(
+                    "Recordings are deleted after ${current.retentionDays} days unless kept. Deleted recordings can be restored for 48 hours.",
+                    color = Brand.Muted,
+                    fontSize = 12.sp
+                )
+            }
+        }
+    }
+}

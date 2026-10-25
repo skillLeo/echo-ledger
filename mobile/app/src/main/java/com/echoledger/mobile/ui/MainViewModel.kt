@@ -10,6 +10,7 @@ import com.echoledger.mobile.calls.Decisions
 import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.data.AppSettings
+import com.echoledger.mobile.data.BinItemDto
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.LocalRecording
@@ -17,6 +18,7 @@ import com.echoledger.mobile.data.SearchItemDto
 import com.echoledger.mobile.data.SecurityResponse
 import com.echoledger.mobile.data.SessionDetailDto
 import com.echoledger.mobile.data.ShareLinkDto
+import com.echoledger.mobile.data.StorageDto
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.net.ApiClient
 import com.echoledger.mobile.net.ApiException
@@ -237,10 +239,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         pinned: Boolean? = null,
         clientId: String? = null,
         clearClient: Boolean = false,
-        labels: List<String>? = null
+        labels: List<String>? = null,
+        keep: Boolean? = null
     ): Boolean {
         val ok = withContext(Dispatchers.IO) {
-            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels) ?: error("Not paired") }
+            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep) ?: error("Not paired") }
                 .onFailure { _message.value = it.message ?: "The change could not be saved." }.isSuccess
         }
         if (ok) refresh()
@@ -289,6 +292,33 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _message.value = it.message ?: "The client could not be created." }.getOrNull()
             ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
     }
+    // ---- Undo bin and storage (B17) --------------------------------------------------------------------------------
+
+    /** Recordings deleted in the last 48 hours; empty when offline. */
+    suspend fun bin(): List<BinItemDto> = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.bin()?.data.orEmpty() }.getOrDefault(emptyList())
+    }
+
+    /** Restores a recording from the bin and syncs it back into the library. */
+    suspend fun restore(id: String): Boolean {
+        val ok = withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.restoreSession(id) ?: error("Not paired") }
+                .onSuccess { _message.value = "Restored" }
+                .onFailure { _message.value = it.message ?: "The recording could not be restored." }.isSuccess
+        }
+        if (ok) refresh()
+        return ok
+    }
+
+    /** Erases a binned recording now. */
+    suspend fun eraseNow(id: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.eraseFromBin(id) ?: error("Not paired") }
+            .onSuccess { _message.value = "Erased" }
+            .onFailure { _message.value = it.message ?: "The recording could not be erased." }.isSuccess
+    }
+
+    /** The storage meter; null when offline. */
+    suspend fun storage(): StorageDto? = withContext(Dispatchers.IO) { runCatching { graph.api()?.storage() }.getOrNull() }
     // ---- Security centre (B16) -------------------------------------------------------------------------------------
 
     /** Paired devices and the recent audit log; null when offline or unpaired. */

@@ -343,3 +343,13 @@ notification shade after every step.
 |---|---|---|
 | S-A1 | Settings → Devices and activity. | Lists this phone and the other devices, and recent activity with who did it. |
 | S-A2 | Revoke another device (tap Revoke, then Revoke now). | It is gone from the list and the console. |
+
+## 13. v1.1 — retention and the undo bin
+
+| ID | Steps | Expected |
+|---|---|---|
+| R-1 | Console Settings: choose 7 days; give one client 30 days; mark one old recording Keep. Run `php artisan recordings:retention`. | Recordings older than their retention move to Recently deleted, except the kept one and the client's younger ones. |
+| R-2 | Delete a recording on the phone; on the desktop open Recently deleted and Restore it. | It comes back on every device after the next sync, with its audio and transcript. |
+| R-3 | Delete a recording and try its old playback link or share link. | Both answer "not found" at once. |
+| R-4 | Leave a deleted recording for 48 hours (or run the command after moving its delete time back). | It disappears from Recently deleted; Restore says it can no longer be restored. |
+| R-5 | Console dashboard, desktop Settings and phone Settings. | The storage meter shows the recordings' size and the server disk; the retention days match the console. |
