@@ -1,6 +1,6 @@
 # ElevenLabs Scribe (alternative STT provider), with short OpenAI and Groq notes
 
-> Verified research note for EchoLedger, written 2026-10-24. Scope comes from `docs/spec/MASTER_PROMPT.md`. Claims taken from `docs/spec/BUILD_PLAN.md` were treated as hypotheses and checked (see §5.3).
+> Verified research note for EchoLedger, written 2026-10-24. Earlier planning assumptions were treated as hypotheses and checked (see §5.3).
 > **Rule:** every API fact carries a source label from the legend below. Each label points to a primary source opened during research. Anything I could not confirm is marked **UNVERIFIED**, with the reason.
 > The ElevenLabs docs serve raw markdown when you append `.md` to a page URL (index at https://elevenlabs.io/docs/llms.txt). Most quotes below come from those `.md` copies and from the OpenAPI JSON.
 
@@ -476,9 +476,9 @@ These are computed from the verified unit prices. Applying the keyterm add-on pe
 
 So one call costs about $1.48 with both lanes, or about $1.01 with Client-only captions.
 
-### 5.3 BUILD_PLAN hypotheses checked
+### 5.3 Planning assumptions checked
 
-| BUILD_PLAN claim | Result |
+| Planning assumption | Result |
 |---|---|
 | "ElevenLabs Scribe v2 … $3.67 /1,000 min" | **Confirmed**: $0.22/h is $3.67 per 1,000 min [E16] |
 | "multichannel (≤5 ch)" | **Confirmed** [E1][E4] |
@@ -511,7 +511,7 @@ So one call costs about $1.48 with both lanes, or about $1.01 with Client-only c
 
 ### 6.2 Groq (OpenAI-compatible)
 - **Endpoint:** `POST https://api.groq.com/openai/v1/audio/transcriptions` [G1].
-- **Auth:** the page I opened shows the header only via SDKs, so it is **UNVERIFIED**. It is presumably `Authorization: Bearer` as with OpenAI.
+- **Auth:** the API reference shows the header only via SDKs, so it is **UNVERIFIED**. It is presumably `Authorization: Bearer` as with OpenAI.
 - **Models** [G1][G2]:
 
   | Model | Price | Translation | WER | Speed factor |

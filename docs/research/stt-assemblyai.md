@@ -11,7 +11,7 @@
 > | Legacy v2 realtime (retired) | [asyncapi.json][v2rt] | AsyncAPI 2.6.0, v1.1.2. Only used here to explain where `word_boost` went |
 >
 > Prose facts come from the docs pages (also exported in full at [llms-full.txt][llmsfull]).
-> Anything I could not confirm is marked **UNVERIFIED** and gives the reason.
+> Anything that could not be confirmed is marked **UNVERIFIED** and gives the reason.
 > Laravel facts come from `web/vendor` (laravel/framework **v13.38.0**, guzzlehttp/guzzle 8.3.0, guzzlehttp/psr7 3.2.0, PHP 8.5.10).
 
 ---
@@ -256,7 +256,7 @@ The 200 response is the `Transcript` object, already `queued`/`processing`, incl
 
 - `POST` to `webhook_url` with JSON `{"transcript_id": "<uuid>", "status": "completed" | "error"}` (`TranscriptReadyNotification`). It contains no text or error detail, so you must `GET` the transcript.
 - **Retries:** your endpoint must return 2xx within **10 s**, otherwise AssemblyAI retries "up to a total of 10 attempts", "waiting 10 seconds between each attempt". **A 4xx response is final**: "considered failed and will not be retried".
-- **Authenticity:** AssemblyAI does **not** sign payloads. There is no HMAC on the page; this was re-checked against the live page today. You get an optional custom header (`webhook_auth_header_name`/`_value`) plus fixed source IPs: **US `44.238.19.20`, EU `54.220.25.36`** ([webhooks][pwh], [IP FAQ][faqip]).
+- **Authenticity:** AssemblyAI does **not** sign payloads. The documentation describes no HMAC. You get an optional custom header (`webhook_auth_header_name`/`_value`) plus fixed source IPs: **US `44.238.19.20`, EU `54.220.25.36`** ([webhooks][pwh], [IP FAQ][faqip]).
 - `GET /v2/transcript/{id}` returns `webhook_status_code`, which is what your server answered ([webhooks][pwh]).
 
 ### 3.6 `GET /v2/transcript/{transcript_id}`: fields we use ([openapi `Transcript`][oas])
@@ -334,9 +334,9 @@ The polling limit is **60 GET/min per (API key, transcript id)**. Beyond that yo
 
 ---
 
-## 7. BUILD_PLAN claims checked
+## 7. Planning assumptions checked
 
-| BUILD_PLAN claim | Verdict |
+| Planning assumption | Verdict |
 |---|---|
 | "Universal-3.5 Pro … $3.50/1,000 min" | **Confirmed as base price:** $0.21/h = $3.50 per 1,000 min. Keyterms add +$0.05/h, and multichannel multiplies by the channel count ([pricing][pricing]). The "3.0% AA-WER" figure was not verified; AssemblyAI's own English benchmarks show 5.6% mean WER (Jan 2026) ([pre-recorded benchmarks][pbench]). |
 | "Pro Realtime tier" exists | **Confirmed:** "Universal-3.6 Pro Realtime", `universal-3-6-pro`, $0.45/h ([pricing][pricing]). |
@@ -344,8 +344,8 @@ The polling limit is **60 GET/min per (API key, transcript id)**. Beyond that yo
 | "multichannel bills per channel" | **Confirmed** ([billing][billing]). |
 | "Async audio kept ~24–48h" | **Confirmed** for uploads ([retention][ret]). |
 | "transcripts until deleted via API" | **Refuted:** transcripts auto-delete after **30 days** by default ([delete FAQ][faqdel]). |
-| Token "WITH the client's keyterms" (MASTER_PROMPT) | **Only as a payload hint.** Keyterms cannot be bound to the token (§2.3). |
-| Webhook "verify signature" (MASTER_PROMPT) | AssemblyAI doesn't sign. Use a custom-header secret (§3.5, R6). |
+| Token "WITH the client's keyterms" | **Only as a payload hint.** Keyterms cannot be bound to the token (§2.3). |
+| Webhook "verify signature" | AssemblyAI doesn't sign. Use a custom-header secret (§3.5, R6). |
 
 ---
 

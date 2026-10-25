@@ -1,15 +1,15 @@
 # STT research: Azure Speech (MAI-Transcribe) + local engines (whisper.cpp, sherpa-onnx Parakeet)
 
-> Scope: what the drivers `azure_mai`, `whispercpp_local` and `parakeet_local` need (see `docs/spec/MASTER_PROMPT.md`).
-> Verified on **2026-10-24** against primary sources I opened during research. Sources are linked next to each fact.
-> **UNVERIFIED** means I could not confirm the fact in a primary source; the reason is given.
-> If this note conflicts with `docs/spec/BUILD_PLAN.md`, this note wins.
+> Scope: what the drivers `azure_mai`, `whispercpp_local` and `parakeet_local` need.
+> Verified on **2026-10-24** against primary sources. Sources are linked next to each fact.
+> **UNVERIFIED** means the fact could not be confirmed in a primary source; the reason is given.
+> Where an earlier planning assumption conflicts with this note, this note wins.
 
 ---
 
-## 0. BUILD_PLAN claims checked
+## 0. Planning assumptions checked
 
-| BUILD_PLAN claim | Verdict | Evidence |
+| Planning assumption | Verdict | Evidence |
 |---|---|---|
 | "Microsoft MAI-Transcribe-2 (Azure)" exists | **Confirmed.** Supported model strings: `MAI-Transcribe-2`, `MAI-Transcribe-1.5`, `MAI-Transcribe-1` ("Deprecated on Aug 20, 2026"). | [mai-transcribe](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/mai-transcribe) |
 | It is served by Azure Speech | **Confirmed.** Call the fast transcription REST API with `definition.enhancedMode.enabled=true` and `enhancedMode.model="MAI-Transcribe-2"`. Also available as a Voice Live transcription model, and as MAI-Transcribe-2-Streaming (Speech SDK / Realtime API). | [mai-transcribe](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/mai-transcribe), [voice-live-how-to](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/voice-live-how-to), [mai-transcribe-2-streaming](https://learn.microsoft.com/en-us/azure/ai-services/speech-service/mai-transcribe-2-streaming) |
@@ -658,7 +658,7 @@ trim the leading space; attach channel; confidence = null
 6. **Audio contract for final transcripts.**
    - Upload per-channel mono **16 kHz FLAC or WAV** (`me.*`, `client.*`), aligned to the same t0.
    - That is the common subset of MAI (WAV/MP3/FLAC) and `whisper-server` without ffmpeg (WAV/FLAC/MP3, plus Ogg Vorbis (corrected by verification: common-whisper.cpp)).
-   - Cross-note conflict (flagged by verification): `stt-assemblyai.md` R5 uploads one stereo Ogg/Opus file and `stt-elevenlabs.md` R3 one stereo FLAC, while this contract uses per-channel mono files. Fix one device upload contract before building (see `VERIFICATION-server.md`).
+   - Cross-note difference: `stt-assemblyai.md` R5 uploads one stereo Ogg/Opus file and `stt-elevenlabs.md` R3 one stereo FLAC, while this contract uses per-channel mono files. docs/API.md settles this: a stereo `primary` artifact plus optional mono `channel_1`/`channel_2` files for providers that need them.
    - Opus can stay as the playback/storage format, but MAI and whisper cannot ingest it, and shared hosting cannot transcode it.
 
 7. **Credentials** (encrypted): Azure `key`, `region`, `endpoint` (`https://{resource}.cognitiveservices.azure.com`), `model`; whisper `base_url`, `bearer_token`, `language`, `chunk_seconds`.

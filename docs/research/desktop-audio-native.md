@@ -4,7 +4,7 @@ Research note for `desktop/src-tauri` (Tauri 2). Researched 2026-10-24.
 
 - Every API fact below comes from a primary source opened during research, with the link next to it.
 - **[OBS]** means I saw it read-only on the research machine (Windows 11 26H2, build 26300, from `HKLM\...\CurrentVersion`, `Get-AppxPackage`, and the registry).
-- **UNVERIFIED** means I could not confirm it. The reason is given each time.
+- **UNVERIFIED** means it could not be confirmed. The reason is given each time.
 - **No Rust toolchain is installed here, so none of the Rust snippets were compiled.** I checked their signatures against docs.rs, windows-docs-rs, or crate source. Run `cargo check` on both targets before you rely on them.
 
 ---
@@ -75,7 +75,7 @@ Research note for `desktop/src-tauri` (Tauri 2). Researched 2026-10-24.
 - `NTSTATUS` has `is_ok()` and `ok()` ([docs](https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Foundation/struct.NTSTATUS.html)).
 - Features:
   - `Wdk_System_SystemServices` (→ `Wdk_System` → `Wdk` → `Win32_Foundation`) and `Win32_System_SystemInformation` both exist in 0.62.2 ([Cargo.toml](https://docs.rs/crate/windows/0.62.2/source/Cargo.toml)).
-  - I could not open the item's `#[cfg]` line to confirm that exactly these two gate the function, so treat that as medium confidence.
+  - The item's `#[cfg]` line could not be checked to confirm that exactly these two gate the function, so treat that as medium confidence.
 
 ```rust
 #[cfg(windows)]
@@ -685,7 +685,7 @@ let st = unsafe { AudioDeviceCreateIOProcIDWithBlock(NonNull::from(&mut proc_id)
 **Drift:**
 - Mic and render hardware run on different crystals. Even with WASAPI SRC, each stream's sample count follows its own device clock.
 - Do not assume a number; **measure** it: regress frames against timestamps per channel.
-- rubato frames `Slip` around "a few ppm" (rubato docs). At 16 kHz, 100 ppm over 1 h is 5.76 k samples (360 ms). That is why sample counting alone fails the ±50 ms check in BUILD_PLAN §9.
+- rubato frames `Slip` around "a few ppm" (rubato docs). At 16 kHz, 100 ppm over 1 h is 5.76 k samples (360 ms). That is why sample counting alone fails the ±50 ms alignment target.
 - On macOS, aggregate drift compensation (`"drift": true`) handles this inside the HAL.
 
 **Algorithm (pure, deterministic):**

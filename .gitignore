@@ -14,3 +14,8 @@ desktop.ini
 *.key
 !**/fixtures/**/*.pem
 local.properties
+
+# Environment files at any depth (templates stay tracked)
+.env
+.env.*
+!.env.example

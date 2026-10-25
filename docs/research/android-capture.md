@@ -5,10 +5,10 @@
 > `android-15.0.0_r1` for the permission-evolution table).
 >
 > **Clean-room statement.** Nothing here was taken from CallVault, BCR, or any GPL call-recording app.
-> Every fact is cited inline to a primary source I opened during research: AOSP via
+> Every fact is cited inline to a primary source: AOSP via
 > `android.googlesource.com` / the `aosp-mirror` GitHub raw mirror, `developer.android.com`, the MIT
 > `RikkaApps/Shizuku-API` repo, and the LICENSE/README of each permissively-licensed library named.
-> Anything I could not confirm from an opened source is marked **UNVERIFIED** with the reason.
+> Anything that could not be confirmed from a primary source is marked **UNVERIFIED** with the reason.
 >
 > **License discipline.** Every library mentioned has its license recorded (see the
 > [Library license summary](#library-license-summary)). The one real licensing trap for a sellable
@@ -440,7 +440,7 @@ open from a foreground service, or relaunch on demand.
   helper does **not** require a mic FGS, so re-arming can be driven from a user tap (notification
   action / widget — the reliable background-start exemptions the spec already calls for) or a
   non-mic worker. Document the "keep Wireless debugging on; tap to re-arm after reboot" flow in-app.
-- Caveat the BUILD_PLAN already notes: some banking/DRM apps refuse to run while USB/Wireless debugging
+- Caveat: some banking/DRM apps refuse to run while USB/Wireless debugging
   is enabled.
 
 ---

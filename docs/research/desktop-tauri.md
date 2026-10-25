@@ -3,7 +3,7 @@
 Research note for `desktop/` (Tauri 2 + React 19 + TS). Researched 2026-10-24.
 
 - **Method.** Every API fact was read during research in a primary source, cited inline: installed `desktop/node_modules/@tauri-apps/**` and `desktop/src-tauri/*`, docs.rs, the crates.io API, v2.tauri.app, GitHub source at the release tag, learn.microsoft.com, or Apple docs JSON.
-- **UNVERIFIED** marks an inference I could not confirm in a primary source.
+- **UNVERIFIED** marks an inference that could not be confirmed in a primary source.
 - **Rust is not installed here**, so snippets match the verified signatures but have never been compiled.
 - **This machine:** node v24.19.0, npm 11.17.0, no `cargo`/`rustc`. No `vswhere.exe` and no `C:\Program Files (x86)\Windows Kits\10`, so the MSVC Build Tools and Windows SDK are missing. WebView2 is installed (registry `HKLM\...\EdgeUpdate\Clients\{F3017226-...}` `pv=155.0.4283.62`).
 - **Scaffold today:** `tauri.conf.json` has `identifier "com.admin.desktop"`, `productName "desktop"`, `csp: null` and one 800x600 `main` window. `Cargo.toml` has `tauri = "2"`, `tauri-plugin-opener = "2"`, edition 2024. `capabilities/default.json` grants `core:default`, `opener:default` to `["main"]`.

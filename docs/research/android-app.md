@@ -343,9 +343,9 @@ Sources for the API calls above:
 
 There is also a trap: `checkSelfPermission(RECORD_AUDIO)` "returns `PERMISSION_GRANTED` even if the app is in the background". Even so, creating a `microphone` FGS from the background "throws a `SecurityException`" on 14+. On older versions the service starts but has no microphone access. You "must call `Context.startForegroundService()` or `Context.bindService()` while your app has a visible activity, unless the service falls into one of the defined exemptions." To detect it, look for the Logcat line `Foreground service started from background can not have location/camera/microphone access`.
 
-### 3.3 Verdicts on BUILD_PLAN §2
+### 3.3 Verdicts on planning assumptions
 
-| BUILD_PLAN claim | Verdict | Evidence |
+| Planning assumption | Verdict | Evidence |
 |---|---|---|
 | A while-in-use (mic) FGS cannot be created from the background even with a general exemption | **CONFIRMED** (verbatim sentence above) | restrictions-bg-start |
 | Notification actions work | **CONFIRMED**: "starts by interacting with a notification" | WIU list |
