@@ -194,7 +194,7 @@ describe('what a deletion leaves alone', function () {
 
         $this->deleteJson("/api/sessions/{$foreign->id}")->assertNotFound();
 
-        expect(CaptureSession::query()->find($foreign->id))->not->toBeNull()->and(Transcript::query()->where('capture_session_id', $foreign->id)->count())->toBe(1);
+        expect(unscoped(fn () => CaptureSession::query()->find($foreign->id)))->not->toBeNull()->and(Transcript::query()->where('capture_session_id', $foreign->id)->count())->toBe(1);
     });
 
     it('lets another device of the same owner delete it, since the library is shared', function () {

@@ -57,7 +57,7 @@ it('hides another owner\'s session from read, delete and every write route', fun
     $this->api($t['aliceToken'])->postJson("/api/sessions/{$sid}/transcripts", ['kind' => 'live', 'provider' => 'x', 'segments' => Fx::segments('HIJACK')])->assertNotFound();
     $this->api($t['aliceToken'])->postJson("/api/sessions/{$sid}/recordings", Fx::artifact(['role' => 'channel_1']))->assertNotFound();
 
-    expect(CaptureSession::query()->find($sid))->not->toBeNull()
+    expect(unscoped(fn () => CaptureSession::query()->find($sid)))->not->toBeNull()
         ->and(Recording::query()->where('capture_session_id', $sid)->count())->toBe(1)
         ->and(Transcript::query()->where('capture_session_id', $sid)->value('text'))->toBe('BOB secret transcript sentence');
     Storage::disk('recordings')->assertExists($t['bobAudio']->stored_path);
@@ -105,13 +105,13 @@ it('does not leak another owner\'s library items, clients or tombstones', functi
 it('does not honour another owner\'s client id when creating a session or minting streaming tokens', function () {
     $t = secTenants();
     $aliceOpen = Fx::session($t['alice'], $t['aliceDevice'], ['status' => 'recording']);
-    $before = CaptureSession::query()->count();
+    $before = unscoped(fn () => CaptureSession::query()->count());
 
     $this->api($t['aliceToken'])->postJson('/api/sessions', Fx::sessionPayload(['client_id' => $t['bobClient']->id]))->assertNotFound();
     $this->api($t['aliceToken'])->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $aliceOpen->id, 'client_id' => $t['bobClient']->id])->assertNotFound();
     $this->api($t['aliceToken'])->getJson('/api/library?client_id='.$t['bobClient']->id)->assertOk()->assertJsonPath('data', []);
 
-    expect(CaptureSession::query()->count())->toBe($before);
+    expect(unscoped(fn () => CaptureSession::query()->count()))->toBe($before);
 });
 
 it('scopes idempotent session creation to the calling device, not to the whole server', function () {

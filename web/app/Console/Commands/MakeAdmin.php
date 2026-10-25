@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Models\User;
+use App\Services\Workspaces\Workspaces;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Validator;
 
@@ -17,7 +18,7 @@ final class MakeAdmin extends Command
 
     protected $description = 'Create or promote the EchoLedger super admin';
 
-    public function handle(): int
+    public function handle(Workspaces $workspaces): int
     {
         $email = (string) ($this->option('email') ?: text('Email', required: true));
         $name = (string) ($this->option('name') ?: text('Name', default: 'Owner', required: true));
@@ -40,6 +41,10 @@ final class MakeAdmin extends Command
         $user->fill(['name' => $name, 'password' => $password]);
         $user->is_super_admin = true; // never mass-assignable
         $user->save();
+        // Every user works inside a workspace (B20); a promoted user keeps the ones they have.
+        if (! $user->workspaces()->exists()) {
+            $workspaces->createFor($user);
+        }
 
         $this->info("Super admin ready: {$email}. Sign in at /admin.");
         $this->line('Two-factor sign-in is optional and recommended. Set it up on your profile page.');

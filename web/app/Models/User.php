@@ -14,6 +14,8 @@ use Filament\Panel;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -23,6 +25,8 @@ use Illuminate\Notifications\Notifiable;
  * @property string $name
  * @property string $email
  * @property bool $is_super_admin
+ * @property int|null $current_workspace_id
+ * @property-read Workspace|null $currentWorkspace
  */
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
@@ -33,8 +37,21 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
 
     public function canAccessPanel(Panel $panel): bool
     {
-        // Single-owner product: only super admins reach /admin. `is_super_admin` is never mass-assignable.
-        return $panel->getId() === 'admin' && $this->is_super_admin;
+        // Super admins (the server operator) and members of a workspace reach /admin; `is_super_admin` and
+        // `current_workspace_id` are never mass-assignable. Content is always that of the current workspace.
+        return $panel->getId() === 'admin' && ($this->is_super_admin || $this->workspaces()->exists());
+    }
+
+    /** @return BelongsToMany<Workspace, $this> */
+    public function workspaces(): BelongsToMany
+    {
+        return $this->belongsToMany(Workspace::class, 'workspace_user')->withPivot('role')->withTimestamps();
+    }
+
+    /** @return BelongsTo<Workspace, $this> */
+    public function currentWorkspace(): BelongsTo
+    {
+        return $this->belongsTo(Workspace::class, 'current_workspace_id');
     }
 
     /** @return HasMany<Device, $this> */
@@ -62,6 +79,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_super_admin' => 'boolean',
+            'current_workspace_id' => 'integer',
         ];
     }
 }

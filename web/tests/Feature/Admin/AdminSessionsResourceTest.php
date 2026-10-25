@@ -303,7 +303,7 @@ it('offers only the admin\'s own clients in the client filter', function () {
     $this->panelComponent(ListCaptureSessions::class)
         ->assertSee('My Client Ltd', false)
         ->assertDontSee('Somebody Else Inc', false);
-    expect(Client::query()->count())->toBe(2)->and($theirs->name)->toBe('Somebody Else Inc')->and($mine->name)->toBe('My Client Ltd');
+    expect(unscoped(fn () => Client::query()->count()))->toBe(2)->and($theirs->name)->toBe('Somebody Else Inc')->and($mine->name)->toBe('My Client Ltd');
 });
 
 it('formats durations as mm:ss below an hour and h:mm:ss from an hour', function (?int $ms, string $expected) {
@@ -390,7 +390,7 @@ it('cannot delete another admin\'s session through the list', function () {
     $this->panelComponent(ListCaptureSessions::class)
         ->assertCanNotSeeTableRecords([$theirs]);
 
-    expect(CaptureSession::query()->find($theirs->id))->not->toBeNull();
+    expect(unscoped(fn () => CaptureSession::query()->find($theirs->id)))->not->toBeNull();
 });
 
 it('has a view link for each row and no create button', function () {

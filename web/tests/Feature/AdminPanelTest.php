@@ -13,11 +13,14 @@ it('serves the admin login page', function () {
     $this->get('/admin/login')->assertOk();
 });
 
-it('grants panel access only to super admins', function () {
+it('grants panel access only to super admins and workspace members', function () {
     $panel = Filament::getPanel('admin');
 
-    $regular = User::factory()->create();
+    $regular = withoutWorkspace(User::factory()->create());
     expect($regular->canAccessPanel($panel))->toBeFalse();
+
+    $member = User::factory()->create();
+    expect($member->canAccessPanel($panel))->toBeTrue();
 
     $admin = User::factory()->create();
     $admin->forceFill(['is_super_admin' => true])->save(); // guarded flag, set explicitly

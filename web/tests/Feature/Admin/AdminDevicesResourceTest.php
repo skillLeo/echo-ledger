@@ -169,7 +169,7 @@ it('cannot revoke or rename another admin\'s device', function () {
     $theirs = Device::factory()->create(['user_id' => $this->makeAdmin()->id]);
 
     $this->panelComponent(ListDevices::class)->assertCanNotSeeTableRecords([$theirs]);
-    expect(Device::query()->find($theirs->id))->not->toBeNull();
+    expect(unscoped(fn () => Device::query()->find($theirs->id)))->not->toBeNull();
 });
 
 // --- Pair a device --------------------------------------------------------------------------------------------

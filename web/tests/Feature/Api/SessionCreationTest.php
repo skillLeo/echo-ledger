@@ -486,7 +486,7 @@ describe('idempotency', function () {
         [, $stranger] = $this->enroll();
         $this->asToken($stranger)->createSession($this->bytes, ['client_ref' => 'shared-ref'])->assertCreated();
 
-        expect(CaptureSession::query()->where('client_ref', 'shared-ref')->count())->toBe(3);
+        expect(unscoped(fn () => CaptureSession::query()->where('client_ref', 'shared-ref')->count()))->toBe(3);
     });
 
     it('does not resurrect a deleted session when the device retries its creation', function () {

@@ -9,6 +9,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\TranscriptKind;
+use App\Models\Concerns\BelongsToWorkspace;
 use App\Services\ProviderCopyEraser;
 use App\Services\SettingsRepository;
 use Database\Factories\CaptureSessionFactory;
@@ -58,10 +59,10 @@ use Illuminate\Support\Carbon;
 class CaptureSession extends Model
 {
     /** @use HasFactory<CaptureSessionFactory> */
-    use HasFactory, HasUlids, Prunable, SoftDeletes;
+    use BelongsToWorkspace, HasFactory, HasUlids, Prunable, SoftDeletes;
 
     protected $fillable = [
-        'user_id', 'device_id', 'client_id', 'client_ref', 'source_device', 'source_app', 'title', 'language',
+        'workspace_id', 'user_id', 'device_id', 'client_id', 'client_ref', 'source_device', 'source_app', 'title', 'language',
         'started_at', 'ended_at', 'duration_ms', 'pauses', 'speaker_names', 'status', 'pinned', 'keep_forever', 'final_provider',
     ];
 

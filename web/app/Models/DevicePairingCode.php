@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToWorkspace;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
@@ -22,9 +23,9 @@ use Illuminate\Support\Carbon;
  */
 class DevicePairingCode extends Model
 {
-    use Prunable;
+    use BelongsToWorkspace, Prunable;
 
-    protected $fillable = ['user_id', 'code_hash', 'expires_at', 'used_at', 'device_id'];
+    protected $fillable = ['workspace_id', 'user_id', 'code_hash', 'expires_at', 'used_at', 'device_id'];
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo

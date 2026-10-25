@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Models\User;
+use App\Services\Workspaces\Workspaces;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
@@ -40,6 +41,9 @@ class DatabaseSeeder extends Seeder
         }
         $admin->is_super_admin = true;
         $admin->save();
+        if (! $admin->workspaces()->exists()) {
+            app(Workspaces::class)->createFor($admin);
+        }
 
         if (filter_var(env('DEMO_SEED', $local), FILTER_VALIDATE_BOOL)) {
             $this->call(DemoSeeder::class);

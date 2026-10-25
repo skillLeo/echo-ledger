@@ -112,7 +112,9 @@ describe('signing in with a passkey', function () {
     });
 
     it('refuses a passkey of someone who may not use the console', function () {
-        $this->admin->forceFill(['is_super_admin' => false])->save();
+        // Neither a super admin nor a member of any workspace (B20).
+        $this->admin->workspaces()->detach();
+        $this->admin->forceFill(['is_super_admin' => false, 'current_workspace_id' => null])->save();
 
         passkeySignIn($this, $this->authenticator)->assertStatus(422)->assertJsonPath('message', 'That passkey could not sign you in. Try again or use your password.');
         expect(auth('web')->check())->toBeFalse();

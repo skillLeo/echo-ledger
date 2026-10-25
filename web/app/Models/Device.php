@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Enums\DevicePlatform;
 use App\Enums\SourceDevice;
+use App\Models\Concerns\BelongsToWorkspace;
 use Database\Factories\DeviceFactory;
 use Illuminate\Auth\Authenticatable as AuthenticatableTrait;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -33,12 +34,12 @@ use Laravel\Sanctum\HasApiTokens;
 class Device extends Model implements Authenticatable
 {
     /** @use HasFactory<DeviceFactory> */
-    use AuthenticatableTrait, HasApiTokens, HasFactory, HasUlids;
+    use AuthenticatableTrait, BelongsToWorkspace, HasApiTokens, HasFactory, HasUlids;
 
     /** Every device token carries exactly these abilities. */
     public const ABILITIES = ['config:read', 'stt:token', 'sessions:write', 'recordings:upload', 'library:read'];
 
-    protected $fillable = ['user_id', 'name', 'platform', 'app_version', 'os_version', 'last_seen_at', 'last_ip'];
+    protected $fillable = ['workspace_id', 'user_id', 'name', 'platform', 'app_version', 'os_version', 'last_seen_at', 'last_ip'];
 
     public function sourceDevice(): SourceDevice
     {

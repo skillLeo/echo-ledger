@@ -67,7 +67,7 @@ it('treats SQL meta characters as data in every library filter', function (strin
     }
 
     expect($failures)->toBe([]);
-    expect(CaptureSession::query()->count())->toBe(5)->and(User::query()->count())->toBe(2);
+    expect(unscoped(fn () => CaptureSession::query()->count()))->toBe(5)->and(User::query()->count())->toBe(2);
 })->with('sql payloads');
 
 it('matches client_id exactly and never as a LIKE pattern', function () {

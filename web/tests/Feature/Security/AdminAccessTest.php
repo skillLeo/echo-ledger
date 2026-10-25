@@ -51,8 +51,8 @@ it('sends guests to the login page for the audio route and never serves bytes', 
     expect($response->headers->get('Location'))->toContain('/admin/login');
 });
 
-it('denies every console page to a signed-in user who is not a super admin', function (string $path) {
-    $this->actingAs(Fx::user());
+it('denies every console page to a signed-in user who is neither a super admin nor a workspace member', function (string $path) {
+    $this->actingAs(withoutWorkspace(Fx::user()));
 
     $this->get($path)->assertForbidden();
 })->with(SEC_ADMIN_PAGES);
@@ -63,11 +63,11 @@ it('lets a super admin open every console page', function (string $path) {
     $this->get($path)->assertOk();
 })->with(SEC_ADMIN_PAGES);
 
-it('denies the audio route to a signed-in user who is not a super admin', function () {
+it('denies the audio route to a signed-in user who is neither a super admin nor a workspace member', function () {
     Fx::fakeRecordingsDisk();
     $user = Fx::user();
     $recording = Fx::readyRecording(Fx::session($user), 'not for regular users');
-    $this->actingAs($user);
+    $this->actingAs(withoutWorkspace($user));
 
     $this->get('/admin-media/recordings/'.$recording->id)->assertForbidden();
 });
@@ -200,8 +200,8 @@ it('gives the same answer for an unknown account and a wrong password', function
     expect($unknownMessage)->not->toBe('')->and($wrong->errors()->first('data.email'))->toBe($unknownMessage);
 });
 
-it('does not sign a regular user into the console even with the right password', function () {
-    $user = Fx::user(['password' => 'a-long-correct-password']);
+it('does not sign a user without a workspace into the console even with the right password', function () {
+    $user = withoutWorkspace(Fx::user(['password' => 'a-long-correct-password']));
     Filament::setCurrentPanel('admin');
     Cache::flush();
 
@@ -246,9 +246,9 @@ it('cannot delete another admin\'s data through the console actions', function (
         }
     }
 
-    expect(CaptureSession::query()->find($bobSession->id))->not->toBeNull()
-        ->and(Client::query()->find($bobClient->id))->not->toBeNull()
-        ->and(Device::query()->find($bobDevice->id)?->name)->toBe($bobDevice->name);
+    expect(unscoped(fn () => CaptureSession::query()->find($bobSession->id)))->not->toBeNull()
+        ->and(unscoped(fn () => Client::query()->find($bobClient->id)))->not->toBeNull()
+        ->and(unscoped(fn () => Device::query()->find($bobDevice->id))?->name)->toBe($bobDevice->name);
 });
 
 it('treats table search and sort input as data', function (string $payload) {

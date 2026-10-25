@@ -105,7 +105,7 @@ describe('the device security API', function () {
         $this->deleteJson("/api/devices/{$this->stranger->id}")->assertNotFound()->assertJsonPath('code', 'device_not_found');
         $this->deleteJson("/api/devices/{$this->laptop->id}")->assertNoContent();
 
-        expect(Device::query()->find($this->laptop->id))->toBeNull()->and(Device::query()->find($this->stranger->id))->not->toBeNull();
+        expect(Device::query()->find($this->laptop->id))->toBeNull()->and(unscoped(fn () => Device::query()->find($this->stranger->id)))->not->toBeNull();
         $revoked = AuditEvent::query()->where('event', 'device_revoked')->firstOrFail();
         expect($revoked->device_id)->toBe($this->device->id)->and($revoked->summary)->toContain($this->laptop->name);
     });

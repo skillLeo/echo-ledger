@@ -8,6 +8,7 @@ use App\Filament\Auth\AppAuthentication;
 use App\Filament\Support\CommandPalette;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
+use App\Http\Middleware\EnsureWorkspaceMember;
 use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -84,6 +85,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
-            ]);
+                // B20: the current workspace is checked on every page and Livewire request.
+                EnsureWorkspaceMember::class,
+            ], isPersistent: true);
     }
 }

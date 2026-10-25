@@ -6,25 +6,26 @@ namespace App\Http\Controllers;
 
 use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Api\ExportController;
+use App\Models\CaptureSession;
 use App\Models\Transcript;
-use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\TranscriptExporter;
+use App\Services\Workspaces\CurrentWorkspace;
 use Illuminate\Http\Response;
 
-/** Console exports (session + super-admin middleware on the route); `html` opens inline for printing to PDF. */
+/** Console exports (session + workspace-member middleware on the route); `html` opens inline for printing to PDF. */
 final class AdminExportController extends Controller
 {
     public function __invoke(string $transcript, string $format, TranscriptExporter $exporter): Response
     {
-        $user = auth()->user();
-        abort_unless($user instanceof User && $user->is_super_admin, 403);
         abort_unless(in_array($format, TranscriptExporter::FORMATS, true), 404);
         $model = Transcript::query()->find($transcript);
-        abort_if(! $model instanceof Transcript || (string) $model->captureSession->user_id !== (string) $user->getKey(), 404);
-        abort_if($model->captureSession->trashed() || $model->status !== TranscriptStatus::Completed, 404);
+        $session = $model instanceof Transcript
+            ? CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->find($model->capture_session_id)
+            : null;
+        abort_if(! $session instanceof CaptureSession || $model->status !== TranscriptStatus::Completed, 404);
         $file = $exporter->export($model, $format);
-        app(AuditLog::class)->record('transcript_exported', (int) auth()->id(), $model->captureSession, "Transcript exported as {$format}", ['format' => $format]);
+        app(AuditLog::class)->record('transcript_exported', (int) auth()->id(), $session, "Transcript exported as {$format}", ['format' => $format]);
 
         return response($file['body'], 200, [
             'Content-Type' => $file['mime'],

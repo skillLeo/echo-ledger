@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToWorkspace;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -37,7 +38,7 @@ use Illuminate\Support\Carbon;
  */
 class UsageLedgerEntry extends Model
 {
-    use HasUlids, Prunable;
+    use BelongsToWorkspace, HasUlids, Prunable;
 
     public const SOURCE_DEVICE = 'device';
 
@@ -49,7 +50,7 @@ class UsageLedgerEntry extends Model
     protected $table = 'usage_ledger';
 
     protected $fillable = [
-        'user_id', 'device_id', 'capture_session_id', 'transcript_id', 'source', 'report_id', 'use_case', 'provider',
+        'workspace_id', 'user_id', 'device_id', 'capture_session_id', 'transcript_id', 'source', 'report_id', 'use_case', 'provider',
         'model', 'duration_ms', 'channels', 'billed_ms', 'unit_price_usd', 'cost_usd', 'billable', 'occurred_at',
     ];
 

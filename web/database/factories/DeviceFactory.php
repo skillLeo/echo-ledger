@@ -19,6 +19,7 @@ class DeviceFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
+            'workspace_id' => fn (array $attributes) => User::query()->whereKey($attributes['user_id'])->value('current_workspace_id'),
             'name' => $this->faker->randomElement(['Pixel', 'Galaxy', 'Work laptop', 'MacBook']).' '.$this->faker->numberBetween(1, 99),
             'platform' => DevicePlatform::Android,
             'app_version' => '1.0.0',

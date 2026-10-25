@@ -6,19 +6,19 @@ use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
-use App\Http\Middleware\EnsureSuperAdmin;
+use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/admin');
 
 // Decrypted playback for the admin transcript player (HTTP Range supported).
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
-    ->middleware(['auth:web', EnsureSuperAdmin::class])
+    ->middleware(['auth:web', EnsureWorkspaceMember::class])
     ->name('admin.recordings.stream');
 
 // Console exports of a transcript (download; `html` opens for printing to PDF).
 Route::get('/admin-export/transcripts/{transcript}/{format}', AdminExportController::class)
-    ->middleware(['auth:web', EnsureSuperAdmin::class])
+    ->middleware(['auth:web', EnsureWorkspaceMember::class])
     ->name('admin.transcripts.export');
 
 // Share links (view-only): the token is the only key, so every route is throttled per IP.

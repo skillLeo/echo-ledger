@@ -118,7 +118,7 @@ describe('changing', function () {
     it('cannot delete the victim\'s session', function () {
         $this->deleteJson("/api/sessions/{$this->session}")->assertNotFound();
 
-        expect(CaptureSession::query()->find($this->session))->not->toBeNull()->and(Storage::disk('recordings')->exists($this->path))->toBeTrue();
+        expect(unscoped(fn () => CaptureSession::query()->find($this->session)))->not->toBeNull()->and(Storage::disk('recordings')->exists($this->path))->toBeTrue();
     });
 
     it('cannot push chunks into the victim\'s upload or complete it', function () {

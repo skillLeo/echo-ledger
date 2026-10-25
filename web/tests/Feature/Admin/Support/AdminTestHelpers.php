@@ -36,7 +36,8 @@ trait AdminTestHelpers
 
     public function makeRegularUser(array $attributes = []): User
     {
-        return User::factory()->create($attributes);
+        // Neither a super admin nor a member of any workspace (B20): no console rights at all.
+        return withoutWorkspace(User::factory()->create($attributes));
     }
 
     /** Signs a fresh super admin in and selects the admin panel for Livewire component tests. */
