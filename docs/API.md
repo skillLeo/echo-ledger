@@ -651,6 +651,27 @@ Revokes another paired device of the owner: its tokens stop working at once; its
 
 ---
 
+## Activity centre (since v1.1)
+
+The console bell and the device apps share one list of notifications: `transcript_ready`, `transcript_failed`,
+`upload_failed` (a recording did not finish uploading; its device can send it again), `device_paired`, `budget_warn`
+(the monthly limit's warning threshold) and `budget_reached`, each budget notice once per month. Recordings in the
+undo bin make none. Read notifications are kept 90 days, unread ones 180. Device apps poll and show new ones as OS
+notifications that open `session_id`, outside the quiet hours the person chose on that device.
+
+### `GET /api/activity?limit=` — `library:read` (since v1.1)
+`limit` 1-100 (default 30), newest first:
+```json
+{"data": [{"id": "9b1c…", "kind": "transcript_ready", "title": "Transcript ready", "body": "Zoom call",
+           "session_id": "01JB…", "read": false, "at": "…"}],
+ "unread_count": 3}
+```
+
+### `POST /api/activity/read` — `library:read` (since v1.1)
+`{"ids": ["9b1c…"]}` marks those as read; without `ids`, everything. `200 {"unread_count": 0}`.
+
+---
+
 ## Usage and monthly limit (since v1.1)
 
 The console (Settings → Monthly limit) sets a limit in minutes and/or US dollars and a price table. Usage is kept in

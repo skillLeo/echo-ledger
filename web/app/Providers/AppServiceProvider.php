@@ -17,6 +17,7 @@ use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Services\ActivityFeed;
 use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
@@ -49,6 +50,8 @@ class AppServiceProvider extends ServiceProvider
 
         // The security centre's audit log (B16).
         AuditLog::listen();
+        // The activity centre (B18).
+        ActivityFeed::listen();
 
         // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
         FilamentTimezone::set(fn (): string => app(SettingsRepository::class)->displayTimezone());

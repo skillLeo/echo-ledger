@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\BinController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
@@ -77,6 +78,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('library/views', [OrganiseController::class, 'views'])->name('api.library.views');
             Route::get('bin', [BinController::class, 'index'])->name('api.bin');
             Route::get('storage', [BinController::class, 'storage'])->name('api.storage');
+            Route::get('activity', [ActivityController::class, 'index'])->name('api.activity');
+            Route::post('activity/read', [ActivityController::class, 'read'])->name('api.activity.read');
             Route::post('sessions/export', [OrganiseController::class, 'export'])->name('api.sessions.export');
             Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');

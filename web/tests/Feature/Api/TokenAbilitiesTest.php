@@ -55,6 +55,8 @@ function abilityRoutes(): array
         'storage meter' => ['GET', '/api/storage', 'library:read'],
         'restore session' => ['POST', "/api/sessions/{$id}/restore", 'sessions:write'],
         'erase from bin' => ['DELETE', "/api/bin/{$id}", 'sessions:write'],
+        'activity' => ['GET', '/api/activity', 'library:read'],
+        'mark activity read' => ['POST', '/api/activity/read', 'library:read'],
         'add recording' => ['POST', "/api/sessions/{$id}/recordings", 'sessions:write'],
         'post transcript' => ['POST', "/api/sessions/{$id}/transcripts", 'sessions:write'],
         'delete session' => ['DELETE', "/api/sessions/{$id}", 'sessions:write'],

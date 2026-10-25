@@ -37,6 +37,9 @@ class AdminPanelProvider extends PanelProvider
             ->path('admin')
             ->brandName('EchoLedger')
             ->login()
+            // The activity centre (B18): the bell shows transcript, upload, device and budget notifications.
+            ->databaseNotifications()
+            ->databaseNotificationsPolling('30s')
             // Passkeys (B16): a second way in, next to the password and the optional two-step code.
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn (): View => view('filament.auth.passkey-login'))
             ->profile(isSimple: false)
