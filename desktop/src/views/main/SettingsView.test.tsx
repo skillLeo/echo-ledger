@@ -239,7 +239,7 @@ describe("SettingsView shortcuts", () => {
     expect(within(row("Show / hide live captions")).getByText("Ctrl + Shift + Space")).toBeInTheDocument();
     expect(within(row("Start / stop saving a recording")).getByText("Ctrl + Shift + R")).toBeInTheDocument();
     expect(within(row("Copy the last 2 minutes of captions")).getByText("Ctrl + Shift + C")).toBeInTheDocument();
-    expect(within(row("Dictation box (press, speak, press again)")).getByText("Ctrl + Shift + D")).toBeInTheDocument();
+    expect(within(row("Dictation box")).getByText("Ctrl + Shift + D")).toBeInTheDocument();
     expect(within(row("Capture voice note playing now")).getByText("Not set")).toBeInTheDocument();
   });
 
@@ -257,13 +257,13 @@ describe("SettingsView shortcuts", () => {
   it("records a new shortcut from the keyboard and sends the accelerator", async () => {
     await setup();
     respondWith("set_shortcut", ({ action, accelerator }) => makeSettings({ shortcuts: { [action as string]: accelerator as string } }));
-    const target = row("Dictation box (press, speak, press again)");
+    const target = row("Dictation box");
     fireEvent.click(within(target).getByRole("button", { name: "Change" }));
     expect(within(target).getByText("Press keys…")).toBeInTheDocument();
 
     keyDown({ key: "K", code: "KeyK", ctrlKey: true, altKey: true });
     await waitFor(() => expect(callsOf("set_shortcut")).toEqual([{ action: "dictation", accelerator: "CommandOrControl+Alt+K" }]));
-    await waitFor(() => expect(within(row("Dictation box (press, speak, press again)")).getByText("Ctrl + Alt + K")).toBeInTheDocument());
+    await waitFor(() => expect(within(row("Dictation box")).getByText("Ctrl + Alt + K")).toBeInTheDocument());
     expect(screen.queryByText("Press keys…")).not.toBeInTheDocument();
   });
 
@@ -322,7 +322,7 @@ describe("SettingsView shortcuts", () => {
 
   it("shows the registration error of an action under its label", async () => {
     await setup({}, { shortcutErrors: [["dictation", "Ctrl+Shift+D is used by another app"]] });
-    expect(within(row("Dictation box (press, speak, press again)")).getByText("Ctrl+Shift+D is used by another app")).toHaveClass("error-text");
+    expect(within(row("Dictation box")).getByText("Ctrl+Shift+D is used by another app")).toHaveClass("error-text");
     expect(within(row("Show / hide live captions")).queryByText(/another app/)).not.toBeInTheDocument();
   });
 });

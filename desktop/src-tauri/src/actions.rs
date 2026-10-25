@@ -31,16 +31,26 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
         (Action::VoiceNote, true) => toggle_voice_note(&app).await,
         (Action::Mark, true) => mark_moment(&app, None, None).map(|_| ()),
         (Action::Dictation, true) => {
-            if crate::dictation::is_active(&app) {
+            let push_to_talk = app.state::<crate::AppState>().settings().dictation_mode == "push_to_talk";
+            if crate::dictation::is_active(&app) && !push_to_talk {
                 app.state::<crate::AppState>().dictation_stop_requested.store(true, Ordering::SeqCst);
+                Ok(())
+            } else if crate::dictation::is_active(&app) {
                 Ok(())
             } else {
                 crate::dictation::start(&app).await
             }
         }
-        // Type only after the keys are released, so held modifiers never combine with typed text.
+        // Type only after the keys are released, so held modifiers never combine with typed text. Hold to talk
+        // ends on every release; a release while the stream is still opening is picked up by `start`.
         (Action::Dictation, false) => {
-            if app.state::<crate::AppState>().dictation_stop_requested.swap(false, Ordering::SeqCst) {
+            let state = app.state::<crate::AppState>();
+            let push_to_talk = state.settings().dictation_mode == "push_to_talk";
+            if push_to_talk && !crate::dictation::is_active(&app) {
+                state.dictation_stop_requested.store(true, Ordering::SeqCst);
+                Ok(())
+            } else if push_to_talk || state.dictation_stop_requested.swap(false, Ordering::SeqCst) {
+                state.dictation_stop_requested.store(false, Ordering::SeqCst);
                 crate::dictation::finish(&app).await.map(|_| ())
             } else {
                 Ok(())

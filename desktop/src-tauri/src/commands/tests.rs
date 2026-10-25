@@ -121,3 +121,21 @@ fn the_transcription_language_is_set_cleared_or_kept() {
     patch(json!({"transcriptionLanguage": null})).apply(&mut s);
     assert_eq!(s.transcription_language, None);
 }
+
+#[test]
+fn dictation_settings_are_saved_cleaned() {
+    let mut s = Settings::default();
+    patch(json!({
+        "dictationMode": "push_to_talk", "dictationCleanup": false,
+        "dictationReplacements": [{"from": " asap ", "to": "as soon as possible"}, {"from": "", "to": "x"}],
+        "dictationSnippets": [{"trigger": "sig", "text": "Regards"}]
+    }))
+    .apply(&mut s);
+    assert_eq!(s.dictation_mode, "push_to_talk");
+    assert!(!s.dictation_cleanup);
+    assert_eq!(s.dictation_replacements.len(), 1);
+    assert_eq!(s.dictation_replacements[0].from, "asap");
+    assert_eq!(s.dictation_snippets[0].trigger, "sig");
+    patch(json!({"dictationMode": "whisper"})).apply(&mut s);
+    assert_eq!(s.dictation_mode, "push_to_talk", "an unknown mode is ignored");
+}

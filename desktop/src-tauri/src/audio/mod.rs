@@ -348,12 +348,19 @@ pub struct MicStream {
 
 impl MicStream {
     pub fn start(sink: UnboundedSender<Vec<u8>>) -> AppResult<Self> {
+        Self::start_with_level(sink, Arc::new(std::sync::atomic::AtomicU32::new(0)))
+    }
+
+    /// Like [`MicStream::start`], keeping the RMS level (0-1, as `f32` bits) of the latest packet in `level` for the
+    /// dictation flow bar.
+    pub fn start_with_level(sink: UnboundedSender<Vec<u8>>, level: Arc<std::sync::atomic::AtomicU32>) -> AppResult<Self> {
         let (tx, rx): (Sender<AudioChunk>, _) = channel();
         let backend = platform::start(Streams { mic: true, system: false }, tx).map_err(|e| AppError::Audio(e.to_string()))?;
         let thread = std::thread::Builder::new()
             .name("el-dictation-mic".into())
             .spawn(move || {
                 while let Ok(chunk) = rx.recv() {
+                    level.store(health::rms(&chunk.samples).to_bits(), Ordering::Relaxed);
                     let mut bytes = Vec::with_capacity(chunk.samples.len() * 2);
                     for s in chunk.samples {
                         bytes.extend_from_slice(&dsp::f32_to_i16(s).to_le_bytes());

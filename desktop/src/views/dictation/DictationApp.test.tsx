@@ -5,6 +5,8 @@ import { callsOf, emitEvent, listenerCount, pushChannelMessage, resetTauriMock, 
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
+const playTone = vi.hoisted(() => vi.fn(() => true));
+vi.mock("../../lib/sounds", () => ({ playTone }));
 
 async function renderDictation() {
   const view = render(<DictationApp />);
@@ -18,6 +20,7 @@ const textLine = (container: HTMLElement) => container.querySelector(".dictation
 describe("dictation box", () => {
   beforeEach(() => {
     resetTauriMock();
+    playTone.mockClear();
     respond("subscribe_captions", undefined);
   });
 
@@ -72,10 +75,37 @@ describe("dictation box", () => {
     expect(text.scrollTop).toBe(480);
   });
 
+  // B14: the flow bar, the start / stop sounds and the push-to-talk hint.
+  it("shows the microphone level in the flow bar and empties it when dictation stops", async () => {
+    await renderDictation();
+    const meter = screen.getByRole("meter", { name: "Microphone level" });
+    expect(meter).toHaveAttribute("aria-valuenow", "0");
+    await emitEvent("dictation:level", 0.2);
+    expect(Number(meter.getAttribute("aria-valuenow"))).toBeGreaterThan(0);
+    await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle" });
+    expect(meter).toHaveAttribute("aria-valuenow", "0");
+  });
+
+  it("plays the start and stop sounds only when they are on", async () => {
+    await renderDictation();
+    await emitEvent("dictation:state", { active: true, sounds: true, mode: "toggle" });
+    await emitEvent("dictation:state", { active: false, sounds: true, mode: "toggle" });
+    expect(playTone.mock.calls).toEqual([["start"], ["stop"]]);
+    await emitEvent("dictation:state", { active: true, sounds: false, mode: "toggle" });
+    expect(playTone).toHaveBeenCalledTimes(2);
+  });
+
+  it("says to let go of the shortcut in hold-to-talk mode", async () => {
+    await renderDictation();
+    await emitEvent("dictation:state", { active: true, sounds: false, mode: "push_to_talk" });
+    expect(screen.getByText("Dictating — let go of the shortcut to insert")).toBeInTheDocument();
+  });
+
   it("removes its visibility listener on unmount", async () => {
     const { unmount } = await renderDictation();
     await waitFor(() => expect(listenerCount("overlay:visibility")).toBe(1));
     unmount();
     await waitFor(() => expect(listenerCount("overlay:visibility")).toBe(0));
+    expect(listenerCount("dictation:level") + listenerCount("dictation:state")).toBe(0);
   });
 });

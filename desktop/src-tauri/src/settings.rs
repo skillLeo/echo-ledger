@@ -173,6 +173,12 @@ fn known_app_switches(value: Value) -> Value {
         .into()
 }
 
+/// Keeps the list entries that parse; drops the others one by one.
+fn parsable_list<T: serde::de::DeserializeOwned>(value: Value) -> Value {
+    let Value::Array(items) = value else { return Value::Array(Vec::new()) };
+    items.into_iter().filter(|item| serde_json::from_value::<T>(item.clone()).is_ok()).collect::<Vec<_>>().into()
+}
+
 /// Keeps the site rules that parse; drops the others one by one.
 fn parsable_site_rules(value: Value) -> Value {
     let Value::Array(rules) = value else { return Value::Array(Vec::new()) };
@@ -227,6 +233,16 @@ pub struct Settings {
     pub far_side_warning: bool,
     /// Language of new recordings: none (the client's or the console default, else automatic), `en`, `ur`, `hi` or `en+ur`.
     pub transcription_language: Option<String>,
+    /// `toggle` (press to start, press again to type) or `push_to_talk` (hold the shortcut while speaking).
+    pub dictation_mode: String,
+    /// Tidy spacing, punctuation and capitals and drop filler words (B14).
+    pub dictation_cleanup: bool,
+    /// A short sound when dictation starts and stops.
+    pub dictation_sounds: bool,
+    /// Dictionary and replacements: `when I say X, write Y`.
+    pub dictation_replacements: Vec<crate::dictation::rules::Replacement>,
+    /// Voice snippets: saying the trigger inserts the text.
+    pub dictation_snippets: Vec<crate::dictation::rules::Snippet>,
 }
 
 impl Default for Settings {
@@ -257,6 +273,11 @@ impl Default for Settings {
             input_device: None,
             far_side_warning: true,
             transcription_language: None,
+            dictation_mode: "toggle".into(),
+            dictation_cleanup: true,
+            dictation_sounds: true,
+            dictation_replacements: Vec::new(),
+            dictation_snippets: Vec::new(),
         }
     }
 }
@@ -282,6 +303,9 @@ impl Settings {
                 "autoRecordApps" => known_app_switches(value),
                 "captionStyle" => tolerant_caption_style(value),
                 "transcriptionLanguage" => language_or_none(value.as_str()).map_or(Value::Null, Value::from),
+                "dictationMode" => Value::from(if value.as_str() == Some("push_to_talk") { "push_to_talk" } else { "toggle" }),
+                "dictationReplacements" => parsable_list::<crate::dictation::rules::Replacement>(value),
+                "dictationSnippets" => parsable_list::<crate::dictation::rules::Snippet>(value),
                 "captionLines" => Value::from(caption_lines_or_default(value.as_u64())),
                 _ => value,
             };

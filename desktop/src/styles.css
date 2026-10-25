@@ -361,3 +361,9 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .palette-detail mark { background: rgba(250, 204, 21, 0.45); color: inherit; border-radius: 3px; }
 .palette-empty { padding: 10px; }
 .palette-foot { padding: 8px 14px; border-top: 1px solid var(--border); }
+
+/* Dictation flow bar (B14): the microphone level under the header. */
+.flow-bar { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.12); overflow: hidden; margin: 0 0 6px; }
+.flow-bar > span { display: block; height: 100%; background: var(--gradient); transition: width 0.1s linear; }
+@media (prefers-reduced-motion: reduce) { .flow-bar > span { transition: none; } }
+.dictation-snippet { white-space: pre-wrap; overflow-wrap: anywhere; }

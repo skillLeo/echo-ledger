@@ -74,6 +74,28 @@ export interface Settings {
   inputDevice: string | null;
   farSideWarning: boolean;
   transcriptionLanguage: TranscriptionLanguage | null;
+  dictationMode: DictationMode;
+  dictationCleanup: boolean;
+  dictationSounds: boolean;
+  dictationReplacements: DictationReplacement[];
+  dictationSnippets: DictationSnippet[];
+}
+
+/** `toggle`: press to start and press again to insert; `push_to_talk`: hold the shortcut while speaking. */
+export type DictationMode = "toggle" | "push_to_talk";
+/** Dictionary and replacements: when I say `from`, write `to`. */
+export interface DictationReplacement {
+  from: string;
+  to: string;
+}
+/** Saying `trigger` inserts `text`. */
+export interface DictationSnippet {
+  trigger: string;
+  text: string;
+}
+export interface DictationHistoryEntry {
+  at: string;
+  text: string;
 }
 
 /** Languages offered for new recordings; null is automatic (the client's or the console default). */
@@ -116,6 +138,11 @@ export interface SettingsPatch {
   inputDevice?: string | null;
   farSideWarning?: boolean;
   transcriptionLanguage?: TranscriptionLanguage | null;
+  dictationMode?: DictationMode;
+  dictationCleanup?: boolean;
+  dictationSounds?: boolean;
+  dictationReplacements?: DictationReplacement[];
+  dictationSnippets?: DictationSnippet[];
 }
 
 /** A bookmark just made on the current recording (`recording:marked`); `count` is how many it has now. */
@@ -393,6 +420,8 @@ export interface EventPayloads {
   "recording:marked": MarkPayload;
   "capture:far_side": FarSidePayload;
   "capture:test_level": [number, number];
+  "dictation:state": { active: boolean; sounds: boolean; mode: DictationMode };
+  "dictation:level": number;
 }
 
 export type AppEvent = keyof EventPayloads;
@@ -461,6 +490,8 @@ export const api = {
   listShares: (sessionId: string) => invoke<{ data: ShareLink[] }>("share_list", { sessionId }),
   revokeShare: (id: string) => invoke<void>("share_revoke", { id }),
   addToVocabulary: (term: string, clientId: string | null) => invoke<{ keyterms: string[] }>("vocabulary_add", { term, clientId }),
+  dictationHistory: () => invoke<DictationHistoryEntry[]>("dictation_history"),
+  clearDictationHistory: () => invoke<void>("dictation_history_clear"),
 };
 
 /**

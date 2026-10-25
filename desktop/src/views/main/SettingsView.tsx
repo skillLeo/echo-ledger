@@ -5,12 +5,13 @@ import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSam
 import { SourceAppIcon } from "../../components/Icons";
 import { SelectRow, Toggle } from "./SettingsControls";
 import { AutoRecordApps, CaptionStyleCard, MicrophoneCard } from "./CaptureSettings";
+import { DictationCard } from "./DictationSettings";
 
 const ACTIONS: [ShortcutAction, string][] = [
   ["toggle_captions", "Show / hide live captions"],
   ["toggle_saving", "Start / stop saving a recording"],
   ["copy_last2_min", "Copy the last 2 minutes of captions"],
-  ["dictation", "Dictation box (press, speak, press again)"],
+  ["dictation", "Dictation box"],
   ["voice_note", "Capture voice note playing now"],
   ["mark", "Bookmark this moment of a recording"],
 ];
@@ -168,13 +169,9 @@ export function SettingsView({ status, run, onUnpaired }: {
             {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
-        <div className="toggle">
-          <label htmlFor="settings-dictation-output">Dictation output</label>
-          <select id="settings-dictation-output" className="input" style={{ width: 220 }} value={settings.dictationOutput} onChange={(e) => patch({ dictationOutput: e.target.value as "type" | "clipboard" })}>
-            <option value="type">Type into the focused app</option><option value="clipboard">Copy to clipboard</option>
-          </select>
-        </div>
       </div>
+      <DictationCard settings={settings} patch={patch} />
+
       <AutoRecordApps settings={settings} patch={patch} />
       <CallSites rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules: siteRules })} />
       <CaptionStyleCard settings={settings} patch={patch} />

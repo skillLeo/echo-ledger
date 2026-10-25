@@ -87,6 +87,11 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     inputDevice: null,
     farSideWarning: true,
     transcriptionLanguage: null,
+    dictationMode: "toggle",
+    dictationCleanup: true,
+    dictationSounds: true,
+    dictationReplacements: [],
+    dictationSnippets: [],
     ...overrides,
   };
 }

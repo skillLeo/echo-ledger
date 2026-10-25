@@ -284,6 +284,8 @@ pub fn run() {
             commands::share_list,
             commands::share_revoke,
             commands::vocabulary_add,
+            commands::dictation_history,
+            commands::dictation_history_clear,
             commands::cancel_recording,
             commands::set_pill_hidden,
             commands::pill_moved,

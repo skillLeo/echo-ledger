@@ -58,6 +58,11 @@ fn customised() -> Settings {
         input_device: Some("{0.0.1.00000000}.{4b3c5f0e-usb-headset}".into()),
         far_side_warning: false,
         transcription_language: Some("en+ur".into()),
+        dictation_mode: "push_to_talk".into(),
+        dictation_cleanup: false,
+        dictation_sounds: false,
+        dictation_replacements: vec![crate::dictation::rules::Replacement { from: "asap".into(), to: "as soon as possible".into() }],
+        dictation_snippets: vec![crate::dictation::rules::Snippet { trigger: "sig".into(), text: "Regards".into() }],
     }
 }
 // ---- Defaults --------------------------------------------------------------------------------------------------
@@ -96,6 +101,8 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert_eq!(s.input_device, None, "the system default microphone");
     assert!(s.far_side_warning, "the silent-other-side warning is on");
     assert_eq!(s.transcription_language, None, "the client's or the console's language, else automatic");
+    assert_eq!((s.dictation_mode.as_str(), s.dictation_cleanup, s.dictation_sounds), ("toggle", true, true));
+    assert!(s.dictation_replacements.is_empty() && s.dictation_snippets.is_empty());
 }
 
 #[test]
@@ -131,7 +138,12 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "decisionTimeout",
             "deviceId",
             "deviceName",
+            "dictationCleanup",
+            "dictationMode",
             "dictationOutput",
+            "dictationReplacements",
+            "dictationSnippets",
+            "dictationSounds",
             "farSideWarning",
             "inputDevice",
             "overlayCorner",
@@ -143,7 +155,9 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 25, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 30, "section 4.7 of the IPC contract");
+    assert_eq!(v["dictationMode"], "push_to_talk");
+    assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "en+ur");
     assert_eq!(v["autoRecordApps"], json!({"zoom": false}));
     assert_eq!(
@@ -519,4 +533,17 @@ fn only_the_offered_languages_are_kept() {
     for (stored, expected) in [(json!("ur"), Some("ur")), (json!(" HI "), Some("hi")), (json!("en+ur"), Some("en+ur")), (json!("fr"), None), (json!(5), None), (json!(null), None)] {
         assert_eq!(Settings::from_value(json!({"transcriptionLanguage": stored.clone()})).transcription_language.as_deref(), expected, "{stored}");
     }
+}
+
+#[test]
+fn dictation_settings_load_tolerantly() {
+    let s = Settings::from_value(json!({
+        "dictationMode": "shout", "dictationSounds": false,
+        "dictationReplacements": [{"from": "asap", "to": "as soon as possible"}, "junk", 5],
+        "dictationSnippets": {"not": "a list"}
+    }));
+    assert_eq!(s.dictation_mode, "toggle");
+    assert!(!s.dictation_sounds);
+    assert_eq!(s.dictation_replacements.len(), 1);
+    assert!(s.dictation_snippets.is_empty());
 }

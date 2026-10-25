@@ -174,6 +174,14 @@ pub struct SettingsPatch {
     /// Missing = keep, `null` = automatic, else one of `settings::LANGUAGES`.
     #[serde(default, deserialize_with = "double_option")]
     transcription_language: Option<Option<String>>,
+    /// `toggle` or `push_to_talk`.
+    dictation_mode: Option<String>,
+    dictation_cleanup: Option<bool>,
+    dictation_sounds: Option<bool>,
+    /// Full replacement of the dictionary and replacements.
+    dictation_replacements: Option<Vec<crate::dictation::rules::Replacement>>,
+    /// Full replacement of the voice snippets.
+    dictation_snippets: Option<Vec<crate::dictation::rules::Snippet>>,
 }
 
 /// A present key becomes `Some(value)`, so an explicit `null` reads as `Some(None)` and a missing key (via
@@ -204,6 +212,11 @@ impl SettingsPatch {
         if let Some(v) = &self.input_device { s.input_device = v.clone(); }
         if let Some(v) = self.far_side_warning { s.far_side_warning = v; }
         if let Some(v) = &self.transcription_language { s.transcription_language = crate::settings::language_or_none(v.as_deref()); }
+        if let Some(v) = &self.dictation_mode && (v == "toggle" || v == "push_to_talk") { s.dictation_mode = v.clone(); }
+        if let Some(v) = self.dictation_cleanup { s.dictation_cleanup = v; }
+        if let Some(v) = self.dictation_sounds { s.dictation_sounds = v; }
+        if let Some(v) = &self.dictation_replacements { s.dictation_replacements = crate::dictation::rules::clean_replacements(v); }
+        if let Some(v) = &self.dictation_snippets { s.dictation_snippets = crate::dictation::rules::clean_snippets(v); }
     }
 }
 
@@ -214,6 +227,12 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         && !crate::settings::CAPTION_LINES.contains(&lines)
     {
         return Err(AppError::msg("Choose 2, 3 or 5 lines."));
+    }
+    if let Some(mode) = &patch.dictation_mode
+        && mode != "toggle"
+        && mode != "push_to_talk"
+    {
+        return Err(AppError::msg("Choose press to start or hold to talk."));
     }
     if let Some(Some(language)) = &patch.transcription_language
         && crate::settings::language_or_none(Some(language)).is_none()
@@ -663,6 +682,17 @@ pub async fn share_revoke(state: State<'_, AppState>, id: String) -> AppResult<(
 #[tauri::command]
 pub async fn vocabulary_add(state: State<'_, AppState>, term: String, client_id: Option<String>) -> AppResult<serde_json::Value> {
     state.api()?.add_keyterm(&term, client_id.as_deref()).await
+}
+
+/// The dictation history on this computer, newest first (B14).
+#[tauri::command]
+pub fn dictation_history(app: AppHandle) -> Vec<crate::dictation::rules::HistoryEntry> {
+    crate::dictation::history(&app)
+}
+
+#[tauri::command]
+pub fn dictation_history_clear(app: AppHandle) -> AppResult<()> {
+    crate::dictation::clear_history(&app)
 }
 
 /// The connected microphones for the device picker (B5), the default first.
