@@ -14,6 +14,7 @@ use App\Models\Plan;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\ActivityFeed;
 use App\Services\PairingService;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
@@ -237,6 +238,22 @@ describe('plan limits', function () {
         Livewire::test(ListDevices::class)->mountAction('pair')->assertActionDataSet(['pairing' => ['error' => PlanLimits::DEVICES_MESSAGE]]);
     });
 
+    it('alerts every owner of the workspace at 80 % and 100 % of the plan minutes, once each, and nobody else', function () {
+        $t = team();
+        $outsider = Fx::user();
+        Plan::personal()->update(['monthly_minutes' => 10]);
+        $kinds = fn (User $u): array => $u->fresh()->notifications->map(fn ($n) => ActivityFeed::kindOf($n))->filter(fn (?string $k): bool => str_starts_with((string) $k, 'budget'))->values()->all();
+
+        billedMinutes($t['ws']->id, 8);
+        billedMinutes($t['ws']->id, 1);
+        expect($kinds($t['owner']))->toBe(['budget_warn'])->and($kinds($t['member']))->toBe([]);
+
+        billedMinutes($t['ws']->id, 1);
+        billedMinutes($t['ws']->id, 1);
+        expect($kinds($t['owner']))->toEqualCanonicalizing(['budget_warn', 'budget_reached'])
+            ->and($kinds($t['member']))->toBe([])
+            ->and($kinds($outsider))->toBe([]);
+    });
     it('never blocks when a limit is empty', function () {
         $t = team();
         Plan::personal()->update(['monthly_minutes' => null, 'storage_bytes' => null, 'max_devices' => null]);

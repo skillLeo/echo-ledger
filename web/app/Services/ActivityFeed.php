@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Enums\UploadStatus;
+use App\Enums\WorkspaceRole;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\CaptureSession;
 use App\Models\Device;
@@ -18,6 +19,7 @@ use App\Services\Usage\UsageSummary;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 /**
@@ -72,21 +74,27 @@ final class ActivityFeed
         }
     }
 
-    /** "Monthly limit at 80 %" and "reached", each once per month. */
+    /**
+     * "Monthly limit at 80 %" and "reached", each once per month, to every owner of the entry's workspace (B20). The
+     * limit is the tighter of the server cap and the workspace plan (UsageSummary).
+     */
     public function budgetChanged(UsageLedgerEntry $entry): void
     {
-        $user = User::query()->find($entry->user_id);
-        if (! $user instanceof User) {
-            return;
-        }
-        $usage = app(UsageSummary::class)->toArray();
+        $usage = app(UsageSummary::class)->toArray($entry->workspace_id);
         $kind = $usage['limit_reached'] ? 'budget_reached' : ($usage['warn'] ? 'budget_warn' : null);
-        if ($kind === null || $this->sentThisMonth($user, $kind, (string) $usage['period_start'])) {
+        if ($kind === null) {
             return;
         }
-        $kind === 'budget_reached'
-            ? $this->post($user, $kind, 'Monthly transcription limit reached', 'New transcripts wait until the limit is raised or the month ends.', null, 'heroicon-o-no-symbol')
-            : $this->post($user, $kind, "Transcription at {$usage['warn_at_percent']}% of the monthly limit", "{$usage['minutes']} minutes used this month.", null, 'heroicon-o-chart-bar');
+        $owners = User::query()->whereIn('id', DB::table('workspace_user')->where('workspace_id', $entry->workspace_id)
+            ->where('role', WorkspaceRole::Owner->value)->select('user_id'))->get();
+        foreach ($owners as $user) {
+            if ($this->sentThisMonth($user, $kind, (string) $usage['period_start'])) {
+                continue;
+            }
+            $kind === 'budget_reached'
+                ? $this->post($user, $kind, 'Monthly transcription limit reached', 'New transcripts wait until the limit is raised in Settings or the month ends.', null, 'heroicon-o-no-symbol')
+                : $this->post($user, $kind, "Transcription at {$usage['warn_at_percent']}% of the monthly limit", "{$usage['minutes']} minutes used this month.", null, 'heroicon-o-chart-bar');
+        }
     }
 
     private function sentThisMonth(User $user, string $kind, string $periodStart): bool

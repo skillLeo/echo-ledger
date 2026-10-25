@@ -75,6 +75,7 @@ it('matches a setting by its name, a keyword or its group', function () {
         ->and(SettingsSearch::results('captions'))->toBe(['captions'])
         ->and(SettingsSearch::results('devices'))->toBe(['devices'])
         ->and(SettingsSearch::results('  Time   ZONE '))->toBe(['language'])
+        ->and(SettingsSearch::results('quota'))->toBe(['plan'])
         ->and(SettingsSearch::results('banana'))->toBe([])
         ->and(SettingsSearch::results('   '))->toBe([])
         ->and(SettingsSearch::matches('', 'limit'))->toBeTrue()

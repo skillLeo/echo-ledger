@@ -16,6 +16,8 @@ use App\Services\SettingsRepository;
 use App\Services\SettingsSearch;
 use App\Services\SettingsTransfer;
 use App\Services\TextReplacements;
+use App\Services\Workspaces\CurrentWorkspace;
+use App\Services\Workspaces\PlanLimits;
 use App\Stt\KeytermPolicy;
 use App\Stt\LanguageChoice;
 use App\Stt\ProviderEndpoints;
@@ -75,7 +77,7 @@ class Settings extends Page
 
     public function mount(SettingsRepository $settings): void
     {
-        $this->form->fill(self::formState($settings->all()));
+        $this->form->fill([...self::formState($settings->all()), ...self::planState()]);
     }
 
     /**
@@ -338,6 +340,19 @@ class Settings extends Page
                                     self::priceFields(),
                                 )),
                         ]),
+                    $this->section('plan')
+                        ->description(fn (): string => self::planDescription())
+                        ->columns(3)->schema([
+                            TextInput::make('plan_monthly_minutes')->label('Minutes per month')
+                                ->integer()->minValue(1)->maxValue(10_000_000)->nullable()
+                                ->helperText('Billable minutes of this workspace. Streaming tokens and new transcripts stop at the limit.'),
+                            TextInput::make('plan_storage_gb')->label('Storage (GB)')
+                                ->integer()->minValue(1)->maxValue(1_000_000)->nullable()
+                                ->helperText('Encrypted recordings, the undo bin included. New uploads stop at the limit.'),
+                            TextInput::make('plan_max_devices')->label('Paired devices')
+                                ->integer()->minValue(1)->maxValue(10_000)->nullable()
+                                ->helperText('New pairings stop at the limit.'),
+                        ]),
                 ]),
                 'about' => $this->tab('about', [
                     $this->section('about')
@@ -412,7 +427,7 @@ class Settings extends Page
         if (array_key_exists('display.timezone', $incoming)) {
             $state['display_timezone'] = $incoming['display.timezone'];
         }
-        $this->form->fill([...$state, 'settings_search' => null]);
+        $this->form->fill([...$state, ...self::planState(), 'settings_search' => null]);
         try {
             $this->persist($settings);
         } catch (ValidationException) {
@@ -465,6 +480,34 @@ class Settings extends Page
             'budget.prices' => self::pricesFromState($state),
             'markers.tags' => SessionMarkers::presets($state['marker_tags'] ?? []),
         ]);
+        // Plan limits live on the plan of the current workspace, not in settings (never exported).
+        $limit = fn (string $key): ?int => filled($state[$key] ?? null) ? (int) $state[$key] : null;
+        $gb = $limit('plan_storage_gb');
+        app(PlanLimits::class)->plan((int) CurrentWorkspace::id())->update([
+            'monthly_minutes' => $limit('plan_monthly_minutes'),
+            'storage_bytes' => $gb === null ? null : $gb * 1024 ** 3,
+            'max_devices' => $limit('plan_max_devices'),
+        ]);
+    }
+
+    /** @return array{plan_monthly_minutes: int|null, plan_storage_gb: int|null, plan_max_devices: int|null} */
+    private static function planState(): array
+    {
+        $plan = app(PlanLimits::class)->plan((int) CurrentWorkspace::id());
+
+        return [
+            'plan_monthly_minutes' => $plan->monthly_minutes,
+            'plan_storage_gb' => $plan->storage_bytes === null ? null : (int) round($plan->storage_bytes / 1024 ** 3),
+            'plan_max_devices' => $plan->max_devices,
+        ];
+    }
+
+    private static function planDescription(): string
+    {
+        $plan = app(PlanLimits::class)->plan((int) CurrentWorkspace::id());
+        $count = $plan->workspaces()->count();
+
+        return "The \"{$plan->name}\" plan of this workspace".($count > 1 ? " (shared by {$count} workspaces)" : '').'. Leave a limit empty for none. No billing: this only caps use.';
     }
 
     /**

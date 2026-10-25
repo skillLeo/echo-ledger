@@ -57,7 +57,7 @@ final class DeviceConfigPayload
             'captions' => ['channels' => $this->settings->captionChannels()],
             'markers' => ['tags' => $this->settings->markerTags()],
             'pins' => $this->settings->pins(),
-            'usage' => app(UsageSummary::class)->toArray(),
+            'usage' => app(UsageSummary::class)->toArray($device->workspace_id),
         ];
     }
 }

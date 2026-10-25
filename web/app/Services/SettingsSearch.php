@@ -39,6 +39,7 @@ final class SettingsSearch
         'devices' => ['devices', 'Paired devices', 'pair revoke phone computer devices page'],
         'retention' => ['storage', 'Storage and retention', 'delete days undo bin recordings transcripts erase 48 hours'],
         'limit' => ['storage', 'Monthly limit', 'budget minutes dollars usd warn percent prices cost usage'],
+        'plan' => ['storage', 'Plan limits', 'plan workspace minutes gigabytes pairings quota raise'],
         'about' => ['about', 'About', 'version export import backup settings file json'],
     ];
 

@@ -39,7 +39,7 @@ class SourceStatsOverview extends StatsOverviewWidget
             ->icon(Heroicon::OutlinedClock)
             ->color('primary');
 
-        $stats[] = self::monthStat(app(UsageSummary::class)->toArray());
+        $stats[] = self::monthStat(app(UsageSummary::class)->toArray((int) CurrentWorkspace::id()));
 
         return $stats;
     }

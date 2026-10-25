@@ -50,7 +50,7 @@ final class UsageController extends Controller
                 'occurred_at' => $entry->occurred_at->utc()->toAtomString(),
                 'duplicate' => $duplicate,
             ],
-            'usage' => $usage->toArray(),
+            'usage' => $usage->toArray($device->workspace_id),
         ], $duplicate ? 200 : 201);
     }
 }
