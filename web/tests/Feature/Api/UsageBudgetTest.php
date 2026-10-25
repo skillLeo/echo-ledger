@@ -166,8 +166,12 @@ describe('monthly limit', function () {
 it('creates and drops the usage tables', function () {
     expect(Schema::hasTable('usage_ledger'))->toBeTrue()->and(Schema::hasColumn('transcripts', 'error_code'))->toBeTrue();
 
-    // The three usage migrations sit below the bookmarks migration (2026_10_26).
-    $this->artisan('migrate:rollback', ['--step' => 4])->assertSuccessful();
+    // Only the three usage migrations, whatever was added after them.
+    $this->artisan('migrate:rollback', ['--path' => [
+        'database/migrations/2026_10_25_000001_create_usage_ledger_table.php',
+        'database/migrations/2026_10_25_000002_create_provider_deletions_table.php',
+        'database/migrations/2026_10_25_000003_add_error_code_to_transcripts_table.php',
+    ]])->assertSuccessful();
     expect(Schema::hasTable('usage_ledger'))->toBeFalse()->and(Schema::hasTable('provider_deletions'))->toBeFalse()
         ->and(Schema::hasColumn('transcripts', 'error_code'))->toBeFalse();
 

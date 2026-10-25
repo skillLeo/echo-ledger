@@ -30,6 +30,8 @@ final class TranscriptResource extends JsonResource
             ...self::failure($transcript),
             'created_at' => $transcript->created_at->toAtomString(),
             'completed_at' => $transcript->completed_at?->toAtomString(),
+            // Since v1.1: set while the text differs from the provider's original (docs/API.md "Editing transcripts").
+            'edited_at' => $transcript->edited_at?->toAtomString(),
         ];
     }
 

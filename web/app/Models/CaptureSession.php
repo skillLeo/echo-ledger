@@ -58,7 +58,7 @@ class CaptureSession extends Model
 
     protected $fillable = [
         'user_id', 'device_id', 'client_id', 'client_ref', 'source_device', 'source_app', 'title', 'language',
-        'started_at', 'ended_at', 'duration_ms', 'pauses', 'status', 'final_provider',
+        'started_at', 'ended_at', 'duration_ms', 'pauses', 'speaker_names', 'status', 'final_provider',
     ];
 
     /** @return BelongsTo<User, $this> */
@@ -194,6 +194,7 @@ class CaptureSession extends Model
             'ended_at' => 'datetime',
             'duration_ms' => 'integer',
             'pauses' => 'array',
+            'speaker_names' => 'array',
         ];
     }
 }

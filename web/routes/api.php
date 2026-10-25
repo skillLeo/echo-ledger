@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\RecordingController;
 use App\Http\Controllers\Api\SessionController;
 use App\Http\Controllers\Api\SttTokenController;
 use App\Http\Controllers\Api\SttWebhookController;
+use App\Http\Controllers\Api\TranscriptEditController;
 use App\Http\Controllers\Api\UsageController;
 use App\Http\Middleware\TouchDevice;
 use Illuminate\Support\Facades\Route;
@@ -46,12 +47,17 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->name('api.sessions.destroy');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
             Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->name('api.sessions.markers.destroy');
+            Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');
+            Route::patch('transcripts/{id}', [TranscriptEditController::class, 'update'])->name('api.transcripts.update');
+            Route::post('transcripts/{id}/replace', [TranscriptEditController::class, 'replace'])->name('api.transcripts.replace');
+            Route::post('transcripts/{id}/restore', [TranscriptEditController::class, 'restore'])->name('api.transcripts.restore');
         });
 
         Route::middleware('abilities:library:read')->group(function (): void {
             Route::get('library', [LibraryController::class, 'index'])->name('api.library');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');
             Route::get('transcripts/{id}', [LibraryController::class, 'transcript'])->name('api.transcripts.show');
+            Route::get('transcripts/{id}/revisions', [TranscriptEditController::class, 'revisions'])->name('api.transcripts.revisions');
         });
     });
 

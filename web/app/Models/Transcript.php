@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -35,6 +36,7 @@ use Illuminate\Support\Carbon;
  * @property int $attempts
  * @property Carbon|null $submitted_at
  * @property Carbon|null $completed_at
+ * @property Carbon|null $edited_at set while the text differs from the provider's original
  * @property Carbon $created_at
  * @property-read CaptureSession $captureSession
  */
@@ -53,12 +55,19 @@ class Transcript extends Model
     protected $fillable = [
         'capture_session_id', 'kind', 'provider', 'status', 'provider_job_id', 'provider_transcript_id',
         'provider_deleted_at', 'language', 'text', 'segments', 'meta', 'error', 'error_code', 'attempts', 'submitted_at', 'completed_at',
+        'edited_at',
     ];
 
     /** @return BelongsTo<CaptureSession, $this> */
     public function captureSession(): BelongsTo
     {
         return $this->belongsTo(CaptureSession::class)->withTrashed();
+    }
+
+    /** @return HasMany<TranscriptRevision, $this> */
+    public function revisions(): HasMany
+    {
+        return $this->hasMany(TranscriptRevision::class);
     }
 
     public function providerKey(): ?SttProviderKey
@@ -91,6 +100,7 @@ class Transcript extends Model
             'provider_deleted_at' => 'datetime',
             'submitted_at' => 'datetime',
             'completed_at' => 'datetime',
+            'edited_at' => 'datetime',
         ];
     }
 }

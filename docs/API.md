@@ -423,14 +423,48 @@ Sync rule **(since v1.1: inclusive boundary)**:
 ### `GET /api/sessions/{id}` — `library:read`
 Library item fields plus `"recordings": [{"id","role","mime","size_bytes","duration_ms","status"}]`,
 `"transcripts": [{"id","kind","provider","status","language","error","error_code"}]` (`error`/`error_code` since
-v1.1, `null` unless `failed`), `"markers"` and `"pauses"` (since v1.1, shapes as above) and `"playback_url"`
+v1.1, `null` unless `failed`), `"markers"` and `"pauses"` (since v1.1, shapes as above), `"speaker_names"`
+(since v1.1, see "Editing transcripts") and `"playback_url"`
 (temporary signed URL, 30 min).
 
 ### `GET /api/transcripts/{id}` — `library:read`
-`200 {"id","session_id","kind","provider","status","language","text","segments":[Segment],"error","error_code","created_at","completed_at"}`
+`200 {"id","session_id","kind","provider","status","language","text","segments":[Segment],"error","error_code","created_at","completed_at","edited_at"}`
+- `edited_at` (since v1.1) is set while the text differs from the provider's original.
 - `error` / `error_code` are `null` unless `status` is `failed` (`error_code` since v1.1; values in the
   enumeration table). A transcript that is `pending`, `submitted` or `processing` has no text yet: clients show
   "Transcribing…", never "no speech".
+
+### Editing transcripts (since v1.1)
+Only `completed` transcripts can be edited (`409 transcript_not_ready` otherwise). Timings never change: an edited
+segment keeps `start_ms` / `end_ms` and loses its `words` (their timings no longer match). The first edit keeps the
+provider's text as the `original` revision; every change adds a revision (the newest 50 are kept besides the
+original). Each change bumps the session's `updated_at`, so other devices sync it.
+
+Speaker names are per session, keyed by the speaker label used in the segments (`"Me"`, `"Client"`,
+`"Speaker B"`…). Clients show `speaker_names[segment.speaker] ?? segment.speaker`. A session of a client starts with
+the names remembered for that client; the session's own names win.
+
+### `PATCH /api/transcripts/{id}` — `sessions:write` (since v1.1)
+`{"edits": [{"index": 0, "text": "Corrected text"}]}` (1–2000 edits, text 1–5000 characters after trimming;
+whitespace runs collapse) → `200` transcript. `422 segment_not_found` for an index that does not exist,
+`422 segment_empty` for an empty text. Unchanged text saves nothing.
+
+### `POST /api/transcripts/{id}/replace` — `sessions:write` (since v1.1)
+`{"find": "acme", "replace": "Acme Ltd", "match_case": false, "whole_word": false}` → `200 {"replaced": 3,
+"transcript": {…}}`. The search is literal (no patterns) and Unicode-aware; `replaced: 0` saves nothing.
+
+### `POST /api/transcripts/{id}/restore` — `sessions:write` (since v1.1)
+Puts the provider's original text back (`edited_at` becomes `null`) and records a `restore` revision. A transcript
+that was never edited is returned unchanged.
+
+### `GET /api/transcripts/{id}/revisions` — `library:read` (since v1.1)
+`200 {"data": [{"id","source","author","created_at"}]}`, newest first; `source` is `original`, `edit`, `replace` or
+`restore`; `author` is the device or console user that made the change.
+
+### `PUT /api/sessions/{id}/speakers` — `sessions:write` (since v1.1)
+`{"names": {"Client": "Jane (Acme)", "Me": "Sam"}, "remember_for_client": true}` (1–20 names, ≤ 60 characters;
+an empty name removes the rename) → `200 {"speaker_names": {…}}` (the effective names). With
+`remember_for_client` the names also become the defaults for the session's client.
 
 ### `DELETE /api/sessions/{id}` — `sessions:write`
 `204`. The session becomes a tombstone; its recordings (files) and transcripts are erased immediately. A provider

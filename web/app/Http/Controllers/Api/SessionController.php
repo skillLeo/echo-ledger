@@ -25,6 +25,7 @@ use App\Services\ChunkedUploadService;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\SessionLifecycle;
 use App\Services\SessionMarkers;
+use App\Services\TranscriptEditor;
 use App\Services\TranscriptStore;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
@@ -245,6 +246,7 @@ final class SessionController extends Controller
             ])->values(),
             'markers' => $session->markers->map(fn (SessionMarker $m): array => $m->toApi())->values(),
             'pauses' => $session->pauses ?? [],
+            'speaker_names' => (object) app(TranscriptEditor::class)->speakerNames($session),
             'playback_url' => $primary?->isReady() ? URL::temporarySignedRoute('api.recordings.audio',
                 now()->addMinutes((int) config('echoledger.playback_url_minutes', 30)), ['recording' => $primary->id]) : null,
         ]);

@@ -29,6 +29,11 @@ function secDeviceGuardedRoutes(): array
         'POST sessions/{id}/finish' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/finish', 'sessions:write'],
         'POST sessions/{id}/markers' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/markers', 'sessions:write'],
         'DELETE sessions/{id}/markers/{marker}' => ['DELETE', '/api/sessions/'.Fx::MISSING_ID.'/markers/'.Fx::MISSING_ID, 'sessions:write'],
+        'PUT sessions/{id}/speakers' => ['PUT', '/api/sessions/'.Fx::MISSING_ID.'/speakers', 'sessions:write'],
+        'PATCH transcripts/{id}' => ['PATCH', '/api/transcripts/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST transcripts/{id}/replace' => ['POST', '/api/transcripts/'.Fx::MISSING_ID.'/replace', 'sessions:write'],
+        'POST transcripts/{id}/restore' => ['POST', '/api/transcripts/'.Fx::MISSING_ID.'/restore', 'sessions:write'],
+        'GET transcripts/{id}/revisions' => ['GET', '/api/transcripts/'.Fx::MISSING_ID.'/revisions', 'library:read'],
         'POST sessions/{id}/recordings' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/recordings', 'sessions:write'],
         'POST sessions/{id}/transcripts' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/transcripts', 'sessions:write'],
         'DELETE sessions/{id}' => ['DELETE', '/api/sessions/'.Fx::MISSING_ID, 'sessions:write'],
@@ -89,7 +94,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(18);
+    expect($guarded)->toBe(23);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

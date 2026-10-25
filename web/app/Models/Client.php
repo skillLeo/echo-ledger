@@ -20,13 +20,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $color
  * @property string|null $language
  * @property string|null $notes
+ * @property array<string, string>|null $speaker_names speaker label → name, remembered for this client's recordings
  */
 class Client extends Model
 {
     /** @use HasFactory<ClientFactory> */
     use HasFactory, HasUlids;
 
-    protected $fillable = ['user_id', 'name', 'color', 'language', 'notes'];
+    protected $fillable = ['user_id', 'name', 'color', 'language', 'notes', 'speaker_names'];
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
@@ -50,5 +51,11 @@ class Client extends Model
     public function keytermList(): array
     {
         return $this->keyterms()->orderBy('id')->pluck('term')->map(fn ($t): string => (string) $t)->values()->all();
+    }
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return ['speaker_names' => 'array'];
     }
 }
