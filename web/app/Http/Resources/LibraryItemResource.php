@@ -33,6 +33,7 @@ final class LibraryItemResource extends JsonResource
         }
 
         $transcripts = $session->relationLoaded('transcripts') ? $session->transcripts : $session->transcripts()->get();
+        $markers = $session->relationLoaded('markers') ? $session->markers : $session->markers()->get(['id', 'capture_session_id', 'tag', 'at_ms']);
         /** @var Transcript|null $final */
         $final = $transcripts->first(fn (Transcript $t) => $t->kind === TranscriptKind::Final);
         /** @var Transcript|null $live */
@@ -61,6 +62,8 @@ final class LibraryItemResource extends JsonResource
                 'live_transcript_id' => $live?->id,
                 'preview' => ($final?->text ? $final->preview() : $live?->preview()) ?: null,
             ],
+            'marker_count' => $markers->count(),
+            'tags' => $markers->pluck('tag')->filter()->unique()->values()->all(),
             'updated_at' => $session->updated_at->toAtomString(),
         ];
     }

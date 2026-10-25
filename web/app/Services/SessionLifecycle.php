@@ -59,6 +59,7 @@ final class SessionLifecycle
             foreach ($data['artifacts'] as $artifact) {
                 $this->uploads->createRecording($session, $artifact, $chunkSize);
             }
+            $this->annotate($session, $data);
 
             return $session;
         });
@@ -97,9 +98,35 @@ final class SessionLifecycle
                 $this->uploads->createRecording($locked, $artifact, $chunkSize);
             }
             $locked->update($attributes);
+            $this->annotate($locked, $data);
 
             return $locked;
         });
+    }
+
+    /**
+     * Stores the bookmarks and paused stretches sent with a recording (docs/API.md `markers` / `pauses`). A repeated
+     * create or finish never adds the device's bookmarks twice.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function annotate(CaptureSession $session, array $data): void
+    {
+        if (isset($data['pauses']) && is_array($data['pauses'])) {
+            $session->pauses = array_values(array_map(
+                static fn (array $pause): array => ['at_ms' => (int) $pause['at_ms'], 'paused_ms' => (int) $pause['paused_ms']],
+                $data['pauses'],
+            ));
+            $session->save();
+        }
+        if (! empty($data['markers']) && ! $session->markers()->where('source', 'device')->exists()) {
+            $session->markers()->createMany(array_map(static fn (array $marker): array => [
+                'at_ms' => (int) $marker['at_ms'],
+                'tag' => SessionMarkers::cleanTag($marker['tag'] ?? null),
+                'note' => SessionMarkers::cleanText($marker['note'] ?? null),
+                'source' => 'device',
+            ], array_values($data['markers'])));
+        }
     }
 
     /**

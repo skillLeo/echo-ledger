@@ -19,10 +19,12 @@ use App\Http\Resources\TranscriptResource;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Recording;
+use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Services\ChunkedUploadService;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\SessionLifecycle;
+use App\Services\SessionMarkers;
 use App\Services\TranscriptStore;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
@@ -93,6 +95,7 @@ final class SessionController extends Controller
             'language' => ['nullable', 'string', 'max:16'],
             'artifacts' => ['sometimes', 'array', 'min:1', 'max:3'],
             ...self::artifactRules('artifacts.*.'),
+            ...SessionMarkers::rules(),
         ]);
         if ($withArtifacts) {
             $this->assertArtifactRoles($data['artifacts']);
@@ -132,6 +135,7 @@ final class SessionController extends Controller
             'client_id' => ['nullable', 'string', 'size:26'],
             'artifacts' => ['required', 'array', 'min:1', 'max:3'],
             ...self::artifactRules('artifacts.*.'),
+            ...SessionMarkers::rules(),
         ]);
         $this->assertArtifactRoles($data['artifacts']);
 
@@ -225,7 +229,7 @@ final class SessionController extends Controller
     /** GET /api/sessions/{id} */
     public function show(Request $request, string $id): JsonResponse
     {
-        $session = $this->findSession($request, $id)->load(['device', 'client', 'transcripts', 'recordings']);
+        $session = $this->findSession($request, $id)->load(['device', 'client', 'transcripts', 'recordings', 'markers']);
         $item = (new LibraryItemResource($session))->toArray($request);
         $primary = $session->recordings->first(fn (Recording $r) => $r->role === RecordingRole::Primary);
 
@@ -239,9 +243,42 @@ final class SessionController extends Controller
                 'id' => $t->id, 'kind' => $t->kind->value, 'provider' => $t->provider, 'status' => $t->status->value, 'language' => $t->language,
                 ...TranscriptResource::failure($t),
             ])->values(),
+            'markers' => $session->markers->map(fn (SessionMarker $m): array => $m->toApi())->values(),
+            'pauses' => $session->pauses ?? [],
             'playback_url' => $primary?->isReady() ? URL::temporarySignedRoute('api.recordings.audio',
                 now()->addMinutes((int) config('echoledger.playback_url_minutes', 30)), ['recording' => $primary->id]) : null,
         ]);
+    }
+
+    /** POST /api/sessions/{id}/markers — a bookmark added after the call (since v1.1). */
+    public function storeMarker(Request $request, string $id): JsonResponse
+    {
+        $session = $this->findSession($request, $id);
+        $data = $request->validate(SessionMarkers::markerRules());
+        if ($session->markers()->count() >= SessionMarkers::MAX_MARKERS) {
+            throw new ApiError(409, 'too_many_markers', 'This recording already has the most bookmarks it can hold.');
+        }
+        $marker = $session->markers()->create([
+            'at_ms' => (int) $data['at_ms'],
+            'tag' => SessionMarkers::cleanTag($data['tag'] ?? null),
+            'note' => SessionMarkers::cleanText($data['note'] ?? null),
+            'source' => 'device',
+        ]);
+
+        return response()->json($marker->toApi(), 201);
+    }
+
+    /** DELETE /api/sessions/{id}/markers/{marker} (since v1.1). */
+    public function destroyMarker(Request $request, string $id, string $marker): Response
+    {
+        $session = $this->findSession($request, $id);
+        $found = $session->markers()->whereKey($marker)->first();
+        if (! $found instanceof SessionMarker) {
+            throw new ApiError(404, 'marker_not_found', 'Bookmark not found.');
+        }
+        $found->delete();
+
+        return response()->noContent();
     }
 
     /** DELETE /api/sessions/{id} — tombstone + immediate media erasure. */

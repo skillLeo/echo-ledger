@@ -50,6 +50,12 @@ final class CaptureSessionsTable
                     ->relationship('client', 'name', fn (Builder $query): Builder => $query->where('user_id', auth()->id()))
                     ->searchable()->preload(),
                 SelectFilter::make('status')->options(SessionStatus::class),
+                SelectFilter::make('tag')->label('Bookmark tag')
+                    ->options(fn (): array => array_combine(app(SettingsRepository::class)->markerTags(), app(SettingsRepository::class)->markerTags()))
+                    ->query(fn (Builder $query, array $data): Builder => blank($data['value'] ?? null) ? $query
+                        : $query->whereHas('markers', fn (Builder $m): Builder => $m->where('tag', $data['value']))),
+                Filter::make('bookmarked')->label('Has bookmarks')->toggle()
+                    ->query(fn (Builder $query): Builder => $query->whereHas('markers')),
                 Filter::make('started_at')
                     ->schema([DatePicker::make('from')->label('From'), DatePicker::make('until')->label('Until')])
                     ->query(fn (Builder $query, array $data): Builder => self::filterByDisplayDay($query, $data['from'] ?? null, $data['until'] ?? null)),

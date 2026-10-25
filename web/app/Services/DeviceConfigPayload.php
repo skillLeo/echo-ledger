@@ -55,6 +55,7 @@ final class DeviceConfigPayload
             ],
             'providers' => $providers,
             'captions' => ['channels' => $this->settings->captionChannels()],
+            'markers' => ['tags' => $this->settings->markerTags()],
             'pins' => $this->settings->pins(),
             'usage' => app(UsageSummary::class)->toArray(),
         ];

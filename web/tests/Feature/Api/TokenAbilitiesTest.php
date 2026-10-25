@@ -28,6 +28,8 @@ function abilityRoutes(): array
         'usage report' => ['POST', '/api/usage', 'stt:token'],
         'create session' => ['POST', '/api/sessions', 'sessions:write'],
         'finish session' => ['POST', "/api/sessions/{$id}/finish", 'sessions:write'],
+        'add bookmark' => ['POST', "/api/sessions/{$id}/markers", 'sessions:write'],
+        'delete bookmark' => ['DELETE', "/api/sessions/{$id}/markers/{$id}", 'sessions:write'],
         'add recording' => ['POST', "/api/sessions/{$id}/recordings", 'sessions:write'],
         'post transcript' => ['POST', "/api/sessions/{$id}/transcripts", 'sessions:write'],
         'delete session' => ['DELETE', "/api/sessions/{$id}", 'sessions:write'],

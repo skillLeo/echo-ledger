@@ -166,7 +166,8 @@ describe('monthly limit', function () {
 it('creates and drops the usage tables', function () {
     expect(Schema::hasTable('usage_ledger'))->toBeTrue()->and(Schema::hasColumn('transcripts', 'error_code'))->toBeTrue();
 
-    $this->artisan('migrate:rollback', ['--step' => 3])->assertSuccessful();
+    // The three usage migrations sit below the bookmarks migration (2026_10_26).
+    $this->artisan('migrate:rollback', ['--step' => 4])->assertSuccessful();
     expect(Schema::hasTable('usage_ledger'))->toBeFalse()->and(Schema::hasTable('provider_deletions'))->toBeFalse()
         ->and(Schema::hasColumn('transcripts', 'error_code'))->toBeFalse();
 

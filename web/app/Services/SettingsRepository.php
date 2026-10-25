@@ -42,6 +42,7 @@ final class SettingsRepository
         // Monthly transcription limit (whole server). Minutes = billable provider minutes (audio minutes × channels).
         'budget.monthly_minutes' => null,            // int >= 1, or null = no minutes limit
         'budget.monthly_usd' => null,                // decimal >= 0.01, or null = no US$ limit
+        'markers.tags' => SessionMarkers::DEFAULT_TAGS,  // one-tap bookmark tags
         'budget.warn_percent' => 80,                 // 1-100
         // US$ per audio hour per channel; pairs that are missing price 0 (provider list prices, 2026-10).
         'budget.prices' => [
@@ -150,6 +151,16 @@ final class SettingsRepository
         $value = $this->get('budget.monthly_usd');
 
         return (is_int($value) || is_float($value)) && $value >= 0.01 ? (float) $value : null;
+    }
+
+    /**
+     * The bookmark tags offered during a call (docs/API.md config `markers.tags`).
+     *
+     * @return list<string>
+     */
+    public function markerTags(): array
+    {
+        return SessionMarkers::presets($this->get('markers.tags', SessionMarkers::DEFAULT_TAGS));
     }
 
     /** Share of a limit (1-100 %) at which devices and the console start warning; 80 unless set. */

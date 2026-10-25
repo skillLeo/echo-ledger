@@ -141,6 +141,7 @@ abilities of the token that asked for it, never more **(since v1.1)**.
    "voice_note":       {"provider": "assemblyai", "mode": "async_webhook", "required_artifacts": ["primary"], "preferred_primary": "ogg_opus"}
  },
  "captions": {"channels": "both"},
+ "markers": {"tags": ["Requirement", "Budget", "Deadline", "Decision", "Follow-up"]},
  "pins": ["sha256/AAAA…=", "sha256/BBBB…="],
  "usage": {"month": "2026-10", "time_zone": "Asia/Karachi",
            "period_start": "2026-09-30T19:00:00+00:00", "period_end": "2026-10-31T19:00:00+00:00",
@@ -363,13 +364,32 @@ session's final provider mode is `device`, e.g. `parakeet_local`).
 Validation: `0 ≤ start_ms ≤ end_ms ≤ duration_ms + 500`, `channel ∈ {1, 2}`, at most 20 000 segments. `201` →
 Transcript. Live caption times are on the recording timeline: paused time is not counted.
 
+### Bookmarks and pauses (since v1.1)
+Both `POST /api/sessions` (with artifacts) and `POST /api/sessions/{id}/finish` accept two optional lists. Times are
+recording time in ms (paused time excluded), so they line up with the transcript.
+```json
+{"markers": [{"at_ms": 61250, "tag": "Budget", "note": null}],
+ "pauses":  [{"at_ms": 300000, "paused_ms": 125000}]}
+```
+- `markers`: at most 500; `at_ms` 0–86 400 000; `tag` at most 40 characters (the presets come from `config.markers.tags`,
+  other text is allowed); `note` at most 200. A repeated create or finish does not add the bookmarks twice.
+- `pauses`: at most 200; `paused_ms` ≥ 1. The pause happened at `at_ms` and lasted `paused_ms` (not recorded).
+
+### `POST /api/sessions/{id}/markers` — `sessions:write` (since v1.1)
+A bookmark added after the call: `{"at_ms": 61250, "tag": "Decision", "note": "Ship in May"}` →
+`201 {"id","at_ms","tag","note","source","created_at"}`. `409 too_many_markers` at 500.
+
+### `DELETE /api/sessions/{id}/markers/{marker}` — `sessions:write` (since v1.1)
+`204`; `404 marker_not_found`. Adding or deleting a bookmark updates the session's `updated_at`.
+
 ---
 
 ## Library & sync
 
 ### `GET /api/library` — `library:read`
 Query: `since` (ISO-8601 with any offset; items with `updated_at >= since`, **including tombstones**), `source`
-(comma list of `phone,desktop,web`), `source_app`, `client_id`, `status`, `cursor`, `limit` (1–100, default 50).
+(comma list of `phone,desktop,web`), `source_app`, `client_id`, `status`, `cursor`, `limit` (1–100, default 50), `tag`
+(sessions with a bookmark of that tag) and `bookmarked=1` (sessions with any bookmark; both since v1.1).
 Returns every session of the owner from **every** device, except sessions still in status `recording` (listed only
 when `status=recording` is given).
 ```json
@@ -382,6 +402,7 @@ when `status=recording` is given).
     "title": "Zoom call", "started_at": "…", "ended_at": "…", "duration_ms": 2530000, "status": "completed",
     "transcript": {"final_status": "completed", "final_transcript_id": "01JB…", "live_available": true,
                    "live_transcript_id": "01JB…", "preview": "first 160 characters…"},
+    "marker_count": 2, "tags": ["Budget"],
     "updated_at": "…"},
    {"id": "01JC…", "client_ref": "9a1d…", "deleted": true, "updated_at": "…"}
  ],
@@ -402,7 +423,8 @@ Sync rule **(since v1.1: inclusive boundary)**:
 ### `GET /api/sessions/{id}` — `library:read`
 Library item fields plus `"recordings": [{"id","role","mime","size_bytes","duration_ms","status"}]`,
 `"transcripts": [{"id","kind","provider","status","language","error","error_code"}]` (`error`/`error_code` since
-v1.1, `null` unless `failed`) and `"playback_url"` (temporary signed URL, 30 min).
+v1.1, `null` unless `failed`), `"markers"` and `"pauses"` (since v1.1, shapes as above) and `"playback_url"`
+(temporary signed URL, 30 min).
 
 ### `GET /api/transcripts/{id}` — `library:read`
 `200 {"id","session_id","kind","provider","status","language","text","segments":[Segment],"error","error_code","created_at","completed_at"}`

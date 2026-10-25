@@ -44,6 +44,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/{id}/recordings', [SessionController::class, 'addRecording'])->name('api.sessions.recordings');
             Route::post('sessions/{id}/transcripts', [SessionController::class, 'storeTranscript'])->name('api.sessions.transcripts');
             Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->name('api.sessions.destroy');
+            Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
+            Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->name('api.sessions.markers.destroy');
         });
 
         Route::middleware('abilities:library:read')->group(function (): void {

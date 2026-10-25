@@ -36,11 +36,13 @@ final class LibraryController extends Controller
             'status' => ['nullable', Rule::enum(SessionStatus::class)],
             'cursor' => ['nullable', 'string', 'max:512'],
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'tag' => ['nullable', 'string', 'max:40'],
+            'bookmarked' => ['nullable', 'boolean'],
         ]);
         $cursor = empty($data['cursor']) ? null : self::decodeCursor($data['cursor']);
 
         $serverTime = now();
-        $query = CaptureSession::query()->where('user_id', $device->user_id)->with(['device', 'client', 'transcripts']);
+        $query = CaptureSession::query()->where('user_id', $device->user_id)->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms']);
 
         if (! empty($data['since'])) {
             // Any offset names an instant; the stored timestamps are UTC. Inclusive: server_time has whole seconds, so a
@@ -62,6 +64,13 @@ final class LibraryController extends Controller
             if (! empty($data[$field])) {
                 $query->where($field, $data[$field]);
             }
+        }
+
+        if (! empty($data['tag'])) {
+            $query->whereHas('markers', fn ($q) => $q->where('tag', $data['tag']));
+        }
+        if ($request->boolean('bookmarked')) {
+            $query->whereHas('markers');
         }
 
         $page = $query->orderByDesc('updated_at')->orderByDesc('id')

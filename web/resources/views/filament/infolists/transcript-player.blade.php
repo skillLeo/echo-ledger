@@ -1,6 +1,14 @@
 @php
     $data = $entry->getPlayerData();
     $segments = $data['segments'];
+    $markers = $data['markers'];
+    $pauses = $data['pauses'];
+    $durationMs = max(1, (int) ($data['duration_ms'] ?? 0));
+    $clock = function (int $ms): string {
+        $sec = intdiv(max(0, $ms), 1000);
+
+        return $sec >= 3600 ? sprintf('%d:%02d:%02d', intdiv($sec, 3600), intdiv($sec % 3600, 60), $sec % 60) : sprintf('%d:%02d', intdiv($sec, 60), $sec % 60);
+    };
     $starts = array_map(fn (array $s): float => ((int) ($s['start_ms'] ?? 0)) / 1000, $segments);
     $stamp = function (array $s): string {
         $sec = intdiv(max(0, (int) ($s['start_ms'] ?? 0)), 1000);
@@ -30,6 +38,7 @@
                 this.active = i;
             },
             seek(i) { const a = this.$refs.audio; if (!a) return; a.currentTime = this.starts[i]; a.play(); },
+            seekTo(ms) { const a = this.$refs.audio; if (!a) return; a.currentTime = ms / 1000; a.play(); },
             toggle() { const a = this.$refs.audio; if (!a) return; if (a.paused) { a.play(); } else { a.pause(); } },
             // Space toggles playback while the player itself has focus; on a line or a button Space keeps its native
             // meaning (a line seeks, a button presses), and the audio element handles its own keys.
@@ -88,6 +97,17 @@
             .el-player .el-btn:hover { background: var(--el-btn-hover); }
             .el-player .el-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
                 clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+            .el-player .el-marks { margin: 0 0 .75rem; }
+            .el-player .el-bar { position: relative; height: 6px; border-radius: 3px; background: var(--el-hover); margin-bottom: .5rem; }
+            .el-player .el-tick { position: absolute; top: -3px; width: 3px; height: 12px; border-radius: 2px; background: var(--el-bar); transform: translateX(-50%); }
+            .el-player .el-tick-pause { background: var(--el-muted); opacity: .6; }
+            .el-player .el-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+            .el-player .el-chip { display: inline-flex; gap: .4rem; align-items: baseline; font-size: .75rem; padding: .25rem .6rem;
+                border-radius: 999px; border: 1px solid var(--el-btn-border); background: var(--el-btn-bg); color: var(--el-text); cursor: pointer; }
+            .el-player .el-chip:hover { background: var(--el-btn-hover); }
+            .el-player .el-chip:focus-visible { outline: 2px solid var(--el-focus); outline-offset: 2px; }
+            .el-player .el-chip-pause { cursor: default; color: var(--el-muted); }
+            .el-player .el-note { color: var(--el-muted); }
             /* Phones: time and speaker on one line, the text below at full width. */
             @media (max-width: 640px) {
                 .el-player { padding: .75rem; }
@@ -114,6 +134,31 @@
                 <span class="el-sr" role="status" aria-live="polite" x-text="copied === 'failed' ? 'Copy failed' : (copied ? 'Copied to the clipboard' : '')"></span>
             @endif
         </div>
+
+        @if (count($markers) > 0 || count($pauses) > 0)
+            <div class="el-marks" aria-label="Bookmarks and pauses">
+                <div class="el-bar" aria-hidden="true">
+                    @foreach ($pauses as $p)
+                        <span class="el-tick el-tick-pause" style="left: {{ min(100, round($p['at_ms'] / $durationMs * 100, 2)) }}%"></span>
+                    @endforeach
+                    @foreach ($markers as $m)
+                        <span class="el-tick" style="left: {{ min(100, round($m['at_ms'] / $durationMs * 100, 2)) }}%"></span>
+                    @endforeach
+                </div>
+                <div class="el-chips">
+                    @foreach ($markers as $m)
+                        <button type="button" class="el-chip" x-on:click="seekTo({{ $m['at_ms'] }})" aria-label="Play from the bookmark at {{ $clock($m['at_ms']) }}">
+                            <span class="el-time">{{ $clock($m['at_ms']) }}</span>
+                            <span>{{ $m['tag'] ?? 'Bookmark' }}</span>
+                            @if ($m['note']) <span class="el-note">{{ $m['note'] }}</span> @endif
+                        </button>
+                    @endforeach
+                    @foreach ($pauses as $p)
+                        <span class="el-chip el-chip-pause">Paused at {{ $clock($p['at_ms']) }} for {{ $clock($p['paused_ms']) }}</span>
+                    @endforeach
+                </div>
+            </div>
+        @endif
 
         @if (count($segments) === 0)
             <div class="el-empty">No transcript yet.</div>

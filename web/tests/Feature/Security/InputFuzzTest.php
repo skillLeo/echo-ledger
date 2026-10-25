@@ -260,6 +260,7 @@ it('survives malformed request bodies on every JSON endpoint', function (string 
     'POST sessions/{id}/recordings' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/recordings'],
     'POST sessions/{id}/transcripts' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/transcripts'],
     'POST sessions/{id}/finish' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/finish'],
+    'POST sessions/{id}/markers' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/markers'],
     'POST stt/token' => ['POST', '/api/stt/token'],
     'POST usage' => ['POST', '/api/usage'],
     'POST devices/rotate-token' => ['POST', '/api/devices/rotate-token'],

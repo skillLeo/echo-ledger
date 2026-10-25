@@ -13,6 +13,7 @@ use App\Services\ProviderCopyEraser;
 use App\Services\SettingsRepository;
 use Database\Factories\CaptureSessionFactory;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -39,6 +40,8 @@ use Illuminate\Support\Carbon;
  * @property Carbon $started_at
  * @property Carbon|null $ended_at
  * @property int|null $duration_ms
+ * @property list<array{at_ms: int, paused_ms: int}>|null $pauses
+ * @property-read Collection<int, SessionMarker> $markers
  * @property SessionStatus $status
  * @property string|null $final_provider
  * @property Carbon $created_at
@@ -55,7 +58,7 @@ class CaptureSession extends Model
 
     protected $fillable = [
         'user_id', 'device_id', 'client_id', 'client_ref', 'source_device', 'source_app', 'title', 'language',
-        'started_at', 'ended_at', 'duration_ms', 'status', 'final_provider',
+        'started_at', 'ended_at', 'duration_ms', 'pauses', 'status', 'final_provider',
     ];
 
     /** @return BelongsTo<User, $this> */
@@ -80,6 +83,16 @@ class CaptureSession extends Model
     public function recordings(): HasMany
     {
         return $this->hasMany(Recording::class);
+    }
+
+    /**
+     * Bookmarks on the recording's timeline, in time order.
+     *
+     * @return HasMany<SessionMarker, $this>
+     */
+    public function markers(): HasMany
+    {
+        return $this->hasMany(SessionMarker::class)->orderBy('at_ms');
     }
 
     /** @return HasOne<Recording, $this> */
@@ -180,6 +193,7 @@ class CaptureSession extends Model
             'started_at' => 'datetime',
             'ended_at' => 'datetime',
             'duration_ms' => 'integer',
+            'pauses' => 'array',
         ];
     }
 }

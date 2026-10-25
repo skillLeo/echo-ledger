@@ -9,6 +9,7 @@ use App\Enums\SttUseCase;
 use App\Models\User;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
+use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
 use App\Stt\ProviderEndpoints;
 use BackedEnum;
@@ -62,6 +63,7 @@ class Settings extends Page
             'captions_channels' => $all['captions.channels'],
             'default_language' => $all['default_language'],
             'display_timezone' => $settings->displayTimezone(),
+            'marker_tags' => $settings->markerTags(),
             'assemblyai_region' => $all['assemblyai.region'],
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
             'assemblyai_async_models' => $all['assemblyai.async_models'],
@@ -156,6 +158,15 @@ class Settings extends Page
                     'off' => 'Off',
                 ])->required(),
             ]),
+            Section::make('Bookmarks')
+                ->description('One-tap tags offered while recording a call (on the desktop pill and the phone notification).')
+                ->schema([
+                    TagsInput::make('marker_tags')->label('Bookmark tags')
+                        ->placeholder('Add a tag')
+                        ->helperText('Up to 12 tags of at most 40 characters. Leave empty for the defaults.')
+                        ->nestedRecursiveRules(['string', 'max:40'])
+                        ->rules(['array', 'max:12']),
+                ]),
             Section::make('Monthly limit')
                 ->description('For the whole server, per calendar month in the time zone above. At the limit, devices show "Monthly transcription limit reached" and new transcripts wait. Leave a limit empty for none.')
                 ->columns(3)->schema([
@@ -253,6 +264,7 @@ class Settings extends Page
             'budget.monthly_usd' => filled($state['monthly_usd'] ?? null) ? round((float) $state['monthly_usd'], 2) : null,
             'budget.warn_percent' => filled($state['warn_percent'] ?? null) ? (int) $state['warn_percent'] : 80,
             'budget.prices' => self::pricesFromState($state),
+            'markers.tags' => SessionMarkers::presets($state['marker_tags'] ?? []),
         ]);
 
         Notification::make()->title('Settings saved')->success()->send();
