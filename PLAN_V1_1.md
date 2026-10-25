@@ -270,14 +270,18 @@ Severity in brackets. Each item lists the platform; the matching regression test
 
 ### Phase 2 — capture and control
 
-- [ ] B1 Auto-record rules (D, P): per app/site toggles, editable site list, never-record list, decision explainer.
-- [ ] B2 Pause / resume and "off the record" (D, P): paused time not captured, streamed or billed; gap markers.
-- [ ] B3 Bookmarks and tags (D, P, W): shortcut / pill / notification "Mark"; presets Requirement · Budget ·
+- [~] B1 Auto-record rules (D, P): per app/site toggles, editable site list, never-record list, decision explainer.
+- [~] B2 Pause / resume and "off the record" (D, P): paused time not captured, streamed or billed; gap markers.
+- [~] B3 Bookmarks and tags (D, P, W): shortcut / pill / notification "Mark"; presets Requirement · Budget ·
       Deadline · Decision · Follow-up (editable); shown on timeline, transcript and search filters.
-- [ ] B4 Caption styles (D, P): size, opacity, lines, width, position presets, compact mode, auto-hide, Me/Client
+- [~] B4 Caption styles (D, P): size, opacity, lines, width, position presets, compact mode, auto-hide, Me/Client
       colours, hidden from screen share.
-- [ ] B5 Capture health and pre-flight (D, P): device picker, level meters, 10-second test recording, permissions
+- [~] B5 Capture health and pre-flight (D, P): device picker, level meters, 10-second test recording, permissions
       centre, "Not hearing the other side for 30 s" warning.
+
+  Built and covered by automated tests on all three apps; the device checks are docs/MANUAL_QA.md section 8
+  (C-D1-C-D8, C-A1-C-A7). On the phone, calls are detected in WhatsApp and WhatsApp Business only, so those are
+  the per-app switches, and the microphone choice applies to recordings made with the phone's microphone.
 
 ### Phase 3 — transcript experience
 

@@ -34,10 +34,67 @@ data class AppSettings(
     /** What happens to a recording nobody decided on within 60 s: "keep", "discard" or "wait" (same as the desktop). */
     val decisionTimeout: String = "keep",
     /** The server's `api_version` ("1.1") from the last config; null for a v1 server or before the first fetch. */
-    val serverApiVersion: String? = null
+    val serverApiVersion: String? = null,
+    /** Per call app (`source_app` wire value): false keeps auto-record from recording it. Missing apps are on. */
+    val autoRecordApps: Map<String, Boolean> = emptyMap(),
+    /** How the floating caption bubble looks (B4). */
+    val captionStyle: CaptionStyle = CaptionStyle(),
+    /** Warn when a call has not heard the other side for 30 seconds (B5). */
+    val farSideWarning: Boolean = true,
+    /** Bookmark tag presets from the last server config; empty = the defaults. */
+    val markerTags: List<String> = emptyList(),
+    /** Microphone kind for recordings made on this phone (`builtin`, `wired`, `bluetooth`, `usb`); null = automatic. */
+    val inputDevice: String? = null
 ) {
     val serverIsV1_1: Boolean get() = serverApiVersion != null
     val paired: Boolean get() = serverUrl != null && deviceId != null
+}
+
+/**
+ * Caption bubble style (B4): text size, background opacity (40-100 %), visible lines (2, 3 or 5), position (top or
+ * bottom of the screen), compact mode (colours instead of speaker labels), auto-hide after 0 / 5 / 10 / 30 s
+ * without captions, and speaker colours as `#rrggbb` (null = theme colour).
+ */
+@Serializable
+data class CaptionStyle(
+    val size: String = "medium",
+    val opacity: Int = 85,
+    val lines: Int = 3,
+    val position: String = "bottom",
+    val compact: Boolean = false,
+    val autoHideSeconds: Int = 0,
+    val meColor: String? = null,
+    val clientColor: String? = null
+) {
+    /** The style with each out-of-range value replaced by its default. */
+    fun sanitized(): CaptionStyle {
+        val d = CaptionStyle()
+        return copy(
+            size = size.takeIf { it in SIZES } ?: d.size,
+            opacity = opacity.takeIf { it in 40..100 } ?: d.opacity,
+            lines = lines.takeIf { it in LINES } ?: d.lines,
+            position = position.takeIf { it in POSITIONS } ?: d.position,
+            autoHideSeconds = autoHideSeconds.takeIf { it in AUTO_HIDE } ?: 0,
+            meColor = meColor?.takeIf(::isHexColour),
+            clientColor = clientColor?.takeIf(::isHexColour)
+        )
+    }
+
+    /** Caption text size in sp. */
+    val textSp: Float get() = when (size) {
+        "small" -> 13f
+        "large" -> 19f
+        else -> 15f
+    }
+
+    companion object {
+        val SIZES = listOf("small", "medium", "large")
+        val LINES = listOf(2, 3, 5)
+        val POSITIONS = listOf("top", "bottom")
+        val AUTO_HIDE = listOf(0, 5, 10, 30)
+
+        fun isHexColour(value: String): Boolean = Regex("#[0-9a-fA-F]{6}").matches(value)
+    }
 }
 
 /** Non-secret settings in DataStore; the device token is stored separately, encrypted with the Keystore keyset. */

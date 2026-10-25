@@ -80,17 +80,25 @@ object Notifications {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 
-    fun recording(context: Context, title: String, detail: String): Notification = NotificationCompat.Builder(context, CHANNEL_RECORDING)
-        .setSmallIcon(R.drawable.ic_stat_rec)
-        .setContentTitle(title)
-        .setContentText(detail)
-        .setOngoing(true)
-        .setOnlyAlertOnce(true)
-        .setCategory(NotificationCompat.CATEGORY_SERVICE)
-        .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-        .setContentIntent(openApp(context))
-        .addAction(0, "Stop", serviceAction(context, RecordingService.ACTION_STOP, 11))
-        .build()
+    /** The ongoing recording: Pause / Resume, Mark (a bookmark at this moment, B3) and Stop. */
+    fun recording(context: Context, title: String, detail: String, paused: Boolean = false): Notification =
+        NotificationCompat.Builder(context, CHANNEL_RECORDING)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(if (paused) "Paused · $title" else title)
+            .setContentText(detail)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setContentIntent(openApp(context))
+            .addAction(
+                0,
+                if (paused) "Resume" else "Pause",
+                serviceAction(context, if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE, 14)
+            )
+            .addAction(0, "Mark", serviceAction(context, RecordingService.ACTION_MARK, 15))
+            .addAction(0, "Stop", serviceAction(context, RecordingService.ACTION_STOP, 11))
+            .build()
 
     fun armed(context: Context): Notification = NotificationCompat.Builder(context, CHANNEL_RECORDING)
         .setSmallIcon(R.drawable.ic_stat_rec)

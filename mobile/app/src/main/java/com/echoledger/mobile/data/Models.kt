@@ -1,5 +1,7 @@
 package com.echoledger.mobile.data
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -44,8 +46,21 @@ data class ServerConfig(
     val pins: List<String> = emptyList(),
     /** "1.1" on a v1.1 server; absent on a v1 server (the app then uses the v1 flows). */
     @SerialName("api_version") val apiVersion: String? = null,
-    val usage: UsageDto? = null
+    val usage: UsageDto? = null,
+    /** Bookmark tag presets from the console (since v1.1). */
+    val markers: MarkersConfig? = null
 )
+
+@Serializable
+data class MarkersConfig(val tags: List<String> = emptyList())
+
+/** A bookmark on the recording's timeline (since v1.1): recorded time, optional preset tag and short note. */
+@Serializable
+data class MarkerDto(@SerialName("at_ms") val atMs: Long, val tag: String? = null, val note: String? = null)
+
+/** A paused stretch (since v1.1): at recorded time `at_ms` the recording paused for `paused_ms` of wall time. */
+@Serializable
+data class PauseDto(@SerialName("at_ms") val atMs: Long, @SerialName("paused_ms") val pausedMs: Long)
 
 /** The month's speech-to-text use and the console limits (docs/API.md `GET /api/config` `usage`, since v1.1). */
 @Serializable
@@ -118,7 +133,14 @@ data class CreateSessionRequest(
     @SerialName("ended_at") val endedAt: String?,
     @SerialName("duration_ms") val durationMs: Long?,
     val language: String?,
-    val artifacts: List<ArtifactDto>
+    val artifacts: List<ArtifactDto>,
+    /** Sent only when there are some, so a v1 server never sees the keys. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val markers: List<MarkerDto> = emptyList(),
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val pauses: List<PauseDto> = emptyList()
 )
 
 @Serializable
@@ -146,7 +168,14 @@ data class FinishSessionRequest(
     @SerialName("ended_at") val endedAt: String,
     @SerialName("duration_ms") val durationMs: Long?,
     @SerialName("client_id") val clientId: String? = null,
-    val artifacts: List<ArtifactDto>
+    val artifacts: List<ArtifactDto>,
+    /** Sent only when there are some, so a v1 server never sees the keys. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val markers: List<MarkerDto> = emptyList(),
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val pauses: List<PauseDto> = emptyList()
 )
 
 /** One streaming period (socket open → close) for `POST /api/usage` (since v1.1). */
@@ -184,7 +213,10 @@ data class LibraryItem(
     @SerialName("duration_ms") val durationMs: Long? = null,
     val status: String? = null,
     val transcript: TranscriptSummary? = null,
-    @SerialName("updated_at") val updatedAt: String
+    @SerialName("updated_at") val updatedAt: String,
+    /** Bookmarks on the recording and the distinct tags among them (since v1.1). */
+    @SerialName("marker_count") val markerCount: Int = 0,
+    val tags: List<String> = emptyList()
 )
 
 @Serializable
@@ -239,7 +271,14 @@ data class TranscriptDto(
 
 /** The part of GET /api/sessions/{id} the app needs: a temporary signed URL to stream the decrypted recording. */
 @Serializable
-data class SessionDetailDto(@SerialName("playback_url") val playbackUrl: String? = null)
+data class SessionDetailDto(
+    @SerialName("playback_url") val playbackUrl: String? = null,
+    /** Bookmarks on the recording, in time order (since v1.1). */
+    val markers: List<SessionMarkerDto> = emptyList()
+)
+
+@Serializable
+data class SessionMarkerDto(val id: String, @SerialName("at_ms") val atMs: Long, val tag: String? = null, val note: String? = null)
 
 @Serializable
 data class DeviceTranscript(val kind: String, val provider: String, val language: String?, val segments: List<SegmentDto>)

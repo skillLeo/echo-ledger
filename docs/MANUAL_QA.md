@@ -195,3 +195,33 @@ Run on **one Pixel (Android 15 or 16)** and **one Samsung (One UI on Android 14+
 | V-A8 | Start captions on a v1.1 server; let the monthly limit be reached. | Captions show "Monthly transcription limit reached" in the bubble; the recording continues and uploads after Keep. |
 | V-A9 | Revoke the phone in the console, then open the app. | It returns to the pairing screen with "This phone was unpaired on the server. Pair it again."; recordings waiting to upload stay. |
 | V-A10 | Rotate the phone on the library, a recording and the setup page. | Known issue from the emulator run: the screen returns to the library (fixed in a later phase). |
+
+## 8. v1.1 — capture and control
+
+Bookmarks, pauses, per-app auto-record, caption styles and capture health. The server side is covered by the
+automated suite; these checks need real devices and calls.
+
+### 8.1 Desktop
+
+| ID | Steps | Expected |
+|---|---|---|
+| C-D1 | Settings → Auto-record apps: switch Zoom off, then join a Zoom call. Open the Record view. | No recording starts; the explainer says "Ignored: auto-record is off for this app". Switching Zoom back on records the next call. |
+| C-D2 | During a call press Ctrl+Shift+B (Cmd+Shift+B on macOS), then click Mark on the pill. | Each press shows "Bookmarked m:ss" under the pill with the tag presets and Undo; the tray closes after about 6 s. |
+| C-D3 | Tag a bookmark "Budget", undo another, finish and keep the recording. Open it in the console and in the desktop library. | The console player and the desktop library show the remaining bookmarks at the right times; clicking one seeks the audio there; the library filter "Budget" finds the recording. |
+| C-D4 | Pause a call for 30 s, resume, keep it. | The file has no gap; the console timeline shows the pause marker at the right point; captions stop while paused. |
+| C-D5 | Settings → Caption style: Large, Wide, 50 % opacity, compact, auto-hide 5 s, a custom Client colour. | The caption overlay resizes and restyles at once; speakers are coloured without labels; it fades after 5 s of silence and returns with the next caption. |
+| C-D6 | Settings → Microphone: pick a USB headset, run "Test 10 seconds" while speaking and playing a video. | Both meters move; the result says both sides were heard and plays back. Unplugging the headset falls back to the default microphone with the "not connected" note. |
+| C-D7 | Windows: block microphone access for desktop apps in Privacy settings. | Settings → Microphone permission says "Blocked" and "Open settings" opens the Windows microphone page. |
+| C-D8 | Record a call while the other side stays silent (mute the call audio) for 30 s. | The pill shows "Not hearing the other side for 30 s"; it disappears once the other side is heard; switching the warning off in Settings stops it. |
+
+### 8.2 Android
+
+| ID | Steps | Expected |
+|---|---|---|
+| C-A1 | Settings → Capture and captions: switch WhatsApp off with auto-record armed; take a WhatsApp call. | Nothing is recorded; the row explains it is off for WhatsApp; WhatsApp Business calls still record. |
+| C-A2 | During a call use the notification's Pause, then Resume, then Mark. | The notification title shows "Paused ·" while paused; Mark shows "Bookmarked m:ss"; the Record tab shows the same with the tag chips and Undo. |
+| C-A3 | Keep the call and open it in the library. | The bookmark chips seek the player; the library shows "N bookmarks" and the tag filter finds it. |
+| C-A4 | Caption style: Large, top, compact, 30 % less opacity, auto-hide 10 s. | The floating bubble follows every setting on the next recording. |
+| C-A5 | Microphone: pick a Bluetooth headset and run the 10-second test, then play it back. | The meter moves; the verdict says the microphone works; playback is audible. |
+| C-A6 | Permissions: revoke the overlay permission and the notification permission. | Both rows show their reason and "Fix" opens the matching system page. |
+| C-A7 | During a call through the helper, mute the far side for 30 s. | The Record tab and the caption bubble say "Not hearing the other side for 30 s". |

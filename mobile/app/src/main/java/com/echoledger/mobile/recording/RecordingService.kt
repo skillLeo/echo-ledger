@@ -39,6 +39,7 @@ import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.net.UsageWorker
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.overlay.CaptionBubble
+import com.echoledger.mobile.ui.formatDuration
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.io.File
 import java.time.Instant
@@ -46,6 +47,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -67,10 +69,20 @@ class RecordingService : LifecycleService() {
         const val ACTION_DISARM = "com.echoledger.mobile.DISARM"
         const val ACTION_TOGGLE = "com.echoledger.mobile.TOGGLE"
         const val ACTION_STOP = "com.echoledger.mobile.STOP"
+        const val ACTION_PAUSE = "com.echoledger.mobile.PAUSE"
+        const val ACTION_RESUME = "com.echoledger.mobile.RESUME"
+        const val ACTION_MARK = "com.echoledger.mobile.MARK"
+        const val ACTION_TAG_LAST = "com.echoledger.mobile.TAG_LAST"
+        const val ACTION_UNDO_MARK = "com.echoledger.mobile.UNDO_MARK"
+        const val EXTRA_TAG = "tag"
         private const val TAG = "EchoLedgerRec"
+        private const val TICK_MS = 1_000L
 
         @Volatile var isRecording = false
             private set
+
+        /** What the Record tab shows while recording: pause state, timer, meters, bookmarks and the far-side warning. */
+        val live = MutableStateFlow(LiveRecording())
 
         fun intent(context: Context, action: String) = Intent(context, RecordingService::class.java).setAction(action)
     }
@@ -130,6 +142,22 @@ class RecordingService : LifecycleService() {
 
             ACTION_STOP -> if (capture != null) stopCapture(fromCall = false) else settle()
 
+            ACTION_PAUSE -> capture?.let { pause(it) } ?: settle()
+
+            ACTION_RESUME -> capture?.let { resume(it) } ?: settle()
+
+            ACTION_MARK -> capture?.let { mark(it, intent.getStringExtra(EXTRA_TAG)) } ?: settle()
+
+            ACTION_TAG_LAST -> capture?.let { session ->
+                session.notes.tagLast(intent.getStringExtra(EXTRA_TAG))
+                refresh(session)
+            } ?: settle()
+
+            ACTION_UNDO_MARK -> capture?.let { session ->
+                session.notes.undo()
+                refresh(session)
+            } ?: settle()
+
             else -> settle()
         }
         return START_NOT_STICKY
@@ -137,7 +165,11 @@ class RecordingService : LifecycleService() {
 
     /** Enters (or updates) the foreground state. Returns false when the system refuses; never crashes. */
     private fun goForeground(mic: Boolean, title: String, detail: String): Boolean {
-        val notification = if (!mic && capture == null) Notifications.armed(this) else Notifications.recording(this, title, detail)
+        val notification = if (!mic && capture == null) {
+            Notifications.armed(this)
+        } else {
+            Notifications.recording(this, title, detail, paused = capture?.paused == true)
+        }
         val type = when {
             mic -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             Build.VERSION.SDK_INT >= 34 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
@@ -204,6 +236,8 @@ class RecordingService : LifecycleService() {
     }
 
     private fun onCallEvent(event: CallEvent) {
+        // A call in an app whose auto-record switch is off is not recorded (B1); recording by hand still works.
+        if (event is CallEvent.CallStarted && !AutoRecordRules.records(event.app, settings.autoRecordApps)) return
         val (next, effects) = CallStateMachine.reduce(callState, event)
         callState = next
         for (effect in effects) {
@@ -236,8 +270,10 @@ class RecordingService : LifecycleService() {
             return
         }
         val session = Capture(id, sourceApp, channels = 2, fromCall = fromCall, clientId = settings.clientId)
+        session.title = "Recording call"
+        session.detail = "Both sides · ${if (fromCall) "auto" else "manual"}"
         capture = session
-        if (!goForeground(mic = false, title = "Recording call", detail = "Both sides · ${if (fromCall) "auto" else "manual"}")) {
+        if (!goForeground(mic = false, title = session.title, detail = session.detail)) {
             session.cancel()
             capture = null
             settle()
@@ -277,8 +313,11 @@ class RecordingService : LifecycleService() {
             return
         }
         val session = Capture(id, SourceApp.OTHER.wire, channels = 1, fromCall = false, clientId = settings.clientId)
+        session.micFgs = true
+        session.title = "Recording"
+        session.detail = "Microphone"
         capture = session
-        if (!goForeground(mic = true, title = "Recording", detail = "Microphone")) {
+        if (!goForeground(mic = true, title = session.title, detail = session.detail)) {
             session.cancel()
             capture = null
             settle()
@@ -296,6 +335,8 @@ class RecordingService : LifecycleService() {
                 AudioRecord.getMinBufferSize(Pcm.CAPTURE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) * 4
             )
             .build()
+        // The chosen microphone while connected (B5); the system's choice otherwise.
+        CaptureHealth.preferredDevice(this, settings.inputDevice)?.let { record.setPreferredDevice(it) }
         session.readerThread = thread(name = "el-mic-reader") {
             val shorts = ShortArray(frames * 4)
             try {
@@ -314,6 +355,9 @@ class RecordingService : LifecycleService() {
 
     private fun afterStart(session: Capture) {
         isRecording = true
+        publish(session)
+        main.removeCallbacks(ticker)
+        main.postDelayed(ticker, TICK_MS)
         lifecycleScope.launch {
             WidgetStateStore.refresh(this@RecordingService)
             if (settings.captionsEnabled) startCaptions(session, session.clientId)
@@ -335,7 +379,7 @@ class RecordingService : LifecycleService() {
             is CaptionTokens.Outcome.Refused -> {
                 // Captions never stop the recording; the bubble says why they are missing.
                 if (Settings.canDrawOverlays(this)) {
-                    if (bubble == null) bubble = CaptionBubble(this).also { it.show() }
+                    if (bubble == null) bubble = CaptionBubble(this, settings.captionStyle).also { it.show() }
                     bubble?.notice(outcome.message)
                 }
                 return
@@ -343,7 +387,7 @@ class RecordingService : LifecycleService() {
         }
         if (token.mode != "cloud") return
         if (Settings.canDrawOverlays(this)) {
-            bubble = CaptionBubble(this).also { it.show() }
+            bubble = CaptionBubble(this, settings.captionStyle).also { it.show() }
         }
         session.provider = token.provider
         for (grant in token.grants) {
@@ -355,13 +399,74 @@ class RecordingService : LifecycleService() {
         }
     }
 
+    // ---- Pause, bookmarks and capture health (B2, B3, B5) ---------------------------------------------------------
+
+    /** Paused audio is dropped: not written, not streamed. The notification and the Record tab follow. */
+    private fun pause(session: Capture) {
+        session.pause()
+        refresh(session)
+    }
+
+    private fun resume(session: Capture) {
+        session.resume()
+        refresh(session)
+    }
+
+    private fun mark(session: Capture, tag: String?) {
+        val marker = session.notes.mark(session.recordedMs(), tag)
+        refresh(session, if (marker == null) "This recording already has 500 bookmarks." else "Bookmarked ${formatDuration(marker.atMs)}")
+    }
+
+    /** Updates the recording notification (with [note] instead of the usual detail) and the Record tab. */
+    private fun refresh(session: Capture, note: String? = null) {
+        val count = session.notes.count()
+        val usual = listOfNotNull(session.detail, "$count bookmark${if (count == 1) "" else "s"}".takeIf { count > 0 }).joinToString(" · ")
+        val warning = session.farSideSeconds?.let { "Not hearing the other side for $it s" }
+        goForeground(session.micFgs, session.title, note ?: warning ?: usual)
+        publish(session)
+    }
+
+    private fun publish(session: Capture?) {
+        live.value = if (session == null) {
+            LiveRecording()
+        } else {
+            LiveRecording(
+                active = true,
+                paused = session.paused,
+                elapsedMs = session.recordedMs(),
+                twoSided = session.channels == 2,
+                meLevel = session.meLevel,
+                clientLevel = session.clientLevel,
+                markers = session.notes.count(),
+                lastMarker = session.notes.last(),
+                farSideSilentSeconds = session.farSideSeconds
+            )
+        }
+    }
+
+    /** Once a second while recording: the far-side silence check and the Record tab's timer and meters. */
+    private val ticker = object : Runnable {
+        override fun run() {
+            val session = capture ?: return
+            val change = session.farSide.tick(session.silentMs(System.nanoTime()), settings.farSideWarning)
+            if (change != null) {
+                session.farSideSeconds = change.seconds.takeIf { change.silent }
+                if (change.silent) bubble?.notice("Not hearing the other side for ${change.seconds} s. Check the call's speaker.")
+                refresh(session)
+            } else {
+                publish(session)
+            }
+            main.postDelayed(this, TICK_MS)
+        }
+    }
+
     private fun onCaption(session: Capture, channel: Int, event: SttEvent) {
         val speaker = Speakers.forChannel(channel, session.channels == 2)
         when (event) {
             is SttEvent.Partial -> main.post { bubble?.partial(speaker, event.text) }
 
             is SttEvent.Final -> {
-                val offset = session.elapsedMs()
+                val offset = session.recordedMs()
                 synchronized(session.segments) {
                     session.segments +=
                         SegmentDto(channel, speaker, event.startMs ?: (offset - 1500).coerceAtLeast(0), event.endMs ?: offset, event.text)
@@ -378,10 +483,13 @@ class RecordingService : LifecycleService() {
         val session = capture ?: return
         capture = null
         isRecording = false
+        main.removeCallbacks(ticker)
+        publish(null)
         finalizing++
         thread(name = "el-finish") {
             val stored = runCatching {
                 session.finish()
+                val (markers, pauses) = session.notes.finish()
                 val meta = LocalRecording(
                     id = session.id,
                     sourceApp = session.sourceApp,
@@ -398,7 +506,9 @@ class RecordingService : LifecycleService() {
                     state = if (session.fromCall || fromCall) "pending_decision" else "queued",
                     liveSegments = synchronized(session.segments) { session.segments.sortedBy { it.startMs } },
                     liveProvider = session.provider,
-                    serverSessionId = session.serverSessionId
+                    serverSessionId = session.serverSessionId,
+                    markers = markers,
+                    pauses = pauses
                 )
                 graph.recordings.importPlainFile(meta, session.file)
             }.onFailure {
@@ -432,6 +542,8 @@ class RecordingService : LifecycleService() {
         if (session?.id == recordingId) {
             capture = null
             isRecording = false
+            main.removeCallbacks(ticker)
+            publish(null)
             finalizing++
             bubble?.hide()
             bubble = null
@@ -475,17 +587,64 @@ class RecordingService : LifecycleService() {
 
         @Volatile var active = true
 
-        fun elapsedMs(): Long = (System.nanoTime() - startNanos) / 1_000_000
+        val notes = RecordingNotes()
+        val farSide = FarSideMonitor()
+
+        @Volatile var paused = false
+        private var pausedSinceNanos = 0L
+
+        @Volatile private var runningSinceNanos = startNanos
+
+        @Volatile private var lastHeardNanos = 0L
+
+        @Volatile var meLevel = 0f
+
+        @Volatile var clientLevel = 0f
+
+        @Volatile var farSideSeconds: Long? = null
+        var micFgs = false
+        var title = ""
+        var detail = ""
+
+        /** Recorded time: what the file holds (paused stretches excluded). */
+        fun recordedMs(): Long = Pcm.durationMs(encoder.framesWritten)
+
+        /** How long a running two-sided recording has not heard the other side; null when paused or one-sided. */
+        fun silentMs(nowNanos: Long): Long? =
+            if (channels != 2 || paused) null else (nowNanos - maxOf(lastHeardNanos, runningSinceNanos)) / 1_000_000
+
+        fun pause() {
+            if (paused) return
+            notes.paused(recordedMs())
+            pausedSinceNanos = System.nanoTime()
+            paused = true
+            meLevel = 0f
+            clientLevel = 0f
+        }
+
+        fun resume() {
+            if (!paused) return
+            val now = System.nanoTime()
+            notes.resumed((now - pausedSinceNanos) / 1_000_000)
+            runningSinceNanos = now
+            paused = false
+        }
 
         fun consume(bytes: ByteArray, length: Int) {
+            if (paused) return // not captured, not streamed
             encoder.feed(bytes, length)
-            if (streamers.isEmpty()) return
             val samples = Pcm.fromLittleEndianBytes(bytes, length)
             if (channels == 2) {
                 val (me, client) = Pcm.deinterleave(samples)
+                meLevel = Levels.rms(me)
+                clientLevel = Levels.rms(client)
+                if (clientLevel >= Levels.HEARD) lastHeardNanos = System.nanoTime()
+                if (streamers.isEmpty()) return
                 streamers[1]?.sendPcm(Pcm.toLittleEndianBytes(Pcm.downsample48To16(me)))
                 streamers[2]?.sendPcm(Pcm.toLittleEndianBytes(Pcm.downsample48To16(client)))
             } else {
+                meLevel = Levels.rms(samples)
+                if (streamers.isEmpty()) return
                 streamers[1]?.sendPcm(Pcm.toLittleEndianBytes(Pcm.downsample48To16(samples)))
             }
         }

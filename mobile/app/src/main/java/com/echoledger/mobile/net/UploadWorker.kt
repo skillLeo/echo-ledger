@@ -129,7 +129,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             try {
                 return api.finishSession(
                     sessionId,
-                    FinishSessionRequest(rec.endedAt, rec.durationMs.takeIf { it > 0 }, rec.clientId, artifacts)
+                    FinishSessionRequest(rec.endedAt, rec.durationMs.takeIf { it > 0 }, rec.clientId, artifacts, rec.markers, rec.pauses)
                 )
             } catch (e: ApiException) {
                 // The open session was swept or deleted meanwhile: create a fresh one with a new reference.
@@ -149,7 +149,9 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         endedAt = rec.endedAt,
         durationMs = rec.durationMs.takeIf { it > 0 },
         language = null,
-        artifacts = artifacts
+        artifacts = artifacts,
+        markers = rec.markers,
+        pauses = rec.pauses
     )
 
     private fun artifactOf(rec: LocalRecording) = ArtifactDto(

@@ -96,7 +96,7 @@ class BackgroundWorkTest : AppTest() {
         val notification = Notifications.recording(app, "Recording", "Microphone")
 
         assertTrue(notification.flags and android.app.Notification.FLAG_ONGOING_EVENT != 0)
-        assertEquals(listOf("Stop"), notification.actions.map { it.title.toString() })
+        assertEquals(listOf("Pause", "Mark", "Stop"), notification.actions.map { it.title.toString() })
         assertEquals("Recording", shadowOf(notification).contentTitle.toString())
     }
 

@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,12 +79,14 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.echoledger.mobile.core.Bookmarks
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
 import com.echoledger.mobile.core.TranscriptText
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
+import com.echoledger.mobile.data.SessionMarkerDto
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.RecordingService
@@ -243,14 +246,25 @@ fun LibraryScreen(vm: MainViewModel, showCallSetup: Boolean, onSetup: () -> Unit
     val items by vm.library.collectAsState()
     val syncing by vm.syncing.collectAsState()
     var filter by remember { mutableStateOf<SourceDevice?>(null) }
+    var tagFilter by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
+    val tags = Bookmarks.tags(items)
+    val anyBookmarks = items.any { !it.deleted && it.markerCount > 0 }
     val visible = items.filter {
         !it.deleted &&
             (filter == null || SourceDevice.from(it.sourceDevice) == filter) &&
+            Bookmarks.matches(it, tagFilter) &&
             (
                 q.isEmpty() ||
-                    listOfNotNull(it.title, it.transcript?.preview, it.client?.name, SourceApp.from(it.sourceApp).label).any { s ->
+                    (
+                        listOfNotNull(
+                            it.title,
+                            it.transcript?.preview,
+                            it.client?.name,
+                            SourceApp.from(it.sourceApp).label
+                        ) + it.tags
+                        ).any { s ->
                         s.lowercase().contains(q)
                     }
                 )
@@ -281,6 +295,16 @@ fun LibraryScreen(vm: MainViewModel, showCallSetup: Boolean, onSetup: () -> Unit
                 }, label = { Text(d.label) }, leadingIcon = { Icon(d.icon(), null, Modifier.size(16.dp)) })
             }
         }
+        if (anyBookmarks || tagFilter != null) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(selected = tagFilter == null, onClick = { tagFilter = null }, label = { Text("Any") })
+                FilterChip(selected = tagFilter == Bookmarks.ANY, onClick = { tagFilter = Bookmarks.ANY }, label = { Text("Bookmarked") })
+                tags.forEach { tag -> FilterChip(selected = tagFilter == tag, onClick = { tagFilter = tag }, label = { Text(tag) }) }
+            }
+        }
         if (visible.isEmpty() && items.isEmpty() && syncing && !vm.hasSynced()) {
             Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -291,7 +315,7 @@ fun LibraryScreen(vm: MainViewModel, showCallSetup: Boolean, onSetup: () -> Unit
         } else if (visible.isEmpty()) {
             EmptyState(
                 icon = Icons.AutoMirrored.Outlined.LibraryBooks,
-                title = if (q.isNotEmpty() || filter != null) "Nothing matches" else "No recordings yet",
+                title = if (q.isNotEmpty() || filter != null || tagFilter != null) "Nothing matches" else "No recordings yet",
                 body = if (q.isNotEmpty() ||
                     filter != null
                 ) {
@@ -321,7 +345,8 @@ private fun LibraryRow(item: LibraryItem, onClick: () -> Unit) {
                         formatDuration(item.durationMs).ifEmpty {
                             null
                         },
-                        item.client?.name
+                        item.client?.name,
+                        Bookmarks.countLabel(item.markerCount)
                     ).joinToString(" · "),
                     color = Brand.Muted,
                     fontSize = 12.sp,
@@ -359,6 +384,7 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
     var transcript by remember { mutableStateOf<TranscriptDto?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var playbackUrl by remember { mutableStateOf<String?>(null) }
+    var bookmarks by remember { mutableStateOf<List<SessionMarkerDto>>(emptyList()) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val clipboard = LocalClipboard.current
     val player = rememberRecordingPlayer(playbackUrl)
@@ -366,7 +392,9 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
         val id = item.transcript?.finalTranscriptId ?: item.transcript?.liveTranscriptId
         transcript = id?.let { vm.transcript(it) }
         loaded = true
-        playbackUrl = vm.playbackUrl(item.id)
+        val detail = vm.sessionDetail(item.id)
+        playbackUrl = detail?.playbackUrl
+        bookmarks = detail?.markers.orEmpty().sortedBy { it.atMs }
     }
     val t = transcript
     val segments = t?.segments.orEmpty()
@@ -427,6 +455,20 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
             if (playbackUrl != null) {
                 item { RecordingPlayer(player) }
                 item { Spacer(Modifier.height(4.dp)) }
+            }
+            if (bookmarks.isNotEmpty()) {
+                item {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        bookmarks.forEach { b ->
+                            FilterChip(
+                                selected = false,
+                                enabled = player.ready,
+                                onClick = { player.seekTo(b.atMs) },
+                                label = { Text(listOfNotNull(formatDuration(b.atMs), b.tag).joinToString(" ")) }
+                            )
+                        }
+                    }
+                }
             }
             when {
                 !loaded -> item { Text("Loading transcript…", color = Brand.Muted) }
@@ -512,6 +554,7 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
     val context = LocalContext.current
     val settings by vm.settings.collectAsState()
     val pending by vm.pending.collectAsState()
+    val live by RecordingService.live.collectAsState()
     var recording by remember { mutableStateOf(RecordingService.isRecording) }
     LaunchedEffect(Unit) {
         vm.reloadLocal()
@@ -555,6 +598,7 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                 }
             }
         }
+        LiveRecordingCard(live, settings)
         SectionCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -737,7 +781,18 @@ private fun StepRow(title: String, done: Boolean, onFix: () -> Unit) {
 fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
     val settings by vm.settings.collectAsState()
     val clients by vm.clients.collectAsState()
+    val helper by vm.helper.collectAsState()
+    val live by RecordingService.live.collectAsState()
     var confirmUnpair by remember { mutableStateOf(false) }
+    var capturePage by rememberSaveable { mutableStateOf(false) }
+    if (capturePage) {
+        BackHandler { capturePage = false }
+        CaptureSettingsPage(vm, settings, helperConnected = helper.connected, recording = live.active, onSetup = onSetup) {
+            capturePage =
+                false
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         SectionCard {
@@ -776,6 +831,15 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
                         )
                     }
                 }) { Text("Change") }
+            }
+        }
+        SectionCard(Modifier.clickable(onClickLabel = "Open capture and captions settings") { capturePage = true }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Capture and captions", fontWeight = FontWeight.SemiBold)
+                    Text("Auto-record apps, caption style, microphone test and permissions", color = Brand.Muted, fontSize = 12.sp)
+                }
+                Text("›", color = Brand.Muted, fontSize = 22.sp)
             }
         }
         DecisionTimeoutSection(vm, settings)

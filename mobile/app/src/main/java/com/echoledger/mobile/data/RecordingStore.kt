@@ -27,7 +27,10 @@ data class LocalRecording(
     val liveSegments: List<SegmentDto> = emptyList(),
     val liveProvider: String? = null,
     /** The open server session captions used (v1.1); Keep finishes it, Discard deletes it. */
-    val serverSessionId: String? = null
+    val serverSessionId: String? = null,
+    /** Bookmarks (time order) and pause gaps in recorded time, sent with the create or finish call. */
+    val markers: List<MarkerDto> = emptyList(),
+    val pauses: List<PauseDto> = emptyList()
 )
 
 /**

@@ -12,6 +12,7 @@ import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.LocalRecording
+import com.echoledger.mobile.data.SessionDetailDto
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.net.ApiClient
 import com.echoledger.mobile.net.ApiException
@@ -105,7 +106,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     pins = finalPins,
                     deviceId = response.device.id,
                     deviceName = response.device.name,
-                    serverApiVersion = response.config.apiVersion
+                    serverApiVersion = response.config.apiVersion,
+                    markerTags = response.config.markers?.tags.orEmpty()
                 )
             }
             graph.invalidateApi()
@@ -139,7 +141,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             withContext(Dispatchers.IO) {
                 // The server's contract version decides the v1 or v1.1 flows (open sessions, usage reports).
                 try {
-                    graph.api()?.config()?.let { config -> graph.settings.update { it.copy(serverApiVersion = config.apiVersion) } }
+                    graph.api()?.config()?.let { config ->
+                        graph.settings.update { it.copy(serverApiVersion = config.apiVersion, markerTags = config.markers?.tags.orEmpty()) }
+                    }
                 } catch (e: ApiException) {
                     // No config answer is no reason to skip the library: keep the last known contract version.
                 }
@@ -167,8 +171,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Temporary signed streaming URL for the session's recording, or null when it is not (yet) playable. */
-    suspend fun playbackUrl(sessionId: String): String? = withContext(Dispatchers.IO) {
-        runCatching { graph.api()?.sessionDetail(sessionId)?.playbackUrl }.getOrNull()
+    suspend fun playbackUrl(sessionId: String): String? = sessionDetail(sessionId)?.playbackUrl
+
+    /** The session detail: the signed playback URL and the bookmarks; null when it cannot be read now. */
+    suspend fun sessionDetail(sessionId: String): SessionDetailDto? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.sessionDetail(sessionId) }.getOrNull()
     }
 
     fun delete(item: LibraryItem) = viewModelScope.launch {
