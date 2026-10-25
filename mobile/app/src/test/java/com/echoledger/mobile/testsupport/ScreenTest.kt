@@ -1,9 +1,13 @@
 package com.echoledger.mobile.testsupport
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.echoledger.mobile.ui.EchoLedgerTheme
 import com.echoledger.mobile.ui.MainViewModel
+import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.robolectric.annotation.Config
@@ -18,13 +22,21 @@ abstract class ScreenTest : AppTest() {
     val compose = createComposeRule()
 
     protected lateinit var vm: MainViewModel
+    private var showing by mutableStateOf(true)
 
     @Before
     fun createViewModel() {
-        vm = MainViewModel(app)
+        vm = MainViewModel(app).clearedAfterTest()
     }
 
     protected fun show(content: @Composable () -> Unit) {
-        compose.setContent { EchoLedgerTheme { content() } }
+        compose.setContent { EchoLedgerTheme { if (showing) content() } }
+    }
+
+    /** Removes the screen before the app is released, so its effects (transcript and playback requests) stop with the test. */
+    @After
+    fun closeScreen() {
+        showing = false
+        compose.waitForIdle()
     }
 }

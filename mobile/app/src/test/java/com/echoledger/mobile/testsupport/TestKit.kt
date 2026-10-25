@@ -167,6 +167,29 @@ fun pumpUntil(what: String = "condition", timeoutMs: Long = 20_000, condition: (
     }
 }
 
+/**
+ * Waits until no other thread is running app or DataStore code, so work a test left running (a sync, a token read, a
+ * settings write) cannot reach the next test's stores. Main-thread work is processed meanwhile. Gives up quietly after
+ * [timeoutMs]; the caller then releases the app anyway.
+ */
+fun awaitAppIdle(timeoutMs: Long = 5_000) {
+    val deadline = System.nanoTime() + timeoutMs * 1_000_000
+    val self = Thread.currentThread()
+    while (System.nanoTime() < deadline) {
+        shadowOf(Looper.getMainLooper()).idle()
+        val busy = Thread.getAllStackTraces().any { (thread, frames) -> thread !== self && frames.any(::isAppWork) }
+        if (!busy) return
+        Thread.sleep(5)
+    }
+}
+
+/** App and DataStore frames count as work; test classes and this support package (for example a scripted server) do not. */
+private fun isAppWork(frame: StackTraceElement): Boolean {
+    val name = frame.className
+    val testCode = name.startsWith("com.echoledger.mobile.testsupport.") || name.substringBefore('$').endsWith("Test")
+    return (name.startsWith("com.echoledger.mobile.") && !testCode) || name.startsWith("androidx.datastore.")
+}
+
 /** Names and top frames of the threads that are doing something, to explain a timeout. */
 private fun busyThreads(): String = Thread.getAllStackTraces().entries
     .filter { (_, frames) -> frames.any { it.className.startsWith("com.echoledger") || it.className.contains("androidx.datastore") } }

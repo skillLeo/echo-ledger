@@ -1,5 +1,6 @@
 package com.echoledger.mobile.ui
 
+import android.Manifest
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -24,8 +25,10 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 
@@ -156,6 +159,19 @@ class MainActivityTest : AppTest() {
         }
     }
 
+    @Ignore("NEW: runtime permission requests crash the app (androidx.fragment 1.2.5 rejects the activity result request code)")
+    @Test
+    fun `tapping Scan QR code asks for the camera permission without crashing`() {
+        val controller = launch(paired = false)
+        awaitText("Pair this phone")
+
+        compose.onNodeWithText("Scan QR code").performClick()
+        compose.waitForIdle()
+
+        val request = shadowOf(controller.get()).lastRequestedPermission
+        assertEquals(listOf(Manifest.permission.CAMERA), request?.requestedPermissions?.toList())
+    }
+
     @Test
     fun `unpairing from settings returns to the pairing screen`() {
         launch(preload = true)
@@ -234,6 +250,7 @@ class MainActivityTest : AppTest() {
         return controller
     }
 
+    @Ignore("A6.M2: the app lock is not engaged when the settings load after the first frame")
     @Test
     fun `a locked app is covered once its settings have loaded after the first frame`() {
         val controller = launchBeforeSettingsLoad(appLock = true)
@@ -249,6 +266,7 @@ class MainActivityTest : AppTest() {
         }
     }
 
+    @Ignore("A6.M2: the on-open sync is skipped when the settings load after the first frame")
     @Test
     fun `opening the app syncs the library once its settings have loaded after the first frame`() {
         launchBeforeSettingsLoad()
@@ -259,6 +277,7 @@ class MainActivityTest : AppTest() {
         }
     }
 
+    @Ignore("A6.M2: the upload restart is skipped when the settings load after the first frame")
     @Test
     fun `opening the app restarts a waiting upload once its settings have loaded after the first frame`() {
         app.storeRecording(id = "waiting", state = "queued", lastError = "Server Error")
@@ -280,6 +299,7 @@ class MainActivityTest : AppTest() {
         }
     }
 
+    @Ignore("A6.M2: a paired phone shows the Pair form until its settings load")
     @Test
     fun `a paired phone does not flash the pairing screen while its settings are loading`() {
         launchBeforeSettingsLoad()

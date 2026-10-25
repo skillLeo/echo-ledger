@@ -5,8 +5,9 @@ package com.echoledger.mobile.testsupport
  * and recording controllers, and docs/API.md). Timestamps use Carbon's toAtomString form, `+00:00` rather than `Z`.
  */
 object ServerFixtures {
-    const val PIN_A = "sha256/brzvtCELCIZUo4sD/qPX0ccRtPsd3DY6RfmxpOU9oB4="
-    const val PIN_B = "sha256/s/tdAOmUzd8syaTuqfgGvFcn6DzA5Cmb+Vby1ST+U3Y="
+    // Placeholder pins in the documented format (current and backup); they match no real certificate.
+    const val PIN_A = "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    const val PIN_B = "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBE="
     const val DEVICE_ID = "01JDEVICE0000000000000000A"
     const val SESSION_ID = "01JSESSION000000000000000A"
     const val RECORDING_ID = "01JRECORD0000000000000000A"

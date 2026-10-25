@@ -1,3 +1,12 @@
+/*
+ * End-to-end tests: the app on an emulator or device against a disposable EchoLedger test backend. Every test here is
+ * skipped unless the run names the backend with these instrumentation arguments (with Gradle:
+ * -Pandroid.testInstrumentationRunnerArguments.<name>=<value>):
+ *   backend.server   the test server the app pairs with, for example http://10.0.2.2:8000 (the development machine as
+ *                    seen from the Android emulator)
+ *   backend.flaky    the same server behind a proxy whose failure mode the tests switch
+ *   backend.control  the backend's control endpoint (pairing codes, seeding, statistics; see support/Backend.kt)
+ */
 package com.echoledger.mobile.e2e
 
 import androidx.test.ext.junit.runners.AndroidJUnit4

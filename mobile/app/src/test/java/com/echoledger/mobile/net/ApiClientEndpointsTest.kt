@@ -58,14 +58,14 @@ class ApiClientEndpointsTest {
     fun `register posts the pairing request without credentials and parses the registration`() = runBlocking {
         server.on("POST", "/api/devices/register", FakeServer.json(201, ServerFixtures.registerResponse()))
 
-        val response = client(withToken = null).register("7KQ2-M9XD", "Pixel 9", "0.1.3", "16")
+        val response = client(withToken = null).register("TEST-2345", "Pixel 9", "0.1.3", "16")
 
         val request = only("POST", "/api/devices/register")
         assertNull("registration must not send a bearer token", request.headers["Authorization"])
         assertEquals("application/json", request.headers["Accept"])
         assertTrue(request.headers["Content-Type"]!!.startsWith("application/json"))
         val body = request.bodyJson()
-        assertEquals("7KQ2-M9XD", body["pairing_code"]!!.jsonPrimitive.content)
+        assertEquals("TEST-2345", body["pairing_code"]!!.jsonPrimitive.content)
         assertEquals("Pixel 9", body["name"]!!.jsonPrimitive.content)
         assertEquals("android", body["platform"]!!.jsonPrimitive.content)
         assertEquals("0.1.3", body["app_version"]!!.jsonPrimitive.content)
@@ -87,10 +87,10 @@ class ApiClientEndpointsTest {
     fun `register preserves unicode device names and a pairing code with spaces is sent verbatim`() = runBlocking {
         server.on("POST", "/api/devices/register", FakeServer.json(201, ServerFixtures.registerResponse()))
 
-        client(null).register(" 7KQ2 M9XD ", "Saïd’s Téléphone 📱", "0.1.3", "16")
+        client(null).register(" TEST 2345", "Saïd’s Téléphone 📱", "0.1.3", "16")
 
         val body = only("POST", "/api/devices/register").bodyJson()
-        assertEquals(" 7KQ2 M9XD ", body["pairing_code"]!!.jsonPrimitive.content)
+        assertEquals(" TEST 2345", body["pairing_code"]!!.jsonPrimitive.content)
         assertEquals("Saïd’s Téléphone 📱", body["name"]!!.jsonPrimitive.content)
     }
 
@@ -499,7 +499,7 @@ class ApiClientEndpointsTest {
         assertNull(live.title)
         assertEquals(2_530_000L, live.durationMs)
         assertNull(live.transcript!!.finalStatus)
-        assertTrue(live.transcript!!.liveAvailable)
+        assertTrue(live.transcript.liveAvailable)
         val tombstone = page.data[1]
         assertTrue(tombstone.deleted)
         assertEquals("2026-10-21T08:00:00+00:00", tombstone.updatedAt)

@@ -39,7 +39,7 @@ class SettingsScreenTest : AppTest() {
 
     @Before
     fun createViewModel() {
-        vm = MainViewModel(app)
+        vm = MainViewModel(app).clearedAfterTest()
     }
 
     private fun launch(

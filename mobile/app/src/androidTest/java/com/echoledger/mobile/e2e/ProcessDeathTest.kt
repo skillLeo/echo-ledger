@@ -1,3 +1,14 @@
+/*
+ * End-to-end test: the app on an emulator or device against a disposable EchoLedger test backend. Every test here is
+ * skipped unless the run names the backend with these instrumentation arguments (with Gradle:
+ * -Pandroid.testInstrumentationRunnerArguments.<name>=<value>):
+ *   backend.server   the test server the app pairs with, for example http://10.0.2.2:8000 (the development machine as
+ *                    seen from the Android emulator)
+ *   backend.flaky    the same server behind a proxy whose failure mode the tests switch
+ *   backend.control  the backend's control endpoint (pairing codes, seeding, statistics; see support/Backend.kt)
+ *   phase            stall or verify, set by the outside script described below
+ * It also needs speech-40s.wav (40 s of speech, 16-bit mono PCM WAV at 22,050 Hz) pushed to /data/local/tmp/e2e with adb.
+ */
 package com.echoledger.mobile.e2e
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -35,6 +46,7 @@ class ProcessDeathTest {
     @Test
     fun phase1_startAnUploadAndLeaveItHalfSent() {
         assumeTrue("run through the process-death script (phase=stall)", phase == "stall")
+        Backend.assumeConfigured()
         Backend.setFlakyMode("ok")
         Backend.resetStats()
         Backend.wipeSessions()
@@ -53,6 +65,7 @@ class ProcessDeathTest {
     @Test
     fun phase2_theUploadResumesAndCompletesAfterTheProcessWasKilled() {
         assumeTrue("run through the process-death script (phase=verify)", phase == "verify")
+        Backend.assumeConfigured()
         Ui.awaitCondition("the upload to finish after the restart", 180_000, 3_000) {
             Backend.liveSessions().any { it.finalStatus == "completed" }
         }

@@ -30,14 +30,14 @@ it('ignores privileged fields smuggled into device registration', function () {
     $response = $this->api()->postJson('/api/devices/register', [
         'pairing_code' => $code, 'name' => 'Pixel', 'platform' => 'android',
         'id' => '01JBADBADBADBADBADBADBADBA', 'user_id' => $other->id, 'is_super_admin' => true,
-        'abilities' => ['*'], 'last_ip' => '6.6.6.6', 'last_seen_at' => '2001-01-01 00:00:00',
+        'abilities' => ['*'], 'last_ip' => '203.0.113.66', 'last_seen_at' => '2001-01-01 00:00:00',
         'created_at' => '2001-01-01 00:00:00', 'token_expires_at' => '2099-01-01T00:00:00Z', 'expires_at' => '2099-01-01',
     ])->assertCreated();
 
     $device = Device::query()->findOrFail($response->json('device.id'));
     expect($device->id)->not->toBe('01JBADBADBADBADBADBADBADBA')
         ->and($device->user_id)->toBe($owner->id)
-        ->and($device->last_ip)->not->toBe('6.6.6.6')
+        ->and($device->last_ip)->not->toBe('203.0.113.66')
         ->and($device->created_at->year)->toBe((int) now()->year)
         ->and(User::query()->where('is_super_admin', true)->count())->toBe(0);
 

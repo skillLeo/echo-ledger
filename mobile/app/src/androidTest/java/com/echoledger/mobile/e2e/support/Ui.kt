@@ -169,6 +169,7 @@ object Ui {
     }
 
     /** A folder under the app's external media directory, which "clear storage" between tests leaves alone. */
+    @Suppress("DEPRECATION")
     fun artifactDir(name: String): File = File(context.externalMediaDirs.first(), name).apply { mkdirs() }
 
     /** Saves a screenshot of the current screen for visual review (`e2e-shots`). */

@@ -12,7 +12,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
 
 /**
@@ -44,7 +43,7 @@ class RecordingServiceTest : AppTest() {
 
     private fun start(action: String?): RecordingService {
         val intent = Intent(app, RecordingService::class.java).apply { if (action != null) setAction(action) }
-        val controller = Robolectric.buildService(RecordingService::class.java, intent).create()
+        val controller = buildService(RecordingService::class.java, intent).create()
         controller.startCommand(0, 1)
         return controller.get()
     }
@@ -105,7 +104,7 @@ class RecordingServiceTest : AppTest() {
     fun `Disarm after Arm removes the call listener and stops`() {
         val helper = RecordingHelper()
         app.graph.helper.attach(helper, source = "adb")
-        val controller = Robolectric.buildService(
+        val controller = buildService(
             RecordingService::class.java,
             Intent(app, RecordingService::class.java).setAction(RecordingService.ACTION_ARM)
         ).create()

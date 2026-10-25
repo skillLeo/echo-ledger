@@ -5,20 +5,41 @@ import java.net.HttpURLConnection
 import java.net.URL
 import org.json.JSONArray
 import org.json.JSONObject
+import org.junit.Assume.assumeTrue
 
 /**
  * Client for the test backend: a disposable EchoLedger server with a stand-in speech provider, plus a small control
- * endpoint next to it. The emulator reaches both on the host through 10.0.2.2. Addresses can be overridden with the
- * instrumentation arguments `backend.control`, `backend.server` and `backend.flaky`.
+ * endpoint next to it. The run names all three addresses with the instrumentation arguments `backend.control`,
+ * `backend.server` and `backend.flaky` (for example `http://10.0.2.2:<port>`, the development machine as seen from the
+ * Android emulator). Without them every end-to-end test is skipped.
  *
  * `flaky` is the same server behind a proxy whose failure mode (dropped connections, rejected requests, slow chunks)
  * can be switched from the tests, so upload recovery can be exercised without stopping the real server.
+ *
+ * Control endpoints the backend answers (GET, JSON): `/pairing-code`, `/mint`, `/budget`, `/note-register`, `/mode`,
+ * `/stats`, `/devices`, `/counts`, `/sessions`, `/revoke`, `/wipe`, `/seed` and `/drop`, each described on the function
+ * that calls it below.
  */
 object Backend {
     private val args = InstrumentationRegistry.getArguments()
-    val controlUrl: String = args.getString("backend.control") ?: "http://10.0.2.2:8115"
-    val serverUrl: String = args.getString("backend.server") ?: "http://10.0.2.2:8113"
-    val flakyServerUrl: String = args.getString("backend.flaky") ?: "http://10.0.2.2:8114"
+    private val configuredControlUrl: String? = args.getString("backend.control")
+    private val configuredServerUrl: String? = args.getString("backend.server")
+    private val configuredFlakyUrl: String? = args.getString("backend.flaky")
+
+    /** True when the run was started with all three backend addresses. */
+    val configured: Boolean get() = configuredControlUrl != null && configuredServerUrl != null && configuredFlakyUrl != null
+
+    /** Skips the calling test when the run was started without a test backend. */
+    fun assumeConfigured() {
+        assumeTrue(
+            "no test backend: pass the instrumentation arguments backend.control, backend.server and backend.flaky",
+            configured
+        )
+    }
+
+    val controlUrl: String get() = checkNotNull(configuredControlUrl) { "the instrumentation argument backend.control is missing" }
+    val serverUrl: String get() = checkNotNull(configuredServerUrl) { "the instrumentation argument backend.server is missing" }
+    val flakyServerUrl: String get() = checkNotNull(configuredFlakyUrl) { "the instrumentation argument backend.flaky is missing" }
 
     data class PairingCode(val display: String, val code: String, val url: String, val payload: String)
 

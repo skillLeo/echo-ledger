@@ -16,7 +16,6 @@ import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 
 /** The recording player card under the transcript, with the streaming URL served by the scripted server. */
@@ -105,11 +104,5 @@ class SessionPlaybackTest : ScreenTest() {
         val request = server.requestsTo("GET", "/api/recordings/.+/audio").first()
         assertTrue(request.url.queryParameter("signature") == "abc")
         assertTrue("the signed url must not leak the device token: ${request.headers}", request.headers["Authorization"] == null)
-    }
-
-    @Ignore("ExoPlayer cannot reach the ready state under Robolectric without a registered audio decoder, so seeking is not exercised")
-    @Test
-    fun `tapping a transcript line seeks the recording to that line`() {
-        showSession()
     }
 }

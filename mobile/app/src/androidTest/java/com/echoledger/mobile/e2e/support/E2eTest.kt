@@ -10,7 +10,8 @@ import org.junit.runners.model.Statement
 /**
  * Puts the phone and the backend into a known state before each test and back afterwards: an unpaired app, a healthy
  * network and server, the phone unlocked and upright. When a test fails, a screenshot and the view hierarchy are saved
- * to the app's external media directory (`e2e-failures`) before the clean-up runs.
+ * to the app's external media directory (`e2e-failures`) before the clean-up runs. Without the backend instrumentation
+ * arguments (see [Backend]) the test is skipped before anything is touched.
  */
 class E2eWorld : TestRule {
     override fun apply(base: Statement, description: Description): Statement = object : Statement() {
@@ -28,6 +29,7 @@ class E2eWorld : TestRule {
     }
 
     private fun prepare() {
+        Backend.assumeConfigured()
         val reachable = runCatching { Backend.counts() }
         assertTrue("test backend is not reachable at ${Backend.controlUrl}: ${reachable.exceptionOrNull()}", reachable.isSuccess)
         Backend.setFlakyMode("ok")

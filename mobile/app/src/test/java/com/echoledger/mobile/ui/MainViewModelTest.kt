@@ -35,7 +35,7 @@ class MainViewModelTest : AppTest() {
 
     @Before
     fun createViewModel() {
-        vm = MainViewModel(app)
+        vm = MainViewModel(app).clearedAfterTest()
     }
 
     private val token = "7|eld_vmtoken"
@@ -79,14 +79,14 @@ class MainViewModelTest : AppTest() {
         serveRegistration()
         serveLibrary(ServerFixtures.libraryItem("01JA"), ServerFixtures.libraryItem("01JB", sourceDevice = "desktop"))
 
-        vm.pair(server.baseUrl, "7KQ2-M9XD", "Sam's Pixel")
+        vm.pair(server.baseUrl, "TEST-2345", "Sam's Pixel")
         val message = awaitMessage()
         pumpUntil("the library to load") { vm.library.value.size == 2 && vm.clients.value.size == 2 }
 
         assertTrue(message, message.startsWith("Paired with"))
         val registration = server.requestsTo("POST", "/api/devices/register").single()
         val body = Json.parseToJsonElement(registration.bodyText()).jsonObject
-        assertEquals("7KQ2-M9XD", body["pairing_code"]!!.jsonPrimitive.content)
+        assertEquals("TEST-2345", body["pairing_code"]!!.jsonPrimitive.content)
         assertEquals("Sam's Pixel", body["name"]!!.jsonPrimitive.content)
         assertEquals("android", body["platform"]!!.jsonPrimitive.content)
         assertEquals(BuildConfig.VERSION_NAME, body["app_version"]!!.jsonPrimitive.content)
@@ -128,12 +128,12 @@ class MainViewModelTest : AppTest() {
         serveRegistration()
         serveLibrary()
 
-        vm.pair("  ${server.baseUrl}/  ", "  7KQ2-M9XD \n", "")
+        vm.pair("  ${server.baseUrl}/  ", "  TEST-2345 \n", "")
         awaitMessage()
 
         assertEquals(1, server.requestsTo("POST", "/api/devices/register").size)
         assertEquals(
-            "7KQ2-M9XD",
+            "TEST-2345",
             Json.parseToJsonElement(server.requests.first().bodyText()).jsonObject["pairing_code"]!!.jsonPrimitive.content
         )
         assertEquals(server.baseUrl, settings().serverUrl)
@@ -219,13 +219,13 @@ class MainViewModelTest : AppTest() {
     fun `a pasted pairing payload pairs with the address and pins it carries`() {
         serveRegistration(pins = emptyList())
         serveLibrary()
-        val payload = """{"v":1,"url":"${server.baseUrl}","code":"7KQ2M9XD","pins":["${ServerFixtures.PIN_A}"]}"""
+        val payload = """{"v":1,"url":"${server.baseUrl}","code":"TEST2345","pins":["${ServerFixtures.PIN_A}"]}"""
 
         vm.pair("https://ignored.example.com", payload, "")
         awaitMessage()
 
         assertEquals(
-            "7KQ2M9XD",
+            "TEST2345",
             Json.parseToJsonElement(
                 server.requestsTo("POST", "/api/devices/register").single().bodyText()
             ).jsonObject["pairing_code"]!!.jsonPrimitive.content
@@ -240,7 +240,7 @@ class MainViewModelTest : AppTest() {
         serveRegistration(pins = listOf(ServerFixtures.PIN_B))
         serveLibrary()
 
-        vm.pairWith(PairingPayload(server.baseUrl, "7KQ2M9XD", listOf(ServerFixtures.PIN_A)), "")
+        vm.pairWith(PairingPayload(server.baseUrl, "TEST2345", listOf(ServerFixtures.PIN_A)), "")
         awaitMessage()
 
         assertEquals(listOf(ServerFixtures.PIN_B), settings().pins)

@@ -131,15 +131,6 @@ it('does not accept a valid token for a different transcript id', function () {
     expect($victim->refresh()->status)->toBe(TranscriptStatus::Submitted);
 });
 
-it('answers a rid parameter sent as an array with 401 instead of a server error', function (string $query) {
-    $response = secPostRaw('/api/webhooks/stt/assemblyai?'.$query, '{"transcript_id":"job_1","status":"completed"}', ['X-EchoLedger-Webhook-Token' => secAaiToken('x')]);
-
-    expect($response->getStatusCode())->toBe(401);
-})->with([
-    'array value' => ['rid[]=x'],
-    'nested array' => ['rid[a][b]=x'],
-])->skip('A6.W16: an array rid parameter on the AssemblyAI webhook gives HTTP 500');
-
 it('answers a malformed rid parameter with 401 instead of a server error', function (string $query) {
     $response = secPostRaw('/api/webhooks/stt/assemblyai?'.$query, '{"transcript_id":"job_1","status":"completed"}', ['X-EchoLedger-Webhook-Token' => secAaiToken('x')]);
 
@@ -151,6 +142,15 @@ it('answers a malformed rid parameter with 401 instead of a server error', funct
     'null byte' => ['rid=a%00b'],
     'sql' => ['rid='."1'%20OR%20'1'%3D'1"],
 ]);
+
+it('answers a rid parameter sent as an array with 401 instead of a server error', function (string $query) {
+    $response = secPostRaw('/api/webhooks/stt/assemblyai?'.$query, '{"transcript_id":"job_1","status":"completed"}', ['X-EchoLedger-Webhook-Token' => secAaiToken('x')]);
+
+    expect($response->getStatusCode())->toBe(401);
+})->with([
+    'array value' => ['rid[]=x'],
+    'nested array' => ['rid[a][b]=x'],
+])->skip('A6.W16: an array rid parameter on the AssemblyAI webhook gives HTTP 500');
 
 it('rejects a job id that does not belong to the transcript', function () {
     $transcript = secTranscript('job_1');

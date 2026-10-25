@@ -20,7 +20,9 @@ import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
+import mockwebserver3.MockResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -82,10 +84,26 @@ class LibraryScreenTest : ScreenTest() {
         compose.onNodeWithText("Calls, meetings and voice notes you capture will appear here.").assertIsDisplayed()
     }
 
-    @Ignore("The library screen has no loading state yet: until the first sync finishes it shows the same empty state")
+    @Ignore("A6.M8: the library shows \"No recordings yet\" while the first sync is still running")
     @Test
-    fun `shows a progress indicator while the first sync is running`() {
+    fun `the empty state is not shown while the first sync is still running`() {
+        runBlocking { app.pairLocally(server) }
+        server.on(
+            "GET",
+            "/api/library",
+            MockResponse.Builder().code(200).addHeader("Content-Type", "application/json")
+                .body(ServerFixtures.libraryPage(listOf(item("a"))))
+                .headersDelay(1_000, TimeUnit.MILLISECONDS)
+                .build()
+        )
+        server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
         showLibrary()
+
+        vm.refresh()
+        pumpUntil("the first sync to start") { server.requestsTo("GET", "/api/library").isNotEmpty() }
+        compose.waitForIdle()
+
+        compose.onNodeWithText("No recordings yet").assertDoesNotExist()
     }
 
     // ---- rows -------------------------------------------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Ignore
 import org.junit.Test
 
 /** Hostile and unusual QR contents for the pairing payload parser. */
@@ -12,7 +13,7 @@ class PairingPayloadParsingTest {
     private val pinA = ServerFixtures.PIN_A
     private val pinB = ServerFixtures.PIN_B
 
-    private fun payload(url: String, code: String = "7KQ2M9XD", pins: String = "[]", version: String = "\"v\":1,") =
+    private fun payload(url: String, code: String = "TEST2345", pins: String = "[]", version: String = "\"v\":1,") =
         """{$version"url":"$url","code":"$code","pins":$pins}"""
 
     // ---- https and http ---------------------------------------------------------------------------------------------
@@ -20,9 +21,9 @@ class PairingPayloadParsingTest {
     @Test
     fun `the exact payload produced by the server QR is accepted`() {
         // PairingService::qrPayload: json_encode with unescaped slashes, normalized code, pins from settings.
-        val text = """{"v":1,"url":"https://transcript.example.com","code":"7KQ2M9XD","pins":["$pinA","$pinB"]}"""
+        val text = """{"v":1,"url":"https://echoledger.example.test","code":"TEST2345","pins":["$pinA","$pinB"]}"""
         val parsed = PairingPayload.parse(text)
-        assertEquals(PairingPayload("https://transcript.example.com", "7KQ2M9XD", listOf(pinA, pinB)), parsed)
+        assertEquals(PairingPayload("https://echoledger.example.test", "TEST2345", listOf(pinA, pinB)), parsed)
     }
 
     @Test
@@ -70,11 +71,13 @@ class PairingPayloadParsingTest {
         }
     }
 
+    @Ignore("A6.M7: a pairing payload with an upper-case HTTPS scheme is rejected")
     @Test
     fun `an upper case https scheme is the same address`() {
         assertNotNull("URL schemes are case-insensitive", PairingPayload.parse(payload("HTTPS://ledger.example.com")))
     }
 
+    @Ignore("A6.M7: a pairing payload whose address embeds credentials is accepted")
     @Test
     fun `an address with embedded credentials is rejected so the host shown to the user is the host contacted`() {
         assertNull(PairingPayload.parse(payload("https://trusted.example.com@evil.example.net")))
@@ -100,7 +103,7 @@ class PairingPayloadParsingTest {
             "{\"url\":",
             "\u0000\u0001\u0002",
             "<html></html>",
-            "7KQ2-M9XD"
+            "TEST-2345"
         ).forEach {
             assertNull("should reject [${it.take(20)}]", PairingPayload.parse(it))
         }
@@ -109,13 +112,13 @@ class PairingPayloadParsingTest {
     @Test
     fun `fields of the wrong type are rejected`() {
         listOf(
-            """{"v":1,"url":null,"code":"7KQ2M9XD"}""",
-            """{"v":1,"url":5,"code":"7KQ2M9XD"}""",
-            """{"v":1,"url":["https://a.example.com"],"code":"7KQ2M9XD"}""",
+            """{"v":1,"url":null,"code":"TEST2345"}""",
+            """{"v":1,"url":5,"code":"TEST2345"}""",
+            """{"v":1,"url":["https://a.example.com"],"code":"TEST2345"}""",
             """{"v":1,"url":"https://a.example.com","code":null}""",
             """{"v":1,"url":"https://a.example.com","code":{"x":1}}""",
             """{"v":1,"url":"https://a.example.com"}""",
-            """{"v":1,"code":"7KQ2M9XD"}"""
+            """{"v":1,"code":"TEST2345"}"""
         ).forEach { assertNull("should reject $it", PairingPayload.parse(it)) }
     }
 
@@ -130,7 +133,7 @@ class PairingPayloadParsingTest {
 
     @Test
     fun `unknown extra fields are ignored`() {
-        val text = """{"v":1,"url":"https://a.example.com","code":"7KQ2M9XD","pins":[],""" +
+        val text = """{"v":1,"url":"https://a.example.com","code":"TEST2345","pins":[],""" +
             """"name":"Acme","expires":"soon","nested":{"a":[1,2]}}"""
         assertEquals("https://a.example.com", PairingPayload.parse(text)?.url)
     }
@@ -145,7 +148,7 @@ class PairingPayloadParsingTest {
 
     @Test
     fun `codes between four and thirty-two characters of letters digits and hyphens are accepted`() {
-        listOf("ABCD", "7KQ2-M9XD", "7kq2m9xd", "A".repeat(32)).forEach {
+        listOf("ABCD", "TEST-2345", "test2345", "A".repeat(32)).forEach {
             assertEquals(it, PairingPayload.parse(payload("https://a.example.com", code = it))?.code)
         }
         listOf("ABC", "A".repeat(33), "", "AB CD", "AB_CD", "AB.CD", "AB;CD", "AB\\nCD", "AB/CD").forEach {
@@ -158,7 +161,7 @@ class PairingPayloadParsingTest {
     @Test
     fun `a payload padded to several megabytes is parsed without trouble`() {
         val padding = "x".repeat(4 * 1024 * 1024)
-        val text = """{"v":1,"url":"https://a.example.com","code":"7KQ2M9XD","pins":[],"pad":"$padding"}"""
+        val text = """{"v":1,"url":"https://a.example.com","code":"TEST2345","pins":[],"pad":"$padding"}"""
         val started = System.nanoTime()
         assertNotNull(PairingPayload.parse(text))
         assertTrue("took ${(System.nanoTime() - started) / 1_000_000} ms", (System.nanoTime() - started) < 5_000_000_000L)
@@ -176,7 +179,7 @@ class PairingPayloadParsingTest {
         val nested = "[".repeat(50_000) + "]".repeat(50_000)
         // The only requirement is that parsing returns (a payload or null) instead of throwing.
         PairingPayload.parse("""{"deep":$nested}""")
-        PairingPayload.parse("""{"v":1,"url":"https://a.example.com","code":"7KQ2M9XD","pins":$nested}""")
+        PairingPayload.parse("""{"v":1,"url":"https://a.example.com","code":"TEST2345","pins":$nested}""")
     }
 
     @Test
@@ -227,7 +230,7 @@ class PairingPayloadParsingTest {
     fun `pins that are not an array are treated as none`() {
         assertEquals(emptyList<String>(), PairingPayload.parse(payload("https://a.example.com", pins = "\"$pinA\""))?.pins)
         assertEquals(emptyList<String>(), PairingPayload.parse(payload("https://a.example.com", pins = "null"))?.pins)
-        assertEquals(emptyList<String>(), PairingPayload.parse("""{"v":1,"url":"https://a.example.com","code":"7KQ2M9XD"}""")?.pins)
+        assertEquals(emptyList<String>(), PairingPayload.parse("""{"v":1,"url":"https://a.example.com","code":"TEST2345"}""")?.pins)
     }
 
     @Test

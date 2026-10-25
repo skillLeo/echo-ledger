@@ -36,7 +36,6 @@ import mockwebserver3.MockResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 import org.robolectric.Shadows.shadowOf
 
@@ -103,7 +102,7 @@ class PairingScreenTest : ScreenTest() {
         compose.onNodeWithText("Pair").assertIsNotEnabled()
 
         compose.onNodeWithText("Pairing code").performTextClearance()
-        typeCode("7KQ2-M9XD")
+        typeCode("TEST-2345")
         compose.onNodeWithText("Pair").assertIsEnabled()
     }
 
@@ -113,12 +112,12 @@ class PairingScreenTest : ScreenTest() {
         showPairing()
 
         compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(server.baseUrl)
-        typeCode("7KQ2-M9XD")
+        typeCode("TEST-2345")
         compose.onNodeWithText("Pair").performClick()
         pumpUntil("pairing") { runBlocking { app.graph.settings.current().paired } && vm.message.value != null }
 
         val body = Json.parseToJsonElement(server.requestsTo("POST", "/api/devices/register").single().bodyText()).jsonObject
-        assertEquals("7KQ2-M9XD", body["pairing_code"]!!.jsonPrimitive.content)
+        assertEquals("TEST-2345", body["pairing_code"]!!.jsonPrimitive.content)
         assertEquals(server.baseUrl, runBlocking { app.graph.settings.current().serverUrl })
         assertTrue(vm.message.value.orEmpty().startsWith("Paired with"))
     }
@@ -129,7 +128,7 @@ class PairingScreenTest : ScreenTest() {
         showPairing()
 
         compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(server.baseUrl)
-        typeCode("7KQ2-M9XD")
+        typeCode("TEST-2345")
         compose.onNodeWithText("Name for this phone (optional)").performTextInput("Sam's Pixel")
         compose.onNodeWithText("Pair").performClick()
         pumpUntil("pairing") { server.requestsTo("POST", "/api/devices/register").isNotEmpty() }
@@ -143,7 +142,7 @@ class PairingScreenTest : ScreenTest() {
         serveRegistration()
         showPairing()
 
-        typeCode("""{"v":1,"url":"${server.baseUrl}","code":"7KQ2M9XD","pins":[]}""")
+        typeCode("""{"v":1,"url":"${server.baseUrl}","code":"TEST2345","pins":[]}""")
 
         compose.onAllNodesWithText("Server address").assertCountEquals(0)
         compose.onNodeWithText("Pair").performClick()
@@ -176,7 +175,7 @@ class PairingScreenTest : ScreenTest() {
         serveRegistration(delayMs = 800)
         showPairing()
         compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(server.baseUrl)
-        typeCode("7KQ2-M9XD")
+        typeCode("TEST-2345")
 
         compose.onNodeWithText("Pair").performClick()
         pumpUntil("busy") { vm.busy.value }
@@ -251,11 +250,5 @@ class PairingScreenTest : ScreenTest() {
             compose.onAllNodesWithText("Scan the pairing QR code").fetchSemanticsNodes().isNotEmpty() ||
                 vm.message.value?.startsWith("The camera could not be started") == true
         }
-    }
-
-    @Ignore("The confirmation dialog opens only from a decoded camera frame; the scanner cannot run under Robolectric")
-    @Test
-    fun `a scanned code asks for confirmation before pairing and shows the server address`() {
-        showPairing()
     }
 }

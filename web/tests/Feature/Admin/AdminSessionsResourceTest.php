@@ -569,7 +569,7 @@ function adminAudioSample(string $kind): string
 }
 
 /*
- * Livewire's test harness reports the client-declared type for uploads, so it cannot exercise the content sniffing
+ * While tests run, Livewire reports the client-declared type for uploads, so it cannot exercise the content sniffing
  * that runs in production. These cases run the same detector (Flysystem's finfo detector, used by Livewire's
  * TemporaryUploadedFile) over real file signatures and check the result against the rule the upload field applies.
  */
