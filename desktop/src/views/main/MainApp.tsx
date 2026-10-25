@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, listenTo, type AppStatus } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type AppStatus, type LockStatus } from "../../lib/ipc";
+import { activityReporter, LockScreen } from "./LockScreen";
 import { AlertIcon, CaptionsIcon, CloseIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { PairingView } from "./PairingView";
@@ -27,6 +28,21 @@ export default function MainApp() {
   const [budgetWarnDismissed, setBudgetWarnDismissed] = useState(false);
   const [palette, setPalette] = useState(false);
   const [openRequest, setOpenRequest] = useState<{ id: string; ms: number; seq: number } | null>(null);
+  const [lock, setLock] = useState<LockStatus | null>(null);
+
+  // App lock (B16): the core decides; the window follows "lock:changed" and reports use to reset the timer.
+  useEffect(() => {
+    api.lockStatus().then(setLock).catch(() => undefined);
+    const report = activityReporter(() => void api.lockTouch().catch(() => undefined));
+    window.addEventListener("pointerdown", report);
+    window.addEventListener("keydown", report);
+    const un = listenTo("lock:changed", (s) => s && setLock(s));
+    return () => {
+      window.removeEventListener("pointerdown", report);
+      window.removeEventListener("keydown", report);
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
 
   // Ctrl / Cmd + K opens the command palette from anywhere in the window.
   useEffect(() => {
@@ -96,6 +112,15 @@ export default function MainApp() {
   // Rendered in every branch: a pairing error, or "unpaired on the server" arriving with the status that sends the
   // window back to the pairing form, must stay visible (A6.DU1).
   const toastView = toast && <div className={`toast ${toast.error ? "error" : ""}`} role="status">{toast.text}</div>;
+
+  if (lock?.locked) {
+    return (
+      <>
+        <LockScreen status={lock} onUnlocked={setLock} />
+        {toastView}
+      </>
+    );
+  }
 
   if (!status || !status.paired) {
     return (

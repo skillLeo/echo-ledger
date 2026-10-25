@@ -289,6 +289,17 @@ impl ApiClient {
         let resp = self.authed(self.http.patch(self.url(&format!("clients/{id}"))))?.json(body).send().await?;
         Self::parse(resp).await
     }
+    /// `GET /api/security` (since v1.1): paired devices and the recent audit log.
+    pub async fn security(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("security")))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/devices/{id}` (since v1.1): revokes another paired device.
+    pub async fn revoke_device(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("devices/{id}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
     /// `GET /api/sessions/{id}/shares`.
     pub async fn list_shares(&self, session_id: &str) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.get(self.url(&format!("sessions/{session_id}/shares"))))?.send().await?;

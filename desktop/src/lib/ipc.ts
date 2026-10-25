@@ -79,6 +79,36 @@ export interface Settings {
   dictationSounds: boolean;
   dictationReplacements: DictationReplacement[];
   dictationSnippets: DictationSnippet[];
+  appLock: boolean;
+  lockAfterMinutes: LockAfterMinutes;
+}
+
+/** App lock (B16): Windows Hello / Touch ID or the PIN; 0 minutes = only when the app starts. */
+export type LockAfterMinutes = 0 | 1 | 5 | 15 | 60;
+export interface LockStatus {
+  enabled: boolean;
+  locked: boolean;
+  hasPin: boolean;
+  osMethod: "windows_hello" | "touch_id" | null;
+  retryAfterSeconds: number;
+}
+export interface SecurityDevice {
+  id: string;
+  name: string;
+  platform: string;
+  app_version: string | null;
+  last_seen_at: string | null;
+  paired_at: string | null;
+  current: boolean;
+}
+export interface SecurityEvent {
+  id: number;
+  event: string;
+  label: string;
+  summary: string;
+  actor: "web" | "device" | "system";
+  device: string | null;
+  at: string;
 }
 
 /** `toggle`: press to start and press again to insert; `push_to_talk`: hold the shortcut while speaking. */
@@ -143,6 +173,8 @@ export interface SettingsPatch {
   dictationSounds?: boolean;
   dictationReplacements?: DictationReplacement[];
   dictationSnippets?: DictationSnippet[];
+  appLock?: boolean;
+  lockAfterMinutes?: LockAfterMinutes;
 }
 
 /** A bookmark just made on the current recording (`recording:marked`); `count` is how many it has now. */
@@ -444,6 +476,7 @@ export interface EventPayloads {
   "capture:test_level": [number, number];
   "dictation:state": { active: boolean; sounds: boolean; mode: DictationMode };
   "dictation:level": number;
+  "lock:changed": LockStatus;
 }
 
 export type AppEvent = keyof EventPayloads;
@@ -519,6 +552,14 @@ export const api = {
   revokeShare: (id: string) => invoke<void>("share_revoke", { id }),
   addToVocabulary: (term: string, clientId: string | null) => invoke<{ keyterms: string[] }>("vocabulary_add", { term, clientId }),
   dictationHistory: () => invoke<DictationHistoryEntry[]>("dictation_history"),
+  lockStatus: () => invoke<LockStatus>("lock_status"),
+  lockNow: () => invoke<LockStatus>("lock_now"),
+  lockTouch: () => invoke<void>("lock_touch"),
+  unlockWithSystem: () => invoke<LockStatus>("lock_unlock_os"),
+  unlockWithPin: (pin: string) => invoke<LockStatus>("lock_unlock_pin", { pin }),
+  setLockPin: (pin: string) => invoke<LockStatus>("lock_set_pin", { pin }),
+  securityOverview: () => invoke<{ devices: SecurityDevice[]; events: SecurityEvent[] }>("security_overview"),
+  revokeDevice: (id: string) => invoke<void>("device_revoke", { id }),
   clearDictationHistory: () => invoke<void>("dictation_history_clear"),
 };
 

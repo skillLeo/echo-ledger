@@ -182,6 +182,8 @@ pub struct SettingsPatch {
     dictation_replacements: Option<Vec<crate::dictation::rules::Replacement>>,
     /// Full replacement of the voice snippets.
     dictation_snippets: Option<Vec<crate::dictation::rules::Snippet>>,
+    app_lock: Option<bool>,
+    lock_after_minutes: Option<u32>,
 }
 
 /// A present key becomes `Some(value)`, so an explicit `null` reads as `Some(None)` and a missing key (via
@@ -217,6 +219,8 @@ impl SettingsPatch {
         if let Some(v) = self.dictation_sounds { s.dictation_sounds = v; }
         if let Some(v) = &self.dictation_replacements { s.dictation_replacements = crate::dictation::rules::clean_replacements(v); }
         if let Some(v) = &self.dictation_snippets { s.dictation_snippets = crate::dictation::rules::clean_snippets(v); }
+        if let Some(v) = self.app_lock { s.app_lock = v; }
+        if let Some(v) = self.lock_after_minutes && crate::lock::LOCK_AFTER_CHOICES.contains(&v) { s.lock_after_minutes = v; }
     }
 }
 
@@ -233,6 +237,14 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         && mode != "push_to_talk"
     {
         return Err(AppError::msg("Choose press to start or hold to talk."));
+    }
+    if let Some(minutes) = patch.lock_after_minutes
+        && !crate::lock::LOCK_AFTER_CHOICES.contains(&minutes)
+    {
+        return Err(AppError::msg("Choose when the app locks."));
+    }
+    if patch.app_lock == Some(true) && !crate::lock::LockFile::load(&paths::app_lock(&app.state::<AppState>().data_dir)).pin_hash.is_some_and(|h| !h.is_empty()) {
+        return Err(AppError::msg("Set a PIN first. It unlocks the app when Windows Hello or Touch ID is not available."));
     }
     if let Some(Some(language)) = &patch.transcription_language
         && crate::settings::language_or_none(Some(language)).is_none()
@@ -417,6 +429,7 @@ pub fn copy_last_minutes(app: AppHandle, minutes: Option<u64>) -> AppResult<Stri
 
 #[tauri::command]
 pub async fn library_list(state: State<'_, AppState>) -> AppResult<Vec<crate::net::models::LibraryItem>> {
+    ensure_unlocked(&state)?;
     Ok(state.library.lock().await.items.clone())
 }
 
@@ -432,17 +445,20 @@ pub async fn refresh_library_inner(app: &AppHandle) -> AppResult<usize> {
 
 #[tauri::command]
 pub async fn library_refresh(app: AppHandle) -> AppResult<Vec<crate::net::models::LibraryItem>> {
+    ensure_unlocked(&app.state::<AppState>())?;
     refresh_library_inner(&app).await?;
     Ok(app.state::<AppState>().library.lock().await.items.clone())
 }
 
 #[tauri::command]
 pub async fn session_detail(state: State<'_, AppState>, id: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
     state.api()?.session(&id).await
 }
 
 #[tauri::command]
 pub async fn transcript_detail(state: State<'_, AppState>, id: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
     state.api()?.transcript(&id).await
 }
 
@@ -599,6 +615,7 @@ impl SearchQuery {
 /// Searches every recording's title and transcript on the server.
 #[tauri::command]
 pub async fn search_library(state: State<'_, AppState>, query: SearchQuery) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
     if query.q.trim().chars().count() < 2 {
         return Ok(serde_json::json!({ "data": [], "next_page": null }));
     }
@@ -622,6 +639,7 @@ pub async fn transcript_restore(state: State<'_, AppState>, id: String) -> AppRe
 
 #[tauri::command]
 pub async fn transcript_revisions(state: State<'_, AppState>, id: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
     state.api()?.transcript_revisions(&id).await
 }
 
@@ -646,6 +664,7 @@ pub fn export_target(dir: &std::path::Path, filename: &str) -> std::path::PathBu
 /// Saves an export to Downloads and returns its path; the print page (`html`) opens in the browser for PDF.
 #[tauri::command]
 pub async fn export_transcript(app: AppHandle, id: String, format: String, timestamps: bool, speakers: bool) -> AppResult<String> {
+    ensure_unlocked(&app.state::<AppState>())?;
     use tauri_plugin_opener::OpenerExt;
     const FORMATS: [&str; 7] = ["txt", "md", "srt", "vtt", "json", "docx", "html"];
     if !FORMATS.contains(&format.as_str()) {
@@ -662,6 +681,155 @@ pub async fn export_transcript(app: AppHandle, id: String, format: String, times
     Ok(path.to_string_lossy().into_owned())
 }
 
+// ---- App lock (B16) ---------------------------------------------------------------------------------------------
+
+/// What the lock screen and Settings need. The PIN hash itself never leaves the Rust side.
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LockStatus {
+    pub enabled: bool,
+    pub locked: bool,
+    pub has_pin: bool,
+    /// `windows_hello`, `touch_id` or null when the system offers neither.
+    pub os_method: Option<String>,
+    /// Seconds before another PIN try is accepted.
+    pub retry_after_seconds: u64,
+}
+
+pub fn lock_status_of(state: &AppState) -> LockStatus {
+    let wait = state.lock.attempts.lock().unwrap_or_else(|p| p.into_inner()).wait(std::time::Instant::now());
+    LockStatus {
+        enabled: state.settings().app_lock,
+        locked: state.lock.is_locked(),
+        has_pin: crate::lock::LockFile::load(&paths::app_lock(&state.data_dir)).pin_hash.is_some(),
+        os_method: crate::lock::os::method().map(str::to_string),
+        retry_after_seconds: wait.as_secs() + u64::from(wait.subsec_nanos() > 0),
+    }
+}
+
+/// Library, transcript and export commands refuse to answer while the app is locked.
+pub fn ensure_unlocked(state: &AppState) -> AppResult<()> {
+    if state.lock.is_locked() { Err(AppError::msg("EchoLedger is locked.")) } else { Ok(()) }
+}
+
+fn emit_lock(app: &AppHandle) {
+    let status = lock_status_of(&app.state::<AppState>());
+    let _ = app.emit("lock:changed", status);
+}
+
+#[tauri::command]
+pub fn lock_status(state: State<'_, AppState>) -> LockStatus {
+    lock_status_of(&state)
+}
+
+/// Locks now (when the lock is on). Recording, captions and uploads carry on.
+#[tauri::command]
+pub fn lock_now(app: AppHandle) -> LockStatus {
+    let state = app.state::<AppState>();
+    if state.settings().app_lock {
+        state.lock.set_locked(true);
+        emit_lock(&app);
+    }
+    lock_status_of(&state)
+}
+
+/// The UI saw the person use the app; resets the lock-after timer.
+#[tauri::command]
+pub fn lock_touch(state: State<'_, AppState>) {
+    if !state.lock.is_locked() {
+        state.lock.touch();
+    }
+}
+
+/// Unlocks with Windows Hello or Touch ID.
+#[tauri::command]
+pub async fn lock_unlock_os(app: AppHandle) -> AppResult<LockStatus> {
+    let window = main_window_handle(&app);
+    let verified = tauri::async_runtime::spawn_blocking(move || crate::lock::os::verify(window, "Unlock EchoLedger"))
+        .await
+        .map_err(|e| AppError::msg(e.to_string()))?
+        .map_err(AppError::msg)?;
+    let state = app.state::<AppState>();
+    if verified {
+        state.lock.attempts.lock().unwrap_or_else(|p| p.into_inner()).succeed();
+        state.lock.set_locked(false);
+        emit_lock(&app);
+    }
+    Ok(lock_status_of(&state))
+}
+
+/// Unlocks with the PIN; wrong PINs make the next try wait.
+#[tauri::command]
+pub fn lock_unlock_pin(app: AppHandle, pin: String) -> AppResult<LockStatus> {
+    let state = app.state::<AppState>();
+    let now = std::time::Instant::now();
+    let wait = state.lock.attempts.lock().unwrap_or_else(|p| p.into_inner()).wait(now);
+    if !wait.is_zero() {
+        return Err(AppError::msg(format!("Too many tries. Try again in {} seconds.", wait.as_secs().max(1))));
+    }
+    let stored = crate::lock::LockFile::load(&paths::app_lock(&state.data_dir)).pin_hash.unwrap_or_default();
+    if crate::lock::verify_pin(&stored, &pin) {
+        state.lock.attempts.lock().unwrap_or_else(|p| p.into_inner()).succeed();
+        state.lock.set_locked(false);
+        emit_lock(&app);
+        return Ok(lock_status_of(&state));
+    }
+    state.lock.attempts.lock().unwrap_or_else(|p| p.into_inner()).fail(now);
+    Err(AppError::msg("That PIN is not right."))
+}
+
+/// Sets or changes the PIN (only while unlocked).
+#[tauri::command]
+pub fn lock_set_pin(app: AppHandle, pin: String) -> AppResult<LockStatus> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    if !crate::lock::pin_is_valid(&pin) {
+        return Err(AppError::msg("Use 4 to 12 digits."));
+    }
+    crate::lock::LockFile { pin_hash: Some(crate::lock::hash_pin(&pin)) }.save(&paths::app_lock(&state.data_dir))?;
+    emit_lock(&app);
+    Ok(lock_status_of(&state))
+}
+
+/// Locks an idle app after the chosen minutes. Checks twice a minute; costs nothing while the lock is off.
+pub fn spawn_idle_lock(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+            let state = app.state::<AppState>();
+            let settings = state.settings();
+            if !state.lock.is_locked() && crate::lock::idle_expired(settings.app_lock, settings.lock_after_minutes, state.lock.last_activity(), std::time::Instant::now()) {
+                state.lock.set_locked(true);
+                emit_lock(&app);
+            }
+        }
+    });
+}
+
+/// Devices paired with the server and its recent audit log (B16).
+#[tauri::command]
+pub async fn security_overview(state: State<'_, AppState>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.security().await
+}
+
+/// Revokes another paired device.
+#[tauri::command]
+pub async fn device_revoke(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    ensure_unlocked(&state)?;
+    state.api()?.revoke_device(&id).await
+}
+fn main_window_handle(app: &AppHandle) -> isize {
+    #[cfg(windows)]
+    {
+        app.get_webview_window("main").and_then(|w| w.hwnd().ok()).map(|h| h.0 as isize).unwrap_or(0)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        0
+    }
+}
 /// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
 pub const SESSION_PATCH_KEYS: [&str; 4] = ["title", "client_id", "pinned", "labels"];
 pub const CLIENT_PATCH_KEYS: [&str; 4] = ["name", "color", "avatar", "pinned"];
@@ -713,6 +881,7 @@ pub async fn sessions_bulk(app: AppHandle, ids: Vec<String>, action: String, cli
 /// Saves the finished transcripts of the selected recordings as one zip file in Downloads; returns its path.
 #[tauri::command]
 pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -> AppResult<String> {
+    ensure_unlocked(&app.state::<AppState>())?;
     if !BULK_EXPORT_FORMATS.contains(&format.as_str()) {
         return Err(AppError::msg("That export format is not available."));
     }
@@ -772,8 +941,9 @@ pub async fn vocabulary_add(state: State<'_, AppState>, term: String, client_id:
 
 /// The dictation history on this computer, newest first (B14).
 #[tauri::command]
-pub fn dictation_history(app: AppHandle) -> Vec<crate::dictation::rules::HistoryEntry> {
-    crate::dictation::history(&app)
+pub fn dictation_history(app: AppHandle) -> AppResult<Vec<crate::dictation::rules::HistoryEntry>> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    Ok(crate::dictation::history(&app))
 }
 
 #[tauri::command]

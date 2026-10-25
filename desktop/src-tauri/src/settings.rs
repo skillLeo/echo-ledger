@@ -243,6 +243,10 @@ pub struct Settings {
     pub dictation_replacements: Vec<crate::dictation::rules::Replacement>,
     /// Voice snippets: saying the trigger inserts the text.
     pub dictation_snippets: Vec<crate::dictation::rules::Snippet>,
+    /// App lock (B16): Windows Hello / Touch ID or the PIN when the app opens and after [Self::lock_after_minutes].
+    pub app_lock: bool,
+    /// Minutes without use before the app locks; 0 = only when it starts or with Lock now.
+    pub lock_after_minutes: u32,
 }
 
 impl Default for Settings {
@@ -278,6 +282,8 @@ impl Default for Settings {
             dictation_sounds: true,
             dictation_replacements: Vec::new(),
             dictation_snippets: Vec::new(),
+            app_lock: false,
+            lock_after_minutes: 5,
         }
     }
 }
@@ -307,6 +313,7 @@ impl Settings {
                 "dictationReplacements" => parsable_list::<crate::dictation::rules::Replacement>(value),
                 "dictationSnippets" => parsable_list::<crate::dictation::rules::Snippet>(value),
                 "captionLines" => Value::from(caption_lines_or_default(value.as_u64())),
+                "lockAfterMinutes" => Value::from(value.as_u64().and_then(|m| u32::try_from(m).ok()).filter(|m| crate::lock::LOCK_AFTER_CHOICES.contains(m)).unwrap_or(5)),
                 _ => value,
             };
             let previous = merged.insert(key.clone(), value);

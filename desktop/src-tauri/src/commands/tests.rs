@@ -167,3 +167,13 @@ fn bulk_requests_are_checked_first() {
     assert!(check_bulk(&ids, "label", Some("  ")).is_err());
     assert!(check_bulk(&ids, "unlabel", None).is_err());
 }
+
+#[test]
+fn app_lock_settings_take_only_the_offered_minutes() {
+    let mut s = Settings::default();
+    patch(json!({"appLock": true, "lockAfterMinutes": 15})).apply(&mut s);
+    assert!(s.app_lock);
+    assert_eq!(s.lock_after_minutes, 15);
+    patch(json!({"lockAfterMinutes": 7})).apply(&mut s);
+    assert_eq!(s.lock_after_minutes, 15, "7 is not offered");
+}

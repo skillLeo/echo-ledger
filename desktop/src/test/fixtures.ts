@@ -92,6 +92,8 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     dictationSounds: true,
     dictationReplacements: [],
     dictationSnippets: [],
+    appLock: false,
+    lockAfterMinutes: 5,
     ...overrides,
   };
 }

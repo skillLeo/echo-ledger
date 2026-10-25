@@ -63,6 +63,8 @@ fn customised() -> Settings {
         dictation_sounds: false,
         dictation_replacements: vec![crate::dictation::rules::Replacement { from: "asap".into(), to: "as soon as possible".into() }],
         dictation_snippets: vec![crate::dictation::rules::Snippet { trigger: "sig".into(), text: "Regards".into() }],
+        app_lock: true,
+        lock_after_minutes: 15,
     }
 }
 // ---- Defaults --------------------------------------------------------------------------------------------------
@@ -123,6 +125,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
     assert_eq!(
         keys,
         [
+            "appLock",
             "askBeforeSaving",
             "askUnknownApps",
             "autoMode",
@@ -146,6 +149,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "dictationSounds",
             "farSideWarning",
             "inputDevice",
+            "lockAfterMinutes",
             "overlayCorner",
             "pillPosition",
             "pins",
@@ -155,7 +159,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 30, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 32, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "en+ur");
@@ -546,4 +550,14 @@ fn dictation_settings_load_tolerantly() {
     assert!(!s.dictation_sounds);
     assert_eq!(s.dictation_replacements.len(), 1);
     assert!(s.dictation_snippets.is_empty());
+}
+
+#[test]
+fn app_lock_settings_load_tolerantly() {
+    let s = Settings::from_value(json!({"appLock": true, "lockAfterMinutes": 15}));
+    assert!(s.app_lock);
+    assert_eq!(s.lock_after_minutes, 15);
+    assert_eq!(Settings::from_value(json!({"lockAfterMinutes": 7})).lock_after_minutes, 5, "not a choice: the default");
+    assert_eq!(Settings::from_value(json!({"lockAfterMinutes": "soon"})).lock_after_minutes, 5);
+    assert!(!Settings::default().app_lock);
 }

@@ -108,6 +108,11 @@ pub mod paths {
         data_dir.join("library.json")
     }
 
+    /// The app lock's PIN hash (B16); kept out of the settings the UI reads.
+    pub fn app_lock(data_dir: &std::path::Path) -> PathBuf {
+        data_dir.join("app_lock.json")
+    }
+
     pub fn uploads(data_dir: &std::path::Path) -> PathBuf {
         data_dir.join("uploads.json")
     }

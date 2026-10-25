@@ -6,6 +6,7 @@ mod commands;
 pub mod detect;
 pub mod dictation;
 pub mod error;
+pub mod lock;
 pub mod net;
 pub mod overlay;
 pub mod pending;
@@ -66,6 +67,8 @@ pub struct AppState {
     pub ticker_running: AtomicBool,
     /// A test recording (B5) is running.
     pub capture_test: AtomicBool,
+    /// App lock (B16): locked at start when the lock is on.
+    pub lock: lock::Lock,
 }
 
 impl AppState {
@@ -77,6 +80,7 @@ impl AppState {
             None
         });
         let library = LibraryCache::load(&paths::library(&data_dir));
+        let settings_locked = settings.app_lock && lock::LockFile::load(&paths::app_lock(&data_dir)).pin_hash.is_some();
         Self {
             data_dir,
             settings: Mutex::new(settings),
@@ -105,6 +109,7 @@ impl AppState {
             review_run: Mutex::new(Vec::new()),
             ticker_running: AtomicBool::new(false),
             capture_test: AtomicBool::new(false),
+            lock: lock::Lock::new(settings_locked),
         }
     }
 
@@ -199,6 +204,7 @@ pub fn run() {
             detect::spawn_auto_mode(handle.clone());
             actions::spawn_upload_worker(handle.clone());
             actions::restore_pending(&handle);
+            commands::spawn_idle_lock(handle.clone());
 
             // Fetch server config (caption policy, pins rotation) and the library in the background.
             let startup = handle.clone();
@@ -280,6 +286,14 @@ pub fn run() {
             commands::transcript_revisions,
             commands::speakers_rename,
             commands::export_transcript,
+            commands::lock_status,
+            commands::lock_now,
+            commands::lock_touch,
+            commands::lock_unlock_os,
+            commands::lock_unlock_pin,
+            commands::lock_set_pin,
+            commands::security_overview,
+            commands::device_revoke,
             commands::session_organise,
             commands::sessions_bulk,
             commands::sessions_export,

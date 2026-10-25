@@ -385,3 +385,9 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .item.picked { border-color: rgba(34, 211, 238, 0.7); box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.14); }
 .bulk-bar { position: sticky; top: 0; z-index: 2; margin-bottom: 10px; display: grid; gap: 8px; }
 .bulk-actions { display: grid; gap: 8px; }
+
+/* App lock and security (B16). */
+.lock-screen { display: grid; place-items: center; min-height: 100vh; }
+.lock-card { display: grid; gap: 12px; width: min(380px, 100% - 32px); text-align: center; }
+.lock-card form { justify-content: center; gap: 8px; }
+.activity { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; }
