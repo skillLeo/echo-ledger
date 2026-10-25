@@ -340,8 +340,12 @@ Severity in brackets. Each item lists the platform; the matching regression test
   Built and covered by automated tests (server on SQLite and MariaDB, console, desktop, Android); the device checks
   are docs/MANUAL_QA.md section 14. The desktop polls every minute; the phone every 15 minutes through WorkManager.
   Clicking a desktop notification opens its recording in installed builds (the OS starts the app by its id).
-- [ ] B19 Onboarding and system-style settings (W, D, P): first-run wizard, grouped searchable settings, shortcut
+- [~] B19 Onboarding and system-style settings (W, D, P): first-run wizard, grouped searchable settings, shortcut
       editor with conflict detection, settings import/export without secrets.
+
+  Desktop done and committed (grouped, searchable settings; shortcut conflict warnings and Alt+Shift defaults;
+  settings export / import without the pairing; first-run wizard). Left: the Android wizard and settings groups /
+  search / export-import, the console settings tabs, MANUAL_QA section 15.
 - [ ] B20 Usage dashboard and SaaS foundations (W): minutes and cost per provider/month, storage, per device, budget
       alerts; `workspaces` with `workspace_id` scoping, roles, plan limits enforced by one policy; existing data
       migrated into a default workspace.
