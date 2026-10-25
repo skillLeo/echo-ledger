@@ -352,9 +352,12 @@ Severity in brackets. Each item lists the platform; the matching regression test
   Settings in the same eight tabs with a search (filters sections, jumps to the first group with a match), JSON
   export / import validated like a save and never touching the API credentials, and a dashboard checklist
   (two-factor, provider key, certificate pins, first device, retention) that hides when complete or dismissed.
-- [ ] B20 Usage dashboard and SaaS foundations (W): minutes and cost per provider/month, storage, per device, budget
+- [x] B20 Usage dashboard and SaaS foundations (W): minutes and cost per provider/month, storage, per device, budget
       alerts; `workspaces` with `workspace_id` scoping, roles, plan limits enforced by one policy; existing data
-      migrated into a default workspace.
+      migrated into a default workspace. Done: 3-step additive migration (up/down/up tested on SQLite + MariaDB),
+      BelongsToWorkspace scope + explicit filters everywhere, owner/member roles, PlanLimits (minutes, storage, devices),
+      Usage and Workspace pages, alerts to owners, isolation tests generated from the route/resource lists.
+      Deploy checks: docs/MANUAL_QA.md section 16.
 
 ---
 

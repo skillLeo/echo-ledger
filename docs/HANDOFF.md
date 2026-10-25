@@ -1,21 +1,19 @@
 # EchoLedger v1.1 — Handoff
 
 ## Snapshot
-- 2026-10-26 00:23 (Asia/Karachi), branch `v1.1`, last code commit `e639ddd` "v1.1: B19 console setup checklist, grouped searchable settings, settings import/export" (this file is committed right after).
-- Tests:
-  - Web (Pest, SQLite, `--parallel`): 3012 passed, 1 failed (the timing test below). MariaDB run of the same suite (B19): 3013 passed, 0 failed.
-  - Desktop core (`cargo test`): 799 passed, 0 failed (1 ignored).
-  - Desktop UI (`vitest`): 948 tests; one flaky failure under load (see below), 948/948 when re-run.
+- 2026-10-26 (Asia/Karachi), branch `v1.1`, B20 finished (commits `abef106`..`f9fe21f` plus the final docs commit).
+- Tests (end of B20):
+  - Web (Pest, SQLite, `--parallel`): 3049 passed, 1 failed (the timing test below). MariaDB: 3048 passed, 2 failed (the same timing test and its 20,001 twin, run while Gradle was building; alone: 8/9 then 9/9).
+  - Desktop core (`cargo test`): 801 passed, 0 failed (1 ignored). Desktop UI (`vitest`): 948/948.
   - Android (`testDebugUnitTest`): 834 passed, 0 failed.
-  - Repo policy (`node --test tools/repo-policy.test.mjs`): 23/23 (re-run after the final commit of B19).
-- Linters: Pint clean, PHPStan 0 errors, `cargo clippy --all-targets -D warnings` clean, macOS clippy (`mac-check.ps1 -Clippy`) clean, `tsc --noEmit` clean, ktlint and Android lint clean.
+  - Repo policy (`node --test tools/repo-policy.test.mjs`): 23/23.
+- Linters: Pint clean, PHPStan 0 errors, `cargo clippy --all-targets -D warnings` clean, `tsc --noEmit` clean, ktlint and Android lint clean. macOS cross clippy not re-run (the `mac-check.ps1` script lived in an older session's scratchpad; B20 changed only `error.rs` / `stt/mod.rs` text, no platform code).
 - Known failing / flaky tests:
-  - `Tests\Feature\Api\TranscriptValidationSpeedTest` "accepts 20,000 segments in under two seconds": timing budget (4 s parallel, 2 s alone). Fails on SQLite only when the laptop runs on battery or under load (seen 2.2-6 s); passes on MariaDB and on mains power. Not a regression (fails the same with the changes stashed).
+  - `Tests\Feature\Api\TranscriptValidationSpeedTest` "accepts 20,000 segments in under two seconds": timing budget (4 s parallel, 2 s alone). Fails on battery or under load (seen 2.0-8 s on SQLite and MariaDB). Not a B20 regression: with the workspace scope switched off it measured 2.24 s / 2.24 s / pass, the same as with it on.
   - `LibraryView.test.tsx` "handles a very long transcript without dropping segments" and `PillApp.test.tsx` "brings the pill back when Stop fails": time out only when Gradle or cargo run at the same time; pass alone.
-
 ## Progress
-- Plan items: 148 in PLAN_V1_1.md: 93 Done ([x]), 32 Partial ([~]), 22 Not started, 1 Blocked. Ticked = 93/148 = **63 %**.
-- All 32 Partial items are built and covered by automated tests on every platform and wait only for on-device checks (docs/MANUAL_QA.md sections 7-15). Weighted by remaining effort, about **68 %** of the upgrade brief is done.
+- Plan items: 148 in PLAN_V1_1.md: 94 Done ([x]), 32 Partial ([~]), 21 Not started, 1 Blocked. Ticked = 94/148 = **64 %**.
+- All 32 Partial items are built and covered by automated tests on every platform and wait only for on-device checks (docs/MANUAL_QA.md sections 7-15). Weighted by remaining effort, about **71 %** of the upgrade brief is done.
 
 | Item | Summary | Status |
 |---|---|---|
@@ -150,7 +148,7 @@
 | B17 | Retention controls (W, D, P): 7 / 14 / 30 / custom days globally an... | Partial |
 | B18 | Notifications and activity centre (W, D, P): bell, OS notifications... | Partial |
 | B19 | Onboarding and system-style settings (W, D, P): first-run wizard, g... | Partial |
-| B20 | Usage dashboard and SaaS foundations (W): minutes and cost per prov... | Not started |
+| B20 | Usage dashboard and SaaS foundations (W): minutes and cost per prov... | Done |
 | C1 | One token file per app (colour, 8-pt spacing, radius 8/12/16, shado... | Not started |
 | C2 | Desktop: Mica/Acrylic (Windows 11) with solid fallback, macOS vibra... | Not started |
 | C3 | Web: custom Filament theme (Vite): page headers, breadcrumbs, stick... | Not started |
@@ -169,21 +167,17 @@
 | P8.4 | `v1.1` merged into `main` and pushed. | Not started |
 
 ## In progress right now
-- Nothing open. **B19 Onboarding and system-style settings is built and tested on all three apps** (marked Partial only because of the device checks in docs/MANUAL_QA.md section 15).
-- Phone (committed in `18f19db`):
-  - First-run wizard (Welcome, Permissions, Pair, Test, Done): `mobile/.../ui/OnboardingScreen.kt`, steps in `core/OnboardingStep.kt`, gated in `MainActivity.kt`; flag `onboardingDone` in `data/SettingsStore.kt` (a stored settings JSON without the key and already paired counts as done).
-  - Settings hub with search and eight group screens: `ui/SettingsScreens.kt`; the list of settings and their keywords is `core/SettingsCatalogue.kt`.
-  - Export / import through the system file picker: `core/SettingsTransfer.kt` (allow-list `PORTABLE`; a test forces every new `AppSettings` field into `PORTABLE` or `NOT_PORTABLE`), `MainViewModel.exportSettingsTo / importSettingsFrom`.
-  - Tests: `SettingsTransferTest`, `SettingsCatalogueTest`, `SettingsHubTest`, `SettingsFilesTest`, `OnboardingTest`, plus updated `SettingsScreenTest`, `MainActivityTest`, `SettingsStoreTest`, `CaptureUiTest` and the instrumented e2e tests (not run here).
-- Console (committed in `e639ddd`):
-  - `web/app/Filament/Pages/Settings.php`: eight tabs (keys in `app/Services/SettingsSearch.php`), search box that hides non-matching sections and opens the first matching group, header actions Export settings / Import settings (`app/Services/SettingsTransfer.php`; credentials never read; an import is applied through the form so it is validated like a save).
-  - Dashboard checklist: `app/Filament/Widgets/OnboardingChecklistWidget.php`, `app/Services/OnboardingChecklist.php`, view `resources/views/filament/widgets/onboarding-checklist.blade.php`; dismissal is the setting `onboarding.dismissed`.
-  - Tests: `AdminSettingsGroupsTest`, `AdminOnboardingChecklistTest`, updated `AdminSettingsPageTest`.
-- Desktop B19 (committed earlier in `d9c6db5`): see the plan item.
+- Nothing open. **B20 is done** (Done, not Partial: web only; its checks in docs/MANUAL_QA.md section 16 are deploy verifications).
+- Where things are:
+  - Schema: `web/database/migrations/2026_11_01_00000{1,2,3}_*.php`; models `Plan`, `Workspace`, trait `Models/Concerns/BelongsToWorkspace.php`, `Models/Scopes/WorkspaceScope.php`.
+  - Services: `Services/Workspaces/{CurrentWorkspace,Workspaces,PlanLimits}.php`, `Services/Usage/UsageReport.php`; `UsageSummary::toArray(?int $workspaceId)`.
+  - Console: `Filament/Pages/Usage.php` (+ `Widgets/Usage/DailyUsageChart.php`, not on the dashboard), `Filament/Pages/WorkspaceSettings.php` (slug `workspace`), Settings → "Plan limits" (section key `plan`), middleware `Http/Middleware/EnsureWorkspaceMember.php` (replaces `EnsureSuperAdmin`), policies `Policies/{CaptureSession,Device}Policy.php`.
+  - Tests: `tests/Feature/Workspaces/*` (isolation, roles and limits, usage, workspace page) and `tests/Feature/Database/WorkspaceMigrationCycleTest.php`; test helpers `unscoped()` and `withoutWorkspace()` in `tests/Pest.php`.
+- Migration cycle result (B20): `WorkspaceMigrationCycleTest` seeds 3 users (2 super admins, 1 plain) × device, pairing code, client + keyterm, 7 sessions (1 binned) each with recording, transcript, marker, label, share link + view and a usage row; up → down → up keeps every row count identical, maps every row to its user's workspace, NOT NULL and the foreign key reject bad rows, and a second backfill run changes nothing. Passed on SQLite and on MariaDB 10.4 (2/2 each). Step 3 refuses to run while a row has no workspace.
 
 ## Next steps (in order)
-1. B20 usage dashboard and SaaS foundations (use Opus 5.5 Medium): `web/app/Services/Usage/*`, `web/app/Filament/Widgets/*`, new `workspaces` migration scoping every owned table, roles (owner / member), plan-limits table enforced by one policy; migrate existing data into a default workspace owned by the super admin.
-2. Phase 6 (C1-C9), then Phase 7 QA (P7.1-P7.3, write the user guide), then Phase 8 release (P8.1-P8.4).
+1. **Next: Phase 6 design polish (use Opus 5.5 High)** — C1-C9.
+2. Then Phase 7 QA (P7.1-P7.3, write the user guide), then Phase 8 release (P8.1-P8.4, with the B20 deploy notes below).
 ## B20 design (workspaces, roles, plan limits, usage)
 - **New tables:** `plans` (key, name, `monthly_minutes`, `storage_bytes`, `max_devices`; null = no limit), `workspaces` (name, `plan_id`), `workspace_user` (workspace, user, `role` owner|member, unique pair); `users.current_workspace_id` (nullable, null on delete).
 - **Get `workspace_id`:** the five root tables that own user data: `devices`, `device_pairing_codes`, `clients`, `capture_sessions`, `usage_ledger`. Their `user_id` stays (creator / device owner; notifications and per-user rules use it).
@@ -197,7 +191,19 @@
 - **Migrations:** (a) `2026_11_01_000001` create tables + nullable indexed `workspace_id` + `users.current_workspace_id`; (b) `…000002` backfill in chunks of 500 with the query builder (no model events): plan Personal, one workspace per user — the first super admin's is the default, named "Personal", owner role; every row → its `user_id`'s workspace (this keeps today's per-user isolation exactly); (c) `…000003` `workspace_id` NOT NULL + foreign keys (restrict on delete).
 - **Rollback:** `migrate:rollback --step=3`: (c) drops the keys and makes the columns nullable, (b) nulls the columns and deletes memberships / workspaces / plans, (a) drops the columns and tables. No existing column is renamed or dropped, so the v1.1-B19 code runs on the rolled-back schema.
 
+## Production deploy notes for B20
+- Before: `select count(*) from users where is_super_admin = 0;` — any such account becomes the owner of its own workspace (its own data only) and can then sign in to the console. Expected 0 on production.
+- Backup first: `mysqldump --single-transaction --routines --triggers -u <user> -p <database> > ~/backup-pre-b20-$(date +%F-%H%M).sql`, copy it off the server. B20 never touches `storage/app/recordings`.
+- Order: `php artisan down` → deploy code → `composer install --no-dev --optimize-autoloader` → `/opt/alt/php84/usr/bin/php artisan migrate --force` (runs `2026_11_01_000001` tables + nullable columns, `000002` backfill, `000003` NOT NULL + foreign keys, in that order; `000003` runs outside a transaction and stops before changing anything if a row has no workspace) → `php artisan optimize:clear` → `php artisan up`. Never run seeders. No manual data steps.
+- Verify: `select id, name from workspaces;` (one per user, the owner's is "Personal"); `select count(*) from capture_sessions where workspace_id is null;` = 0 (same for devices, device_pairing_codes, clients, usage_ledger); then docs/MANUAL_QA.md W-1 to W-4 (console data, phone/desktop sync and captions, an old share link and playback, `php artisan recordings:retention`).
+- Roll back: `php artisan down` → `php artisan migrate:rollback --step=3 --force` (drops the keys, nulls and drops the columns, drops the three tables; recordings, transcripts and files untouched) → deploy the previous code (`68c2142`) → `php artisan optimize:clear` → `php artisan up`. Restore the dump only if the rollback itself fails.
+
 ## Decisions made (do not redo)
+- B20: one workspace per existing user at migration (the first super admin's is the default "Personal"): keeps today's per-user isolation exactly; members are added later on the Workspace page.
+- B20: console access = super admin or any workspace membership; Settings and API credentials stay super-admin only; content is always the current workspace's, also for the super admin (the Workspace page shows them only names and totals of other workspaces).
+- B20: the plan minute limit reuses `403 budget_exceeded` (old app builds already stop captions on it); new codes `storage_limit_reached`, `device_limit_reached`, `not_allowed`. The `usage` block keeps its fields (the apps parse it strictly).
+- B20: the shared vocabulary (no client) and every other setting stay server-wide; only a super admin's device may change the shared vocabulary.
+- B20: `workspace_id` only on the five root tables; children are reached through their parent. The unique (user_id, name) on clients stays; names are unique per workspace by validation.
 - Every server suite run also runs on MariaDB (XAMPP): it found real bugs (`started_at` silently got ON UPDATE CURRENT_TIMESTAMP; `transcripts.kind` too short for `alternate`).
 - Recording tags are called **labels** (`session_labels` table, `labels` field): `tags` already means bookmark tags in the API (B15).
 - Client-not-found from organise endpoints is `404 client_not_found` (same as session create), not 422.
@@ -215,6 +221,11 @@
 - The upgrade brief (the untracked file in docs/) stays out of git (repo rule: no instruction or prompt files committed); it is untracked on purpose.
 
 ## Gotchas learned
+- SQLite `->change()` / adding a foreign key rebuilds the table (copy, drop, rename). Inside a transaction `PRAGMA foreign_keys=off` is ignored, so dropping `capture_sessions` would cascade-delete recordings and transcripts: such migrations need `public $withinTransaction = false;` and never run inside a test transaction (the cycle test uses its own `cycle` connection).
+- Laravel infers the pivot `user_workspace` (alphabetical); ours is `workspace_user`, so both `belongsToMany` calls name it.
+- After an API call in a test the guard keeps the device, so the workspace scope narrows later test queries: read stored truth with `unscoped(fn () => ...)`; go back to the console with `actingAs($user, 'web')` (a bare `actingAs` lands on the sanctum guard after an API call).
+- Filament runs a policy only for methods that exist (missing → allowed); `DeleteBulkAction` needs `authorizeIndividualRecords('delete')` to check each record.
+- PowerShell: `R` is an alias (Invoke-History) and beats a function of the same name; don't name helpers `R`.
 - Filament `Tabs::livewireProperty()`: tab keys must be the array keys, the property holds that key, only the active tab is rendered (assert other tabs with `->set('activeTab', 'x')`), and `getFlatFields()` keys are prefixed with the tab key (`general.display_timezone`). `Section::extraAttributes()` lands on the wrapper `div.fi-sc-section`. Dashboard widgets are lazy by default (`$isLazy = false` to see them in a plain GET).
 - Test failures that print a whole page (`assertSee` on a Filament page) flood the output: write the HTML to a file and grep it.
 - PowerShell 5.1: no `&&`; use `;` and `if ($?)`. `[IO.File]` needs absolute paths (`"$PWD\..."`). Inside double quotes backtick sequences (` `, ` 	`) become control characters; use single-quoted here-strings for code with `$`. Write files with `New-Object Text.UTF8Encoding($false)` (no BOM) and a final LF (repo policy checks it).

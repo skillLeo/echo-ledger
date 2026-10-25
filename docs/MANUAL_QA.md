@@ -385,3 +385,23 @@ notification shade after every step.
 | S-7 | Console: Export settings, change retention, Import settings with the file. | The JSON has no API keys or webhook secrets; retention is back. A file with a value the server refuses (for example 9999 days) changes nothing and says so. |
 | S-8 | Console: new install, open the dashboard as the super admin. | "Finish setting up" lists two-factor, provider key, certificate pins, first device and retention; each opens its page; finished steps lose their link. |
 | S-9 | Console: finish all five steps, or press Dismiss. | The card disappears and does not come back (finishing: it returns if a step is undone). |
+
+## 16. v1.1 — workspaces, roles, plan limits and usage
+
+Run W-1 to W-4 on a copy of the production database (or right after the deploy) before anything else.
+
+| ID | Steps | Expected |
+|---|---|---|
+| W-1 | After the migrations: open the console as the owner. | Every recording, client and device is there as before; the dashboard counts are unchanged; Workspace shows "Personal", you as owner. |
+| W-2 | Phone and desktop already paired: record a short call, let it upload. | Sync, upload, live captions and the final transcript work with no re-pairing. |
+| W-3 | Open a share link made before the deploy; play a recording in the console. | The link opens (and plays when it allows audio); console playback works. |
+| W-4 | Wait for the hourly retention run (or run `php artisan recordings:retention`). | It finishes without errors; old recordings move to the bin as before. |
+| W-5 | Workspace → Add member with a new e-mail; sign in as that person in a private window. | A one-time password is shown once; the member sees the same library, cannot open Settings or API credentials, and has no Add member / Rename / Remove buttons. |
+| W-6 | As the member: try to delete one of the owner's recordings (console row, bulk delete, phone, desktop). | The console offers no delete for it; bulk delete skips it; the apps show "Only the workspace owner can delete recordings made by someone else." Their own recordings delete normally. |
+| W-7 | As the owner: Remove the member. | The member's devices in this workspace are unpaired at once; their recordings stay. |
+| W-8 | Usage page, this month. | Minutes by provider (streaming and final), cost, storage, devices, per device and top clients match what you expect; the daily chart has one bar per day. Another month shows that month. |
+| W-9 | Settings → Plan limits: set minutes to a number already used this month. Start live captions on desktop and phone. | Both show "Monthly limit reached — raise it in Settings"; recording continues. Raise the limit: captions work again. |
+| W-10 | Settings → Plan limits: set storage to 1 GB below what is used, then record and upload. | The upload stops with "Storage limit reached — raise it in Settings" and the recording stays on the device. Raise it: the upload goes through. |
+| W-11 | Settings → Plan limits: set devices to the number paired, then pair one more (QR in the console). | The pairing dialog shows "Device limit reached — raise it in Settings". |
+| W-12 | Set the minutes limit so this month is past 80 %, then past 100 % (or wait for real use). | The bell shows "Transcription at 80% of the monthly limit" once and "Monthly transcription limit reached" once, for each owner. |
+| W-13 | Restore the plan limits to the defaults (30 000 minutes, 500 GB, 25 devices). | Nothing is blocked. |

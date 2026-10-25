@@ -9,11 +9,15 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
 
-/** Second layer of tenant isolation: rows of the current workspace only, whenever there is one. */
+/**
+ * Second layer of tenant isolation: rows of the current workspace only, whenever there is one.
+ *
+ * @implements Scope<Model>
+ */
 final class WorkspaceScope implements Scope
 {
     /**
-     * @param  Builder<Model>  $builder
+     * @param  Builder<covariant Model>  $builder
      */
     public function apply(Builder $builder, Model $model): void
     {

@@ -32,7 +32,7 @@ final class PlanLimits
 
     public function plan(int $workspaceId): Plan
     {
-        return Workspace::query()->find($workspaceId)?->plan ?? Plan::personal();
+        return Workspace::query()->find($workspaceId)->plan ?? Plan::personal();
     }
 
     /** Billed minutes (duration × billed channels) of billable rows this month, as the usage ledger counts them. */

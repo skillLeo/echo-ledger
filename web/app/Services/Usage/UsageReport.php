@@ -158,6 +158,6 @@ final class UsageReport
         }
         usort($clients, fn (array $a, array $b): int => $b['minutes'] <=> $a['minutes']);
 
-        return array_slice(array_values($clients), 0, 5);
+        return array_slice($clients, 0, 5);
     }
 }
