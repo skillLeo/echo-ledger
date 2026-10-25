@@ -22,7 +22,7 @@ object AppState {
         work.pruneWork().result.get(15, TimeUnit.SECONDS)
         graph.recordings.all().forEach { graph.recordings.delete(it.id) }
         graph.settings.clearPairing()
-        graph.settings.update { AppSettings() }
+        graph.settings.update { AppSettings(onboardingDone = true) }
         graph.library.clear()
         graph.invalidateApi()
     }
@@ -31,7 +31,7 @@ object AppState {
     fun pairAs(device: Backend.Device) = runBlocking {
         graph.settings.saveToken(device.token)
         graph.settings.update {
-            it.copy(serverUrl = device.baseUrl, pins = device.pins, deviceId = device.id, deviceName = device.name)
+            it.copy(serverUrl = device.baseUrl, pins = device.pins, deviceId = device.id, deviceName = device.name, onboardingDone = true)
         }
         graph.invalidateApi()
     }

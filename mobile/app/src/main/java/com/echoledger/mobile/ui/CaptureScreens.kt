@@ -235,7 +235,7 @@ fun CaptionStyleSection(vm: MainViewModel, settings: AppSettings) {
     }
 }
 
-private fun granted(context: Context, permission: String) =
+internal fun granted(context: Context, permission: String) =
     ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
 /** The settings page that fixes a permission row. */
@@ -360,29 +360,5 @@ fun CaptureHealthSection(vm: MainViewModel, settings: AppSettings, helperConnect
                 }
             }
         }
-    }
-}
-
-/** Settings → Capture and captions: auto-record apps, caption style, microphone and permissions on one page. */
-@Composable
-fun CaptureSettingsPage(
-    vm: MainViewModel,
-    settings: AppSettings,
-    helperConnected: Boolean,
-    recording: Boolean,
-    onSetup: () -> Unit,
-    onBack: () -> Unit
-) {
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
-            Text("Capture and captions", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        }
-        AutoRecordSection(vm, settings)
-        CaptionStyleSection(vm, settings)
-        CaptureHealthSection(vm, settings, helperConnected, recording, onSetup)
     }
 }

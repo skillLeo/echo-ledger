@@ -55,6 +55,7 @@ class SettingsScreenTest : AppTest() {
 
     private lateinit var vm: MainViewModel
     private var setupTaps = 0
+    private val privacyGroup = "Privacy & security"
 
     @Before
     fun createViewModel() {
@@ -65,7 +66,8 @@ class SettingsScreenTest : AppTest() {
         biometricsAvailable: Boolean = true,
         host: Class<out ComponentActivity> = FragmentActivity::class.java,
         screenLock: Boolean = false,
-        prompter: UnlockPrompter? = null
+        prompter: UnlockPrompter? = null,
+        open: String? = null
     ): ComponentActivity {
         val controller = buildActivity(host).create()
         val activity = controller.get()
@@ -81,6 +83,7 @@ class SettingsScreenTest : AppTest() {
                 }
             }
         }
+        if (open != null) compose.onNodeWithText(open).performClick()
         return activity
     }
 
@@ -94,7 +97,7 @@ class SettingsScreenTest : AppTest() {
         }
     }
 
-    private fun appLockSwitch() = compose.onAllNodes(isToggleable())[1]
+    private fun appLockSwitch() = compose.onAllNodes(isToggleable())[0]
 
     private fun pairAndSettle() {
         runBlocking {
@@ -110,7 +113,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `the app lock row is offered when the phone can authenticate`() {
-        launch(biometricsAvailable = true)
+        launch(open = privacyGroup, biometricsAvailable = true)
 
         compose.onNodeWithText("App lock").assertIsDisplayed()
         compose.onNodeWithText("Ask for your fingerprint, face or screen lock when EchoLedger opens.").assertIsDisplayed()
@@ -120,7 +123,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `without a screen lock the app lock row stays visible, disabled, with the reason and a way to fix it`() {
-        val activity = launch(biometricsAvailable = false, screenLock = false)
+        val activity = launch(open = privacyGroup, biometricsAvailable = false, screenLock = false)
 
         compose.onNodeWithText("App lock").assertIsDisplayed()
         compose.onNodeWithText("Set a screen lock on this phone to use App lock.").assertIsDisplayed()
@@ -135,7 +138,7 @@ class SettingsScreenTest : AppTest() {
     fun `a stored lock is shown as off while the phone has no screen lock`() {
         runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true) } }
         pumpUntil("settings") { vm.settings.value.appLockEnabled }
-        launch(biometricsAvailable = false, screenLock = false)
+        launch(open = privacyGroup, biometricsAvailable = false, screenLock = false)
 
         appLockSwitch().assertIsOff().assertIsNotEnabled()
         compose.onAllNodesWithText("Lock after").assertCountEquals(0)
@@ -143,7 +146,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `a phone with only a screen lock can switch the lock on`() {
-        launch(biometricsAvailable = false, screenLock = true)
+        launch(open = privacyGroup, biometricsAvailable = false, screenLock = true)
 
         compose.onAllNodesWithText("Set a screen lock on this phone to use App lock.").assertCountEquals(0)
         appLockSwitch().assertIsEnabled()
@@ -151,7 +154,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `outside a fragment activity the row is shown but cannot be switched on`() {
-        launch(biometricsAvailable = true, host = ComponentActivity::class.java)
+        launch(open = privacyGroup, biometricsAvailable = true, host = ComponentActivity::class.java)
 
         compose.onNodeWithText("App lock").assertIsDisplayed()
         appLockSwitch().assertIsNotEnabled()
@@ -160,7 +163,7 @@ class SettingsScreenTest : AppTest() {
     @Test
     fun `switching app lock on takes one successful unlock and switching it off does not`() {
         val prompter = FakePrompter(result = true)
-        launch(prompter = prompter)
+        launch(open = privacyGroup, prompter = prompter)
         appLockSwitch().assertIsOff()
 
         appLockSwitch().performClick()
@@ -177,7 +180,7 @@ class SettingsScreenTest : AppTest() {
     @Test
     fun `a cancelled unlock leaves the app lock off without a message`() {
         val prompter = FakePrompter(result = false)
-        launch(prompter = prompter)
+        launch(open = privacyGroup, prompter = prompter)
 
         appLockSwitch().performClick()
         compose.waitForIdle()
@@ -190,7 +193,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `with the real prompt the switch waits for the user before saving`() {
-        launch(biometricsAvailable = true)
+        launch(open = privacyGroup, biometricsAvailable = true)
 
         appLockSwitch().performClick()
         compose.waitForIdle()
@@ -201,7 +204,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `on a phone the biometric prompt cannot serve the screen lock is confirmed before the lock is saved`() {
-        val activity = launch(biometricsAvailable = false, screenLock = true)
+        val activity = launch(open = privacyGroup, biometricsAvailable = false, screenLock = true)
 
         appLockSwitch().performClick()
         compose.waitForIdle()
@@ -218,7 +221,7 @@ class SettingsScreenTest : AppTest() {
     fun `a stored app lock setting is shown as on when the screen opens`() {
         runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true) } }
         pumpUntil("settings") { vm.settings.value.appLockEnabled }
-        launch()
+        launch(open = privacyGroup)
 
         appLockSwitch().assertIsOn()
     }
@@ -227,7 +230,7 @@ class SettingsScreenTest : AppTest() {
     fun `with the lock on the grace period and the hide content option are offered and saved`() {
         runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true) } }
         pumpUntil("settings") { vm.settings.value.appLockEnabled }
-        launch()
+        launch(open = privacyGroup)
 
         compose.onNodeWithText("Lock after").assertIsDisplayed()
         compose.onNode(hasText("Immediately") and isSelectable()).assertIsSelected()
@@ -238,13 +241,13 @@ class SettingsScreenTest : AppTest() {
         compose.onNode(hasText("After 5 minutes") and isSelectable()).assertIsSelected()
 
         compose.onNodeWithText("Hide content in Recents and screenshots").assertIsDisplayed()
-        compose.onAllNodes(isToggleable())[2].assertIsOn().performClick()
+        compose.onAllNodes(isToggleable())[1].assertIsOn().performClick()
         pumpUntil("hide content saved off") { !settings().secureScreen }
     }
 
     @Test
     fun `with the lock off the grace period and the hide content option are not shown`() {
-        launch()
+        launch(open = privacyGroup)
 
         compose.onAllNodesWithText("Lock after").assertCountEquals(0)
         compose.onAllNodesWithText("Hide content in Recents and screenshots").assertCountEquals(0)
@@ -298,7 +301,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `live captions can be turned off and on again`() {
-        launch()
+        launch(open = "Captions")
         compose.onAllNodes(isToggleable())[0].assertIsOn()
 
         compose.onAllNodes(isToggleable())[0].performClick()
@@ -311,7 +314,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `the microphone source toggles between echo-cancelled and raw`() {
-        launch()
+        launch(open = "Recording")
         compose.onNodeWithText("Voice communication (echo-cancelled)").assertIsDisplayed()
 
         compose.onNodeWithText("Change").performClick()
@@ -330,7 +333,7 @@ class SettingsScreenTest : AppTest() {
         server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
         val refresh = vm.refresh()
         pumpUntil("clients") { refresh.isCompleted && vm.clients.value.size == 2 }
-        launch()
+        launch(open = "General")
 
         compose.onNodeWithText("Acme Holdings").performClick()
         pumpUntil("client saved") { settings().clientId == "01JCLIENT0000000000000000A" }
@@ -345,7 +348,7 @@ class SettingsScreenTest : AppTest() {
     @Test
     fun `the device card shows the phone name server address and pin status`() {
         pairAndSettle()
-        launch()
+        launch(open = "Devices")
 
         compose.onNodeWithText("Sam's Pixel · ${server.baseUrl}").assertIsDisplayed()
         compose.onNodeWithText("Server certificate pinned (2 pins)").assertIsDisplayed()
@@ -355,14 +358,14 @@ class SettingsScreenTest : AppTest() {
     fun `a server without pins is flagged as not pinned`() {
         runBlocking { app.pairLocally(server, pins = emptyList()) }
         pumpUntil("settings") { vm.settings.value.paired }
-        launch()
+        launch(open = "Devices")
 
         compose.onNodeWithText("Certificate pinning not configured on the server").assertIsDisplayed()
     }
 
     @Test
     fun `Setup guide opens the setup screen`() {
-        launch()
+        launch(open = "Devices")
 
         compose.onNodeWithText("Setup guide").performClick()
 
@@ -373,7 +376,7 @@ class SettingsScreenTest : AppTest() {
     fun `Unpair forgets the pairing but keeps the preferences`() {
         pairAndSettle()
         runBlocking { app.graph.settings.update { it.copy(captionsEnabled = false) } }
-        launch()
+        launch(open = "Devices")
 
         compose.onNodeWithText("Unpair").performClick()
         assertTrue("nothing changes before the user confirms", settings().paired)

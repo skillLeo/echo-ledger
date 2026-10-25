@@ -58,7 +58,7 @@ class MainActivityTest : AppTest() {
     private fun launch(paired: Boolean = true, preload: Boolean = false): ActivityController<MainActivity> {
         serve()
         runBlocking {
-            if (paired) app.pairLocally(server)
+            if (paired) app.pairLocally(server) else app.graph.settings.update { it.copy(onboardingDone = true) }
             if (paired && preload) app.graph.library.refresh()
         }
         val controller = buildActivity(MainActivity::class.java).create()
@@ -116,10 +116,44 @@ class MainActivityTest : AppTest() {
         }
 
         compose.onNodeWithContentDescription("Settings").performClick()
-        awaitText("Client keyterms")
+        awaitText("Privacy & security")
 
         compose.onNodeWithContentDescription("Library").performClick()
         awaitText("Weekly sync")
+    }
+
+    @Test
+    fun `a settings group closes with the system back button and the tab stays on the list`() {
+        val controller = launch(preload = true)
+        awaitText("Weekly sync")
+        compose.onNodeWithContentDescription("Settings").performClick()
+        awaitText("Privacy & security")
+
+        compose.onNodeWithText("Storage").performClick()
+        awaitText("Storage and retention")
+        compose.onAllNodesWithText("Search settings").assertCountEquals(0)
+
+        controller.get().onBackPressedDispatcher.onBackPressed()
+        awaitText("Privacy & security")
+        compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a fresh install opens the setup wizard and skipping it hands over to pairing for good`() {
+        serve()
+        val controller = buildActivity(MainActivity::class.java).create()
+        controller.get().simulateBiometrics(false)
+        controller.start().postCreate(null).resume().visible()
+
+        awaitText("Welcome to EchoLedger")
+        compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
+        assertTrue(server.requests.isEmpty())
+
+        compose.onNodeWithText("Skip setup").performClick()
+
+        awaitText("Pair this phone")
+        assertTrue(runBlocking { app.graph.settings.current().onboardingDone })
+        assertTrue(!present("Welcome to EchoLedger"))
     }
 
     @Test
@@ -182,6 +216,8 @@ class MainActivityTest : AppTest() {
         launch(preload = true)
         awaitText("Weekly sync")
         compose.onNodeWithContentDescription("Settings").performClick()
+        awaitText("Devices")
+        compose.onNodeWithText("Devices").performClick()
         awaitText("Unpair")
 
         compose.onNodeWithText("Unpair").performScrollTo().performClick()
@@ -247,7 +283,7 @@ class MainActivityTest : AppTest() {
         serve()
         runBlocking {
             if (paired) app.pairLocally(server)
-            app.graph.settings.update { it.copy(appLockEnabled = appLock) }
+            app.graph.settings.update { it.copy(appLockEnabled = appLock, onboardingDone = true) }
         }
         app.delaySettingsEmission(1_500)
         val controller = buildActivity(MainActivity::class.java).create()

@@ -57,7 +57,9 @@ data class AppSettings(
     val activityNotifications: Boolean = true,
     val quietHours: Boolean = false,
     val quietFrom: String = "22:00",
-    val quietTo: String = "07:00"
+    val quietTo: String = "07:00",
+    /** The first-run wizard has been finished or skipped (B19). Installs paired before v1.1 count as done. */
+    val onboardingDone: Boolean = false
 ) {
     val serverIsV1_1: Boolean get() = serverApiVersion != null
     val paired: Boolean get() = serverUrl != null && deviceId != null
@@ -145,8 +147,12 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
         }
     }
 
-    private fun Preferences.toSettings(): AppSettings =
-        this[Keys.SETTINGS]?.let { runCatching { ApiJson.decodeFromString(AppSettings.serializer(), it) }.getOrNull() } ?: AppSettings()
+    private fun Preferences.toSettings(): AppSettings {
+        val raw = this[Keys.SETTINGS]
+        val parsed = raw?.let { runCatching { ApiJson.decodeFromString(AppSettings.serializer(), it) }.getOrNull() } ?: return AppSettings()
+        // Settings written before the wizard existed have no such key: a phone that is already paired skips it.
+        return if (!raw.contains("\"onboardingDone\"") && parsed.paired) parsed.copy(onboardingDone = true) else parsed
+    }
 
     private companion object {
         val TOKEN_CONTEXT = "echoledger.device_token".toByteArray()

@@ -44,6 +44,26 @@ class SettingsStoreTest : AppTest() {
     }
 
     @Test
+    fun `a phone paired before the wizard existed counts as set up and a new one does not`() = runBlocking {
+        plantRaw("settings_json", """{"serverUrl":"https://ledger.example.com","deviceId":"01JDEVICE"}""")
+        assertTrue(store.current().onboardingDone)
+
+        plantRaw("settings_json", """{"captionsEnabled":false}""")
+        assertFalse("not paired: the wizard still has to run", store.current().onboardingDone)
+    }
+
+    @Test
+    fun `an explicit wizard flag is never overridden by the pairing`() = runBlocking {
+        store.update { it.copy(serverUrl = "https://ledger.example.com", deviceId = "01JDEVICE", onboardingDone = false) }
+        assertFalse("paired in the middle of the wizard", store.current().onboardingDone)
+
+        store.update { it.copy(onboardingDone = true) }
+        assertTrue(store.current().onboardingDone)
+        store.clearPairing()
+        assertTrue("unpairing never brings the wizard back", store.current().onboardingDone)
+    }
+
+    @Test
     fun `updates persist every field and are visible to a second store on the same file`() = runBlocking {
         store.update {
             it.copy(

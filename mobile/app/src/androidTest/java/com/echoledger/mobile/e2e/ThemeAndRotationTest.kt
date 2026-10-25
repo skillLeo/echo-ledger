@@ -119,7 +119,7 @@ class RotationTest : E2eTest() {
     fun theSelectedTabIsKeptWhenThePhoneIsRotated() {
         launchPaired()
         Ui.openTab("Settings")
-        Ui.awaitText("Device")
+        Ui.awaitText("Privacy & security")
         Ui.device.setOrientationLeft()
         Thread.sleep(2_500)
         assertFalse("rotating must not send the user back to the Library", Ui.has("Recordings from your phone, computer and the web"))

@@ -85,9 +85,9 @@ class CaptureUiTest : ScreenTest() {
     // ---- settings page --------------------------------------------------------------------------------------------
 
     @Test
-    fun `Settings opens the capture page and back returns`() {
+    fun `Settings opens the recording group and back returns`() {
         show { SettingsScreen(vm, onSetup = {}) }
-        compose.onNodeWithText("Capture and captions").performClick()
+        compose.onNodeWithText("Recording").performClick()
         compose.onNodeWithText("Auto-record apps").assertExists()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Auto-record apps").assertDoesNotExist()
@@ -98,8 +98,7 @@ class CaptureUiTest : ScreenTest() {
         runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = true) } }
         pumpUntil("settings to load") { vm.settings.value.autoRecordArmed }
         show {
-            CaptureSettingsPage(vm, vm.settings.collectAsState().value, helperConnected = true, recording = false, onSetup = {
-            }, onBack = {})
+            AutoRecordSection(vm, vm.settings.collectAsState().value)
         }
         compose.onNodeWithContentDescription("Auto-record WhatsApp").assertIsOn().performClick()
         pumpUntil("the switch to be saved") { settings().autoRecordApps["whatsapp"] == false }

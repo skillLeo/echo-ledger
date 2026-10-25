@@ -9,6 +9,7 @@ import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.calls.Decisions
 import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
+import com.echoledger.mobile.core.SettingsTransfer
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.BinItemDto
 import com.echoledger.mobile.data.ClientDto
@@ -366,6 +367,56 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) = viewModelScope.launch { graph.settings.update(transform) }
+
+    // ---- Onboarding and settings files (B19) ------------------------------------------------------------------------
+
+    /** Ends the first-run wizard for good; the consent box of its last step is recorded when ticked. */
+    fun finishOnboarding(consent: Boolean = false) = updateSettings {
+        it.copy(onboardingDone = true, consentAcknowledged = it.consentAcknowledged || consent)
+    }
+
+    /** Writes the portable settings (never the pairing, token or lock) to a file the user picked. */
+    fun exportSettingsTo(uri: android.net.Uri) = viewModelScope.launch(Dispatchers.IO) {
+        try {
+            val text = SettingsTransfer.export(graph.settings.current())
+            val out = getApplication<Application>().contentResolver.openOutputStream(uri, "wt") ?: error("no stream")
+            out.use { it.write(text.toByteArray()) }
+            _message.value = "Settings saved"
+        } catch (e: Exception) {
+            _message.value = "The settings could not be saved."
+        }
+    }
+
+    /** Applies a settings file the user picked; the pairing, token and lock stay as they are. */
+    fun importSettingsFrom(uri: android.net.Uri) = viewModelScope.launch(Dispatchers.IO) {
+        val text = try {
+            getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                // At most one byte past the limit is read, so a huge file is refused without being loaded.
+                val bytes = ByteArray(SettingsTransfer.MAX_BYTES + 1)
+                var read = 0
+                while (read < bytes.size) {
+                    val n = input.read(bytes, read, bytes.size - read)
+                    if (n < 0) break
+                    read += n
+                }
+                String(bytes, 0, read, Charsets.UTF_8)
+            } ?: error("no stream")
+        } catch (e: Exception) {
+            _message.value = "The file could not be read."
+            return@launch
+        }
+        when (val result = SettingsTransfer.import(text, graph.settings.current())) {
+            is SettingsTransfer.Result.Rejected -> _message.value = result.reason
+
+            is SettingsTransfer.Result.Applied -> {
+                graph.settings.update { current ->
+                    (SettingsTransfer.import(text, current) as? SettingsTransfer.Result.Applied)?.settings
+                        ?: current
+                }
+                _message.value = "Settings imported"
+            }
+        }
+    }
 
     fun connectShizuku() {
         val h = graph.helper

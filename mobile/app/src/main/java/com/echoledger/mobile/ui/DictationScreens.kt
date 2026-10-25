@@ -199,12 +199,20 @@ private fun SwitchRow(title: String, hint: String?, checked: Boolean, onChange: 
 /** Settings → Dictation: the voice keyboard, how the microphone works, clean-up, sounds, words and snippets, history. */
 @Composable
 fun DictationSettingsPage(vm: MainViewModel, settings: AppSettings, history: DictationHistory, onBack: () -> Unit) {
-    val context = LocalContext.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
             Text("Dictation", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
+        DictationSettingsContent(vm, settings, history)
+    }
+}
+
+/** The dictation cards without a page around them (the Dictation group of Settings). */
+@Composable
+fun DictationSettingsContent(vm: MainViewModel, settings: AppSettings, history: DictationHistory) {
+    val context = LocalContext.current
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SectionCard {
             Text("Voice keyboard", fontWeight = FontWeight.SemiBold)
             Text(

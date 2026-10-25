@@ -54,6 +54,7 @@ class AppLockTest : E2eTest() {
         Shell.setDevicePin(pin)
         launchPaired()
         Ui.openTab("Settings")
+        Ui.clickText("Privacy & security")
         Ui.awaitText(lockLabel)
         Ui.switchNear(lockLabel).click()
         enterPin()
@@ -64,6 +65,7 @@ class AppLockTest : E2eTest() {
     fun withoutASecureLockScreenTheSwitchIsDisabledAndSaysWhy() {
         launchPaired()
         Ui.openTab("Settings")
+        Ui.clickText("Privacy & security")
         Ui.awaitText(lockLabel)
         assertTrue(Ui.has("Set a screen lock on this phone to use App lock."))
         assertTrue(Ui.has("Open security settings"))
@@ -75,6 +77,7 @@ class AppLockTest : E2eTest() {
         Shell.setDevicePin(pin)
         launchPaired()
         Ui.openTab("Settings")
+        Ui.clickText("Privacy & security")
         Ui.awaitText(lockLabel)
         Ui.switchNear(lockLabel).click()
         cancelUnlockPrompt()

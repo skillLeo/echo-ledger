@@ -44,7 +44,8 @@ class PermissionsAndRecordingTest : E2eTest() {
     private fun openSetup() {
         launchPaired()
         Ui.openTab("Settings")
-        Ui.awaitText("Device")
+        Ui.clickText("Devices")
+        Ui.awaitText("This phone")
         Ui.clickText("Setup guide")
         Ui.awaitText("Setup")
     }

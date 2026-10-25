@@ -209,7 +209,13 @@ suspend fun EchoLedgerApp.resetPersistedState() {
 suspend fun EchoLedgerApp.pairLocally(server: FakeServer, token: String = "7|eld_testtoken", pins: List<String> = emptyList()) {
     graph.settings.saveToken(token)
     graph.settings.update {
-        it.copy(serverUrl = server.baseUrl, deviceId = "01JDEVICE0000000000000000A", deviceName = "Test phone", pins = pins)
+        it.copy(
+            serverUrl = server.baseUrl,
+            deviceId = "01JDEVICE0000000000000000A",
+            deviceName = "Test phone",
+            pins = pins,
+            onboardingDone = true
+        )
     }
     graph.invalidateApi()
 }

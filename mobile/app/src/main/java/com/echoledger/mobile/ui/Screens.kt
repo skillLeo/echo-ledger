@@ -958,142 +958,9 @@ private fun StepRow(title: String, done: Boolean, onFix: () -> Unit) {
     }
 }
 
-@Composable
-fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
-    val settings by vm.settings.collectAsState()
-    val clients by vm.clients.collectAsState()
-    val helper by vm.helper.collectAsState()
-    val live by RecordingService.live.collectAsState()
-    var confirmUnpair by remember { mutableStateOf(false) }
-    var capturePage by rememberSaveable { mutableStateOf(false) }
-    var dictationPage by rememberSaveable { mutableStateOf(false) }
-    if (dictationPage) {
-        val context = androidx.compose.ui.platform.LocalContext.current
-        BackHandler { dictationPage = false }
-        DictationSettingsPage(vm, settings, remember { com.echoledger.mobile.dictation.DictationHistory.of(context) }) {
-            dictationPage =
-                false
-        }
-        return
-    }
-    if (capturePage) {
-        BackHandler { capturePage = false }
-        CaptureSettingsPage(vm, settings, helperConnected = helper.connected, recording = live.active, onSetup = onSetup) {
-            capturePage =
-                false
-        }
-        return
-    }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        SectionCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Live captions while recording")
-                    Text("Floating bubble; needs the overlay permission", color = Brand.Muted, fontSize = 12.sp)
-                }
-                Switch(checked = settings.captionsEnabled, onCheckedChange = { v -> vm.updateSettings { it.copy(captionsEnabled = v) } })
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Near-end microphone source")
-                    Text(
-                        if (settings.micSource ==
-                            "mic"
-                        ) {
-                            "Raw microphone"
-                        } else {
-                            "Voice communication (echo-cancelled)"
-                        },
-                        color = Brand.Muted,
-                        fontSize = 12.sp
-                    )
-                }
-                TextButton(onClick = {
-                    vm.updateSettings {
-                        it.copy(
-                            micSource = if (it.micSource ==
-                                "mic"
-                            ) {
-                                "voice_communication"
-                            } else {
-                                "mic"
-                            }
-                        )
-                    }
-                }) { Text("Change") }
-            }
-        }
-        SectionCard(Modifier.clickable(onClickLabel = "Open capture and captions settings") { capturePage = true }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Capture and captions", fontWeight = FontWeight.SemiBold)
-                    Text("Auto-record apps, caption style, microphone test and permissions", color = Brand.Muted, fontSize = 12.sp)
-                }
-                Text("›", color = Brand.Muted, fontSize = 22.sp)
-            }
-        }
-        SectionCard(Modifier.clickable(onClickLabel = "Open dictation settings") { dictationPage = true }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Dictation", fontWeight = FontWeight.SemiBold)
-                    Text("Voice keyboard, words and snippets, recent dictations", color = Brand.Muted, fontSize = 12.sp)
-                }
-                Text("›", color = Brand.Muted, fontSize = 22.sp)
-            }
-        }
-        DecisionTimeoutSection(vm, settings)
-        AppLockSection(vm, settings)
-        SecuritySection(load = { vm.security() }, revoke = { vm.revokeDevice(it) })
-        StorageSection(load = { vm.storage() })
-        NotificationsSection(settings) { vm.updateSettings(it) }
-        TranscriptionSection(vm, settings)
-        SectionCard {
-            Text("Client keyterms", fontWeight = FontWeight.SemiBold)
-            Text("Names and jargon of the selected client improve accuracy.", color = Brand.Muted, fontSize = 12.sp)
-            (listOf(null) + clients).forEach { client ->
-                Row(Modifier.fillMaxWidth().clickable { vm.updateSettings { it.copy(clientId = client?.id) } }.padding(vertical = 6.dp)) {
-                    Text(if (settings.clientId == client?.id) "●  " else "○  ", color = Brand.Violet)
-                    Text(client?.name ?: "No client")
-                }
-            }
-        }
-        SectionCard {
-            Text("Device", fontWeight = FontWeight.SemiBold)
-            Text("${settings.deviceName ?: ""} · ${settings.serverUrl ?: ""}", color = Brand.Muted, fontSize = 13.sp)
-            Text(
-                if (settings.pins.isNotEmpty()) {
-                    "Server certificate pinned (${settings.pins.size} pins)"
-                } else {
-                    "Certificate pinning not configured on the server"
-                },
-                color = Brand.Muted,
-                fontSize = 12.sp
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onSetup) { Text("Setup guide") }
-                Button(onClick = {
-                    confirmUnpair = true
-                }, colors = ButtonDefaults.buttonColors(containerColor = Brand.Danger)) { Text("Unpair") }
-            }
-        }
-    }
-    if (confirmUnpair) {
-        ConfirmDialog(
-            text = "Unpair this phone? Recordings waiting to upload stay on the phone.",
-            confirmLabel = "Unpair",
-            onConfirm = {
-                confirmUnpair = false
-                vm.unpair()
-            },
-            onDismiss = { confirmUnpair = false }
-        )
-    }
-}
-
 /** A short yes/no question before an action that cannot be undone (A6.M4). */
 @Composable
-private fun ConfirmDialog(text: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+internal fun ConfirmDialog(text: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         text = { Text(text) },
@@ -1104,7 +971,7 @@ private fun ConfirmDialog(text: String, confirmLabel: String, onConfirm: () -> U
 
 /** "If I don't choose within 60 s": what happens to a recording nobody decided on (same choices as the desktop). */
 @Composable
-private fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
+internal fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
     SectionCard {
         Text("After a call", fontWeight = FontWeight.SemiBold)
         Text("If I don't choose within 60 s", color = Brand.Muted, fontSize = 12.sp)
@@ -1131,7 +998,7 @@ private fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
  * themselves out with a screen lock they cannot answer.
  */
 @Composable
-private fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
+internal fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
     val context = LocalContext.current
     var recheck by remember { mutableIntStateOf(0) }
     // A screen lock set in the system settings counts as soon as the user comes back.

@@ -67,6 +67,7 @@ import com.echoledger.mobile.ui.LockScreen
 import com.echoledger.mobile.ui.LockState
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.Method
+import com.echoledger.mobile.ui.OnboardingScreen
 import com.echoledger.mobile.ui.PairingScreen
 import com.echoledger.mobile.ui.RecordScreen
 import com.echoledger.mobile.ui.SessionScreen
@@ -244,7 +245,7 @@ class MainActivity : FragmentActivity() {
                 containerColor = Brand.Background,
                 snackbarHost = { SnackbarHost(snackbar) },
                 bottomBar = {
-                    if (unlocked && settings.paired && openItem == null && !showSetup) {
+                    if (unlocked && settings.onboardingDone && settings.paired && openItem == null && !showSetup) {
                         BottomNav(tab) { tab = it }
                     }
                 }
@@ -256,6 +257,8 @@ class MainActivity : FragmentActivity() {
                         !loaded || lockState == LockState.Unknown -> StartupSplash()
 
                         lockState == LockState.Locked -> LockScreen(onUnlock = { requestUnlock() })
+
+                        !settings.onboardingDone -> OnboardingScreen(vm)
 
                         !settings.paired -> PairingScreen(vm)
 
