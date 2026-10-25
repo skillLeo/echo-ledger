@@ -26,11 +26,11 @@ unticked item.
 
 - [x] P0.1 Branch `v1.1` from `main` (`e9e8d93`).
 - [x] P0.2 Read CONTRIBUTING.md, PLAN.md, docs/* and docs/research/*.
-- [ ] P0.3 Baseline: all suites and linters recorded (counts below).
-- [ ] P0.4 Expanded test suites added (API, console, security, Rust core, desktop UI, Android unit, server
+- [x] P0.3 Baseline: all suites and linters recorded (counts below).
+- [x] P0.4 Expanded test suites added (API, console, security, Rust core, desktop UI, Android unit, server
       contract fixtures, desktop end-to-end, Android instrumented). Tests that expose a known defect are marked
       skipped with the defect ID below and are re-enabled by the fix.
-- [ ] P0.5 This plan written.
+- [x] P0.5 This plan written.
 
 **Baseline at `e9e8d93` (before v1.1)**
 
@@ -40,6 +40,16 @@ unticked item.
 | Desktop core (Rust) | 35 passed | clippy clean |
 | Desktop UI | 26 passed | tsc clean · build OK |
 | Android | 66 passed | ktlint clean · Android lint: 4 errors (A6.M6) |
+
+**After Phase 0 (expanded suites; skipped = tests waiting for a defect fix, tagged with its ID)**
+
+| App | Tests | Passed | Skipped | Linters |
+|---|---|---|---|---|
+| Server | 2,168 | 2,065 | 103 | Pint clean · Larastan L6 clean |
+| Desktop core (Rust) | 563 | 519 | 44 | clippy clean |
+| Desktop UI | 372 | 364 | 8 | tsc clean · build OK |
+| Android (unit) | 617 | 594 | 23 | ktlint clean |
+| Repository checks | 23 | 11 | 12 | — |
 
 ---
 
