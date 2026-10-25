@@ -82,7 +82,7 @@ it('lists the navigation groups and pages in the sidebar', function () {
     foreach (['Library', 'System', 'Sessions', 'Clients', 'Devices', 'API Credentials', 'Settings'] as $label) {
         expect($html)->toContain($label);
     }
-    expect($html)->not->toContain('fi-global-search');
+    expect($html)->toContain('fi-global-search'); // the command palette (Ctrl / Cmd + K)
 });
 
 it('counts sessions per source device with an icon and a text label', function () {

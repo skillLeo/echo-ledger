@@ -11,9 +11,13 @@ use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
 use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
+use App\Services\TextReplacements;
+use App\Stt\KeytermPolicy;
+use App\Stt\LanguageChoice;
 use App\Stt\ProviderEndpoints;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
@@ -61,7 +65,9 @@ class Settings extends Page
             'provider_final_transcript' => $all['provider.final_transcript'],
             'provider_voice_note' => $all['provider.voice_note'],
             'captions_channels' => $all['captions.channels'],
-            'default_language' => $all['default_language'],
+            'default_language' => LanguageChoice::normalize($all['default_language']) ?? '',
+            'vocabulary_keyterms' => $settings->globalKeyterms(),
+            'vocabulary_replacements' => $settings->globalReplacements(),
             'display_timezone' => $settings->displayTimezone(),
             'marker_tags' => $settings->markerTags(),
             'assemblyai_region' => $all['assemblyai.region'],
@@ -140,8 +146,8 @@ class Settings extends Page
                 TextInput::make('retention_days')->label('Delete recordings & transcripts after (days)')
                     ->numeric()->minValue(1)->maxValue(365)->required()
                     ->helperText('Runs daily via model:prune. Default 30.'),
-                TextInput::make('default_language')->label('Default language')->maxLength(16)
-                    ->helperText('Empty = auto-detect (recommended for mixed-language calls).'),
+                Select::make('default_language')->label('Default language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false)
+                    ->helperText('Automatic suits most calls. “English + Urdu” is for calls that switch between the two. A client or recording can choose its own.'),
                 Select::make('display_timezone')->label('Time zone')
                     ->options(array_combine(timezone_identifiers_list(), timezone_identifiers_list()))
                     ->searchable()->required()
@@ -166,6 +172,28 @@ class Settings extends Page
                         ->helperText('Up to 12 tags of at most 40 characters. Leave empty for the defaults.')
                         ->nestedRecursiveRules(['string', 'max:40'])
                         ->rules(['array', 'max:12']),
+                ]),
+            Section::make('Vocabulary')
+                ->description('Words the engines should know, and corrections made to every new final transcript. Each client can add its own on its page.')
+                ->schema([
+                    TagsInput::make('vocabulary_keyterms')->label('Keyterms for every recording')
+                        ->placeholder('Add a name, product or term')
+                        ->helperText('Up to 200 terms of at most 50 characters and 5 words. The client’s own keyterms come first; each engine takes as many as it accepts.')
+                        ->nestedRecursiveRules(['string', 'max:50', fn () => function (string $attribute, mixed $value, \Closure $fail): void {
+                            if (($message = KeytermPolicy::validate((string) $value)) !== null) {
+                                $fail($message);
+                            }
+                        }])
+                        ->rules(['array', 'max:200']),
+                    Repeater::make('vocabulary_replacements')->label('Always write')
+                        ->schema([
+                            TextInput::make('from')->label('When the transcript says')->required()->maxLength(TextReplacements::MAX_CHARS),
+                            TextInput::make('to')->label('Write instead')->maxLength(TextReplacements::MAX_CHARS),
+                            Toggle::make('whole_word')->label('Whole words only')->default(true)->inline(false),
+                            Toggle::make('match_case')->label('Match case')->inline(false),
+                        ])
+                        ->columns(4)->defaultItems(0)->maxItems(TextReplacements::MAX_RULES)->addActionLabel('Add a correction')
+                        ->helperText('Applied to every new final transcript; the original stays in the transcript history and can be restored.'),
                 ]),
             Section::make('Monthly limit')
                 ->description('For the whole server, per calendar month in the time zone above. At the limit, devices show "Monthly transcription limit reached" and new transcripts wait. Leave a limit empty for none.')
@@ -246,7 +274,9 @@ class Settings extends Page
             'provider.final_transcript' => $state['provider_final_transcript'],
             'provider.voice_note' => $state['provider_voice_note'],
             'captions.channels' => $state['captions_channels'],
-            'default_language' => filled($state['default_language'] ?? null) ? trim((string) $state['default_language']) : null,
+            'default_language' => LanguageChoice::normalize($state['default_language'] ?? null),
+            'vocabulary.keyterms' => KeytermPolicy::sanitize((array) ($state['vocabulary_keyterms'] ?? [])),
+            'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',
             'assemblyai.region' => $state['assemblyai_region'],
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],

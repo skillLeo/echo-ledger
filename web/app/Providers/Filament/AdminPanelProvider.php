@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Filament\Auth\AppAuthentication;
+use App\Filament\Support\CommandPalette;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
 use Filament\Enums\ThemeMode;
@@ -49,7 +50,10 @@ class AdminPanelProvider extends PanelProvider
             // Self-hosted font and initials avatars: the console asks no third-party host for anything.
             ->font('Inter', provider: LocalInterFontProvider::class)
             ->defaultAvatarProvider(InitialsAvatarProvider::class)
-            ->globalSearch(false)
+            // Ctrl / Cmd + K: pages, recordings (title and transcript) and clients.
+            ->globalSearch(CommandPalette::class)
+            ->globalSearchKeyBindings(['mod+k'])
+            ->globalSearchFieldSuffix(fn (): string => 'Ctrl K')
             ->sidebarCollapsibleOnDesktop()
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')

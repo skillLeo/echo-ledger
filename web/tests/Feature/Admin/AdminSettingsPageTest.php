@@ -254,13 +254,13 @@ it('limits the default language to 16 characters and stores blank as auto-detect
     $this->signInAsAdmin();
 
     adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => str_repeat('x', 17)]))->call('save')
-        ->assertHasFormErrors(['default_language' => 'max']);
+        ->assertHasFormErrors(['default_language' => 'in']);
 
-    adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => '  ']))->call('save')->assertHasNoFormErrors();
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => '']))->call('save')->assertHasNoFormErrors();
     expect(app(SettingsRepository::class)->get('default_language'))->toBeNull();
 
-    adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => ' en ']))->call('save')->assertHasNoFormErrors();
-    expect(app(SettingsRepository::class)->get('default_language'))->toBe('en');
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => 'en+ur']))->call('save')->assertHasNoFormErrors();
+    expect(app(SettingsRepository::class)->get('default_language'))->toBe('en+ur');
 });
 
 it('rejects an unknown caption channel mode', function () {

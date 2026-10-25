@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Support\CommandPalette;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
 use Filament\Enums\ThemeMode;
@@ -63,8 +64,9 @@ it('uses the Inter font', function () {
     expect($this->panel->getFontFamily())->toBe('Inter');
 });
 
-it('has global search switched off and a collapsible sidebar', function () {
-    expect($this->panel->getGlobalSearchProvider())->toBeNull()
+it('has the command palette as global search on Ctrl or Cmd + K and a collapsible sidebar', function () {
+    expect($this->panel->getGlobalSearchProvider())->toBeInstanceOf(CommandPalette::class)
+        ->and($this->panel->getGlobalSearchKeyBindings())->toBe(['mod+k'])
         ->and($this->panel->isSidebarCollapsibleOnDesktop())->toBeTrue();
 });
 

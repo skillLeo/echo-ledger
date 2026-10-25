@@ -123,9 +123,9 @@ it('limits name, language and notes length', function () {
     $this->signInAsAdmin();
 
     $this->panelComponent(CreateClient::class)
-        ->fillForm(['name' => str_repeat('n', 121), 'language' => str_repeat('l', 17), 'notes' => str_repeat('x', 2001)])
+        ->fillForm(['name' => str_repeat('n', 121), 'language' => 'klingon', 'notes' => str_repeat('x', 2001)])
         ->call('create')
-        ->assertHasFormErrors(['name' => 'max', 'language' => 'max', 'notes' => 'max']);
+        ->assertHasFormErrors(['name' => 'max', 'language' => 'in', 'notes' => 'max']);
 });
 
 it('rejects a duplicate client name for the same admin but allows it for another', function () {

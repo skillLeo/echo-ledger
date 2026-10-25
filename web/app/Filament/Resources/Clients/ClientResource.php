@@ -9,12 +9,17 @@ use App\Filament\Resources\Clients\Pages\EditClient;
 use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
 use App\Models\Client;
+use App\Services\TextReplacements;
+use App\Stt\LanguageChoice;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\ColorPicker;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -54,10 +59,24 @@ class ClientResource extends Resource
                 ColorPicker::make('color')->default('#8B5CF6')
                     ->regex('/^#[0-9A-Fa-f]{6}\z/')
                     ->validationMessages(['regex' => 'Use a colour like #8B5CF6.']),
-                TextInput::make('language')->label('Language (optional)')->maxLength(16)
-                    ->helperText('e.g. en, ur, ar. Leave empty for auto-detect (best for mixed-language calls).'),
+                Select::make('language')->label('Language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false)
+                    ->formatStateUsing(fn (?string $state): string => LanguageChoice::normalize($state) ?? '')
+                    ->dehydrateStateUsing(fn (?string $state): ?string => LanguageChoice::normalize($state))
+                    ->helperText('Used for this client’s recordings unless a recording chooses its own. Automatic suits mixed-language calls.'),
                 Textarea::make('notes')->rows(3)->maxLength(2000)->columnSpanFull(),
             ]),
+            Section::make('Corrections')->description('Applied to every new final transcript of this client, before the general ones in Settings.')
+                ->collapsible()->schema([
+                    Repeater::make('replacements')->hiddenLabel()
+                        ->schema([
+                            TextInput::make('from')->label('When the transcript says')->required()->maxLength(TextReplacements::MAX_CHARS),
+                            TextInput::make('to')->label('Write instead')->maxLength(TextReplacements::MAX_CHARS),
+                            Toggle::make('whole_word')->label('Whole words only')->default(true)->inline(false),
+                            Toggle::make('match_case')->label('Match case')->inline(false),
+                        ])
+                        ->columns(4)->defaultItems(0)->maxItems(TextReplacements::MAX_RULES)->addActionLabel('Add a correction')
+                        ->dehydrateStateUsing(fn (?array $state): ?array => ($rules = TextReplacements::rules(array_values($state ?? []))) === [] ? null : $rules),
+                ]),
         ]);
     }
 

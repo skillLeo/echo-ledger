@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
+use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Devices\Pages\ListDevices;
@@ -55,8 +56,10 @@ it('opens every demo session with its transcript, speakers and audio player', fu
             ->toContain('<audio')
             ->toContain('Copy text')
             ->toContain('Copy with timestamps')
-            ->toContain($segments[0]['text'] === '' ? 'el-player' : e($segments[0]['text']));
-        expect(substr_count($html, 'class="el-spk el-spk-'))->toBe(count($segments));
+            ->toContain('aria-label="Playback speed"');
+        $player = TranscriptPlayerEntry::payload($session);
+        expect($player['segments'])->toHaveCount(count($segments))
+            ->and($player['segments'][0]['text'])->toBe($segments[0]['text']);
     }
 });
 
@@ -64,11 +67,12 @@ it('labels the speakers Me and Client for calls and a single speaker for the voi
     $call = CaptureSession::query()->where('title', 'Retainer check-in')->firstOrFail();
     $note = CaptureSession::query()->where('source_app', SourceApp::VoiceNote)->firstOrFail();
 
-    $callHtml = $this->get('/admin/sessions/'.$call->id)->getContent();
-    $noteHtml = $this->get('/admin/sessions/'.$note->id)->getContent();
+    $this->get('/admin/sessions/'.$call->id)->assertOk();
+    $callSpeakers = array_unique(array_column(TranscriptPlayerEntry::payload($call)['segments'], 'speaker'));
+    $noteSpeakers = array_unique(array_column(TranscriptPlayerEntry::payload($note)['segments'], 'speaker'));
 
-    expect($callHtml)->toContain('>Me<')->toContain('>Client<');
-    expect($noteHtml)->not->toContain('>Client<');
+    expect($callSpeakers)->toContain('Me')->toContain('Client');
+    expect($noteSpeakers)->not->toContain('Client');
 });
 
 it('streams every demo recording back as a decrypted WAV', function () {

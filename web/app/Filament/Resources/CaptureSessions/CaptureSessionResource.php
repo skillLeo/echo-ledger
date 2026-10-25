@@ -6,6 +6,7 @@ namespace App\Filament\Resources\CaptureSessions;
 
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
+use App\Filament\Resources\CaptureSessions\RelationManagers\ShareLinksRelationManager;
 use App\Filament\Resources\CaptureSessions\Schemas\CaptureSessionInfolist;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
@@ -56,6 +57,11 @@ class CaptureSessionResource extends Resource
     public static function table(Table $table): Table
     {
         return CaptureSessionsTable::configure($table);
+    }
+
+    public static function getRelations(): array
+    {
+        return [ShareLinksRelationManager::class];
     }
 
     public static function getPages(): array

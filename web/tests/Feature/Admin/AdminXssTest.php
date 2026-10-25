@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Clients\Pages\EditClient;
@@ -219,8 +220,12 @@ it('keeps hostile data that arrives through the device API inert in the console'
         }
     }
     $view = $this->get('/admin/sessions/'.$sessionId)->getContent();
-    expect(adminVisibleText($view))->toContain(ADMIN_XSS_SCRIPT)->toContain(ADMIN_XSS_IMG)->toContain('<b>Me</b>');
-    expect($view)->not->toContain('<b>Me</b>');
+    // The player renders the lines from its data with x-text (never as HTML): the data holds the text verbatim.
+    $player = TranscriptPlayerEntry::payload(CaptureSession::query()->findOrFail($sessionId));
+    expect(array_column($player['segments'], 'text'))->toBe([ADMIN_XSS_SCRIPT, ADMIN_XSS_IMG])
+        ->and($player['segments'][0]['speaker'])->toBe('<b>Me</b>');
+    expect(adminVisibleText($view))->toContain(ADMIN_XSS_IMG); // the title
+    expect($view)->not->toContain('<b>Me</b>')->not->toContain('x-html');
     expect(Device::query()->where('name', ADMIN_XSS_SCRIPT)->exists())->toBeTrue(); // stored verbatim, escaped on output
 });
 

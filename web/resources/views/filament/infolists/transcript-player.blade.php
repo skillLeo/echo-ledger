@@ -1,62 +1,96 @@
 @php
     $data = $entry->getPlayerData();
-    $segments = $data['segments'];
-    $markers = $data['markers'];
-    $pauses = $data['pauses'];
-    $durationMs = max(1, (int) ($data['duration_ms'] ?? 0));
-    $clock = function (int $ms): string {
-        $sec = intdiv(max(0, $ms), 1000);
-
-        return $sec >= 3600 ? sprintf('%d:%02d:%02d', intdiv($sec, 3600), intdiv($sec % 3600, 60), $sec % 60) : sprintf('%d:%02d', intdiv($sec, 60), $sec % 60);
-    };
-    $starts = array_map(fn (array $s): float => ((int) ($s['start_ms'] ?? 0)) / 1000, $segments);
-    $stamp = function (array $s): string {
-        $sec = intdiv(max(0, (int) ($s['start_ms'] ?? 0)), 1000);
-
-        return $sec >= 3600 ? sprintf('%d:%02d:%02d', intdiv($sec, 3600), intdiv($sec % 3600, 60), $sec % 60) : sprintf('%02d:%02d', intdiv($sec, 60), $sec % 60);
-    };
 @endphp
 <x-dynamic-component :component="$getEntryWrapperView()" :entry="$entry">
-    <div class="el-player" wire:ignore tabindex="0" role="group" aria-label="Transcript player. Press Space to play or pause."
-        x-on:keydown="onKey($event)" x-data="{
-            starts: @js($starts), active: -1, raf: null,
+    <div class="el-player" wire:ignore tabindex="0" role="group"
+        aria-label="Transcript player. Space or K plays and pauses, J and L jump 10 seconds, the arrow keys 5 seconds."
+        x-on:keydown="onKey($event)"
+        x-on:el-transcript-updated.window="load($event.detail)"
+        x-data="{
+            d: @js($data), active: -1, word: -1, raf: null, playing: false, now: 0, rate: 1, skipSilence: false, follow: true,
+            editing: false, saving: null, error: null, copied: null,
             init() {
                 const a = this.$refs.audio;
                 if (!a) return;
-                a.addEventListener('play', () => this.tick());
-                ['pause', 'ended'].forEach(e => a.addEventListener(e, () => cancelAnimationFrame(this.raf)));
+                a.addEventListener('play', () => { this.playing = true; this.tick(); });
+                ['pause', 'ended'].forEach(e => a.addEventListener(e, () => { this.playing = false; cancelAnimationFrame(this.raf); this.sync(); }));
                 a.addEventListener('seeked', () => this.sync());
+                a.addEventListener('loadedmetadata', () => {
+                    const t = Number(new URLSearchParams(window.location.search).get('t'));
+                    if (Number.isFinite(t) && t > 0) { a.currentTime = t / 1000; this.sync(); }
+                });
             },
-            tick() { this.sync(); this.raf = requestAnimationFrame(() => this.tick()); },
+            load(next) { this.d = next; this.active = -1; this.word = -1; this.$nextTick(() => this.sync()); },
+            name(s) { return this.d.speaker_names[s.speaker] || s.speaker; },
+            clock(ms) { const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+                return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); },
+            pct(ms) { return Math.min(100, Math.max(0, ms / this.d.duration_ms * 100)) + '%'; },
+            // Consecutive lines of the same speaker form one block.
+            blocks() {
+                const out = [];
+                this.d.segments.forEach((s, i) => {
+                    const last = out[out.length - 1];
+                    if (last && last.speaker === s.speaker) { last.items.push(i); } else { out.push({ speaker: s.speaker, channel: s.channel, start: s.start_ms, items: [i] }); }
+                });
+                return out;
+            },
+            tick() {
+                this.sync();
+                const a = this.$refs.audio;
+                if (this.skipSilence && a && !a.paused) {
+                    const t = a.currentTime * 1000, next = this.d.segments.find(s => s.start_ms > t);
+                    const inSpeech = this.d.segments.some(s => s.start_ms <= t && s.end_ms >= t);
+                    if (!inSpeech && next && next.start_ms - t > 1500) a.currentTime = (next.start_ms - 200) / 1000;
+                }
+                this.raf = requestAnimationFrame(() => this.tick());
+            },
             sync() {
-                const t = this.$refs.audio.currentTime; let lo = 0, hi = this.starts.length - 1, i = -1;
-                while (lo <= hi) { const m = (lo + hi) >> 1; if (this.starts[m] <= t) { i = m; lo = m + 1; } else { hi = m - 1; } }
+                const a = this.$refs.audio; if (!a) return;
+                const t = a.currentTime * 1000; this.now = t;
+                let lo = 0, hi = this.d.segments.length - 1, i = -1;
+                while (lo <= hi) { const m = (lo + hi) >> 1; if (this.d.segments[m].start_ms <= t) { i = m; lo = m + 1; } else { hi = m - 1; } }
+                let w = -1;
+                if (i >= 0) { const words = this.d.segments[i].words; for (let k = 0; k < words.length; k++) { if (words[k].s <= t) w = k; else break; } }
+                this.word = w;
                 if (i === this.active) return;
-                const rows = this.$refs.list.children;
-                if (this.active >= 0 && rows[this.active]) { rows[this.active].removeAttribute('data-active'); rows[this.active].removeAttribute('aria-current'); }
-                if (i >= 0 && rows[i]) { rows[i].setAttribute('data-active', ''); rows[i].setAttribute('aria-current', 'true'); rows[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
                 this.active = i;
+                if (i >= 0 && this.follow && !this.editing) {
+                    const row = this.$refs.list && this.$refs.list.querySelector('[data-seg=\'' + i + '\']');
+                    if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }
             },
-            seek(i) { const a = this.$refs.audio; if (!a) return; a.currentTime = this.starts[i]; a.play(); },
             seekTo(ms) { const a = this.$refs.audio; if (!a) return; a.currentTime = ms / 1000; a.play(); },
+            jump(seconds) { const a = this.$refs.audio; if (!a) return; a.currentTime = Math.max(0, a.currentTime + seconds); this.sync(); },
             toggle() { const a = this.$refs.audio; if (!a) return; if (a.paused) { a.play(); } else { a.pause(); } },
-            // Space toggles playback while the player itself has focus; on a line or a button Space keeps its native
-            // meaning (a line seeks, a button presses), and the audio element handles its own keys.
-            onKey(e) {
-                if (e.key !== ' ' && e.code !== 'Space') return;
-                const tag = (e.target && e.target.tagName) || '';
-                if (['BUTTON', 'AUDIO', 'INPUT', 'TEXTAREA', 'SELECT', 'A'].includes(tag)) return;
-                e.preventDefault();
-                this.toggle();
+            setRate(r) { this.rate = Number(r); if (this.$refs.audio) this.$refs.audio.playbackRate = this.rate; },
+            onTimeline(e) {
+                const box = e.currentTarget.getBoundingClientRect();
+                this.seekTo(Math.max(0, (e.clientX - box.left) / box.width) * this.d.duration_ms);
             },
-            segments: @js(array_map(fn (array $s): array => ['speaker' => $s['speaker'] ?? 'Speaker', 'start_ms' => (int) ($s['start_ms'] ?? 0), 'text' => $s['text'] ?? ''], $segments)),
-            copied: null,
+            onKey(e) {
+                const tag = (e.target && e.target.tagName) || '';
+                if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || (e.target && e.target.isContentEditable)) return;
+                const onControl = ['BUTTON', 'AUDIO', 'A'].includes(tag);
+                const key = e.key.toLowerCase();
+                if ((key === ' ' && !onControl) || key === 'k') { e.preventDefault(); this.toggle(); }
+                else if (key === 'j') { e.preventDefault(); this.jump(-10); }
+                else if (key === 'l') { e.preventDefault(); this.jump(10); }
+                else if (e.key === 'ArrowLeft' && !onControl) { e.preventDefault(); this.jump(-5); }
+                else if (e.key === 'ArrowRight' && !onControl) { e.preventDefault(); this.jump(5); }
+            },
+            async save(i, text) {
+                if (text.trim() === this.d.segments[i].text) return;
+                this.saving = i; this.error = null;
+                try {
+                    const next = await $wire.saveSegment(i, text);
+                    if (next && next.error) { this.error = next.error; } else if (next) { this.load(next); }
+                } catch (e) { this.error = 'The change could not be saved. Try again.'; }
+                this.saving = null;
+            },
             // Same text format as the desktop and Android apps: '[m:ss] Speaker: text', speaker omitted when there is only one.
             transcriptText(withTimes) {
-                const single = new Set(this.segments.map(s => s.speaker)).size <= 1;
-                const stamp = ms => { const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
-                    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0'); };
-                return this.segments.map(s => (withTimes ? '[' + stamp(s.start_ms) + '] ' : '') + (single ? '' : s.speaker + ': ') + s.text).join('\n');
+                const single = new Set(this.d.segments.map(s => s.speaker)).size <= 1;
+                return this.d.segments.map(s => (withTimes ? '[' + this.clock(s.start_ms) + '] ' : '') + (single ? '' : this.name(s) + ': ') + s.text).join('\n');
             },
             async copy(withTimes) {
                 try { await navigator.clipboard.writeText(this.transcriptText(withTimes)); this.copied = withTimes ? 'times' : 'text'; }
@@ -69,52 +103,56 @@
             .el-player { --el-border: #E2E8F0; --el-bg: linear-gradient(135deg, rgba(139,92,246,.06), rgba(34,211,238,.04)), #FFFFFF;
                 --el-text: #0F172A; --el-muted: #475569; --el-me: #6D28D9; --el-client: #155E75; --el-hover: rgba(15,23,42,.05);
                 --el-active: rgba(139,92,246,.14); --el-bar: #7C3AED; --el-focus: #7C3AED; --el-btn-border: #CBD5E1;
-                --el-btn-bg: #FFFFFF; --el-btn-hover: rgba(139,92,246,.12);
+                --el-btn-bg: #FFFFFF; --el-btn-hover: rgba(139,92,246,.12); --el-word: rgba(250,204,21,.45); --el-lane-me: rgba(124,58,237,.55);
+                --el-lane-client: rgba(14,116,144,.55);
                 color: var(--el-text); border: 1px solid var(--el-border); border-radius: 1rem; padding: 1rem; background: var(--el-bg); }
             .dark .el-player { --el-border: rgba(255,255,255,.10); --el-bg: linear-gradient(135deg, rgba(139,92,246,.12), rgba(34,211,238,.06));
                 --el-text: #F1F5F9; --el-muted: #CBD5E1; --el-me: #C4B5FD; --el-client: #67E8F9; --el-hover: rgba(255,255,255,.06);
                 --el-active: rgba(139,92,246,.30); --el-bar: #A78BFA; --el-focus: #C4B5FD; --el-btn-border: rgba(255,255,255,.22);
-                --el-btn-bg: rgba(255,255,255,.04); --el-btn-hover: rgba(139,92,246,.28); }
-            .el-player:focus-visible, .el-player .el-seg:focus-visible, .el-player .el-btn:focus-visible, .el-player audio:focus-visible {
-                outline: 2px solid var(--el-focus); outline-offset: 2px; }
-            .el-player audio { width: 100%; margin-bottom: .75rem; border-radius: .75rem; }
-            .el-player .el-meta { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: .75rem; color: var(--el-muted); margin-bottom: .5rem; }
-            .el-player ol { max-height: 30rem; overflow-y: auto; list-style: none; padding: 2px; margin: 0; }
-            .el-player li { border-radius: .6rem; }
-            .el-player li[data-active] { background: var(--el-active); box-shadow: inset 3px 0 0 var(--el-bar); }
-            .el-player .el-seg { display: grid; grid-template-columns: 4.5rem 5.5rem minmax(0, 1fr); gap: .5rem; width: 100%;
-                padding: .45rem .6rem; border: 0; border-radius: .6rem; background: transparent; color: inherit; font: inherit;
-                text-align: left; line-height: 1.45; cursor: pointer; transition: background .15s; }
-            .el-player .el-seg:hover { background: var(--el-hover); }
-            .el-player .el-time { font-variant-numeric: tabular-nums; color: var(--el-muted); font-size: .8rem; padding-top: .1rem; }
-            .el-player .el-spk { font-weight: 600; font-size: .8rem; padding-top: .1rem; }
-            .el-player .el-spk-1 { color: var(--el-me); } .el-player .el-spk-2 { color: var(--el-client); }
-            .el-player .el-text { overflow-wrap: anywhere; }
-            .el-player .el-empty { color: var(--el-muted); font-size: .9rem; padding: .75rem 0; }
-            .el-player .el-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: .4rem; }
+                --el-btn-bg: rgba(255,255,255,.04); --el-btn-hover: rgba(139,92,246,.28); --el-word: rgba(250,204,21,.35);
+                --el-lane-me: rgba(167,139,250,.7); --el-lane-client: rgba(34,211,238,.6); }
+            .el-player :focus-visible, .el-player:focus-visible { outline: 2px solid var(--el-focus); outline-offset: 2px; }
+            .el-player audio { width: 100%; margin-bottom: .6rem; border-radius: .75rem; }
+            .el-player .el-tools { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: .78rem; color: var(--el-muted); margin-bottom: .6rem; }
+            .el-player .el-tools label { display: inline-flex; gap: .35rem; align-items: center; cursor: pointer; }
+            .el-player .el-tools select { font: inherit; border: 1px solid var(--el-btn-border); background: var(--el-btn-bg); color: var(--el-text); border-radius: .45rem; padding: .15rem .4rem; }
+            .el-player .el-spacer { flex: 1; }
             .el-player .el-btn { font-size: .75rem; padding: .3rem .7rem; border-radius: .5rem; border: 1px solid var(--el-btn-border);
                 background: var(--el-btn-bg); color: var(--el-text); cursor: pointer; transition: background .15s; }
-            .el-player .el-btn:hover { background: var(--el-btn-hover); }
-            .el-player .el-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
-                clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-            .el-player .el-marks { margin: 0 0 .75rem; }
-            .el-player .el-bar { position: relative; height: 6px; border-radius: 3px; background: var(--el-hover); margin-bottom: .5rem; }
-            .el-player .el-tick { position: absolute; top: -3px; width: 3px; height: 12px; border-radius: 2px; background: var(--el-bar); transform: translateX(-50%); }
-            .el-player .el-tick-pause { background: var(--el-muted); opacity: .6; }
-            .el-player .el-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+            .el-player .el-btn:hover, .el-player .el-btn[aria-pressed=true] { background: var(--el-btn-hover); }
+            .el-player .el-time { font-variant-numeric: tabular-nums; color: var(--el-muted); font-size: .8rem; }
+            .el-player .el-timeline { position: relative; height: 34px; border-radius: .5rem; background: var(--el-hover); margin-bottom: .75rem; cursor: pointer; overflow: hidden; }
+            .el-player .el-lane { position: absolute; left: 0; right: 0; height: 11px; }
+            .el-player .el-lane-1 { top: 4px; } .el-player .el-lane-2 { top: 19px; }
+            .el-player .el-talk { position: absolute; top: 0; height: 100%; border-radius: 3px; min-width: 2px; }
+            .el-player .el-lane-1 .el-talk { background: var(--el-lane-me); } .el-player .el-lane-2 .el-talk { background: var(--el-lane-client); }
+            .el-player .el-tick { position: absolute; top: 0; width: 3px; height: 100%; background: var(--el-bar); transform: translateX(-50%); }
+            .el-player .el-tick-pause { background: var(--el-muted); opacity: .7; }
+            .el-player .el-head { position: absolute; top: 0; width: 2px; height: 100%; background: var(--el-text); transform: translateX(-50%); pointer-events: none; }
+            .el-player .el-chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .75rem; }
             .el-player .el-chip { display: inline-flex; gap: .4rem; align-items: baseline; font-size: .75rem; padding: .25rem .6rem;
                 border-radius: 999px; border: 1px solid var(--el-btn-border); background: var(--el-btn-bg); color: var(--el-text); cursor: pointer; }
             .el-player .el-chip:hover { background: var(--el-btn-hover); }
-            .el-player .el-chip:focus-visible { outline: 2px solid var(--el-focus); outline-offset: 2px; }
             .el-player .el-chip-pause { cursor: default; color: var(--el-muted); }
             .el-player .el-note { color: var(--el-muted); }
-            /* Phones: time and speaker on one line, the text below at full width. */
-            @media (max-width: 640px) {
-                .el-player { padding: .75rem; }
-                .el-player .el-seg { grid-template-columns: auto minmax(0, 1fr); row-gap: .15rem; }
-                .el-player .el-seg .el-text { grid-column: 1 / -1; }
-                .el-player .el-actions { margin-left: 0; }
-            }
+            .el-player .el-list { max-height: 34rem; overflow-y: auto; padding: 2px; margin: 0; }
+            .el-player .el-block { padding: .45rem .5rem .55rem; border-radius: .6rem; }
+            .el-player .el-block + .el-block { margin-top: .2rem; }
+            .el-player .el-who { display: flex; gap: .5rem; align-items: baseline; margin-bottom: .15rem; }
+            .el-player .el-spk { font-weight: 600; font-size: .82rem; }
+            .el-player .el-spk-1 { color: var(--el-me); } .el-player .el-spk-2 { color: var(--el-client); }
+            .el-player .el-line { display: block; width: 100%; text-align: start; border: 0; background: transparent; color: inherit; font: inherit;
+                line-height: 1.55; padding: .1rem .35rem; border-radius: .4rem; cursor: pointer; overflow-wrap: anywhere; unicode-bidi: plaintext; }
+            .el-player .el-line:hover { background: var(--el-hover); }
+            .el-player .el-line[data-active] { background: var(--el-active); box-shadow: inset 3px 0 0 var(--el-bar); }
+            .el-player .el-w[data-on] { background: var(--el-word); border-radius: 3px; }
+            .el-player textarea.el-edit { width: 100%; font: inherit; line-height: 1.5; color: var(--el-text); background: var(--el-btn-bg);
+                border: 1px solid var(--el-btn-border); border-radius: .45rem; padding: .3rem .45rem; resize: vertical; unicode-bidi: plaintext; }
+            .el-player .el-empty { color: var(--el-muted); font-size: .9rem; padding: .75rem 0; }
+            .el-player .el-error { color: #E11D48; font-size: .8rem; margin: 0 0 .5rem; }
+            .el-player .el-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+            @media (max-width: 640px) { .el-player { padding: .75rem; } .el-player .el-spacer { flex-basis: 100%; } }
+            @media (prefers-reduced-motion: reduce) { .el-player .el-btn { transition: none; } }
         </style>
 
         @if ($data['audio_url'])
@@ -123,58 +161,72 @@
             <div class="el-empty">Audio is not available (still uploading, deleted, or retention expired).</div>
         @endif
 
-        <div class="el-meta">
-            <span>{{ $data['kind'] === 'live' ? 'Live captions (final transcript pending)' : 'Final transcript' }}</span>
-            @if ($data['status'] && $data['status'] !== 'completed') <span>· {{ str_replace('_', ' ', $data['status']) }}</span> @endif
-            @if (count($segments) > 0)
-                <span class="el-actions">
-                    <button type="button" class="el-btn" x-on:click="copy(false)" x-text="copied === 'text' ? 'Copied' : 'Copy text'"></button>
-                    <button type="button" class="el-btn" x-on:click="copy(true)" x-text="copied === 'times' ? 'Copied' : (copied === 'failed' ? 'Copy failed' : 'Copy with timestamps')"></button>
-                </span>
-                <span class="el-sr" role="status" aria-live="polite" x-text="copied === 'failed' ? 'Copy failed' : (copied ? 'Copied to the clipboard' : '')"></span>
+        <div class="el-tools">
+            <span x-text="d.kind === 'live' ? 'Live captions (final transcript pending)' : 'Final transcript'"></span>
+            <span x-show="d.status && d.status !== 'completed'" x-text="'· ' + (d.status || '').replace('_', ' ')"></span>
+            <span x-show="d.model" x-text="'· ' + d.model"></span>
+            <span x-text="'· ' + d.language"></span>
+            <span x-show="d.edited">· edited</span>
+            <span class="el-spacer"></span>
+            @if ($data['audio_url'])
+                <label>Speed
+                    <select x-on:change="setRate($event.target.value)" aria-label="Playback speed">
+                        <template x-for="r in [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]" :key="r"><option :value="r" :selected="r === rate" x-text="r + '×'"></option></template>
+                    </select>
+                </label>
+                <label><input type="checkbox" x-model="skipSilence"> Skip silence</label>
+                <label><input type="checkbox" x-model="follow"> Follow</label>
             @endif
+            <button type="button" class="el-btn" x-show="d.editable" x-on:click="editing = !editing" :aria-pressed="editing" x-text="editing ? 'Done editing' : 'Edit text'"></button>
+            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(false)" x-text="copied === 'text' ? 'Copied' : 'Copy text'"></button>
+            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(true)" x-text="copied === 'times' ? 'Copied' : (copied === 'failed' ? 'Copy failed' : 'Copy with timestamps')"></button>
+            <span class="el-sr" role="status" aria-live="polite" x-text="copied === 'failed' ? 'Copy failed' : (copied ? 'Copied to the clipboard' : (saving !== null ? 'Saving' : ''))"></span>
         </div>
 
-        @if (count($markers) > 0 || count($pauses) > 0)
-            <div class="el-marks" aria-label="Bookmarks and pauses">
-                <div class="el-bar" aria-hidden="true">
-                    @foreach ($pauses as $p)
-                        <span class="el-tick el-tick-pause" style="left: {{ min(100, round($p['at_ms'] / $durationMs * 100, 2)) }}%"></span>
-                    @endforeach
-                    @foreach ($markers as $m)
-                        <span class="el-tick" style="left: {{ min(100, round($m['at_ms'] / $durationMs * 100, 2)) }}%"></span>
-                    @endforeach
-                </div>
-                <div class="el-chips">
-                    @foreach ($markers as $m)
-                        <button type="button" class="el-chip" x-on:click="seekTo({{ $m['at_ms'] }})" aria-label="Play from the bookmark at {{ $clock($m['at_ms']) }}">
-                            <span class="el-time">{{ $clock($m['at_ms']) }}</span>
-                            <span>{{ $m['tag'] ?? 'Bookmark' }}</span>
-                            @if ($m['note']) <span class="el-note">{{ $m['note'] }}</span> @endif
-                        </button>
-                    @endforeach
-                    @foreach ($pauses as $p)
-                        <span class="el-chip el-chip-pause">Paused at {{ $clock($p['at_ms']) }} for {{ $clock($p['paused_ms']) }}</span>
-                    @endforeach
-                </div>
-            </div>
-        @endif
+        <div class="el-timeline" x-show="d.segments.length || d.markers.length" x-on:click="onTimeline($event)" role="presentation" aria-hidden="true">
+            <div class="el-lane el-lane-1"><template x-for="(s, i) in d.segments" :key="'l' + i"><span x-show="s.channel === 1" class="el-talk" :style="'left:' + pct(s.start_ms) + ';width:' + pct(s.end_ms - s.start_ms)"></span></template></div>
+            <div class="el-lane el-lane-2"><template x-for="(s, i) in d.segments" :key="'r' + i"><span x-show="s.channel === 2" class="el-talk" :style="'left:' + pct(s.start_ms) + ';width:' + pct(s.end_ms - s.start_ms)"></span></template></div>
+            <template x-for="(p, i) in d.pauses" :key="'p' + i"><span class="el-tick el-tick-pause" :style="'left:' + pct(p.at_ms)"></span></template>
+            <template x-for="(m, i) in d.markers" :key="'m' + i"><span class="el-tick" :style="'left:' + pct(m.at_ms)"></span></template>
+            <span class="el-head" :style="'left:' + pct(now)"></span>
+        </div>
 
-        @if (count($segments) === 0)
-            <div class="el-empty">No transcript yet.</div>
-            <ol x-ref="list"></ol>
-        @else
-            <ol x-ref="list" aria-label="Transcript lines. Choose a line to play from there.">
-                @foreach ($segments as $i => $s)
-                    <li>
-                        <button type="button" class="el-seg" x-on:click="seek({{ $i }})">
-                            <span class="el-time">{{ $stamp($s) }}</span>
-                            <span class="el-spk el-spk-{{ (int) ($s['channel'] ?? 1) === 2 ? 2 : 1 }}">{{ $s['speaker'] ?? 'Speaker' }}</span>
-                            <span class="el-text">{{ $s['text'] ?? '' }}</span>
-                        </button>
-                    </li>
-                @endforeach
-            </ol>
-        @endif
+        <div class="el-chips" x-show="d.markers.length || d.pauses.length" aria-label="Bookmarks and pauses">
+            <template x-for="(m, i) in d.markers" :key="'mc' + i">
+                <button type="button" class="el-chip" x-on:click="seekTo(m.at_ms)" :aria-label="'Play from the bookmark at ' + clock(m.at_ms)">
+                    <span class="el-time" x-text="clock(m.at_ms)"></span><span x-text="m.tag || 'Bookmark'"></span><span class="el-note" x-show="m.note" x-text="m.note"></span>
+                </button>
+            </template>
+            <template x-for="(p, i) in d.pauses" :key="'pc' + i">
+                <span class="el-chip el-chip-pause" x-text="'Paused at ' + clock(p.at_ms) + ' for ' + clock(p.paused_ms)"></span>
+            </template>
+        </div>
+
+        <p class="el-error" role="alert" x-show="error" x-text="error"></p>
+        <div class="el-empty" x-show="!d.segments.length">No transcript yet.</div>
+        <div class="el-list" x-ref="list" x-show="d.segments.length" aria-label="Transcript. Choose a line to play from there.">
+            <template x-for="(b, bi) in blocks()" :key="'b' + bi + '-' + b.start">
+                <div class="el-block">
+                    <div class="el-who"><span class="el-spk" :class="'el-spk-' + b.channel" x-text="name(d.segments[b.items[0]])"></span><span class="el-time" x-text="clock(b.start)"></span></div>
+                    <template x-for="i in b.items" :key="'s' + i">
+                        <div :data-seg="i">
+                            <template x-if="!editing">
+                                <button type="button" class="el-line" :data-active="active === i ? '' : null" :aria-current="active === i ? 'true' : null" x-on:click="seekTo(d.segments[i].start_ms)">
+                                    <template x-if="d.segments[i].words.length">
+                                        <span><template x-for="(w, wi) in d.segments[i].words" :key="wi"><span class="el-w" :data-on="active === i && word === wi ? '' : null" x-text="w.t + ' '"></span></template></span>
+                                    </template>
+                                    <template x-if="!d.segments[i].words.length"><span x-text="d.segments[i].text"></span></template>
+                                </button>
+                            </template>
+                            <template x-if="editing">
+                                <textarea class="el-edit" rows="2" :aria-label="'Line at ' + clock(d.segments[i].start_ms)" :disabled="saving === i"
+                                    x-init="$el.value = d.segments[i].text" x-on:blur="save(i, $el.value)"
+                                    x-on:keydown.ctrl.enter.prevent="$el.blur()" x-on:keydown.meta.enter.prevent="$el.blur()"></textarea>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
     </div>
 </x-dynamic-component>

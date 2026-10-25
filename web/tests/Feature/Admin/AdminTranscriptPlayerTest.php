@@ -13,6 +13,12 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 
 uses(AdminTestHelpers::class);
 
+/*
+ * The console transcript player (v1.1): speaker blocks, word highlight, speeds, skip silence, follow, the keys
+ * Space / J / K / L / ← / →, the activity timeline with bookmarks, copy, and inline editing. The Alpine component is
+ * evaluated in Node so its behaviour is tested, not only its markup.
+ */
+
 beforeEach(function () {
     Filament::setCurrentPanel('admin');
 });
@@ -21,7 +27,8 @@ beforeEach(function () {
 function adminCallSegments(): array
 {
     return [
-        ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 4_000, 'text' => 'Hello there, this is Farah.'],
+        ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 4_000, 'text' => 'Hello there, this is Farah.',
+            'words' => [['text' => 'Hello', 'start_ms' => 0, 'end_ms' => 400], ['text' => 'there,', 'start_ms' => 450, 'end_ms' => 900]]],
         ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 5_000, 'end_ms' => 9_000, 'text' => 'Hi, how can I help?'],
         ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 65_000, 'end_ms' => 70_000, 'text' => 'We spoke about the Q3 roadmap.'],
         ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 3_725_000, 'end_ms' => 3_730_000, 'text' => 'One hour later.'],
@@ -44,17 +51,6 @@ function adminPlayerNode(string $html): DOMElement
     expect($node)->not->toBeNull('the transcript player is on the page');
 
     return $node;
-}
-
-/** @return list<DOMElement> */
-function adminPlayerRows(DOMElement $player): array
-{
-    $rows = [];
-    foreach ((new DOMXPath($player->ownerDocument))->query('.//ol/li', $player) as $row) {
-        $rows[] = $row;
-    }
-
-    return $rows;
 }
 
 function adminNodeAvailable(): bool
@@ -90,13 +86,17 @@ const input = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 globalThis.setTimeout = () => 0;
 globalThis.cancelAnimationFrame = () => {};
 globalThis.requestAnimationFrame = () => 0;
+globalThis.$wire = { saveSegment: async (i, text) => input.save === 'refuse' ? { error: 'Only a finished transcript can be edited.' } : { ...input.saved, saved: [i, text] } };
 
 const data = new Function('return (' + input.expression + ')')();
+data.$nextTick = (f) => f();
 const out = {
-  starts: data.starts,
-  segments: data.segments,
+  d: data.d,
   text: data.transcriptText(false),
   times: data.transcriptText(true),
+  blocks: data.blocks().map((b) => ({ speaker: b.speaker, items: b.items })),
+  pct: [data.pct(0), data.pct(data.d.duration_ms / 2), data.pct(data.d.duration_ms * 2)],
+  clock: [data.clock(0), data.clock(65000), data.clock(3725000)],
 };
 
 if (input.copy) {
@@ -111,38 +111,40 @@ if (input.copy) {
   out.copy = { writes, states: results };
 }
 
+const audio = { currentTime: 0, paused: true, playbackRate: 1, play() { this.paused = false; }, pause() { this.paused = true; } };
+data.$refs = { audio, list: { querySelector: () => ({ scrollIntoView() {} }) } };
+
 if (input.sync) {
-  const rows = data.segments.map(() => {
-    const attrs = new Set();
-    return { attrs, setAttribute: (n) => attrs.add(n), removeAttribute: (n) => attrs.delete(n), scrollIntoView() {} };
-  });
-  const audio = { currentTime: 0, played: false, play() { this.played = true; } };
-  data.$refs = { audio, list: { children: rows } };
-  out.sync = input.sync.map((t) => {
-    audio.currentTime = t;
-    data.sync();
-    return { t, active: data.active, marked: rows.map((r, i) => (r.attrs.has('data-active') ? i : null)).filter((i) => i !== null) };
-  });
-  data.seek(input.seek ?? 0);
-  out.seek = { currentTime: audio.currentTime, played: audio.played };
+  out.sync = input.sync.map((t) => { audio.currentTime = t; data.sync(); return { t, active: data.active, word: data.word }; });
+  data.seekTo(input.seekTo ?? 0);
+  out.seek = { currentTime: audio.currentTime, playing: !audio.paused };
 }
 
 if (input.keys) {
-  const audio = { paused: true, play() { this.paused = false; }, pause() { this.paused = true; } };
-  data.$refs = Object.assign({}, data.$refs || {}, { audio });
+  audio.currentTime = 30; audio.paused = true;
   out.keys = input.keys.map((k) => {
     let prevented = false;
     data.onKey({ key: k.key, code: k.code || '', target: { tagName: k.tag }, preventDefault() { prevented = true; } });
-    return { prevented, paused: audio.paused };
+    return { prevented, paused: audio.paused, time: audio.currentTime };
   });
+}
+
+if (input.skip) {
+  data.skipSilence = true; audio.paused = false;
+  out.skip = input.skip.map((t) => { audio.currentTime = t; data.tick(); return audio.currentTime; });
+}
+
+if (input.rate) { data.setRate(input.rate); out.rate = audio.playbackRate; }
+
+if (input.save) {
+  await data.save(0, input.save === 'refuse' ? 'changed' : input.text);
+  out.save = { error: data.error, d: data.d, saving: data.saving };
 }
 
 if (input.desktopModule) {
   const desktop = await import(pathToFileURL(input.desktopModule).href);
-  out.desktop = {
-    text: desktop.transcriptText(data.segments, false),
-    times: desktop.transcriptText(data.segments, true),
-  };
+  const named = data.d.segments.map((s) => ({ ...s, speaker: data.name(s) }));
+  out.desktop = { text: desktop.transcriptText(named, false), times: desktop.transcriptText(named, true) };
 }
 
 console.log(JSON.stringify(out));
@@ -161,279 +163,215 @@ JS);
     return json_decode($stdout, true, flags: JSON_THROW_ON_ERROR);
 }
 
-// --- Structure ------------------------------------------------------------------------------------------------
+function adminNeedsNode(object $test): void
+{
+    if (! adminNodeAvailable()) {
+        $test->markTestSkipped('Node.js is not available to evaluate the player script.');
+    }
+}
 
-it('lists every segment with a time, a speaker label and the text', function () {
+// --- Data ------------------------------------------------------------------------------------------------------
+
+it('exposes the player data through the entry class', function () {
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, adminCallSegments());
-
-    $rows = adminPlayerRows(adminPlayerNode(adminPlayerPage($this, $session)));
-
-    expect($rows)->toHaveCount(4);
-    $cells = array_map(fn (DOMElement $row): array => array_map(fn ($span) => trim($span->textContent), iterator_to_array($row->getElementsByTagName('span'))), $rows);
-    expect($cells[0])->toBe(['00:00', 'Me', 'Hello there, this is Farah.'])
-        ->and($cells[1])->toBe(['00:05', 'Client', 'Hi, how can I help?'])
-        ->and($cells[2])->toBe(['01:05', 'Me', 'We spoke about the Q3 roadmap.'])
-        ->and($cells[3])->toBe(['1:02:05', 'Client', 'One hour later.']);
-});
-
-it('shows times as mm:ss under an hour and h:mm:ss from an hour', function (int $ms, string $expected) {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => $ms, 'end_ms' => $ms + 1, 'text' => 'x']]);
-
-    $rows = adminPlayerRows(adminPlayerNode(adminPlayerPage($this, $session)));
-
-    expect(trim($rows[0]->getElementsByTagName('span')->item(0)->textContent))->toBe($expected);
-})->with([
-    'start' => [0, '00:00'],
-    'under a second' => [999, '00:00'],
-    'one minute' => [60_000, '01:00'],
-    'just under an hour' => [3_599_999, '59:59'],
-    'exactly an hour' => [3_600_000, '1:00:00'],
-    'ten hours' => [36_000_000, '10:00:00'],
-]);
-
-it('colours Me and Client differently by channel and falls back to "Speaker"', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, [
-        ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1, 'text' => 'mine'],
-        ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 1000, 'end_ms' => 2, 'text' => 'theirs'],
-        ['channel' => 1, 'start_ms' => 2000, 'end_ms' => 3, 'text' => 'unlabelled'],
-    ]);
-
-    $rows = adminPlayerRows(adminPlayerNode(adminPlayerPage($this, $session)));
-    $classes = array_map(fn (DOMElement $row): string => $row->getElementsByTagName('span')->item(1)->getAttribute('class'), $rows);
-    $labels = array_map(fn (DOMElement $row): string => trim($row->getElementsByTagName('span')->item(1)->textContent), $rows);
-
-    expect($classes)->toBe(['el-spk el-spk-1', 'el-spk el-spk-2', 'el-spk el-spk-1'])
-        ->and($labels)->toBe(['Me', 'Client', 'Speaker']);
-});
-
-it('plays the decrypted recording from the admin media route', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+    $session->update(['speaker_names' => ['Client' => 'Jane'], 'duration_ms' => 3_730_000]);
     $recording = $this->readyRecording($session);
 
-    $player = adminPlayerNode(adminPlayerPage($this, $session));
-    $audio = $player->getElementsByTagName('audio')->item(0);
+    $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])->instance();
+    $schema = Schema::make($page)->record($session->fresh())->components([TranscriptPlayerEntry::make('player')]);
+    $data = $schema->getComponent('player')->getPlayerData();
 
-    expect($audio)->not->toBeNull()
-        ->and($audio->getAttribute('src'))->toBe(route('admin.recordings.stream', ['recording' => $recording->id]))
-        ->and($audio->hasAttribute('controls'))->toBeTrue()
-        ->and($audio->getAttribute('preload'))->toBe('metadata');
-});
-
-it('explains when there is no audio to play', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments());
-
-    $player = adminPlayerNode(adminPlayerPage($this, $session));
-
-    expect($player->getElementsByTagName('audio')->length)->toBe(0)
-        ->and($player->textContent)->toContain('Audio is not available (still uploading, deleted, or retention expired).');
-});
-
-it('says "No transcript yet" and offers no copy buttons when there are no segments', function () {
-    $admin = $this->signInAsAdmin();
-    $session = CaptureSession::factory()->create(['user_id' => $admin->id]);
-
-    $html = adminPlayerPage($this, $session);
-    $player = adminPlayerNode($html);
-
-    expect($player->textContent)->toContain('No transcript yet.')
-        ->and($player->getElementsByTagName('button')->length)->toBe(0)
-        ->and(adminPlayerRows($player))->toBe([]);
-});
-
-it('labels a final transcript and a live-caption transcript differently', function () {
-    $admin = $this->signInAsAdmin();
-    $final = $this->sessionWithTranscript($admin, adminCallSegments());
-    $live = $this->sessionWithTranscript($admin, adminCallSegments(), kind: 'live', transcript: ['status' => TranscriptStatus::Completed]);
-
-    expect(adminPlayerNode(adminPlayerPage($this, $final))->textContent)->toContain('Final transcript')->not->toContain('Live captions');
-    expect(adminPlayerNode(adminPlayerPage($this, $live))->textContent)->toContain('Live captions (final transcript pending)');
+    expect($data['audio_url'])->toBe(route('admin.recordings.stream', ['recording' => $recording->id]))
+        ->and($data['kind'])->toBe('final')
+        ->and($data['status'])->toBe('completed')
+        ->and($data['editable'])->toBeTrue()
+        ->and($data['segments'])->toHaveCount(4)
+        ->and($data['segments'][0]['words'])->toBe([['s' => 0, 'e' => 400, 't' => 'Hello'], ['s' => 450, 'e' => 900, 't' => 'there,']])
+        ->and($data['segments'][1]['words'])->toBe([])
+        ->and($data['speaker_names'])->toBe(['Client' => 'Jane'])
+        ->and($data['duration_ms'])->toBe(3_730_000);
 });
 
 it('prefers the final transcript, but falls back to live captions while the final one has no text', function () {
     $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1, 'text' => 'LIVE caption text']], kind: 'live');
-    Transcript::query()->create(['capture_session_id' => $session->id, 'kind' => 'final', 'provider' => 'assemblyai', 'status' => TranscriptStatus::Processing, 'segments' => []]);
+    $session = $this->sessionWithTranscript($admin, [], transcript: ['status' => TranscriptStatus::Processing]);
+    Transcript::query()->create(['capture_session_id' => $session->id, 'kind' => 'live', 'provider' => 'device', 'status' => TranscriptStatus::Completed,
+        'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'live words']]]);
 
-    $text = adminPlayerNode(adminPlayerPage($this, $session))->textContent;
-    expect($text)->toContain('LIVE caption text')->toContain('processing');
+    $data = TranscriptPlayerEntry::payload($session->fresh());
 
-    Transcript::query()->where('capture_session_id', $session->id)->where('kind', 'final')->update([
-        'status' => TranscriptStatus::Completed->value,
-        'segments' => json_encode([['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1, 'text' => 'FINAL transcript text']]),
-    ]);
-    $text = adminPlayerNode(adminPlayerPage($this, $session))->textContent;
-    expect($text)->toContain('FINAL transcript text')->not->toContain('LIVE caption text');
+    expect($data['kind'])->toBe('live')
+        ->and($data['status'])->toBe('processing')
+        ->and($data['editable'])->toBeFalse()
+        ->and($data['segments'][0]['text'])->toBe('live words');
 });
 
-it('shows the transcript status while it is not finished', function (TranscriptStatus $status, string $label) {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments(), transcript: ['status' => $status]);
-
-    expect(adminPlayerNode(adminPlayerPage($this, $session))->textContent)->toContain($label);
-})->with([
-    [TranscriptStatus::Pending, 'pending'],
-    [TranscriptStatus::Submitted, 'submitted'],
-    [TranscriptStatus::Processing, 'processing'],
-    [TranscriptStatus::AwaitingDevice, 'awaiting device'],
-    [TranscriptStatus::Failed, 'failed'],
-]);
-
-// --- Copy controls --------------------------------------------------------------------------------------------
-
-it('has Copy text and Copy with timestamps buttons wired to the copy handler', function () {
+it('plays the decrypted recording from the admin media route, or explains why there is no audio', function () {
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, adminCallSegments());
 
-    $player = adminPlayerNode(adminPlayerPage($this, $session));
-    // Transcript lines are buttons too (A6.W14), so pick the copy buttons by their class.
-    $buttons = iterator_to_array((new DOMXPath($player->ownerDocument))->query('.//button[contains(concat(" ", normalize-space(@class), " "), " el-btn ")]', $player));
+    expect(adminPlayerPage($this, $session))->toContain('Audio is not available');
+    $recording = $this->readyRecording($session);
+    $audio = adminPlayerNode(adminPlayerPage($this, $session))->getElementsByTagName('audio')->item(0);
 
-    expect($buttons)->toHaveCount(2)
-        ->and($buttons[0]->getAttribute('x-on:click'))->toBe('copy(false)')
-        ->and($buttons[0]->getAttribute('x-text'))->toContain('Copy text')
-        ->and($buttons[1]->getAttribute('x-on:click'))->toBe('copy(true)')
-        ->and($buttons[1]->getAttribute('x-text'))->toContain('Copy with timestamps')
-        ->and($buttons[0]->getAttribute('type'))->toBe('button')
-        ->and($buttons[1]->getAttribute('type'))->toBe('button');
+    expect($audio)->not->toBeNull()
+        ->and($audio->getAttribute('src'))->toBe(route('admin.recordings.stream', ['recording' => $recording->id]))
+        ->and($audio->getAttribute('x-ref'))->toBe('audio');
 });
 
-it('carries every segment\'s speaker, start time and text to the browser', function () {
+it('offers speed, skip silence, follow, editing and copying in the toolbar', function () {
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, adminCallSegments());
-    if (! adminNodeAvailable()) {
-        $this->markTestSkipped('Node.js is not available to evaluate the player script.');
-    }
+    $this->readyRecording($session);
 
-    $result = adminRunPlayerScript(adminPlayerPage($this, $session));
+    $html = adminPlayerPage($this, $session);
 
-    expect($result['starts'])->toEqual([0, 5, 65, 3725])
-        ->and($result['segments'])->toBe([
-            ['speaker' => 'Me', 'start_ms' => 0, 'text' => 'Hello there, this is Farah.'],
-            ['speaker' => 'Client', 'start_ms' => 5000, 'text' => 'Hi, how can I help?'],
-            ['speaker' => 'Me', 'start_ms' => 65000, 'text' => 'We spoke about the Q3 roadmap.'],
-            ['speaker' => 'Client', 'start_ms' => 3725000, 'text' => 'One hour later.'],
-        ]);
+    expect($html)->toContain('aria-label="Playback speed"')
+        ->toContain('Skip silence')->toContain('Follow')
+        ->toContain("editing ? 'Done editing' : 'Edit text'")
+        ->toContain('Copy with timestamps');
 });
 
-it('copies "Speaker: text" lines without timestamps', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments());
-    if (! adminNodeAvailable()) {
-        $this->markTestSkipped('Node.js is not available to evaluate the player script.');
-    }
+// --- Behaviour (Node) ------------------------------------------------------------------------------------------
 
-    $result = adminRunPlayerScript(adminPlayerPage($this, $session));
-
-    expect($result['text'])->toBe(implode("\n", [
-        'Me: Hello there, this is Farah.',
-        'Client: Hi, how can I help?',
-        'Me: We spoke about the Q3 roadmap.',
-        'Client: One hour later.',
-    ]));
-});
-
-it('copies "[m:ss] Speaker: text" lines with timestamps, using h:mm:ss from an hour', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments());
-    if (! adminNodeAvailable()) {
-        $this->markTestSkipped('Node.js is not available to evaluate the player script.');
-    }
-
-    $result = adminRunPlayerScript(adminPlayerPage($this, $session));
-
-    expect($result['times'])->toBe(implode("\n", [
-        '[0:00] Me: Hello there, this is Farah.',
-        '[0:05] Client: Hi, how can I help?',
-        '[1:05] Me: We spoke about the Q3 roadmap.',
-        '[1:02:05] Client: One hour later.',
-    ]));
-});
-
-it('leaves the speaker out when only one person speaks', function () {
+it('groups consecutive lines of a speaker and uses renamed speakers', function () {
+    adminNeedsNode($this);
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, [
-        ['channel' => 1, 'speaker' => 'Speaker', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'A short voice note.'],
-        ['channel' => 1, 'speaker' => 'Speaker', 'start_ms' => 1000, 'end_ms' => 2000, 'text' => 'Second sentence.'],
+        ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'One.'],
+        ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 1000, 'end_ms' => 2000, 'text' => 'Two.'],
+        ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 2000, 'end_ms' => 3000, 'text' => 'Three.'],
     ]);
-    if (! adminNodeAvailable()) {
-        $this->markTestSkipped('Node.js is not available to evaluate the player script.');
-    }
+    $session->update(['speaker_names' => ['Client' => 'Jane']]);
 
     $result = adminRunPlayerScript(adminPlayerPage($this, $session));
 
-    expect($result['text'])->toBe("A short voice note.\nSecond sentence.")
-        ->and($result['times'])->toBe("[0:00] A short voice note.\n[0:01] Second sentence.");
+    expect($result['blocks'])->toBe([['speaker' => 'Me', 'items' => [0, 1]], ['speaker' => 'Client', 'items' => [2]]])
+        ->and($result['text'])->toBe("Me: One.\nMe: Two.\nJane: Three.");
 });
 
-it('produces exactly the same text as the desktop app\'s copy function', function () {
+it('copies "[m:ss] Speaker: text" lines like the desktop app and reports Copied or Copy failed', function () {
+    adminNeedsNode($this);
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, adminCallSegments());
-    $module = realpath(base_path('../desktop/src/lib/format.ts'));
-    if (! adminNodeAvailable() || $module === false) {
-        $this->markTestSkipped('Node.js or the desktop sources are not available.');
-    }
-
-    $result = adminRunPlayerScript(adminPlayerPage($this, $session), ['desktopModule' => $module]);
-
-    expect($result['text'])->toBe($result['desktop']['text'])
-        ->and($result['times'])->toBe($result['desktop']['times']);
-});
-
-it('writes the chosen text to the clipboard and reports Copied or Copy failed', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments());
-    if (! adminNodeAvailable()) {
-        $this->markTestSkipped('Node.js is not available to evaluate the player script.');
-    }
     $html = adminPlayerPage($this, $session);
 
     $ok = adminRunPlayerScript($html, ['copy' => 'ok']);
-    expect($ok['copy']['writes'])->toBe([$ok['text'], $ok['times']])
+    expect($ok['times'])->toBe("[0:00] Me: Hello there, this is Farah.\n[0:05] Client: Hi, how can I help?\n[1:05] Me: We spoke about the Q3 roadmap.\n[1:02:05] Client: One hour later.")
+        ->and($ok['copy']['writes'])->toBe([$ok['text'], $ok['times']])
         ->and($ok['copy']['states'])->toBe(['text', 'times']);
+    expect(adminRunPlayerScript($html, ['copy' => 'reject'])['copy']['states'])->toBe(['failed', 'failed']);
 
-    $denied = adminRunPlayerScript($html, ['copy' => 'reject']);
-    expect($denied['copy']['states'])->toBe(['failed', 'failed']);
+    $module = realpath(base_path('../desktop/src/lib/format.ts'));
+    if ($module !== false) {
+        $desktop = adminRunPlayerScript($html, ['desktopModule' => $module]);
+        expect($desktop['text'])->toBe($desktop['desktop']['text'])->and($desktop['times'])->toBe($desktop['desktop']['times']);
+    }
 });
 
-it('highlights the segment being played and seeks when a line is clicked', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments());
-    if (! adminNodeAvailable()) {
-        $this->markTestSkipped('Node.js is not available to evaluate the player script.');
-    }
-
-    // starts are [0, 5, 65, 3725] seconds
-    $result = adminRunPlayerScript(adminPlayerPage($this, $session), ['sync' => [0, 4.99, 5, 30, 64.9, 65, 4000], 'seek' => 2]);
-
-    $active = array_map(fn (array $step): int => $step['active'], $result['sync']);
-    expect($active)->toBe([0, 0, 1, 1, 1, 2, 3]);
-    foreach ($result['sync'] as $step) {
-        expect($step['marked'])->toBe([$step['active']]); // exactly one row is highlighted at a time
-    }
-    expect($result['seek'])->toBe(['currentTime' => 65, 'played' => true]);
-});
-
-it('highlights nothing before the first segment starts', function () {
+it('leaves the speaker out when only one person speaks', function () {
+    adminNeedsNode($this);
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, [
-        ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 2_000, 'end_ms' => 3_000, 'text' => 'late start'],
-        ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 2_000, 'end_ms' => 3_000, 'text' => 'same start'],
+        ['channel' => 1, 'speaker' => 'Speaker', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'A short voice note.'],
+        ['channel' => 1, 'speaker' => 'Speaker', 'start_ms' => 1_000, 'end_ms' => 2_000, 'text' => 'Second sentence.'],
     ]);
-    if (! adminNodeAvailable()) {
-        $this->markTestSkipped('Node.js is not available to evaluate the player script.');
-    }
 
-    $result = adminRunPlayerScript(adminPlayerPage($this, $session), ['sync' => [0, 1.9, 2]]);
-
-    expect(array_map(fn (array $s): int => $s['active'], $result['sync']))->toBe([-1, -1, 1]);
+    expect(adminRunPlayerScript(adminPlayerPage($this, $session))['times'])->toBe("[0:00] A short voice note.\n[0:01] Second sentence.");
 });
 
-it('keeps hostile text inside the data, never in the markup or the script', function () {
+it('follows the line and the word being played and seeks when asked', function () {
+    adminNeedsNode($this);
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+
+    $result = adminRunPlayerScript(adminPlayerPage($this, $session), ['sync' => [0, 0.5, 4.99, 5, 65, 4000], 'seekTo' => 65_000]);
+
+    expect(array_column($result['sync'], 'active'))->toBe([0, 0, 0, 1, 2, 3])
+        ->and(array_column($result['sync'], 'word'))->toBe([0, 1, 1, -1, -1, -1])
+        ->and($result['seek'])->toBe(['currentTime' => 65, 'playing' => true]);
+});
+
+it('highlights nothing before the first line starts', function () {
+    adminNeedsNode($this);
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 2_000, 'end_ms' => 3_000, 'text' => 'late start']]);
+
+    expect(array_column(adminRunPlayerScript(adminPlayerPage($this, $session), ['sync' => [0, 1.9, 2]])['sync'], 'active'))->toBe([-1, -1, 0]);
+});
+
+it('answers Space, K, J, L and the arrow keys, and leaves controls and text fields alone', function () {
+    adminNeedsNode($this);
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+    $html = adminPlayerPage($this, $session);
+    $player = adminPlayerNode($html);
+    expect($player->getAttribute('tabindex'))->toBe('0')
+        ->and($player->getAttribute('x-on:keydown'))->toBe('onKey($event)')
+        ->and($player->getAttribute('aria-label'))->toContain('Space');
+
+    $result = adminRunPlayerScript($html, ['keys' => [
+        ['key' => ' ', 'tag' => 'DIV'], ['key' => 'k', 'tag' => 'DIV'], ['key' => 'j', 'tag' => 'DIV'], ['key' => 'L', 'tag' => 'DIV'],
+        ['key' => 'ArrowLeft', 'tag' => 'DIV'], ['key' => 'ArrowRight', 'tag' => 'DIV'], ['key' => ' ', 'tag' => 'BUTTON'],
+        ['key' => 'k', 'tag' => 'TEXTAREA'], ['key' => 'Enter', 'tag' => 'DIV'],
+    ]]);
+
+    expect($result['keys'])->toBe([
+        ['prevented' => true, 'paused' => false, 'time' => 30],   // Space plays
+        ['prevented' => true, 'paused' => true, 'time' => 30],    // K pauses
+        ['prevented' => true, 'paused' => true, 'time' => 20],    // J: back 10 s
+        ['prevented' => true, 'paused' => true, 'time' => 30],    // L: forward 10 s
+        ['prevented' => true, 'paused' => true, 'time' => 25],    // ←: back 5 s
+        ['prevented' => true, 'paused' => true, 'time' => 30],    // →: forward 5 s
+        ['prevented' => false, 'paused' => true, 'time' => 30],   // Space on a button keeps its native action
+        ['prevented' => false, 'paused' => true, 'time' => 30],   // typing in a line being edited is left alone
+        ['prevented' => false, 'paused' => true, 'time' => 30],   // other keys are left alone
+    ]);
+});
+
+it('skips silences longer than 1.5 seconds and changes the speed', function () {
+    adminNeedsNode($this);
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+
+    $result = adminRunPlayerScript(adminPlayerPage($this, $session), ['skip' => [2, 4.5, 10], 'rate' => 1.5]);
+
+    // In speech nothing moves; 0.5 s before the next line is too short to skip; in a long gap it jumps near the next line.
+    expect($result['skip'])->toBe([2, 4.5, 64.8])->and($result['rate'])->toBe(1.5);
+});
+
+it('places lines, bookmarks and the playhead on the timeline by time', function () {
+    adminNeedsNode($this);
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+
+    $result = adminRunPlayerScript(adminPlayerPage($this, $session));
+
+    expect($result['pct'])->toBe(['0%', '50%', '100%'])->and($result['clock'])->toBe(['0:00', '1:05', '1:02:05']);
+});
+
+it('saves an edited line through Livewire and shows the new state, or the reason it was refused', function () {
+    adminNeedsNode($this);
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+    $html = adminPlayerPage($this, $session);
+    $saved = TranscriptPlayerEntry::payload($session->fresh());
+    $saved['segments'][0]['text'] = 'Hello there, this is Farah Khan.';
+
+    $ok = adminRunPlayerScript($html, ['save' => 'ok', 'text' => 'Hello there, this is Farah Khan.', 'saved' => $saved]);
+    expect($ok['save']['error'])->toBeNull()
+        ->and($ok['save']['d']['segments'][0]['text'])->toBe('Hello there, this is Farah Khan.')
+        ->and($ok['save']['d']['saved'])->toBe([0, 'Hello there, this is Farah Khan.'])
+        ->and($ok['save']['saving'])->toBeNull();
+
+    $refused = adminRunPlayerScript($html, ['save' => 'refuse']);
+    expect($refused['save']['error'])->toBe('Only a finished transcript can be edited.');
+});
+
+// --- Safety and accessibility ---------------------------------------------------------------------------------
+
+it('keeps hostile text inside the data, never in the markup', function () {
     $admin = $this->signInAsAdmin();
     $payloads = [
         '<script>alert("xss")</script>',
@@ -450,98 +388,27 @@ it('keeps hostile text inside the data, never in the markup or the script', func
     foreach (['script', 'img', 'svg', 'iframe', 'object', 'embed', 'b', 'i'] as $tag) {
         expect($player->getElementsByTagName($tag)->length)->toBe(0, "unexpected <{$tag}> inside the player");
     }
-    $xpath = new DOMXPath($player->ownerDocument);
-    foreach ($xpath->query('.//*[@*[starts-with(name(), "on")]]', $player) as $element) {
+    foreach ((new DOMXPath($player->ownerDocument))->query('.//*[@*[starts-with(name(), "on")]]', $player) as $element) {
         $this->fail('Inline event handler found on <'.$element->nodeName.'>');
     }
-    $rows = adminPlayerRows($player);
-    foreach ($payloads as $i => $payload) {
-        expect($rows[$i]->getElementsByTagName('span')->item(2)->textContent)->toBe($payload);
-    }
-    expect($rows[0]->getElementsByTagName('span')->item(1)->textContent)->toBe('<i>Mallory</i>');
-
     if (adminNodeAvailable()) {
         $result = adminRunPlayerScript($html);
-        expect(array_column($result['segments'], 'text'))->toBe($payloads);
+        expect(array_column($result['d']['segments'], 'text'))->toBe($payloads)
+            ->and($result['d']['segments'][0]['speaker'])->toBe('<i>Mallory</i>');
     }
-});
-
-it('exposes the player data through the entry class', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments());
-    $recording = $this->readyRecording($session);
-
-    $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])->instance();
-    $schema = Schema::make($page)->record($session->fresh())->components([TranscriptPlayerEntry::make('player')]);
-    $data = $schema->getComponent('player')->getPlayerData();
-
-    expect($data['audio_url'])->toBe(route('admin.recordings.stream', ['recording' => $recording->id]))
-        ->and($data['kind'])->toBe('final')
-        ->and($data['status'])->toBe('completed')
-        ->and($data['segments'])->toHaveCount(4)
-        ->and($data['text'])->toContain('Hello there');
-});
-
-// --- Keyboard, contrast and small screens (A6.W14) ------------------------------------------------------------
-
-it('makes every transcript line a button that seeks to it', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments());
-
-    $rows = adminPlayerRows(adminPlayerNode(adminPlayerPage($this, $session)));
-
-    expect($rows)->toHaveCount(4);
-    foreach ($rows as $i => $row) {
-        $button = $row->getElementsByTagName('button')->item(0);
-        expect($button)->not->toBeNull()
-            ->and($button->getAttribute('type'))->toBe('button')
-            ->and($button->getAttribute('x-on:click'))->toBe("seek({$i})")
-            ->and($row->hasAttribute('x-on:click'))->toBeFalse();
-    }
-});
-
-it('lets the keyboard reach the player and toggles playback with Space on it', function () {
-    $admin = $this->signInAsAdmin();
-    $session = $this->sessionWithTranscript($admin, adminCallSegments());
-    $html = adminPlayerPage($this, $session);
-    $player = adminPlayerNode($html);
-
-    expect($player->getAttribute('tabindex'))->toBe('0')
-        ->and($player->getAttribute('x-on:keydown'))->toBe('onKey($event)')
-        ->and($player->getAttribute('aria-label'))->toContain('Space');
-
-    if (! adminNodeAvailable()) {
-        $this->markTestSkipped('Node.js is not available to evaluate the player script.');
-    }
-    $result = adminRunPlayerScript($html, ['keys' => [
-        ['key' => ' ', 'tag' => 'DIV'],
-        ['key' => ' ', 'tag' => 'DIV'],
-        ['key' => ' ', 'tag' => 'BUTTON'],
-        ['key' => 'Enter', 'tag' => 'DIV'],
-        ['key' => 'Spacebar', 'code' => 'Space', 'tag' => 'DIV'],
-    ]]);
-
-    expect($result['keys'])->toBe([
-        ['prevented' => true, 'paused' => false],  // Space on the player plays
-        ['prevented' => true, 'paused' => true],   // and pauses again
-        ['prevented' => false, 'paused' => true],  // on a line or button Space keeps its native action
-        ['prevented' => false, 'paused' => true],  // other keys are left alone
-        ['prevented' => true, 'paused' => false],
-    ]);
+    // Lines are rendered with x-text, which never parses HTML.
+    expect($html)->toContain('x-text="d.segments[i].text"')->not->toContain('x-html');
 });
 
 it('styles the player for light and dark themes with a visible focus ring', function () {
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, adminCallSegments());
 
-    $html = adminPlayerPage($this, $session);
-
-    expect($html)->toContain('.dark .el-player')
+    expect(adminPlayerPage($this, $session))->toContain('.dark .el-player')
         ->toContain(':focus-visible')
         ->toContain('outline: 2px solid var(--el-focus)')
-        ->toContain('@media (max-width: 640px)');
-    // The light palette no longer relies on white-on-white borders or the old low-contrast speaker colours.
-    expect($html)->not->toContain('.el-player .el-spk-1 { color: #A78BFA; }')->not->toContain('opacity: .55');
+        ->toContain('@media (max-width: 640px)')
+        ->toContain('prefers-reduced-motion');
 });
 
 it('gives the light-theme text colours at least 4.5:1 contrast on the player background', function () {
@@ -557,20 +424,23 @@ it('gives the light-theme text colours at least 4.5:1 contrast on the player bac
     preg_match_all('/--el-(text|muted|me|client): (#[0-9A-F]{6})/', $light[1] ?? '', $colours, PREG_SET_ORDER);
 
     expect($colours)->toHaveCount(4);
-    // Worst case background: the active-row tint (violet at 14 %) over white, about #EEE8FD.
+    // Worst case background: the active-line tint (violet at 14 %) over white, about #EEE8FD.
     foreach ($colours as [, $name, $hex]) {
         expect($ratio($hex, '#FFFFFF'))->toBeGreaterThanOrEqual(4.5, "{$name} on white")
-            ->and($ratio($hex, '#EEE8FD'))->toBeGreaterThanOrEqual(4.5, "{$name} on the active row");
+            ->and($ratio($hex, '#EEE8FD'))->toBeGreaterThanOrEqual(4.5, "{$name} on the active line");
     }
 });
 
-it('announces copy results to assistive technology', function () {
+it('announces copy results and saving to assistive technology, and errors as alerts', function () {
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, adminCallSegments());
 
     $player = adminPlayerNode(adminPlayerPage($this, $session));
-    $live = (new DOMXPath($player->ownerDocument))->query('.//*[@aria-live="polite"]', $player)->item(0);
+    $xpath = new DOMXPath($player->ownerDocument);
+    $live = $xpath->query('.//*[@aria-live="polite"]', $player)->item(0);
+    $alert = $xpath->query('.//*[@role="alert"]', $player)->item(0);
 
     expect($live)->not->toBeNull()
-        ->and($live->getAttribute('x-text'))->toContain('Copied');
+        ->and($live->getAttribute('x-text'))->toContain('Copied')->and($live->getAttribute('x-text'))->toContain('Saving')
+        ->and($alert)->not->toBeNull();
 });
