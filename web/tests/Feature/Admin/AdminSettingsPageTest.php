@@ -69,7 +69,7 @@ function adminAssertFormShows($page, array $expected): void
 it('renders the settings page for a super admin', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin/settings')->assertOk()->assertSee('Retention', false)->assertSee('Save settings');
+    $this->get('/admin/settings')->assertOk()->assertSee('Language & time')->assertSee('Save settings');
 });
 
 it('shows the stored defaults when nothing has been saved', function () {
@@ -184,7 +184,7 @@ it('accepts any real IANA time zone, including UTC', function (string $zone) {
 it('offers the full IANA list in the time zone picker', function () {
     $this->signInAsAdmin();
 
-    $options = adminSettingsPage($this)->instance()->getSchema('form')->getFlatFields()['display_timezone']->getOptions();
+    $options = adminSettingsPage($this)->instance()->getSchema('form')->getFlatFields()['general.display_timezone']->getOptions();
 
     expect($options)->toHaveKeys(['UTC', 'Asia/Karachi', 'America/New_York'])
         ->and(count($options))->toBe(count(timezone_identifiers_list()));
@@ -476,7 +476,7 @@ it('shows no monthly limit, an 80 % warning and the default price table when not
 it('renders the monthly limit section with its labels and help text', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin/settings')->assertOk()
+    adminSettingsPage($this)->set('activeTab', 'storage')
         ->assertSee('Monthly limit')
         ->assertSee('Monthly limit (minutes)')
         ->assertSee('Monthly limit (US$)')
