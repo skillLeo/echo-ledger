@@ -1,0 +1,173 @@
+{
+  "id": "01m5qa50ek26ajmqeed2cqhq5c",
+  "session_id": "01m5qa4zznz2f07s3t4xf6b2kh",
+  "kind": "final",
+  "provider": "assemblyai",
+  "status": "completed",
+  "language": "en",
+  "text": "This is a test of the EchoLedger transcription system. Loud and clear. Go ahead. Please call me back tomorrow at three thirty. Will do, thanks.",
+  "segments": [
+    {
+      "channel": 1,
+      "speaker": "Speaker",
+      "start_ms": 400,
+      "end_ms": 9580,
+      "text": "This is a test of the EchoLedger transcription system. Loud and clear. Go ahead. Please call me back tomorrow at three thirty. Will do, thanks.",
+      "words": [
+        {
+          "text": "This",
+          "start_ms": 400,
+          "end_ms": 747,
+          "confidence": 0.9
+        },
+        {
+          "text": "is",
+          "start_ms": 767,
+          "end_ms": 1113,
+          "confidence": 0.97
+        },
+        {
+          "text": "a",
+          "start_ms": 1133,
+          "end_ms": 1480,
+          "confidence": 0.94
+        },
+        {
+          "text": "test",
+          "start_ms": 1500,
+          "end_ms": 1847,
+          "confidence": 0.91
+        },
+        {
+          "text": "of",
+          "start_ms": 1867,
+          "end_ms": 2213,
+          "confidence": 0.98
+        },
+        {
+          "text": "the",
+          "start_ms": 2233,
+          "end_ms": 2580,
+          "confidence": 0.95
+        },
+        {
+          "text": "EchoLedger",
+          "start_ms": 2600,
+          "end_ms": 2947,
+          "confidence": 0.92
+        },
+        {
+          "text": "transcription",
+          "start_ms": 2967,
+          "end_ms": 3313,
+          "confidence": 0.99
+        },
+        {
+          "text": "system.",
+          "start_ms": 3333,
+          "end_ms": 3680,
+          "confidence": 0.96
+        },
+        {
+          "text": "Loud",
+          "start_ms": 4100,
+          "end_ms": 4440,
+          "confidence": 0.91
+        },
+        {
+          "text": "and",
+          "start_ms": 4460,
+          "end_ms": 4800,
+          "confidence": 0.98
+        },
+        {
+          "text": "clear.",
+          "start_ms": 4820,
+          "end_ms": 5160,
+          "confidence": 0.95
+        },
+        {
+          "text": "Go",
+          "start_ms": 5180,
+          "end_ms": 5520,
+          "confidence": 0.92
+        },
+        {
+          "text": "ahead.",
+          "start_ms": 5540,
+          "end_ms": 5880,
+          "confidence": 0.99
+        },
+        {
+          "text": "Please",
+          "start_ms": 6200,
+          "end_ms": 6468,
+          "confidence": 0.92
+        },
+        {
+          "text": "call",
+          "start_ms": 6488,
+          "end_ms": 6755,
+          "confidence": 0.99
+        },
+        {
+          "text": "me",
+          "start_ms": 6775,
+          "end_ms": 7043,
+          "confidence": 0.96
+        },
+        {
+          "text": "back",
+          "start_ms": 7063,
+          "end_ms": 7330,
+          "confidence": 0.93
+        },
+        {
+          "text": "tomorrow",
+          "start_ms": 7350,
+          "end_ms": 7618,
+          "confidence": 0.9
+        },
+        {
+          "text": "at",
+          "start_ms": 7638,
+          "end_ms": 7905,
+          "confidence": 0.97
+        },
+        {
+          "text": "three",
+          "start_ms": 7925,
+          "end_ms": 8193,
+          "confidence": 0.94
+        },
+        {
+          "text": "thirty.",
+          "start_ms": 8213,
+          "end_ms": 8480,
+          "confidence": 0.91
+        },
+        {
+          "text": "Will",
+          "start_ms": 8800,
+          "end_ms": 9047,
+          "confidence": 0.93
+        },
+        {
+          "text": "do,",
+          "start_ms": 9067,
+          "end_ms": 9313,
+          "confidence": 0.9
+        },
+        {
+          "text": "thanks.",
+          "start_ms": 9333,
+          "end_ms": 9580,
+          "confidence": 0.97
+        }
+      ]
+    }
+  ],
+  "error": null,
+  "created_at": "2026-10-24T15:58:26+00:00",
+  "completed_at": "2026-10-24T15:58:27+00:00"
+}

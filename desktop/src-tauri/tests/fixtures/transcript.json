@@ -1,0 +1,16 @@
+{
+  "id": "01JB8QB1P2Q3R4S5T6V7W8X9YZ",
+  "session_id": "01JB8QB0A1B2C3D4E5F6G7H8J9",
+  "kind": "final",
+  "provider": "assemblyai",
+  "status": "completed",
+  "language": "en",
+  "text": "Good morning everyone. Thanks for joining.",
+  "segments": [
+    {"channel": 1, "speaker": "Me", "start_ms": 250, "end_ms": 2600, "text": "Good morning everyone.", "words": [{"text": "Good", "start_ms": 250, "end_ms": 650, "confidence": 0.97}]},
+    {"channel": 2, "speaker": "Client", "start_ms": 2700, "end_ms": 4100, "text": "Thanks for joining.", "words": []}
+  ],
+  "error": null,
+  "created_at": "2026-10-24T08:45:00+00:00",
+  "completed_at": "2026-10-24T08:49:30+00:00"
+}

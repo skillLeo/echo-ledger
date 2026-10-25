@@ -1,0 +1,8 @@
+{
+  "message": "The selected artifacts.0.mime is invalid.",
+  "errors": {
+    "artifacts.0.mime": [
+      "The selected artifacts.0.mime is invalid."
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "01m5qa4gm8y23h61n19ftjm587",
+  "session_id": "01m5qa4fx831xtv79zq0cwwkj8",
+  "kind": "final",
+  "provider": "assemblyai",
+  "status": "failed",
+  "language": null,
+  "text": null,
+  "segments": [],
+  "error": "Transcoding failed. File does not appear to contain audio. File type is application/octet-stream (data).",
+  "created_at": "2026-10-24T15:58:10+00:00",
+  "completed_at": null
+}

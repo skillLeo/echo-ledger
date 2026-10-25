@@ -1,0 +1,18 @@
+{
+  "provider": "elevenlabs",
+  "mode": "cloud",
+  "expires_at": "2026-10-24T09:14:00+00:00",
+  "keyterms": ["Acme Holdings"],
+  "grants": [
+    {
+      "channel": "me",
+      "transport": "websocket",
+      "protocol": "elevenlabs_realtime",
+      "ws_url": "wss://api.elevenlabs.io/v1/speech-to-text/realtime?model_id=scribe_v2_realtime&token=sutkn_me&audio_format=pcm_16000&commit_strategy=vad&keyterms=Acme%20Holdings",
+      "redeem_by": "2026-10-24T09:14:00+00:00",
+      "max_session_seconds": null,
+      "audio": {"encoding": "pcm_s16le", "sample_rate": 16000, "channels": 1, "frame_ms": 100},
+      "init_messages": []
+    }
+  ]
+}

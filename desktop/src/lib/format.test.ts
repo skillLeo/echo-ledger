@@ -39,7 +39,9 @@ describe("formatWhen", () => {
   });
 
   it("falls back to a dated label and tolerates junk", () => {
-    expect(formatWhen("2026-10-01T09:30:00", now).startsWith("Oct")).toBe(true);
+    // The month-and-day part follows the viewer's locale ("Oct 1" in en-US).
+    const monthDay = new Date(2026, 9, 1).toLocaleDateString([], { month: "short", day: "numeric" });
+    expect(formatWhen("2026-10-01T09:30:00", now).startsWith(`${monthDay} · `)).toBe(true);
     expect(formatWhen("not a date", now)).toBe("");
     expect(formatWhen(undefined, now)).toBe("");
   });

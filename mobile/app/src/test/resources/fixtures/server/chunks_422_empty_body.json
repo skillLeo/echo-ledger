@@ -1,0 +1,8 @@
+{
+  "message": "Chunk 0 must be exactly 5242880 bytes (got 0).",
+  "errors": {
+    "chunk": [
+      "Chunk 0 must be exactly 5242880 bytes (got 0)."
+    ]
+  }
+}

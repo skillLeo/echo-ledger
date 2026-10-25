@@ -67,6 +67,11 @@ dispatch2 = "0.3.1"
 
 [dev-dependencies]
 tempfile = "3"
+# Independent FLAC decoder used to verify what the encoder writes.
+claxon = "0.4"
+# Throw-away certificate chains for the SPKI pinning tests.
+rcgen = "0.14"
+tokio = { version = "1.54.1", features = ["net", "io-util", "macros", "rt-multi-thread", "time", "sync"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

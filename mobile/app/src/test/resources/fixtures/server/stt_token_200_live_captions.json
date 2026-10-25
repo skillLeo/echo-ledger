@@ -1,0 +1,60 @@
+{
+  "provider": "assemblyai",
+  "mode": "cloud",
+  "expires_at": "2026-10-24T15:57:48+00:00",
+  "keyterms": [
+    "Acme Holdings",
+    "Farah Khan",
+    "Q3 forecast"
+  ],
+  "grants": [
+    {
+      "channel": "me",
+      "transport": "websocket",
+      "protocol": "assemblyai_v3",
+      "ws_url": "wss://streaming.assemblyai.com/v3/ws?speech_model=universal-3-6-pro&encoding=pcm_s16le&sample_rate=16000&inactivity_timeout=120&token=STREAMING_TOKEN_PLACEHOLDER",
+      "redeem_by": "2026-10-24T15:57:48+00:00",
+      "max_session_seconds": 10800,
+      "audio": {
+        "encoding": "pcm_s16le",
+        "sample_rate": 16000,
+        "channels": 1,
+        "frame_ms": 50
+      },
+      "init_messages": [
+        {
+          "type": "UpdateConfiguration",
+          "keyterms_prompt": [
+            "Acme Holdings",
+            "Farah Khan",
+            "Q3 forecast"
+          ]
+        }
+      ]
+    },
+    {
+      "channel": "client",
+      "transport": "websocket",
+      "protocol": "assemblyai_v3",
+      "ws_url": "wss://streaming.assemblyai.com/v3/ws?speech_model=universal-3-6-pro&encoding=pcm_s16le&sample_rate=16000&inactivity_timeout=120&token=STREAMING_TOKEN_PLACEHOLDER",
+      "redeem_by": "2026-10-24T15:57:48+00:00",
+      "max_session_seconds": 10800,
+      "audio": {
+        "encoding": "pcm_s16le",
+        "sample_rate": 16000,
+        "channels": 1,
+        "frame_ms": 50
+      },
+      "init_messages": [
+        {
+          "type": "UpdateConfiguration",
+          "keyterms_prompt": [
+            "Acme Holdings",
+            "Farah Khan",
+            "Q3 forecast"
+          ]
+        }
+      ]
+    }
+  ]
+}

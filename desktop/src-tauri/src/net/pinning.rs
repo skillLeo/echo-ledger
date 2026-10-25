@@ -103,3 +103,6 @@ pub fn build_http_client(base_url: &str, pins: &[String]) -> Result<reqwest::Cli
     };
     builder.build().map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+mod tests;

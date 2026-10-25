@@ -1,0 +1,316 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { SettingsView } from "./SettingsView";
+import { errorMessage, type AppStatus, type Settings } from "../../lib/ipc";
+import { callsOf, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { makeSettings, makeStatus } from "../../test/fixtures";
+
+vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
+vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
+
+const CLIENTS = { data: [{ id: "c1", name: "Acme Holdings", keyterm_count: 4 }, { id: "c2", name: "Northwind", keyterm_count: 0 }] };
+
+/** Same contract as MainApp.run: executes the action, swallows and reports failures, resolves to undefined on error. */
+function makeRun() {
+  const errors: string[] = [];
+  const notices: string[] = [];
+  const run = async (fn: () => Promise<unknown>, ok?: string) => {
+    try {
+      const result = await fn();
+      if (ok) notices.push(ok);
+      return result;
+    } catch (e) {
+      errors.push(errorMessage(e));
+      return undefined;
+    }
+  };
+  return { run: run as never, errors, notices };
+}
+
+async function setup(settings: Partial<Settings> = {}, status: Partial<AppStatus> = {}) {
+  respond("get_settings", makeSettings(settings));
+  respond("list_clients", CLIENTS);
+  respond("update_settings", makeSettings(settings));
+  const helpers = makeRun();
+  const onUnpaired = vi.fn();
+  const view = render(<SettingsView status={makeStatus(status)} run={helpers.run} onUnpaired={onUnpaired} />);
+  await screen.findByRole("heading", { name: "Settings" });
+  return { ...helpers, onUnpaired, ...view };
+}
+
+/** The `update_settings` command echoes the patch back merged into the current settings, like the Rust side. */
+function echoSettings(base: Settings) {
+  let current = base;
+  respondWith("update_settings", ({ patch }) => {
+    current = { ...current, ...(patch as Partial<Settings>) };
+    return current;
+  });
+}
+
+const row = (label: string | RegExp) => screen.getByText(label).closest(".toggle") as HTMLElement;
+const keyDown = (init: KeyboardEventInit) => act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init })));
+
+describe("SettingsView loading", () => {
+  beforeEach(() => resetTauriMock());
+
+  it("renders nothing until the settings have loaded, then loads settings and clients once", async () => {
+    let release: (v: unknown) => void = () => undefined;
+    respondWith("get_settings", () => new Promise((resolve) => (release = resolve)));
+    respond("list_clients", CLIENTS);
+    const { container } = render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
+    expect(container).toBeEmptyDOMElement();
+    release(makeSettings());
+    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(callsOf("get_settings")).toHaveLength(1);
+    expect(callsOf("list_clients")).toHaveLength(1);
+  });
+
+  it("still renders when the client list cannot be loaded", async () => {
+    respond("get_settings", makeSettings());
+    respondWith("list_clients", () => Promise.reject("Server returned 500: oops"));
+    render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
+    await screen.findByRole("heading", { name: "Settings" });
+    expect(screen.getByRole("option", { name: "No client" })).toBeInTheDocument();
+  });
+
+  it("shows the paired server and whether the certificate is pinned", async () => {
+    await setup({}, { serverUrl: "https://ledger.example.test", pinned: true });
+    expect(screen.getByText(/Paired with https:\/\/ledger\.example\.test\s+· certificate pinned/)).toBeInTheDocument();
+  });
+
+  it("says when the certificate is not pinned", async () => {
+    await setup({}, { pinned: false });
+    expect(screen.getByText(/· not pinned/)).toBeInTheDocument();
+  });
+
+  it("shows the device name next to the unpair button", async () => {
+    await setup({}, { deviceName: "Studio PC" });
+    expect(screen.getByText("Studio PC")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unpair" })).toBeInTheDocument();
+  });
+});
+
+describe("SettingsView switches", () => {
+  beforeEach(() => resetTauriMock());
+
+  const switches: [string, keyof Settings, boolean][] = [
+    ["Auto-record calls", "autoMode", true],
+    ["Show live captions while recording", "captionsOnRecord", true],
+    ["Hide overlays from screen sharing", "contentProtection", true],
+    ["Start EchoLedger when I sign in", "autostart", false],
+    ["I understand and will obtain consent where required", "consentAcknowledged", false],
+  ];
+
+  it.each(switches)("%s reflects its state and sends the inverse as `%s`", async (label, key, initial) => {
+    await setup({ [key]: initial });
+    const toggle = screen.getByRole("switch", { name: label });
+    expect(toggle).toHaveAttribute("aria-checked", String(initial));
+    fireEvent.click(toggle);
+    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { [key]: !initial } }]));
+  });
+
+  it("flips the switch after the backend confirms and flips back on the next click", async () => {
+    await setup();
+    echoSettings(makeSettings());
+    const toggle = screen.getByRole("switch", { name: "Start EchoLedger when I sign in" });
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "false"));
+    expect(callsOf("update_settings").map((c) => c.patch)).toEqual([{ autostart: true }, { autostart: false }]);
+  });
+
+  it("keeps the old state and reports the error when the backend rejects the change", async () => {
+    const { errors } = await setup();
+    respondWith("update_settings", () => Promise.reject("Settings could not be saved: disk full"));
+    const toggle = screen.getByRole("switch", { name: "Auto-record calls" });
+    fireEvent.click(toggle);
+    await waitFor(() => expect(errors).toEqual(["Settings could not be saved: disk full"]));
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+  });
+});
+
+describe("SettingsView selects", () => {
+  beforeEach(() => resetTauriMock());
+
+  it("changes the caption corner", async () => {
+    await setup({ overlayCorner: "bottom_right" });
+    const select = screen.getByDisplayValue("Bottom right");
+    expect([...(select as HTMLSelectElement).options].map((o) => [o.value, o.text])).toEqual([
+      ["bottom_right", "Bottom right"],
+      ["top_right", "Top right"],
+      ["bottom_left", "Bottom left"],
+      ["top_left", "Top left"],
+    ]);
+    fireEvent.change(select, { target: { value: "top_left" } });
+    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { overlayCorner: "top_left" } }]));
+  });
+
+  it("lists the server's clients, selects one and can clear the choice", async () => {
+    await setup({ clientId: null });
+    await screen.findByRole("option", { name: "Acme Holdings" });
+    const select = screen.getByDisplayValue("No client");
+    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["No client", "Acme Holdings", "Northwind"]);
+
+    fireEvent.change(select, { target: { value: "c2" } });
+    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
+    expect(callsOf("update_settings")[0]).toEqual({ patch: { clientId: "c2" } });
+  });
+
+  it("sends clientId null when 'No client' is chosen", async () => {
+    await setup({ clientId: "c1" });
+    await screen.findByRole("option", { name: "Acme Holdings" });
+    const select = screen.getByDisplayValue("Acme Holdings");
+    fireEvent.change(select, { target: { value: "" } });
+    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
+    expect(callsOf("update_settings")[0]).toEqual({ patch: { clientId: null } });
+  });
+
+  it("changes the dictation output between typing and clipboard", async () => {
+    await setup({ dictationOutput: "type" });
+    const select = screen.getByDisplayValue("Type into the focused app");
+    fireEvent.change(select, { target: { value: "clipboard" } });
+    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { dictationOutput: "clipboard" } }]));
+  });
+
+  // A6.DU7: the caption position, client keyterms and dictation output selects have no accessible name.
+  it.skip("gives each select an accessible name", async () => {
+    await setup();
+    await screen.findByRole("option", { name: "Acme Holdings" });
+    for (const select of screen.getAllByRole("combobox")) {
+      expect(select, "select has no label / aria-label").toHaveAccessibleName();
+    }
+  });
+});
+
+describe("SettingsView shortcuts", () => {
+  beforeEach(() => resetTauriMock());
+  afterEach(() => vi.restoreAllMocks());
+
+  it("lists all five actions with readable shortcuts and 'Not set' for the empty one", async () => {
+    await setup();
+    expect(within(row("Show / hide live captions")).getByText("Ctrl + Shift + Space")).toBeInTheDocument();
+    expect(within(row("Start / stop saving a recording")).getByText("Ctrl + Shift + R")).toBeInTheDocument();
+    expect(within(row("Copy the last 2 minutes of captions")).getByText("Ctrl + Shift + C")).toBeInTheDocument();
+    expect(within(row("Dictation box (press, speak, press again)")).getByText("Ctrl + Shift + D")).toBeInTheDocument();
+    expect(within(row("Capture voice note playing now")).getByText("Not set")).toBeInTheDocument();
+  });
+
+  it("uses macOS symbols on macOS", async () => {
+    await setup({}, { platform: "macos" });
+    expect(within(row("Show / hide live captions")).getByText("⌘⇧Space")).toBeInTheDocument();
+  });
+
+  it("only offers Clear for actions that have a shortcut", async () => {
+    await setup();
+    expect(within(row("Show / hide live captions")).getByRole("button", { name: "Clear" })).toBeInTheDocument();
+    expect(within(row("Capture voice note playing now")).queryByRole("button", { name: "Clear" })).not.toBeInTheDocument();
+  });
+
+  it("records a new shortcut from the keyboard and sends the accelerator", async () => {
+    await setup();
+    respondWith("set_shortcut", ({ action, accelerator }) => makeSettings({ shortcuts: { [action as string]: accelerator as string } }));
+    const target = row("Dictation box (press, speak, press again)");
+    fireEvent.click(within(target).getByRole("button", { name: "Change" }));
+    expect(within(target).getByText("Press keys…")).toBeInTheDocument();
+
+    keyDown({ key: "K", code: "KeyK", ctrlKey: true, altKey: true });
+    await waitFor(() => expect(callsOf("set_shortcut")).toEqual([{ action: "dictation", accelerator: "CommandOrControl+Alt+K" }]));
+    await waitFor(() => expect(within(row("Dictation box (press, speak, press again)")).getByText("Ctrl + Alt + K")).toBeInTheDocument());
+    expect(screen.queryByText("Press keys…")).not.toBeInTheDocument();
+  });
+
+  it("builds the accelerator with Command on macOS", async () => {
+    await setup({}, { platform: "macos" });
+    respond("set_shortcut", makeSettings());
+    fireEvent.click(within(row("Capture voice note playing now")).getByRole("button", { name: "Change" }));
+    keyDown({ key: "v", code: "KeyV", metaKey: true, shiftKey: true });
+    await waitFor(() => expect(callsOf("set_shortcut")).toEqual([{ action: "voice_note", accelerator: "CommandOrControl+Shift+V" }]));
+  });
+
+  it("keeps waiting after a modifier-only or modifier-less key press", async () => {
+    await setup();
+    respond("set_shortcut", makeSettings());
+    fireEvent.click(within(row("Show / hide live captions")).getByRole("button", { name: "Change" }));
+    keyDown({ key: "Control", code: "ControlLeft", ctrlKey: true });
+    keyDown({ key: "a", code: "KeyA" });
+    expect(screen.getByText("Press keys…")).toBeInTheDocument();
+    expect(callsOf("set_shortcut")).toHaveLength(0);
+  });
+
+  it("cancels recording with Escape without changing anything", async () => {
+    await setup();
+    fireEvent.click(within(row("Show / hide live captions")).getByRole("button", { name: "Change" }));
+    keyDown({ key: "Escape", code: "Escape" });
+    expect(screen.queryByText("Press keys…")).not.toBeInTheDocument();
+    expect(callsOf("set_shortcut")).toHaveLength(0);
+    expect(within(row("Show / hide live captions")).getByText("Ctrl + Shift + Space")).toBeInTheDocument();
+  });
+
+  it("reports a conflicting shortcut and keeps the previous one", async () => {
+    const { errors } = await setup();
+    respondWith("set_shortcut", () => Promise.reject("Ctrl+Shift+R is already registered by another application"));
+    fireEvent.click(within(row("Start / stop saving a recording")).getByRole("button", { name: "Change" }));
+    keyDown({ key: "R", code: "KeyR", ctrlKey: true, shiftKey: true });
+    await waitFor(() => expect(errors).toEqual(["Ctrl+Shift+R is already registered by another application"]));
+    expect(within(row("Start / stop saving a recording")).getByText("Ctrl + Shift + R")).toBeInTheDocument();
+  });
+
+  it("clears a shortcut by sending an empty accelerator", async () => {
+    await setup();
+    respondWith("set_shortcut", ({ action }) => makeSettings({ shortcuts: { [action as string]: "" } }));
+    fireEvent.click(within(row("Copy the last 2 minutes of captions")).getByRole("button", { name: "Clear" }));
+    await waitFor(() => expect(callsOf("set_shortcut")).toEqual([{ action: "copy_last2_min", accelerator: "" }]));
+    await waitFor(() => expect(within(row("Copy the last 2 minutes of captions")).getByText("Not set")).toBeInTheDocument());
+  });
+
+  it("resets all shortcuts to their defaults", async () => {
+    const { notices } = await setup({ shortcuts: { toggle_captions: "CommandOrControl+Alt+X" } });
+    respond("reset_shortcuts", makeSettings());
+    fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
+    await waitFor(() => expect(callsOf("reset_shortcuts")).toHaveLength(1));
+    await waitFor(() => expect(within(row("Show / hide live captions")).getByText("Ctrl + Shift + Space")).toBeInTheDocument());
+    expect(notices).toContain("Shortcuts reset");
+  });
+
+  it("shows the registration error of an action under its label", async () => {
+    await setup({}, { shortcutErrors: [["dictation", "Ctrl+Shift+D is used by another app"]] });
+    expect(within(row("Dictation box (press, speak, press again)")).getByText("Ctrl+Shift+D is used by another app")).toHaveClass("error-text");
+    expect(within(row("Show / hide live captions")).queryByText(/another app/)).not.toBeInTheDocument();
+  });
+});
+
+describe("SettingsView unpair", () => {
+  beforeEach(() => resetTauriMock());
+  afterEach(() => vi.restoreAllMocks());
+
+  it("does nothing when the confirmation is declined", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { onUnpaired } = await setup();
+    respond("unpair", makeStatus({ paired: false }));
+    fireEvent.click(screen.getByRole("button", { name: "Unpair" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Unpair this computer?"));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(callsOf("unpair")).toHaveLength(0);
+    expect(onUnpaired).not.toHaveBeenCalled();
+  });
+
+  it("unpairs and hands the new status to the app when confirmed", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { onUnpaired } = await setup();
+    const unpaired = makeStatus({ paired: false, deviceName: null, serverUrl: null });
+    respond("unpair", unpaired);
+    fireEvent.click(screen.getByRole("button", { name: "Unpair" }));
+    await waitFor(() => expect(onUnpaired).toHaveBeenCalledWith(unpaired));
+    expect(callsOf("unpair")).toHaveLength(1);
+  });
+
+  it("reports a failed unpair and keeps the computer paired", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { onUnpaired, errors } = await setup();
+    respondWith("unpair", () => Promise.reject("Keychain error: access denied"));
+    fireEvent.click(screen.getByRole("button", { name: "Unpair" }));
+    await waitFor(() => expect(errors).toEqual(["Keychain error: access denied"]));
+    expect(onUnpaired).not.toHaveBeenCalled();
+  });
+});

@@ -1,0 +1,25 @@
+{
+  "id": "01JB8QB0A1B2C3D4E5F6G7H8J9",
+  "client_ref": "3f2b6c1e-8d4a-4d3e-9a51-2c7f0e9b1a22",
+  "deleted": false,
+  "source_device": "desktop",
+  "source_device_label": "Desktop",
+  "source_device_icon": "computer-desktop",
+  "source_app": "zoom",
+  "source_app_label": "Zoom",
+  "device": {"id": "01JB8Q3R0Z5V1K7M9N2P4S6T8W", "name": "Work laptop"},
+  "client": {"id": "01JB8Q4C1D2E3F4G5H6J7K8M9N", "name": "Acme Holdings"},
+  "title": "Zoom call",
+  "started_at": "2026-10-24T08:00:00+00:00",
+  "ended_at": "2026-10-24T08:42:10+00:00",
+  "duration_ms": 2530000,
+  "status": "completed",
+  "transcript": {"final_status": "completed", "final_transcript_id": "01JB8QB1P2Q3R4S5T6V7W8X9YZ", "live_available": true, "live_transcript_id": "01JB8QB2P2Q3R4S5T6V7W8X9YZ", "preview": "Good morning everyone"},
+  "updated_at": "2026-10-24T08:50:00+00:00",
+  "recordings": [{"id": "01JB8QA1P2Q3R4S5T6V7W8X9YZ", "role": "primary", "mime": "audio/flac", "size_bytes": 10485760, "duration_ms": 2530000, "status": "ready"}],
+  "transcripts": [
+    {"id": "01JB8QB1P2Q3R4S5T6V7W8X9YZ", "kind": "final", "provider": "assemblyai", "status": "completed", "language": "en"},
+    {"id": "01JB8QB2P2Q3R4S5T6V7W8X9YZ", "kind": "live", "provider": "assemblyai", "status": "completed", "language": null}
+  ],
+  "playback_url": "https://ledger.example.com/api/recordings/01JB8QA1P2Q3R4S5T6V7W8X9YZ/audio?expires=1793000000&signature=abc123"
+}

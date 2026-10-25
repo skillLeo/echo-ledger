@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "id": "01m5qa4fx831xtv79zq0cwwkj8",
+      "client_ref": "1d128b3a-c575-4c43-b0c8-803bb27b15d7",
+      "deleted": true,
+      "updated_at": "2026-10-24T15:58:59+00:00"
+    }
+  ],
+  "next_cursor": null,
+  "server_time": "2026-10-24T15:58:59+00:00"
+}

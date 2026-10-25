@@ -64,3 +64,6 @@ impl Settings {
         std::fs::rename(tmp, path)
     }
 }
+
+#[cfg(test)]
+mod tests;

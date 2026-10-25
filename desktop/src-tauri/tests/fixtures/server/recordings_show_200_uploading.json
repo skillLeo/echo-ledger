@@ -1,0 +1,12 @@
+{
+  "id": "01m5qa4r029ar9j7pvyth2y381",
+  "role": "primary",
+  "upload": {
+    "chunk_size_bytes": 5242880,
+    "total_chunks": 2,
+    "received_chunks": [
+      0
+    ],
+    "status": "uploading"
+  }
+}

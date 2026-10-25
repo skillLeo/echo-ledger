@@ -1,0 +1,18 @@
+{
+  "data": [
+    {
+      "id": "01m5qa084edsznvjc59xnyt37x",
+      "name": "Acme Holdings",
+      "color": "#8B5CF6",
+      "keyterm_count": 3,
+      "updated_at": "2026-10-24T15:55:50+00:00"
+    },
+    {
+      "id": "01m5qa0852gg40qdmwq2a1v3dk",
+      "name": "Birch & Co",
+      "color": null,
+      "keyterm_count": 0,
+      "updated_at": "2026-10-24T15:55:50+00:00"
+    }
+  ]
+}

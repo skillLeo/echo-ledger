@@ -27,6 +27,10 @@ android {
         versionCode = 4
         versionName = "0.1.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Every instrumented test runs in its own process with cleared app data (a crash fails only that test).
+        testInstrumentationRunnerArguments["clearPackageData"] = "true"
+        // Tests that need an outside script (see ProcessDeathTest) are not part of the default run.
+        testInstrumentationRunnerArguments["notAnnotation"] = "com.echoledger.mobile.e2e.support.ScriptDriven"
     }
 
     signingConfigs {
@@ -61,6 +65,8 @@ android {
     }
 
     testOptions {
+        animationsDisabled = true
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
         unitTests {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
@@ -117,12 +123,24 @@ dependencies {
     testImplementation(libs.junit4)
     testImplementation(libs.robolectric)
     testImplementation(libs.turbine)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.kotlin)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.okhttp.mockwebserver3)
+    testImplementation(libs.okhttp.tls)
+    testImplementation(libs.work.testing)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.ext.junit)
     testImplementation(libs.glance.appwidget.testing)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
+
+    androidTestImplementation(libs.junit4)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestUtil(libs.androidx.test.orchestrator)
 }

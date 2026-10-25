@@ -1,0 +1,8 @@
+{
+  "message": "This artifact role already exists for the session.",
+  "errors": {
+    "role": [
+      "This artifact role already exists for the session."
+    ]
+  }
+}

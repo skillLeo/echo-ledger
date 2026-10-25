@@ -1,0 +1,60 @@
+{
+  "device": {
+    "id": "01m5qa075a8qgfk8yzxqbh3jzp",
+    "name": "Work laptop",
+    "platform": "windows",
+    "source_device": "desktop"
+  },
+  "server_time": "2026-10-24T16:15:28+00:00",
+  "retention_days": 30,
+  "upload": {
+    "chunk_size_bytes": 5242880,
+    "max_recording_bytes": 2147483648,
+    "accepted_mimes": [
+      "audio/ogg",
+      "audio/opus",
+      "audio/flac",
+      "audio/x-flac",
+      "audio/wav",
+      "audio/x-wav",
+      "audio/wave",
+      "audio/mpeg",
+      "audio/mp4",
+      "audio/x-m4a",
+      "audio/aac",
+      "audio/webm",
+      "audio/amr",
+      "application/ogg"
+    ]
+  },
+  "providers": {
+    "live_captions": {
+      "provider": "assemblyai",
+      "mode": "cloud"
+    },
+    "dictation": {
+      "provider": "assemblyai",
+      "mode": "cloud"
+    },
+    "final_transcript": {
+      "provider": "assemblyai",
+      "mode": "async_webhook",
+      "required_artifacts": [
+        "primary"
+      ],
+      "preferred_primary": "ogg_opus"
+    },
+    "voice_note": {
+      "provider": "assemblyai",
+      "mode": "async_webhook",
+      "required_artifacts": [
+        "primary"
+      ],
+      "preferred_primary": "ogg_opus"
+    }
+  },
+  "captions": {
+    "channels": "off"
+  },
+  "pins": []
+}

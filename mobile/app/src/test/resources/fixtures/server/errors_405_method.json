@@ -1,0 +1,3 @@
+{
+  "message": "The PUT method is not supported for route api/config. Supported methods: GET, HEAD."
+}

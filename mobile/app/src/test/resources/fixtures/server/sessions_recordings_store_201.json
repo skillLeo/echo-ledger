@@ -1,0 +1,10 @@
+{
+  "id": "01m5qa25bc80yjgjzxth2x7rdm",
+  "role": "channel_1",
+  "upload": {
+    "chunk_size_bytes": 5242880,
+    "total_chunks": 1,
+    "received_chunks": [],
+    "status": "pending"
+  }
+}

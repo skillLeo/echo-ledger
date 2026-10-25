@@ -1,0 +1,8 @@
+{
+  "message": "Chunk checksum mismatch.",
+  "errors": {
+    "sha256": [
+      "Chunk checksum mismatch."
+    ]
+  }
+}

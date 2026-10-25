@@ -1,0 +1,11 @@
+{
+  "message": "The selected use case is invalid. (and 1 more error)",
+  "errors": {
+    "use_case": [
+      "The selected use case is invalid."
+    ],
+    "channels.1": [
+      "The selected channels.1 is invalid."
+    ]
+  }
+}

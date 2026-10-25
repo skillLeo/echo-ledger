@@ -1,0 +1,8 @@
+{
+  "message": "This pairing code is invalid, expired, or already used.",
+  "errors": {
+    "pairing_code": [
+      "This pairing code is invalid, expired, or already used."
+    ]
+  }
+}

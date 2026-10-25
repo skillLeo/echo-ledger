@@ -1,0 +1,499 @@
+{
+  "audio_403_bad_signature": {
+    "method": "GET",
+    "path": "/api/recordings/{id}/audio",
+    "status": 403
+  },
+  "audio_403_unsigned": {
+    "method": "GET",
+    "path": "/api/recordings/{id}/audio",
+    "status": 403
+  },
+  "chunks_200_last": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 200
+  },
+  "chunks_200_partial": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 200
+  },
+  "chunks_200_resend": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 200
+  },
+  "chunks_200_single": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 200
+  },
+  "chunks_409_already_complete": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 409
+  },
+  "chunks_413_too_large": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 413
+  },
+  "chunks_422_checksum_mismatch": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 422
+  },
+  "chunks_422_empty_body": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 422
+  },
+  "chunks_422_index_out_of_range": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 422
+  },
+  "chunks_422_missing_index": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/chunks",
+    "status": 422
+  },
+  "clients_200": {
+    "method": "GET",
+    "path": "/api/clients",
+    "status": 200
+  },
+  "config_200_android": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 200
+  },
+  "config_200_captions_client_only": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 200
+  },
+  "config_200_captions_off": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 200
+  },
+  "config_200_channel_artifacts": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 200
+  },
+  "config_200_device_mode": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 200
+  },
+  "config_200_on_device_captions": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 200
+  },
+  "config_200_with_pins": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 200
+  },
+  "config_200": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 200
+  },
+  "errors_401_expired_token": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 401
+  },
+  "errors_401_invalid_token": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 401
+  },
+  "errors_401_missing_token": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 401
+  },
+  "errors_401_revoked_token": {
+    "method": "GET",
+    "path": "/api/config",
+    "status": 401
+  },
+  "errors_403_missing_ability": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 403
+  },
+  "errors_403_sessions_write": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 403
+  },
+  "errors_404_recording": {
+    "method": "GET",
+    "path": "/api/recordings/{id}",
+    "status": 404
+  },
+  "errors_404_route": {
+    "method": "GET",
+    "path": "/api/nope",
+    "status": 404
+  },
+  "errors_404_session": {
+    "method": "GET",
+    "path": "/api/sessions/{id}",
+    "status": 404
+  },
+  "errors_404_transcript": {
+    "method": "GET",
+    "path": "/api/transcripts/{id}",
+    "status": 404
+  },
+  "errors_405_method": {
+    "method": "PUT",
+    "path": "/api/config",
+    "status": 405
+  },
+  "errors_429_pairing": {
+    "method": "POST",
+    "path": "/api/devices/register",
+    "status": 429,
+    "retry_after": 55
+  },
+  "errors_429_stt_token": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 429,
+    "retry_after": 57
+  },
+  "library_200_cursor_page1": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_cursor_page2": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_filter_client": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_filter_failed": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_filter_phone": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_filter_zoom": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_page_after_delete": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_page": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_since_empty": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_since_tombstone": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_200_with_tombstones": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 200
+  },
+  "library_422_limit": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 422
+  },
+  "library_422_since": {
+    "method": "GET",
+    "path": "/api/library",
+    "status": 422
+  },
+  "recordings_complete_202_ogg": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/complete",
+    "status": 202
+  },
+  "recordings_complete_202": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/complete",
+    "status": 202
+  },
+  "recordings_complete_422_missing_chunks": {
+    "method": "POST",
+    "path": "/api/recordings/{id}/complete",
+    "status": 422
+  },
+  "recordings_show_200_all_chunks": {
+    "method": "GET",
+    "path": "/api/recordings/{id}",
+    "status": 200
+  },
+  "recordings_show_200_pending": {
+    "method": "GET",
+    "path": "/api/recordings/{id}",
+    "status": 200
+  },
+  "recordings_show_200_ready": {
+    "method": "GET",
+    "path": "/api/recordings/{id}",
+    "status": 200
+  },
+  "recordings_show_200_uploading": {
+    "method": "GET",
+    "path": "/api/recordings/{id}",
+    "status": 200
+  },
+  "register_201_android": {
+    "method": "POST",
+    "path": "/api/devices/register",
+    "status": 201
+  },
+  "register_201_windows": {
+    "method": "POST",
+    "path": "/api/devices/register",
+    "status": 201
+  },
+  "register_201_with_pins": {
+    "method": "POST",
+    "path": "/api/devices/register",
+    "status": 201
+  },
+  "register_422_invalid_code": {
+    "method": "POST",
+    "path": "/api/devices/register",
+    "status": 422
+  },
+  "register_422_used_code": {
+    "method": "POST",
+    "path": "/api/devices/register",
+    "status": 422
+  },
+  "register_422_validation": {
+    "method": "POST",
+    "path": "/api/devices/register",
+    "status": 422
+  },
+  "rotate_token_200": {
+    "method": "POST",
+    "path": "/api/devices/rotate-token",
+    "status": 200
+  },
+  "sessions_delete_404_twice": {
+    "method": "DELETE",
+    "path": "/api/sessions/{id}",
+    "status": 404
+  },
+  "sessions_recordings_store_201": {
+    "method": "POST",
+    "path": "/api/sessions/{id}/recordings",
+    "status": 201
+  },
+  "sessions_recordings_store_422_duplicate": {
+    "method": "POST",
+    "path": "/api/sessions/{id}/recordings",
+    "status": 422
+  },
+  "sessions_show_200_completed_android": {
+    "method": "GET",
+    "path": "/api/sessions/{id}",
+    "status": 200
+  },
+  "sessions_show_200_completed": {
+    "method": "GET",
+    "path": "/api/sessions/{id}",
+    "status": 200
+  },
+  "sessions_show_200_failed": {
+    "method": "GET",
+    "path": "/api/sessions/{id}",
+    "status": 200
+  },
+  "sessions_show_200_processing": {
+    "method": "GET",
+    "path": "/api/sessions/{id}",
+    "status": 200
+  },
+  "sessions_show_200_three_artifacts": {
+    "method": "GET",
+    "path": "/api/sessions/{id}",
+    "status": 200
+  },
+  "sessions_show_200_uploading": {
+    "method": "GET",
+    "path": "/api/sessions/{id}",
+    "status": 200
+  },
+  "sessions_show_200_with_pending_artifact": {
+    "method": "GET",
+    "path": "/api/sessions/{id}",
+    "status": 200
+  },
+  "sessions_show_404_deleted": {
+    "method": "GET",
+    "path": "/api/sessions/{id}",
+    "status": 404
+  },
+  "sessions_store_200_after_delete": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 200
+  },
+  "sessions_store_200_existing": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 200
+  },
+  "sessions_store_201_minimal": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 201
+  },
+  "sessions_store_201_three_artifacts": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 201
+  },
+  "sessions_store_201_two_chunks": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 201
+  },
+  "sessions_store_201_voice_note": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 201
+  },
+  "sessions_store_201": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 201
+  },
+  "sessions_store_404_unknown_client": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 404
+  },
+  "sessions_store_422_mime": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 422
+  },
+  "sessions_store_422_validation": {
+    "method": "POST",
+    "path": "/api/sessions",
+    "status": 422
+  },
+  "stt_token_200_captions_off": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 200
+  },
+  "stt_token_200_client_only": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 200
+  },
+  "stt_token_200_dictation_captions_off": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 200
+  },
+  "stt_token_200_dictation": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 200
+  },
+  "stt_token_200_live_captions": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 200
+  },
+  "stt_token_200_on_device": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 200
+  },
+  "stt_token_422_invalid": {
+    "method": "POST",
+    "path": "/api/stt/token",
+    "status": 422
+  },
+  "transcripts_show_200_final_completed": {
+    "method": "GET",
+    "path": "/api/transcripts/{id}",
+    "status": 200
+  },
+  "transcripts_show_200_final_failed": {
+    "method": "GET",
+    "path": "/api/transcripts/{id}",
+    "status": 200
+  },
+  "transcripts_show_200_final_mono": {
+    "method": "GET",
+    "path": "/api/transcripts/{id}",
+    "status": 200
+  },
+  "transcripts_show_200_final_processing": {
+    "method": "GET",
+    "path": "/api/transcripts/{id}",
+    "status": 200
+  },
+  "transcripts_show_200_live": {
+    "method": "GET",
+    "path": "/api/transcripts/{id}",
+    "status": 200
+  },
+  "transcripts_show_404_deleted": {
+    "method": "GET",
+    "path": "/api/transcripts/{id}",
+    "status": 404
+  },
+  "transcripts_store_201_live": {
+    "method": "POST",
+    "path": "/api/sessions/{id}/transcripts",
+    "status": 201
+  },
+  "transcripts_store_422_channel": {
+    "method": "POST",
+    "path": "/api/sessions/{id}/transcripts",
+    "status": 422
+  },
+  "transcripts_store_422_final_from_device": {
+    "method": "POST",
+    "path": "/api/sessions/{id}/transcripts",
+    "status": 422
+  },
+  "transcripts_store_422_timing": {
+    "method": "POST",
+    "path": "/api/sessions/{id}/transcripts",
+    "status": 422
+  }
+}

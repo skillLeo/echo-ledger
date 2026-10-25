@@ -1,0 +1,12 @@
+{
+  "session": {
+    "id": "01m5qb4drjn0p896pc4p1r8exr",
+    "client_ref": "84da7299-c0b7-4c64-83b1-a7293926da86",
+    "deleted": true,
+    "updated_at": "2026-10-24T16:15:35+00:00"
+  },
+  "recordings": [],
+  "required_artifacts": [
+    "primary"
+  ]
+}

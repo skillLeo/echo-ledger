@@ -1,0 +1,19 @@
+{
+  "provider": "azure_mai",
+  "mode": "cloud",
+  "expires_at": "2026-10-24T09:10:00+00:00",
+  "keyterms": ["Acme"],
+  "grants": [
+    {
+      "channel": "me",
+      "transport": "azure_speech_sdk",
+      "protocol": "azure_speech_sdk",
+      "token": "eyJhbGciOiJFUzI1NiJ9.e30.sig",
+      "region": "westeurope",
+      "expires_in": 600,
+      "refresh_after": 540,
+      "phrases": ["Acme"],
+      "audio": {"encoding": "pcm_s16le", "sample_rate": 16000, "channels": 1, "frame_ms": 100}
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "session": {
+    "id": "01JB8QA0M1X2C3V4B5N6M7K8J9",
+    "client_ref": "3f2b6c1e-8d4a-4d3e-9a51-2c7f0e9b1a22",
+    "deleted": false,
+    "source_device": "desktop",
+    "source_device_label": "Desktop",
+    "source_device_icon": "computer-desktop",
+    "source_app": "whatsapp",
+    "source_app_label": "WhatsApp",
+    "device": {"id": "01JB8Q3R0Z5V1K7M9N2P4S6T8W", "name": "Work laptop"},
+    "client": null,
+    "title": "WhatsApp call",
+    "started_at": "2026-10-24T09:00:00+00:00",
+    "ended_at": "2026-10-24T09:42:10+00:00",
+    "duration_ms": 2530000,
+    "status": "uploading",
+    "transcript": {"final_status": null, "final_transcript_id": null, "live_available": false, "live_transcript_id": null, "preview": null},
+    "updated_at": "2026-10-24T09:42:11+00:00"
+  },
+  "recordings": [
+    {
+      "id": "01JB8QA1P2Q3R4S5T6V7W8X9YZ",
+      "role": "primary",
+      "upload": {"chunk_size_bytes": 5242880, "total_chunks": 2, "received_chunks": [], "status": "pending"}
+    }
+  ],
+  "required_artifacts": ["primary"]
+}

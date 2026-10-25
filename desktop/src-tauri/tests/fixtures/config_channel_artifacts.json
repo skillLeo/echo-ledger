@@ -1,0 +1,18 @@
+{
+  "device": {"id": "01JB8Q3R0Z5V1K7M9N2P4S6T8W", "name": "Work laptop", "platform": "windows", "source_device": "desktop"},
+  "server_time": "2026-10-24T09:00:00+00:00",
+  "retention_days": 7,
+  "upload": {
+    "chunk_size_bytes": 1048576,
+    "max_recording_bytes": 2147483648,
+    "accepted_mimes": ["audio/flac", "audio/wav"]
+  },
+  "providers": {
+    "live_captions": {"provider": "whispercpp_local", "mode": "on_device"},
+    "dictation": {"provider": "whispercpp_local", "mode": "on_device"},
+    "final_transcript": {"provider": "whispercpp_local", "mode": "sync", "required_artifacts": ["primary", "channel_1", "channel_2"], "preferred_primary": "wav"},
+    "voice_note": {"provider": "parakeet_local", "mode": "device", "required_artifacts": ["primary"], "preferred_primary": null}
+  },
+  "captions": {"channels": "client_only"},
+  "pins": []
+}

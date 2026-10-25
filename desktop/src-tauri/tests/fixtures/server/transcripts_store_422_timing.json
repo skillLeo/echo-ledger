@@ -1,0 +1,8 @@
+{
+  "message": "Segment timing exceeds the session duration.",
+  "errors": {
+    "segments": [
+      "Segment timing exceeds the session duration."
+    ]
+  }
+}

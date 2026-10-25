@@ -1,0 +1,14 @@
+{
+  "message": "The pairing code field is required. (and 2 more errors)",
+  "errors": {
+    "pairing_code": [
+      "The pairing code field is required."
+    ],
+    "name": [
+      "The name field is required."
+    ],
+    "platform": [
+      "The selected platform is invalid."
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "message": "The selected segments.0.channel is invalid.",
+  "errors": {
+    "segments.0.channel": [
+      "The selected segments.0.channel is invalid."
+    ]
+  }
+}

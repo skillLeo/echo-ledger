@@ -1,0 +1,8 @@
+{
+  "message": "The limit field must not be greater than 100.",
+  "errors": {
+    "limit": [
+      "The limit field must not be greater than 100."
+    ]
+  }
+}
