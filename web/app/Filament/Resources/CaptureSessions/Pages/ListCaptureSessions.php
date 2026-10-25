@@ -13,6 +13,7 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\FinalTranscriptCoordinator;
+use App\Services\LibraryOrganiser;
 use App\Services\RecordingIngestor;
 use App\Services\SettingsRepository;
 use Filament\Actions\Action;
@@ -21,13 +22,40 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ListCaptureSessions extends ListRecords
 {
     protected static string $resource = CaptureSessionResource::class;
+
+    /** Smart views (B15), in the order the tabs show. */
+    public const VIEW_LABELS = [
+        'today' => 'Today',
+        'this_week' => 'This week',
+        'waiting' => 'Waiting for decision',
+        'bookmarked' => 'Bookmarked',
+        'failed' => 'Failed uploads',
+        'pinned' => 'Pinned',
+    ];
+
+    /** @return array<string, Tab> */
+    public function getTabs(): array
+    {
+        $organiser = app(LibraryOrganiser::class);
+        $counts = $organiser->counts((int) auth()->id());
+        $tabs = ['all' => Tab::make('All')];
+        foreach (self::VIEW_LABELS as $view => $label) {
+            $tabs[$view] = Tab::make($label)
+                ->badge($counts[$view] > 0 ? $counts[$view] : null)
+                ->modifyQueryUsing(fn (Builder $query): Builder => $organiser->applyView($query, $view));
+        }
+
+        return $tabs;
+    }
 
     protected function getHeaderActions(): array
     {

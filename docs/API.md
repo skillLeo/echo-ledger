@@ -58,12 +58,14 @@ Every addition below is marked **(since v1.1)**.
 | 409 | `session_not_recording` | `stt/token`: the session is not in status `recording`, or is 4 hours old or older | Captions are unavailable for this recording; keep recording |
 | 409 | `too_many_open_uploads` | 50 or more unfinished recordings exist for this device | Finish pending uploads, then retry |
 | 409 | `too_many_open_sessions` | 10 or more sessions of this device are still `recording` | Finish or discard them, then retry |
+| 409 | `nothing_to_export` | `sessions/export`: none of the chosen recordings has a finished transcript | Permanent for those recordings |
 | 413 | `too_large` | Body or declared size above the limit | Permanent |
 | 422 | `validation_failed` | Field errors in `errors` | Permanent for that request |
 | 422 | `session_required` | `stt/token` for `live_captions` without `session_id` | Open a session first (v1.1 clients); v1 clients lose captions only |
 | 422 | `upload_incomplete` | `complete` while chunks are missing (`missing_chunks`) | Send the missing chunks, then call `complete` again |
 | 422 | `verification_failed` | `complete`: the assembled file failed the size/SHA-256 check; the parts were discarded | Upload the whole file again from chunk 0 |
 | 422 | `invalid_cursor` | `library` cursor is malformed | Restart paging without a cursor |
+| 422 | `too_many_labels` | More than 20 labels on one recording | Permanent: remove some labels first |
 | 429 | `rate_limited` | Throttled; `Retry-After` is always set | Wait `Retry-After` seconds |
 | 502 | `provider_error` | `stt/token`: the provider refused or could not be reached | Retry later |
 | 503 | `provider_not_configured` | `stt/token`: provider key or region missing | Show the message; retry later |
@@ -166,7 +168,11 @@ abilities of the token that asked for it, never more **(since v1.1)**.
     new final transcripts fail with `error_code` `budget_exceeded`. Both are `false` when no limit is set.
 
 ### `GET /api/clients` — `library:read`
-`200 {"data": [{"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "keyterm_count": 12, "updated_at": "…"}]}`
+`200 {"data": [{"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH", "pinned": true, "keyterm_count": 12, "session_count": 40, "updated_at": "…"}]}`
+
+Pinned folders come first, then by name. `avatar` (one emoji or up to two letters), `pinned` and `session_count`
+are since v1.1; client folders are created and changed with `POST /api/clients` and `PATCH /api/clients/{id}`
+(see "Organising the library").
 
 ---
 
@@ -389,7 +395,8 @@ A bookmark added after the call: `{"at_ms": 61250, "tag": "Decision", "note": "S
 ### `GET /api/library` — `library:read`
 Query: `since` (ISO-8601 with any offset; items with `updated_at >= since`, **including tombstones**), `source`
 (comma list of `phone,desktop,web`), `source_app`, `client_id`, `status`, `cursor`, `limit` (1–100, default 50), `tag`
-(sessions with a bookmark of that tag) and `bookmarked=1` (sessions with any bookmark; both since v1.1).
+(sessions with a bookmark of that tag) and `bookmarked=1` (sessions with any bookmark; both since v1.1), `view`, `tz`,
+`label` and `pinned` (since v1.1, see "Organising the library").
 Returns every session of the owner from **every** device, except sessions still in status `recording` (listed only
 when `status=recording` is given).
 ```json
@@ -398,11 +405,11 @@ when `status=recording` is given).
     "source_device": "desktop", "source_device_label": "Desktop", "source_device_icon": "computer-desktop",
     "source_app": "zoom", "source_app_label": "Zoom",
     "device": {"id": "01JB…", "name": "Work laptop"},
-    "client": {"id": "01JB…", "name": "Acme Holdings"},
+    "client": {"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH"},
     "title": "Zoom call", "started_at": "…", "ended_at": "…", "duration_ms": 2530000, "status": "completed",
     "transcript": {"final_status": "completed", "final_transcript_id": "01JB…", "live_available": true,
                    "live_transcript_id": "01JB…", "preview": "first 160 characters…"},
-    "marker_count": 2, "tags": ["Budget"],
+    "marker_count": 2, "tags": ["Budget"], "pinned": false, "labels": ["Invoice"],
     "updated_at": "…"},
    {"id": "01JC…", "client_ref": "9a1d…", "deleted": true, "updated_at": "…"}
  ],
@@ -420,6 +427,42 @@ Sync rule **(since v1.1: inclusive boundary)**:
   paging.
 - Clients poll on open and after each capture (no websockets).
 
+### Organising the library (since v1.1)
+Client folders, labels, pins, smart views and bulk actions. Every change updates the session's `updated_at`, so the
+other devices pick it up on their next sync. `tags` on a library item are bookmark tags; `labels` belong to the
+recording itself.
+
+Smart views (`view` on `GET /api/library`): `today` and `this_week` (calendar day or Monday-based week of `started_at`
+in `tz`, an IANA zone, default the console's display zone), `waiting` (still `recording`: the phone or computer has
+not decided Keep or Discard), `bookmarked`, `failed` (session `failed` or an upload that failed) and `pinned`.
+`label` matches a recording label ignoring capitals; `pinned=1` / `pinned=0` filter by pin.
+
+### `GET /api/library/views?tz=` — `library:read` (since v1.1)
+`200 {"views": {"today": 2, "this_week": 9, "waiting": 0, "bookmarked": 4, "failed": 1, "pinned": 3}, "labels": [{"label": "Invoice", "count": 5}]}`.
+Counts match what `GET /api/library?view=…` lists.
+
+### `PATCH /api/sessions/{id}` — `sessions:write` (since v1.1)
+Body, every field optional: `title` (≤ 200; empty clears it), `client_id` (a client of the owner, `null` = no
+client), `pinned` (boolean) and `labels` (the complete list: trimmed, single spaces, ≤ 40 characters, duplicates
+ignoring capitals and blanks dropped, at most 20 → else `422 too_many_labels`). Returns `200 {"data": <library item>}`.
+`404 session_not_found`; another owner's client is `404 client_not_found`.
+
+### `POST /api/sessions/bulk` — `sessions:write` (since v1.1)
+`{"ids": ["01JB…"], "action": "move|label|unlabel|pin|unpin|delete", "client_id": "01JB…" | null, "label": "Invoice"}`.
+Up to 200 ids; ids of other owners are ignored. `move` uses `client_id` (`null` = no client), `label` / `unlabel`
+need `label`, `delete` makes tombstones exactly like `DELETE /api/sessions/{id}`. `200 {"changed": 2}`.
+
+### `POST /api/sessions/export` — `library:read` (since v1.1)
+`{"ids": [...], "format": "txt|md|srt|vtt|json|docx"}` → `200 application/zip` with one file per finished final
+transcript (names as in `GET /api/transcripts/{id}/export`, numbered when two match) and the header
+`X-Export-Count`. Recordings without a finished transcript are skipped; when none has one, `409 nothing_to_export`.
+
+### `POST /api/clients` — `sessions:write` (since v1.1)
+`{"name": "Acme", "color": "#22d3ee", "avatar": "AC", "pinned": false}` → `201 {"data": <client>}`. `name` is
+required and unique per owner (≤ 120), `color` is `#rrggbb`, `avatar` keeps one emoji or two letters (upper case).
+
+### `PATCH /api/clients/{id}` — `sessions:write` (since v1.1)
+Any of `name`, `color`, `avatar`, `pinned` → `200 {"data": <client>}`; `404 client_not_found`.
 ### `GET /api/search` — `library:read`, throttled (60/min/device) (since v1.1)
 Searches titles and transcript text (final and live) of every device. Query: `q` (2–200 characters; every word
 must match, `"quoted phrases"` stay together, case does not matter), and the optional filters `client_id`,

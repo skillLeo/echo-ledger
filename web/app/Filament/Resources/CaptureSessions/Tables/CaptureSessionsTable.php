@@ -7,21 +7,32 @@ namespace App\Filament\Resources\CaptureSessions\Tables;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
+use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
+use App\Models\Client;
+use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class CaptureSessionsTable
 {
@@ -38,10 +49,14 @@ final class CaptureSessionsTable
                     ->state(fn (CaptureSession $r): string => $r->displayTitle())->limit(48)
                     ->searchable(query: fn (Builder $query, string $search): Builder => self::searchDisplayedTitle($query, $search)),
                 TextColumn::make('client.name')->label('Client')->placeholder('—')->searchable(),
+                TextColumn::make('labels.label')->label('Labels')->badge()->color('gray')->placeholder('')->toggleable(),
                 TextColumn::make('device.name')->label('Device')
                     ->state(fn (CaptureSession $r): string => self::deviceLabel($r))->toggleable(),
                 TextColumn::make('status')->badge(),
                 TextColumn::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('—')->toggleable(),
+                IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)
+                    ->trueColor('warning')->falseColor('gray')
+                    ->action(fn (CaptureSession $record) => app(LibraryOrganiser::class)->update($record, ['pinned' => ! $record->pinned])),
             ])
             ->filters([
                 SelectFilter::make('source_device')->label('Source device')->options(SourceDevice::class)->multiple(),
@@ -54,6 +69,10 @@ final class CaptureSessionsTable
                     ->options(fn (): array => array_combine(app(SettingsRepository::class)->markerTags(), app(SettingsRepository::class)->markerTags()))
                     ->query(fn (Builder $query, array $data): Builder => blank($data['value'] ?? null) ? $query
                         : $query->whereHas('markers', fn (Builder $m): Builder => $m->where('tag', $data['value']))),
+                SelectFilter::make('label')->label('Label')
+                    ->options(fn (): array => collect(app(LibraryOrganiser::class)->labels((int) auth()->id()))->pluck('label', 'label')->all())
+                    ->query(fn (Builder $query, array $data): Builder => blank($data['value'] ?? null) ? $query
+                        : $query->whereHas('labels', fn (Builder $l): Builder => $l->where('label', $data['value']))),
                 Filter::make('bookmarked')->label('Has bookmarks')->toggle()
                     ->query(fn (Builder $query): Builder => $query->whereHas('markers')),
                 Filter::make('started_at')
@@ -68,7 +87,7 @@ final class CaptureSessionsTable
                 ViewAction::make(),
                 DeleteAction::make()->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
             ])
-            ->toolbarActions([BulkActionGroup::make([DeleteBulkAction::make()])])
+            ->toolbarActions([BulkActionGroup::make([...self::bulkActions(), DeleteBulkAction::make()])])
             ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => match (true) {
                 $livewire->hasTableSearch() => 'No sessions match your search',
                 $table->isFiltered() => 'No sessions match these filters',
@@ -77,6 +96,71 @@ final class CaptureSessionsTable
             ->emptyStateDescription(fn (HasTable $livewire, Table $table): string => $livewire->hasTableSearch() || $table->isFiltered()
                 ? 'Try other words, or clear the search and filters.'
                 : 'Pair a phone or desktop under Devices, or upload a voice note.');
+    }
+
+    /**
+     * Bulk actions on the selected recordings (B15): move to a client, add or remove a label, pin, unpin and export
+     * the finished transcripts as one zip file.
+     *
+     * @return list<BulkAction>
+     */
+    public static function bulkActions(): array
+    {
+        $run = function (Collection $records, string $action, ?string $client = null, ?string $label = null): void {
+            try {
+                $changed = app(LibraryOrganiser::class)->bulk((int) auth()->id(), self::ids($records), $action, $client, $label);
+                Notification::make()->title($changed === 1 ? '1 recording updated' : "{$changed} recordings updated")->success()->send();
+            } catch (ApiError $e) {
+                Notification::make()->title($e->getMessage())->danger()->send();
+            }
+        };
+
+        return [
+            BulkAction::make('move')->label('Move to client')->icon(Heroicon::OutlinedFolder)
+                ->schema([Select::make('client_id')->label('Client')->placeholder('No client')
+                    ->options(fn (): array => Client::query()->where('user_id', auth()->id())->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all())])
+                ->action(fn (Collection $records, array $data) => $run($records, 'move', $data['client_id'] ?? null))
+                ->deselectRecordsAfterCompletion(),
+            BulkAction::make('label')->label('Add label')->icon(Heroicon::OutlinedTag)
+                ->schema([TextInput::make('label')->label('Label')->required()->maxLength(LibraryOrganiser::MAX_LABEL_CHARS)
+                    ->datalist(fn (): array => array_column(app(LibraryOrganiser::class)->labels((int) auth()->id()), 'label'))])
+                ->action(fn (Collection $records, array $data) => $run($records, 'label', null, $data['label']))
+                ->deselectRecordsAfterCompletion(),
+            BulkAction::make('unlabel')->label('Remove label')->icon(Heroicon::OutlinedXMark)
+                ->schema([Select::make('label')->label('Label')->required()
+                    ->options(fn (): array => collect(app(LibraryOrganiser::class)->labels((int) auth()->id()))->pluck('label', 'label')->all())])
+                ->action(fn (Collection $records, array $data) => $run($records, 'unlabel', null, $data['label']))
+                ->deselectRecordsAfterCompletion(),
+            BulkAction::make('pin')->label('Pin')->icon(Heroicon::OutlinedStar)
+                ->action(fn (Collection $records) => $run($records, 'pin'))->deselectRecordsAfterCompletion(),
+            BulkAction::make('unpin')->label('Unpin')->icon(Heroicon::OutlinedMinusCircle)
+                ->action(fn (Collection $records) => $run($records, 'unpin'))->deselectRecordsAfterCompletion(),
+            BulkAction::make('export')->label('Export transcripts')->icon(Heroicon::OutlinedArrowDownTray)
+                ->schema([Select::make('format')->label('Format')->required()->default('docx')->selectablePlaceholder(false)
+                    ->options(['docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Web subtitles (.vtt)', 'json' => 'JSON'])])
+                ->action(function (Collection $records, array $data): ?StreamedResponse {
+                    try {
+                        $file = app(LibraryOrganiser::class)->exportZip((int) auth()->id(), self::ids($records), (string) $data['format']);
+                    } catch (ApiError $e) {
+                        Notification::make()->title($e->getMessage())->warning()->send();
+
+                        return null;
+                    }
+
+                    return response()->streamDownload(function () use ($file): void {
+                        echo $file['body'];
+                    }, $file['filename'], ['Content-Type' => 'application/zip']);
+                }),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, CaptureSession>  $records
+     * @return list<string>
+     */
+    private static function ids(Collection $records): array
+    {
+        return $records->map(fn (CaptureSession $session): string => $session->id)->values()->all();
     }
 
     /** mm:ss below an hour, then h:mm:ss with the hours counting on past a day (no wrap at 24 h). */

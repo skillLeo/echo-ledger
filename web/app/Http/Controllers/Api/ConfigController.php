@@ -27,14 +27,28 @@ final class ConfigController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $clients = Client::query()->where('user_id', $device->user_id)->withCount('keyterms')->orderBy('name')->get();
+        $clients = Client::query()->where('user_id', $device->user_id)->withCount(['keyterms', 'captureSessions'])
+            ->orderByDesc('pinned')->orderBy('name')->get();
 
-        return response()->json(['data' => $clients->map(fn (Client $c): array => [
-            'id' => $c->id,
-            'name' => $c->name,
-            'color' => $c->color,
-            'keyterm_count' => (int) $c->getAttribute('keyterms_count'),
-            'updated_at' => $c->updated_at?->toAtomString(),
-        ])->values()]);
+        return response()->json(['data' => $clients->map(fn (Client $c): array => self::clientPayload($c))->values()]);
+    }
+
+    /**
+     * One client folder as devices see it (the counts come from `withCount`).
+     *
+     * @return array<string, mixed>
+     */
+    public static function clientPayload(Client $client): array
+    {
+        return [
+            'id' => $client->id,
+            'name' => $client->name,
+            'color' => $client->color,
+            'avatar' => $client->avatar,
+            'pinned' => (bool) $client->pinned,
+            'keyterm_count' => (int) $client->getAttribute('keyterms_count'),
+            'session_count' => (int) $client->getAttribute('capture_sessions_count'),
+            'updated_at' => $client->updated_at?->toAtomString(),
+        ];
     }
 }

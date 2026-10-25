@@ -18,6 +18,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $user_id
  * @property string $name
  * @property string|null $color
+ * @property string|null $avatar one emoji or up to two letters shown on the folder (B15)
+ * @property bool $pinned listed first (B15)
  * @property string|null $language
  * @property string|null $notes
  * @property list<array<string, mixed>>|null $replacements text replacements applied to this client's final transcripts
@@ -28,7 +30,7 @@ class Client extends Model
     /** @use HasFactory<ClientFactory> */
     use HasFactory, HasUlids;
 
-    protected $fillable = ['user_id', 'name', 'color', 'language', 'notes', 'speaker_names', 'replacements'];
+    protected $fillable = ['user_id', 'name', 'color', 'avatar', 'pinned', 'language', 'notes', 'speaker_names', 'replacements'];
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
@@ -57,6 +59,6 @@ class Client extends Model
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['speaker_names' => 'array', 'replacements' => 'array'];
+        return ['speaker_names' => 'array', 'replacements' => 'array', 'pinned' => 'boolean'];
     }
 }

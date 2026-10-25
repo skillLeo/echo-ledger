@@ -49,7 +49,7 @@ final class LibraryItemResource extends JsonResource
             'source_app' => $session->source_app->value,
             'source_app_label' => $session->source_app->getLabel(),
             'device' => $session->device ? ['id' => $session->device->id, 'name' => $session->device->name] : null,
-            'client' => $session->client ? ['id' => $session->client->id, 'name' => $session->client->name] : null,
+            'client' => $session->client ? ['id' => $session->client->id, 'name' => $session->client->name, 'color' => $session->client->color, 'avatar' => $session->client->avatar] : null,
             'title' => $session->displayTitle(),
             'started_at' => $session->started_at->toAtomString(),
             'ended_at' => $session->ended_at?->toAtomString(),
@@ -64,6 +64,8 @@ final class LibraryItemResource extends JsonResource
             ],
             'marker_count' => $markers->count(),
             'tags' => $markers->pluck('tag')->filter()->unique()->values()->all(),
+            'pinned' => (bool) $session->pinned,
+            'labels' => $session->labelList(),
             'updated_at' => $session->updated_at->toAtomString(),
         ];
     }

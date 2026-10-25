@@ -14,6 +14,7 @@ use App\Http\Resources\TranscriptResource;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Transcript;
+use App\Services\LibraryOrganiser;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Cursor;
@@ -24,7 +25,7 @@ use Throwable;
 final class LibraryController extends Controller
 {
     /** GET /api/library — every session of the owner, from every device, plus tombstones when `since` is given. */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, LibraryOrganiser $organiser): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
@@ -38,18 +39,22 @@ final class LibraryController extends Controller
             'limit' => ['nullable', 'integer', 'min:1', 'max:100'],
             'tag' => ['nullable', 'string', 'max:40'],
             'bookmarked' => ['nullable', 'boolean'],
+            'view' => ['nullable', Rule::in(LibraryOrganiser::VIEWS)],
+            'tz' => ['nullable', 'timezone:all'],
+            'label' => ['nullable', 'string', 'max:40'],
+            'pinned' => ['nullable', 'boolean'],
         ]);
         $cursor = empty($data['cursor']) ? null : self::decodeCursor($data['cursor']);
 
         $serverTime = now();
-        $query = CaptureSession::query()->where('user_id', $device->user_id)->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms']);
+        $query = CaptureSession::query()->where('user_id', $device->user_id)->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels']);
 
         if (! empty($data['since'])) {
             // Any offset names an instant; the stored timestamps are UTC. Inclusive: server_time has whole seconds, so a
             // change in the same second as the previous sync is delivered again rather than lost (clients merge by id).
             $query->withTrashed()->where('updated_at', '>=', Carbon::parse($data['since'])->utc());
         }
-        if (empty($data['status'])) {
+        if (empty($data['status']) && ($data['view'] ?? null) !== 'waiting') {
             // Open sessions (still recording) may yet be discarded: listed only when asked for; tombstones always sync.
             $query->where(fn ($q) => $q->whereNotNull('deleted_at')->orWhere('status', '!=', SessionStatus::Recording->value));
         }
@@ -71,6 +76,15 @@ final class LibraryController extends Controller
         }
         if ($request->boolean('bookmarked')) {
             $query->whereHas('markers');
+        }
+        if (! empty($data['view'])) {
+            $organiser->applyView($query, $data['view'], $data['tz'] ?? null);
+        }
+        if (! empty($data['label'])) {
+            $query->whereHas('labels', fn ($q) => $q->whereRaw('LOWER(label) = ?', [mb_strtolower(trim($data['label']))]));
+        }
+        if ($request->has('pinned') && $data['pinned'] !== null) {
+            $query->where('pinned', $request->boolean('pinned'));
         }
 
         $page = $query->orderByDesc('updated_at')->orderByDesc('id')

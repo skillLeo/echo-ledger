@@ -105,6 +105,12 @@ function produceError(object $test, string $code): TestResponse
             return $test->postJson('/api/recordings/'.$created->json('recordings.0.id').'/complete');
         case 'verification_failed':
             return $test->uploadRecording($test->bytes, [], ['sha256' => str_repeat('0', 64)])['complete'];
+        case 'nothing_to_export':
+            return $test->postJson('/api/sessions/export', ['ids' => [ENVELOPE_MISSING_ID], 'format' => 'txt']);
+        case 'too_many_labels':
+            $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
+
+            return $test->patchJson("/api/sessions/{$session->id}", ['labels' => array_map(fn (int $i): string => "label {$i}", range(1, 21))]);
         case 'invalid_cursor':
             return $test->getJson('/api/library?cursor=not-a-cursor');
         case 'rate_limited':
@@ -144,7 +150,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(22);
+        ->and(count(documentedErrorCodes()))->toBe(24);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

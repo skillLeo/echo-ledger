@@ -8,6 +8,7 @@ use App\Filament\Resources\Clients\Pages\CreateClient;
 use App\Filament\Resources\Clients\Pages\EditClient;
 use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
+use App\Http\Controllers\Api\OrganiseController;
 use App\Models\Client;
 use App\Services\TextReplacements;
 use App\Stt\LanguageChoice;
@@ -25,6 +26,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\ColorColumn;
+use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -59,6 +61,10 @@ class ClientResource extends Resource
                 ColorPicker::make('color')->default('#8B5CF6')
                     ->regex('/^#[0-9A-Fa-f]{6}\z/')
                     ->validationMessages(['regex' => 'Use a colour like #8B5CF6.']),
+                TextInput::make('avatar')->label('Avatar')->maxLength(16)->placeholder('AC or an emoji')
+                    ->helperText('One emoji or up to two letters, shown on the folder.')
+                    ->dehydrateStateUsing(fn (?string $state): ?string => OrganiseController::avatar($state)),
+                Toggle::make('pinned')->label('Pin to the top')->inline(false),
                 Select::make('language')->label('Language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false)
                     ->formatStateUsing(fn (?string $state): string => LanguageChoice::normalize($state) ?? '')
                     ->dehydrateStateUsing(fn (?string $state): ?string => LanguageChoice::normalize($state))
@@ -84,13 +90,17 @@ class ClientResource extends Resource
     {
         return $table
             ->defaultSort('name')
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->orderByDesc('pinned'))
             ->columns([
                 ColorColumn::make('color')->label(''),
+                TextColumn::make('avatar')->label('')->placeholder('')->weight('semibold'),
                 TextColumn::make('name')->searchable()->sortable()->weight('semibold'),
                 TextColumn::make('keyterms_count')->label('Keyterms')->badge()->color('primary'),
                 TextColumn::make('capture_sessions_count')->label('Sessions')->badge()->color('gray'),
                 TextColumn::make('language')->placeholder('auto'),
                 TextColumn::make('updated_at')->since()->label('Updated'),
+                IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)
+                    ->action(fn (Client $record) => $record->update(['pinned' => ! $record->pinned])),
             ])
             ->recordActions([EditAction::make(), DeleteAction::make()]);
     }

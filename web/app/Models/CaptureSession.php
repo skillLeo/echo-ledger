@@ -43,6 +43,8 @@ use Illuminate\Support\Carbon;
  * @property list<array{at_ms: int, paused_ms: int}>|null $pauses
  * @property-read Collection<int, SessionMarker> $markers
  * @property SessionStatus $status
+ * @property bool $pinned kept at the top of the library (B15)
+ * @property-read Collection<int, SessionLabel> $labels
  * @property string|null $final_provider
  * @property Carbon $created_at
  * @property Carbon $updated_at
@@ -58,7 +60,7 @@ class CaptureSession extends Model
 
     protected $fillable = [
         'user_id', 'device_id', 'client_id', 'client_ref', 'source_device', 'source_app', 'title', 'language',
-        'started_at', 'ended_at', 'duration_ms', 'pauses', 'speaker_names', 'status', 'final_provider',
+        'started_at', 'ended_at', 'duration_ms', 'pauses', 'speaker_names', 'status', 'pinned', 'final_provider',
     ];
 
     /** @return BelongsTo<User, $this> */
@@ -93,6 +95,20 @@ class CaptureSession extends Model
     public function markers(): HasMany
     {
         return $this->hasMany(SessionMarker::class)->orderBy('at_ms');
+    }
+
+    /** @return HasMany<SessionLabel, $this> */
+    public function labels(): HasMany
+    {
+        return $this->hasMany(SessionLabel::class)->orderBy('label');
+    }
+
+    /** @return list<string> */
+    public function labelList(): array
+    {
+        $labels = $this->relationLoaded('labels') ? $this->labels : $this->labels()->get();
+
+        return $labels->pluck('label')->map(fn ($l): string => (string) $l)->values()->all();
     }
 
     /** @return HasOne<Recording, $this> */
@@ -201,6 +217,7 @@ class CaptureSession extends Model
             'duration_ms' => 'integer',
             'pauses' => 'array',
             'speaker_names' => 'array',
+            'pinned' => 'boolean',
         ];
     }
 }

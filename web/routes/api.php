@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\LibraryController;
+use App\Http\Controllers\Api\OrganiseController;
 use App\Http\Controllers\Api\RecordingController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SessionController;
@@ -49,6 +50,10 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/{id}/recordings', [SessionController::class, 'addRecording'])->name('api.sessions.recordings');
             Route::post('sessions/{id}/transcripts', [SessionController::class, 'storeTranscript'])->name('api.sessions.transcripts');
             Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->name('api.sessions.destroy');
+            Route::patch('sessions/{id}', [OrganiseController::class, 'update'])->name('api.sessions.update');
+            Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->name('api.sessions.bulk');
+            Route::post('clients', [OrganiseController::class, 'storeClient'])->name('api.clients.store');
+            Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->name('api.clients.update');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
             Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->name('api.sessions.markers.destroy');
             Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');
@@ -63,6 +68,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
 
         Route::middleware('abilities:library:read')->group(function (): void {
             Route::get('library', [LibraryController::class, 'index'])->name('api.library');
+            Route::get('library/views', [OrganiseController::class, 'views'])->name('api.library.views');
+            Route::post('sessions/export', [OrganiseController::class, 'export'])->name('api.sessions.export');
             Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');
             Route::get('transcripts/{id}', [LibraryController::class, 'transcript'])->name('api.transcripts.show');

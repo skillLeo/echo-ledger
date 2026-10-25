@@ -569,7 +569,7 @@ describe('item contents', function () {
             ->and($item['source_app'])->toBeString()
             ->and($item['source_app_label'])->toBeString()
             ->and($item['device'])->toBe(['id' => $this->device->id, 'name' => $this->device->name])
-            ->and($item['client'])->toBe(['id' => $client->id, 'name' => 'Acme'])
+            ->and($item['client'])->toBe(['id' => $client->id, 'name' => 'Acme', 'color' => $client->color, 'avatar' => null])
             ->and($item['title'])->toBeString()
             ->and($item['started_at'])->toBeString()->toMatch(Fixtures::ISO_8601)
             ->and($item['duration_ms'])->toBeInt()->toBe(61000)
