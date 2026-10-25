@@ -10,9 +10,11 @@ use App\Models\ClientKeyterm;
 use App\Models\Credential;
 use App\Models\Device;
 use App\Models\DevicePairingCode;
+use App\Models\ProviderDeletion;
 use App\Models\Recording;
 use App\Models\Setting;
 use App\Models\Transcript;
+use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\CredentialVault;
@@ -64,6 +66,8 @@ class AppServiceProvider extends ServiceProvider
             'setting' => Setting::class,
             'credential' => Credential::class,
             'webhook_event' => WebhookEvent::class,
+            'usage_ledger_entry' => UsageLedgerEntry::class,
+            'provider_deletion' => ProviderDeletion::class,
         ]);
 
         RateLimiter::for('device', fn (Request $request) => Limit::perMinute(240)->by('device:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));

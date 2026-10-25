@@ -7,21 +7,33 @@ namespace App\Jobs;
 use App\Enums\RecordingRole;
 use App\Enums\SessionStatus;
 use App\Enums\SttProviderKey;
+use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
 use App\Services\ChunkedUploadService;
+use App\Services\ProviderCopyEraser;
 use App\Services\TranscriptStore;
+use App\Services\Usage\BudgetGuard;
+use App\Services\Usage\UsageLedger;
+use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
+use App\Stt\Data\SubmitResult;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\SttManager;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Throwable;
 
 /**
  * Submits (async providers) or performs (sync providers) the final transcription.
- * Idempotent: never re-submits once a provider job id exists (a timed-out submit may still have been billed).
+ *
+ * Never submits twice: the transcript is claimed (pending → processing) right before the provider call, and every
+ * error during that call fails the transcript with a reason instead of retrying, because a submit that timed out
+ * may already be billed. Errors before the call leave it pending and propagate, so the queue (or, after an inline
+ * attempt, the coordinator's queued fallback and stt:reconcile) picks it up again.
  */
 final class TranscribeFinalJob implements ShouldQueue
 {
@@ -42,33 +54,36 @@ final class TranscribeFinalJob implements ShouldQueue
     public function handle(SttManager $stt, ChunkedUploadService $uploads, TranscriptStore $store): void
     {
         $transcript = Transcript::query()->find($this->transcriptId);
-        if ($transcript === null || $transcript->provider_job_id !== null || $transcript->status->isTerminal()
-            || $transcript->status === TranscriptStatus::AwaitingDevice) {
-            return;
+        if ($transcript === null || $transcript->provider_job_id !== null || $transcript->status !== TranscriptStatus::Pending) {
+            return; // gone, already submitted, finished, handed to the device, or another run holds it
         }
 
         $session = $transcript->captureSession;
         $recordings = $session->recordings()->get()->keyBy(fn ($r) => $r->role->value);
         $primary = $recordings->get(RecordingRole::Primary->value);
         if ($primary === null || ! $primary->isReady()) {
-            $store->fail($transcript, 'Primary recording is missing or not ready.');
+            $store->failWith($transcript, TranscriptErrorCode::RecordingMissing);
 
             return;
         }
 
-        // A container with (almost) no audio frames means capture produced nothing — typically the call-capture
-        // helper was not running. Fail with a clear message instead of a provider "transcoding failed" error.
+        // A container with (almost) no audio frames means capture produced nothing. Fail with a clear, platform-neutral
+        // message (each app adds its own hint) instead of a provider "transcoding failed" error.
         if ($primary->declared_size_bytes < self::MIN_AUDIO_BYTES) {
-            $store->fail($transcript, 'No audio was captured in this recording. On Android, check Setup → Call capture (the helper must be running) and record again.');
+            $store->failWith($transcript, TranscriptErrorCode::NoAudio);
 
             return;
         }
 
         $provider = SttProviderKey::from($transcript->provider);
-        $driver = $stt->driver($provider);
-        $transcript->increment('attempts');
-        $transcript->update(['status' => TranscriptStatus::Processing]);
+        // Monthly limit: nothing is sent to a paid provider once it is reached (Retry from the console after raising it).
+        if (UsageLedger::isBillable($provider) && app(BudgetGuard::class)->limitReached()) {
+            $store->failWith($transcript, TranscriptErrorCode::BudgetExceeded);
 
+            return;
+        }
+
+        $driver = $stt->driver($provider);
         $temps = [];
         try {
             $primaryPath = $temps[] = $uploads->decryptToTemp($primary);
@@ -78,7 +93,7 @@ final class TranscribeFinalJob implements ShouldQueue
             $channel1Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel1)) : null;
             $channel2Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel2)) : null;
 
-            $result = $driver->submitFinal(new FinalJobRequest(
+            $request = new FinalJobRequest(
                 transcript: $transcript,
                 session: $session,
                 primary: $primary,
@@ -90,15 +105,32 @@ final class TranscribeFinalJob implements ShouldQueue
                 keyterms: $stt->keytermsFor($session->client),
                 language: $session->language ?: ($session->client?->language ?: null),
                 webhookUrl: $stt->webhookUrl($provider, $transcript->id),
-            ));
-        } catch (ProviderJobFailed|ProviderNotConfigured $e) {
-            $store->fail($transcript, $e->getMessage()); // permanent: do not retry
+            );
 
-            return;
+            // Claim: only one run may submit, and only now does the transcript become "processing".
+            $claimed = Transcript::query()->whereKey($transcript->id)
+                ->where('status', TranscriptStatus::Pending->value)->whereNull('provider_job_id')
+                ->increment('attempts', 1, ['status' => TranscriptStatus::Processing->value]);
+            if ($claimed !== 1) {
+                return;
+            }
+            $transcript->refresh();
+
+            $result = $this->submit($driver, $request, $transcript, $store);
         } finally {
             foreach ($temps as $temp) {
                 @unlink($temp);
             }
+        }
+
+        if ($result === null) {
+            return;
+        }
+
+        if (! Transcript::query()->whereKey($transcript->id)->exists()) {
+            $this->orphaned($transcript, $result);
+
+            return;
         }
 
         match ($result->state) {
@@ -115,11 +147,70 @@ final class TranscribeFinalJob implements ShouldQueue
         };
     }
 
+    /** The provider call. Any error fails the transcript with its documented code; nothing is retried automatically. */
+    private function submit(SttProvider $driver, FinalJobRequest $request, Transcript $transcript, TranscriptStore $store): ?SubmitResult
+    {
+        try {
+            return $driver->submitFinal($request);
+        } catch (ProviderNotConfigured $e) {
+            $store->fail($transcript, $e->getMessage(), TranscriptErrorCode::ProviderNotConfigured);
+        } catch (ProviderJobFailed $e) {
+            $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
+        } catch (RequestException $e) {
+            $store->fail($transcript, TranscriptErrorCode::rejectedMessage(self::providerReason($e)), TranscriptErrorCode::ProviderRejected);
+        } catch (ConnectionException) {
+            $store->failWith($transcript, TranscriptErrorCode::ProviderUnreachable);
+        } catch (Throwable $e) {
+            report($e);
+            $store->failWith($transcript, TranscriptErrorCode::Interrupted);
+        }
+
+        return null;
+    }
+
+    /** The provider's own words for a refused request (its JSON error field), else the HTTP status. */
+    public static function providerReason(RequestException $e): string
+    {
+        $response = $e->response;
+        $json = $response->json();
+        if (is_array($json)) {
+            $detail = $json['detail'] ?? null;
+            foreach ([$json['error'] ?? null, $json['message'] ?? null, is_array($detail) ? ($detail['message'] ?? null) : $detail] as $candidate) {
+                if (is_string($candidate) && trim($candidate) !== '') {
+                    return $candidate;
+                }
+            }
+        }
+
+        return 'HTTP '.$response->status();
+    }
+
+    /**
+     * The session was deleted while the provider worked: erase the provider's copy (or queue it), and keep the
+     * provider minutes of a finished job in the usage ledger, since they were billed.
+     */
+    private function orphaned(Transcript $transcript, SubmitResult $result): void
+    {
+        if ($result->state === 'completed' && $result->result !== null) {
+            app(UsageLedger::class)->recordFinal($transcript->forceFill(['provider_job_id' => $result->jobId ?: null]), $result->result);
+        }
+        if ($result->jobId !== null && $result->jobId !== '') {
+            app(ProviderCopyEraser::class)->erase($transcript->forceFill([
+                'provider_job_id' => $result->jobId,
+                'provider_transcript_id' => $result->transcriptId ?? $transcript->provider_transcript_id,
+            ]));
+        }
+    }
+
     public function failed(?Throwable $exception): void
     {
         $transcript = Transcript::query()->find($this->transcriptId);
         if ($transcript !== null && ! $transcript->status->isTerminal()) {
-            $transcript->update(['status' => TranscriptStatus::Failed, 'error' => mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000)]);
+            $transcript->update([
+                'status' => TranscriptStatus::Failed,
+                'error' => mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000),
+                'error_code' => TranscriptErrorCode::Interrupted->value,
+            ]);
             $transcript->captureSession->update(['status' => SessionStatus::Failed]);
         }
     }

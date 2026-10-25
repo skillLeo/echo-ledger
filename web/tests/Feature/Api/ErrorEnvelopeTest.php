@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 use App\Enums\SessionStatus;
 use App\Models\CaptureSession;
+use App\Models\UsageLedgerEntry;
 use App\Services\ChunkedUploadService;
+use App\Services\SettingsRepository;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
@@ -22,7 +24,7 @@ uses(InteractsWithDeviceApi::class);
 const ENVELOPE_MISSING_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
 
 /** Codes produced by later work packages; their own tests cover them until then. */
-const ENVELOPE_PENDING_CODES = ['budget_exceeded', 'verification_failed'];
+const ENVELOPE_PENDING_CODES = ['budget_exceeded'];
 
 /** @return array<string, array{0: int, 1: string}> the docs table as code => [status, code] */
 function documentedErrorCodes(): array
@@ -101,6 +103,8 @@ function produceError(object $test, string $code): TestResponse
             $created = $test->createSession($test->bytes)->assertCreated();
 
             return $test->postJson('/api/recordings/'.$created->json('recordings.0.id').'/complete');
+        case 'verification_failed':
+            return $test->uploadRecording($test->bytes, [], ['sha256' => str_repeat('0', 64)])['complete'];
         case 'invalid_cursor':
             return $test->getJson('/api/library?cursor=not-a-cursor');
         case 'rate_limited':
@@ -144,12 +148,25 @@ it('reads every row of the documented table', function () {
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {
-    // Produced once the usage ledger can reach the limit.
-})->skip('A5.2: the monthly limit cannot be reached before the usage ledger exists');
+    app(SettingsRepository::class)->set('budget.monthly_minutes', 1);
+    UsageLedgerEntry::query()->create([
+        'user_id' => $this->device->user_id, 'source' => 'device', 'report_id' => 'seed-limit', 'use_case' => 'dictation',
+        'provider' => 'assemblyai', 'duration_ms' => 120_000, 'channels' => 1, 'billed_ms' => 120_000,
+        'unit_price_usd' => 0.45, 'cost_usd' => 0.015, 'billable' => true, 'occurred_at' => now(),
+    ]);
+
+    $this->postJson('/api/stt/token', ['use_case' => 'dictation'])->assertForbidden()->assertExactJson([
+        'message' => 'Monthly transcription limit reached', 'code' => 'budget_exceeded',
+    ]);
+});
 
 it('answers 422 verification_failed when the assembled file does not verify', function () {
-    // Produced once complete reports whole-file verification failures.
-})->skip('A6.W3: complete answers 202 when whole-file verification fails');
+    $flow = $this->uploadRecording($this->bytes, [], ['sha256' => str_repeat('0', 64)]);
+
+    $flow['complete']->assertStatus(422)->assertExactJson([
+        'message' => 'The uploaded file did not match its checksum. Send it again.', 'code' => 'verification_failed',
+    ]);
+});
 
 it('lists field errors only on validation failures', function () {
     $response = $this->postJson('/api/sessions', ['client_ref' => '', 'source_app' => 'fax'])->assertStatus(422);

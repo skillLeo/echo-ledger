@@ -138,7 +138,7 @@ describe('tombstones', function () {
         prune();
 
         expect(CaptureSession::onlyTrashed()->find($session->id))->not->toBeNull();
-    })->skip('A6.W6: tombstones expire by session creation age, not deletion age');
+    });
 
     it('forgets an old tombstone for good', function () {
         $session = agedSession($this, 5);

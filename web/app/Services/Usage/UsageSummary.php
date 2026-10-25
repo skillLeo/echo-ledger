@@ -4,19 +4,15 @@ declare(strict_types=1);
 
 namespace App\Services\Usage;
 
+use App\Models\UsageLedgerEntry;
 use App\Services\SettingsRepository;
-use Illuminate\Support\Carbon;
 
 /**
  * The `usage` block of GET /api/config and POST /api/usage (docs/API.md): this calendar month, cut in the console's
- * display time zone, for the whole server.
- *
- * Until the usage ledger exists this reports zero usage and no limits.
+ * display time zone, for the whole server. Sums the billable rows of the usage ledger.
  */
 final class UsageSummary
 {
-    public const WARN_AT_PERCENT = 80;
-
     public function __construct(private readonly SettingsRepository $settings) {}
 
     /**
@@ -25,22 +21,39 @@ final class UsageSummary
      */
     public function toArray(): array
     {
-        $zone = $this->settings->displayTimezone();
-        $start = Carbon::now($zone)->startOfMonth();
-        $end = $start->copy()->addMonthNoOverflow();
+        $period = UsagePeriod::current($this->settings);
+        $totals = UsageLedgerEntry::query()
+            ->where('billable', true)
+            ->where('occurred_at', '>=', $period['start'])
+            ->where('occurred_at', '<', $period['end'])
+            ->toBase()
+            ->selectRaw('coalesce(sum(billed_ms), 0) as billed_ms, coalesce(sum(cost_usd), 0) as cost_usd')
+            ->first();
+
+        $minutes = (float) ($totals->billed_ms ?? 0) / 60000;
+        $cost = (float) ($totals->cost_usd ?? 0);
+        $limitMinutes = $this->settings->monthlyMinutesLimit();
+        $limitUsd = $this->settings->monthlyUsdLimit();
+        $warnPercent = $this->settings->warnPercent();
+
+        // Fraction of the tightest limit that is used up; compared unrounded so the flags never disagree with the ledger.
+        $used = max(
+            $limitMinutes !== null ? $minutes / $limitMinutes : 0.0,
+            $limitUsd !== null ? $cost / $limitUsd : 0.0,
+        );
 
         return [
-            'month' => $start->format('Y-m'),
-            'time_zone' => $zone,
-            'period_start' => $start->copy()->utc()->toAtomString(),
-            'period_end' => $end->copy()->utc()->toAtomString(),
-            'minutes' => 0.0,
-            'cost_usd' => 0.0,
-            'limit_minutes' => null,
-            'limit_usd' => null,
-            'warn_at_percent' => self::WARN_AT_PERCENT,
-            'warn' => false,
-            'limit_reached' => false,
+            'month' => $period['month'],
+            'time_zone' => $period['zone'],
+            'period_start' => $period['start']->toAtomString(),
+            'period_end' => $period['end']->toAtomString(),
+            'minutes' => round($minutes, 1),
+            'cost_usd' => round($cost, 2),
+            'limit_minutes' => $limitMinutes,
+            'limit_usd' => $limitUsd,
+            'warn_at_percent' => $warnPercent,
+            'warn' => $used >= $warnPercent / 100,
+            'limit_reached' => $used >= 1.0,
         ];
     }
 }

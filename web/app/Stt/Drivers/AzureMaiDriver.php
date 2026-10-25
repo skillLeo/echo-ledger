@@ -115,6 +115,8 @@ final class AzureMaiDriver implements SttProvider
     {
         $phrases = KeytermPolicy::forProvider($request->keyterms, $this->capabilities(), false);
         $segments = [];
+        // The model that actually ran: the usage ledger bills MAI per channel file and standard once per file.
+        $model = 'MAI-Transcribe-2';
 
         if ($this->usesMai() && $request->hasChannelArtifacts()) {
             foreach ([1 => [$request->channel1Path, $request->channel1Mime], 2 => [$request->channel2Path, $request->channel2Mime]] as $channel => [$path, $mime]) {
@@ -139,6 +141,7 @@ final class AzureMaiDriver implements SttProvider
             }
         } else {
             // Standard fast-transcription model separates stereo channels itself and accepts Opus.
+            $model = 'standard';
             $definition = ['profanityFilterMode' => 'None'];
             if ($request->isStereo()) {
                 $definition['channels'] = [0, 1];
@@ -160,7 +163,7 @@ final class AzureMaiDriver implements SttProvider
         }
 
         return SubmitResult::completed(new NormalizedTranscript(TranscriptNormalizer::plainText($segments), $segments,
-            $request->language, ['model' => $this->usesMai() ? 'MAI-Transcribe-2' : 'standard', 'audio_channels' => $stereo ? 2 : 1]));
+            $request->language, ['model' => $model, 'audio_channels' => $stereo ? 2 : 1]));
     }
 
     /**

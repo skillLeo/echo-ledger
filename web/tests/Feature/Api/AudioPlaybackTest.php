@@ -235,7 +235,7 @@ describe('byte ranges', function () {
 
         $response->assertStatus(416);
         expect($response->headers->get('Content-Range'))->toBe('bytes */4096');
-    })->skip('A6.W15: a Range that starts at the end of the file returns 200 with the whole file instead of 416');
+    });
 
     it('never answers a range request with more bytes than were asked for', function (string $range, int $max) {
         $response = $this->withHeaders(['Range' => $range])->get($this->url);

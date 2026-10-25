@@ -185,7 +185,7 @@ describe('paging', function () {
 });
 
 describe('incremental sync', function () {
-    it('returns only items changed after since, treating the boundary as exclusive', function () {
+    it('returns only items changed at or after since, treating the boundary as inclusive', function () {
         $this->freezeTime();
         $before = sessionAged($this->owner, 30);
         $atBoundary = sessionAged($this->owner, 10);
@@ -194,8 +194,36 @@ describe('incremental sync', function () {
 
         $ids = array_column($this->getJson('/api/library?since='.urlencode($since))->json('data'), 'id');
 
-        expect($ids)->toBe([$after->id])->not->toContain($before->id)->not->toContain($atBoundary->id);
+        expect($ids)->toBe([$after->id, $atBoundary->id])->not->toContain($before->id);
     });
+
+    it('takes server_time when the query starts, so a change during the request is not skipped by the next sync', function () {
+        Carbon::setTestNow(Carbon::parse('2026-10-24 12:00:10'));
+        $first = $this->getJson('/api/library')->assertOk();
+        // A change in the same second as the sync, written after the answer was built.
+        $session = sessionAged($this->owner, 0);
+
+        $next = $this->getJson('/api/library?since='.urlencode($first->json('server_time')))->assertOk();
+
+        expect($first->json('server_time'))->toBe('2026-10-24T12:00:10+00:00')
+            ->and(array_column($next->json('data'), 'id'))->toBe([$session->id]);
+    });
+
+    it('delivers a final transcript that completes or fails after the last sync', function (string $status) {
+        $this->freezeTime();
+        $session = sessionAged($this->owner, 10, ['status' => SessionStatus::Processing]);
+        $final = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Submitted]);
+        $this->travel(1)->minutes();
+        $first = $this->getJson('/api/library')->assertOk();
+
+        $this->travel(2)->minutes();
+        $final->update(['status' => $status]); // only the transcript row changes
+        $this->travel(1)->seconds();
+
+        $second = $this->getJson('/api/library?since='.urlencode($first->json('server_time')))->assertOk();
+        expect(array_column($second->json('data'), 'id'))->toBe([$session->id])
+            ->and($second->json('data.0.transcript.final_status'))->toBe($status);
+    })->with(['completed', 'failed']);
 
     it('includes a tombstone for every session deleted since', function () {
         $this->freezeTime();
@@ -311,7 +339,7 @@ describe('incremental sync', function () {
 
         // The device stores server_time as its next "since"; a change 400 ms after that sync must not be lost.
         expect(array_column($next->json('data'), 'id'))->toBe([$session->id]);
-    })->skip('A6.W6: incremental sync misses a change made in the same second as the previous sync');
+    });
 
     it('reports a server time that is never in the future and never goes backwards between pages', function () {
         foreach (range(1, 4) as $i) {
@@ -379,7 +407,7 @@ describe('incremental sync', function () {
         $second = $this->getJson('/api/library?since='.urlencode($first->json('server_time')))->assertOk();
         expect(array_column($second->json('data'), 'id'))->toBe([$session->id])
             ->and($second->json('data.0.transcript.live_available'))->toBeTrue();
-    })->skip('A6.W6: a live transcript added after a sync does not change the session, so incremental sync misses it');
+    });
 });
 
 describe('filters', function () {

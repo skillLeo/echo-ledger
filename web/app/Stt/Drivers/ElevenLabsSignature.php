@@ -52,6 +52,20 @@ final class ElevenLabsSignature
         throw new InvalidWebhookSignature('Signature mismatch.');
     }
 
+    /** The `t=` value verify() signed against (the last one, as there); '' when absent. */
+    public static function timestamp(string $header): string
+    {
+        $timestamp = '';
+        foreach (explode(',', $header) as $part) {
+            $part = trim($part);
+            if (str_starts_with($part, 't=')) {
+                $timestamp = substr($part, 2);
+            }
+        }
+
+        return $timestamp;
+    }
+
     public static function sign(string $rawBody, string $secret, int $timestamp): string
     {
         return 't='.$timestamp.',v0='.hash_hmac('sha256', $timestamp.'.'.$rawBody, $secret);

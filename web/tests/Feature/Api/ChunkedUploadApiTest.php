@@ -376,7 +376,7 @@ describe('integrity', function () {
 
         // A client that ignores the body must not read a plain 2xx as "stored and verified".
         expect($response->getStatusCode())->toBeGreaterThanOrEqual(400);
-    })->skip('A6.W3: complete answers 202 when whole-file verification fails');
+    });
 
     it('does not report the discarded parts as received once verification failed', function () {
         $bytes = Fixtures::audio(2000);
@@ -388,7 +388,7 @@ describe('integrity', function () {
         $state = $this->getJson("/api/recordings/{$id}")->json('upload');
 
         expect($state['status'])->toBe('failed')->and($state['received_chunks'])->toBe([]);
-    })->skip('A6.W3: received_chunks still lists the discarded parts after verification fails');
+    });
 
     it('lets a client discover that a failed upload needs every chunk again', function () {
         $bytes = Fixtures::audio(2000);
@@ -397,7 +397,36 @@ describe('integrity', function () {
         $this->uploadAll($id, $bytes, (int) $created->json('recordings.0.upload.chunk_size_bytes'));
         $this->postJson("/api/recordings/{$id}/complete");
 
-        $this->postJson("/api/recordings/{$id}/complete")->assertStatus(422)->assertJsonPath('missing_chunks', [0]);
+        // Repeating complete before new chunks arrive gives the same answer; nothing counts as received any more.
+        $this->postJson("/api/recordings/{$id}/complete")->assertStatus(422)->assertExactJson([
+            'message' => 'The uploaded file did not match its checksum. Send it again.', 'code' => 'verification_failed',
+        ]);
+        $this->getJson("/api/recordings/{$id}")->assertOk()
+            ->assertJsonPath('upload.received_chunks', [])->assertJsonPath('upload.total_chunks', 1)
+            ->assertJsonPath('upload.error', 'The uploaded file did not match its checksum. Send it again.');
+    });
+
+    it('accepts the whole file again after a failed verification and then completes normally', function () {
+        $probe = $this->createSession('x', ['client_ref' => 'probe'], ['size_bytes' => 10, 'sha256' => str_repeat('a', 64)])->assertCreated();
+        $chunk = (int) $probe->json('recordings.0.upload.chunk_size_bytes');
+        $bytes = Fixtures::audio($chunk + 500);
+        $created = $this->createSession($bytes)->assertCreated();
+        $id = (string) $created->json('recordings.0.id');
+        $chunks = Fixtures::chunks($bytes, $chunk);
+        $this->uploadAll($id, $bytes, $chunk);
+        // Damage a stored part so the whole-file check fails although each chunk verified.
+        $part = Storage::disk('recordings')->path("parts/{$id}/1.part");
+        file_put_contents($part, strrev((string) file_get_contents($part)));
+        $this->postJson("/api/recordings/{$id}/complete")->assertStatus(422)->assertJsonPath('code', 'verification_failed');
+        expect(Storage::disk('recordings')->directoryExists("parts/{$id}"))->toBeFalse();
+
+        $this->postChunk($id, 0, $chunks[0])->assertOk()->assertJson(['received_chunks' => [0], 'status' => 'uploading']);
+        expect($this->getJson("/api/recordings/{$id}")->json('upload.error'))->toBeNull();
+        $this->postJson("/api/recordings/{$id}/complete")->assertStatus(422)->assertJsonPath('code', 'upload_incomplete')->assertJsonPath('missing_chunks', [1]);
+        $this->postChunk($id, 1, $chunks[1])->assertOk();
+
+        $this->postJson("/api/recordings/{$id}/complete")->assertStatus(202)->assertJsonPath('status', 'ready');
+        expect(Recording::query()->find($id)->isReady())->toBeTrue();
     });
 
     it('waits for every declared artifact before transcribing', function () {

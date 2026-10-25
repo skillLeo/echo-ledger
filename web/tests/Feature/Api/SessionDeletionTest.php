@@ -235,5 +235,5 @@ describe('provider copies', function () {
 
         // The audio was uploaded to AssemblyAI and the job is still running there: deleting the session must delete that too.
         expect($log)->toContain('DELETE /v2/transcript/job_1');
-    })->skip('A6.W7: deleting a session mid-transcription never deletes the provider-side copy');
+    });
 });

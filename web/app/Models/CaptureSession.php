@@ -9,6 +9,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\TranscriptKind;
+use App\Services\ProviderCopyEraser;
 use App\Services\SettingsRepository;
 use Database\Factories\CaptureSessionFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -129,15 +130,18 @@ class CaptureSession extends Model
     }
 
     /**
-     * Sessions (and tombstones) older than the retention window are purged with their files.
+     * Sessions older than the retention window are purged with their files. Tombstones are kept for the retention
+     * window counted from the deletion, so an offline device still learns about it (docs/API.md "Library & sync").
      *
      * @return Builder<self>
      */
     public function prunable(): Builder
     {
-        $days = app(SettingsRepository::class)->retentionDays();
+        $cutoff = now()->subDays(app(SettingsRepository::class)->retentionDays());
 
-        return static::withTrashed()->where('created_at', '<', now()->subDays($days));
+        return static::withTrashed()->where(fn (Builder $q) => $q
+            ->where(fn (Builder $live) => $live->whereNull('deleted_at')->where('created_at', '<', $cutoff))
+            ->orWhere(fn (Builder $gone) => $gone->whereNotNull('deleted_at')->where('deleted_at', '<', $cutoff)));
     }
 
     protected function pruning(): void
@@ -145,9 +149,13 @@ class CaptureSession extends Model
         $this->eraseMedia();
     }
 
-    /** Delete recordings + transcripts through Eloquent so their file-cleanup events fire. */
+    /**
+     * Delete recordings + transcripts through Eloquent so their file-cleanup events fire. The provider's own copy
+     * (uploaded audio and transcript, also of a job still running) is deleted first, or queued for stt:reconcile.
+     */
     public function eraseMedia(): void
     {
+        app(ProviderCopyEraser::class)->eraseFor($this);
         $this->recordings()->get()->each(fn (Recording $r) => $r->delete());
         $this->transcripts()->get()->each(fn (Transcript $t) => $t->delete());
     }

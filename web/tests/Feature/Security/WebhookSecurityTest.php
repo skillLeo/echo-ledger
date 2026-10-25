@@ -305,7 +305,7 @@ it('deduplicates an exact ElevenLabs replay even when the unsigned delivery-id h
     }
 
     expect(WebhookEvent::query()->count())->toBe(1);
-})->skip('A6.W20: ElevenLabs webhook de-duplication keys on the unsigned delivery-id header');
+});
 
 it('compares signatures with constant-time functions', function () {
     $assemblyAi = file_get_contents(app_path('Stt/Drivers/AssemblyAiDriver.php'));

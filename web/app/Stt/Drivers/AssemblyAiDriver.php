@@ -251,8 +251,9 @@ final class AssemblyAiDriver implements SttProvider
         if ($transcript->provider_job_id === null) {
             return;
         }
-        // DELETE also removes the uploaded audio (no standalone upload delete exists).
-        $response = $this->http()->delete($this->restBase().'/v2/transcript/'.rawurlencode($transcript->provider_job_id));
+        // DELETE also removes the uploaded audio (no standalone upload delete exists). It may run inside a device's
+        // DELETE /api/sessions request, so it gets at most 10 seconds; a failure is retried by stt:reconcile.
+        $response = $this->http()->connectTimeout(5)->timeout(10)->delete($this->restBase().'/v2/transcript/'.rawurlencode($transcript->provider_job_id));
         if ($response->failed() && $response->status() !== 404) {
             $response->throw();
         }

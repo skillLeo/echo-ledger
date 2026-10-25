@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\CaptureSession;
 use App\Services\ChunkedUploadService;
 use App\Services\CredentialVault;
+use App\Services\Data\CompleteOutcome;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -83,13 +84,13 @@ it('reports missing chunks from markComplete, then assembles inline once everyth
     $slices = [substr($bytes, 0, 1000), substr($bytes, 1000, 1000), substr($bytes, 2000, 500)];
 
     $uploads->storeChunk($recording->fresh(), 0, hash('sha256', $slices[0]), resourceFrom($slices[0]));
-    expect($uploads->markComplete($recording->fresh()))->toBe([1, 2]);
+    expect($uploads->markComplete($recording->fresh()))->toEqual(CompleteOutcome::incomplete([1, 2]));
 
     $uploads->storeChunk($recording->fresh(), 1, hash('sha256', $slices[1]), resourceFrom($slices[1]));
     $uploads->storeChunk($recording->fresh(), 2, hash('sha256', $slices[2]), resourceFrom($slices[2]));
 
     // Small recording: markComplete assembles + submits the transcript inline (no queue wait).
-    expect($uploads->markComplete($recording->fresh()))->toBe([]);
+    expect($uploads->markComplete($recording->fresh()))->toEqual(CompleteOutcome::ready());
     expect($recording->fresh()->upload_status->value)->toBe('ready');
     expect($recording->captureSession->finalTranscript()->first()?->status->value)->toBe('submitted');
 });
@@ -132,5 +133,31 @@ it('fails assembly when the declared checksum does not match the uploaded bytes'
     }
 
     $uploads->assemble($recording->fresh());
-    expect($recording->fresh()->upload_status->value)->toBe('failed');
+    expect($recording->fresh()->upload_status->value)->toBe('failed')
+        ->and($recording->fresh()->received_chunks)->toBe([])
+        ->and($recording->fresh()->error)->toBe(ChunkedUploadService::VERIFICATION_FAILED)
+        ->and(Storage::disk('recordings')->directoryExists($recording->partsDirectory()))->toBeFalse();
+    // A repeated complete gives the same answer until new chunks arrive.
+    expect($uploads->markComplete($recording->fresh()))->toEqual(CompleteOutcome::failed());
+});
+
+it('takes chunks again after a failed verification and starts the received set afresh', function () {
+    $uploads = app(ChunkedUploadService::class);
+    $bytes = random_bytes(150);
+    $session = CaptureSession::factory()->create();
+    $recording = $uploads->createRecording($session, [
+        'role' => 'primary', 'mime' => 'audio/ogg', 'channels' => 1,
+        'size_bytes' => 150, 'sha256' => str_repeat('0', 64),
+    ], 100);
+    foreach ([substr($bytes, 0, 100), substr($bytes, 100, 50)] as $i => $slice) {
+        $uploads->storeChunk($recording->fresh(), $i, hash('sha256', $slice), resourceFrom($slice));
+    }
+    $uploads->assemble($recording->fresh());
+
+    $again = $uploads->storeChunk($recording->fresh(), 1, hash('sha256', substr($bytes, 100, 50)), resourceFrom(substr($bytes, 100, 50)));
+
+    expect($again->upload_status->value)->toBe('uploading')
+        ->and($again->error)->toBeNull()
+        ->and($again->received_chunks)->toBe([1])
+        ->and($uploads->markComplete($again->fresh()))->toEqual(CompleteOutcome::incomplete([0]));
 });

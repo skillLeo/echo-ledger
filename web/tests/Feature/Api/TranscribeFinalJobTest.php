@@ -10,6 +10,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientKeyterm;
 use App\Models\Transcript;
+use App\Models\UsageLedgerEntry;
 use App\Services\ChunkedUploadService;
 use App\Services\CredentialVault;
 use App\Services\FinalTranscriptCoordinator;
@@ -19,7 +20,6 @@ use App\Stt\Drivers\AssemblyAiDriver;
 use App\Stt\SttManager;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request as HttpRequest;
-use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Tests\Feature\Api\Support\Fixtures;
@@ -302,33 +302,37 @@ describe('recordings that cannot be transcribed', function () {
 });
 
 describe('provider errors and retries', function () {
-    it('lets a transient upload failure bubble up so the queue retries, and cleans up', function (int $status) {
+    it('fails the transcript with provider_rejected when the provider refuses the upload, without retrying it', function (int $status) {
         Http::fake(['api.assemblyai.com/v2/upload' => Http::response(['error' => 'try later'], $status)]);
         $session = $this->makeReadySession($this->device, $this->audio);
         $transcript = pendingFinal($session);
 
-        expect(fn () => runFinalJob($transcript))->toThrow(RequestException::class);
+        runFinalJob($transcript);
 
         $transcript->refresh();
-        expect($transcript->status)->toBe(TranscriptStatus::Processing)
-            ->and($transcript->attempts)->toBe(1)
+        expect($transcript->status)->toBe(TranscriptStatus::Failed)
+            ->and($transcript->error_code)->toBe('provider_rejected')
+            ->and($transcript->error)->toStartWith('The speech provider could not transcribe this recording: ')
             ->and($transcript->provider_job_id)->toBeNull()
-            ->and($session->refresh()->status)->toBe(SessionStatus::Processing)
+            ->and($session->refresh()->status)->toBe(SessionStatus::Failed)
             ->and($this->workFiles())->toBe([]);
     })->with([500, 502, 503, 429]);
 
-    it('lets a connection failure bubble up so the queue retries', function () {
+    it('fails the transcript with provider_unreachable when the provider cannot be reached', function () {
         Http::fake(fn () => throw new ConnectionException('cURL error 28: Operation timed out'));
         $session = $this->makeReadySession($this->device, $this->audio);
         $transcript = pendingFinal($session);
 
-        expect(fn () => runFinalJob($transcript))->toThrow(ConnectionException::class);
+        runFinalJob($transcript);
 
-        expect($transcript->refresh()->status)->toBe(TranscriptStatus::Processing);
-        expect($this->workFiles())->toBe([]);
+        $transcript->refresh();
+        expect($transcript->status)->toBe(TranscriptStatus::Failed)
+            ->and($transcript->error_code)->toBe('provider_unreachable')
+            ->and($transcript->error)->toBe('The speech provider could not be reached. Try again later.')
+            ->and($this->workFiles())->toBe([]);
     });
 
-    it('lets a failure after the audio upload bubble up too', function () {
+    it('fails the transcript when the submit after the audio upload is refused', function () {
         Http::fake([
             'api.assemblyai.com/v2/upload' => Http::response(['upload_url' => 'https://x/u'], 200),
             'api.assemblyai.com/v2/transcript' => Http::response(['error' => 'overloaded'], 503),
@@ -336,17 +340,21 @@ describe('provider errors and retries', function () {
         $session = $this->makeReadySession($this->device, $this->audio);
         $transcript = pendingFinal($session);
 
-        expect(fn () => runFinalJob($transcript))->toThrow(RequestException::class);
+        runFinalJob($transcript);
 
-        expect($transcript->refresh()->provider_job_id)->toBeNull();
+        $transcript->refresh();
+        expect($transcript->status)->toBe(TranscriptStatus::Failed)
+            ->and($transcript->error_code)->toBe('provider_rejected')
+            ->and($transcript->provider_job_id)->toBeNull();
     });
 
-    it('succeeds on the retry and counts both attempts', function () {
-        $calls = 0;
-        Http::fake(function (HttpRequest $request) use (&$calls) {
-            $path = parse_url($request->url(), PHP_URL_PATH);
-            if ($path === '/v2/upload') {
-                return ++$calls === 1 ? Http::response([], 500) : Http::response(['upload_url' => 'https://x/u'], 200);
+    it('never resubmits a refused transcript on its own, because the first submit may already be billed', function () {
+        $uploads = 0;
+        Http::fake(function (HttpRequest $request) use (&$uploads) {
+            if (parse_url($request->url(), PHP_URL_PATH) === '/v2/upload') {
+                $uploads++;
+
+                return Http::response([], 500);
             }
 
             return Http::response(['id' => 'job_retry'], 200);
@@ -354,11 +362,12 @@ describe('provider errors and retries', function () {
         $session = $this->makeReadySession($this->device, $this->audio);
         $transcript = pendingFinal($session);
 
-        expect(fn () => runFinalJob($transcript))->toThrow(RequestException::class);
+        runFinalJob($transcript);
         runFinalJob($transcript);
 
-        $transcript->refresh();
-        expect($transcript->status)->toBe(TranscriptStatus::Submitted)->and($transcript->provider_job_id)->toBe('job_retry')->and($transcript->attempts)->toBe(2);
+        expect($uploads)->toBe(1)
+            ->and($transcript->refresh()->status)->toBe(TranscriptStatus::Failed)
+            ->and($transcript->provider_job_id)->toBeNull();
     });
 
     it('marks the transcript and session failed with the reason once the queue gives up', function () {
@@ -592,5 +601,60 @@ describe('other completion modes', function () {
         $transcript->refresh();
         expect($transcript->status)->toBe(TranscriptStatus::Submitted)->and($transcript->provider_job_id)->toBe('req_7')->and($transcript->provider_transcript_id)->toBe('tr_7');
         expect($captured)->toContain('name="webhook"')->toContain('wh_123')->toContain($transcript->id);
+    });
+});
+
+describe('usage and the monthly limit', function () {
+    it('fails the final transcript with budget_exceeded and calls no provider once the limit is reached', function () {
+        app(SettingsRepository::class)->set('budget.monthly_minutes', 1);
+        UsageLedgerEntry::query()->create([
+            'user_id' => $this->device->user_id, 'source' => 'device', 'report_id' => 'seed-limit', 'use_case' => 'live_captions',
+            'provider' => 'assemblyai', 'duration_ms' => 120_000, 'channels' => 1, 'billed_ms' => 120_000,
+            'unit_price_usd' => 0.45, 'cost_usd' => 0.015, 'billable' => true, 'occurred_at' => now(),
+        ]);
+        Http::fake();
+        $session = $this->makeReadySession($this->device, $this->audio);
+        $transcript = pendingFinal($session);
+
+        runFinalJob($transcript);
+
+        $transcript->refresh();
+        expect($transcript->status)->toBe(TranscriptStatus::Failed)
+            ->and($transcript->error_code)->toBe('budget_exceeded')
+            ->and($transcript->error)->toBe('Monthly transcription limit reached');
+        Http::assertNothingSent();
+    });
+
+    it('writes one ledger row per completed job, billed for every channel', function () {
+        app(CredentialVault::class)->put('elevenlabs', 'api_key', 'xi_test_key_1234567890');
+        Http::fake(['api.elevenlabs.io/v1/speech-to-text' => Http::response([
+            'transcription_id' => 'tr_ledger', 'language_code' => 'en',
+            'transcripts' => [
+                ['channel_index' => 0, 'words' => [['text' => 'Hi', 'start' => 0.1, 'end' => 0.3, 'type' => 'word']]],
+                ['channel_index' => 1, 'words' => [['text' => 'Hello', 'start' => 1.1, 'end' => 1.5, 'type' => 'word']]],
+            ],
+        ], 200)]);
+        $session = $this->makeReadySession($this->device, $this->audio, ['final_provider' => 'elevenlabs']);
+        $transcript = pendingFinal($session, 'elevenlabs');
+
+        runFinalJob($transcript);
+        runFinalJob($transcript);
+
+        $rows = UsageLedgerEntry::query()->get();
+        expect($rows)->toHaveCount(1)
+            ->and($rows[0]->use_case)->toBe('final_transcript')
+            ->and($rows[0]->provider)->toBe('elevenlabs')
+            ->and($rows[0]->channels)->toBe(2)
+            ->and($rows[0]->billed_ms)->toBe($rows[0]->duration_ms * 2)
+            ->and($rows[0]->transcript_id)->toBe($transcript->id);
+    });
+
+    it('writes no ledger row when the provider refuses the job', function () {
+        Http::fake(['api.assemblyai.com/v2/upload' => Http::response(['error' => 'no'], 400)]);
+        $session = $this->makeReadySession($this->device, $this->audio);
+
+        runFinalJob(pendingFinal($session));
+
+        expect(UsageLedgerEntry::query()->count())->toBe(0);
     });
 });

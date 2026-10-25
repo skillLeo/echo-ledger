@@ -6,9 +6,12 @@ namespace App\Console\Commands;
 
 use App\Enums\CompletionMode;
 use App\Enums\SttProviderKey;
+use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptStatus;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\Transcript;
+use App\Services\ProviderCopyEraser;
+use App\Services\TempFileSweeper;
 use App\Services\TranscriptStore;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\SttManager;
@@ -52,10 +55,13 @@ final class ReconcileTranscripts extends Command
                         $transcript->update(['provider_deleted_at' => now()]);
                         $this->info("Recovered transcript {$transcript->id}");
                     } elseif ($transcript->submitted_at?->lt(now()->subHours(6))) {
-                        $store->fail($transcript, 'Provider did not finish within 6 hours.');
+                        $store->failWith($transcript, TranscriptErrorCode::ProviderTimeout);
                     }
                 } catch (ProviderJobFailed $e) {
-                    $store->fail($transcript, $e->getMessage());
+                    $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
+                    if (app(ProviderCopyEraser::class)->erase($transcript)) {
+                        $transcript->update(['provider_deleted_at' => now()]);
+                    }
                 } catch (Throwable $e) {
                     report($e);
                 }
@@ -84,6 +90,29 @@ final class ReconcileTranscripts extends Command
                     report($e);
                 }
             });
+
+        // 4. Submits that never returned (the worker or request died mid-call): a provider job may exist and be billed,
+        //    so it is not resubmitted automatically; the admin retries from the console.
+        Transcript::query()
+            ->where('status', TranscriptStatus::Processing->value)
+            ->whereNull('provider_job_id')
+            ->where('updated_at', '<', now()->subMinutes(30))
+            ->limit($limit)->get()
+            ->each(fn (Transcript $t) => $store->failWith($t, TranscriptErrorCode::Interrupted));
+
+        // 5. Provider copies of deleted sessions whose delete failed earlier.
+        try {
+            app(ProviderCopyEraser::class)->retryDue($limit);
+        } catch (Throwable $e) {
+            report($e);
+        }
+
+        // Last: plaintext audio and upload parts left behind by crashed requests or workers.
+        try {
+            app(TempFileSweeper::class)->sweep();
+        } catch (Throwable $e) {
+            report($e);
+        }
 
         return self::SUCCESS;
     }

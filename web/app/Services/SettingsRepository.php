@@ -133,6 +133,50 @@ final class SettingsRepository
         return is_array($pins) ? array_values(array_filter($pins, CertificatePin::isValid(...))) : [];
     }
 
+    /** Monthly limit in billable provider minutes (audio minutes × channels), or null when none is set. */
+    public function monthlyMinutesLimit(): ?int
+    {
+        $value = $this->get('budget.monthly_minutes');
+        if (is_float($value) && floor($value) === $value) {
+            $value = (int) $value;
+        }
+
+        return is_int($value) && $value >= 1 ? $value : null;
+    }
+
+    /** Monthly limit in US dollars, or null when none is set. Stored JSON turns 50.0 into 50, so ints count too. */
+    public function monthlyUsdLimit(): ?float
+    {
+        $value = $this->get('budget.monthly_usd');
+
+        return (is_int($value) || is_float($value)) && $value >= 0.01 ? (float) $value : null;
+    }
+
+    /** Share of a limit (1-100 %) at which devices and the console start warning; 80 unless set. */
+    public function warnPercent(): int
+    {
+        $value = $this->get('budget.warn_percent', 80);
+
+        return is_int($value) && $value >= 1 && $value <= 100 ? $value : 80;
+    }
+
+    /**
+     * US$ per audio hour per channel for a provider and use case, from the console price table. A stored value that
+     * is not a number, or is negative, falls back to the default; a pair the default table does not list costs 0.
+     */
+    public function priceFor(SttProviderKey $provider, SttUseCase $useCase): float
+    {
+        $stored = $this->get('budget.prices');
+        $value = is_array($stored) && is_array($stored[$provider->value] ?? null) ? ($stored[$provider->value][$useCase->value] ?? null) : null;
+        if ((is_int($value) || is_float($value)) && $value >= 0) {
+            return (float) $value;
+        }
+
+        $defaults = self::DEFAULTS['budget.prices'];
+
+        return (float) ($defaults[$provider->value][$useCase->value] ?? 0.0);
+    }
+
     public function flush(): void
     {
         $this->cache = null;

@@ -177,8 +177,7 @@ describe('rejection', function () {
     it('detects truncation inside the magic and leaves no output file behind', $truncatedLeavesNothing)->with([0, 3]);
 
     it('detects truncation inside the header and leaves no output file behind', $truncatedLeavesNothing)
-        ->with([4, 5, 20, CIPHER_PREFIX - 1])
-        ->skip('A6.W22: decryptToFile leaves an empty output file behind when the header is cut short');
+        ->with([4, 5, 20, CIPHER_PREFIX - 1]);
 
     it('detects extra bytes after the end of the stream', function (string $suffix) {
         $cipher = freshCipher();
@@ -239,7 +238,7 @@ describe('rejection', function () {
 
         expect(thrownBy(fn () => $cipher->decryptToFile($path, $path.'.out', 'rec')))->not->toBeNull();
         expect(file_exists($path.'.out'))->toBeFalse();
-    })->skip('A6.W22: decryptToFile leaves an empty output file behind when the header is cut short');
+    });
 
     it('reports a missing file as an error rather than returning nothing', function () {
         set_error_handler(static fn (): bool => true);

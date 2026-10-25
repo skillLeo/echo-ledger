@@ -162,7 +162,9 @@ final class ElevenLabsDriver implements SttProvider
     {
         $secret = $this->vault->get('elevenlabs', 'webhook_secret')
             ?? throw new InvalidWebhookSignature('ElevenLabs webhook secret is not configured.');
-        $payload = ElevenLabsSignature::verify($request->getContent(), $request->header('elevenlabs-signature'), $secret, time());
+        $rawBody = $request->getContent();
+        $header = $request->header('elevenlabs-signature');
+        $payload = ElevenLabsSignature::verify($rawBody, $header, $secret, time());
 
         $type = (string) ($payload['type'] ?? '');
         $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
@@ -171,10 +173,11 @@ final class ElevenLabsDriver implements SttProvider
         if (is_string($metadata)) {
             $metadata = json_decode($metadata, true);
         }
-        $deliveryId = (string) $request->header('ElevenLabs-Webhook-Delivery-Id', '');
 
         return new WebhookEnvelope(
-            'elevenlabs:'.($deliveryId !== '' ? $deliveryId : $requestId.':'.$type),
+            // Keyed on what the signature covers (timestamp + exact body), never on the unsigned delivery-id header:
+            // a replay with a new delivery id is still the same event (A6.W20).
+            'el:'.hash('sha256', ElevenLabsSignature::timestamp((string) $header).'.'.$rawBody),
             is_array($metadata) ? (string) ($metadata['transcript_id'] ?? '') : null,
             $requestId !== '' ? $requestId : null,
             $type === 'webhook_error' ? 'error' : 'completed',
@@ -255,7 +258,8 @@ final class ElevenLabsDriver implements SttProvider
         if ($id === null || $id === '') {
             return; // surfaced in admin as "provider copy not deleted" via provider_deleted_at = null
         }
-        $response = $this->http()->delete('/v1/speech-to-text/transcripts/'.rawurlencode($id));
+        // May run inside a device's DELETE /api/sessions request: at most 10 seconds, stt:reconcile retries failures.
+        $response = $this->http()->connectTimeout(5)->timeout(10)->delete('/v1/speech-to-text/transcripts/'.rawurlencode($id));
         if ($response->failed() && $response->status() !== 404) {
             $response->throw();
         }

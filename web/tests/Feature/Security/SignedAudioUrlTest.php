@@ -196,7 +196,7 @@ it('answers a range that starts past the end of the file with 416 as documented'
     [$url] = secPlayback();
 
     $this->api(null, false)->withHeaders(['Range' => 'bytes=999999-'])->get($url)->assertStatus(416);
-})->skip('A6.W15: a Range that starts past the end of the file returns 200 with the whole file instead of 416');
+});
 
 it('never fails with a server error on malformed range headers', function () {
     [$url] = secPlayback();

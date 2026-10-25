@@ -414,6 +414,17 @@ describe('errors', function () {
             ->assertNotFound()->assertExactJson(['message' => 'Session not found.', 'code' => 'session_not_found']);
     });
 
+    it('answers a whole-file verification failure with the documented body and resume state', function () {
+        $bytes = Fixtures::audio(3000);
+        $flow = $this->uploadRecording($bytes, [], ['sha256' => str_repeat('0', 64)]);
+
+        $flow['complete']->assertStatus(422)->assertExactJson([
+            'message' => 'The uploaded file did not match its checksum. Send it again.', 'code' => 'verification_failed',
+        ]);
+        expect($this->getJson("/api/recordings/{$flow['recording']}")->json('upload'))
+            ->toMatchArray(['status' => 'failed', 'received_chunks' => [], 'error' => 'The uploaded file did not match its checksum. Send it again.']);
+    });
+
     it('answers a token request without a session with the documented body', function () {
         $this->postJson('/api/stt/token', ['use_case' => 'live_captions'])->assertStatus(422)->assertExactJson([
             'message' => 'The session id field is required for live captions.', 'code' => 'session_required',

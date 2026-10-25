@@ -10,7 +10,9 @@ use App\Http\Resources\RecordingUploadResource;
 use App\Models\Device;
 use App\Models\Recording;
 use App\Services\ChunkedUploadService;
+use App\Services\Data\CompleteOutcome;
 use App\Services\RecordingCipher;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -47,16 +49,20 @@ final class RecordingController extends Controller
         ]);
     }
 
-    /** POST /api/recordings/{id}/complete */
+    /**
+     * POST /api/recordings/{id}/complete — 202 `assembling`/`ready`; 422 `upload_incomplete` (send the missing chunks)
+     * or 422 `verification_failed` (the parts were discarded: send the whole file again).
+     */
     public function complete(Request $request, string $id, ChunkedUploadService $uploads): JsonResponse
     {
         $recording = $this->findRecording($request, $id);
-        $missing = $uploads->markComplete($recording);
-        if ($missing !== []) {
-            throw new ApiError(422, 'upload_incomplete', 'Upload is incomplete.', ['missing_chunks' => $missing]);
-        }
+        $outcome = $uploads->markComplete($recording);
 
-        return response()->json(['status' => $recording->refresh()->upload_status->value], 202);
+        return match ($outcome->state) {
+            CompleteOutcome::INCOMPLETE => throw new ApiError(422, 'upload_incomplete', 'Upload is incomplete.', ['missing_chunks' => $outcome->missing]),
+            CompleteOutcome::FAILED => throw new ApiError(422, 'verification_failed', ChunkedUploadService::VERIFICATION_FAILED),
+            default => response()->json(['status' => $outcome->state], 202),
+        };
     }
 
     /** GET /api/recordings/{id}/audio — temporary signed URL (route middleware `signed`), decrypted, Range-capable. */
@@ -68,20 +74,60 @@ final class RecordingController extends Controller
         return self::streamDecrypted($model);
     }
 
+    /**
+     * Decrypts the recording into a private temp file (constant memory, whatever the length) and serves it with Range
+     * support; the file is deleted once sent, and TempFileSweeper removes any copy whose response never went out.
+     */
     public static function streamDecrypted(Recording $recording): BinaryFileResponse
     {
-        $plain = RecordingCipher::fromConfig()->decryptToMemory(
+        $plain = app(ChunkedUploadService::class)->tempPath('play');
+        RecordingCipher::fromConfig()->decryptToFile(
             Storage::disk('recordings')->path((string) $recording->stored_path),
+            $plain,
             $recording->id,
         );
+        $headers = ['X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store'];
 
-        $response = new BinaryFileResponse($plain, 200, [
-            'Content-Type' => $recording->mime,
-            'X-Content-Type-Options' => 'nosniff',
-        ], false, null, false, false);
+        $size = (int) filesize($plain);
+        if (self::rangeStartsPastEnd(request(), $size)) {
+            @unlink($plain);
+            throw new HttpResponseException(response('', 416, $headers + ['Content-Range' => "bytes */{$size}"]));
+        }
+
+        $response = new BinaryFileResponse($plain, 200, ['Content-Type' => $recording->mime, ...$headers], false, null, false, false);
         $response->headers->set('Cache-Control', 'private, no-store');
+        $response->deleteFileAfterSend(true);
 
         return $response;
+    }
+
+    /**
+     * True for `Range: bytes=<start>-[<end>]` whose start is at or past the end of the file. Symfony answers 416 only
+     * when the end is given and beyond the start; an open range starting at the size falls through to a full 200
+     * (vendor/symfony/http-foundation/BinaryFileResponse.php prepare(): only `$start <= $end` is handled).
+     * Mirrors Symfony's other rules: GET only, and an If-Range (never valid here: no ETag or Last-Modified) means the
+     * whole file.
+     */
+    private static function rangeStartsPastEnd(Request $request, int $size): bool
+    {
+        if (! $request->isMethod('GET') || $request->headers->has('If-Range')) {
+            return false;
+        }
+        if (preg_match('/^bytes=(\d+)-(\d*)$/', (string) $request->headers->get('Range', ''), $m) !== 1) {
+            return false;
+        }
+        // Compare as digits: a start too long for an integer is past the end of any file.
+        $start = ltrim($m[1], '0');
+        if (strlen($start) > 18) {
+            return true;
+        }
+        $start = (int) $start;
+        $end = ltrim($m[2], '0');
+        if ($m[2] !== '' && strlen($end) <= 18 && (int) $end < $start) {
+            return false; // end before start: an invalid range, which Symfony ignores (whole file)
+        }
+
+        return $start >= $size;
     }
 
     private function findRecording(Request $request, string $id): Recording

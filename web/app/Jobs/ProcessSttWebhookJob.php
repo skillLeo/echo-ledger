@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\SttProviderKey;
+use App\Enums\TranscriptErrorCode;
 use App\Models\WebhookEvent;
 use App\Services\TranscriptStore;
 use App\Stt\Exceptions\ProviderJobFailed;
@@ -47,7 +48,7 @@ final class ProcessSttWebhookJob implements ShouldQueue
         try {
             $result = $driver->fetchResult($transcript, $event->payload);
         } catch (ProviderJobFailed $e) {
-            $store->fail($transcript, $e->getMessage());
+            $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
             $this->deleteRemoteQuietly($stt, $event);
             $event->update(['status' => 'processed', 'processed_at' => now(), 'payload' => null]);
 

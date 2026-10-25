@@ -112,7 +112,7 @@ describe('live transcripts', function () {
     it('accepts a segment that ends exactly 500 ms past the session duration and no further', function () {
         $this->postJson($this->url, liveTranscript([Fixtures::segment(['start_ms' => 59000, 'end_ms' => 60500])]))->assertCreated();
         $this->postJson($this->url, liveTranscript([Fixtures::segment(['start_ms' => 59000, 'end_ms' => 60501])]))
-            ->assertStatus(422)->assertJsonValidationErrors(['segments']);
+            ->assertStatus(422)->assertJsonValidationErrors(['segments.0.end_ms']);
     });
 
     it('applies no upper bound when the session has no duration', function () {

@@ -17,6 +17,12 @@ Schedule::command('queue:work --stop-when-empty --max-time=55 --tries=3 --timeou
 
 Schedule::command('stt:reconcile')->everyFiveMinutes()->withoutOverlapping(10);
 
+// Recordings left in "assembling" by a request or worker that died (docs/API.md "complete").
+Schedule::command('recordings:recover')->everyFiveMinutes()->withoutOverlapping(10);
+
+// Open sessions (status "recording") never finished within 6 hours become tombstones.
+Schedule::command('sessions:sweep-open')->everyFifteenMinutes()->withoutOverlapping(10);
+
 Schedule::command('model:prune')->daily()->withoutOverlapping(60);
 
 Schedule::command('sanctum:prune-expired --hours=24')->daily();

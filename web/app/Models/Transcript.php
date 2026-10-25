@@ -31,6 +31,7 @@ use Illuminate\Support\Carbon;
  * @property list<array<string, mixed>>|null $segments
  * @property array<string, mixed>|null $meta
  * @property string|null $error
+ * @property string|null $error_code one of App\Enums\TranscriptErrorCode, set while the transcript is failed
  * @property int $attempts
  * @property Carbon|null $submitted_at
  * @property Carbon|null $completed_at
@@ -41,9 +42,17 @@ class Transcript extends Model
 {
     use HasUlids, Prunable;
 
+    /**
+     * Adding, completing or failing a transcript bumps the session's updated_at, so `GET /api/library?since=` delivers
+     * the change to the other devices (docs/API.md "Library & sync").
+     *
+     * @var list<string>
+     */
+    protected $touches = ['captureSession'];
+
     protected $fillable = [
         'capture_session_id', 'kind', 'provider', 'status', 'provider_job_id', 'provider_transcript_id',
-        'provider_deleted_at', 'language', 'text', 'segments', 'meta', 'error', 'attempts', 'submitted_at', 'completed_at',
+        'provider_deleted_at', 'language', 'text', 'segments', 'meta', 'error', 'error_code', 'attempts', 'submitted_at', 'completed_at',
     ];
 
     /** @return BelongsTo<CaptureSession, $this> */

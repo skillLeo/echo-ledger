@@ -43,8 +43,9 @@ final class LibraryController extends Controller
         $query = CaptureSession::query()->where('user_id', $device->user_id)->with(['device', 'client', 'transcripts']);
 
         if (! empty($data['since'])) {
-            // Any offset names an instant; the stored timestamps are UTC.
-            $query->withTrashed()->where('updated_at', '>', Carbon::parse($data['since'])->utc());
+            // Any offset names an instant; the stored timestamps are UTC. Inclusive: server_time has whole seconds, so a
+            // change in the same second as the previous sync is delivered again rather than lost (clients merge by id).
+            $query->withTrashed()->where('updated_at', '>=', Carbon::parse($data['since'])->utc());
         }
         if (empty($data['status'])) {
             // Open sessions (still recording) may yet be discarded: listed only when asked for; tombstones always sync.

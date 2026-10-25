@@ -12,6 +12,7 @@ use App\Jobs\AssembleRecordingJob;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Recording;
+use App\Services\Data\CompleteOutcome;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -196,30 +197,66 @@ final class ChunkedUploadService
      */
     public const SYNC_ASSEMBLE_MAX_BYTES = 20 * 1024 * 1024;
 
-    /** @return list<int> missing chunk indexes; empty means assembly was started (idempotent). */
-    public function markComplete(Recording $recording): array
+    /** `upload.error` after the assembled file failed the size or SHA-256 check (docs/API.md `verification_failed`). */
+    public const VERIFICATION_FAILED = 'The uploaded file did not match its checksum. Send it again.';
+
+    /** `upload.error` when an interrupted assembly cannot be finished from what is left on disk. */
+    public const NOT_FINISHED = 'Upload could not be finished. Send the file again.';
+
+    /**
+     * Idempotent `complete`: a repeat while assembling or after a failure (before new chunks arrive) gives the same
+     * answer again.
+     */
+    public function markComplete(Recording $recording): CompleteOutcome
     {
-        if ($recording->upload_status === UploadStatus::Ready || $recording->upload_status === UploadStatus::Assembling) {
-            return [];
+        $known = self::settledOutcome($recording);
+        if ($known !== null) {
+            return $known;
         }
         $missing = $this->missingChunks($recording);
         if ($missing !== []) {
-            return $missing;
+            return CompleteOutcome::incomplete($missing);
         }
         $recording->update(['upload_status' => UploadStatus::Assembling]);
 
+        $queued = true;
         if ($recording->declared_size_bytes <= self::SYNC_ASSEMBLE_MAX_BYTES) {
             try {
                 Bus::dispatchNow(new AssembleRecordingJob($recording->id));
-
-                return [];
+                $queued = false;
             } catch (\Throwable $e) {
                 report($e); // fall through to the queue so the recording still gets processed
             }
         }
-        AssembleRecordingJob::dispatch($recording->id);
+        if ($queued) {
+            AssembleRecordingJob::dispatch($recording->id);
+        }
 
-        return [];
+        return self::settledOutcome($recording->refresh()) ?? CompleteOutcome::assembling();
+    }
+
+    /** The answer for a recording that is past the chunk stage, or null while chunks are still expected. */
+    private static function settledOutcome(Recording $recording): ?CompleteOutcome
+    {
+        return match (true) {
+            $recording->upload_status === UploadStatus::Ready => CompleteOutcome::ready(),
+            $recording->upload_status === UploadStatus::Assembling => CompleteOutcome::assembling(),
+            $recording->upload_status === UploadStatus::Failed && $recording->received_chunks === [] => CompleteOutcome::failed(),
+            default => null,
+        };
+    }
+
+    /**
+     * Marks the upload failed and discards its parts, so the client sends the whole file again from chunk 0
+     * (`received_chunks` becomes empty).
+     */
+    public function discard(Recording $recording, string $error): void
+    {
+        $recording->update(['upload_status' => UploadStatus::Failed, 'error' => $error, 'received_chunks' => []]);
+        $disk = Storage::disk('recordings');
+        if ($disk->directoryExists($recording->partsDirectory())) {
+            $disk->deleteDirectory($recording->partsDirectory());
+        }
     }
 
     /** Called by AssembleRecordingJob: concatenate → verify size + SHA-256 → encrypt → delete parts. */
@@ -250,8 +287,7 @@ final class ChunkedUploadService
             fclose($out);
 
             if ($size !== $recording->declared_size_bytes || ! hash_equals($recording->sha256, hash_final($hash))) {
-                $recording->update(['upload_status' => UploadStatus::Failed, 'error' => 'Assembled file failed size/checksum verification.']);
-                $disk->deleteDirectory($recording->partsDirectory());
+                $this->discard($recording, self::VERIFICATION_FAILED);
 
                 return;
             }
@@ -270,7 +306,7 @@ final class ChunkedUploadService
     public function storeEncrypted(Recording $recording, string $plainPath): void
     {
         $disk = Storage::disk('recordings');
-        $relative = 'files/'.$recording->created_at->format('Y/m').'/'.$recording->id.'.elr';
+        $relative = self::storedPathFor($recording);
         $disk->makeDirectory(dirname($relative));
         $this->cipher()->encryptFile($plainPath, $disk->path($relative), $recording->id);
 
@@ -281,6 +317,54 @@ final class ChunkedUploadService
             'assembled_at' => now(),
             'error' => null,
         ]);
+    }
+
+    /**
+     * Finishes an interrupted assembly from the encrypted file it already wrote (`recordings:recover`, the parts are
+     * gone). The file is decrypted as a stream and kept only when its size and SHA-256 match the declaration.
+     *
+     * @return bool|null true: adopted, the recording is ready; false: the file did not verify and was deleted;
+     *                   null: there is no such file
+     */
+    public function adoptStoredFile(Recording $recording): ?bool
+    {
+        $disk = Storage::disk('recordings');
+        $relative = $recording->stored_path ?? self::storedPathFor($recording);
+        if (! $disk->exists($relative)) {
+            return null;
+        }
+        $cipher = $this->cipher(); // a missing key must stop here, not count as a bad file
+
+        try {
+            $digest = $cipher->digest($disk->path($relative), $recording->id);
+            $valid = $digest['size'] === $recording->declared_size_bytes && hash_equals($recording->sha256, $digest['sha256']);
+        } catch (RuntimeException) {
+            $valid = false; // cut short or damaged while it was being written
+        }
+        if (! $valid) {
+            $disk->delete($relative);
+
+            return false;
+        }
+
+        $recording->update([
+            'stored_path' => $relative,
+            'stored_size_bytes' => filesize($disk->path($relative)) ?: null,
+            'upload_status' => UploadStatus::Ready,
+            'assembled_at' => now(),
+            'error' => null,
+        ]);
+        if ($disk->directoryExists($recording->partsDirectory())) {
+            $disk->deleteDirectory($recording->partsDirectory());
+        }
+
+        return true;
+    }
+
+    /** Where the encrypted file of a recording lives on the recordings disk (known before `stored_path` is saved). */
+    public static function storedPathFor(Recording $recording): string
+    {
+        return 'files/'.$recording->created_at->format('Y/m').'/'.$recording->id.'.elr';
     }
 
     /** Decrypts a ready recording to a private temp file. The caller MUST unlink it in `finally`. */

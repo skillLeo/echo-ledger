@@ -335,7 +335,7 @@ it('caps a transcript upload so one request cannot store an unbounded document',
 
     $this->api($token)->postJson("/api/sessions/{$session->id}/transcripts", ['kind' => 'live', 'provider' => 'a', 'segments' => array_fill(0, 20001, $segment)])
         ->assertStatus(422);
-})->skip('A6.W13: transcript validation is super-linear, so refusing an upload over the 20,000-segment cap takes many seconds');
+});
 
 it('creates nothing when session validation fails', function () {
     $device = Fx::device();

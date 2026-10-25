@@ -251,8 +251,7 @@ it('leaves no partial plaintext file behind when decryption to a file fails', $l
     ->with(['flipped bit in the final tag', 'flipped bit in the second chunk', 'dangling five bytes after two good chunks', 'stream cut right after the header', 'good chunks followed by one byte']);
 
 it('leaves no file behind when the encrypted stream is cut inside its header', $leavesNoPlaintextBehind)
-    ->with(['stream cut inside the header'])
-    ->skip('A6.W22: decryptToFile leaves an empty output file behind when the header is cut short');
+    ->with(['stream cut inside the header']);
 
 it('stores provider credentials as authenticated ciphertext, never as plain text', function () {
     $secret = 'aai-PLAINTEXT-SENTINEL-'.bin2hex(random_bytes(8));
@@ -356,4 +355,4 @@ it('purges decrypted or assembled audio orphaned by a crashed worker during sche
     }
     @rmdir($dir);
     expect($left)->toBe([]);
-})->skip('A6.W22: orphaned decrypted and assembled temp audio is never swept');
+});

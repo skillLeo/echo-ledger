@@ -256,23 +256,16 @@ final class SessionController extends Controller
     public function storeTranscript(Request $request, string $id, TranscriptStore $store, FinalTranscriptCoordinator $coordinator, SttManager $stt): JsonResponse
     {
         $session = $this->findSession($request, $id);
+        // Only the top level goes through the validator: wildcard rules over 20 000 segments take minutes, so the
+        // segments are checked in one linear pass below (same rules, first error reported as segments.<i>.<field>).
         $data = $request->validate([
             'kind' => ['required', Rule::enum(TranscriptKind::class)],
             'provider' => ['required', 'string', 'max:32'],
             'language' => ['nullable', 'string', 'max:16'],
-            'segments' => ['present', 'array', 'max:20000'],
-            'segments.*.channel' => ['required', 'integer', 'in:1,2'],
-            'segments.*.speaker' => ['nullable', 'string', 'max:40'],
-            'segments.*.start_ms' => ['required', 'integer', 'min:0'],
-            'segments.*.end_ms' => ['required', 'integer', 'gte:segments.*.start_ms'],
-            'segments.*.text' => ['required', 'string', 'max:20000'],
-            'segments.*.words' => ['nullable', 'array'],
-            'segments.*.words.*' => ['array'],
-            'segments.*.words.*.text' => ['nullable', 'string', 'max:1000'],
-            'segments.*.words.*.start_ms' => ['nullable', 'integer', 'min:0'],
-            'segments.*.words.*.end_ms' => ['nullable', 'integer', 'min:0'],
-            'segments.*.words.*.confidence' => ['nullable', 'numeric', 'between:0,1'],
+            'segments' => ['present', 'array', 'max:'.self::MAX_SEGMENTS],
         ]);
+        $maxEnd = $session->duration_ms !== null ? $session->duration_ms + 500 : PHP_INT_MAX;
+        $rows = self::validatedSegments(array_values($data['segments']), $maxEnd);
 
         $kind = TranscriptKind::from($data['kind']);
         if ($kind === TranscriptKind::Final) {
@@ -282,15 +275,11 @@ final class SessionController extends Controller
             }
         }
 
-        $maxEnd = $session->duration_ms !== null ? $session->duration_ms + 500 : PHP_INT_MAX;
-        $channels = count(array_unique(array_column($data['segments'], 'channel')));
+        $channels = max(count(array_unique(array_column($rows, 'channel'))), (int) ($session->recordings()->max('channels') ?? 1));
         $segments = [];
-        foreach ($data['segments'] as $raw) {
-            if ((int) $raw['end_ms'] > $maxEnd) {
-                throw ValidationException::withMessages(['segments' => 'Segment timing exceeds the session duration.']);
-            }
-            $raw['speaker'] = $raw['speaker'] ?? TranscriptNormalizer::speakerFor((int) $raw['channel'], max($channels, $session->recordings()->max('channels') ?? 1));
-            $segments[] = Segment::fromArray($raw);
+        foreach ($rows as $row) {
+            $row['speaker'] ??= TranscriptNormalizer::speakerFor($row['channel'], $channels);
+            $segments[] = Segment::fromArray($row);
         }
         $segments = TranscriptNormalizer::sortByStart($segments);
 
@@ -304,6 +293,120 @@ final class SessionController extends Controller
             ['source' => 'device']));
 
         return (new TranscriptResource($transcript->refresh()))->response()->setStatusCode(201);
+    }
+
+    /** Most segments one transcript upload may carry (docs/API.md). */
+    public const MAX_SEGMENTS = 20000;
+
+    /**
+     * Checks every segment in one pass: channel 1|2, 0 ≤ start_ms ≤ end_ms ≤ $maxEnd, text 1-20 000 characters,
+     * speaker ≤ 40, optional words (text ≤ 1000, times ≥ 0, confidence 0-1). The first problem is a 422 on
+     * `segments.<i>.<field>`.
+     *
+     * @param  list<mixed>  $segments
+     * @return list<array{channel: int, speaker: string|null, start_ms: int, end_ms: int, text: string, words: list<array<string, mixed>>}>
+     */
+    private static function validatedSegments(array $segments, int $maxEnd): array
+    {
+        $fail = static function (string $key, string $message): never {
+            throw ValidationException::withMessages([$key => str_replace(':attribute', $key, $message)]);
+        };
+        $rows = [];
+        foreach ($segments as $i => $segment) {
+            $at = "segments.{$i}";
+            if (! is_array($segment)) {
+                $fail($at, 'The :attribute field must be an object.');
+            }
+
+            $channel = self::integerOrNull($segment['channel'] ?? null);
+            if (($segment['channel'] ?? null) === null) {
+                $fail("{$at}.channel", 'The :attribute field is required.');
+            }
+            if ($channel !== 1 && $channel !== 2) {
+                $fail("{$at}.channel", 'The selected :attribute is invalid.');
+            }
+
+            $speaker = $segment['speaker'] ?? null;
+            if ($speaker !== null && (! is_string($speaker) || mb_strlen($speaker) > 40)) {
+                $fail("{$at}.speaker", 'The :attribute field must be a string of at most 40 characters.');
+            }
+
+            $start = self::integerOrNull($segment['start_ms'] ?? null);
+            if ($start === null || $start < 0) {
+                $fail("{$at}.start_ms", 'The :attribute field must be an integer of at least 0.');
+            }
+            $end = self::integerOrNull($segment['end_ms'] ?? null);
+            if ($end === null || $end < $start) {
+                $fail("{$at}.end_ms", 'The :attribute field must be an integer greater than or equal to the start.');
+            }
+            if ($end > $maxEnd) {
+                $fail("{$at}.end_ms", 'Segment timing exceeds the session duration.');
+            }
+
+            $text = $segment['text'] ?? null;
+            if (! is_string($text) || trim($text) === '') {
+                $fail("{$at}.text", 'The :attribute field is required.');
+            }
+            if (mb_strlen($text) > 20000) {
+                $fail("{$at}.text", 'The :attribute field must not be greater than 20000 characters.');
+            }
+
+            $rows[] = [
+                'channel' => $channel, 'speaker' => $speaker, 'start_ms' => $start, 'end_ms' => $end, 'text' => $text,
+                'words' => self::validatedWords($segment['words'] ?? null, "{$at}.words", $fail),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @param  callable(string, string): never  $fail
+     * @return list<array<string, mixed>>
+     */
+    private static function validatedWords(mixed $words, string $at, callable $fail): array
+    {
+        if ($words === null) {
+            return [];
+        }
+        if (! is_array($words)) {
+            $fail($at, 'The :attribute field must be an array.');
+        }
+        $valid = [];
+        foreach (array_values($words) as $j => $word) {
+            if (! is_array($word)) {
+                $fail("{$at}.{$j}", 'The :attribute field must be an array.');
+            }
+            $text = $word['text'] ?? null;
+            if ($text !== null && (! is_string($text) || mb_strlen($text) > 1000)) {
+                $fail("{$at}.{$j}.text", 'The :attribute field must be a string of at most 1000 characters.');
+            }
+            foreach (['start_ms', 'end_ms'] as $field) {
+                $value = $word[$field] ?? null;
+                if ($value !== null && (self::integerOrNull($value) ?? -1) < 0) {
+                    $fail("{$at}.{$j}.{$field}", 'The :attribute field must be an integer of at least 0.');
+                }
+            }
+            $confidence = $word['confidence'] ?? null;
+            if ($confidence !== null && (is_bool($confidence) || ! is_numeric($confidence) || ! is_finite((float) $confidence)
+                || (float) $confidence < 0 || (float) $confidence > 1)) {
+                $fail("{$at}.{$j}.confidence", 'The :attribute field must be a number between 0 and 1.');
+            }
+            $valid[] = $word;
+        }
+
+        return $valid;
+    }
+
+    /** Laravel's `integer` rule (FILTER_VALIDATE_INT, so 5, "5" and 5.0 pass) without letting booleans through. */
+    private static function integerOrNull(mixed $value): ?int
+    {
+        if ($value === null || is_bool($value) || is_array($value) || is_object($value)) {
+            return null;
+        }
+        $int = filter_var($value, FILTER_VALIDATE_INT);
+
+        return $int === false ? null : $int;
     }
 
     private function findSession(Request $request, string $id): CaptureSession

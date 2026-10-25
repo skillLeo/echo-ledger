@@ -276,7 +276,7 @@ describe('AssemblyAI processing', function () {
 
         $transcript->refresh();
         expect($transcript->status)->toBe(TranscriptStatus::Failed)
-            ->and($transcript->error)->toBe('Audio file could not be decoded')
+            ->and($transcript->error)->toBe('The speech provider could not transcribe this recording: Audio file could not be decoded')
             ->and($transcript->captureSession->status)->toBe(SessionStatus::Failed)
             ->and($transcript->provider_deleted_at)->not->toBeNull()
             ->and($this->log)->toBe(['GET /v2/transcript/job_1', 'DELETE /v2/transcript/job_1']);
@@ -490,7 +490,7 @@ describe('ElevenLabs processing', function () {
         }
 
         expect(WebhookEvent::query()->count())->toBe(1)->and($this->calls)->toHaveCount(1);
-    })->skip('A6.W20: ElevenLabs webhook de-duplication keys on the unsigned delivery-id header');
+    });
 
     it('fails the transcript with the provider\'s message on a webhook_error', function () {
         $payload = elevenPayload($this->transcript, 'req_1', [], 'webhook_error');
@@ -500,7 +500,7 @@ describe('ElevenLabs processing', function () {
         $this->postRaw('/api/webhooks/stt/elevenlabs', $body, $headers)->assertOk();
 
         $transcript = $this->transcript->refresh();
-        expect($transcript->status)->toBe(TranscriptStatus::Failed)->and($transcript->error)->toBe('The audio file is silent.')
+        expect($transcript->status)->toBe(TranscriptStatus::Failed)->and($transcript->error)->toBe('The speech provider could not transcribe this recording: The audio file is silent.')
             ->and($transcript->captureSession->status)->toBe(SessionStatus::Failed);
     });
 
@@ -592,7 +592,7 @@ describe('reconciliation', function () {
 
         $this->artisan('stt:reconcile')->assertSuccessful();
 
-        expect($broken->refresh()->status)->toBe(TranscriptStatus::Failed)->and($broken->error)->toBe('unsupported file');
+        expect($broken->refresh()->status)->toBe(TranscriptStatus::Failed)->and($broken->error)->toBe('The speech provider could not transcribe this recording: unsupported file');
     });
 
     it('survives a provider outage and tries again on the next run', function () {
