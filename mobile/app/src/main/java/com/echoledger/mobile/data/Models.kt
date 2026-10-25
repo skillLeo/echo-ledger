@@ -357,6 +357,24 @@ data class ClientResponse(val data: ClientDto)
 @Serializable
 data class BulkAnswer(val changed: Int = 0)
 
+/** `GET /api/activity` (since v1.1, B18): the activity centre. */
+@Serializable
+data class ActivityItemDto(
+    val id: String,
+    val kind: String? = null,
+    val title: String = "",
+    val body: String = "",
+    @SerialName("session_id") val sessionId: String? = null,
+    val read: Boolean = false,
+    val at: String? = null
+)
+
+@Serializable
+data class ActivityResponse(val data: List<ActivityItemDto> = emptyList(), @SerialName("unread_count") val unreadCount: Int = 0)
+
+@Serializable
+data class UnreadAnswer(@SerialName("unread_count") val unreadCount: Int = 0)
+
 /** `GET /api/bin` (since v1.1, B17): recordings deleted in the last 48 hours. */
 @Serializable
 data class BinItemDto(

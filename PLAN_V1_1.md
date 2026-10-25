@@ -335,7 +335,11 @@ Severity in brackets. Each item lists the platform; the matching regression test
   Built and covered by automated tests (server on SQLite and MariaDB, console, desktop, Android); the device checks
   are docs/MANUAL_QA.md section 13. Every delete now goes through the 48-hour bin (the provider copy is erased at
   once; binned recordings are never played or shared); recordings deleted mid-upload are erased at once.
-- [ ] B18 Notifications and activity centre (W, D, P): bell, OS notifications that open the recording, quiet hours.
+- [~] B18 Notifications and activity centre (W, D, P): bell, OS notifications that open the recording, quiet hours.
+
+  Built and covered by automated tests (server on SQLite and MariaDB, console, desktop, Android); the device checks
+  are docs/MANUAL_QA.md section 14. The desktop polls every minute; the phone every 15 minutes through WorkManager.
+  Clicking a desktop notification opens its recording in installed builds (the OS starts the app by its id).
 - [ ] B19 Onboarding and system-style settings (W, D, P): first-run wizard, grouped searchable settings, shortcut
       editor with conflict detection, settings import/export without secrets.
 - [ ] B20 Usage dashboard and SaaS foundations (W): minutes and cost per provider/month, storage, per device, budget

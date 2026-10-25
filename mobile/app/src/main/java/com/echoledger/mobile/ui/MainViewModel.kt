@@ -156,6 +156,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 }
                 graph.library.refresh()
             }
+            com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())
             _clients.value = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
             WidgetStateStore.refresh(getApplication())
         } catch (e: NotPairedException) {
@@ -292,6 +293,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _message.value = it.message ?: "The client could not be created." }.getOrNull()
             ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
     }
+    // ---- Activity centre (B18) -------------------------------------------------------------------------------------
+
+    /** The activity list; null when offline. */
+    suspend fun activity(): com.echoledger.mobile.data.ActivityResponse? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.activity(30) }.getOrNull()
+    }
+
+    /** Marks those ids (or all) read; the new unread count, or null when it failed. */
+    suspend fun markActivityRead(ids: List<String>? = null): Int? =
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.markActivityRead(ids) }.getOrNull() }
     // ---- Undo bin and storage (B17) --------------------------------------------------------------------------------
 
     /** Recordings deleted in the last 48 hours; empty when offline. */

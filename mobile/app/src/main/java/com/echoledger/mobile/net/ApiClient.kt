@@ -1,5 +1,6 @@
 package com.echoledger.mobile.net
 
+import com.echoledger.mobile.data.ActivityResponse
 import com.echoledger.mobile.data.ApiJson
 import com.echoledger.mobile.data.BinResponse
 import com.echoledger.mobile.data.BulkAnswer
@@ -24,6 +25,7 @@ import com.echoledger.mobile.data.ShareListResponse
 import com.echoledger.mobile.data.StorageDto
 import com.echoledger.mobile.data.SttTokenResponse
 import com.echoledger.mobile.data.TranscriptDto
+import com.echoledger.mobile.data.UnreadAnswer
 import com.echoledger.mobile.data.UploadState
 import com.echoledger.mobile.data.UsageReport
 import java.io.IOException
@@ -272,6 +274,25 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun createClient(name: String): ClientDto {
         val body = buildJsonObject { put("name", name) }.toString().toRequestBody(jsonType)
         return call(request("clients").post(body).build(), ClientResponse.serializer())!!.data
+    }
+
+    /** `GET /api/activity` (since v1.1): the activity centre, newest first. */
+    suspend fun activity(limit: Int = 30): ActivityResponse {
+        val target = url("activity").toHttpUrl().newBuilder().addQueryParameter("limit", limit.toString()).build()
+        return call(
+            Request.Builder().url(target).apply {
+                token?.let { header("Authorization", "Bearer $it") }
+            }.get().build(),
+            ActivityResponse.serializer()
+        )!!
+    }
+
+    /** `POST /api/activity/read` (since v1.1): those ids, or everything when null. */
+    suspend fun markActivityRead(ids: List<String>? = null): Int {
+        val body = buildJsonObject {
+            ids?.let { list -> put("ids", buildJsonArray { list.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("activity/read").post(body).build(), UnreadAnswer.serializer())!!.unreadCount
     }
 
     /** `GET /api/bin` (since v1.1): recordings deleted in the last 48 hours. */

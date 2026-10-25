@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -269,6 +270,9 @@ fun LibraryScreen(
     var labelFilter by remember { mutableStateOf<String?>(null) }
     var selecting by remember { mutableStateOf(false) }
     var binOpen by remember { mutableStateOf(false) }
+    var activityOpen by remember { mutableStateOf(false) }
+    var unread by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { unread = vm.activity()?.unreadCount ?: 0 }
     var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     val clients by vm.clients.collectAsState()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -315,6 +319,15 @@ fun LibraryScreen(
         Spacer(Modifier.height(8.dp))
         ScreenHeader("Library", "Recordings from your phone, computer and the web") {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = { activityOpen = !activityOpen },
+                    modifier = Modifier.semantics {
+                        contentDescription =
+                            if (unread > 0) "Activity, $unread unread" else "Activity"
+                    }
+                ) {
+                    Text(if (unread > 0) "🔔 $unread" else "🔔")
+                }
                 TextButton(onClick = { binOpen = !binOpen }) { Text("Deleted") }
                 TextButton(onClick = {
                     selecting = !selecting
@@ -353,6 +366,13 @@ fun LibraryScreen(
                 FilterChip(selected = tagFilter == Bookmarks.ANY, onClick = { tagFilter = Bookmarks.ANY }, label = { Text("Bookmarked") })
                 tags.forEach { tag -> FilterChip(selected = tagFilter == tag, onClick = { tagFilter = tag }, label = { Text(tag) }) }
             }
+        }
+        if (activityOpen) {
+            ActivityPanel(load = { vm.activity() }, markRead = { vm.markActivityRead(it) }, onOpen = { id ->
+                activityOpen = false
+                items.firstOrNull { it.id == id && !it.deleted }?.let(onOpen)
+            }, onUnread = { unread = it }, onClose = { activityOpen = false })
+            Spacer(Modifier.height(8.dp))
         }
         if (binOpen) {
             BinSection(load = { vm.bin() }, restore = { vm.restore(it) }, erase = { vm.eraseNow(it) }, onClose = { binOpen = false })
@@ -1026,6 +1046,7 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
         AppLockSection(vm, settings)
         SecuritySection(load = { vm.security() }, revoke = { vm.revokeDevice(it) })
         StorageSection(load = { vm.storage() })
+        NotificationsSection(settings) { vm.updateSettings(it) }
         TranscriptionSection(vm, settings)
         SectionCard {
             Text("Client keyterms", fontWeight = FontWeight.SemiBold)

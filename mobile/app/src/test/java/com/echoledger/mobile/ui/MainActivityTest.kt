@@ -15,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.ViewModelProvider
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -183,7 +184,7 @@ class MainActivityTest : AppTest() {
         compose.onNodeWithContentDescription("Settings").performClick()
         awaitText("Unpair")
 
-        compose.onNodeWithText("Unpair").performClick()
+        compose.onNodeWithText("Unpair").performScrollTo().performClick()
         compose.onNode(hasText("Unpair") and hasAnyAncestor(isDialog())).performClick()
 
         awaitText("Pair this phone")

@@ -1,6 +1,7 @@
 package com.echoledger.mobile.notify
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -33,6 +34,9 @@ object Notifications {
     const val CHANNEL_DECISIONS = "decisions_headsup"
     private const val OLD_CHANNEL_DECISIONS = "decisions"
     const val CHANNEL_STATUS = "status"
+
+    /** Activity centre (B18): transcript ready, upload failed, new device, monthly limit. */
+    const val CHANNEL_ACTIVITY = "activity"
     const val ID_FOREGROUND = 1001
 
     fun createChannels(context: Context) {
@@ -60,6 +64,14 @@ object Notifications {
                 },
                 NotificationChannel(CHANNEL_STATUS, context.getString(R.string.channel_status), NotificationManager.IMPORTANCE_MIN).apply {
                     description = context.getString(R.string.channel_status_desc)
+                },
+                NotificationChannel(
+                    CHANNEL_ACTIVITY,
+                    context.getString(R.string.channel_activity),
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = context.getString(R.string.channel_activity_desc)
+                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
                 }
             )
         )
@@ -182,6 +194,29 @@ object Notifications {
             .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_PENDING),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
+
+    /** One activity notification; tapping it opens [sessionId] (or the app). Hidden content on the lock screen. */
+    @SuppressLint("MissingPermission") // checked by the caller (POST_NOTIFICATIONS)
+    fun activity(context: Context, key: String, title: String, body: String, sessionId: String?) {
+        val open = PendingIntent.getActivity(
+            context,
+            key.hashCode(),
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .apply { sessionId?.let { putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SESSION_PREFIX + it) } },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_ACTIVITY)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .build()
+        NotificationManagerCompat.from(context).notify(key.hashCode(), notification)
+    }
 
     fun cancelDecision(context: Context, recordingId: String) {
         NotificationManagerCompat.from(context).cancel(recordingId.hashCode())

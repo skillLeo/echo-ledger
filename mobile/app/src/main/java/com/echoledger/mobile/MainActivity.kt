@@ -119,6 +119,7 @@ class MainActivity : FragmentActivity() {
         var tab by remember { mutableIntStateOf(0) }
         var openItem by remember { mutableStateOf<LibraryItem?>(null) }
         var openAtMs by remember { mutableStateOf<Long?>(null) }
+        var openSession by remember { mutableStateOf<String?>(null) }
         var showSetup by remember { mutableStateOf(false) }
         var recheck by remember { mutableIntStateOf(0) }
         val context = LocalContext.current
@@ -212,7 +213,19 @@ class MainActivity : FragmentActivity() {
                 openItem = null
                 showSetup = false
             }
+            open?.takeIf { it.startsWith(OPEN_SESSION_PREFIX) }?.let { openSession = it.removePrefix(OPEN_SESSION_PREFIX) }
             if (open != null) openRequest.value = null
+        }
+        val libraryItems by vm.library.collectAsState()
+        LaunchedEffect(openSession, libraryItems) {
+            val id = openSession ?: return@LaunchedEffect
+            libraryItems.firstOrNull { it.id == id && !it.deleted }?.let {
+                tab = 0
+                showSetup = false
+                openAtMs = null
+                openItem = it
+                openSession = null
+            }
         }
         LaunchedEffect(message) {
             message?.let {
@@ -286,6 +299,9 @@ class MainActivity : FragmentActivity() {
 
         /** Opens the Record tab, where recordings waiting for Keep / Discard are listed. */
         const val OPEN_PENDING = "pending"
+
+        /** `session:<id>` opens that recording (an activity notification was tapped, B18). */
+        const val OPEN_SESSION_PREFIX = "session:"
 
         const val NO_SCREEN_LOCK = "App lock is off because this phone has no screen lock."
 

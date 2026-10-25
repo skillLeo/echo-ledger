@@ -52,7 +52,12 @@ data class AppSettings(
     val dictationCleanup: Boolean = true,
     val dictationSounds: Boolean = true,
     val dictationReplacements: List<com.echoledger.mobile.dictation.Replacement> = emptyList(),
-    val dictationSnippets: List<com.echoledger.mobile.dictation.Snippet> = emptyList()
+    val dictationSnippets: List<com.echoledger.mobile.dictation.Snippet> = emptyList(),
+    /** Activity centre (B18): show new activity as notifications, except in the quiet hours (local `HH:MM`). */
+    val activityNotifications: Boolean = true,
+    val quietHours: Boolean = false,
+    val quietFrom: String = "22:00",
+    val quietTo: String = "07:00"
 ) {
     val serverIsV1_1: Boolean get() = serverApiVersion != null
     val paired: Boolean get() = serverUrl != null && deviceId != null

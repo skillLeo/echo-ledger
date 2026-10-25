@@ -353,3 +353,14 @@ notification shade after every step.
 | R-3 | Delete a recording and try its old playback link or share link. | Both answer "not found" at once. |
 | R-4 | Leave a deleted recording for 48 hours (or run the command after moving its delete time back). | It disappears from Recently deleted; Restore says it can no longer be restored. |
 | R-5 | Console dashboard, desktop Settings and phone Settings. | The storage meter shows the recordings' size and the server disk; the retention days match the console. |
+
+## 14. v1.1 — notifications and activity
+
+| ID | Steps | Expected |
+|---|---|---|
+| N-1 | Upload a recording and wait for its transcript. | The console bell shows "Transcript ready"; Open goes to the recording. |
+| N-2 | Desktop (installed build): leave the app in the tray while a transcript finishes. | A Windows / macOS notification appears within a minute; clicking it opens EchoLedger on that recording. |
+| N-3 | Phone: leave the app closed while a transcript finishes. | A notification appears within about 15 minutes; tapping it opens the recording. |
+| N-4 | Turn on quiet hours covering now, on the desktop and the phone; finish another transcript. | No notification; the item waits in the bell / Activity list. |
+| N-5 | Lock the desktop app, then let a notification arrive. | It says only "New activity. Unlock EchoLedger to see it." |
+| N-6 | Pair a new device; set a small monthly limit and record past 80 %. | "Device paired" and the limit notices appear once each. |
