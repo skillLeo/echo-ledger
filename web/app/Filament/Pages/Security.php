@@ -7,7 +7,10 @@ namespace App\Filament\Pages;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\AuditEvent;
 use App\Models\Device;
+use App\Models\Passkey;
+use App\Models\User;
 use App\Services\AuditLog;
+use App\Services\Passkeys;
 use App\Services\WebSessions;
 use BackedEnum;
 use Filament\Notifications\Notification;
@@ -26,7 +29,7 @@ use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
 /**
- * The security centre (plan B16): browsers signed in to the console, paired devices and the audit log of sign-ins,
+ * The security centre (plan B16): passkeys, browsers signed in to the console, paired devices and the audit log of sign-ins,
  * deletes, exports, share links and credential changes.
  */
 class Security extends Page implements HasTable
@@ -44,6 +47,9 @@ class Security extends Page implements HasTable
     public function content(Schema $schema): Schema
     {
         return $schema->components([
+            Section::make('Passkeys')
+                ->description('Sign in with your fingerprint, face or device PIN instead of a password. Two-step sign-in with an app stays available.')
+                ->schema([View::make('filament.pages.security-passkeys')->viewData(fn (): array => ['passkeys' => Passkey::query()->where('user_id', auth()->id())->latest()->get(), 'max' => Passkeys::MAX_PER_USER])]),
             Section::make('Signed-in browsers')
                 ->description('Sign out a browser you no longer use. Your phone and computer apps are under Devices.')
                 ->schema([View::make('filament.pages.security-browsers')->viewData(fn (): array => $this->browserData())]),
@@ -64,6 +70,32 @@ class Security extends Page implements HasTable
             'devices' => Device::query()->where('user_id', $userId)->count(),
             'devicesUrl' => DeviceResource::getUrl(),
         ];
+    }
+
+    /** Options for `navigator.credentials.create()`, kept in the session until the answer comes back. */
+    public function passkeyOptions(): string
+    {
+        $user = auth()->user();
+
+        return $user instanceof User ? app(Passkeys::class)->registrationOptions($user) : '{}';
+    }
+
+    /** @param array<string, mixed> $credential */
+    public function savePasskey(array $credential, string $name = ''): void
+    {
+        $user = auth()->user();
+        $passkey = $user instanceof User ? app(Passkeys::class)->register($user, (string) json_encode($credential), $name) : null;
+        $passkey === null
+            ? Notification::make()->title('That passkey could not be added')->body('Try again, or use another device.')->danger()->send()
+            : Notification::make()->title('Passkey added')->body("“{$passkey->name}” can now sign you in.")->success()->send();
+    }
+
+    public function removePasskey(string $id): void
+    {
+        $user = auth()->user();
+        if ($user instanceof User && app(Passkeys::class)->remove($user, $id)) {
+            Notification::make()->title('Passkey removed')->success()->send();
+        }
     }
 
     public function signOutBrowser(string $id): void

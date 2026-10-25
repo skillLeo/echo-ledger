@@ -7,7 +7,8 @@ reconciler and the 30-day retention cleanup.
 - PHP **≥ 8.4.1** (the lock file enforces it) with `sodium`, `pdo_mysql` (or `pdo_sqlite`), `mbstring`, `intl`,
   `fileinfo`, `zip`, `curl`, `openssl`.
 - MySQL 8 / MariaDB 10.6+ (or SQLite for single-user installs).
-- HTTPS on a public domain (providers deliver webhooks to `APP_URL`; devices pin its certificate).
+- HTTPS on a public domain (providers deliver webhooks to `APP_URL`; devices pin its certificate). Passkeys are tied
+  to the host of `APP_URL`: changing the domain later means adding passkeys again (passwords keep working).
 - Recommended PHP limits: `post_max_size >= 8M` (chunks are ≤ 5 MiB raw bodies), `memory_limit >= 256M`
   (playback decrypts in memory), `max_execution_time >= 60` for web requests.
 

@@ -81,6 +81,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('share', fn (Request $request) => Limit::perMinute(120)->by('share:'.$request->ip()));
         RateLimiter::for('share-password', fn (Request $request) => Limit::perMinute(10)->by('share-pw:'.$request->ip().'|'.(string) $request->route('token')));
         RateLimiter::for('pairing', fn (Request $request) => Limit::perMinute(5)->by('pair:'.$request->ip()));
+        RateLimiter::for('passkey', fn (Request $request) => Limit::perMinute(20)->by('passkey:'.$request->ip()));
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by('hook:'.$request->ip()));
     }
 }
