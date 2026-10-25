@@ -23,14 +23,29 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** The stored settings, or the fact that they have not been read yet (a cold start reads DataStore after the first frame). */
+sealed interface SettingsState {
+    data object Loading : SettingsState
+
+    data class Loaded(val settings: AppSettings) : SettingsState
+}
+
 class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val graph = (app as EchoLedgerApp).graph
 
-    val settings: StateFlow<AppSettings> = graph.settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
+    val settingsState: StateFlow<SettingsState> = graph.settings.settings
+        .map<AppSettings, SettingsState> { SettingsState.Loaded(it) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsState.Loading)
+
+    /** The stored settings once loaded; the defaults until then (use [settingsState] to tell the two apart). */
+    val settings: StateFlow<AppSettings> = settingsState
+        .map { (it as? SettingsState.Loaded)?.settings ?: AppSettings() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
     val library: StateFlow<List<LibraryItem>> = graph.library.items
     val helper: StateFlow<HelperConnection.State> = graph.helper.state
 

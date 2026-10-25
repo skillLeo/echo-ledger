@@ -17,7 +17,6 @@ import com.echoledger.mobile.e2e.support.Ui
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -50,22 +49,38 @@ class AppLockTest : E2eTest() {
         }
     }
 
+    /** Switching the lock on takes one successful unlock: the switch opens the prompt and only the PIN saves it. */
     private fun enableLockWithPin() {
         Shell.setDevicePin(pin)
         launchPaired()
         Ui.openTab("Settings")
         Ui.awaitText(lockLabel)
         Ui.switchNear(lockLabel).click()
+        enterPin()
         Ui.awaitCondition("the app lock to be saved", Ui.NORMAL) { AppState.settings().appLockEnabled }
     }
 
     @Test
-    fun theAppLockSwitchIsNotOfferedWithoutASecureLockScreen() {
+    fun withoutASecureLockScreenTheSwitchIsDisabledAndSaysWhy() {
         launchPaired()
         Ui.openTab("Settings")
-        Ui.awaitText("Settings")
-        Ui.awaitText("Device")
-        assertFalse(Ui.has(lockLabel))
+        Ui.awaitText(lockLabel)
+        assertTrue(Ui.has("Set a screen lock on this phone to use App lock."))
+        assertTrue(Ui.has("Open security settings"))
+        assertFalse("the switch cannot be turned on", Ui.switchNear(lockLabel).isEnabled)
+    }
+
+    @Test
+    fun cancellingTheUnlockWhenSwitchingTheLockOnLeavesItOff() {
+        Shell.setDevicePin(pin)
+        launchPaired()
+        Ui.openTab("Settings")
+        Ui.awaitText(lockLabel)
+        Ui.switchNear(lockLabel).click()
+        cancelUnlockPrompt()
+        Ui.awaitText(lockLabel, Ui.NORMAL)
+        assertFalse(AppState.settings().appLockEnabled)
+        assertFalse(Ui.switchNear(lockLabel).isChecked)
     }
 
     @Test
@@ -89,7 +104,6 @@ class AppLockTest : E2eTest() {
         assertFalse("tabs are hidden while locked", Ui.hasDescription("Settings"))
     }
 
-    @Ignore("A4.5: the lock cover does not hide the library from accessibility services")
     @Test
     fun theLockedAppDoesNotExposeTheLibraryBehindTheCover() {
         enableLockWithPin()
@@ -102,7 +116,6 @@ class AppLockTest : E2eTest() {
         )
     }
 
-    @Ignore("A4.2: the app lock does not engage again when the app returns from the background")
     @Test
     fun theLockEngagesAgainAfterTheAppWasLeftAndComesBack() {
         enableLockWithPin()

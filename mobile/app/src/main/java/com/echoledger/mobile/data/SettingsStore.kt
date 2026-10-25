@@ -26,7 +26,11 @@ data class AppSettings(
     val clientId: String? = null,
     val micSource: String = "voice_communication",
     /** Require a fingerprint/face/PIN unlock when the app is opened. */
-    val appLockEnabled: Boolean = false
+    val appLockEnabled: Boolean = false,
+    /** How long the app may stay in the background before the lock engages again: 0, 60 000 or 300 000 ms. */
+    val lockAfterMs: Long = 0L,
+    /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
+    val secureScreen: Boolean = true
 ) {
     val paired: Boolean get() = serverUrl != null && deviceId != null
 }

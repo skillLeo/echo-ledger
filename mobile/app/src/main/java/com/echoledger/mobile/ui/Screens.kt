@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +49,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,6 +57,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -66,15 +69,19 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.toClipEntry
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
 import com.echoledger.mobile.core.TranscriptText
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.privilege.Capabilities
@@ -747,18 +754,7 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
                 }) { Text("Change") }
             }
         }
-        val activity = LocalContext.current as? androidx.fragment.app.FragmentActivity
-        if (activity != null && biometricAvailable(activity)) {
-            SectionCard {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("App lock", fontWeight = FontWeight.SemiBold)
-                        Text("Require fingerprint, face or PIN to open EchoLedger", color = Brand.Muted, fontSize = 12.sp)
-                    }
-                    Switch(checked = settings.appLockEnabled, onCheckedChange = { v -> vm.updateSettings { it.copy(appLockEnabled = v) } })
-                }
-            }
-        }
+        AppLockSection(vm, settings)
         SectionCard {
             Text("Client keyterms", fontWeight = FontWeight.SemiBold)
             Text("Names and jargon of the selected client improve accuracy.", color = Brand.Muted, fontSize = 12.sp)
@@ -784,6 +780,75 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onSetup) { Text("Setup guide") }
                 Button(onClick = { vm.unpair() }, colors = ButtonDefaults.buttonColors(containerColor = Brand.Danger)) { Text("Unpair") }
+            }
+        }
+    }
+}
+
+/**
+ * The App lock group, always visible. When the phone has no screen lock the switch is disabled and the reason and a
+ * shortcut to the security settings are shown. Switching the lock on takes one successful unlock, so nobody can lock
+ * themselves out with a screen lock they cannot answer.
+ */
+@Composable
+private fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
+    val context = LocalContext.current
+    var recheck by remember { mutableIntStateOf(0) }
+    // A screen lock set in the system settings counts as soon as the user comes back.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { recheck++ }
+    val availability = remember(recheck) { lockAvailability(context) }
+    val prompter = LocalUnlockPrompter.current ?: rememberUnlockPrompter()
+    val available = availability.method != Method.None
+    val on = settings.appLockEnabled && available
+    var prompting by remember { mutableStateOf(false) }
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("App lock", fontWeight = FontWeight.SemiBold)
+                Text("Ask for your fingerprint, face or screen lock when EchoLedger opens.", color = Brand.Muted, fontSize = 12.sp)
+            }
+            Switch(
+                checked = on,
+                enabled = available && prompter != null,
+                onCheckedChange = { wanted ->
+                    if (!wanted) {
+                        vm.updateSettings { it.copy(appLockEnabled = false) }
+                    } else if (prompter != null && !prompting) {
+                        prompting = true
+                        prompter.prompt { ok ->
+                            prompting = false
+                            if (ok) vm.updateSettings { it.copy(appLockEnabled = true) }
+                        }
+                    }
+                }
+            )
+        }
+        if (!available) {
+            availability.reason?.let { Text(it, color = Brand.Warning, fontSize = 12.sp) }
+            TextButton(onClick = { runCatching { context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) } }) {
+                Text("Open security settings")
+            }
+        }
+        if (on) {
+            Text("Lock after", color = Brand.Muted, fontSize = 12.sp)
+            val lockAfter = LockAfter.normalize(settings.lockAfterMs)
+            LockAfter.choices.forEach { (ms, label) ->
+                Row(
+                    Modifier.fillMaxWidth()
+                        .selectable(
+                            selected = lockAfter == ms,
+                            role = Role.RadioButton,
+                            onClick = { vm.updateSettings { it.copy(lockAfterMs = ms) } }
+                        ),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = lockAfter == ms, onClick = null)
+                    Text(label, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Hide content in Recents and screenshots", modifier = Modifier.weight(1f))
+                Switch(checked = settings.secureScreen, onCheckedChange = { v -> vm.updateSettings { it.copy(secureScreen = v) } })
             }
         }
     }

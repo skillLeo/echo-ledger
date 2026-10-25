@@ -9,16 +9,26 @@ import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.net.UploadWorker
+import com.echoledger.mobile.ui.applySecureScreen
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Receives voice notes from the Android share sheet, encrypts them locally and queues them for transcription. */
+/**
+ * Receives voice notes from the Android share sheet, encrypts them locally and queues them for transcription.
+ * It never shows recording titles or transcripts (only a count), so it needs no unlock; while the app lock hides
+ * content its window is still kept out of Recents and screenshots.
+ */
 class ShareImportActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycleScope.launch {
+            (application as EchoLedgerApp).graph.settings.settings.collect { settings ->
+                window.applySecureScreen(settings.appLockEnabled && settings.secureScreen)
+            }
+        }
         val shared = ShareIntentParser.parse(intent)
         if (shared.isEmpty()) {
             Toast.makeText(this, "No audio found to transcribe", Toast.LENGTH_SHORT).show()

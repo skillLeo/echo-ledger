@@ -1,12 +1,15 @@
 package com.echoledger.mobile.ui
 
 import android.Manifest
+import android.content.Intent
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
@@ -25,7 +28,6 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
 import org.robolectric.Shadows.shadowOf
@@ -159,7 +161,6 @@ class MainActivityTest : AppTest() {
         }
     }
 
-    @Ignore("NEW: runtime permission requests crash the app (androidx.fragment 1.2.5 rejects the activity result request code)")
     @Test
     fun `tapping Scan QR code asks for the camera permission without crashing`() {
         val controller = launch(paired = false)
@@ -250,7 +251,6 @@ class MainActivityTest : AppTest() {
         return controller
     }
 
-    @Ignore("A6.M2: the app lock is not engaged when the settings load after the first frame")
     @Test
     fun `a locked app is covered once its settings have loaded after the first frame`() {
         val controller = launchBeforeSettingsLoad(appLock = true)
@@ -266,7 +266,6 @@ class MainActivityTest : AppTest() {
         }
     }
 
-    @Ignore("A6.M2: the on-open sync is skipped when the settings load after the first frame")
     @Test
     fun `opening the app syncs the library once its settings have loaded after the first frame`() {
         launchBeforeSettingsLoad()
@@ -277,7 +276,6 @@ class MainActivityTest : AppTest() {
         }
     }
 
-    @Ignore("A6.M2: the upload restart is skipped when the settings load after the first frame")
     @Test
     fun `opening the app restarts a waiting upload once its settings have loaded after the first frame`() {
         app.storeRecording(id = "waiting", state = "queued", lastError = "Server Error")
@@ -299,12 +297,74 @@ class MainActivityTest : AppTest() {
         }
     }
 
-    @Ignore("A6.M2: a paired phone shows the Pair form until its settings load")
     @Test
     fun `a paired phone does not flash the pairing screen while its settings are loading`() {
         launchBeforeSettingsLoad()
         compose.waitForIdle()
 
         assertTrue("the pairing form must not be shown to an already paired phone", !present("Pair this phone"))
+    }
+
+    @Test
+    fun `while the settings load only a neutral splash is shown`() {
+        val controller = launchBeforeSettingsLoad(appLock = true)
+        compose.waitForIdle()
+        val vm = ViewModelProvider(controller.get())[MainViewModel::class.java]
+
+        assertEquals(SettingsState.Loading, vm.settingsState.value)
+        compose.onNodeWithTag("startup-splash").assertExists()
+        compose.onAllNodesWithContentDescription("Library").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
+        assertTrue("no library, pairing form or cover yet", !present("Search transcripts and titles") && !present("EchoLedger is locked"))
+        assertTrue("nothing is synced before the settings are known", server.requestsTo("GET", "/api/library").isEmpty())
+    }
+
+    @Test
+    fun `an unpaired phone shows the pairing screen once its settings have loaded`() {
+        launchBeforeSettingsLoad(paired = false)
+
+        pumpUntil("the pairing screen", timeoutMs = 10_000) {
+            compose.waitForIdle()
+            present("Pair this phone")
+        }
+        compose.onAllNodesWithTag("startup-splash").assertCountEquals(0)
+    }
+
+    @Test
+    fun `the on-open sync runs once for one opening of the app`() {
+        launch(preload = false)
+        awaitText("Weekly sync")
+        compose.waitForIdle()
+
+        assertEquals(1, server.requestsTo("GET", "/api/library").size)
+    }
+
+    // ---- what the launching intent asks for ------------------------------------------------------------------------------------
+
+    private fun pendingIntent() = Intent(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_PENDING)
+
+    @Test
+    fun `opening with open=pending shows the Record tab`() {
+        serve()
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.library.refresh()
+        }
+        val controller = buildActivity(MainActivity::class.java, pendingIntent()).create()
+        controller.get().simulateBiometrics(false)
+        controller.start().postCreate(null).resume().visible()
+
+        awaitText("Not recording")
+        assertTrue(!present("Weekly sync"))
+    }
+
+    @Test
+    fun `a new intent with open=pending switches a running app to the Record tab`() {
+        val controller = launch(preload = true)
+        awaitText("Weekly sync")
+
+        controller.newIntent(pendingIntent())
+
+        awaitText("Not recording")
     }
 }

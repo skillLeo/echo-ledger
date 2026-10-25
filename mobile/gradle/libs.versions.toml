@@ -18,6 +18,8 @@ camerax = "1.6.2"
 zxing = "3.5.4"
 media3 = "1.11.1"
 biometric = "1.1.0"
+# biometric 1.1.0 pulls fragment 1.2.5, whose FragmentActivity rejects Activity Result request codes above 16 bits
+fragment = "1.9.1"
 junit4 = "4.13.2"
 robolectric = "4.17"
 turbine = "1.2.1"
@@ -67,6 +69,7 @@ zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-common = { module = "androidx.media3:media3-common", version.ref = "media3" }
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
+androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "fragment" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }

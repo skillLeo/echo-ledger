@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.ViewModelProvider
 import com.echoledger.mobile.MainActivity
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.FakeServer
@@ -15,15 +16,17 @@ import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.simulateBiometrics
+import java.time.Duration
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
+import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowSystemClock
 
 /**
  * The biometric app lock around the real MainActivity: when the cover appears, when it must not trap the user,
@@ -56,15 +59,45 @@ class AppLockTest : AppTest() {
         }
     }
 
-    private fun launchMain(biometricsAvailable: Boolean = true): FragmentActivity {
+    private fun launchMain(biometricsAvailable: Boolean = true): FragmentActivity = launchController(biometricsAvailable).get()
+
+    private fun launchController(biometricsAvailable: Boolean = true): ActivityController<MainActivity> {
         val controller = buildActivity(MainActivity::class.java).create()
-        val activity = controller.get()
-        activity.simulateBiometrics(biometricsAvailable)
+        controller.get().simulateBiometrics(biometricsAvailable)
         controller.start().postCreate(null).resume().visible()
-        return activity
+        return controller
     }
 
     private fun lockScreenShown() = compose.onAllNodesWithText("EchoLedger is locked").fetchSemanticsNodes().isNotEmpty()
+
+    private fun libraryShown() = compose.onAllNodesWithText("Confidential merger call").fetchSemanticsNodes().isNotEmpty()
+
+    /**
+     * An open app with the lock switched on: it starts with the lock off and the lock is then turned on, which never
+     * locks by itself (switching it on in Settings already took one successful unlock).
+     */
+    private fun unlockedWithLockOn(lockAfterMs: Long): ActivityController<MainActivity> {
+        prepare(appLock = false)
+        val controller = launchController()
+        pumpUntil("the library") {
+            compose.waitForIdle()
+            libraryShown()
+        }
+        runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true, lockAfterMs = lockAfterMs) } }
+        pumpUntil("the setting to reach the screen") {
+            compose.waitForIdle()
+            ViewModelProvider(controller.get())[MainViewModel::class.java].settings.value.appLockEnabled
+        }
+        assertFalse("turning the lock on does not cover the open app", lockScreenShown())
+        return controller
+    }
+
+    private fun leaveAndComeBack(controller: ActivityController<MainActivity>, away: Duration) {
+        controller.pause().stop()
+        ShadowSystemClock.advanceBy(away)
+        controller.restart().start().resume()
+        compose.waitForIdle()
+    }
 
     // ---- when the cover appears ----------------------------------------------------------------------------------------------
 
@@ -132,6 +165,76 @@ class AppLockTest : AppTest() {
     }
 
     @Test
+    fun `an enabled lock on a phone without a screen lock says why the app opened`() {
+        prepare(appLock = true)
+        launchMain(biometricsAvailable = false)
+
+        pumpUntil("the message") {
+            compose.waitForIdle()
+            compose.onAllNodesWithText("App lock is off because this phone has no screen lock.").fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    // ---- leaving the app ---------------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `with Immediately the lock engages again when the app comes back from the background`() {
+        val controller = unlockedWithLockOn(LockAfter.IMMEDIATELY)
+
+        leaveAndComeBack(controller, Duration.ofSeconds(1))
+
+        pumpUntil("the lock screen") {
+            compose.waitForIdle()
+            lockScreenShown()
+        }
+        assertFalse(libraryShown())
+    }
+
+    @Test
+    fun `with After 1 minute a short trip keeps the app open and a longer one locks it`() {
+        val controller = unlockedWithLockOn(LockAfter.ONE_MINUTE)
+
+        leaveAndComeBack(controller, Duration.ofSeconds(30))
+        assertFalse(lockScreenShown())
+        assertTrue(libraryShown())
+
+        leaveAndComeBack(controller, Duration.ofSeconds(61))
+        pumpUntil("the lock screen") {
+            compose.waitForIdle()
+            lockScreenShown()
+        }
+    }
+
+    @Test
+    fun `with the lock off leaving the app never locks it`() {
+        prepare(appLock = false)
+        val controller = launchController()
+        pumpUntil("the library") {
+            compose.waitForIdle()
+            libraryShown()
+        }
+
+        leaveAndComeBack(controller, Duration.ofMinutes(10))
+
+        assertFalse(lockScreenShown())
+        assertTrue(libraryShown())
+    }
+
+    @Test
+    fun `rotating the phone keeps an unlocked app open`() {
+        val controller = unlockedWithLockOn(LockAfter.IMMEDIATELY)
+
+        controller.recreate()
+        compose.waitForIdle()
+
+        pumpUntil("the library after the rotation") {
+            compose.waitForIdle()
+            libraryShown()
+        }
+        assertFalse(lockScreenShown())
+    }
+
+    @Test
     fun `the lock also covers the pairing screen of an unpaired phone`() {
         prepare(appLock = true, paired = false)
         launchMain()
@@ -144,7 +247,6 @@ class AppLockTest : AppTest() {
 
     // ---- what remains reachable behind the cover -------------------------------------------------------------------------------
 
-    @Ignore("A4.5: the lock cover does not hide the library from accessibility services")
     @Test
     fun `recording titles are not exposed to accessibility services while the app is locked`() {
         prepare(appLock = true)
@@ -158,7 +260,6 @@ class AppLockTest : AppTest() {
         compose.onAllNodesWithText("Confidential merger call").assertCountEquals(0)
     }
 
-    @Ignore("A4.5: the lock cover does not block touches to the library underneath")
     @Test
     fun `touching a recording behind the cover does not open it`() {
         prepare(appLock = true)

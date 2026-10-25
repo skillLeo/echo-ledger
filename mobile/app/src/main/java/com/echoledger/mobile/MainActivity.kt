@@ -1,6 +1,8 @@
 package com.echoledger.mobile
 
+import android.content.Intent
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -16,7 +18,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,12 +33,17 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,108 +54,255 @@ import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.lifecycleScope
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
+import com.echoledger.mobile.ui.AppLockMachine
 import com.echoledger.mobile.ui.Brand
 import com.echoledger.mobile.ui.EchoLedgerTheme
 import com.echoledger.mobile.ui.LibraryScreen
+import com.echoledger.mobile.ui.LocalUnlockPrompter
+import com.echoledger.mobile.ui.LockInput
 import com.echoledger.mobile.ui.LockScreen
+import com.echoledger.mobile.ui.LockState
 import com.echoledger.mobile.ui.MainViewModel
+import com.echoledger.mobile.ui.Method
 import com.echoledger.mobile.ui.PairingScreen
 import com.echoledger.mobile.ui.RecordScreen
 import com.echoledger.mobile.ui.SessionScreen
 import com.echoledger.mobile.ui.SettingsScreen
+import com.echoledger.mobile.ui.SettingsState
 import com.echoledger.mobile.ui.SetupScreen
-import com.echoledger.mobile.ui.biometricAvailable
+import com.echoledger.mobile.ui.StartupSplash
+import com.echoledger.mobile.ui.UnlockPrompter
+import com.echoledger.mobile.ui.applySecureScreen
 import com.echoledger.mobile.ui.capabilities
+import com.echoledger.mobile.ui.lockAvailability
 import com.echoledger.mobile.ui.promptUnlock
+import com.echoledger.mobile.ui.reconnectUnlockPrompt
+import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
     private val vm: MainViewModel by viewModels()
 
+    /** A screen the launching intent asks for (`open = "pending"`: the Record tab with its pending list). */
+    private val openRequest = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
-            EchoLedgerTheme {
-                val settings by vm.settings.collectAsState()
-                val helper by vm.helper.collectAsState()
-                val message by vm.message.collectAsState()
-                val snackbar = remember { SnackbarHostState() }
-                var tab by remember { mutableIntStateOf(0) }
-                var openItem by remember { mutableStateOf<LibraryItem?>(null) }
-                var showSetup by remember { mutableStateOf(false) }
-                var recheck by remember { mutableIntStateOf(0) }
-                val context = LocalContext.current
-                val caps = remember(helper.connected, recheck) { context.capabilities(helper.connected) }
+        if (savedInstanceState == null) openRequest.value = intent?.getStringExtra(EXTRA_OPEN)
+        // Content hidden in Recents and screenshots while the app lock and its "hide content" option are on.
+        lifecycleScope.launch {
+            vm.settingsState.collect { state ->
+                if (state is SettingsState.Loaded) window.applySecureScreen(state.settings.appLockEnabled && state.settings.secureScreen)
+            }
+        }
+        setContent { EchoLedgerTheme { Content() } }
+    }
 
-                // Biometric app lock: cover the app until unlocked when the setting is on and the phone supports it.
-                val lockEligible = settings.appLockEnabled && biometricAvailable(this)
-                var locked by remember { mutableStateOf(lockEligible) }
-                LaunchedEffect(lockEligible) { if (!lockEligible) locked = false }
-                LaunchedEffect(locked) { if (locked) promptUnlock(this@MainActivity) { ok -> if (ok) locked = false } }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.getStringExtra(EXTRA_OPEN)?.let { openRequest.value = it }
+    }
 
-                LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
-                    recheck++
-                    if (settings.paired) {
-                        vm.refresh()
-                        vm.retryPending() // an upload waiting out a back-off restarts as soon as the app is opened
+    @Composable
+    private fun Content() {
+        val settingsState by vm.settingsState.collectAsState()
+        val loaded = settingsState is SettingsState.Loaded
+        val settings = (settingsState as? SettingsState.Loaded)?.settings ?: AppSettings()
+        val currentSettings by rememberUpdatedState(settings)
+        val helper by vm.helper.collectAsState()
+        val message by vm.message.collectAsState()
+        val snackbar = remember { SnackbarHostState() }
+        var tab by remember { mutableIntStateOf(0) }
+        var openItem by remember { mutableStateOf<LibraryItem?>(null) }
+        var showSetup by remember { mutableStateOf(false) }
+        var recheck by remember { mutableIntStateOf(0) }
+        val context = LocalContext.current
+        val caps = remember(helper.connected, recheck) { context.capabilities(helper.connected) }
+
+        // ---- app lock: decided only once the stored settings are known, then on every trip to the background ----
+        val machine = rememberSaveable(saver = lockMachineSaver) { AppLockMachine(SystemClock::elapsedRealtime) }
+        var lockState by remember { mutableStateOf(machine.state) }
+        // Saved so a prompt still showing after a rotation is not launched a second time; Unlock always prompts.
+        var unlockInFlight by rememberSaveable { mutableStateOf(false) }
+        val prompter = remember { UnlockPrompter { onResult -> promptUnlock(this, onResult = onResult) } }
+
+        fun lockInput(): LockInput = LockInput(
+            enabled = currentSettings.appLockEnabled,
+            available = lockAvailability(this).method != Method.None,
+            lockAfterMs = currentSettings.lockAfterMs
+        )
+
+        fun publish() {
+            lockState = machine.state
+            if (machine.takeNoScreenLockNotice()) vm.showMessage(NO_SCREEN_LOCK)
+        }
+
+        val onUnlockResult: (Boolean) -> Unit = { ok ->
+            unlockInFlight = false
+            if (ok) machine.onUnlockSucceeded() else machine.onUnlockFailed()
+            publish()
+        }
+
+        fun requestUnlock() {
+            unlockInFlight = true
+            prompter.prompt(onUnlockResult)
+        }
+
+        LaunchedEffect(Unit) {
+            when {
+                !unlockInFlight -> Unit
+
+                // Restored after process death (the lock state was not kept): that prompt can no longer answer.
+                machine.state == LockState.Unknown -> unlockInFlight = false
+
+                else -> reconnectUnlockPrompt(this@MainActivity, onUnlockResult)
+            }
+        }
+
+        LaunchedEffect(loaded) {
+            if (!loaded) return@LaunchedEffect
+            val before = machine.state
+            machine.onSettingsLoaded(lockInput())
+            publish()
+            val started = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+            if (before == LockState.Unknown && machine.state == LockState.Locked && started && !unlockInFlight) requestUnlock()
+        }
+        LaunchedEffect(settings.appLockEnabled, settings.lockAfterMs) {
+            machine.onSettingsChanged(lockInput())
+            publish()
+        }
+        LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+            // A rotation stops and recreates the activity; that is not leaving the app.
+            if (!isChangingConfigurations) {
+                machine.onStop(lockInput())
+                publish()
+            }
+        }
+        LifecycleEventEffect(Lifecycle.Event.ON_START) {
+            machine.onStart(lockInput())
+            publish()
+            if (machine.state == LockState.Locked && !unlockInFlight) requestUnlock()
+        }
+
+        // ---- on open: sync and restart waiting uploads once the settings are known, and on every later resume ----
+        var resumed by remember { mutableStateOf(false) }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+            recheck++
+            resumed = true
+        }
+        LaunchedEffect(loaded, resumed) {
+            if (loaded && resumed) {
+                resumed = false
+                if (currentSettings.paired) {
+                    vm.refresh()
+                    vm.retryPending() // an upload waiting out a back-off restarts as soon as the app is opened
+                }
+            }
+        }
+
+        val open by openRequest
+        LaunchedEffect(open) {
+            if (open == OPEN_PENDING) {
+                tab = 1
+                openItem = null
+                showSetup = false
+            }
+            if (open != null) openRequest.value = null
+        }
+        LaunchedEffect(message) {
+            message?.let {
+                snackbar.showSnackbar(it)
+                vm.consumeMessage()
+            }
+        }
+        val unlocked = loaded && lockState == LockState.Unlocked
+        BackHandler(enabled = unlocked && (openItem != null || showSetup)) {
+            openItem = null
+            showSetup = false
+        }
+
+        CompositionLocalProvider(LocalUnlockPrompter provides prompter) {
+            Scaffold(
+                containerColor = Brand.Background,
+                snackbarHost = { SnackbarHost(snackbar) },
+                bottomBar = {
+                    if (unlocked && settings.paired && openItem == null && !showSetup) {
+                        BottomNav(tab) { tab = it }
                     }
                 }
-                LaunchedEffect(message) {
-                    message?.let {
-                        snackbar.showSnackbar(it)
-                        vm.consumeMessage()
-                    }
-                }
-                BackHandler(enabled = openItem != null || showSetup) {
-                    openItem = null
-                    showSetup = false
-                }
+            ) { padding ->
+                Box(Modifier.fillMaxSize().padding(padding)) {
+                    // While the settings load or the app is locked nothing else is composed: no titles reach the
+                    // accessibility tree and nothing behind the cover can be touched.
+                    when {
+                        !loaded || lockState == LockState.Unknown -> StartupSplash()
 
-                Scaffold(
-                    containerColor = Brand.Background,
-                    snackbarHost = { SnackbarHost(snackbar) },
-                    bottomBar = {
-                        if (settings.paired && openItem == null && !showSetup && !locked) {
-                            BottomNav(tab) { tab = it }
-                        }
-                    }
-                ) { padding ->
-                    Box(Modifier.fillMaxSize().padding(padding)) {
-                        when {
-                            !settings.paired -> PairingScreen(vm)
+                        lockState == LockState.Locked -> LockScreen(onUnlock = { requestUnlock() })
 
-                            showSetup -> SetupScreen(vm, caps, onBack = { showSetup = false }, onRecheck = { recheck++ })
+                        !settings.paired -> PairingScreen(vm)
 
-                            openItem != null -> SessionScreen(vm, openItem!!, onBack = { openItem = null })
+                        showSetup -> SetupScreen(vm, caps, onBack = { showSetup = false }, onRecheck = { recheck++ })
 
-                            else -> AnimatedContent(
-                                targetState = tab,
-                                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                                label = "tab"
-                            ) { current ->
-                                when (current) {
-                                    0 -> LibraryScreen(
-                                        vm,
-                                        showCallSetup = caps.callCaptureSupportedByOs && !caps.helperConnected,
-                                        onSetup = { showSetup = true }
-                                    ) { openItem = it }
+                        openItem != null -> SessionScreen(vm, openItem!!, onBack = { openItem = null })
 
-                                    1 -> RecordScreen(vm, caps, onSetup = { showSetup = true })
+                        else -> AnimatedContent(
+                            targetState = tab,
+                            transitionSpec = { fadeIn() togetherWith fadeOut() },
+                            label = "tab"
+                        ) { current ->
+                            when (current) {
+                                0 -> LibraryScreen(
+                                    vm,
+                                    showCallSetup = caps.callCaptureSupportedByOs && !caps.helperConnected,
+                                    onSetup = { showSetup = true }
+                                ) { openItem = it }
 
-                                    else -> SettingsScreen(vm, onSetup = { showSetup = true })
-                                }
+                                1 -> RecordScreen(vm, caps, onSetup = { showSetup = true })
+
+                                else -> SettingsScreen(vm, onSetup = { showSetup = true })
                             }
                         }
-                        if (locked) LockScreen(onUnlock = { promptUnlock(this@MainActivity) { ok -> if (ok) locked = false } })
                     }
                 }
             }
         }
     }
+
+    companion object {
+        /** Intent extra naming the screen to open; see [OPEN_PENDING]. */
+        const val EXTRA_OPEN = "open"
+
+        /** Opens the Record tab, where recordings waiting for Keep / Discard are listed. */
+        const val OPEN_PENDING = "pending"
+
+        const val NO_SCREEN_LOCK = "App lock is off because this phone has no screen lock."
+
+        /** Keeps the lock state across a rotation; a snapshot from an earlier process is ignored (cold starts re-lock). */
+        private val lockMachineSaver = listSaver<AppLockMachine, Any>(
+            save = { machine ->
+                val saved = machine.save()
+                listOf(saved.process, saved.state.name, saved.backgroundedAt ?: -1L)
+            },
+            restore = { values ->
+                AppLockMachine(SystemClock::elapsedRealtime).apply {
+                    restore(
+                        AppLockMachine.Saved(
+                            process = values[0] as String,
+                            state = LockState.valueOf(values[1] as String),
+                            backgroundedAt = (values[2] as Long).takeIf { it >= 0 }
+                        )
+                    )
+                }
+            }
+        )
+    }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 private fun BottomNav(selected: Int, onSelect: (Int) -> Unit) {
     val items = listOf(
         Triple("Library", Icons.AutoMirrored.Outlined.LibraryBooks, 0),

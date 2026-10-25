@@ -1,19 +1,23 @@
 package com.echoledger.mobile.ui
 
 import android.os.Build
+import android.os.Looper
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.core.PairingPayload
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.bodyText
+import com.echoledger.mobile.testsupport.delaySettingsEmission
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.widget.WidgetStateStore
+import java.time.Duration
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -28,6 +32,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.robolectric.Shadows.shadowOf
 
 /** The state holder behind every screen, driven against the real stores and a scripted server. */
 class MainViewModelTest : AppTest() {
@@ -595,6 +600,22 @@ class MainViewModelTest : AppTest() {
 
         assertEquals("mic", vm.settings.value.micSource)
         assertTrue(settings().appLockEnabled)
+    }
+
+    @Test
+    fun `settings are Loading until the store has been read and then Loaded`() {
+        runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true) } }
+        app.delaySettingsEmission(300)
+        val slow = MainViewModel(app).clearedAfterTest()
+
+        assertEquals(SettingsState.Loading, slow.settingsState.value)
+        assertEquals("the defaults stand in while loading", AppSettings(), slow.settings.value)
+
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(400))
+        pumpUntil("the settings to load") { slow.settingsState.value is SettingsState.Loaded }
+
+        assertTrue((slow.settingsState.value as SettingsState.Loaded).settings.appLockEnabled)
+        pumpUntil("the plain settings to follow") { slow.settings.value.appLockEnabled }
     }
 
     @Test
