@@ -72,7 +72,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -86,6 +89,7 @@ import com.echoledger.mobile.core.SourceDevice
 import com.echoledger.mobile.core.TranscriptText
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
+import com.echoledger.mobile.data.SearchItemDto
 import com.echoledger.mobile.data.SessionMarkerDto
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.privilege.Capabilities
@@ -242,13 +246,29 @@ private fun CallSetupBanner(onSetup: () -> Unit) {
 }
 
 @Composable
-fun LibraryScreen(vm: MainViewModel, showCallSetup: Boolean, onSetup: () -> Unit, onOpen: (LibraryItem) -> Unit) {
+fun LibraryScreen(
+    vm: MainViewModel,
+    showCallSetup: Boolean,
+    onSetup: () -> Unit,
+    onOpenAt: (LibraryItem, Long) -> Unit = { item, _ -> },
+    onOpen: (LibraryItem) -> Unit
+) {
     val items by vm.library.collectAsState()
     val syncing by vm.syncing.collectAsState()
     var filter by remember { mutableStateOf<SourceDevice?>(null) }
     var tagFilter by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
+    var found by remember { mutableStateOf<List<SearchItemDto>>(emptyList()) }
+    // Two characters search every transcript on the server too (the list below filters titles on the phone).
+    LaunchedEffect(q) {
+        if (q.length < 2) {
+            found = emptyList()
+        } else {
+            kotlinx.coroutines.delay(350)
+            found = vm.search(q)
+        }
+    }
     val tags = Bookmarks.tags(items)
     val anyBookmarks = items.any { !it.deleted && it.markerCount > 0 }
     val visible = items.filter {
@@ -326,6 +346,9 @@ fun LibraryScreen(vm: MainViewModel, showCallSetup: Boolean, onSetup: () -> Unit
             )
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (found.isNotEmpty()) {
+                item(key = "search-hits") { SearchResultsSection(found) { result, ms -> onOpenAt(result.session, ms) } }
+            }
             items(visible, key = { it.id }) { item -> LibraryRow(item) { onOpen(item) } }
             item { Spacer(Modifier.height(24.dp)) }
         }
@@ -380,11 +403,13 @@ private fun StatusDot(status: String?, finalStatus: String?) {
 }
 
 @Composable
-fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
+fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, startAtMs: Long? = null) {
     var transcript by remember { mutableStateOf<TranscriptDto?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var playbackUrl by remember { mutableStateOf<String?>(null) }
     var bookmarks by remember { mutableStateOf<List<SessionMarkerDto>>(emptyList()) }
+    var speakerNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var pendingSeek by remember { mutableStateOf(startAtMs) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val clipboard = LocalClipboard.current
     val player = rememberRecordingPlayer(playbackUrl)
@@ -395,9 +420,19 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
         val detail = vm.sessionDetail(item.id)
         playbackUrl = detail?.playbackUrl
         bookmarks = detail?.markers.orEmpty().sortedBy { it.atMs }
+        speakerNames = detail?.speakerNames.orEmpty()
+    }
+    // Opened from a search match: play from that moment once the recording is ready.
+    LaunchedEffect(player.ready, pendingSeek) {
+        val target = pendingSeek
+        if (player.ready && target != null) {
+            player.seekTo(target)
+            pendingSeek = null
+        }
     }
     val t = transcript
     val segments = t?.segments.orEmpty()
+    val speakerList = segments.map { it.speaker }
     // Highlight the segment under the playhead; binary search keeps this cheap for long calls.
     val activeIndex = if (player.playing || player.positionMs > 0) {
         segments.indexOfLast { it.startMs <= player.positionMs }
@@ -454,7 +489,11 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
             }
             if (playbackUrl != null) {
                 item { RecordingPlayer(player) }
+                item { PlayerOptions(player) }
                 item { Spacer(Modifier.height(4.dp)) }
+            }
+            item {
+                ExportShareRow(vm, item.id, t?.id?.takeIf { t.status == "completed" && t.kind == "final" }, hasAudio = playbackUrl != null)
             }
             if (bookmarks.isNotEmpty()) {
                 item {
@@ -532,14 +571,32 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
                                 .padding(horizontal = 6.dp, vertical = 4.dp)
                         ) {
                             Text(TranscriptText.stamp(s.startMs), color = Brand.Muted, fontSize = 12.sp, modifier = Modifier.width(52.dp))
+                            // A turn shows its speaker once; following lines of the same speaker leave the label blank.
                             Text(
-                                s.speaker,
+                                if (continuesTurn(speakerList, index)) "" else speakerName(speakerNames, s.speaker),
                                 color = if (s.channel == 2) Brand.Cyan else androidx.compose.ui.graphics.Color(0xFFA78BFA),
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 12.sp,
                                 modifier = Modifier.width(60.dp)
                             )
-                            Text(s.text, fontSize = 14.sp)
+                            val spoken = if (active && s.words.isNotEmpty()) s.words.indexOfLast { it.startMs <= player.positionMs } else -1
+                            if (spoken >= 0) {
+                                Text(
+                                    buildAnnotatedString {
+                                        s.words.forEachIndexed { wi, w ->
+                                            if (wi == spoken) {
+                                                withStyle(SpanStyle(background = Brand.Warning.copy(alpha = 0.35f))) { append(w.text) }
+                                            } else {
+                                                append(w.text)
+                                            }
+                                            if (wi < s.words.lastIndex) append(" ")
+                                        }
+                                    },
+                                    fontSize = 14.sp
+                                )
+                            } else {
+                                Text(s.text, fontSize = 14.sp)
+                            }
                         }
                     }
                 }
@@ -844,6 +901,7 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
         }
         DecisionTimeoutSection(vm, settings)
         AppLockSection(vm, settings)
+        TranscriptionSection(vm, settings)
         SectionCard {
             Text("Client keyterms", fontWeight = FontWeight.SemiBold)
             Text("Names and jargon of the selected client improve accuracy.", color = Brand.Muted, fontSize = 12.sp)

@@ -12,7 +12,9 @@ import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.LocalRecording
+import com.echoledger.mobile.data.SearchItemDto
 import com.echoledger.mobile.data.SessionDetailDto
+import com.echoledger.mobile.data.ShareLinkDto
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.net.ApiClient
 import com.echoledger.mobile.net.ApiException
@@ -20,6 +22,7 @@ import com.echoledger.mobile.net.NotPairedException
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.privilege.HelperConnection
 import com.echoledger.mobile.widget.WidgetStateStore
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -176,6 +179,52 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** The session detail: the signed playback URL and the bookmarks; null when it cannot be read now. */
     suspend fun sessionDetail(sessionId: String): SessionDetailDto? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.sessionDetail(sessionId) }.getOrNull()
+    }
+
+    /** `GET /api/search`: matches in every transcript; empty when offline or the query is too short. */
+    suspend fun search(query: String): List<SearchItemDto> = withContext(Dispatchers.IO) {
+        if (query.trim().length < 2) return@withContext emptyList()
+        runCatching { graph.api()?.search(query)?.data.orEmpty() }.getOrDefault(emptyList())
+    }
+
+    /**
+     * Downloads an export into the app's private cache (`exports/`, emptied first) and returns the file, or null
+     * with a message when it failed.
+     */
+    suspend fun export(transcriptId: String, format: String): File? = withContext(Dispatchers.IO) {
+        try {
+            val api = graph.api() ?: return@withContext null
+            val (bytes, name) = api.export(transcriptId, format)
+            val dir = File(getApplication<Application>().cacheDir, "exports").apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            File(dir, name).apply { writeBytes(bytes) }
+        } catch (e: Exception) {
+            _message.value = e.message ?: "The export failed."
+            null
+        }
+    }
+
+    suspend fun createShare(sessionId: String, expiresIn: Long, password: String?, includeAudio: Boolean): ShareLinkDto? =
+        withContext(Dispatchers.IO) {
+            runCatching { graph.api()?.createShare(sessionId, expiresIn, password, includeAudio) }
+                .onFailure { _message.value = it.message ?: "The link could not be made." }.getOrNull()
+        }
+
+    suspend fun shares(sessionId: String): List<ShareLinkDto> = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.shares(sessionId)?.data.orEmpty() }.getOrDefault(emptyList())
+    }
+
+    suspend fun revokeShare(id: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.revokeShare(id) }.onFailure { _message.value = it.message }.isSuccess
+    }
+
+    /** "Add to vocabulary": for the selected client, or for every recording. */
+    fun addKeyterm(term: String, clientId: String?) = viewModelScope.launch(Dispatchers.IO) {
+        runCatching { graph.api()?.addKeyterm(term.trim(), clientId) }
+            .onSuccess { _message.value = "Added “${term.trim()}” to the vocabulary" }
+            .onFailure { _message.value = it.message ?: "The term could not be added." }
     }
 
     fun delete(item: LibraryItem) = viewModelScope.launch {

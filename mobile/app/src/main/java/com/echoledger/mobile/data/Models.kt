@@ -159,7 +159,11 @@ data class OpenSessionRequest(
     @SerialName("client_ref") val clientRef: String,
     @SerialName("source_app") val sourceApp: String,
     @SerialName("client_id") val clientId: String?,
-    @SerialName("started_at") val startedAt: String
+    @SerialName("started_at") val startedAt: String,
+    /** The language chosen in Settings (`en`, `ur`, `hi`, `en+ur`); left out for automatic. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val language: String? = null
 )
 
 /** `POST /api/sessions/{id}/finish`: a null `client_id` is left out, so the server keeps the stored client. */
@@ -251,8 +255,53 @@ data class SegmentDto(
     val speaker: String,
     @SerialName("start_ms") val startMs: Long,
     @SerialName("end_ms") val endMs: Long,
-    val text: String
+    val text: String,
+    /** Word timings when the engine gave them; never sent by the phone. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val words: List<WordDto> = emptyList()
 )
+
+@Serializable
+data class WordDto(val text: String = "", @SerialName("start_ms") val startMs: Long = 0, @SerialName("end_ms") val endMs: Long = 0)
+
+/** One transcript match of `GET /api/search` (since v1.1): jump to `start_ms`; highlights are [start, length]. */
+@Serializable
+data class SearchHitDto(
+    @SerialName("transcript_id") val transcriptId: String,
+    @SerialName("segment_index") val segmentIndex: Int = 0,
+    @SerialName("start_ms") val startMs: Long = 0,
+    val speaker: String = "",
+    val snippet: String = "",
+    val highlights: List<List<Int>> = emptyList()
+)
+
+@Serializable
+data class SearchItemDto(
+    val session: LibraryItem,
+    val hits: List<SearchHitDto> = emptyList(),
+    @SerialName("hit_count") val hitCount: Int = 0
+)
+
+@Serializable
+data class SearchResponse(val data: List<SearchItemDto> = emptyList(), @SerialName("next_page") val nextPage: Int? = null)
+
+/** A view-only share link (since v1.1); `url` only right after it was made. */
+@Serializable
+data class ShareLinkDto(
+    val id: String,
+    val active: Boolean = false,
+    val url: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("revoked_at") val revokedAt: String? = null,
+    @SerialName("view_count") val viewCount: Int = 0,
+    @SerialName("has_password") val hasPassword: Boolean = false,
+    @SerialName("include_audio") val includeAudio: Boolean = false,
+    @SerialName("created_at") val createdAt: String? = null
+)
+
+@Serializable
+data class ShareListResponse(val data: List<ShareLinkDto> = emptyList())
 
 @Serializable
 data class TranscriptDto(
@@ -274,7 +323,9 @@ data class TranscriptDto(
 data class SessionDetailDto(
     @SerialName("playback_url") val playbackUrl: String? = null,
     /** Bookmarks on the recording, in time order (since v1.1). */
-    val markers: List<SessionMarkerDto> = emptyList()
+    val markers: List<SessionMarkerDto> = emptyList(),
+    /** Renamed speakers: label in the segments → name (since v1.1). */
+    @SerialName("speaker_names") val speakerNames: Map<String, String> = emptyMap()
 )
 
 @Serializable

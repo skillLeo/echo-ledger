@@ -285,20 +285,25 @@ Severity in brackets. Each item lists the platform; the matching regression test
 
 ### Phase 3 — transcript experience
 
-- [ ] B6 Pro transcript player (W, D, P): speaker blocks, word highlight, click-to-seek, 0.5–2×, skip silence,
+- [~] B6 Pro transcript player (W, D, P): speaker blocks, word highlight, click-to-seek, 0.5–2×, skip silence,
       waveform with bookmarks, auto-follow, Space / J / K / L / ← / →.
-- [ ] B7 Transcript editing and speaker names (W, D): inline edit, rename speakers (remembered per client), find &
+- [~] B7 Transcript editing and speaker names (W, D): inline edit, rename speakers (remembered per client), find &
       replace, revisions with "Restore original".
-- [ ] B8 Global full-text search (W, D, P): filters (client, app, device, date, tag, bookmarked, status), jump to
+- [~] B8 Global full-text search (W, D, P): filters (client, app, device, date, tag, bookmarked, status), jump to
       the moment, highlighted snippet; MySQL FULLTEXT with a LIKE fallback.
-- [ ] B9 Command palette and keyboard-first (W, D): Ctrl/Cmd + K.
-- [ ] B10 Export and secure share (W, D, P): TXT, Markdown, DOCX, PDF, SRT, VTT, JSON; copy variants; share links
+- [~] B9 Command palette and keyboard-first (W, D): Ctrl/Cmd + K.
+- [~] B10 Export and secure share (W, D, P): TXT, Markdown, DOCX, PDF, SRT, VTT, JSON; copy variants; share links
       (1 h / 1 d / 7 d, optional password, view-only, revocable, audio optional, access logged).
-- [ ] B11 Custom vocabulary 2.0 (W, D, P): global + per-client keyterms within provider limits, text replacements,
+- [~] B11 Custom vocabulary 2.0 (W, D, P): global + per-client keyterms within provider limits, text replacements,
       "Add to vocabulary" from edits.
-- [ ] B12 Language routing (W, D, P): English, Urdu, Hindi, English + Urdu, Auto; model chosen from documented
+- [~] B12 Language routing (W, D, P): English, Urdu, Hindi, English + Urdu, Auto; model chosen from documented
       provider language lists; the chosen model is shown.
-- [ ] B13 Re-transcribe and compare (W): second engine, both versions kept, side-by-side diff, choose primary.
+- [~] B13 Re-transcribe and compare (W): second engine, both versions kept, side-by-side diff, choose primary.
+
+  Built and covered by automated tests (server on SQLite and MariaDB, console, desktop, Android); the device checks
+  are docs/MANUAL_QA.md section 9. PDF exports are made by printing the print-ready page (browser, desktop browser,
+  Android print), which keeps Urdu and Hindi shaping right. Editing and comparing are on the web and desktop; the
+  phone reads, searches, exports and shares. Live captions always detect the language.
 
 ### Phase 4 — dictation
 

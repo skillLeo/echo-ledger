@@ -510,7 +510,7 @@ class ApiClientEndpointsTest {
     // ---- transcripts, session detail, delete ----------------------------------------------------------------------
 
     @Test
-    fun `transcript parses segments, ignoring word timings and bookkeeping fields`() = runBlocking {
+    fun `transcript parses segments and their word timings, ignoring bookkeeping fields`() = runBlocking {
         server.on("GET", "/api/transcripts/${ServerFixtures.TRANSCRIPT_ID}", FakeServer.json(200, ServerFixtures.transcript()))
 
         val transcript = client().transcript(ServerFixtures.TRANSCRIPT_ID)
@@ -519,7 +519,9 @@ class ApiClientEndpointsTest {
         assertEquals("completed", transcript.status)
         assertEquals("en", transcript.language)
         assertEquals(2, transcript.segments.size)
-        assertEquals(SegmentDto(1, "Me", 250, 2600, "Hello there."), transcript.segments[0])
+        assertEquals(SegmentDto(1, "Me", 250, 2600, "Hello there."), transcript.segments[0].copy(words = emptyList()))
+        assertEquals("Hello", transcript.segments[0].words.first().text)
+        assertEquals(250L, transcript.segments[0].words.first().startMs)
         assertNull(transcript.error)
     }
 

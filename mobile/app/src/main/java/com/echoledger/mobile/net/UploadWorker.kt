@@ -148,7 +148,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         startedAt = rec.startedAt,
         endedAt = rec.endedAt,
         durationMs = rec.durationMs.takeIf { it > 0 },
-        language = null,
+        language = rec.language,
         artifacts = artifacts,
         markers = rec.markers,
         pauses = rec.pauses

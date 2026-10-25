@@ -30,7 +30,9 @@ data class LocalRecording(
     val serverSessionId: String? = null,
     /** Bookmarks (time order) and pause gaps in recorded time, sent with the create or finish call. */
     val markers: List<MarkerDto> = emptyList(),
-    val pauses: List<PauseDto> = emptyList()
+    val pauses: List<PauseDto> = emptyList(),
+    /** The transcription language chosen when the recording ended (null = automatic). */
+    val language: String? = null
 )
 
 /**

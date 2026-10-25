@@ -77,7 +77,8 @@ class SessionScreenTest : ScreenTest() {
     private fun showSession(item: LibraryItem = item()) = show { SessionScreen(vm, item, onBack = { backTaps++ }) }
 
     private fun awaitText(text: String) {
-        pumpUntil("the text \"$text\"") {
+        // The whole suite runs in parallel forks; a loaded machine can take longer than the default 20 s.
+        pumpUntil("the text \"$text\"", timeoutMs = 45_000) {
             compose.waitForIdle()
             compose.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
         }

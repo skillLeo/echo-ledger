@@ -367,7 +367,7 @@ class RecordingService : LifecycleService() {
     private suspend fun startCaptions(session: Capture, clientId: String?) {
         val api = graph.api() ?: return
         val channels = if (session.channels == 2) listOf("me", "client") else listOf("me")
-        val open = OpenSessionRequest(session.id, session.sourceApp, clientId, session.startedAt.toString())
+        val open = OpenSessionRequest(session.id, session.sourceApp, clientId, session.startedAt.toString(), settings.transcriptionLanguage)
         val outcome = CaptionTokens(api).fetch(settings.serverIsV1_1, open, channels, session.serverSessionId) {
             graph.settings.update { it.copy(clientId = null) }
         }
@@ -508,7 +508,8 @@ class RecordingService : LifecycleService() {
                     liveProvider = session.provider,
                     serverSessionId = session.serverSessionId,
                     markers = markers,
-                    pauses = pauses
+                    pauses = pauses,
+                    language = settings.transcriptionLanguage
                 )
                 graph.recordings.importPlainFile(meta, session.file)
             }.onFailure {

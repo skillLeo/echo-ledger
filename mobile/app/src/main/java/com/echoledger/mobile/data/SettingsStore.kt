@@ -44,7 +44,9 @@ data class AppSettings(
     /** Bookmark tag presets from the last server config; empty = the defaults. */
     val markerTags: List<String> = emptyList(),
     /** Microphone kind for recordings made on this phone (`builtin`, `wired`, `bluetooth`, `usb`); null = automatic. */
-    val inputDevice: String? = null
+    val inputDevice: String? = null,
+    /** Language of new recordings: null (the client's or the console default, else automatic), `en`, `ur`, `hi` or `en+ur`. */
+    val transcriptionLanguage: String? = null
 ) {
     val serverIsV1_1: Boolean get() = serverApiVersion != null
     val paired: Boolean get() = serverUrl != null && deviceId != null

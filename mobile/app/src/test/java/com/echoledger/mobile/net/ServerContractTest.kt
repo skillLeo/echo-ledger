@@ -480,7 +480,11 @@ class ServerContractTest {
         assertEquals(listOf(1 to "Me", 2 to "Client", 1 to "Me", 2 to "Client"), t.segments.map { it.channel to it.speaker })
         assertTrue(t.segments.all { it.startMs < it.endMs && it.text.isNotEmpty() })
         assertEquals(t.segments.sortedBy { it.startMs }, t.segments)
-        assertEquals(SegmentDto(1, "Me", 400, 3_700, "This is a test of the EchoLedger transcription system."), t.segments[0])
+        assertEquals(
+            SegmentDto(1, "Me", 400, 3_700, "This is a test of the EchoLedger transcription system."),
+            t.segments[0].copy(words = emptyList())
+        )
+        assertTrue("the word timings come along for highlighting", t.segments[0].words.isNotEmpty())
     }
 
     @Test

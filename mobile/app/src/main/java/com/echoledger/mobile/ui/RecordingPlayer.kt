@@ -21,6 +21,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -78,6 +79,30 @@ class RecordingPlayerState(context: Context) {
         private set
     var error by mutableStateOf<String?>(null)
         private set
+    var speed by mutableFloatStateOf(1f)
+        private set
+    var skipSilence by mutableStateOf(false)
+        private set
+
+    /** Playback speed 0.5-2x (B6). */
+    fun changeSpeed(value: Float) {
+        speed = value.coerceIn(0.5f, 2f)
+        player.setPlaybackSpeed(speed)
+    }
+
+    /** The player's own silence skipping (B6); Media3 marks the switch as unstable API. */
+    @androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+    fun changeSkipSilence(on: Boolean) {
+        skipSilence = on
+        player.skipSilenceEnabled = on
+    }
+
+    /** Jumps by [deltaMs] without starting playback. */
+    fun jump(deltaMs: Long) {
+        val target = (player.currentPosition + deltaMs).coerceAtLeast(0)
+        player.seekTo(target)
+        positionMs = target
+    }
 
     fun load(url: String) {
         error = null

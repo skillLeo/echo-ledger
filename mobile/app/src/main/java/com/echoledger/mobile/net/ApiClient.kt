@@ -11,8 +11,11 @@ import com.echoledger.mobile.data.LibraryResponse
 import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.RecordingUpload
 import com.echoledger.mobile.data.RegisterResponse
+import com.echoledger.mobile.data.SearchResponse
 import com.echoledger.mobile.data.ServerConfig
 import com.echoledger.mobile.data.SessionDetailDto
+import com.echoledger.mobile.data.ShareLinkDto
+import com.echoledger.mobile.data.ShareListResponse
 import com.echoledger.mobile.data.SttTokenResponse
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.data.UploadState
@@ -171,5 +174,73 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
 
     suspend fun deleteSession(id: String) {
         call(request("sessions/$id").delete().build(), null as KSerializer<Unit>?)
+    }
+
+    /** `GET /api/search` (since v1.1): every recording's title and transcript. */
+    suspend fun search(query: String, tag: String? = null, bookmarked: Boolean = false): SearchResponse {
+        val builder = url("search").toHttpUrl().newBuilder().addQueryParameter("q", query.trim())
+        tag?.let { builder.addQueryParameter("tag", it) }
+        if (bookmarked) builder.addQueryParameter("bookmarked", "1")
+        val req = Request.Builder().url(builder.build()).header("Accept", "application/json")
+            .apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
+        return call(req, SearchResponse.serializer())!!
+    }
+
+    /** `GET /api/transcripts/{id}/export`: the file and the name the server gives it. */
+    suspend fun export(transcriptId: String, format: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
+        val target = url("transcripts/$transcriptId/export").toHttpUrl().newBuilder().addQueryParameter("format", format).build()
+        val req = Request.Builder().url(target).apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
+        http.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) parse(resp, null as KSerializer<Unit>?)
+            val name = ExportNames.fromDisposition(resp.header("Content-Disposition")) ?: "transcript.$format"
+            resp.body.bytes() to name
+        }
+    }
+
+    /** `POST /api/sessions/{id}/shares`: the new link with its URL (shown once). */
+    suspend fun createShare(sessionId: String, expiresIn: Long, password: String?, includeAudio: Boolean): ShareLinkDto {
+        val body = buildJsonObject {
+            put("expires_in", expiresIn)
+            password?.takeIf { it.isNotEmpty() }?.let { put("password", it) }
+            put("include_audio", includeAudio)
+        }.toString().toRequestBody(jsonType)
+        return call(request("sessions/$sessionId/shares").post(body).build(), ShareLinkDto.serializer())!!
+    }
+
+    suspend fun shares(sessionId: String): ShareListResponse =
+        call(request("sessions/$sessionId/shares").get().build(), ShareListResponse.serializer())!!
+
+    suspend fun revokeShare(id: String) {
+        call(request("shares/$id").delete().build(), null as KSerializer<Unit>?)
+    }
+
+    /** `POST /api/vocabulary/keyterms`: for the client, or for every recording without one. */
+    suspend fun addKeyterm(term: String, clientId: String?) {
+        val body = buildJsonObject {
+            put("term", term)
+            clientId?.let { put("client_id", it) }
+        }.toString().toRequestBody(jsonType)
+        call(request("vocabulary/keyterms").post(body).build(), null as KSerializer<Unit>?)
+    }
+}
+
+/** File names of exports (`Content-Disposition`), safe for the phone's storage. */
+object ExportNames {
+    fun fromDisposition(header: String?): String? {
+        if (header == null) return null
+        var plain: String? = null
+        var extended: String? = null
+        for (part in header.split(';').map { it.trim() }) {
+            when {
+                part.startsWith("filename*=") -> extended = java.net.URLDecoder.decode(
+                    part.removePrefix("filename*=").trim('"').substringAfter("''").replace("+", "%2B"),
+                    "UTF-8"
+                )
+
+                part.startsWith("filename=") -> plain = part.removePrefix("filename=").trim('"')
+            }
+        }
+        val name = (extended ?: plain ?: return null).filterNot { it in "/\\:*?\"<>|" || it.isISOControl() }.trim().trimStart('.')
+        return name.ifEmpty { null }
     }
 }

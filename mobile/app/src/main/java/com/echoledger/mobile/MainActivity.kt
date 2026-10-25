@@ -118,6 +118,7 @@ class MainActivity : FragmentActivity() {
         val snackbar = remember { SnackbarHostState() }
         var tab by remember { mutableIntStateOf(0) }
         var openItem by remember { mutableStateOf<LibraryItem?>(null) }
+        var openAtMs by remember { mutableStateOf<Long?>(null) }
         var showSetup by remember { mutableStateOf(false) }
         var recheck by remember { mutableIntStateOf(0) }
         val context = LocalContext.current
@@ -247,7 +248,10 @@ class MainActivity : FragmentActivity() {
 
                         showSetup -> SetupScreen(vm, caps, onBack = { showSetup = false }, onRecheck = { recheck++ })
 
-                        openItem != null -> SessionScreen(vm, openItem!!, onBack = { openItem = null })
+                        openItem != null -> SessionScreen(vm, openItem!!, onBack = {
+                            openItem = null
+                            openAtMs = null
+                        }, startAtMs = openAtMs)
 
                         else -> AnimatedContent(
                             targetState = tab,
@@ -258,7 +262,11 @@ class MainActivity : FragmentActivity() {
                                 0 -> LibraryScreen(
                                     vm,
                                     showCallSetup = caps.callCaptureSupportedByOs && !caps.helperConnected,
-                                    onSetup = { showSetup = true }
+                                    onSetup = { showSetup = true },
+                                    onOpenAt = { item, ms ->
+                                        openAtMs = ms
+                                        openItem = item
+                                    }
                                 ) { openItem = it }
 
                                 1 -> RecordScreen(vm, caps, onSetup = { showSetup = true })

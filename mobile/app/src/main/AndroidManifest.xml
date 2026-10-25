@@ -111,6 +111,16 @@
 
         <!-- The ADB-launched helper hands its binder over here; callers are UID-checked (shell / root / self). -->
         <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.exports"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/export_paths" />
+        </provider>
+
+        <provider
             android:name=".capture.BinderHandoffProvider"
             android:authorities="${applicationId}.handoff"
             android:exported="true" />

@@ -225,3 +225,37 @@ automated suite; these checks need real devices and calls.
 | C-A5 | Microphone: pick a Bluetooth headset and run the 10-second test, then play it back. | The meter moves; the verdict says the microphone works; playback is audible. |
 | C-A6 | Permissions: revoke the overlay permission and the notification permission. | Both rows show their reason and "Fix" opens the matching system page. |
 | C-A7 | During a call through the helper, mute the far side for 30 s. | The Record tab and the caption bubble say "Not hearing the other side for 30 s". |
+
+## 9. v1.1 — transcript experience
+
+### 9.1 Console
+
+| ID | Steps | Expected |
+|---|---|---|
+| T-W1 | Open a finished session; play it at 1.5×, turn on Skip silence, press J, K, L and the arrows on the player. | Speed and silence skipping work; J/L jump 10 s, arrows 5 s, Space/K play and pause; the spoken word is highlighted when the engine gave word timings. |
+| T-W2 | Edit text: change a line and leave the field; Edit → Rename speakers with "remember for this client"; then open another recording of the client. | The line is saved (no timing change); the names show on both recordings. |
+| T-W3 | Edit → Find and replace a word, then Edit → History → Restore original. | The count is reported; History lists the change with your name; Restore brings back the engine's text. |
+| T-W4 | Export → Word, Print or save as PDF, Subtitles (.srt) on an Urdu transcript. | Word opens with right-to-left Urdu lines; the print page saves a PDF with correct Urdu shaping; the SRT plays in a video player. |
+| T-W5 | Share → 1 hour, a password and the recording; open the link in a private window. | The password page appears, then the transcript and player; the link stops working after Revoke or an hour; Share links lists the views. |
+| T-W6 | ⋯ → Transcribe with another engine (Urdu); when done ⋯ → Compare versions → Use the second version. | Changed words are highlighted side by side; the chosen version becomes the transcript on every device. |
+| T-W7 | Search page and Ctrl/Cmd+K: type a word from a transcript. | Results show the matching line with the word highlighted; choosing it opens the recording at that moment. |
+| T-W8 | Settings → Vocabulary: add a keyterm and a correction; record a new call. | The correction is applied to the new transcript and can be undone with Restore original. |
+
+### 9.2 Desktop
+
+| ID | Steps | Expected |
+|---|---|---|
+| T-D1 | In the library, type two letters of a word spoken in a call. | "In transcripts" lists the line; clicking it opens the recording and plays from there. |
+| T-D2 | Edit text, Find and replace, Speakers, History and Export → Word / Print or save as PDF. | The same results as in the console; the Word file lands in Downloads; the print page opens in the browser. |
+| T-D3 | After correcting a name in a line, use the vocabulary suggestion. | The name is added to the client's keyterms (visible in the console). |
+| T-D4 | Ctrl/Cmd+K → "pause", "bookmark", "go to settings" and a transcript word. | Each command runs; the word opens the recording at the moment. |
+| T-D5 | Settings → Transcription language: English + Urdu; record a mixed call. | The session's language is en+ur and the transcript keeps both languages. |
+
+### 9.3 Android
+
+| ID | Steps | Expected |
+|---|---|---|
+| T-A1 | Open a recording; choose 1.5× and Skip silence; follow the highlighted word. | Speed and silence skipping work; the speaker label shows once per turn with renamed names. |
+| T-A2 | Export → PDF (print) and Word; Share link with a password. | The print dialog saves a correctly shaped PDF; Word opens in a document app; the link opens as on the web. |
+| T-A3 | Library search for a spoken word. | "In transcripts" shows the line; tapping it plays from that moment. |
+| T-A4 | Settings → Transcription: Urdu; add a vocabulary term. | New recordings are sent with Urdu; the term appears for the selected client in the console. |
