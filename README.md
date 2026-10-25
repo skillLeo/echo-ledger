@@ -100,7 +100,7 @@ iOS does not allow third-party apps to record VoIP calls, so an iPhone client is
   dedicated key on the server, and with Tink streaming AEAD (Android Keystore–wrapped keys) on Android.
 - **Hardened transport.** Device apps pin the server's public key (current + backup pins); uploads are
   verified chunk by chunk with SHA-256.
-- **Strong administration.** The console requires TOTP two-factor authentication with recovery codes; device
+- **Strong administration.** The console offers optional TOTP two-factor sign-in with recovery codes (recommended); device
   tokens are scoped by ability and revocable per device.
 - **Retention.** Recordings, transcripts and webhook payloads are purged automatically after a configurable
   period (30 days by default). Provider copies are deleted as soon as a transcript is stored.
@@ -142,7 +142,7 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Open `http://localhost:8000/admin`, sign in, enrol two-factor authentication, then add provider keys under
+Open `http://localhost:8000/admin`, sign in (two-factor sign-in is optional and recommended), then add provider keys under
 **API Credentials**. Production deployment on shared hosting is covered in [`web/DEPLOY.md`](web/DEPLOY.md).
 
 ### Desktop

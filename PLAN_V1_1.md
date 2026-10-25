@@ -51,81 +51,92 @@ unticked item.
 | Android (unit) | 617 | 594 | 23 | ktlint clean |
 | Repository checks | 23 | 11 | 12 | — |
 
+**After Phase 1 (Part A and every A6 defect except A6.M9-M12)**
+
+| App | Tests | Passed | Skipped | Linters |
+|---|---|---|---|---|
+| Server | 2,534 | 2,534 | 0 | Pint clean · Larastan L6 clean |
+| Desktop core (Rust) | 718 | 717 | 1 (a 120 s timeout case, run with `--ignored`) | clippy clean · macOS clippy clean |
+| Desktop UI | 733 | 733 | 0 | tsc clean · build OK |
+| Android (unit) | 706 | 706 | 0 | ktlint clean · Android lint 0 errors |
+| Repository checks | 23 | 23 | 0 | — |
+| Desktop end-to-end (live local server) | 48 | 48 | 0 (10 need operator actions and report themselves skipped) | — |
+
 ---
 
 ## Part A — P0 bugs (Phase 1)
 
 ### A1. Auto-record only real calls, label browsers by site
 
-- [ ] A1.1 A call needs two-way audio: the same process tree holds an active **capture** session and an active
+- [~] A1.1 A call needs two-way audio: the same process tree holds an active **capture** session and an active
       **render** session for the whole start window. Windows: `IAudioSessionManager2` / `IAudioSessionEnumerator`
       on capture and render endpoints, state `AudioSessionStateActive`, PID → process tree.
-- [ ] A1.2 macOS 14.4+: Core Audio process objects for running input/output (property names checked against the
+- [~] A1.2 macOS 14.4+: Core Audio process objects for running input/output (property names checked against the
       installed bindings).
-- [ ] A1.3 Browsers are identified by site, never by process name: Windows `EnumWindows` /
+- [~] A1.3 Browsers are identified by site, never by process name: Windows `EnumWindows` /
       `GetWindowThreadProcessId` / `GetWindowTextW` over the browser's process tree; macOS Apple Events for tab
       URLs (opt-in Automation permission), otherwise "unknown".
-- [ ] A1.4 Data-driven, unit-tested site rules (user-extendable in Settings): Google Meet, WhatsApp Web, Zoom web;
+- [x] A1.4 Data-driven, unit-tested site rules (user-extendable in Settings): Google Meet, WhatsApp Web, Zoom web;
       built-in never-record list (chatgpt.com, claude.ai, gemini.google.com).
-- [ ] A1.5 Unknown browser mic use does nothing. Optional setting (off by default): "Ask me when an unrecognised
+- [~] A1.5 Unknown browser mic use does nothing. Optional setting (off by default): "Ask me when an unrecognised
       app uses the microphone" chip (Record / Ignore / Always ignore this site), auto-dismiss after 8 s.
-- [ ] A1.6 The label is decided once at start and kept for the session.
-- [ ] A1.7 `whatsapp_web` end to end (server enum, validation, API docs, console badges and filters, desktop,
+- [x] A1.6 The label is decided once at start and kept for the session.
+- [x] A1.7 `whatsapp_web` end to end (server enum, validation, API docs, console badges and filters, desktop,
       Android labels, library filters); `microsoft_teams` the same way.
-- [ ] A1.8 Record screen explains each decision ("Holds mic ✓ · Playing audio ✓ · Identified as Google Meet ·
+- [~] A1.8 Record screen explains each decision ("Holds mic ✓ · Playing audio ✓ · Identified as Google Meet ·
       Decision: auto-record" / "Ignored: dictation (no audio playing)" / "Ignored: unknown site").
-- [ ] A1.9 Tests: ChatGPT title → none; "Meet - abc-defg-hij" → google_meet; "WhatsApp" → whatsapp_web;
+- [x] A1.9 Tests: ChatGPT title → none; "Meet - abc-defg-hij" → google_meet; "WhatsApp" → whatsapp_web;
       WhatsApp capture-only → not a call; capture + render → call; tab switch keeps the label; both signals
       needed for the full start window.
 
 ### A2. Keep / Discard after a recording ends (desktop, phone parity)
 
-- [ ] A2.1 `PendingDecision` state: a finished recording stays local and is not uploaded.
-- [ ] A2.2 Review card window (unfocusable, always on top, bottom-right, hidden from screen share, 180 ms slide):
+- [x] A2.1 `PendingDecision` state: a finished recording stays local and is not uploaded.
+- [~] A2.2 Review card window (unfocusable, always on top, bottom-right, hidden from screen share, 180 ms slide):
       source, client chip, duration, first caption line, Keep · Discard · ⋯ (Rename, Assign client, Open).
-- [ ] A2.3 Discard deletes local files, uploads nothing, requests no transcript, deletes any server session.
-- [ ] A2.4 Keep enqueues the upload and the final transcript.
-- [ ] A2.5 "If I don't choose within 60 s": Keep (default) / Discard / Keep waiting; undecided items listed under
+- [x] A2.3 Discard deletes local files, uploads nothing, requests no transcript, deletes any server session.
+- [x] A2.4 Keep enqueues the upload and the final transcript.
+- [x] A2.5 "If I don't choose within 60 s": Keep (default) / Discard / Keep waiting; undecided items listed under
       "Waiting for your decision" and persisted across restarts.
-- [ ] A2.6 "Ask before saving": Always (default) / Only automatic calls / Never.
-- [ ] A2.7 Phone: heads-up post-call notification with the same preview fields and timeout rule; pending count on
+- [x] A2.6 "Ask before saving": Always (default) / Only automatic calls / Never.
+- [~] A2.7 Phone: heads-up post-call notification with the same preview fields and timeout rule; pending count on
       the widget.
-- [ ] A2.8 Tests: Keep → enqueued; Discard → files deleted, no upload, no transcript request; timeout → default;
+- [x] A2.8 Tests: Keep → enqueued; Discard → files deleted, no upload, no transcript request; timeout → default;
       pending list survives restart.
 
 ### A3. Caption overlay and recording controls
 
-- [ ] A3.1 Overlay card is a flex column (`max-height: 100%`), header always visible, body scrolls, auto-scroll
+- [~] A3.1 Overlay card is a flex column (`max-height: 100%`), header always visible, body scrolls, auto-scroll
       with "Jump to live"; hit regions recomputed on scroll and resize.
-- [ ] A3.2 Visible lines setting (2 / 3 / 5); long partial turns wrap inside the body.
-- [ ] A3.3 Recording pill (≤ 280 × 44, draggable, remembers position, unfocusable, hidden from screen share):
+- [~] A3.2 Visible lines setting (2 / 3 / 5); long partial turns wrap inside the body.
+- [~] A3.3 Recording pill (≤ 280 × 44, draggable, remembers position, unfocusable, hidden from screen share):
       REC + timer, source, Me/Client meters, Pause/Resume, Stop (→ review card), Cancel (inline confirm),
       Captions on/off, Hide.
-- [ ] A3.4 Tray icon states: idle / recording / paused / uploading / needs attention.
-- [ ] A3.5 Tests: toolbar stays inside the window with 50 long lines; pill actions call the right commands.
+- [~] A3.4 Tray icon states: idle / recording / paused / uploading / needs attention.
+- [x] A3.5 Tests: toolbar stays inside the window with 50 long lines; pill actions call the right commands.
 
 ### A4. Android app lock
 
-- [ ] A4.1 Settings expose "not loaded yet"; a neutral splash is shown until DataStore emits; `locked` is computed
+- [x] A4.1 Settings expose "not loaded yet"; a neutral splash is shown until DataStore emits; `locked` is computed
       after load.
-- [ ] A4.2 Re-lock on `ON_STOP` with "Lock after: Immediately / 1 min / 5 min".
-- [ ] A4.3 `BIOMETRIC_WEAK or DEVICE_CREDENTIAL`, `canAuthenticate()` at runtime, `KeyguardManager` fallback where a
+- [~] A4.2 Re-lock on `ON_STOP` with "Lock after: Immediately / 1 min / 5 min".
+- [~] A4.3 `BIOMETRIC_WEAK or DEVICE_CREDENTIAL`, `canAuthenticate()` at runtime, `KeyguardManager` fallback where a
       combination is unsupported; no negative button with `DEVICE_CREDENTIAL`.
-- [ ] A4.4 The App lock row is always visible (disabled + reason + "Open security settings" when there is no
+- [x] A4.4 The App lock row is always visible (disabled + reason + "Open security settings" when there is no
       screen lock); turning the lock on needs one successful unlock.
-- [ ] A4.5 `FLAG_SECURE` while the lock is on (user setting); every activity that shows recordings or transcripts
+- [~] A4.5 `FLAG_SECURE` while the lock is on (user setting); every activity that shows recordings or transcripts
       respects the lock; the lock cover blocks touches and accessibility focus.
-- [ ] A4.6 Robolectric tests: late settings emission → locked; `ON_STOP` → locked; authenticator per API level; row
+- [x] A4.6 Robolectric tests: late settings emission → locked; `ON_STOP` → locked; authenticator per API level; row
       visible with reason.
 
 ### A5. Never spend speech-to-text without approval
 
-- [ ] A5.1 `POST /api/stt/token` only for an open session owned by the device, in recording state, younger than 4 h.
-- [ ] A5.2 Monthly budget cap (minutes or USD) in the console; over the cap → "Monthly transcription limit
+- [x] A5.1 `POST /api/stt/token` only for an open session owned by the device, in recording state, younger than 4 h.
+- [x] A5.2 Monthly budget cap (minutes or USD) in the console; over the cap → "Monthly transcription limit
       reached" on every device.
-- [ ] A5.3 Devices open a streaming socket only when the user started it or the auto-record rules approved it;
+- [x] A5.3 Devices open a streaming socket only when the user started it or the auto-record rules approved it;
       sockets close on Pause; final transcription only after Keep.
-- [ ] A5.4 `usage_ledger` table: streamed minutes reported at session end; final minutes from provider responses ×
+- [x] A5.4 `usage_ledger` table: streamed minutes reported at session end; final minutes from provider responses ×
       billed channels.
 
 ### A6. Defects found by the full QA sweep
@@ -134,115 +145,120 @@ Severity in brackets. Each item lists the platform; the matching regression test
 
 **Server and console (W)**
 
-- [ ] A6.W1 [high] Console audio route returns 403 to admins without 2FA although 2FA is optional.
-- [ ] A6.W2 [medium] Console audio route is not scoped to the recording's owner.
-- [ ] A6.W3 [high] `complete` answers 202 when whole-file verification fails, so apps delete their only copy;
+- [x] A6.W1 [high] Console audio route returns 403 to admins without 2FA although 2FA is optional.
+- [x] A6.W2 [medium] Console audio route is not scoped to the recording's owner.
+- [x] A6.W3 [high] `complete` answers 202 when whole-file verification fails, so apps delete their only copy;
       `received_chunks` still lists discarded parts.
-- [ ] A6.W4 [high] A provider error during the inline submit leaves the final transcript "processing" for ever.
-- [ ] A6.W5 [high] A recording left in "assembling" by a request that died is never finished.
-- [ ] A6.W6 [medium] Incremental sync misses same-second changes and live transcripts added after a sync;
+- [x] A6.W4 [high] A provider error during the inline submit leaves the final transcript "processing" for ever.
+- [x] A6.W5 [high] A recording left in "assembling" by a request that died is never finished.
+- [x] A6.W6 [medium] Incremental sync misses same-second changes and live transcripts added after a sync;
       tombstones expire by creation age; `since` ignores an offset; a cursor with null fields gives 500.
-- [ ] A6.W7 [medium] Deleting a session mid-transcription never deletes the provider-side copy.
-- [ ] A6.W8 [medium] Playback decrypts the whole recording into memory twice (large recordings exceed
+- [x] A6.W7 [medium] Deleting a session mid-transcription never deletes the provider-side copy.
+- [x] A6.W8 [medium] Playback decrypts the whole recording into memory twice (large recordings exceed
       `memory_limit`).
-- [ ] A6.W9 [medium] Certificate pins are saved and pushed to devices without validation.
-- [ ] A6.W10 [medium] Provider endpoint URLs accept non-HTTPS schemes and any host (lets a console session send
+- [x] A6.W9 [medium] Certificate pins are saved and pushed to devices without validation.
+- [x] A6.W10 [medium] Provider endpoint URLs accept non-HTTPS schemes and any host (lets a console session send
       the write-only keys elsewhere).
-- [ ] A6.W11 [medium] The seeder creates a super admin with a published default password in any environment.
-- [ ] A6.W12 [medium] Docs and CLI messages still say 2FA is required.
-- [ ] A6.W13 [medium] Transcript upload validation is super-linear; the 20,000-segment cap is unreachable.
-- [ ] A6.W14 [medium] Console transcript player is unreadable in the light theme and mouse-only.
-- [ ] A6.W15 [low] A Range past the end returns 200 with the whole file instead of 416.
-- [ ] A6.W16 [low] HTTP 500 instead of 4xx: webhook `rid[]=x`, library cursor with null fields, malformed
+- [x] A6.W11 [medium] The seeder creates a super admin with a published default password in any environment.
+- [x] A6.W12 [medium] Docs and CLI messages describe two-factor sign-in as enforced although it is optional.
+- [x] A6.W13 [medium] Transcript upload validation is super-linear; the 20,000-segment cap is unreachable.
+- [x] A6.W14 [medium] Console transcript player is unreadable in the light theme and mouse-only.
+- [x] A6.W15 [low] A Range past the end returns 200 with the whole file instead of 416.
+- [x] A6.W16 [low] HTTP 500 instead of 4xx: webhook `rid[]=x`, library cursor with null fields, malformed
       authenticated input, non-text settings values; provider connection failure on `stt/token` should be 502.
-- [ ] A6.W17 [low] 404 responses name internal model classes.
-- [ ] A6.W18 [low] `rotate-token` widens a restricted token to the full ability set.
-- [ ] A6.W19 [low] The `uploads` rate limiter can never trigger (the `device` limiter is stricter).
-- [ ] A6.W20 [low] ElevenLabs webhook de-duplication keys on an unsigned header.
-- [ ] A6.W21 [low] Garbage `sample_rate` values are coerced and accepted; timestamps with an offset are stored as
+- [x] A6.W17 [low] 404 responses name internal model classes.
+- [x] A6.W18 [low] `rotate-token` widens a restricted token to the full ability set.
+- [x] A6.W19 [low] The `uploads` rate limiter can never trigger (the `device` limiter is stricter).
+- [x] A6.W20 [low] ElevenLabs webhook de-duplication keys on an unsigned header.
+- [x] A6.W21 [low] Garbage `sample_rate` values are coerced and accepted; timestamps with an offset are stored as
       UTC wall clock.
-- [ ] A6.W22 [low] Orphaned decrypted/assembled temp audio is never swept.
-- [ ] A6.W23 [low] Console profile accepts 8-character passwords (CLI requires 12).
-- [ ] A6.W24 [low] No limit on open upload slots.
-- [ ] A6.W25 [low] Security headers exist only in the hosting `.htaccess`; API answers CORS for any origin.
-- [ ] A6.W26 [low] Console details: dashboard chart and date filter ignore the display time zone, durations ≥ 24 h
+- [x] A6.W22 [low] Orphaned decrypted/assembled temp audio is never swept.
+- [x] A6.W23 [low] Console profile accepts 8-character passwords (CLI requires 12).
+- [x] A6.W24 [low] No limit on open upload slots.
+- [x] A6.W25 [low] Security headers exist only in the hosting `.htaccess`; API answers CORS for any origin.
+- [x] A6.W26 [low] Console details: dashboard chart and date filter ignore the display time zone, durations ≥ 24 h
       wrap, search misses displayed titles, empty search shows "No sessions yet", revoked-device sessions say
       "Web upload", client filter lists other admins' clients, client colour unvalidated, cramped at 360 px,
       recovery-code first click ignored, filter button accessible name.
-- [ ] A6.W27 [low] Console loads third-party fonts and avatars (fonts.bunny.net, ui-avatars.com).
-- [ ] A6.W28 [low] Console voice-note upload refuses AMR, ADTS AAC and WebM despite the allowlist.
-- [ ] A6.W29 [low] `.env.example` defaults (`APP_DEBUG=true`, `APP_ENV=local`, `APP_NAME=Laravel`), composer.json
-      skeleton metadata, `npm ci` in DEPLOY.md without a lock file, mis-encoded characters in comments.
-- [ ] A6.W30 [low] docs/API.md differs from real responses.
+- [x] A6.W27 [low] Console loads third-party fonts and avatars (fonts.bunny.net, ui-avatars.com).
+- [x] A6.W28 [low] Console voice-note upload refuses AMR, ADTS AAC and WebM despite the allowlist.
+- [x] A6.W29 [low] `.env.example` defaults (`APP_DEBUG=true`, `APP_ENV=local`, `APP_NAME=Laravel`), composer.json
+      skeleton metadata, a clean-install npm command in DEPLOY.md without a lock file, mis-encoded characters in comments.
+- [x] A6.W30 [low] docs/API.md differs from real responses.
 
 **Desktop core (DR)**
 
-- [ ] A6.DR1 [high] AssemblyAI streaming flushes pre-Begin audio with a trailing frame under 50 ms, which the
+- [x] A6.DR1 [high] AssemblyAI streaming flushes pre-Begin audio with a trailing frame under 50 ms, which the
       provider rejects.
-- [ ] A6.DR2 [medium] The loopback check is a string prefix: look-alike hosts get cleartext HTTP without pinning.
-- [ ] A6.DR3 [medium] Pinning fails open when none of the configured pins parses.
-- [ ] A6.DR4 [medium] Permanent upload errors (403, 404, 413, 422) are retried for ever; `Retry-After` is ignored.
-- [ ] A6.DR5 [medium] Imported `.oga`, `.aac` and `.amr` files are declared `application/octet-stream`; imported
+- [x] A6.DR2 [medium] The loopback check is a string prefix: look-alike hosts get cleartext HTTP without pinning.
+- [x] A6.DR3 [medium] Pinning fails open when none of the configured pins parses.
+- [x] A6.DR4 [medium] Permanent upload errors (403, 404, 413, 422) are retried for ever; `Retry-After` is ignored.
+- [x] A6.DR5 [medium] Imported `.oga`, `.aac` and `.amr` files are declared `application/octet-stream`; imported
       notes declare 16 kHz and 0 ms without measuring.
-- [ ] A6.DR6 [medium] The recorder inflates a recording when the first packet has no timestamp.
-- [ ] A6.DR7 [medium] A client deleted in the console blocks every upload and caption start of a device that still
+- [x] A6.DR6 [medium] The recorder inflates a recording when the first packet has no timestamp.
+- [x] A6.DR7 [medium] A client deleted in the console blocks every upload and caption start of a device that still
       has it selected.
-- [ ] A6.DR8 [medium] An upload that fails server verification is counted as uploaded and the local audio is
+- [x] A6.DR8 [medium] An upload that fails server verification is counted as uploaded and the local audio is
       deleted.
-- [ ] A6.DR9 [low] FLAC with a final block of 1–15 samples writes an invalid STREAMINFO minimum block size.
-- [ ] A6.DR10 [low] Stopping a long recording needs about 2.3 GB of RAM per hour of stereo audio.
-- [ ] A6.DR11 [low] ElevenLabs live transcript loses turn order; an AssemblyAI session never ends if Terminate is
+- [x] A6.DR9 [low] FLAC with a final block of 1–15 samples writes an invalid STREAMINFO minimum block size.
+- [x] A6.DR10 [low] Stopping a long recording needs about 2.3 GB of RAM per hour of stereo audio.
+- [x] A6.DR11 [low] ElevenLabs live transcript loses turn order; an AssemblyAI session never ends if Terminate is
       not answered.
-- [ ] A6.DR12 [low] TLS and pin failures are reported as a generic network error.
-- [ ] A6.DR13 [low] One unknown enum value in settings.json discards the whole file.
-- [ ] A6.DR14 [low] A single NaN/inf sample poisons the resampler.
-- [ ] A6.DR15 [low] The HTTP client is rebuilt on every call; no guard against a repeating `next_cursor`; a clock
+- [x] A6.DR12 [low] TLS and pin failures are reported as a generic network error.
+- [x] A6.DR13 [low] One unknown enum value in settings.json discards the whole file.
+- [x] A6.DR14 [low] A single NaN/inf sample poisons the resampler.
+- [x] A6.DR15 [low] The HTTP client is rebuilt on every call; no guard against a repeating `next_cursor`; a clock
       step back makes a recording unsendable.
-- [ ] A6.DR16 [low] Version drift: tauri.conf.json says 0.1.1, Cargo.toml/package.json say 0.1.0.
-- [ ] A6.DR17 [low] `zip` 4.6.1 (RUSTSEC advisories) via the updater plugin; installer publisher/copyright metadata
+- [x] A6.DR16 [low] Version drift: tauri.conf.json says 0.1.1, Cargo.toml/package.json say 0.1.0.
+- [x] A6.DR17 [low] `zip` 4.6.1 (RUSTSEC advisories) via the updater plugin; installer publisher/copyright metadata
       and the placeholder updater key.
-- [ ] A6.DR18 [low] The "no audio captured" message tells desktop users to check Android settings.
-- [ ] A6.DR19 [low] The macOS code had never been compiled: `cargo clippy --target aarch64-apple-darwin` fails
+- [x] A6.DR18 [low] The "no audio captured" message tells desktop users to check Android settings.
+- [x] A6.DR19 [low] The macOS code had never been compiled: `cargo clippy --target aarch64-apple-darwin` fails
       (`type_complexity` in `audio/platform/macos.rs`). A macOS type-check and clippy gate now runs on Windows
       (C and Objective-C build scripts compile against stand-in headers; nothing is linked).
 
 **Desktop UI (DU)**
 
-- [ ] A6.DU1 [high] Pairing errors (wrong code, network, pin mismatch, "unpaired on the server") are never shown.
-- [ ] A6.DU2 [medium] The library shows another recording's transcript when responses arrive out of order.
-- [ ] A6.DU3 [medium] A processing transcript is shown as "The transcript is empty: no speech was detected."
-- [ ] A6.DU4 [medium] "No client" in Settings cannot clear the selected client.
-- [ ] A6.DU5 [medium] The library layout breaks below about 1030 px (minimum window is 860 px).
-- [ ] A6.DU6 [medium] Library search only looks at the 160-character preview (covered by feature 8).
-- [ ] A6.DU7 [medium] Accessibility: unnamed selects, misused tablist role, transcript rows not keyboard-operable,
+- [x] A6.DU1 [high] Pairing errors (wrong code, network, pin mismatch, "unpaired on the server") are never shown.
+- [x] A6.DU2 [medium] The library shows another recording's transcript when responses arrive out of order.
+- [x] A6.DU3 [medium] A processing transcript is shown as "The transcript is empty: no speech was detected."
+- [x] A6.DU4 [medium] "No client" in Settings cannot clear the selected client.
+- [x] A6.DU5 [medium] The library layout breaks below about 1030 px (minimum window is 860 px).
+- [x] A6.DU6 [medium] Library search only looks at the 160-character preview (covered by feature 8).
+- [x] A6.DU7 [medium] Accessibility: unnamed selects, misused tablist role, transcript rows not keyboard-operable,
       contrast below AA, no main landmark, switches without state.
-- [ ] A6.DU8 [low] Layout details: long titles push the status pill out, an unbroken URL widens the transcript
+- [x] A6.DU8 [low] Layout details: long titles push the status pill out, an unbroken URL widens the transcript
       grid, the dictation box overflows, Record cards misaligned, raw app ids shown, macOS "Control" label, an
       expired audio URL fails silently.
 
 **Android (M)**
 
-- [ ] A6.M1 [high] UploadWorker leaves a recording stuck "uploading" on an unexpected exception; a missing file is
+- [x] A6.M1 [high] UploadWorker leaves a recording stuck "uploading" on an unexpected exception; a missing file is
       retried 12 times; a failed import leaves an orphaned file.
-- [ ] A6.M2 [high] Startup races when settings load after the first frame: lock not engaged (A4), on-open sync and
+- [x] A6.M2 [high] Startup races when settings load after the first frame: lock not engaged (A4), on-open sync and
       upload restart skipped, a paired phone shows the Pair form.
-- [ ] A6.M3 [medium] The share entry accepts `file://` URIs.
-- [ ] A6.M4 [medium] Delete and Unpair act on one tap with no confirmation.
-- [ ] A6.M5 [medium] A processing transcript is shown as empty.
-- [ ] A6.M6 [medium] Android lint: 4 errors, 19 warnings.
-- [ ] A6.M7 [low] Parsing details: media types with codec parameters, pairing payloads with embedded credentials,
+- [x] A6.M3 [medium] The share entry accepts `file://` URIs.
+- [x] A6.M4 [medium] Delete and Unpair act on one tap with no confirmation.
+- [x] A6.M5 [medium] A processing transcript is shown as empty.
+- [x] A6.M6 [medium] Android lint: 4 errors, 19 warnings.
+- [x] A6.M7 [low] Parsing details: media types with codec parameters, pairing payloads with embedded credentials,
       upper-case `HTTPS`, locale digits in copied text, durations truncated instead of rounded, `Pcm.rms` above 1,
       `SttProtocol` throws on a non-object word.
-- [ ] A6.M8 [low] "No recordings yet" during the first sync, "Pull to refresh" copy without pull-to-refresh, a 401
+- [x] A6.M8 [low] "No recordings yet" during the first sync, "Pull to refresh" copy without pull-to-refresh, a 401
       does not return to the unpaired state, `Retry-After` ignored.
+
+- [ ] A6.M9 [low] Rotating the phone returns to the library (tab, open recording and setup page are not saved).
+- [ ] A6.M10 [low] Status bar icons are dark on the dark app background in the light system theme.
+- [ ] A6.M11 [low] In landscape the library header, search, banner and filters leave no room for the list.
+- [ ] A6.M12 [low] The Record tab upload card does not update until the tab is opened again.
 
 **Repository (R)**
 
 - [x] A6.R1 [medium] docs/research notes reference files that no longer exist and read as working logs.
 - [x] A6.R2 [medium] `.gitignore` does not ignore `.env` files outside `web/`.
-- [ ] A6.R3 [low] Unreachable objects in the local object store; pushed history verified clean.
+- [x] A6.R3 [low] Unreachable objects in the local object store; pushed history verified clean.
 - [x] A6.R4 [low] A unit test contains the production host name, a real-looking pairing code and production pins.
-- [ ] A6.R5 [low] Dead files, stale docs, inconsistent metadata across manifests.
+- [x] A6.R5 [low] Dead files, stale docs, inconsistent metadata across manifests.
 - [-] A6.R6 [info] The Windows installer is not Authenticode-signed: needs a code-signing certificate from the
       owner (documented in the release notes).
 

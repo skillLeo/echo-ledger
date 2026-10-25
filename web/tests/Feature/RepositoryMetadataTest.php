@@ -54,7 +54,7 @@ it('has no mis-encoded characters in the shipped sources', function () {
             if (! $file->isFile() || ! preg_match('/\.(php|js|css|json|md)$/', $file->getFilename())) {
                 continue;
             }
-            // UTF-8 text decoded as Windows-1252 and encoded again: "Â·", "â€”", "â†’", "Ã©" ...
+            // UTF-8 text decoded as Windows-1252 and encoded again (a middle dot, a dash or an arrow turning into two or three other characters).
             if (preg_match('/\xC3\x82[\xC2\xA0-\xC2\xBF]|\xC3\xA2\xE2\x82\xAC|\xC3\xA2\xE2\x80\xA0|\xC3\x83[\xC2\x80-\xC2\xBF]/', (string) file_get_contents($file->getPathname())) === 1) {
                 $hits[] = str_replace(base_path().DIRECTORY_SEPARATOR, '', $file->getPathname());
             }

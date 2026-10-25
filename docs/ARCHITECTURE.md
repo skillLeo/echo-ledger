@@ -94,7 +94,7 @@ microphone.
 4. Every authenticated request updates `last_seen_at`. A `401` means the device was revoked: the app stops
    syncing and uploading, keeps queued recordings locally, and asks the user to pair again.
 
-The admin console uses Filament's built-in TOTP multi-factor authentication. It is **required**, includes
+The admin console uses Filament's built-in TOTP multi-factor authentication. It is optional (recommended), includes
 recovery codes, and access is limited to super admins.
 
 ## Recording lifecycle
@@ -283,7 +283,7 @@ from the app, a notification action, the home-screen widget or the Quick Setting
 | Encryption at rest | Server: secretstream with a dedicated key, kept separate from `APP_KEY` and backed up offline. Android: Tink streaming AEAD with the recording id as associated data, keysets wrapped by the Keystore. Desktop: local files exist only until the upload is verified. |
 | API access | Sanctum tokens with per-route abilities. Named rate limiters: `pairing`, `device`, `uploads`, `stt-token`, `webhooks`. The only unauthenticated routes are pairing, signature-checked webhooks and signed audio URLs. |
 | Uploads | MIME allowlist, size cap (2 GiB by default), per-chunk and whole-file SHA-256. Files are stored under server-generated ULID paths. |
-| Playback | The console streams decrypted audio over a session-authenticated, MFA-protected route with HTTP Range support. Devices use temporary signed URLs. |
+| Playback | The console streams decrypted audio over a session-authenticated, super-admin-only, owner-scoped route with HTTP Range support. Devices use temporary signed URLs. |
 | Retention | `Prunable` models delete recordings, transcripts, webhook payloads and tombstones after the configured number of days (30 by default, 1–365). Files are deleted with their rows. Provider copies are deleted as soon as a transcript is stored. |
 | Privacy | No analytics, telemetry or crash-reporting SDKs in any application. A visible indicator is shown whenever capture is active. |
 

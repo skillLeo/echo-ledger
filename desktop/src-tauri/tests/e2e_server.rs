@@ -52,7 +52,8 @@ use desktop_lib::audio::types::{AudioChunk, Channel, TARGET_RATE};
 use desktop_lib::error::AppError;
 use desktop_lib::net::api::{ApiClient, with_client_fallback};
 use desktop_lib::net::models::{
-    ArtifactDto, CreateSessionRequest, LibraryItem, OpenSessionRequest, RegisterResponse, SegmentDto,
+    ArtifactDto, CreateSessionRequest, LibraryItem, OpenSessionRequest, RegisterResponse,
+    SegmentDto,
 };
 use desktop_lib::net::sync::LibraryCache;
 use desktop_lib::net::uploader::{PendingUpload, UploadQueue, file_sha256, sha256_hex, upload};
@@ -1816,15 +1817,23 @@ e2e_test!(
         };
         let api = api_for(cfg, token);
         let mut created: Vec<String> = Vec::new();
-        for n in 0..101 {
-            let request = session_request(&uuid::Uuid::new_v4().to_string(), "other", 2048 + n);
-            created.push(
-                api.create_session(&request)
-                    .await
-                    .expect("create")
-                    .session
-                    .id,
+        for n in 0..101u64 {
+            // Each tiny upload is finished at once, so the device never holds more unfinished uploads than the
+            // server allows (50 per device); the sessions still all count for the paging below.
+            let bytes = vec![b'a' + (n % 26) as u8; 2048 + n as usize];
+            let mut request = session_request(
+                &uuid::Uuid::new_v4().to_string(),
+                "other",
+                bytes.len() as u64,
             );
+            request.artifacts[0].sha256 = sha256_hex(&bytes);
+            let response = api.create_session(&request).await.expect("create");
+            let recording = response.recordings[0].id.clone();
+            api.upload_chunk(&recording, 0, bytes.clone(), &sha256_hex(&bytes))
+                .await
+                .expect("chunk");
+            api.complete(&recording).await.expect("complete");
+            created.push(response.session.id);
         }
         let mut cache = LibraryCache::default();
         let changed = cache.refresh(&api).await.expect("paged refresh");
@@ -1869,7 +1878,7 @@ e2e_test!(
 );
 
 e2e_test!(
-        a_session_created_in_the_same_second_as_a_sync_is_picked_up_by_the_next_sync,
+    a_session_created_in_the_same_second_as_a_sync_is_picked_up_by_the_next_sync,
     300,
     |cfg, case| {
         let id = identity(cfg).await;
@@ -3043,7 +3052,7 @@ e2e_test!(
 );
 
 e2e_test!(
-        audio_below_the_size_floor_ends_as_a_failed_transcript_with_a_readable_message,
+    audio_below_the_size_floor_ends_as_a_failed_transcript_with_a_readable_message,
     300,
     |cfg, case| {
         let id = identity(cfg).await;
@@ -3088,7 +3097,7 @@ e2e_test!(
 );
 
 e2e_test!(
-        a_range_that_starts_at_or_after_the_end_of_the_audio_is_unsatisfiable,
+    a_range_that_starts_at_or_after_the_end_of_the_audio_is_unsatisfiable,
     300,
     |cfg, case| {
         let id = identity(cfg).await;
@@ -3302,7 +3311,7 @@ e2e_test!(
 );
 
 e2e_test!(
-        a_provider_that_rejects_the_job_does_not_leave_the_transcript_processing_forever,
+    a_provider_that_rejects_the_job_does_not_leave_the_transcript_processing_forever,
     300,
     |cfg, case| {
         let Some(control) = Control::of(cfg) else {
@@ -3353,7 +3362,7 @@ e2e_test!(
 );
 
 e2e_test!(
-        unknown_ids_give_404_with_a_message_that_does_not_name_server_internals,
+    unknown_ids_give_404_with_a_message_that_does_not_name_server_internals,
     120,
     |cfg, case| {
         let id = identity(cfg).await;
@@ -3420,7 +3429,12 @@ e2e_test!(
         // Live captions get the client's vocabulary.
         let session = caption_session(&api).await;
         let grants = api
-            .stt_token("live_captions", &["me", "client"], Some(&client_id), session.as_deref())
+            .stt_token(
+                "live_captions",
+                &["me", "client"],
+                Some(&client_id),
+                session.as_deref(),
+            )
             .await
             .expect("stt token for a client");
         close_caption_session(&api, session).await;
@@ -3487,14 +3501,23 @@ e2e_test!(
         let captions_result = with_client_fallback(Some(client_id.clone()), |client| {
             let (api, session) = (api.clone(), session.clone());
             async move {
-                api.stt_token("live_captions", &["me", "client"], client.as_deref(), session.as_deref())
-                    .await
+                api.stt_token(
+                    "live_captions",
+                    &["me", "client"],
+                    client.as_deref(),
+                    session.as_deref(),
+                )
+                .await
             }
         })
         .await;
         close_caption_session(&api, session).await;
         if let Ok((_, cleared)) = &captions_result {
-            assert_eq!(cleared.as_deref(), Some(client_id.as_str()), "the deleted client is forgotten");
+            assert_eq!(
+                cleared.as_deref(),
+                Some(client_id.as_str()),
+                "the deleted client is forgotten"
+            );
         }
         if let Ok(session_id) = &upload_result {
             let _ = api.delete_session(session_id).await;
@@ -3531,7 +3554,7 @@ async fn session_id_for(api: &ApiClient, client_ref: &str) -> String {
 }
 
 e2e_test!(
-        a_recording_left_in_assembling_by_a_crashed_request_is_not_lost,
+    a_recording_left_in_assembling_by_a_crashed_request_is_not_lost,
     400,
     |cfg, case| {
         let Some(control) = Control::of(cfg) else {
@@ -3749,7 +3772,7 @@ e2e_test!(
 );
 
 e2e_test!(
-        a_deletion_in_the_same_second_as_a_sync_reaches_the_next_sync,
+    a_deletion_in_the_same_second_as_a_sync_reaches_the_next_sync,
     300,
     |cfg, case| {
         let id = identity(cfg).await;

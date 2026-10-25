@@ -9,7 +9,7 @@ Transcription only — no AI summaries in this release (extension points are kep
 ## Priorities
 
 1. **Accuracy** — two-pass transcription, per-client vocabulary, clean two-channel audio.
-2. **Security** — keys server-side only, encryption at rest, pinned transport, mandatory admin 2FA.
+2. **Security** — keys server-side only, encryption at rest, pinned transport, optional (recommended) admin 2FA.
 3. **No disturbance** — no repeated pop-ups, no focus stealing, nothing that interrupts a call.
 
 ## Users
@@ -23,7 +23,7 @@ Transcription only — no AI summaries in this release (extension points are kep
 ### Server and admin console
 - Data model: users, devices, clients and keyterms, capture sessions, recordings, transcripts, settings,
   encrypted credentials, webhook events.
-- Admin console at `/admin` with mandatory TOTP two-factor sign-in and a super-administrator role.
+- Admin console at `/admin` with optional TOTP two-factor sign-in and a super-administrator role.
 - Screens: dashboard (counts by source), sessions library (filter by source device, app, client and date;
   playback with synced transcript; delete), clients and keyterms, devices (pairing, revocation), settings
   (retention, provider per use case), API credentials (write-only, encrypted).
@@ -78,7 +78,7 @@ Transcription only — no AI summaries in this release (extension points are kep
 
 ## Acceptance criteria
 
-- Admin signs in with 2FA, stores provider keys encrypted, sees a library mixing phone, desktop and web items
+- Admin signs in (2FA optional), stores provider keys encrypted, sees a library mixing phone, desktop and web items
   with correct labels, plays audio with a synced transcript and deletes a session.
 - Desktop builds on Windows and macOS; overlay is transparent, click-through and always on top; shortcuts
   work; a simulated two-channel capture produces aligned, equal-length `mic.wav` and `system.wav`; captions

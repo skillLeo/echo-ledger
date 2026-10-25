@@ -158,7 +158,6 @@ describe('secrets and local files', () => {
 
   test(
     'tracked sources do not embed production hostnames',
-    { skip: 'A6.R4: a mobile unit test still uses the production server host name' },
     () => {
       const offenders = findInTracked(/\b[a-z0-9-]+\.skillleo\.[a-z]{2,}\b/i);
       assert.deepEqual(offenders, []);
@@ -167,7 +166,6 @@ describe('secrets and local files', () => {
 
   test(
     'database seeders do not ship a fixed administrator password',
-    { skip: 'A6.W11: the database seeder falls back to a published default administrator password' },
     () => {
       const offenders = tracked
         .filter((p) => p.startsWith('web/database/seeders/'))
@@ -178,7 +176,6 @@ describe('secrets and local files', () => {
 
   test(
     'ignore rules cover environment files in every app',
-    { skip: 'A6.R2: .gitignore does not ignore .env files outside web/' },
     () => {
       const environmentFiles = ['.env', 'web/.env', 'web/.env.production', 'desktop/.env', 'mobile/.env'];
       assert.deepEqual(notIgnoredByRepository(environmentFiles), []);
@@ -212,7 +209,6 @@ describe('licensing and manifest metadata', () => {
 
   test(
     'composer.json declares the same licence as the LICENSE file',
-    { skip: 'A6.W29: composer.json still declares the MIT licence of the framework skeleton' },
     () => {
       const composer = JSON.parse(read('web/composer.json'));
       assert.equal(String(composer.license).toLowerCase(), 'proprietary');
@@ -221,7 +217,6 @@ describe('licensing and manifest metadata', () => {
 
   test(
     'composer.json names and describes this product, not the framework skeleton',
-    { skip: 'A6.W29: composer.json still carries the framework skeleton name and description' },
     () => {
       const composer = JSON.parse(read('web/composer.json'));
       assert.notEqual(composer.name, 'laravel/laravel');
@@ -231,7 +226,6 @@ describe('licensing and manifest metadata', () => {
 
   test(
     'the PHP constraint in composer.json is satisfiable by the locked dependency set',
-    { skip: 'A6.W29: composer.json allows PHP 8.3 although the locked packages need 8.4.1' },
     () => {
       const composer = JSON.parse(read('web/composer.json'));
       const lock = JSON.parse(read('web/composer.lock'));
@@ -256,7 +250,6 @@ describe('licensing and manifest metadata', () => {
 
   test(
     'the desktop app version is identical in tauri.conf.json, package.json and Cargo.toml',
-    { skip: 'A6.DR16: tauri.conf.json says 0.1.1 while package.json and Cargo.toml say 0.1.0' },
     () => {
       const tauri = JSON.parse(read('desktop/src-tauri/tauri.conf.json')).version;
       const npm = JSON.parse(read('desktop/package.json')).version;
@@ -279,7 +272,6 @@ describe('licensing and manifest metadata', () => {
 
   test(
     'the server environment template sets the product name EchoLedger',
-    { skip: 'A6.W29: web/.env.example still sets APP_NAME=Laravel' },
     () => {
       const name = /^APP_NAME="?([^"\r\n]*)"?\s*$/m.exec(read('web/.env.example'))?.[1];
       assert.equal(name, 'EchoLedger');
@@ -310,7 +302,6 @@ describe('documentation', () => {
 
   test(
     'documents only name repository files that exist',
-    { skip: 'A6.R1: research notes cite planning files that are not in the repository' },
     () => {
       const trackedNames = new Set(tracked.map((p) => basename(p)));
       const missing = [];
@@ -338,7 +329,6 @@ describe('documentation', () => {
 
   test(
     'two-factor documentation matches the admin panel configuration',
-    { skip: 'A6.W12: docs and CLI messages still say two-factor sign-in is required' },
     () => {
       const panel = read('web/app/Providers/Filament/AdminPanelProvider.php');
       const required = /isRequired:\s*true/.test(panel);
@@ -371,7 +361,6 @@ describe('documentation', () => {
 
   test(
     'install steps that use npm ci have a committed package-lock.json',
-    { skip: 'A6.W29: web/DEPLOY.md runs npm ci but web/ has no package-lock.json' },
     () => {
       const offenders = markdownFiles
         .filter((file) => /\bnpm ci\b/.test(read(file)))
@@ -405,7 +394,6 @@ describe('documentation', () => {
 
   test(
     'text files contain no double-encoded characters',
-    { skip: 'A6.W29: a comment in web/app/Services/ChunkedUploadService.php has double-encoded arrows' },
     () => {
       const offenders = textFiles.filter((p) => !isLockfile(p) && DOUBLE_ENCODED.test(read(p)));
       assert.deepEqual(offenders, []);

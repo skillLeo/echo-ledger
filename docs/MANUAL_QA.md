@@ -19,7 +19,7 @@ WhatsApp Business account, a Zoom account, a Google Meet link, and a server with
 | ID | Steps | Expected |
 |---|---|---|
 | S-01 | Deploy to the shared host per `web/DEPLOY.md`; add the cron line. | `php artisan schedule:list` shows the queue worker, `stt:reconcile`, `model:prune`, `sanctum:prune-expired`. Queue drains within a minute of a new job. |
-| S-02 | Sign in to `/admin` for the first time. | MFA enrolment is forced; a real authenticator app (Google Authenticator, 1Password, Aegis) accepts the QR; recovery codes are shown once and each works exactly once. |
+| S-02 | Sign in to `/admin` for the first time, then enrol two-factor sign-in from Profile. | Not forced at first sign-in; a real authenticator app (Google Authenticator, 1Password, Aegis) accepts the QR; recovery codes are shown once and each works exactly once. |
 | S-03 | Enter AssemblyAI + ElevenLabs keys on **API Credentials**; reload. | Only "configured ••••last4" is shown; the raw values are never rendered in HTML (view source). |
 | S-04 | Record a 2-minute two-party call from the desktop with AssemblyAI as final provider. | Webhook arrives (session reaches `completed` without waiting for `stt:reconcile`); Me/Client segments are correct; the AssemblyAI dashboard no longer lists the transcript (deleted after store). |
 | S-05 | Repeat S-04 with ElevenLabs as final provider. | Signed webhook accepted; transcript stored; the ElevenLabs history no longer lists it. |
@@ -128,3 +128,70 @@ Run on **one Pixel (Android 15 or 16)** and **one Samsung (One UI on Android 14+
   the EchoLedger server and the chosen speech provider appear).
 - Search the desktop installer and the APK for provider key patterns (`sk_`, `xi-api-key`, AssemblyAI keys): none.
 - A recording indicator (notification / tray state / overlay dot) is visible whenever audio is being captured.
+
+## 7. v1.1 — recording decisions, call detection and app lock
+
+### 7.1 Server and console
+
+| ID | Steps | Expected |
+|---|---|---|
+| V-S1 | Sign in as an admin without two-factor and play a session's audio. | It plays. |
+| V-S2 | On a session page, Tab to a transcript line and press Enter; focus the player and press Space. | Playback seeks to the line; Space plays and pauses. |
+| V-S3 | With two-factor on, sign in with a recovery code and click "Confirm sign in" once. | Signed in on the first click. |
+| V-S4 | Open a session page and API Credentials at 360 px width. | No horizontal scrolling. |
+| V-S5 | Set Settings → Monthly limit to 1 minute, then start live captions on a device. | The device shows "Monthly transcription limit reached"; the recording continues. |
+
+### 7.2 Desktop — call detection (Windows)
+
+| ID | Steps | Expected |
+|---|---|---|
+| V-D1 | Auto-record on. Use voice input in ChatGPT, Claude and Gemini for 30 s each. | Nothing is recorded; the Record screen shows "Ignored: never record". |
+| V-D2 | Record a 20 s WhatsApp Desktop voice message. | No recording; the explainer shows "Playing audio ✗ · Ignored: dictation". |
+| V-D3 | Start WhatsApp, Zoom, Teams, Google Meet (Chrome) and WhatsApp Web calls. | Each records within about 3 s, labelled WhatsApp, Zoom, Microsoft Teams, Google Meet and WhatsApp Web. |
+| V-D4 | During a Meet call, switch to a ChatGPT tab for a minute. | The recording continues as Google Meet. |
+| V-D5 | Turn on "Ask me when an unrecognised app uses the microphone" and call on an unknown site. | The chip appears after about 3 s and closes after 8 s; Record, Ignore and "Always ignore this site" work. |
+| V-D6 | macOS: with automation on, a Meet call in Chrome or Safari; then with it off. | On: recorded as Google Meet after the permission prompt. Off: ignored as an unknown site. |
+
+### 7.3 Desktop — recording controls and Keep / Discard
+
+| ID | Steps | Expected |
+|---|---|---|
+| V-D7 | Start a call recording while typing in another app. | The pill appears top-centre without taking focus; every button works on the first click; clicks around it pass through. |
+| V-D8 | Pause, then resume. | The timer freezes, the dot turns amber and the OS microphone indicator turns off; resume continues. |
+| V-D9 | Cancel → "Discard? Yes / No". | No restores the buttons; Yes discards with no review card. |
+| V-D10 | Hide the pill, then use the tray item "Show recording controls". | The recording continues while hidden; the pill comes back. |
+| V-D11 | Drag the pill to a second monitor and restart; then unplug that monitor and restart. | It reopens where it was; without the monitor it opens top-centre of the main screen. |
+| V-D12 | Stop a recording. | The review card slides in bottom-right without taking focus; the countdown follows the timeout setting; Rename opens the Library. |
+| V-D13 | Keep one recording, Discard another, let a third time out with "Keep" and with "Discard". | Kept ones upload and get a transcript; discarded ones leave nothing locally or on the server. |
+| V-D14 | Quit from the tray while recording, then start the app again. | The recording is listed under "Waiting for your decision". |
+| V-D15 | Share the screen in a call app. | The pill, the review card and the caption overlay are not visible to the other side. |
+| V-D16 | Turn on the OS "Reduce motion" setting. | No pulse and no slide-in. |
+| V-D17 | Watch the tray icon while idle, recording, paused, uploading and with a recording waiting. | The icon and tooltip change for each state. |
+
+### 7.4 Desktop — captions, uploads and layout
+
+| ID | Steps | Expected |
+|---|---|---|
+| V-D18 | Turn on captions during a call and let 50+ long turns arrive (include a long URL), with 2, 3 and 5 caption lines. | The header (drag, copy, close) stays inside the overlay; long text wraps; scrolling up shows "Jump to live", which returns to the newest line. |
+| V-D19 | Record a call longer than one chunk and keep it. | It shows uploading, then verifying; its local folder is removed only once the server shows it ready. |
+| V-D20 | Select a client, delete it in the console, then record and keep a call. | The toast says the client was removed; Settings shows no client; the recording uploads. |
+| V-D21 | Stop the server during an upload, then start it again. | The upload finishes on its own; a failed item shows Retry and Discard. |
+| V-D22 | Stop a recording that ran over 30 minutes. | Memory does not jump while it stops; the upload file plays completely. |
+| V-D23 | Resize the main window to 860 px wide, then to 1030 px and wider. | The library stacks at 860 px and sits side by side from 1030 px, with no horizontal scrollbar. |
+| V-D24 | In light and dark themes, check group labels, status pills, badges and primary buttons. | All are clearly readable. |
+| V-D25 | macOS: build and run on a Mac. | The pill and review card appear and are hidden from screen recording. |
+
+### 7.5 Android
+
+| ID | Steps | Expected |
+|---|---|---|
+| V-A1 | With a PIN on the phone, switch Settings → App lock on: cancel the prompt, then try again and enter the PIN. Close and reopen the app. | Cancelling leaves it off; after the PIN it stays on; reopening asks to unlock before anything shows. |
+| V-A2 | Lock after "Immediately", "After 1 minute": leave the app and come back. | Immediately locks at once; 1 minute stays open within 30 s and locks after a minute. |
+| V-A3 | Android 10 with only a PIN (no fingerprint). | App lock can be switched on and unlocks with the PIN. |
+| V-A4 | No screen lock on the phone. | The switch is disabled with "Set a screen lock on this phone to use App lock." and "Open security settings" works. |
+| V-A5 | App lock and "Hide content in Recents and screenshots" on. | Recents shows a blank thumbnail and screenshots are blocked; turning the option off restores both. |
+| V-A6 | Finish a WhatsApp call. | A heads-up "Save this recording?" shows app, duration, client and the first caption line; Keep and Discard work; it times out after 60 s with Keep or Discard, never with "Keep waiting". |
+| V-A7 | Add the widget while a recording waits; turn App lock on. | The widget shows "N to review" and opens the waiting list; with App lock on it shows no titles or transcript text. |
+| V-A8 | Start captions on a v1.1 server; let the monthly limit be reached. | Captions show "Monthly transcription limit reached" in the bubble; the recording continues and uploads after Keep. |
+| V-A9 | Revoke the phone in the console, then open the app. | It returns to the pairing screen with "This phone was unpaired on the server. Pair it again."; recordings waiting to upload stay. |
+| V-A10 | Rotate the phone on the library, a recording and the setup page. | Known issue from the emulator run: the screen returns to the library (fixed in a later phase). |

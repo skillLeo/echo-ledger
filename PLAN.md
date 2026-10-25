@@ -23,7 +23,7 @@ How to use this plan:
 |---|---|---|
 | D1 | Capture sessions live in table `capture_sessions` (model `CaptureSession`); API paths stay `/api/sessions`, Filament slug `sessions`. | Laravel's database session driver owns `sessions`; `Session` is a facade alias. `web-laravel-filament.md` §0 |
 | D2 | `Device` is the Sanctum tokenable (own `devices` auth provider; `sanctum.guard => []`). Devices register with a **one-time pairing code** (10 min, single use) created by a Filament action and shown as code + QR (`{v,url,code,pins}`). Tokens carry explicit abilities and an expiry; revoking a device deletes its tokens. | Admin password + TOTP never typed on devices. `web-laravel-filament.md` R3 |
-| D3 | Web 2FA = Filament 5 built-in app (TOTP) MFA, **required**, with recovery codes. Email-code MFA skipped (needs SMTP). Panel access only for `is_super_admin` users. | `web-laravel-filament.md` §1 |
+| D3 | Web 2FA = Filament 5 built-in app (TOTP) MFA with recovery codes; optional and recommended since v1.0.1 (it was required at first). Email-code MFA skipped (needs SMTP). Panel access only for `is_super_admin` users. | `web-laravel-filament.md` §1 |
 | D4 | Chunk uploads are raw `application/octet-stream` bodies (`Upload-Chunk-Index`, `Upload-Chunk-Sha256` headers), size advertised by the server (≤ 5 MiB, derived from `post_max_size`). | Multipart would be capped by `upload_max_filesize` (2 MB locally). `web-laravel-filament.md` R11 |
 | D5 | A session owns 1–3 **recording artifacts**: `primary` (stereo; FLAC from desktop, Ogg/Opus from Android; voice notes keep their original format) plus optional mono 16 kHz WAV/FLAC `channel_1` / `channel_2`, requested only when the selected final provider cannot split channels or decode Opus (`azure_mai` with MAI model, `whispercpp_local`). `GET /api/config` tells devices which artifacts to produce. | MAI-Transcribe-2 has no channel separation and no Opus; whisper-server needs WAV/FLAC/MP3 without ffmpeg. `stt-azure-local.md` |
 | D6 | `SttProvider` drivers declare a completion mode: `async_webhook` (assemblyai, elevenlabs), `sync` (azure_mai, whispercpp_local), `device` (parakeet_local — the device transcribes and uploads). | `stt-azure-local.md` R1 |
@@ -64,7 +64,7 @@ How to use this plan:
 
 **Goal:** the server of record — data model, encrypted storage, chunked uploads, STT orchestration
 (token minting, final jobs, webhooks, reconciler), REST API for devices, and a premium dark Filament
-admin with required 2FA.
+admin with optional 2FA.
 
 ### 1.1 Foundation
 - [x] Tooling: Pest 4 (`tests/Pest.php`, `RefreshDatabase` for Feature tests), `phpstan.neon` (Larastan, level 6), `pint.json`, phpunit sqlite `:memory:` (Livewire/Filament covered over HTTP and the panel API, so no extra Livewire plugin is needed)
@@ -95,7 +95,7 @@ admin with required 2FA.
 - [x] `POST /api/webhooks/stt/{provider}` (public, signature-verified, idempotent via `webhook_events`, 401 on bad signature, 5xx only for transient faults)
 
 ### 1.5 Filament admin (`/admin`, dark, violet primary, no global search)
-- [x] Panel: required app MFA + recovery codes, profile page, `FilamentUser::canAccessPanel` = super admin, branding "EchoLedger"
+- [x] Panel: optional app MFA + recovery codes, profile page, `FilamentUser::canAccessPanel` = super admin, branding "EchoLedger"
 - [x] Dashboard: stats by `source_device` (icon + label) and status, minutes transcribed (30 d), sessions-per-day chart; no polling
 - [x] Sessions library (`CaptureSessionResource`, list + view, no create): source device/app badges (icon + text), filters (source_device, source_app, client, date range, status), view + delete actions, header action "Upload voice note" (`source_device=web`)
 - [x] Session view: metadata infolist + `TranscriptPlayerEntry` (HTML5 audio from the admin media route + synced transcript; active segment highlight; click to seek; Me/Client colors; `wire:ignore`; scoped CSS — no arbitrary Tailwind)
