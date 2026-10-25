@@ -126,6 +126,16 @@ describe('roles', function () {
             ->assertActionVisible(TestAction::make(DeleteAction::class)->table($t['memberDevice']));
     });
 
+    it('lets only a super admin\'s device change the shared vocabulary; anyone may add to a client of the workspace', function () {
+        $t = team();
+        $client = Fx::client($t['owner'], 'Team client');
+        $token = Fx::token($t['memberDevice']);
+
+        $this->api($token)->postJson('/api/vocabulary/keyterms', ['term' => 'Kubernetes'])->assertForbidden()->assertJsonPath('code', 'not_allowed');
+        $this->api($token)->postJson('/api/vocabulary/replacements', ['from' => 'kubes', 'to' => 'Kubernetes'])->assertForbidden();
+        $this->api($token)->postJson('/api/vocabulary/keyterms', ['term' => 'Kubernetes', 'client_id' => $client->id])->assertCreated();
+    });
+
     it('keeps server pages for super admins: a member gets 403 on Settings and API credentials', function () {
         $t = team();
         $this->actingAs($t['member'], 'web');

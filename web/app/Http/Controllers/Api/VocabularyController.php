@@ -67,6 +67,7 @@ final class VocabularyController extends Controller
 
             return response()->json(['keyterms' => $client->keytermList()], 201);
         }
+        $this->assertServerVocabularyWriter($request);
         $global = $this->settings->globalKeyterms();
         if (! in_array(mb_strtolower($term), array_map('mb_strtolower', $global), true)) {
             if (count($global) >= self::MAX_GLOBAL_KEYTERMS) {
@@ -102,10 +103,24 @@ final class VocabularyController extends Controller
 
             return response()->json(['replacements' => $rules], 201);
         }
+        $this->assertServerVocabularyWriter($request);
         $rules = TextReplacements::rules([...$rule, ...$this->settings->globalReplacements()]);
         $this->settings->set('vocabulary.replacements', $rules);
 
         return response()->json(['replacements' => $rules], 201);
+    }
+
+    /**
+     * The vocabulary without a client is server-wide (Settings, B20 design): only a super admin's device changes it,
+     * so one workspace never edits what every other workspace's transcripts use.
+     */
+    private function assertServerVocabularyWriter(Request $request): void
+    {
+        /** @var Device $device */
+        $device = $request->user();
+        if (! $device->user->is_super_admin) {
+            throw new ApiError(403, 'not_allowed', 'Only the server admin can change the shared vocabulary. Add the words to a client instead.');
+        }
     }
 
     private function client(Request $request, string $id): Client

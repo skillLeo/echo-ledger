@@ -35,6 +35,8 @@ uses(InteractsWithDeviceApi::class);
 
 beforeEach(function () {
     [$this->device, $this->token] = $this->enroll(platform: 'windows');
+    // The shared (no client) vocabulary is server-wide: its writer is the super admin (B20).
+    $this->device->user->forceFill(['is_super_admin' => true])->save();
     $this->asToken($this->token);
 });
 
