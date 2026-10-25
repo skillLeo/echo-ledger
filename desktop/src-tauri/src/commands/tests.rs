@@ -139,3 +139,31 @@ fn dictation_settings_are_saved_cleaned() {
     patch(json!({"dictationMode": "whisper"})).apply(&mut s);
     assert_eq!(s.dictation_mode, "push_to_talk", "an unknown mode is ignored");
 }
+
+// ---- library organisation (B15) ----
+
+fn object(value: serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
+    value.as_object().cloned().unwrap()
+}
+
+#[test]
+fn only_known_fields_are_sent() {
+    let patch = object(json!({"pinned": true, "labels": ["Invoice"], "user_id": 7, "status": "failed"}));
+    assert_eq!(serde_json::Value::Object(allowed_patch(&patch, &SESSION_PATCH_KEYS)), json!({"pinned": true, "labels": ["Invoice"]}));
+    let client_patch = object(json!({"avatar": "AC", "user_id": 7}));
+    assert_eq!(serde_json::Value::Object(allowed_patch(&client_patch, &CLIENT_PATCH_KEYS)), json!({"avatar": "AC"}));
+}
+
+#[test]
+fn bulk_requests_are_checked_first() {
+    let ids = vec!["01JB8Q4C1D2E3F4G5H6J7K8M9N".to_string()];
+    for action in BULK_ACTIONS {
+        let label = matches!(action, "label" | "unlabel").then_some("Q4");
+        assert!(check_bulk(&ids, action, label).is_ok(), "{action}");
+    }
+    assert!(check_bulk(&ids, "explode", None).is_err());
+    assert!(check_bulk(&[], "pin", None).is_err());
+    assert!(check_bulk(&vec!["01JB8Q4C1D2E3F4G5H6J7K8M9N".to_string(); 201], "pin", None).is_err());
+    assert!(check_bulk(&ids, "label", Some("  ")).is_err());
+    assert!(check_bulk(&ids, "unlabel", None).is_err());
+}

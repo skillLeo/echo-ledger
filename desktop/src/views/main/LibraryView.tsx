@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail } from "../../lib/ipc";
+import { api, errorMessage, type ClientFolder, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail } from "../../lib/ipc";
 import { activeIndex, activeWord, continuesTurn, KEY_SECONDS, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName } from "../../lib/player";
 import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, SpeakersPanel, Timeline, VocabularyHint } from "./TranscriptTools";
 import { formatDuration, formatWhen, timestamp, transcriptText } from "../../lib/format";
@@ -10,6 +10,8 @@ import { CopyIcon, DesktopIcon, GlobeIcon, PhoneIcon, RefreshIcon, SearchIcon, S
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
+import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, SMART_VIEWS, smartViewCounts, type SmartView } from "../../lib/organise";
+import { BulkBar, OrganisePanel } from "./LibraryOrganise";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -40,6 +42,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [source, setSource] = useState<SourceFilter>("all");
   const [tag, setTag] = useState<string | null>(null);
+  const [view, setView] = useState<SmartView>("all");
+  const [label, setLabel] = useState<string | null>(null);
+  const [folder, setFolder] = useState<string | null>(null);
+  const [clients, setClients] = useState<ClientFolder[]>([]);
+  const [clientsLoaded, setClientsLoaded] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
@@ -91,11 +100,25 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
 
   const tags = useMemo(() => libraryTags(items), [items]);
   const anyBookmarks = useMemo(() => items.some((i) => !i.deleted && (i.marker_count ?? 0) > 0), [items]);
-  const filtered = useMemo(() => sortItems(searchItems(filterByTag(filterItems(items, source), tag), query), sort), [items, source, tag, query, sort]);
+  const labels = useMemo(() => libraryLabels(items), [items]);
+  const viewCounts = useMemo(() => smartViewCounts(items), [items]);
+  const pickedIds = useMemo(() => [...picked].filter((id) => items.some((i) => i.id === id && !i.deleted)), [picked, items]);
+  const togglePicked = (id: string) => setPicked((p) => { const next = new Set(p); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const endSelecting = () => { setSelecting(false); setPicked(new Set()); };
+  const folders = useMemo(() => foldersOf(items, clients), [items, clients]);
+  const addClient = (client: ClientFolder) => setClients((list) => [...list.filter((c) => c.id !== client.id), client]);
+  const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(filterByTag(filterItems(items, source), tag), label), folder).filter((i) => inSmartView(i, view)), query), sort), [items, source, tag, label, folder, view, query, sort]);
   const groups = useMemo(() => groupItems(filtered, sort), [filtered, sort]);
   // A recording opened from a transcript match stays open even when its title does not match the typed words.
   const [hitSelected, setHitSelected] = useState<string | null>(null);
   const current = filtered.find((i) => i.id === selected) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? null;
+  // The full client list (folders without recordings too) is fetched once, when a recording is opened or selecting starts.
+  const needClients = !!current || selecting;
+  useEffect(() => {
+    if (!needClients || clientsLoaded) return;
+    setClientsLoaded(true);
+    api.clients().then((r) => setClients(r.data ?? [])).catch(() => undefined); // offline: the folders of synced recordings still show
+  }, [needClients, clientsLoaded]);
 
   const finalStatus = current?.transcript?.final_status ?? null;
   const finalId = current?.transcript?.final_transcript_id ?? null;
@@ -355,6 +378,27 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         <select className="select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort recordings">
           {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => <option key={k} value={k}>{SORT_LABELS[k]}</option>)}
         </select>
+        {(folders.length > 0 || folder !== null) && (
+          <select className="select" value={folder ?? "*"} onChange={(e) => setFolder(e.target.value === "*" ? null : e.target.value)} aria-label="Client folder">
+            <option value="*">All clients</option>
+            <option value="">No client</option>
+            {folders.map((cl) => <option key={cl.id} value={cl.id}>{`${folderBadge(cl)} · ${cl.name}`}</option>)}
+          </select>
+        )}
+        {(labels.length > 0 || label !== null) && (
+          <select className="select" value={label ?? ""} onChange={(e) => setLabel(e.target.value || null)} aria-label="Label">
+            <option value="">Any label</option>
+            {labels.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+        )}
+        <button type="button" className="btn ghost" aria-pressed={selecting} onClick={() => (selecting ? endSelecting() : setSelecting(true))}>{selecting ? "Cancel selection" : "Select"}</button>
+      </div>
+      <div className="chips views" role="group" aria-label="Smart views">
+        {SMART_VIEWS.map(([key, text]) => (
+          <button key={key} type="button" className={`chip ${view === key ? "active" : ""}`} aria-pressed={view === key} onClick={() => setView(key)}>
+            {text}{key !== "all" && viewCounts[key] > 0 && <span className="count">{viewCounts[key]}</span>}
+          </button>
+        ))}
       </div>
       {/* Filter toggles, not tabs: a group of pressed / not pressed buttons (A6.DU7). */}
       <div className="chips" role="group" aria-label="Filter by device">
@@ -373,6 +417,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       )}
       <div className="library">
         <div className="list" data-testid="library-list">
+          {selecting && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} />}
           <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />
           {found.length > 0 && (
             <div className="group search-hits" role="region" aria-label="Matches in transcripts">
@@ -393,7 +438,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             </div>
           )}
           {filtered.length === 0 && (
-            <div className="empty">{query || source !== "all" || tag !== null ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
+            <div className="empty">{view === "waiting" ? "Nothing is waiting here. Recordings waiting for Keep or Discard on this computer are listed at the top." : query || source !== "all" || tag !== null || label !== null || folder !== null || view !== "all" ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
           )}
           {groups.map((group) => (
             <div key={group.label ?? "all"} className="group">
@@ -401,16 +446,19 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               {group.items.map((item) => {
                 const state = itemState(item);
                 return (
-                  <button key={item.id} type="button" className={`item ${item.id === selected ? "selected" : ""}`} aria-current={item.id === selected ? "true" : undefined} onClick={() => setSelected(item.id)}>
+                  <button key={item.id} type="button" className={`item ${item.id === selected ? "selected" : ""} ${selecting && picked.has(item.id) ? "picked" : ""}`}
+                    aria-current={!selecting && item.id === selected ? "true" : undefined} aria-pressed={selecting ? picked.has(item.id) : undefined}
+                    onClick={() => (selecting ? togglePicked(item.id) : setSelected(item.id))}>
                     <div className="row">
                       <span className={`avatar ${item.source_device ?? "web"}`}><SourceAppIcon app={item.source_app} size={18} /></span>
                       <div className="item-main">
-                        <div className="item-title">{item.title}</div>
+                        <div className="item-title">{item.pinned && <span className="pin-star" aria-label="Pinned">★ </span>}{item.title}</div>
                         <div className="small muted">{formatWhen(item.started_at)}{item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ""}{item.client ? ` · ${item.client.name}` : ""}{item.marker_count ? ` · ${item.marker_count} bookmark${item.marker_count === 1 ? "" : "s"}` : ""}</div>
                       </div>
                       <span className={`pill ${state}`}>{STATE_LABEL[state]}</span>
                     </div>
                     {item.transcript?.preview && <div className="item-preview">{item.transcript.preview}</div>}
+                    {(item.labels ?? []).length > 0 && <div className="item-labels">{item.labels!.map((l) => <span key={l} className="label-chip small">{l}</span>)}</div>}
                   </button>
                 );
               })}
@@ -430,6 +478,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               </div>
               <h2 className="detail-title">{current.title}</h2>
               <div className="small muted">{formatWhen(current.started_at)} · {formatDuration(current.duration_ms)}{current.client ? ` · ${current.client.name}` : ""}</div>
+              <OrganisePanel item={current} clients={folders} knownLabels={labels} notify={notify} onClientCreated={addClient} />
               {playbackUrl && (
                 <audio ref={audioRef} className="player" controls preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} onError={onPlaybackError} onLoadedMetadata={onLoaded} data-testid="player" />
               )}

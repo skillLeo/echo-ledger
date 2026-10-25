@@ -254,6 +254,41 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `PATCH /api/sessions/{id}` (since v1.1): title, client folder, pin or labels; returns the library item.
+    pub async fn update_session(&self, id: &str, patch: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.patch(self.url(&format!("sessions/{id}"))))?.json(patch).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/sessions/bulk` (since v1.1): one action for many recordings; returns `{"changed": n}`.
+    pub async fn bulk_sessions(&self, ids: &[String], action: &str, client_id: Option<&str>, label: Option<&str>) -> AppResult<serde_json::Value> {
+        let body = json!({ "ids": ids, "action": action, "client_id": client_id, "label": label });
+        let resp = self.authed(self.http.post(self.url("sessions/bulk")))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/sessions/export` (since v1.1): the finished transcripts of many recordings in one zip file.
+    pub async fn export_sessions(&self, ids: &[String], format: &str) -> AppResult<(Vec<u8>, String)> {
+        let resp = self.authed(self.http.post(self.url("sessions/export")))?.json(&json!({ "ids": ids, "format": format })).send().await?;
+        if !resp.status().is_success() {
+            return Err(Self::error(resp).await);
+        }
+        let disposition = resp.headers().get(reqwest::header::CONTENT_DISPOSITION).and_then(|v| v.to_str().ok()).unwrap_or_default().to_string();
+        let bytes = resp.bytes().await?.to_vec();
+        Ok((bytes, filename_from_disposition(&disposition).unwrap_or_else(|| "EchoLedger transcripts.zip".to_string())))
+    }
+
+    /// `POST /api/clients` (since v1.1): a new client folder.
+    pub async fn create_client(&self, body: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url("clients")))?.json(body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/clients/{id}` (since v1.1): rename, colour, avatar or pin a client folder.
+    pub async fn update_client(&self, id: &str, body: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.patch(self.url(&format!("clients/{id}"))))?.json(body).send().await?;
+        Self::parse(resp).await
+    }
     /// `GET /api/sessions/{id}/shares`.
     pub async fn list_shares(&self, session_id: &str) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.get(self.url(&format!("sessions/{session_id}/shares"))))?.send().await?;

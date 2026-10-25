@@ -662,6 +662,92 @@ pub async fn export_transcript(app: AppHandle, id: String, format: String, times
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
+pub const SESSION_PATCH_KEYS: [&str; 4] = ["title", "client_id", "pinned", "labels"];
+pub const CLIENT_PATCH_KEYS: [&str; 4] = ["name", "color", "avatar", "pinned"];
+pub const BULK_ACTIONS: [&str; 6] = ["move", "label", "unlabel", "pin", "unpin", "delete"];
+pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
+/// The server takes at most this many recordings per bulk action.
+pub const MAX_BULK: usize = 200;
+
+/// Keeps only the allowed keys of a patch.
+pub fn allowed_patch(patch: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> serde_json::Map<String, serde_json::Value> {
+    patch.iter().filter(|(k, _)| keys.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect()
+}
+
+/// Checks a bulk request before it goes to the server: a known action, 1-200 recordings, a label when needed.
+pub fn check_bulk(ids: &[String], action: &str, label: Option<&str>) -> AppResult<()> {
+    if !BULK_ACTIONS.contains(&action) {
+        return Err(AppError::msg("That action is not available."));
+    }
+    if ids.is_empty() || ids.len() > MAX_BULK {
+        return Err(AppError::msg(format!("Choose between 1 and {MAX_BULK} recordings.")));
+    }
+    if matches!(action, "label" | "unlabel") && label.is_none_or(|l| l.trim().is_empty()) {
+        return Err(AppError::msg("Type a label first."));
+    }
+    Ok(())
+}
+
+/// Pins, labels, renames or moves one recording, then refreshes the library so every view shows the change.
+#[tauri::command]
+pub async fn session_organise(app: AppHandle, id: String, patch: serde_json::Map<String, serde_json::Value>) -> AppResult<serde_json::Value> {
+    let patch = allowed_patch(&patch, &SESSION_PATCH_KEYS);
+    if patch.is_empty() {
+        return Err(AppError::msg("Nothing to change."));
+    }
+    let item = app.state::<AppState>().api()?.update_session(&id, &serde_json::Value::Object(patch)).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(item)
+}
+
+/// One action for the selected recordings (move, label, unlabel, pin, unpin, delete); returns how many changed.
+#[tauri::command]
+pub async fn sessions_bulk(app: AppHandle, ids: Vec<String>, action: String, client_id: Option<String>, label: Option<String>) -> AppResult<u64> {
+    check_bulk(&ids, &action, label.as_deref())?;
+    let answer = app.state::<AppState>().api()?.bulk_sessions(&ids, &action, client_id.as_deref(), label.as_deref()).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(answer.get("changed").and_then(serde_json::Value::as_u64).unwrap_or(0))
+}
+
+/// Saves the finished transcripts of the selected recordings as one zip file in Downloads; returns its path.
+#[tauri::command]
+pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -> AppResult<String> {
+    if !BULK_EXPORT_FORMATS.contains(&format.as_str()) {
+        return Err(AppError::msg("That export format is not available."));
+    }
+    if ids.is_empty() || ids.len() > MAX_BULK {
+        return Err(AppError::msg(format!("Choose between 1 and {MAX_BULK} recordings.")));
+    }
+    let state = app.state::<AppState>();
+    let (bytes, filename) = state.api()?.export_sessions(&ids, &format).await?;
+    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+    let path = export_target(&dir, &filename);
+    std::fs::write(&path, bytes)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// A new client folder.
+#[tauri::command]
+pub async fn client_create(state: State<'_, AppState>, name: String, color: Option<String>, avatar: Option<String>) -> AppResult<serde_json::Value> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::msg("Give the client a name."));
+    }
+    state.api()?.create_client(&serde_json::json!({ "name": name, "color": color, "avatar": avatar })).await
+}
+
+/// Renames, recolours, sets the avatar of or pins a client folder.
+#[tauri::command]
+pub async fn client_update(app: AppHandle, id: String, patch: serde_json::Map<String, serde_json::Value>) -> AppResult<serde_json::Value> {
+    let patch = allowed_patch(&patch, &CLIENT_PATCH_KEYS);
+    if patch.is_empty() {
+        return Err(AppError::msg("Nothing to change."));
+    }
+    let client = app.state::<AppState>().api()?.update_client(&id, &serde_json::Value::Object(patch)).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(client)
+}
 #[tauri::command]
 pub async fn share_create(state: State<'_, AppState>, session_id: String, expires_in: u64, password: Option<String>, include_audio: bool) -> AppResult<serde_json::Value> {
     let password = password.filter(|p| !p.is_empty());

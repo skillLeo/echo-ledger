@@ -207,7 +207,7 @@ export interface LibraryItem {
   source_app?: string;
   source_app_label?: string;
   device?: { id: string; name: string } | null;
-  client?: { id: string; name: string } | null;
+  client?: { id: string; name: string; color?: string | null; avatar?: string | null } | null;
   title?: string;
   started_at?: string;
   duration_ms?: number | null;
@@ -215,6 +215,9 @@ export interface LibraryItem {
   /** Bookmarks on the recording and the distinct tags among them (since v1.1). */
   marker_count?: number;
   tags?: string[];
+  /** Pinned to the top and recording labels (since v1.1, B15). */
+  pinned?: boolean;
+  labels?: string[];
   transcript?: {
     final_status: string | null;
     final_transcript_id: string | null;
@@ -223,6 +226,25 @@ export interface LibraryItem {
     preview: string | null;
   };
 }
+
+/** A client folder (B15): `avatar` is one emoji or two letters; pinned folders come first. */
+export interface ClientFolder {
+  id: string;
+  name: string;
+  color?: string | null;
+  avatar?: string | null;
+  pinned?: boolean;
+  keyterm_count?: number;
+  session_count?: number;
+}
+export interface SessionOrganisePatch {
+  title?: string | null;
+  client_id?: string | null;
+  pinned?: boolean;
+  labels?: string[];
+}
+export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "delete";
+export type BulkExportFormat = "txt" | "md" | "srt" | "vtt" | "json" | "docx";
 
 export interface Segment {
   channel: number;
@@ -448,7 +470,13 @@ export const api = {
   session: (id: string) => invoke<Record<string, unknown>>("session_detail", { id }),
   transcript: (id: string) => invoke<TranscriptDetail>("transcript_detail", { id }),
   deleteSession: (id: string) => invoke<void>("delete_session", { id }),
-  clients: () => invoke<{ data: { id: string; name: string; keyterm_count: number }[] }>("list_clients"),
+  clients: () => invoke<{ data: ClientFolder[] }>("list_clients"),
+  organiseSession: (id: string, patch: SessionOrganisePatch) => invoke<{ data: LibraryItem }>("session_organise", { id, patch }),
+  bulkSessions: (ids: string[], action: BulkAction, clientId: string | null = null, label: string | null = null) =>
+    invoke<number>("sessions_bulk", { ids, action, clientId, label }),
+  exportSessions: (ids: string[], format: BulkExportFormat) => invoke<string>("sessions_export", { ids, format }),
+  createClient: (name: string, color: string | null = null, avatar: string | null = null) => invoke<{ data: ClientFolder }>("client_create", { name, color, avatar }),
+  updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
   setHitRegions: (regions: RectPx[]) => invoke<void>("overlay_set_hit_regions", { regions }),
   snapOverlay: () => invoke<void>("overlay_snap"),
   pauseRecording: () => invoke<AppStatus>("pause_recording"),

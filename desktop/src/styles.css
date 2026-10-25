@@ -367,3 +367,21 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .flow-bar > span { display: block; height: 100%; background: var(--gradient); transition: width 0.1s linear; }
 @media (prefers-reduced-motion: reduce) { .flow-bar > span { transition: none; } }
 .dictation-snippet { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Library organisation (B15): smart views, labels, pins, folders and bulk actions. */
+.chips.views .count { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.chips.views .chip.active .count { color: var(--text); }
+.organise { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.organise .pinned { color: var(--warning); }
+.organise-field { gap: 6px; flex-wrap: wrap; }
+.chips.labels { margin: 0; }
+.label-chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; font-size: 12px; color: var(--muted); }
+.label-chip.small { font-size: 11px; padding: 1px 7px; }
+.chip-remove { border: 0; background: transparent; color: var(--faint); cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1; }
+.chip-remove:hover { color: var(--text); }
+.label-add .input { width: 130px; }
+.item-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.pin-star { color: var(--warning); }
+.item.picked { border-color: rgba(34, 211, 238, 0.7); box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.14); }
+.bulk-bar { position: sticky; top: 0; z-index: 2; margin-bottom: 10px; display: grid; gap: 8px; }
+.bulk-actions { display: grid; gap: 8px; }
