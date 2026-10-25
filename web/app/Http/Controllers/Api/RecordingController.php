@@ -69,7 +69,8 @@ final class RecordingController extends Controller
     public function audio(string $recording): BinaryFileResponse
     {
         $model = Recording::query()->findOrFail($recording);
-        abort_unless($model->isReady(), 404);
+        // A recording in the undo bin (B17) is not played, even through a link signed before the delete.
+        abort_unless($model->isReady() && ! $model->captureSession->trashed(), 404);
 
         return self::streamDecrypted($model);
     }

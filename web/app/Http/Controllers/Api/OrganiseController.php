@@ -28,6 +28,7 @@ final class OrganiseController extends Controller
             'title' => ['sometimes', 'nullable', 'string', 'max:200'],
             'client_id' => ['sometimes', 'nullable', 'string', 'size:26'],
             'pinned' => ['sometimes', 'boolean'],
+            'keep' => ['sometimes', 'boolean'],
             'labels' => ['sometimes', 'array', 'max:50'],
             'labels.*' => ['nullable', 'string', 'max:200'],
         ]);
@@ -35,7 +36,7 @@ final class OrganiseController extends Controller
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
-        /** @var array{title?: string|null, client_id?: string|null, pinned?: bool, labels?: list<mixed>} $data */
+        /** @var array{title?: string|null, client_id?: string|null, pinned?: bool, keep?: bool, labels?: list<mixed>} $data */
         $session = $this->organiser->update($session, $data);
         $session->load(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels']);
 
@@ -126,6 +127,7 @@ final class OrganiseController extends Controller
             'color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'avatar' => ['sometimes', 'nullable', 'string', 'max:16'],
             'pinned' => ['sometimes', 'boolean'],
+            'retention_days' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:365'],
         ];
     }
 
@@ -147,6 +149,9 @@ final class OrganiseController extends Controller
         }
         if (array_key_exists('pinned', $data)) {
             $values['pinned'] = (bool) $data['pinned'];
+        }
+        if (array_key_exists('retention_days', $data)) {
+            $values['retention_days'] = $data['retention_days'] === null ? null : (int) $data['retention_days'];
         }
 
         return $values;

@@ -105,6 +105,12 @@ function produceError(object $test, string $code): TestResponse
             return $test->postJson('/api/recordings/'.$created->json('recordings.0.id').'/complete');
         case 'verification_failed':
             return $test->uploadRecording($test->bytes, [], ['sha256' => str_repeat('0', 64)])['complete'];
+        case 'restore_expired':
+            $gone = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
+            $gone->delete();
+            CaptureSession::onlyTrashed()->whereKey($gone->id)->update(['deleted_at' => now()->subHours(49)]);
+
+            return $test->postJson("/api/sessions/{$gone->id}/restore");
         case 'device_not_found':
             return $test->deleteJson('/api/devices/'.ENVELOPE_MISSING_ID);
         case 'current_device':
@@ -154,7 +160,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(26);
+        ->and(count(documentedErrorCodes()))->toBe(27);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

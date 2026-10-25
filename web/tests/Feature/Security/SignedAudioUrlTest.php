@@ -129,7 +129,7 @@ it('accepts the link right up to the expiry boundary and not after', function ()
     $this->api(null, false)->get($url)->assertForbidden();
 });
 
-it('stops serving a link after the session is deleted and the file is erased', function () {
+it('stops serving a link as soon as the session is deleted, and the file is erased when the undo bin ends', function () {
     [$url, $recording, , $token] = secPlayback();
     $this->api(null, false)->get($url)->assertOk();
     $path = $recording->stored_path;
@@ -137,6 +137,8 @@ it('stops serving a link after the session is deleted and the file is erased', f
     $this->api($token)->deleteJson('/api/sessions/'.$recording->capture_session_id)->assertNoContent();
 
     $this->api(null, false)->get($url)->assertNotFound();
+    Storage::disk('recordings')->assertExists($path);
+    emptyUndoBin();
     Storage::disk('recordings')->assertMissing($path);
 });
 

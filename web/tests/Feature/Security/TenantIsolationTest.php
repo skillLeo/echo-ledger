@@ -178,17 +178,20 @@ it('treats a deleted session as gone for every route, including for its owner', 
     $this->api($t['bobToken'])->postJson("/api/sessions/{$sid}/transcripts", ['kind' => 'live', 'provider' => 'x', 'segments' => Fx::segments('late')])->assertNotFound();
     $this->api($t['bobToken'])->deleteJson("/api/sessions/{$sid}")->assertNotFound();
 
+    emptyUndoBin();
     expect(Recording::query()->where('capture_session_id', $sid)->count())->toBe(0)
         ->and(Transcript::query()->where('capture_session_id', $sid)->count())->toBe(0);
 });
 
-it('erases the encrypted file from disk when a session is deleted', function () {
+it('erases the encrypted file from disk when the undo bin of a deleted session ends', function () {
     $t = secTenants();
     $path = $t['bobAudio']->stored_path;
     Storage::disk('recordings')->assertExists($path);
 
     $this->api($t['bobToken'])->deleteJson('/api/sessions/'.$t['bobSession']->id)->assertNoContent();
+    Storage::disk('recordings')->assertExists($path);
 
+    emptyUndoBin();
     Storage::disk('recordings')->assertMissing($path);
 });
 

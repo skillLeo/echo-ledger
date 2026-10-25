@@ -50,10 +50,12 @@ reconciler and the 30-day retention cleanup.
 The scheduler (`routes/console.php`) runs:
 - `queue:work --stop-when-empty --max-time=55 --tries=3 --timeout=900` every minute (`withoutOverlapping(15)`)
 - `stt:reconcile` every 5 minutes (recovers missed webhooks, retries provider-side deletes)
-- `model:prune` daily (deletes recordings, transcripts, webhook events and tombstones older than the retention days)
+- `recordings:retention` hourly (recordings past their retention go to the 48-hour undo bin; the bin erases what has
+  waited 48 hours) and `model:prune` daily (webhook events, old tombstones and other expired rows)
 - `sanctum:prune-expired --hours=24` daily
 
-Check what retention would delete without deleting: `php artisan model:prune --pretend`.
+Check what the daily clean-up would delete without deleting: `php artisan model:prune --pretend`. Deleted recordings can
+be restored from the console's Recently deleted page for 48 hours.
 `--timeout` is enforced only when `pcntl` exists; every provider HTTP call also has its own timeout.
 
 ## Provider dashboards

@@ -44,6 +44,8 @@ use Illuminate\Support\Carbon;
  * @property-read Collection<int, SessionMarker> $markers
  * @property SessionStatus $status
  * @property bool $pinned kept at the top of the library (B15)
+ * @property bool $keep_forever never deleted by the retention rules (B17)
+ * @property Carbon|null $media_erased_at when a deleted recording's audio and text were erased (end of the undo bin)
  * @property-read Collection<int, SessionLabel> $labels
  * @property string|null $final_provider
  * @property Carbon $created_at
@@ -60,7 +62,7 @@ class CaptureSession extends Model
 
     protected $fillable = [
         'user_id', 'device_id', 'client_id', 'client_ref', 'source_device', 'source_app', 'title', 'language',
-        'started_at', 'ended_at', 'duration_ms', 'pauses', 'speaker_names', 'status', 'pinned', 'final_provider',
+        'started_at', 'ended_at', 'duration_ms', 'pauses', 'speaker_names', 'status', 'pinned', 'keep_forever', 'final_provider',
     ];
 
     /** @return BelongsTo<User, $this> */
@@ -170,18 +172,40 @@ class CaptureSession extends Model
      *
      * @return Builder<self>
      */
+    /**
+     * Tombstones whose media is gone are kept for the retention period (devices still sync the deletion), then
+     * removed. Live recordings past their retention go to the undo bin first: see App\Services\RetentionPolicy.
+     *
+     * @return Builder<CaptureSession>
+     */
     public function prunable(): Builder
     {
         $cutoff = now()->subDays(app(SettingsRepository::class)->retentionDays());
 
-        return static::withTrashed()->where(fn (Builder $q) => $q
-            ->where(fn (Builder $live) => $live->whereNull('deleted_at')->where('created_at', '<', $cutoff))
-            ->orWhere(fn (Builder $gone) => $gone->whereNotNull('deleted_at')->where('deleted_at', '<', $cutoff)));
+        return static::onlyTrashed()->whereNotNull('media_erased_at')->where('deleted_at', '<', $cutoff);
     }
 
     protected function pruning(): void
     {
         $this->eraseMedia();
+    }
+
+    /** Hours a deleted recording waits in the undo bin before its audio and text are erased (B17). */
+    public const BIN_HOURS = 48;
+
+    /** In the undo bin: deleted, media not erased yet, and still within the 48 hours. */
+    public function restorable(): bool
+    {
+        return $this->trashed() && $this->media_erased_at === null && $this->deleted_at !== null
+            && $this->deleted_at->gt(now()->subHours(self::BIN_HOURS));
+    }
+
+    /** End of the undo bin: the audio and text go for good; the tombstone stays for syncing. */
+    public function purgeMedia(): void
+    {
+        $this->recordings()->get()->each(fn (Recording $r) => $r->delete());
+        $this->transcripts()->get()->each(fn (Transcript $t) => $t->delete());
+        $this->forceFill(['media_erased_at' => now()])->saveQuietly();
     }
 
     /**
@@ -197,10 +221,17 @@ class CaptureSession extends Model
 
     protected static function booted(): void
     {
-        // A user/device delete (tombstone) erases audio and text immediately for privacy.
+        // A delete (tombstone) erases the provider's copy at once; our own encrypted copy waits 48 hours in the undo
+        // bin (B17), then RetentionPolicy::emptyBin() erases it.
         static::deleting(function (CaptureSession $session): void {
             if (! $session->isForceDeleting()) {
-                $session->eraseMedia();
+                app(ProviderCopyEraser::class)->eraseFor($session);
+            }
+        });
+        // Still recording or uploading: nothing finished to restore, so the partial audio goes at once.
+        static::deleted(function (CaptureSession $session): void {
+            if (! $session->isForceDeleting() && in_array($session->status, [SessionStatus::Recording, SessionStatus::Uploading], true)) {
+                $session->purgeMedia();
             }
         });
     }
@@ -218,6 +249,8 @@ class CaptureSession extends Model
             'pauses' => 'array',
             'speaker_names' => 'array',
             'pinned' => 'boolean',
+            'keep_forever' => 'boolean',
+            'media_erased_at' => 'datetime',
         ];
     }
 }

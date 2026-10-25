@@ -37,7 +37,10 @@ final class SttWebhookController extends Controller
             return response()->json(['message' => 'Invalid signature.', 'code' => 'invalid_signature'], 401);
         }
 
-        $transcript = $envelope->transcriptRef ? Transcript::query()->find($envelope->transcriptRef) : null;
+        // A recording in the undo bin (B17) takes no provider results: its provider copy was erased on delete.
+        $transcript = $envelope->transcriptRef
+            ? Transcript::query()->whereHas('captureSession', fn ($q) => $q->whereNull('deleted_at'))->find($envelope->transcriptRef)
+            : null;
         if ($transcript === null || $transcript->provider !== $key->value) {
             return response()->json(['received' => true, 'ignored' => 'unknown transcript']); // 2xx: never retry
         }

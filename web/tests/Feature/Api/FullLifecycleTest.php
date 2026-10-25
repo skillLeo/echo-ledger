@@ -119,13 +119,14 @@ describe('a phone call transcribed by AssemblyAI', function () {
         $partial->assertStatus(206);
         expect($partial->streamedContent())->toBe(substr($bytes, 5242870, 20));
 
-        // 10. The laptop deletes the call; the phone learns about it on its next sync and everything is erased.
+        // 10. The laptop deletes the call; the phone learns about it on its next sync; the undo bin then erases it all.
         $syncPoint = $this->asToken($phone)->getJson('/api/library')->json('server_time');
         $this->travel(2)->seconds();
         $this->asToken($laptop)->deleteJson("/api/sessions/{$sessionId}")->assertNoContent();
         $this->travel(2)->seconds();
         $tombstones = $this->asToken($phone)->getJson('/api/library?since='.urlencode($syncPoint))->assertOk()->json('data');
         expect($tombstones)->toHaveCount(1)->and($tombstones[0]['id'])->toBe($sessionId)->and($tombstones[0]['deleted'])->toBeTrue();
+        emptyUndoBin();
         expect(Recording::query()->count())->toBe(0)->and(Transcript::query()->count())->toBe(0)->and(Storage::disk('recordings')->allFiles())->toBe([]);
 
         // 11. The phone's token is rotated and the old one stops working at once.

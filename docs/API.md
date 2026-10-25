@@ -61,6 +61,7 @@ Every addition below is marked **(since v1.1)**.
 | 409 | `too_many_open_sessions` | 10 or more sessions of this device are still `recording` | Finish or discard them, then retry |
 | 409 | `current_device` | `DELETE devices/{id}` for the device making the request | Unpair from the device's own settings |
 | 409 | `nothing_to_export` | `sessions/export`: none of the chosen recordings has a finished transcript | Permanent for those recordings |
+| 410 | `restore_expired` | `sessions/{id}/restore` after the 48-hour undo bin ended | Permanent: the recording is gone |
 | 413 | `too_large` | Body or declared size above the limit | Permanent |
 | 422 | `validation_failed` | Field errors in `errors` | Permanent for that request |
 | 422 | `session_required` | `stt/token` for `live_captions` without `session_id` | Open a session first (v1.1 clients); v1 clients lose captions only |
@@ -170,7 +171,7 @@ abilities of the token that asked for it, never more **(since v1.1)**.
     new final transcripts fail with `error_code` `budget_exceeded`. Both are `false` when no limit is set.
 
 ### `GET /api/clients` — `library:read`
-`200 {"data": [{"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH", "pinned": true, "keyterm_count": 12, "session_count": 40, "updated_at": "…"}]}`
+`200 {"data": [{"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH", "pinned": true, "retention_days": null, "keyterm_count": 12, "session_count": 40, "updated_at": "…"}]}`
 
 Pinned folders come first, then by name. `avatar` (one emoji or up to two letters), `pinned` and `session_count`
 are since v1.1; client folders are created and changed with `POST /api/clients` and `PATCH /api/clients/{id}`
@@ -411,7 +412,7 @@ when `status=recording` is given).
     "title": "Zoom call", "started_at": "…", "ended_at": "…", "duration_ms": 2530000, "status": "completed",
     "transcript": {"final_status": "completed", "final_transcript_id": "01JB…", "live_available": true,
                    "live_transcript_id": "01JB…", "preview": "first 160 characters…"},
-    "marker_count": 2, "tags": ["Budget"], "pinned": false, "labels": ["Invoice"],
+    "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"],
     "updated_at": "…"},
    {"id": "01JC…", "client_ref": "9a1d…", "deleted": true, "updated_at": "…"}
  ],
@@ -445,12 +446,12 @@ Counts match what `GET /api/library?view=…` lists.
 
 ### `PATCH /api/sessions/{id}` — `sessions:write` (since v1.1)
 Body, every field optional: `title` (≤ 200; empty clears it), `client_id` (a client of the owner, `null` = no
-client), `pinned` (boolean) and `labels` (the complete list: trimmed, single spaces, ≤ 40 characters, duplicates
+client), `pinned` (boolean), `keep` (boolean, since B17: never deleted by retention) and `labels` (the complete list: trimmed, single spaces, ≤ 40 characters, duplicates
 ignoring capitals and blanks dropped, at most 20 → else `422 too_many_labels`). Returns `200 {"data": <library item>}`.
 `404 session_not_found`; another owner's client is `404 client_not_found`.
 
 ### `POST /api/sessions/bulk` — `sessions:write` (since v1.1)
-`{"ids": ["01JB…"], "action": "move|label|unlabel|pin|unpin|delete", "client_id": "01JB…" | null, "label": "Invoice"}`.
+`{"ids": ["01JB…"], "action": "move|label|unlabel|pin|unpin|keep|unkeep|delete", "client_id": "01JB…" | null, "label": "Invoice"}`.
 Up to 200 ids; ids of other owners are ignored. `move` uses `client_id` (`null` = no client), `label` / `unlabel`
 need `label`, `delete` makes tombstones exactly like `DELETE /api/sessions/{id}`. `200 {"changed": 2}`.
 
@@ -464,7 +465,8 @@ transcript (names as in `GET /api/transcripts/{id}/export`, numbered when two ma
 required and unique per owner (≤ 120), `color` is `#rrggbb`, `avatar` keeps one emoji or two letters (upper case).
 
 ### `PATCH /api/clients/{id}` — `sessions:write` (since v1.1)
-Any of `name`, `color`, `avatar`, `pinned` → `200 {"data": <client>}`; `404 client_not_found`.
+Any of `name`, `color`, `avatar`, `pinned`, `retention_days` (1-365, `null` = the general setting) →
+`200 {"data": <client>}`; `404 client_not_found`.
 ### `GET /api/search` — `library:read`, throttled (60/min/device) (since v1.1)
 Searches titles and transcript text (final and live) of every device. Query: `q` (2–200 characters; every word
 must match, `"quoted phrases"` stay together, case does not matter), and the optional filters `client_id`,
@@ -586,8 +588,30 @@ duplicate is not added twice). Terms are at most 50 characters and 5 words; 200 
 `{"from": "acme limited", "to": "Acme Ltd", "match_case": false, "whole_word": true, "client_id": "optional"}` →
 `201 {"replacements": [...]}`. The newest rule comes first; at most 200 rules of 100 characters each.
 
+### Retention and the undo bin (since v1.1)
+Recordings older than their retention (the client's `retention_days`, else the general setting: 7, 14, 30 or a custom
+1-365 days) move to the undo bin every hour, unless `keep` is set or they are still recording. A delete, by a device,
+the console or retention, makes a tombstone at once (devices sync it as before) and erases the provider's copy; the
+encrypted audio and the transcripts stay **48 hours** in the bin, unplayable and unshared, then are erased. A
+recording deleted while still recording or uploading is erased at once.
+
+### `GET /api/bin` — `library:read` (since v1.1)
+`200 {"data": [{"id": "01JB…", "title": "Zoom call", "client": null, "started_at": "…", "duration_ms": 2530000,
+"deleted_at": "…", "erase_at": "…"}]}`: the owner's binned recordings, most recently deleted first.
+
+### `POST /api/sessions/{id}/restore` — `sessions:write` (since v1.1)
+Takes a recording out of the bin: `200 {"data": <library item>}` with a new `updated_at`, so every device brings it
+back on its next sync. `410 restore_expired` after the 48 hours; `404 session_not_found` for anything else.
+
+### `DELETE /api/bin/{id}` — `sessions:write` (since v1.1)
+Erases a binned recording now instead of after 48 hours. `204`.
+
+### `GET /api/storage` — `library:read` (since v1.1)
+`200 {"recordings_bytes": 51234567, "recordings_count": 42, "disk_free_bytes": 80123456789, "disk_total_bytes": 107374182400, "retention_days": 30}`.
+The disk fields are `null` when the server cannot read them.
 ### `DELETE /api/sessions/{id}` — `sessions:write`
-`204`. The session becomes a tombstone; its recordings (files) and transcripts are erased immediately. A provider
+`204`. The session becomes a tombstone at once; its recordings (files) and transcripts wait 48 hours in the undo bin
+(since v1.1, see "Retention and the undo bin"), unplayable and unshared, then are erased. A provider
 job still running for it is cancelled and its provider-side copy deleted, retried by `stt:reconcile` until the
 provider accepts **(since v1.1)**. Any device of the owner may delete. A repeated delete is
 `404 session_not_found`: clients treat it as done.

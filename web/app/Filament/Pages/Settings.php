@@ -9,6 +9,7 @@ use App\Enums\SttUseCase;
 use App\Models\User;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
+use App\Services\RetentionPolicy;
 use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
 use App\Services\TextReplacements;
@@ -28,6 +29,7 @@ use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use UnitEnum;
@@ -60,6 +62,7 @@ class Settings extends Page
         $all = $settings->all();
         $this->form->fill([
             'retention_days' => $all['retention_days'],
+            'retention_preset' => in_array((int) $all['retention_days'], RetentionPolicy::PRESETS, true) ? (string) $all['retention_days'] : 'custom',
             'provider_live_captions' => $all['provider.live_captions'],
             'provider_dictation' => $all['provider.dictation'],
             'provider_final_transcript' => $all['provider.final_transcript'],
@@ -143,9 +146,12 @@ class Settings extends Page
 
         return $schema->statePath('data')->components([
             Section::make('Retention & privacy')->columns(2)->schema([
-                TextInput::make('retention_days')->label('Delete recordings & transcripts after (days)')
+                Select::make('retention_preset')->label('Delete recordings & transcripts after')->live()->dehydrated(false)->selectablePlaceholder(false)
+                    ->options(['7' => '7 days', '14' => '14 days', '30' => '30 days', 'custom' => 'Custom'])
+                    ->afterStateUpdated(fn (?string $state, Set $set) => is_numeric($state) ? $set('retention_days', (int) $state) : null),
+                TextInput::make('retention_days')->label('Days')
                     ->numeric()->minValue(1)->maxValue(365)->required()
-                    ->helperText('Runs daily via model:prune. Default 30.'),
+                    ->helperText('Older recordings go to the 48-hour undo bin, then are erased. Kept recordings and clients with their own setting are exempt.'),
                 Select::make('default_language')->label('Default language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false)
                     ->helperText('Automatic suits most calls. “English + Urdu” is for calls that switch between the two. A client or recording can choose its own.'),
                 Select::make('display_timezone')->label('Time zone')

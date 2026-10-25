@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $color
  * @property string|null $avatar one emoji or up to two letters shown on the folder (B15)
  * @property bool $pinned listed first (B15)
+ * @property int|null $retention_days this client's recordings are deleted after these days; null = the general setting (B17)
  * @property string|null $language
  * @property string|null $notes
  * @property list<array<string, mixed>>|null $replacements text replacements applied to this client's final transcripts
@@ -30,7 +31,7 @@ class Client extends Model
     /** @use HasFactory<ClientFactory> */
     use HasFactory, HasUlids;
 
-    protected $fillable = ['user_id', 'name', 'color', 'avatar', 'pinned', 'language', 'notes', 'speaker_names', 'replacements'];
+    protected $fillable = ['user_id', 'name', 'color', 'avatar', 'pinned', 'language', 'retention_days', 'notes', 'speaker_names', 'replacements'];
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
@@ -59,6 +60,6 @@ class Client extends Model
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['speaker_names' => 'array', 'replacements' => 'array', 'pinned' => 'boolean'];
+        return ['speaker_names' => 'array', 'replacements' => 'array', 'pinned' => 'boolean', 'retention_days' => 'integer'];
     }
 }

@@ -34,21 +34,25 @@ function agedSession(object $test, int $days, array $attributes = []): CaptureSe
     return $session->refresh();
 }
 
+/** The scheduled clean-ups: retention moves old recordings to the undo bin (B17), model:prune drops old rows. */
 function prune(): void
 {
+    Artisan::call('recordings:retention');
     Artisan::call('model:prune');
 }
 
 describe('retention window', function () {
-    it('removes sessions, recordings, transcripts and files older than the retention and keeps newer ones', function () {
+    it('bins recordings older than the retention, erases them after 48 hours and keeps newer ones', function () {
         $old = agedSession($this, 40);
         $fresh = agedSession($this, 5);
         $oldPath = Recording::query()->where('capture_session_id', $old->id)->value('stored_path');
         $freshPath = Recording::query()->where('capture_session_id', $fresh->id)->value('stored_path');
 
         prune();
+        expect(CaptureSession::query()->find($old->id))->toBeNull()->and(CaptureSession::withTrashed()->find($old->id)->restorable())->toBeTrue();
+        emptyUndoBin();
 
-        expect(CaptureSession::withTrashed()->find($old->id))->toBeNull()
+        expect(CaptureSession::withTrashed()->find($old->id)->media_erased_at)->not->toBeNull()
             ->and(Recording::query()->where('capture_session_id', $old->id)->count())->toBe(0)
             ->and(Transcript::query()->where('capture_session_id', $old->id)->count())->toBe(0)
             ->and(Storage::disk('recordings')->exists($oldPath))->toBeFalse()
@@ -114,8 +118,10 @@ describe('retention window', function () {
 
         prune();
         prune();
+        emptyUndoBin();
+        emptyUndoBin();
 
-        expect(CaptureSession::withTrashed()->count())->toBe(0);
+        expect(CaptureSession::query()->count())->toBe(0)->and(CaptureSession::onlyTrashed()->count())->toBe(1)->and(Recording::query()->count())->toBe(0);
     });
 });
 
@@ -144,7 +150,7 @@ describe('tombstones', function () {
         $session = agedSession($this, 5);
         $session->delete();
         // Old by both measures: created and deleted well before the retention window.
-        CaptureSession::withTrashed()->whereKey($session->id)->update(['created_at' => now()->subDays(60), 'deleted_at' => now()->subDays(60)]);
+        CaptureSession::withTrashed()->whereKey($session->id)->update(['created_at' => now()->subDays(60), 'deleted_at' => now()->subDays(60), 'media_erased_at' => now()->subDays(58)]);
 
         prune();
 

@@ -65,6 +65,7 @@ final class LibraryItemResource extends JsonResource
             'marker_count' => $markers->count(),
             'tags' => $markers->pluck('tag')->filter()->unique()->values()->all(),
             'pinned' => (bool) $session->pinned,
+            'keep' => (bool) $session->keep_forever,
             'labels' => $session->labelList(),
             'updated_at' => $session->updated_at->toAtomString(),
         ];

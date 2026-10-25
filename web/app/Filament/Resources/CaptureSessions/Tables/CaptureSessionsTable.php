@@ -57,6 +57,9 @@ final class CaptureSessionsTable
                 IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)
                     ->trueColor('warning')->falseColor('gray')
                     ->action(fn (CaptureSession $record) => app(LibraryOrganiser::class)->update($record, ['pinned' => ! $record->pinned])),
+                IconColumn::make('keep_forever')->label('Keep')->boolean()->trueIcon(Heroicon::LockClosed)->falseIcon(Heroicon::OutlinedLockOpen)
+                    ->trueColor('success')->falseColor('gray')->tooltip('Kept recordings are never deleted automatically')->toggleable()
+                    ->action(fn (CaptureSession $record) => app(LibraryOrganiser::class)->update($record, ['keep' => ! $record->keep_forever])),
             ])
             ->filters([
                 SelectFilter::make('source_device')->label('Source device')->options(SourceDevice::class)->multiple(),
@@ -85,7 +88,7 @@ final class CaptureSessionsTable
                 ->label(fn (): string => 'Filters ('.$table->getActiveFiltersCount().' active)'))
             ->recordActions([
                 ViewAction::make(),
-                DeleteAction::make()->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
+                DeleteAction::make()->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for 48 hours.'),
             ])
             ->toolbarActions([BulkActionGroup::make([...self::bulkActions(), DeleteBulkAction::make()])])
             ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => match (true) {
@@ -135,6 +138,10 @@ final class CaptureSessionsTable
                 ->action(fn (Collection $records) => $run($records, 'pin'))->deselectRecordsAfterCompletion(),
             BulkAction::make('unpin')->label('Unpin')->icon(Heroicon::OutlinedMinusCircle)
                 ->action(fn (Collection $records) => $run($records, 'unpin'))->deselectRecordsAfterCompletion(),
+            BulkAction::make('keep')->label('Keep forever')->icon(Heroicon::OutlinedLockClosed)
+                ->action(fn (Collection $records) => $run($records, 'keep'))->deselectRecordsAfterCompletion(),
+            BulkAction::make('unkeep')->label('Stop keeping')->icon(Heroicon::OutlinedLockOpen)
+                ->action(fn (Collection $records) => $run($records, 'unkeep'))->deselectRecordsAfterCompletion(),
             BulkAction::make('export')->label('Export transcripts')->icon(Heroicon::OutlinedArrowDownTray)
                 ->schema([Select::make('format')->label('Format')->required()->default('docx')->selectablePlaceholder(false)
                     ->options(['docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Web subtitles (.vtt)', 'json' => 'JSON'])])

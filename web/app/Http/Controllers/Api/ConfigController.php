@@ -46,6 +46,7 @@ final class ConfigController extends Controller
             'color' => $client->color,
             'avatar' => $client->avatar,
             'pinned' => (bool) $client->pinned,
+            'retention_days' => $client->retention_days,
             'keyterm_count' => (int) $client->getAttribute('keyterms_count'),
             'session_count' => (int) $client->getAttribute('capture_sessions_count'),
             'updated_at' => $client->updated_at?->toAtomString(),

@@ -351,7 +351,7 @@ it('rolls the date forward when the configured zone is past midnight', function 
     $this->panelComponent(ListCaptureSessions::class)->assertSee('Oct 25, 2026 · 1:30 AM');
 });
 
-it('deletes a session from the list, erasing its audio and transcript and leaving a tombstone', function () {
+it('deletes a session from the list into the undo bin, then erases its audio and transcript, leaving a tombstone', function () {
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello']]);
     $recording = $this->readyRecording($session);
@@ -362,7 +362,9 @@ it('deletes a session from the list, erasing its audio and transcript and leavin
         ->callAction(TestAction::make(DeleteAction::class)->table($session));
 
     expect(CaptureSession::query()->find($session->id))->toBeNull()
-        ->and(CaptureSession::withTrashed()->find($session->id)?->deleted_at)->not->toBeNull()
+        ->and(CaptureSession::withTrashed()->find($session->id)?->restorable())->toBeTrue();
+    emptyUndoBin();
+    expect(CaptureSession::withTrashed()->find($session->id)?->deleted_at)->not->toBeNull()
         ->and(Recording::query()->count())->toBe(0)
         ->and(Transcript::query()->count())->toBe(0)
         ->and(Storage::disk('recordings')->exists($path))->toBeFalse();

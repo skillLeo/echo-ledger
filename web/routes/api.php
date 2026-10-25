@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\BinController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController;
@@ -57,6 +58,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('clients', [OrganiseController::class, 'storeClient'])->name('api.clients.store');
             Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->name('api.clients.update');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
+            Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->name('api.sessions.restore');
+            Route::delete('bin/{id}', [BinController::class, 'destroy'])->name('api.bin.destroy');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
             Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->name('api.sessions.markers.destroy');
             Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');
@@ -72,6 +75,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
         Route::middleware('abilities:library:read')->group(function (): void {
             Route::get('library', [LibraryController::class, 'index'])->name('api.library');
             Route::get('library/views', [OrganiseController::class, 'views'])->name('api.library.views');
+            Route::get('bin', [BinController::class, 'index'])->name('api.bin');
+            Route::get('storage', [BinController::class, 'storage'])->name('api.storage');
             Route::post('sessions/export', [OrganiseController::class, 'export'])->name('api.sessions.export');
             Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');

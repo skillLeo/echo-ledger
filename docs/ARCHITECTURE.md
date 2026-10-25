@@ -212,8 +212,9 @@ Each client caches the library:
 - **Desktop:** in its app data directory.
 - **Android:** in an encrypted file in no-backup storage.
 
-Deleting a session from any device makes it disappear everywhere after the next sync. The server deletes the
-files and transcripts immediately; the tombstone row is pruned later.
+Deleting a session from any device makes it disappear everywhere after the next sync. The server keeps the encrypted
+files and transcripts 48 hours in the undo bin (restorable, never played or shared), then erases them; the tombstone
+row is pruned later.
 
 ## Audio pipelines
 
@@ -284,7 +285,7 @@ from the app, a notification action, the home-screen widget or the Quick Setting
 | API access | Sanctum tokens with per-route abilities. Named rate limiters: `pairing`, `device`, `uploads`, `stt-token`, `webhooks`. The only unauthenticated routes are pairing, signature-checked webhooks and signed audio URLs. |
 | Uploads | MIME allowlist, size cap (2 GiB by default), per-chunk and whole-file SHA-256. Files are stored under server-generated ULID paths. |
 | Playback | The console streams decrypted audio over a session-authenticated, super-admin-only, owner-scoped route with HTTP Range support. Devices use temporary signed URLs. |
-| Retention | `Prunable` models delete recordings, transcripts, webhook payloads and tombstones after the configured number of days (30 by default, 1–365). Files are deleted with their rows. Provider copies are deleted as soon as a transcript is stored. |
+| Retention | Hourly `recordings:retention`: recordings past their retention (the client's own, else 7 / 14 / 30 / custom days) go to the 48-hour undo bin unless kept; the bin then erases audio and transcripts. Provider copies are deleted as soon as a transcript is stored or the recording is deleted. `Prunable` models remove webhook payloads and old tombstones. |
 | Privacy | No analytics, telemetry or crash-reporting SDKs in any application. A visible indicator is shown whenever capture is active. |
 
 ## Background processing on shared hosting
@@ -296,6 +297,7 @@ minute:
 |---|---|
 | Every minute | `queue:work --stop-when-empty --max-time=55` (database queue, `withoutOverlapping`) |
 | Every 5 minutes | `stt:reconcile`, which recovers jobs whose webhook was missed |
-| Daily | `model:prune` (retention) and `sanctum:prune-expired` |
+| Hourly | `recordings:retention` (retention and the undo bin) |
+| Daily | `model:prune` and `sanctum:prune-expired` |
 
 See [`web/DEPLOY.md`](../web/DEPLOY.md) for the cron line and PHP limits.

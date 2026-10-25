@@ -25,7 +25,7 @@ final class LibraryOrganiser
 {
     public const VIEWS = ['today', 'this_week', 'waiting', 'bookmarked', 'failed', 'pinned'];
 
-    public const BULK_ACTIONS = ['move', 'label', 'unlabel', 'pin', 'unpin', 'delete'];
+    public const BULK_ACTIONS = ['move', 'label', 'unlabel', 'pin', 'unpin', 'keep', 'unkeep', 'delete'];
 
     public const EXPORT_FORMATS = ['txt', 'md', 'srt', 'vtt', 'json', 'docx'];
 
@@ -112,7 +112,7 @@ final class LibraryOrganiser
     /**
      * Applies a single-recording change: title, client folder, pin and the full list of labels.
      *
-     * @param  array{title?: string|null, client_id?: string|null, pinned?: bool, labels?: list<mixed>}  $data
+     * @param  array{title?: string|null, client_id?: string|null, pinned?: bool, keep?: bool, labels?: list<mixed>}  $data
      */
     public function update(CaptureSession $session, array $data): CaptureSession
     {
@@ -126,6 +126,9 @@ final class LibraryOrganiser
             }
             if (array_key_exists('pinned', $data)) {
                 $session->pinned = (bool) $data['pinned'];
+            }
+            if (array_key_exists('keep', $data)) {
+                $session->keep_forever = (bool) $data['keep'];
             }
             if (array_key_exists('labels', $data)) {
                 $this->replaceLabels($session, $data['labels']);
@@ -180,6 +183,8 @@ final class LibraryOrganiser
                     'move' => $session->client_id = $client?->id,
                     'pin' => $session->pinned = true,
                     'unpin' => $session->pinned = false,
+                    'keep' => $session->keep_forever = true,
+                    'unkeep' => $session->keep_forever = false,
                     'label' => $this->addLabel($session, (string) $label),
                     'unlabel' => $session->labels()->whereRaw('LOWER(label) = ?', [mb_strtolower((string) $label)])->delete(),
                     default => null,

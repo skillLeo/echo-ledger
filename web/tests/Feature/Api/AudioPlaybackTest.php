@@ -314,6 +314,7 @@ describe('who can obtain a URL', function () {
         expect(Storage::disk('recordings')->exists($path))->toBeTrue();
 
         $this->asToken($this->token)->deleteJson("/api/sessions/{$this->flow['session']}")->assertNoContent();
+        emptyUndoBin();
 
         expect(Storage::disk('recordings')->exists($path))->toBeFalse();
     });

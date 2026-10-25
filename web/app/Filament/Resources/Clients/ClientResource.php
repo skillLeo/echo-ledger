@@ -10,6 +10,7 @@ use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Models\Client;
+use App\Services\SettingsRepository;
 use App\Services\TextReplacements;
 use App\Stt\LanguageChoice;
 use BackedEnum;
@@ -69,6 +70,9 @@ class ClientResource extends Resource
                     ->formatStateUsing(fn (?string $state): string => LanguageChoice::normalize($state) ?? '')
                     ->dehydrateStateUsing(fn (?string $state): ?string => LanguageChoice::normalize($state))
                     ->helperText('Used for this client’s recordings unless a recording chooses its own. Automatic suits mixed-language calls.'),
+                TextInput::make('retention_days')->label('Delete this client’s recordings after (days)')->numeric()->minValue(1)->maxValue(365)->nullable()
+                    ->placeholder(fn (): string => 'General setting: '.app(SettingsRepository::class)->retentionDays().' days')
+                    ->helperText('Empty uses the general setting. 7, 14 or 30 days are common.'),
                 Textarea::make('notes')->rows(3)->maxLength(2000)->columnSpanFull(),
             ]),
             Section::make('Corrections')->description('Applied to every new final transcript of this client, before the general ones in Settings.')

@@ -23,6 +23,7 @@ Schedule::command('recordings:recover')->everyFiveMinutes()->withoutOverlapping(
 // Open sessions (status "recording") never finished within 6 hours become tombstones.
 Schedule::command('sessions:sweep-open')->everyFifteenMinutes()->withoutOverlapping(10);
 
+Schedule::command('recordings:retention')->hourly()->withoutOverlapping(30);
 Schedule::command('model:prune')->daily()->withoutOverlapping(60);
 
 Schedule::command('sanctum:prune-expired --hours=24')->daily();

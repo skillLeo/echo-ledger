@@ -39,13 +39,18 @@ describe('deleting a finished session', function () {
         expect($response->getContent())->toBe('');
     });
 
-    it('turns the session into a tombstone and erases its recordings, transcripts and files at once', function () {
+    it('turns the session into a tombstone, keeps its files 48 hours in the undo bin, then erases everything', function () {
         expect(Storage::disk('recordings')->exists($this->storedPath))->toBeTrue();
 
         $this->deleteJson("/api/sessions/{$this->flow['session']}")->assertNoContent();
 
         $trashed = CaptureSession::withTrashed()->find($this->flow['session']);
-        expect($trashed)->not->toBeNull()->and($trashed->trashed())->toBeTrue()
+        expect($trashed)->not->toBeNull()->and($trashed->trashed())->toBeTrue()->and($trashed->restorable())->toBeTrue()
+            ->and(Storage::disk('recordings')->exists($this->storedPath))->toBeTrue();
+
+        emptyUndoBin();
+
+        expect(CaptureSession::withTrashed()->find($this->flow['session'])->media_erased_at)->not->toBeNull()
             ->and(Recording::query()->where('capture_session_id', $this->flow['session'])->count())->toBe(0)
             ->and(Transcript::query()->where('capture_session_id', $this->flow['session'])->count())->toBe(0)
             ->and(Storage::disk('recordings')->exists($this->storedPath))->toBeFalse()
@@ -105,9 +110,10 @@ describe('deleting a finished session', function () {
     it('is not undone by the device retrying its upload', function () {
         $this->deleteJson("/api/sessions/{$this->flow['session']}")->assertNoContent();
 
+        $before = Recording::query()->count();
         $this->createSession(Fixtures::audio(5000), ['client_ref' => 'doomed'])->assertOk();
 
-        expect(CaptureSession::query()->count())->toBe(0)->and(Recording::query()->count())->toBe(0)->and(Storage::disk('recordings')->allFiles())->toBe([]);
+        expect(CaptureSession::query()->count())->toBe(0)->and(Recording::query()->count())->toBe($before);
     });
 
     it('answers a repeated delete without a server error', function () {
@@ -175,6 +181,7 @@ describe('what a deletion leaves alone', function () {
         $keptPath = Recording::query()->find($keep['recording'])->stored_path;
 
         $this->deleteJson("/api/sessions/{$drop['session']}")->assertNoContent();
+        emptyUndoBin();
 
         expect(Storage::disk('recordings')->allFiles())->toBe([$keptPath])
             ->and(Recording::query()->find($keep['recording'])->isReady())->toBeTrue()
@@ -217,6 +224,7 @@ describe('what a deletion leaves alone', function () {
         Storage::disk('recordings')->delete(Recording::query()->find($flow['recording'])->stored_path);
 
         $this->deleteJson("/api/sessions/{$flow['session']}")->assertNoContent();
+        emptyUndoBin();
 
         expect(Recording::query()->count())->toBe(0);
     });
