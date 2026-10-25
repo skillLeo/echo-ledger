@@ -2,7 +2,7 @@ package com.echoledger.mobile.core
 
 /** The groups of the Settings tab, named and ordered like the desktop app and the console (B19). */
 enum class SettingsGroup(val label: String, val summary: String) {
-    General("General", "Language, client, notifications"),
+    General("General", "Appearance, language, client, notifications"),
     Recording("Recording", "After a call, auto-record, microphone"),
     Captions("Captions", "Live captions and how they look"),
     Dictation("Dictation", "Voice keyboard, words and snippets"),
@@ -17,6 +17,7 @@ data class SettingsEntry(val id: String, val group: SettingsGroup, val title: St
 
 object SettingsCatalogue {
     val entries: List<SettingsEntry> = listOf(
+        SettingsEntry("appearance", SettingsGroup.General, "Appearance", "theme dark light system colours wallpaper dynamic"),
         SettingsEntry("transcription", SettingsGroup.General, "Transcription", "language english urdu hindi vocabulary terms"),
         SettingsEntry("client", SettingsGroup.General, "Client keyterms", "client names jargon accuracy"),
         SettingsEntry("notifications", SettingsGroup.General, "Notifications", "quiet hours bell activity alerts"),

@@ -59,7 +59,11 @@ data class AppSettings(
     val quietFrom: String = "22:00",
     val quietTo: String = "07:00",
     /** The first-run wizard has been finished or skipped (B19). Installs paired before v1.1 count as done. */
-    val onboardingDone: Boolean = false
+    val onboardingDone: Boolean = false,
+    /** App theme (C4): `system`, `light` or `dark`. */
+    val themeMode: String = "system",
+    /** Use the wallpaper's colours (Material You, Android 12 and later) instead of the EchoLedger accent. */
+    val dynamicColour: Boolean = false
 ) {
     val serverIsV1_1: Boolean get() = serverApiVersion != null
     val paired: Boolean get() = serverUrl != null && deviceId != null

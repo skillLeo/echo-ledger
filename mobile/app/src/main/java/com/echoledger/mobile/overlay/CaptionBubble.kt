@@ -8,6 +8,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -30,6 +31,8 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.echoledger.mobile.data.CaptionStyle
+import com.echoledger.mobile.ui.DarkColors
+import com.echoledger.mobile.ui.Radius
 
 /**
  * Floating live-caption bubble (SYSTEM_ALERT_WINDOW). Not focusable and not touchable (alpha ≤ 0.8), so it never takes
@@ -125,8 +128,10 @@ fun bubbleColour(hex: String?, fallback: Color): Color {
     return Color(0xFF000000 or hex.substring(1).toLong(16))
 }
 
-private val ME_COLOUR = Color(0xFFE6E8EE)
-private val CLIENT_COLOUR = Color(0xFF22D3EE)
+// Captions float over any app, so the bubble keeps the dark glass of the desktop caption overlay (Tokens.kt).
+private val ME_COLOUR = DarkColors.text
+private val CLIENT_COLOUR = DarkColors.client
+private val GLASS = Color(0xFF1E1F23)
 
 @androidx.compose.runtime.Composable
 private fun Bubble(style: CaptionStyle, lines: List<Pair<String, String>>, partial: Pair<String, String>?, notice: String?) {
@@ -135,11 +140,12 @@ private fun Bubble(style: CaptionStyle, lines: List<Pair<String, String>>, parti
     Column(
         Modifier
             .widthIn(max = 340.dp)
-            .background(Color(0xFF0C0E14).copy(alpha = style.opacity / 100f), RoundedCornerShape(16.dp))
+            .background(GLASS.copy(alpha = style.opacity / 100f), RoundedCornerShape(Radius.lg))
+            .border(1.dp, DarkColors.border, RoundedCornerShape(Radius.lg))
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
-        notice?.let { Text(it, color = Color(0xFFF59E0B), fontSize = 13.sp) }
-        if (lines.isEmpty() && partial == null && notice == null) Text("Listening…", color = Color(0xFF9AA3B2), fontSize = 13.sp)
+        notice?.let { Text(it, color = DarkColors.warning, fontSize = 13.sp) }
+        if (lines.isEmpty() && partial == null && notice == null) Text("Listening…", color = DarkColors.textMuted, fontSize = 13.sp)
         bubbleLines(lines, partial, style.compact).forEach { line ->
             Text(
                 text = line.text,

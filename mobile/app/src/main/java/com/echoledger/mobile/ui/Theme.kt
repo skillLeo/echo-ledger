@@ -1,5 +1,7 @@
 package com.echoledger.mobile.ui
 
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Forum
@@ -9,83 +11,177 @@ import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
 
+/** The colour tokens of the current theme (Tokens.kt); read them through [Brand] or `MaterialTheme.colorScheme`. */
+val LocalEchoColors = staticCompositionLocalOf { DarkColors }
+
 /**
- * EchoLedger design system (dark, premium). Layered surfaces give depth; one violet→cyan accent is used sparingly
- * on primary actions and live states. Colours are deliberate tokens, not ad-hoc values.
+ * EchoLedger colours by role, for the current theme (light, dark, or the wallpaper's colours when dynamic colour is
+ * on). One accent is used sparingly on primary actions and live states.
  */
 object Brand {
-    val Background = Color(0xFF0A0B10) // app canvas
-    val Surface = Color(0xFF13151F) // cards
-    val SurfaceAlt = Color(0xFF191C28) // inputs, nested panels
-    val Elevated = Color(0xFF202434) // raised/hover
-    val Border = Color(0x12FFFFFF)
-    val BorderStrong = Color(0x24FFFFFF)
-    val Text = Color(0xFFF1F3F8)
-    val Muted = Color(0xFF9BA3B4)
-    val Faint = Color(0xFF636B7D)
+    val Background: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.bg
+    val Surface: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.surface
+    val SurfaceAlt: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.surface2
+    val Elevated: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.surface3
+    val Border: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.border
+    val BorderStrong: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.borderStrong
+    val Text: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.text
+    val Muted: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.textMuted
+    val Faint: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.textFaint
 
-    val Violet = Color(0xFF8B5CF6)
-    val Indigo = Color(0xFF6366F1)
-    val Cyan = Color(0xFF22D3EE)
-    val Danger = Color(0xFFFB5A74)
-    val Success = Color(0xFF34D399)
-    val Warning = Color(0xFFFBBF24)
+    val Violet: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.accent
+    val AccentText: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.accentText
+    val Cyan: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.client
+    val Danger: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.danger
+    val Success: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.success
+    val Warning: Color
+        @Composable @ReadOnlyComposable
+        get() = LocalEchoColors.current.warning
 
-    val Gradient = Brush.linearGradient(listOf(Violet, Indigo, Cyan))
-    val GradientSoft = Brush.linearGradient(listOf(Violet.copy(alpha = 0.18f), Cyan.copy(alpha = 0.10f)))
+    /** Fill of primary actions (solid: no gradients on controls). */
+    val Gradient: Brush
+        @Composable @ReadOnlyComposable
+        get() = SolidColor(LocalEchoColors.current.accentStrong)
+    val GradientSoft: Brush
+        @Composable @ReadOnlyComposable
+        get() = SolidColor(LocalEchoColors.current.accentSoft)
 
     /** Per-source accent used for the small device avatar and badges. */
+    @Composable
+    @ReadOnlyComposable
     fun accent(device: SourceDevice): Color = when (device) {
         SourceDevice.PHONE -> Success
         SourceDevice.DESKTOP -> Cyan
-        SourceDevice.WEB -> Color(0xFFC4B5FD)
+        SourceDevice.WEB -> AccentText
     }
 }
 
 private val EchoTypography = Typography(
-    headlineLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 28.sp, letterSpacing = (-0.5).sp),
-    headlineSmall = TextStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp, letterSpacing = (-0.3).sp),
-    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 18.sp),
-    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 15.sp),
-    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 22.sp),
-    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 13.sp, lineHeight = 19.sp),
-    labelLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp),
-    labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 0.4.sp)
+    headlineLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 34.sp),
+    headlineSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp),
+    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
+    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp),
+    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp),
+    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp),
+    labelLarge = TextStyle(fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp),
+    labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp)
 )
 
+/** `system`, `light` or `dark` (the General setting) resolved against the phone's dark theme. */
 @Composable
-fun EchoLedgerTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            primary = Brand.Violet,
-            onPrimary = Color.White,
-            secondary = Brand.Cyan,
-            background = Brand.Background,
-            onBackground = Brand.Text,
-            surface = Brand.Surface,
-            onSurface = Brand.Text,
-            surfaceVariant = Brand.SurfaceAlt,
-            onSurfaceVariant = Brand.Muted,
-            error = Brand.Danger,
-            outline = Brand.Border,
-            outlineVariant = Brand.BorderStrong
-        ),
-        typography = EchoTypography,
-        content = content
+fun isDarkTheme(themeMode: String): Boolean = when (themeMode) {
+    "light" -> false
+    "dark" -> true
+    else -> isSystemInDarkTheme()
+}
+
+/** Dynamic colour (Material You) needs Android 12. */
+val supportsDynamicColour: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+/** Our tokens with the wallpaper's accent and surfaces (dynamic colour); text and status colours stay ours. */
+private fun EchoColors.withScheme(scheme: ColorScheme): EchoColors = copy(
+    bg = scheme.surface,
+    surface = scheme.surfaceContainerLow,
+    surface2 = scheme.surfaceContainerHigh,
+    text = scheme.onSurface,
+    textMuted = scheme.onSurfaceVariant,
+    accent = scheme.primary,
+    accentText = scheme.primary,
+    accentStrong = scheme.primary,
+    accentSoft = scheme.primary.copy(alpha = if (isDark) 0.16f else 0.1f),
+    onAccent = scheme.onPrimary,
+    me = scheme.primary
+)
+
+private fun EchoColors.toScheme(): ColorScheme {
+    val base = if (isDark) darkColorScheme() else lightColorScheme()
+    return base.copy(
+        primary = accentStrong,
+        onPrimary = onAccent,
+        primaryContainer = accentSoft,
+        onPrimaryContainer = accentText,
+        secondary = client,
+        background = bg,
+        onBackground = text,
+        surface = bg,
+        onSurface = text,
+        surfaceVariant = surface2,
+        onSurfaceVariant = textMuted,
+        surfaceContainerLowest = bg,
+        surfaceContainerLow = surface,
+        surfaceContainer = surface,
+        surfaceContainerHigh = surface2,
+        surfaceContainerHighest = surface2,
+        error = danger,
+        outline = borderStrong,
+        outlineVariant = border
     )
+}
+
+@Composable
+fun EchoLedgerTheme(themeMode: String = "system", dynamicColour: Boolean = false, content: @Composable () -> Unit) {
+    val dark = isDarkTheme(themeMode)
+    val base = if (dark) DarkColors else LightColors
+    val context = LocalContext.current
+    val dynamicScheme = if (dynamicColour && supportsDynamicColour) {
+        if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    } else {
+        null
+    }
+    val colors = dynamicScheme?.let { base.withScheme(it) } ?: base
+    CompositionLocalProvider(LocalEchoColors provides colors) {
+        MaterialTheme(colorScheme = dynamicScheme ?: colors.toScheme(), typography = EchoTypography, content = content)
+    }
 }
 
 fun SourceDevice.icon(): ImageVector = when (this) {
@@ -94,6 +190,8 @@ fun SourceDevice.icon(): ImageVector = when (this) {
     SourceDevice.WEB -> Icons.Outlined.Language
 }
 
+@Composable
+@ReadOnlyComposable
 fun SourceDevice.tint(): Color = Brand.accent(this)
 
 fun SourceApp.icon(): ImageVector = when (this) {

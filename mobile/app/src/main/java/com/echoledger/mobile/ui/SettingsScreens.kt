@@ -33,6 +33,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -179,6 +182,8 @@ private fun SettingsGroupScreen(vm: MainViewModel, group: SettingsGroup, focus: 
 @Composable
 private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settings: AppSettings, onSetup: () -> Unit) {
     when (entry.id) {
+        "appearance" -> AppearanceSection(settings) { vm.updateSettings(it) }
+
         "transcription" -> TranscriptionSection(vm, settings)
 
         "client" -> ClientKeytermsCard(vm, settings)
@@ -348,6 +353,39 @@ private fun AboutSection(vm: MainViewModel, settings: AppSettings) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { export.launch("EchoLedger settings ${LocalDate.now()}.json") }) { Text("Export settings") }
             OutlinedButton(onClick = { import.launch(arrayOf("application/json", "text/plain")) }) { Text("Import settings") }
+        }
+    }
+}
+
+/** Settings → Appearance (C4): light, dark or the phone's theme, and the wallpaper's colours on Android 12+. */
+@Composable
+fun AppearanceSection(settings: AppSettings, update: ((AppSettings) -> AppSettings) -> Unit) {
+    val modes = listOf("system" to "System", "light" to "Light", "dark" to "Dark")
+    SectionCard {
+        Text("Appearance", fontWeight = FontWeight.SemiBold)
+        Text("Theme", color = Brand.Muted, fontSize = 12.sp)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            modes.forEachIndexed { index, (value, label) ->
+                SegmentedButton(
+                    selected = settings.themeMode == value,
+                    onClick = { update { it.copy(themeMode = value) } },
+                    shape = SegmentedButtonDefaults.itemShape(index, modes.size),
+                    label = { Text(label) }
+                )
+            }
+        }
+        if (supportsDynamicColour) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Wallpaper colours")
+                    Text("Use the colours of your wallpaper instead of EchoLedger purple.", color = Brand.Muted, fontSize = 12.sp)
+                }
+                Switch(
+                    checked = settings.dynamicColour,
+                    onCheckedChange = { v -> update { it.copy(dynamicColour = v) } },
+                    modifier = Modifier.semantics { contentDescription = "Wallpaper colours" }
+                )
+            }
         }
     }
 }

@@ -3,6 +3,7 @@ package com.echoledger.mobile
 import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -78,6 +79,7 @@ import com.echoledger.mobile.ui.StartupSplash
 import com.echoledger.mobile.ui.UnlockPrompter
 import com.echoledger.mobile.ui.applySecureScreen
 import com.echoledger.mobile.ui.capabilities
+import com.echoledger.mobile.ui.isDarkTheme
 import com.echoledger.mobile.ui.lockAvailability
 import com.echoledger.mobile.ui.promptUnlock
 import com.echoledger.mobile.ui.reconnectUnlockPrompt
@@ -99,7 +101,19 @@ class MainActivity : FragmentActivity() {
                 if (state is SettingsState.Loaded) window.applySecureScreen(state.settings.appLockEnabled && state.settings.secureScreen)
             }
         }
-        setContent { EchoLedgerTheme { Content() } }
+        setContent {
+            val state by vm.settingsState.collectAsState()
+            val settings = (state as? SettingsState.Loaded)?.settings
+            val themeMode = settings?.themeMode ?: "system"
+            val dark = isDarkTheme(themeMode)
+            // Status and navigation bar icons follow the app's theme, not only the phone's (A6.M10).
+            LaunchedEffect(dark) {
+                val transparent = android.graphics.Color.TRANSPARENT
+                val style = if (dark) SystemBarStyle.dark(transparent) else SystemBarStyle.light(transparent, transparent)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
+            EchoLedgerTheme(themeMode, dynamicColour = settings?.dynamicColour == true) { Content() }
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

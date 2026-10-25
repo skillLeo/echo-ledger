@@ -11,11 +11,13 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,7 +56,7 @@ private fun Chip(text: String, color: Color, filled: Boolean, icon: @Composable 
         border = if (filled) null else BorderStroke(1.dp, color.copy(alpha = 0.30f))
     ) {
         Row(
-            Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+            Modifier.padding(horizontal = Space.s2, vertical = Space.s1),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
@@ -64,22 +66,16 @@ private fun Chip(text: String, color: Color, filled: Boolean, icon: @Composable 
     }
 }
 
-/** Raised card with a soft shadow and hairline border — the premium container used across the app. */
+/** Card with a hairline border on the surface colour (no drop shadow): the container used across the app. */
 @Composable
 fun SectionCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Surface(
-        modifier = modifier.fillMaxWidth().shadow(
-            10.dp,
-            RoundedCornerShape(18.dp),
-            clip = false,
-            ambientColor = Color.Black,
-            spotColor = Color.Black
-        ),
-        shape = RoundedCornerShape(18.dp),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(Radius.lg),
         color = Brand.Surface,
         border = BorderStroke(1.dp, Brand.Border)
     ) {
-        Column(Modifier.padding(PaddingValues(16.dp)), verticalArrangement = Arrangement.spacedBy(10.dp), content = content)
+        Column(Modifier.padding(PaddingValues(Space.s4)), verticalArrangement = Arrangement.spacedBy(Space.s2 + 2.dp), content = content)
     }
 }
 
@@ -96,15 +92,15 @@ fun SourceAvatar(device: SourceDevice, app: SourceApp, size: Int = 44) {
     }
 }
 
-/** Large page title with an optional trailing action, consistent across screens. */
+/** Large page title with optional trailing actions on its row and a full-width subtitle below, on every screen. */
 @Composable
 fun ScreenHeader(title: String, subtitle: String? = null, trailing: (@Composable () -> Unit)? = null) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Brand.Text, letterSpacing = (-0.5).sp)
-            subtitle?.let { Text(it, color = Brand.Muted, fontSize = 13.sp) }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.headlineSmall, color = Brand.Text, modifier = Modifier.weight(1f))
+            trailing?.invoke()
         }
-        trailing?.invoke()
+        subtitle?.let { Text(it, color = Brand.Muted, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
@@ -132,23 +128,33 @@ fun EmptyState(icon: ImageVector, title: String, body: String? = null, modifier:
     }
 }
 
-/** Full-width gradient primary button (the app's single strong call to action). */
+/** Full-width primary button in the accent colour (the screen's single strong call to action). */
 @Composable
 fun GradientButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, icon: ImageVector? = null) {
     Box(
         modifier
             .fillMaxWidth()
             .height(52.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(Radius.md))
             .background(if (enabled) Brand.Gradient else androidx.compose.ui.graphics.SolidColor(Brand.SurfaceAlt))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             icon?.let {
-                Icon(it, contentDescription = null, tint = if (enabled) Color.White else Brand.Faint, modifier = Modifier.size(20.dp))
+                Icon(
+                    it,
+                    contentDescription = null,
+                    tint = if (enabled) LocalEchoColors.current.onAccent else Brand.Faint,
+                    modifier = Modifier.size(20.dp)
+                )
             }
-            Text(text, color = if (enabled) Color.White else Brand.Faint, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+            Text(
+                text,
+                color = if (enabled) LocalEchoColors.current.onAccent else Brand.Faint,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 16.sp
+            )
         }
     }
 }

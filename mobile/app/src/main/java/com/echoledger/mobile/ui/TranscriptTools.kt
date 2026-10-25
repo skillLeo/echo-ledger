@@ -68,6 +68,9 @@ val EXPORT_FORMATS = listOf(
 /** Share link lifetimes in seconds. */
 val SHARE_LIFETIMES = listOf(3_600L to "1 hour", 86_400L to "1 day", 604_800L to "7 days")
 
+/** The search-match highlight: the warning token at 35 % (readable under light and dark text). */
+private val SNIPPET_HIGHLIGHT = androidx.compose.ui.graphics.Color(0x59F5B731)
+
 /** A search snippet with its matching words in bold on a highlight (the server sends character ranges, not HTML). */
 fun snippetText(snippet: String, highlights: List<List<Int>>): AnnotatedString = buildAnnotatedString {
     val points = snippet.codePoints().toArray()
@@ -77,7 +80,7 @@ fun snippetText(snippet: String, highlights: List<List<Int>>): AnnotatedString =
         val end = (range[0] + range[1]).coerceAtMost(points.size)
         if (start < pos || start >= points.size) continue
         append(String(points, pos, start - pos))
-        withStyle(SpanStyle(fontWeight = FontWeight.Bold, background = Brand.Warning.copy(alpha = 0.35f))) {
+        withStyle(SpanStyle(fontWeight = FontWeight.Bold, background = SNIPPET_HIGHLIGHT)) {
             append(
                 String(
                     points,

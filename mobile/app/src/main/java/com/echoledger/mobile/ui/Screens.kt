@@ -38,13 +38,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -319,20 +325,34 @@ fun LibraryScreen(
         Spacer(Modifier.height(8.dp))
         ScreenHeader("Library", "Recordings from your phone, computer and the web") {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(
+                IconButton(
                     onClick = { activityOpen = !activityOpen },
                     modifier = Modifier.semantics {
                         contentDescription =
                             if (unread > 0) "Activity, $unread unread" else "Activity"
                     }
                 ) {
-                    Text(if (unread > 0) "🔔 $unread" else "🔔")
+                    BadgedBox(badge = { if (unread > 0) Badge { Text(if (unread > 99) "99+" else "$unread") } }) {
+                        Icon(Icons.Outlined.Notifications, contentDescription = null, tint = Brand.Muted)
+                    }
                 }
-                TextButton(onClick = { binOpen = !binOpen }) { Text("Deleted") }
-                TextButton(onClick = {
+                IconButton(onClick = { binOpen = !binOpen }) {
+                    Icon(
+                        Icons.Outlined.DeleteOutline,
+                        contentDescription = "Recently deleted",
+                        tint = if (binOpen) Brand.Violet else Brand.Muted
+                    )
+                }
+                IconButton(onClick = {
                     selecting = !selecting
                     picked = emptySet()
-                }) { Text(if (selecting) "Cancel" else "Select") }
+                }) {
+                    Icon(
+                        if (selecting) Icons.Outlined.Close else Icons.Outlined.Checklist,
+                        contentDescription = if (selecting) "Cancel selection" else "Select",
+                        tint = if (selecting) Brand.Violet else Brand.Muted
+                    )
+                }
                 IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, contentDescription = "Sync", tint = Brand.Muted) }
             }
         }
@@ -342,14 +362,14 @@ fun LibraryScreen(
             placeholder = { Text("Search transcripts and titles", color = Brand.Faint) },
             leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null, tint = Brand.Faint) },
             singleLine = true,
-            shape = RoundedCornerShape(14.dp),
+            shape = RoundedCornerShape(Radius.md),
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
         )
         if (showCallSetup) {
             Spacer(Modifier.height(12.dp))
             CallSetupBanner(onSetup)
         }
-        Row(Modifier.padding(vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text("All") })
             SourceDevice.entries.forEach { d ->
                 FilterChip(selected = filter == d, onClick = {
@@ -458,7 +478,7 @@ private fun LibraryRow(item: LibraryItem, picked: Boolean? = null, onLongClick: 
     }
     SectionCard(
         Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Select").then(selection)
-            .then(if (picked == true) Modifier.border(2.dp, Brand.Cyan, RoundedCornerShape(16.dp)) else Modifier)
+            .then(if (picked == true) Modifier.border(2.dp, Brand.Violet, RoundedCornerShape(Radius.lg)) else Modifier)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             SourceAvatar(SourceDevice.from(item.sourceDevice), SourceApp.from(item.sourceApp))
@@ -601,22 +621,6 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                 item { Spacer(Modifier.height(4.dp)) }
             }
             item {
-                val clientList by vm.clients.collectAsState()
-                val library by vm.library.collectAsState()
-                val live = library.firstOrNull { it.id == item.id } ?: item
-                OrganiseSection(
-                    live,
-                    Organise.folders(library, clientList),
-                    Organise.labels(library),
-                    onPin = { scope.launch { vm.organise(item.id, pinned = it) } },
-                    onMove = { id -> scope.launch { vm.organise(item.id, clientId = id, clearClient = id == null) } },
-                    onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { vm.organise(item.id, clientId = it.id) } } },
-                    onLabels = { scope.launch { vm.organise(item.id, labels = it) } },
-                    onKeep = { scope.launch { vm.organise(item.id, keep = it) } }
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-            item {
                 ExportShareRow(vm, item.id, t?.id?.takeIf { t.status == "completed" && t.kind == "final" }, hasAudio = playbackUrl != null)
             }
             if (bookmarks.isNotEmpty()) {
@@ -698,7 +702,7 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                             // A turn shows its speaker once; following lines of the same speaker leave the label blank.
                             Text(
                                 if (continuesTurn(speakerList, index)) "" else speakerName(speakerNames, s.speaker),
-                                color = if (s.channel == 2) Brand.Cyan else androidx.compose.ui.graphics.Color(0xFFA78BFA),
+                                color = if (s.channel == 2) LocalEchoColors.current.client else LocalEchoColors.current.me,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 12.sp,
                                 modifier = Modifier.width(60.dp)
@@ -724,6 +728,24 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                         }
                     }
                 }
+            }
+            // Organising comes after the transcript: reading it is the main job of this page.
+            item {
+                Spacer(Modifier.height(8.dp))
+                val clientList by vm.clients.collectAsState()
+                val library by vm.library.collectAsState()
+                val live = library.firstOrNull { it.id == item.id } ?: item
+                OrganiseSection(
+                    live,
+                    Organise.folders(library, clientList),
+                    Organise.labels(library),
+                    onPin = { scope.launch { vm.organise(item.id, pinned = it) } },
+                    onMove = { id -> scope.launch { vm.organise(item.id, clientId = id, clearClient = id == null) } },
+                    onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { vm.organise(item.id, clientId = it.id) } } },
+                    onLabels = { scope.launch { vm.organise(item.id, labels = it) } },
+                    onKeep = { scope.launch { vm.organise(item.id, keep = it) } }
+                )
+                Spacer(Modifier.height(8.dp))
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
