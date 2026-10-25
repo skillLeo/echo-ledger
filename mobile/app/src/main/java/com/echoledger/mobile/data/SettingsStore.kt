@@ -30,7 +30,9 @@ data class AppSettings(
     /** How long the app may stay in the background before the lock engages again: 0, 60 000 or 300 000 ms. */
     val lockAfterMs: Long = 0L,
     /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
-    val secureScreen: Boolean = true
+    val secureScreen: Boolean = true,
+    /** What happens to a recording nobody decided on within 60 s: "keep", "discard" or "wait" (same as the desktop). */
+    val decisionTimeout: String = "keep"
 ) {
     val paired: Boolean get() = serverUrl != null && deviceId != null
 }

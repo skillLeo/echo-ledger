@@ -23,6 +23,7 @@ import com.echoledger.mobile.calls.CallEffect
 import com.echoledger.mobile.calls.CallEvent
 import com.echoledger.mobile.calls.CallState
 import com.echoledger.mobile.calls.CallStateMachine
+import com.echoledger.mobile.calls.DecisionTimeoutWorker
 import com.echoledger.mobile.capture.ICallListener
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.Speakers
@@ -382,15 +383,12 @@ class RecordingService : LifecycleService() {
                 Log.e(TAG, "saving recording failed", it)
                 session.file.delete()
             }.getOrNull()
+            val decisionTimeout = settings.decisionTimeout
             main.post {
                 if (stored != null) {
                     if (stored.state == "pending_decision") {
-                        Notifications.showSaveDecision(
-                            this,
-                            stored.id,
-                            SourceApp.from(stored.sourceApp).label,
-                            formatDuration(stored.durationMs)
-                        )
+                        Notifications.showSaveDecision(this, stored, clientName = null, decisionTimeout = decisionTimeout)
+                        DecisionTimeoutWorker.schedule(this, stored.id)
                     } else {
                         UploadWorker.enqueue(this, stored.id)
                     }
@@ -435,11 +433,6 @@ class RecordingService : LifecycleService() {
         bubble?.hide()
         bubble = null
         super.onDestroy()
-    }
-
-    private fun formatDuration(ms: Long): String {
-        val s = ms / 1000
-        return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
     }
 
     /** One active capture: encoder + live caption streams. */

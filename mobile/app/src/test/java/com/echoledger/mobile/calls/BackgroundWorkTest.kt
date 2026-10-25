@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.work.NetworkType
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.testsupport.AppTest
@@ -79,11 +80,11 @@ class BackgroundWorkTest : AppTest() {
     // ---- notifications ------------------------------------------------------------------------------------------------------
 
     @Test
-    fun `the three notification channels are created with calm importance`() {
+    fun `the notification channels are calm, and the post-call question is a silent heads-up`() {
         val manager = app.getSystemService(NotificationManager::class.java)
 
         assertEquals(NotificationManager.IMPORTANCE_LOW, manager.getNotificationChannel(Notifications.CHANNEL_RECORDING).importance)
-        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS).importance)
+        assertEquals(NotificationManager.IMPORTANCE_HIGH, manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS).importance)
         assertEquals(NotificationManager.IMPORTANCE_MIN, manager.getNotificationChannel(Notifications.CHANNEL_STATUS).importance)
         assertNull("no sound for the post-call question", manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS).sound)
         assertFalse(manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS).shouldVibrate())
@@ -108,19 +109,49 @@ class BackgroundWorkTest : AppTest() {
     }
 
     @Test
-    fun `the post-call question offers Keep and Discard and can be withdrawn`() {
-        Notifications.showSaveDecision(app, "rec-1", "WhatsApp", "2:05")
+    fun `the post-call question is a heads-up with Keep and Discard and can be withdrawn`() {
+        val rec = app.storeRecording(
+            id = "rec-1",
+            state = "pending_decision",
+            durationMs = 125_000,
+            liveSegments = listOf(SegmentDto(2, "Client", 400, 1_200, "Thanks for calling back"))
+        )
+        Notifications.showSaveDecision(app, rec, clientName = "Acme", decisionTimeout = "keep")
         val manager = shadowOf(app.getSystemService(NotificationManager::class.java))
 
         val posted = manager.allNotifications.single()
+        assertEquals(Notifications.CHANNEL_DECISIONS, posted.channelId)
         assertEquals("Save this recording?", shadowOf(posted).contentTitle.toString())
-        assertEquals("WhatsApp call · 2:05", shadowOf(posted).contentText.toString())
+        assertEquals("WhatsApp call · 2:05 · Acme", shadowOf(posted).contentText.toString())
         assertEquals(listOf("Keep", "Discard"), posted.actions.map { it.title.toString() })
+        assertEquals(60_000L, posted.timeoutAfter)
+        assertTrue(
+            posted.extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT).toString().endsWith("Client: Thanks for calling back")
+        )
+        assertEquals("Save this recording?", posted.publicVersion.extras.getCharSequence(android.app.Notification.EXTRA_TITLE).toString())
 
         Notifications.cancelDecision(app, "rec-1")
         assertTrue(manager.allNotifications.isEmpty())
     }
 
+    @Test
+    fun `with Keep waiting the post-call question never times out`() {
+        val rec = app.storeRecording(id = "rec-1", state = "pending_decision", sourceApp = "voice_note", durationMs = 42_000)
+        Notifications.showSaveDecision(app, rec, clientName = null, decisionTimeout = "wait")
+
+        val posted = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.single()
+        assertEquals("Voice note · 0:42", shadowOf(posted).contentText.toString())
+        assertEquals(0L, posted.timeoutAfter)
+    }
+
+    @Test
+    fun `the heads-up channel replaces the old quiet decisions channel`() {
+        Notifications.createChannels(app)
+        val manager = app.getSystemService(NotificationManager::class.java)
+
+        assertEquals(NotificationManager.IMPORTANCE_HIGH, manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS).importance)
+        assertNull(manager.getNotificationChannel("decisions"))
+    }
     // ---- post-call decisions through the notification ----------------------------------------------------------------------------
 
     private fun decision(action: String, id: String?) = Intent(app, SaveDecisionReceiver::class.java).setAction(action).apply {
@@ -133,8 +164,8 @@ class BackgroundWorkTest : AppTest() {
 
     @Test
     fun `Keep from the notification queues the recording and schedules the upload`() {
-        app.storeRecording(id = "call-1", state = "pending_decision")
-        Notifications.showSaveDecision(app, "call-1", "WhatsApp", "1:00")
+        val rec = app.storeRecording(id = "call-1", state = "pending_decision")
+        Notifications.showSaveDecision(app, rec, clientName = null, decisionTimeout = "keep")
 
         app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_KEEP, "call-1"))
         pumpUntil("the decision") { app.peekRecording("call-1")?.state == "queued" }
@@ -215,7 +246,7 @@ class BackgroundWorkTest : AppTest() {
         assertTrue(state.armed)
         assertFalse(state.recording)
         assertEquals(2, state.pendingDecisions)
-        assertEquals("2 recording(s) to review", state.statusLine)
+        assertEquals("2 to review", state.statusLine)
     }
 
     // ---- API client cache ---------------------------------------------------------------------------------------------------------

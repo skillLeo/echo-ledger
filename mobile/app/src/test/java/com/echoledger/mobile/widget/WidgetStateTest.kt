@@ -19,7 +19,7 @@ class WidgetStateTest {
     @Test
     fun `pending decisions are surfaced before the armed hint`() {
         val state = WidgetState(paired = true, armed = true, pendingDecisions = 3)
-        assertEquals("3 recording(s) to review", state.statusLine)
+        assertEquals("3 to review", state.statusLine)
     }
 
     @Test

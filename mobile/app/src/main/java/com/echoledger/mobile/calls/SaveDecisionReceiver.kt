@@ -37,6 +37,7 @@ object Decisions {
     suspend fun apply(context: Context, recordingId: String, keep: Boolean) {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         Notifications.cancelDecision(context, recordingId)
+        DecisionTimeoutWorker.cancel(context, recordingId)
         if (keep) {
             graph.recordings.update(recordingId) { it.copy(state = "queued") }
             UploadWorker.enqueue(context, recordingId)

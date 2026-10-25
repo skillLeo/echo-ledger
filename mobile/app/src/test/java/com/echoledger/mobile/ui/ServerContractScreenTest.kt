@@ -92,7 +92,6 @@ class ServerContractScreenTest : ScreenTest() {
             .assertIsDisplayed()
     }
 
-    @Ignore("A6.M5: a transcript that is still processing is shown as empty")
     @Test
     fun `a transcript the provider is still working on is not shown as an empty one`() {
         // The server creates the final transcript row when it submits the job (status "submitted", no segments) and

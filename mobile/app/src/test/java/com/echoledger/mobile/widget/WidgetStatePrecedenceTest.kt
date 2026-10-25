@@ -17,7 +17,7 @@ class WidgetStatePrecedenceTest {
             val expected = when {
                 !paired -> "Open EchoLedger to pair"
                 recording -> "Recording…"
-                pending > 0 -> "2 recording(s) to review"
+                pending > 0 -> "2 to review"
                 armed -> "Ready to record calls"
                 else -> "Tap to record"
             }
@@ -28,8 +28,8 @@ class WidgetStatePrecedenceTest {
 
     @Test
     fun `the review count is shown as given including large numbers`() {
-        assertEquals("1 recording(s) to review", WidgetState(paired = true, pendingDecisions = 1).statusLine)
-        assertEquals("250 recording(s) to review", WidgetState(paired = true, pendingDecisions = 250).statusLine)
+        assertEquals("1 to review", WidgetState(paired = true, pendingDecisions = 1).statusLine)
+        assertEquals("250 to review", WidgetState(paired = true, pendingDecisions = 250).statusLine)
     }
 
     @Test

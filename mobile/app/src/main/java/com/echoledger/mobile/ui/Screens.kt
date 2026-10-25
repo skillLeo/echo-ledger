@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -240,6 +241,7 @@ private fun CallSetupBanner(onSetup: () -> Unit) {
 @Composable
 fun LibraryScreen(vm: MainViewModel, showCallSetup: Boolean, onSetup: () -> Unit, onOpen: (LibraryItem) -> Unit) {
     val items by vm.library.collectAsState()
+    val syncing by vm.syncing.collectAsState()
     var filter by remember { mutableStateOf<SourceDevice?>(null) }
     var query by remember { mutableStateOf("") }
     val q = query.trim().lowercase()
@@ -279,7 +281,14 @@ fun LibraryScreen(vm: MainViewModel, showCallSetup: Boolean, onSetup: () -> Unit
                 }, label = { Text(d.label) }, leadingIcon = { Icon(d.icon(), null, Modifier.size(16.dp)) })
             }
         }
-        if (visible.isEmpty()) {
+        if (visible.isEmpty() && items.isEmpty() && syncing && !vm.hasSynced()) {
+            Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    CircularProgressIndicator(color = Brand.Violet)
+                    Text("Loading your library…", color = Brand.Muted)
+                }
+            }
+        } else if (visible.isEmpty()) {
             EmptyState(
                 icon = Icons.AutoMirrored.Outlined.LibraryBooks,
                 title = if (q.isNotEmpty() || filter != null) "Nothing matches" else "No recordings yet",
@@ -380,12 +389,24 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
             Spacer(Modifier.weight(1f))
+            var confirmDelete by remember { mutableStateOf(false) }
             IconButton(onClick = {
-                scope.launch {
-                    vm.delete(item)
-                    onBack()
-                }
+                confirmDelete = true
             }) { Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = Brand.Danger) }
+            if (confirmDelete) {
+                ConfirmDialog(
+                    text = "Delete this recording? It is removed from every device.",
+                    confirmLabel = "Delete",
+                    onConfirm = {
+                        confirmDelete = false
+                        scope.launch {
+                            vm.delete(item)
+                            onBack()
+                        }
+                    },
+                    onDismiss = { confirmDelete = false }
+                )
+            }
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxSize()) {
             item {
@@ -416,7 +437,7 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
                         when (status) {
                             null -> "No transcript for this recording."
                             "failed" -> "Transcription failed."
-                            else -> "Transcript ${status.replace('_', ' ')}. Pull to refresh in a moment."
+                            else -> "Transcribing…"
                         },
                         color = Brand.Muted
                     )
@@ -425,9 +446,11 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit) {
                 t.status == "failed" -> item {
                     SectionCard {
                         Text("Transcription failed", fontWeight = FontWeight.SemiBold, color = Brand.Danger)
-                        Text(t.error ?: "The speech provider could not process this recording.", color = Brand.Muted, fontSize = 13.sp)
+                        Text(failureText(t), color = Brand.Muted, fontSize = 13.sp)
                     }
                 }
+
+                t.status in IN_PROGRESS -> item { Text("Transcribing…", color = Brand.Muted) }
 
                 segments.isEmpty() -> item { Text("The transcript is empty: no speech was detected.", color = Brand.Muted) }
 
@@ -714,6 +737,7 @@ private fun StepRow(title: String, done: Boolean, onFix: () -> Unit) {
 fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
     val settings by vm.settings.collectAsState()
     val clients by vm.clients.collectAsState()
+    var confirmUnpair by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         SectionCard {
@@ -754,6 +778,7 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
                 }) { Text("Change") }
             }
         }
+        DecisionTimeoutSection(vm, settings)
         AppLockSection(vm, settings)
         SectionCard {
             Text("Client keyterms", fontWeight = FontWeight.SemiBold)
@@ -779,7 +804,54 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onSetup) { Text("Setup guide") }
-                Button(onClick = { vm.unpair() }, colors = ButtonDefaults.buttonColors(containerColor = Brand.Danger)) { Text("Unpair") }
+                Button(onClick = {
+                    confirmUnpair = true
+                }, colors = ButtonDefaults.buttonColors(containerColor = Brand.Danger)) { Text("Unpair") }
+            }
+        }
+    }
+    if (confirmUnpair) {
+        ConfirmDialog(
+            text = "Unpair this phone? Recordings waiting to upload stay on the phone.",
+            confirmLabel = "Unpair",
+            onConfirm = {
+                confirmUnpair = false
+                vm.unpair()
+            },
+            onDismiss = { confirmUnpair = false }
+        )
+    }
+}
+
+/** A short yes/no question before an action that cannot be undone (A6.M4). */
+@Composable
+private fun ConfirmDialog(text: String, confirmLabel: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        text = { Text(text) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirmLabel, color = Brand.Danger) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/** "If I don't choose within 60 s": what happens to a recording nobody decided on (same choices as the desktop). */
+@Composable
+private fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
+    SectionCard {
+        Text("After a call", fontWeight = FontWeight.SemiBold)
+        Text("If I don't choose within 60 s", color = Brand.Muted, fontSize = 12.sp)
+        listOf("keep" to "Keep the recording", "discard" to "Discard it", "wait" to "Keep waiting").forEach { (value, label) ->
+            Row(
+                Modifier.fillMaxWidth()
+                    .selectable(
+                        selected = settings.decisionTimeout == value,
+                        role = Role.RadioButton,
+                        onClick = { vm.updateSettings { it.copy(decisionTimeout = value) } }
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(selected = settings.decisionTimeout == value, onClick = null)
+                Text(label, modifier = Modifier.padding(start = 8.dp))
             }
         }
     }
@@ -863,3 +935,12 @@ fun Context.capabilities(helperConnected: Boolean): Capabilities = Capabilities(
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED,
     overlayPermission = Settings.canDrawOverlays(this)
 )
+
+/** Final transcript states that are still being worked on: never shown as an empty transcript (A6.M5). */
+private val IN_PROGRESS = setOf("pending", "submitted", "processing", "awaiting_device")
+
+/** The failure reason, plus the phone's own hint when nothing was captured. */
+internal fun failureText(t: TranscriptDto): String {
+    val reason = t.error ?: "The speech provider could not process this recording."
+    return if (t.errorCode == "no_audio") "$reason Check Setup → Call capture (the helper must be running) and record again." else reason
+}

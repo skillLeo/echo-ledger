@@ -10,6 +10,8 @@ import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.LocalContext
+import androidx.glance.action.ActionParameters
+import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
@@ -61,17 +63,25 @@ private fun Content(state: WidgetState) {
         }
         Text(
             state.statusLine,
-            style = TextStyle(color = ColorProvider(if (state.recording) Color(0xFFF43F5E) else Color(0xFF9AA3B2)), fontSize = 12.sp)
+            style = TextStyle(color = ColorProvider(if (state.recording) Color(0xFFF43F5E) else Color(0xFF9AA3B2)), fontSize = 12.sp),
+            modifier = if (!state.recording && state.pendingDecisions > 0) GlanceModifier.clickable(openPending()) else GlanceModifier
         )
+        state.reviewLine?.let {
+            Text(
+                it,
+                style = TextStyle(color = ColorProvider(Color(0xFF8B5CF6)), fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                modifier = GlanceModifier.clickable(openPending())
+            )
+        }
         Spacer(GlanceModifier.height(8.dp))
-        state.lastTitle?.let {
+        state.lastTitle?.takeIf { state.showsContent }?.let {
             Text(
                 it,
                 maxLines = 1,
                 style = TextStyle(color = ColorProvider(Color(0xFFE6E8EE)), fontSize = 13.sp, fontWeight = FontWeight.Medium)
             )
         }
-        state.lastPreview?.let {
+        state.lastPreview?.takeIf { state.showsContent }?.let {
             Text(it, maxLines = 2, style = TextStyle(color = ColorProvider(Color(0xFF9AA3B2)), fontSize = 12.sp))
         }
         Spacer(GlanceModifier.height(8.dp))
@@ -80,6 +90,11 @@ private fun Content(state: WidgetState) {
         }
     }
 }
+
+/** Opens the Record tab's list of recordings waiting for Keep / Discard (glance passes parameters as intent extras). */
+private fun openPending() = actionStartActivity<MainActivity>(
+    actionParametersOf(ActionParameters.Key<String>(MainActivity.EXTRA_OPEN) to MainActivity.OPEN_PENDING)
+)
 
 class RecordWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = RecordWidget()
@@ -103,7 +118,8 @@ object WidgetStateStore {
     suspend fun refresh(context: Context) {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         val settings = graph.settings.current()
-        val latest = graph.library.items.value.firstOrNull { !it.deleted }
+        // With App lock on, no titles or transcript text are stored for (or shown on) the home screen.
+        val latest = graph.library.items.value.firstOrNull { !it.deleted }?.takeUnless { settings.appLockEnabled }
         save(
             context,
             WidgetState(
@@ -112,7 +128,8 @@ object WidgetStateStore {
                 paired = settings.paired,
                 lastTitle = latest?.title,
                 lastPreview = latest?.transcript?.preview,
-                pendingDecisions = graph.recordings.pendingDecisions().size
+                pendingDecisions = graph.recordings.pendingDecisions().size,
+                locked = settings.appLockEnabled
             )
         )
         runCatching { RecordWidget().updateAll(context) }

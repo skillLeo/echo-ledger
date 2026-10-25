@@ -180,7 +180,9 @@ data class TranscriptDto(
     val text: String? = null,
     val segments: List<SegmentDto> = emptyList(),
     /** Set only when `status` is `failed`: the reason, written for the user. */
-    val error: String? = null
+    val error: String? = null,
+    /** Machine-readable reason of a failure (`no_audio`, `provider_rejected`, `budget_exceeded`, ...). */
+    @SerialName("error_code") val errorCode: String? = null
 )
 
 /** The part of GET /api/sessions/{id} the app needs: a temporary signed URL to stream the decrypted recording. */

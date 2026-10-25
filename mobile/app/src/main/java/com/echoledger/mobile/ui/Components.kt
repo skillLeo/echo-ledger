@@ -155,8 +155,13 @@ fun GradientButton(text: String, onClick: () -> Unit, modifier: Modifier = Modif
 
 fun formatDuration(ms: Long?): String {
     if (ms == null || ms <= 0) return ""
-    val s = ms / 1000
-    return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+    // Rounded to the nearest second (as on the desktop) and always ASCII digits, whatever the phone language.
+    val s = (ms + 500) / 1000
+    return if (s >= 3600) {
+        String.format(java.util.Locale.ROOT, "%d:%02d:%02d", s / 3600, (s % 3600) / 60, s % 60)
+    } else {
+        String.format(java.util.Locale.ROOT, "%d:%02d", s / 60, s % 60)
+    }
 }
 
 /**

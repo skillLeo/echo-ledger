@@ -52,6 +52,9 @@ class LibraryRepository(
         changed
     }
 
+    /** True once a sync has completed (the server time of the last sync is known). */
+    fun hasSynced(): Boolean = since != null
+
     fun clear() {
         since = null
         _items.value = emptyList()

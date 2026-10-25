@@ -15,8 +15,10 @@ enum class SourceDevice(val wire: String, val label: String) {
 enum class SourceApp(val wire: String, val label: String) {
     WHATSAPP("whatsapp", "WhatsApp"),
     WHATSAPP_BUSINESS("whatsapp_business", "WhatsApp Business"),
+    WHATSAPP_WEB("whatsapp_web", "WhatsApp Web"),
     GOOGLE_MEET("google_meet", "Google Meet"),
     ZOOM("zoom", "Zoom"),
+    MICROSOFT_TEAMS("microsoft_teams", "Microsoft Teams"),
     VOICE_NOTE("voice_note", "Voice note"),
     OTHER("other", "Other")
     ;

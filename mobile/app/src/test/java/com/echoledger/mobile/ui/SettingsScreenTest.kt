@@ -15,7 +15,9 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
@@ -374,6 +376,9 @@ class SettingsScreenTest : AppTest() {
         launch()
 
         compose.onNodeWithText("Unpair").performClick()
+        assertTrue("nothing changes before the user confirms", settings().paired)
+        compose.onNodeWithText("Unpair this phone? Recordings waiting to upload stay on the phone.").assertExists()
+        compose.onNode(hasText("Unpair") and hasAnyAncestor(isDialog())).performClick()
         pumpUntil("unpaired") { !settings().paired }
 
         assertNull(runBlocking { app.graph.settings.token() })

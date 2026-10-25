@@ -63,7 +63,7 @@ class RecordingPlayerState(context: Context) {
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                this@RecordingPlayerState.error = "This recording could not be played. Pull to refresh and try again."
+                this@RecordingPlayerState.error = "This recording could not be played. Go back and open it again."
             }
         })
     }

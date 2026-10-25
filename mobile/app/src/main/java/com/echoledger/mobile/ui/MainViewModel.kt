@@ -118,15 +118,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         WidgetStateStore.refresh(getApplication())
     }
 
+    private val _syncing = MutableStateFlow(false)
+
+    /** A library sync is running (the first one shows a progress indicator instead of an empty library). */
+    val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
+
+    /** Whether this phone has finished at least one library sync since it was paired. */
+    fun hasSynced(): Boolean = graph.library.hasSynced()
+
     fun refresh() = viewModelScope.launch {
+        _syncing.value = true
         try {
             withContext(Dispatchers.IO) { graph.library.refresh() }
             _clients.value = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
             WidgetStateStore.refresh(getApplication())
         } catch (e: NotPairedException) {
+            // Revoked on the server: back to the pairing screen. Recordings waiting to upload stay on the phone.
+            graph.settings.clearPairing()
+            graph.library.clear()
+            graph.invalidateApi()
+            WidgetStateStore.refresh(getApplication())
             _message.value = "This phone was unpaired on the server. Pair it again."
         } catch (e: Exception) {
             _message.value = "Offline — showing the last synced library"
+        } finally {
+            _syncing.value = false
         }
         reloadLocal()
     }

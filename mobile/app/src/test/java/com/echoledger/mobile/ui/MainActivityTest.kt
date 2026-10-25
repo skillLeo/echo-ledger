@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.Intent
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -181,6 +184,7 @@ class MainActivityTest : AppTest() {
         awaitText("Unpair")
 
         compose.onNodeWithText("Unpair").performClick()
+        compose.onNode(hasText("Unpair") and hasAnyAncestor(isDialog())).performClick()
 
         awaitText("Pair this phone")
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)

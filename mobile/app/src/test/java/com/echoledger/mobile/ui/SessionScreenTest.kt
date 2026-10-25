@@ -193,15 +193,15 @@ class SessionScreenTest : ScreenTest() {
         serve(transcriptStatus = 404, transcriptJson = """{"message":"No query results."}""")
         showSession(item(finalStatus = "processing"))
 
-        awaitText("Transcript processing.")
+        awaitText("Transcribing…")
     }
 
     @Test
-    fun `an on-device transcript state is spelled out with spaces`() {
+    fun `an on-device transcript that is not back yet is shown as being transcribed`() {
         serve(transcriptStatus = 404, transcriptJson = """{"message":"No query results."}""")
         showSession(item(finalStatus = "awaiting_device"))
 
-        awaitText("Transcript awaiting device.")
+        awaitText("Transcribing…")
     }
 
     @Test
@@ -308,6 +308,13 @@ class SessionScreenTest : ScreenTest() {
         showSession()
 
         compose.onNodeWithContentDescription("Delete").performClick()
+        assertEquals(
+            "nothing is deleted before the user confirms",
+            0,
+            server.requestsTo("DELETE", "/api/sessions/${ServerFixtures.SESSION_ID}").size
+        )
+        compose.onNodeWithText("Delete this recording? It is removed from every device.").assertExists()
+        compose.onNodeWithText("Delete").performClick()
         pumpUntil("the delete request") { server.requestsTo("DELETE", "/api/sessions/${ServerFixtures.SESSION_ID}").isNotEmpty() }
 
         assertEquals(1, backTaps)

@@ -134,7 +134,6 @@ class FormatWhenZonesTest {
         assertEquals("10:00:00", formatDuration(36_000_000))
     }
 
-    @Ignore("A6.M7: durations use the phone's locale digits")
     @Test
     fun `durations keep ASCII digits whatever the phone language is`() {
         val saved = Locale.getDefault()
@@ -148,7 +147,6 @@ class FormatWhenZonesTest {
         }
     }
 
-    @Ignore("A6.M7: durations are truncated on Android instead of rounded")
     @Test
     fun `a duration reads the same on the phone and on the desktop client`() {
         // desktop/src/lib/format.ts rounds to the nearest second (Math.round); the library must agree between devices.
