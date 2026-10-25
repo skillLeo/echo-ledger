@@ -10,8 +10,9 @@ use App\Models\Transcript;
 use Filament\Infolists\Components\Entry;
 
 /**
- * HTML5 audio + transcript whose active segment highlights in sync with playback (click a line to seek).
- * Audio streams from the admin media route (session auth + MFA) with HTTP Range support.
+ * HTML5 audio + transcript whose active segment highlights in sync with playback. Each line is a button that seeks
+ * (mouse, Enter or Space); Space on the player toggles playback. Audio streams from the admin media route
+ * (signed-in super admin, owner only) with HTTP Range support.
  */
 class TranscriptPlayerEntry extends Entry
 {

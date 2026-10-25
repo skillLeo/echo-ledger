@@ -152,7 +152,7 @@ it('rejects a colour that is not a hex value', function () {
         ->fillForm(['name' => 'Acme', 'color' => 'purple'])
         ->call('create')
         ->assertHasFormErrors(['color']);
-})->skip('A6.W26: the client colour is not validated on the server');
+});
 
 it('cannot be tricked into creating a client for another user', function () {
     $admin = $this->signInAsAdmin();

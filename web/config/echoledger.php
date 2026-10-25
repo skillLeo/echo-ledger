@@ -30,5 +30,8 @@ return [
     'accepted_mimes' => [
         'audio/ogg', 'audio/opus', 'audio/flac', 'audio/x-flac', 'audio/wav', 'audio/x-wav', 'audio/wave',
         'audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/webm', 'audio/amr', 'application/ogg',
+        // What PHP's finfo reports for AMR, ADTS AAC and WebM files (the console upload checks sniffed types);
+        // stored as audio/amr, audio/aac and audio/webm (RecordingIngestor::canonicalMime).
+        'audio/AMR', 'audio/x-hx-aac-adts', 'video/webm',
     ],
 ];

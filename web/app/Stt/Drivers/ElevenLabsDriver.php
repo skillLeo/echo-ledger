@@ -20,7 +20,9 @@ use App\Stt\Data\WebhookEnvelope;
 use App\Stt\Data\Word;
 use App\Stt\Exceptions\InvalidWebhookSignature;
 use App\Stt\Exceptions\ProviderJobFailed;
+use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\KeytermPolicy;
+use App\Stt\ProviderEndpoints;
 use App\Stt\TranscriptNormalizer;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
@@ -51,7 +53,14 @@ final class ElevenLabsDriver implements SttProvider
 
     private function baseUrl(): string
     {
-        return rtrim((string) $this->settings->get('elevenlabs.base_url', 'https://api.elevenlabs.io'), '/');
+        $stored = $this->settings->get('elevenlabs.base_url', 'https://api.elevenlabs.io');
+        $url = rtrim(is_string($stored) ? $stored : '', '/');
+        // Every request carries the API key: refuse an address that is not ElevenLabs' own (A6.W10).
+        if (! ProviderEndpoints::allowsElevenLabs($url)) {
+            throw new ProviderNotConfigured('Set an HTTPS elevenlabs.io API base URL on Admin → Settings.');
+        }
+
+        return $url;
     }
 
     private function http(): PendingRequest

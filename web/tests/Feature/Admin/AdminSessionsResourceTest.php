@@ -16,6 +16,7 @@ use App\Models\Client;
 use App\Models\Device;
 use App\Models\Recording;
 use App\Models\Transcript;
+use App\Services\RecordingIngestor;
 use App\Services\SettingsRepository;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -226,7 +227,7 @@ it('finds a session by the title it is shown with, including the generated "What
         ->searchTable('WhatsApp call')
         ->assertCanSeeTableRecords([$untitled])
         ->assertCanNotSeeTableRecords([$other]);
-})->skip('A6.W26: search only matches the stored title, not the fallback title the list shows');
+});
 
 it('filters by date using the days shown in the console time zone', function () {
     $admin = $this->signInAsAdmin();
@@ -239,7 +240,7 @@ it('filters by date using the days shown in the console time zone', function () 
         ->filterTable('started_at', ['from' => '2026-10-25', 'until' => '2026-10-25'])
         ->assertCanSeeTableRecords([$lateNight])
         ->assertCanNotSeeTableRecords([$earlier]);
-})->skip('A6.W26: the date filter compares UTC dates instead of days in the display time zone');
+});
 
 it('combines filters and search', function () {
     $admin = $this->signInAsAdmin();
@@ -303,7 +304,7 @@ it('offers only the admin\'s own clients in the client filter', function () {
         ->assertSee('My Client Ltd', false)
         ->assertDontSee('Somebody Else Inc', false);
     expect(Client::query()->count())->toBe(2)->and($theirs->name)->toBe('Somebody Else Inc')->and($mine->name)->toBe('My Client Ltd');
-})->skip('A6.W26: the client filter lists the clients of other admins');
+});
 
 it('formats durations as mm:ss below an hour and h:mm:ss from an hour', function (?int $ms, string $expected) {
     expect(CaptureSessionsTable::duration($ms))->toBe($expected);
@@ -324,7 +325,7 @@ it('keeps counting hours from a day on instead of wrapping around', function (in
 })->with([
     'a full day' => [86_400_000, '24:00:00'],
     'a day and a bit' => [90_000_000, '25:00:00'],
-])->skip('A6.W26: durations of 24 hours or more wrap around');
+]);
 
 it('shows the start time as "M j, Y · g:i A" in the configured time zone', function () {
     $admin = $this->signInAsAdmin();
@@ -593,7 +594,41 @@ it('recognises the ADTS AAC, AMR and WebM containers the product also lists as s
     'aac' => 'aac',
     'amr' => 'amr',
     'webm' => 'webm',
-])->skip('A6.W28: the console voice-note upload refuses AMR, ADTS AAC and WebM despite the allowlist');
+]);
+
+it('stores an AMR, ADTS AAC or WebM voice note under its audio type (A6.W28)', function (string $kind, string $name, string $stored) {
+    Queue::fake();
+    $this->isolatedStorage();
+    $this->signInAsAdmin();
+    $bytes = adminAudioSample($kind);
+    $sniffed = (string) (new FinfoMimeTypeDetector)->detectMimeTypeFromBuffer($bytes);
+
+    $this->panelComponent(ListCaptureSessions::class)
+        ->callAction('uploadVoiceNote', ['audio' => UploadedFile::fake()->createWithContent($name, $bytes)->mimeType($sniffed)])
+        ->assertHasNoActionErrors();
+
+    $recording = Recording::query()->sole();
+    expect($recording->mime)->toBe($stored)
+        ->and($recording->isReady())->toBeTrue();
+})->with([
+    'amr' => ['amr', 'note.amr', 'audio/amr'],
+    'aac' => ['aac', 'note.aac', 'audio/aac'],
+    'webm' => ['webm', 'note.webm', 'audio/webm'],
+]);
+
+it('maps the sniffed container names to the stored audio type', function (string $sniffed, string $stored) {
+    expect(RecordingIngestor::canonicalMime($sniffed))->toBe($stored);
+})->with([
+    ['audio/AMR', 'audio/amr'],
+    ['audio/x-hx-aac-adts', 'audio/aac'],
+    ['video/webm', 'audio/webm'],
+    ['audio/ogg', 'audio/ogg'],
+    [' Audio/WAV ', 'audio/wav'],
+]);
+
+it('still refuses video and image types that are not on the list', function (string $mime) {
+    expect((array) config('echoledger.accepted_mimes'))->not->toContain($mime);
+})->with(['video/mp4', 'video/quicktime', 'image/svg+xml', 'text/html', 'application/octet-stream']);
 
 it('does not mistake non-audio content for audio, whatever the file is called', function (string $content) {
     $detected = (new FinfoMimeTypeDetector)->detectMimeTypeFromBuffer($content);
@@ -668,4 +703,73 @@ it('does not let a voice note be filed under another admin\'s client', function 
         ->assertHasActionErrors(['client_id']);
 
     expect(CaptureSession::query()->count())->toBe(0);
+});
+
+// --- Console details (A6.W26) -----------------------------------------------------------------------------------
+
+it('says the search found nothing instead of claiming the library is empty', function () {
+    $admin = $this->signInAsAdmin();
+    CaptureSession::factory()->create(['user_id' => $admin->id, 'title' => 'Budget review']);
+
+    $this->panelComponent(ListCaptureSessions::class)
+        ->searchTable('zzz-nothing-like-this')
+        ->assertSee('No sessions match your search')
+        ->assertDontSee('No sessions yet');
+    $this->panelComponent(ListCaptureSessions::class)
+        ->filterTable('status', 'failed')
+        ->assertSee('No sessions match these filters');
+});
+
+it('matches percent signs and underscores in a search literally', function () {
+    $admin = $this->signInAsAdmin();
+    $underscore = CaptureSession::factory()->create(['user_id' => $admin->id, 'title' => 'file_name review']);
+    $plain = CaptureSession::factory()->create(['user_id' => $admin->id, 'title' => 'filename review']);
+
+    $this->panelComponent(ListCaptureSessions::class)
+        ->searchTable('file_name')
+        ->assertCanSeeTableRecords([$underscore])
+        ->assertCanNotSeeTableRecords([$plain]);
+});
+
+it('finds untitled voice notes and other recordings by their shown titles', function () {
+    $admin = $this->signInAsAdmin();
+    $note = CaptureSession::factory()->create(['user_id' => $admin->id, 'title' => '', 'source_app' => SourceApp::VoiceNote]);
+    $other = CaptureSession::factory()->create(['user_id' => $admin->id, 'title' => null, 'source_app' => SourceApp::Other]);
+    $titled = CaptureSession::factory()->create(['user_id' => $admin->id, 'title' => 'Zoom planning', 'source_app' => SourceApp::VoiceNote]);
+
+    $this->panelComponent(ListCaptureSessions::class)->searchTable('voice note')
+        ->assertCanSeeTableRecords([$note])->assertCanNotSeeTableRecords([$other, $titled]);
+    $this->panelComponent(ListCaptureSessions::class)->searchTable('recording')
+        ->assertCanSeeTableRecords([$other])->assertCanNotSeeTableRecords([$note, $titled]);
+});
+
+it('ends the date filter at midnight of the last chosen day in the console time zone', function () {
+    $admin = $this->signInAsAdmin();
+    app(SettingsRepository::class)->set('display.timezone', 'Asia/Karachi'); // UTC+5
+    $lastMinute = CaptureSession::factory()->create(['user_id' => $admin->id, 'started_at' => Carbon::parse('2026-10-25 18:59:00', 'UTC')]); // Oct 25, 11:59 PM
+    $nextDay = CaptureSession::factory()->create(['user_id' => $admin->id, 'started_at' => Carbon::parse('2026-10-25 19:00:00', 'UTC')]);  // Oct 26, 12:00 AM
+
+    $this->panelComponent(ListCaptureSessions::class)
+        ->filterTable('started_at', ['from' => null, 'until' => '2026-10-25'])
+        ->assertCanSeeTableRecords([$lastMinute])
+        ->assertCanNotSeeTableRecords([$nextDay]);
+});
+
+it('labels the source of a session whose device was revoked on its view page', function () {
+    $admin = $this->signInAsAdmin();
+    $session = CaptureSession::factory()->create(['user_id' => $admin->id, 'device_id' => null, 'source_device' => SourceDevice::Desktop]);
+
+    expect(CaptureSessionsTable::deviceLabel($session))->toBe('Desktop');
+    $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])->assertDontSee('Web upload');
+});
+
+it('gives the filter button an accessible name that includes the number it shows', function () {
+    $admin = $this->signInAsAdmin();
+    CaptureSession::factory()->create(['user_id' => $admin->id]);
+
+    $html = $this->panelComponent(ListCaptureSessions::class)->html();
+    expect($html)->toContain('aria-label="Filters (0 active)"');
+
+    $filtered = $this->panelComponent(ListCaptureSessions::class)->filterTable('status', 'failed')->html();
+    expect($filtered)->toContain('aria-label="Filters (1 active)"');
 });

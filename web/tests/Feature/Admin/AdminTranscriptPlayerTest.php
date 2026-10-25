@@ -127,6 +127,16 @@ if (input.sync) {
   out.seek = { currentTime: audio.currentTime, played: audio.played };
 }
 
+if (input.keys) {
+  const audio = { paused: true, play() { this.paused = false; }, pause() { this.paused = true; } };
+  data.$refs = Object.assign({}, data.$refs || {}, { audio });
+  out.keys = input.keys.map((k) => {
+    let prevented = false;
+    data.onKey({ key: k.key, code: k.code || '', target: { tagName: k.tag }, preventDefault() { prevented = true; } });
+    return { prevented, paused: audio.paused };
+  });
+}
+
 if (input.desktopModule) {
   const desktop = await import(pathToFileURL(input.desktopModule).href);
   out.desktop = {
@@ -280,7 +290,8 @@ it('has Copy text and Copy with timestamps buttons wired to the copy handler', f
     $session = $this->sessionWithTranscript($admin, adminCallSegments());
 
     $player = adminPlayerNode(adminPlayerPage($this, $session));
-    $buttons = iterator_to_array($player->getElementsByTagName('button'));
+    // Transcript lines are buttons too (A6.W14), so pick the copy buttons by their class.
+    $buttons = iterator_to_array((new DOMXPath($player->ownerDocument))->query('.//button[contains(concat(" ", normalize-space(@class), " "), " el-btn ")]', $player));
 
     expect($buttons)->toHaveCount(2)
         ->and($buttons[0]->getAttribute('x-on:click'))->toBe('copy(false)')
@@ -469,4 +480,97 @@ it('exposes the player data through the entry class', function () {
         ->and($data['status'])->toBe('completed')
         ->and($data['segments'])->toHaveCount(4)
         ->and($data['text'])->toContain('Hello there');
+});
+
+// --- Keyboard, contrast and small screens (A6.W14) ------------------------------------------------------------
+
+it('makes every transcript line a button that seeks to it', function () {
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+
+    $rows = adminPlayerRows(adminPlayerNode(adminPlayerPage($this, $session)));
+
+    expect($rows)->toHaveCount(4);
+    foreach ($rows as $i => $row) {
+        $button = $row->getElementsByTagName('button')->item(0);
+        expect($button)->not->toBeNull()
+            ->and($button->getAttribute('type'))->toBe('button')
+            ->and($button->getAttribute('x-on:click'))->toBe("seek({$i})")
+            ->and($row->hasAttribute('x-on:click'))->toBeFalse();
+    }
+});
+
+it('lets the keyboard reach the player and toggles playback with Space on it', function () {
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+    $html = adminPlayerPage($this, $session);
+    $player = adminPlayerNode($html);
+
+    expect($player->getAttribute('tabindex'))->toBe('0')
+        ->and($player->getAttribute('x-on:keydown'))->toBe('onKey($event)')
+        ->and($player->getAttribute('aria-label'))->toContain('Space');
+
+    if (! adminNodeAvailable()) {
+        $this->markTestSkipped('Node.js is not available to evaluate the player script.');
+    }
+    $result = adminRunPlayerScript($html, ['keys' => [
+        ['key' => ' ', 'tag' => 'DIV'],
+        ['key' => ' ', 'tag' => 'DIV'],
+        ['key' => ' ', 'tag' => 'BUTTON'],
+        ['key' => 'Enter', 'tag' => 'DIV'],
+        ['key' => 'Spacebar', 'code' => 'Space', 'tag' => 'DIV'],
+    ]]);
+
+    expect($result['keys'])->toBe([
+        ['prevented' => true, 'paused' => false],  // Space on the player plays
+        ['prevented' => true, 'paused' => true],   // and pauses again
+        ['prevented' => false, 'paused' => true],  // on a line or button Space keeps its native action
+        ['prevented' => false, 'paused' => true],  // other keys are left alone
+        ['prevented' => true, 'paused' => false],
+    ]);
+});
+
+it('styles the player for light and dark themes with a visible focus ring', function () {
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+
+    $html = adminPlayerPage($this, $session);
+
+    expect($html)->toContain('.dark .el-player')
+        ->toContain(':focus-visible')
+        ->toContain('outline: 2px solid var(--el-focus)')
+        ->toContain('@media (max-width: 640px)');
+    // The light palette no longer relies on white-on-white borders or the old low-contrast speaker colours.
+    expect($html)->not->toContain('.el-player .el-spk-1 { color: #A78BFA; }')->not->toContain('opacity: .55');
+});
+
+it('gives the light-theme text colours at least 4.5:1 contrast on the player background', function () {
+    $luminance = function (string $hex): float {
+        $rgb = array_map(fn (string $c): float => hexdec($c) / 255, str_split(ltrim($hex, '#'), 2));
+        $lin = array_map(fn (float $c): float => $c <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4, $rgb);
+
+        return 0.2126 * $lin[0] + 0.7152 * $lin[1] + 0.0722 * $lin[2];
+    };
+    $ratio = fn (string $a, string $b): float => (max($luminance($a), $luminance($b)) + 0.05) / (min($luminance($a), $luminance($b)) + 0.05);
+    $view = (string) file_get_contents(resource_path('views/filament/infolists/transcript-player.blade.php'));
+    preg_match('/\.el-player \{ (--el-border.*?)color: var\(--el-text\)/s', $view, $light);
+    preg_match_all('/--el-(text|muted|me|client): (#[0-9A-F]{6})/', $light[1] ?? '', $colours, PREG_SET_ORDER);
+
+    expect($colours)->toHaveCount(4);
+    // Worst case background: the active-row tint (violet at 14 %) over white, about #EEE8FD.
+    foreach ($colours as [, $name, $hex]) {
+        expect($ratio($hex, '#FFFFFF'))->toBeGreaterThanOrEqual(4.5, "{$name} on white")
+            ->and($ratio($hex, '#EEE8FD'))->toBeGreaterThanOrEqual(4.5, "{$name} on the active row");
+    }
+});
+
+it('announces copy results to assistive technology', function () {
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, adminCallSegments());
+
+    $player = adminPlayerNode(adminPlayerPage($this, $session));
+    $live = (new DOMXPath($player->ownerDocument))->query('.//*[@aria-live="polite"]', $player)->item(0);
+
+    expect($live)->not->toBeNull()
+        ->and($live->getAttribute('x-text'))->toContain('Copied');
 });

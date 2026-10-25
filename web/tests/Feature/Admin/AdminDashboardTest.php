@@ -209,4 +209,37 @@ it('buckets the chart by the console time zone rather than UTC', function () {
 
     expect($data['labels'][13])->toBe('Oct 25')
         ->and($phone['data'][13])->toBe(1);
-})->skip('A6.W26: the dashboard chart buckets sessions by UTC day instead of the display time zone');
+});
+
+// --- This month's usage (A5.2) ----------------------------------------------------------------------------------
+
+/** @return array<string, mixed> */
+function adminUsageBlock(array $overrides = []): array
+{
+    return array_merge(['month' => '2026-10', 'time_zone' => 'UTC', 'minutes' => 812.5, 'cost_usd' => 6.42, 'limit_minutes' => null,
+        'limit_usd' => null, 'warn_at_percent' => 80, 'warn' => false, 'limit_reached' => false], $overrides);
+}
+
+it('shows this month\'s billable minutes and cost on the dashboard', function () {
+    $this->signInAsAdmin();
+
+    $stat = adminStatsByLabel()['This month'];
+
+    expect($stat->getValue())->toBe('0.0 min · $0.00')
+        ->and($stat->getDescription())->toBe('No monthly limit')
+        ->and($stat->getColor())->toBe('gray');
+    $this->panelComponent(SourceStatsOverview::class)->assertSee('This month');
+});
+
+it('describes the limit and colours the month by the warning and limit flags', function (array $usage, string $value, string $description, string $colour) {
+    $stat = SourceStatsOverview::monthStat(adminUsageBlock($usage));
+
+    expect($stat->getValue())->toBe($value)
+        ->and($stat->getDescription())->toBe($description)
+        ->and($stat->getColor())->toBe($colour);
+})->with([
+    'no limit' => [[], '812.5 min · $6.42', 'No monthly limit', 'gray'],
+    'minutes limit' => [['limit_minutes' => 3000], '812.5 min · $6.42', 'of 3,000 min', 'gray'],
+    'dollar limit, warning' => [['limit_usd' => 7.5, 'warn' => true], '812.5 min · $6.42', 'of $7.50', 'warning'],
+    'both limits, reached' => [['limit_minutes' => 800, 'limit_usd' => 6, 'warn' => true, 'limit_reached' => true], '812.5 min · $6.42', 'of 800 min · $6.00', 'danger'],
+]);

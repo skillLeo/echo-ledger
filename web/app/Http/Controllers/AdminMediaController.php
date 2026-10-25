@@ -18,7 +18,7 @@ final class AdminMediaController extends Controller
         abort_unless($user instanceof User && $user->is_super_admin, 403);
         $session = $recording->captureSession;
         // Same answer as an unknown id: one admin must not learn that another admin's recording exists.
-        abort_if($session === null || (string) $session->user_id !== (string) $user->getKey(), 404);
+        abort_if((string) $session->user_id !== (string) $user->getKey(), 404);
         abort_if($session->trashed() || ! $recording->isReady(), 404);
 
         return RecordingController::streamDecrypted($recording);

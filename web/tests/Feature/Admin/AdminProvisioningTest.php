@@ -64,4 +64,21 @@ it('does not tell the new admin they will be forced to set up two-factor, becaus
     Artisan::call('echoledger:make-admin', ['--email' => 'owner@example.test', '--name' => 'Owner', '--password' => 'a-long-enough-passphrase']);
 
     expect(Artisan::output())->not->toContain('will be asked to set up 2FA');
-})->skip('A6.W12: the make-admin command still says two-factor setup is required');
+});
+
+it('says that two-factor sign-in is optional and recommended (A6.W12)', function () {
+    Artisan::call('echoledger:make-admin', ['--email' => 'owner@example.test', '--name' => 'Owner', '--password' => 'a-long-enough-passphrase']);
+
+    expect(Artisan::output())->toContain('Two-factor sign-in is optional and recommended.')
+        ->not->toMatch('/\b(required|forced|mandatory)\b/i');
+});
+
+it('keeps the wording of the server guides in line with optional two-factor sign-in (A6.W12)', function () {
+    foreach (['README.md', 'DEPLOY.md'] as $guide) {
+        $text = (string) file_get_contents(base_path($guide));
+
+        expect($text)->toContain('Two-factor sign-in is optional and recommended.')
+            ->not->toMatch('/\b(?:requires?|required|mandatory|forced?|forces)\b[^|\n]{0,60}\b(?:TOTP|two-factor|2FA|MFA)\b/i')
+            ->not->toMatch('/\b(?:TOTP|two-factor|2FA|MFA)\b[^|\n]{0,60}\b(?:is|are)\s+(?:\*\*)?(?:required|mandatory|forced)/i');
+    }
+});

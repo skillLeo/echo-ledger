@@ -14,7 +14,21 @@ use App\Models\Recording;
  */
 final class RecordingIngestor
 {
+    /** finfo names for audio containers mapped to the type the library stores and serves. */
+    private const CANONICAL_MIMES = [
+        'audio/amr' => 'audio/amr',
+        'audio/x-hx-aac-adts' => 'audio/aac',
+        'video/webm' => 'audio/webm', // a WebM voice note is audio-only; serve it with an audio type
+    ];
+
     public function __construct(private readonly ChunkedUploadService $uploads) {}
+
+    public static function canonicalMime(string $mime): string
+    {
+        $mime = strtolower(trim($mime));
+
+        return self::CANONICAL_MIMES[$mime] ?? $mime;
+    }
 
     /** @param array{codec?: string|null, channels?: int, sample_rate?: int|null, duration_ms?: int|null} $meta */
     public function ingestLocalFile(CaptureSession $session, string $absolutePath, RecordingRole $role, string $mime, array $meta = []): Recording
@@ -24,7 +38,7 @@ final class RecordingIngestor
         /** @var Recording $recording */
         $recording = $session->recordings()->create([
             'role' => $role,
-            'mime' => strtolower($mime),
+            'mime' => self::canonicalMime($mime),
             'codec' => $meta['codec'] ?? null,
             'channels' => $meta['channels'] ?? 1,
             'sample_rate' => $meta['sample_rate'] ?? null,

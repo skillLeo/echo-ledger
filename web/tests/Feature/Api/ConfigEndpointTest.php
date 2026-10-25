@@ -195,17 +195,25 @@ describe('pins', function () {
     });
 
     it('lists the configured SPKI pins in order', function () {
-        app(SettingsRepository::class)->set('app.pins', ['sha256/AAAA=', 'sha256/BBBB=']);
+        $pins = ['sha256/'.str_repeat('A', 43).'=', 'sha256/'.str_repeat('B', 43).'='];
+        app(SettingsRepository::class)->set('app.pins', $pins);
 
-        expect($this->getJson('/api/config')->json('pins'))->toBe(['sha256/AAAA=', 'sha256/BBBB=']);
+        expect($this->getJson('/api/config')->json('pins'))->toBe($pins);
     });
 
     it('drops blank entries and never emits a non-list', function () {
-        app(SettingsRepository::class)->set('app.pins', ['sha256/AAAA=', '', '   ' => 'x', 0 => '']);
+        app(SettingsRepository::class)->set('app.pins', ['sha256/'.str_repeat('A', 43).'=', '', '   ' => 'x', 0 => '']);
         expect($this->getJson('/api/config')->json('pins'))->toBeArray()->each->toBeString();
 
         app(SettingsRepository::class)->set('app.pins', 'sha256/not-a-list');
         expect($this->getJson('/api/config')->json('pins'))->toBe([]);
+    });
+
+    it('drops stored pins that devices could not use (A6.W9)', function () {
+        $valid = 'sha256/'.str_repeat('C', 43).'=';
+        app(SettingsRepository::class)->set('app.pins', ['sha256/AAAA=', $valid, 'md5/'.str_repeat('D', 43).'=', ['nested'], 42, 'sha256/'.str_repeat('E', 44)]);
+
+        expect($this->getJson('/api/config')->json('pins'))->toBe([$valid]);
     });
 });
 

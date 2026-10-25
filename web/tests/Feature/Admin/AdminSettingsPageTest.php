@@ -308,7 +308,7 @@ it('refuses plain http and ftp for endpoints that receive API keys and bearer to
     'ElevenLabs over ftp' => ['elevenlabs_base_url', 'ftp://api.elevenlabs.io'],
     'Azure over http' => ['azure_endpoint', 'http://acme.cognitiveservices.azure.com'],
     'whisper.cpp over http' => ['whisper_base_url', 'http://whisper.example.test'],
-])->skip('A6.W10: provider endpoint URLs accept non-HTTPS schemes');
+]);
 
 it('requires the ElevenLabs base URL but lets Azure and whisper.cpp endpoints stay empty', function () {
     $this->signInAsAdmin();
@@ -395,7 +395,7 @@ it('rejects certificate pins that devices could not use', function (string $pin)
     'too short' => ['sha256/abc='],
     'not base64' => ['sha256/<script>alert(1)</script>'],
     'plain text' => ['please pin my certificate'],
-])->skip('A6.W9: certificate pins are saved and pushed to devices without validation');
+]);
 
 it('ignores form keys that are not part of the settings form', function () {
     $this->signInAsAdmin();
@@ -452,4 +452,103 @@ it('survives a stored time zone that is no longer valid', function () {
 
     adminSettingsPage($this)->assertFormSet(['display_timezone' => 'UTC']);
     $this->get('/admin/sessions')->assertOk();
+});
+
+// --- Monthly limit and prices (A5.2) ---------------------------------------------------------------------------
+
+it('shows no monthly limit, an 80 % warning and the default price table when nothing is saved', function () {
+    $this->signInAsAdmin();
+
+    adminAssertFormShows(adminSettingsPage($this), [
+        'monthly_minutes' => null,
+        'monthly_usd' => null,
+        'warn_percent' => 80,
+        'price__assemblyai__live_captions' => 0.45,
+        'price__assemblyai__final_transcript' => 0.26,
+        'price__elevenlabs__dictation' => 0.47,
+        'price__elevenlabs__voice_note' => 0.27,
+        'price__azure_mai__final_transcript' => 0.10,
+    ]);
+    expect(array_column(Settings::priceFields(), 2))->toContain('AssemblyAI · Live captions', 'ElevenLabs · Final transcript', 'Azure MAI · Voice notes')
+        ->and(Settings::priceFields())->toHaveCount(10);
+});
+
+it('renders the monthly limit section with its labels and help text', function () {
+    $this->signInAsAdmin();
+
+    $this->get('/admin/settings')->assertOk()
+        ->assertSee('Monthly limit')
+        ->assertSee('Monthly limit (minutes)')
+        ->assertSee('Monthly limit (US$)')
+        ->assertSee('Warn at (%)')
+        ->assertSee('Billable provider minutes: audio minutes × channels.')
+        ->assertSee('Prices (US$ per audio hour per channel)')
+        ->assertSee('Defaults follow the providers&#039; list prices. Edit them when you change model or plan.', false);
+});
+
+it('saves the monthly limits, the warning threshold and the prices', function () {
+    $this->signInAsAdmin();
+
+    adminSettingsPage($this)->fillForm(adminChangedSettings([
+        'monthly_minutes' => 3000,
+        'monthly_usd' => '49.999',
+        'warn_percent' => 75,
+        'price__assemblyai__live_captions' => '0.1234',
+        'price__azure_mai__voice_note' => 0,
+    ]))->call('save')->assertHasNoFormErrors();
+
+    $settings = app(SettingsRepository::class);
+    $prices = $settings->get('budget.prices');
+    expect($settings->get('budget.monthly_minutes'))->toBe(3000)
+        ->and($settings->get('budget.monthly_usd'))->toEqual(50) // JSON keeps 50.0 as 50
+        ->and($settings->get('budget.warn_percent'))->toBe(75)
+        ->and($prices['assemblyai']['live_captions'])->toBe(0.1234)
+        ->and($prices['assemblyai']['final_transcript'])->toBe(0.26)
+        ->and($prices['azure_mai']['voice_note'])->toEqual(0.0)
+        ->and(array_keys($prices))->toBe(['assemblyai', 'elevenlabs', 'azure_mai']);
+
+    adminAssertFormShows(adminSettingsPage($this), ['monthly_minutes' => 3000, 'monthly_usd' => 50.0, 'warn_percent' => 75, 'price__assemblyai__live_captions' => 0.1234]);
+});
+
+it('clears a monthly limit when the field is emptied', function () {
+    $this->signInAsAdmin();
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['monthly_minutes' => 600, 'monthly_usd' => 20]))->call('save')->assertHasNoFormErrors();
+
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['monthly_minutes' => '', 'monthly_usd' => null]))->call('save')->assertHasNoFormErrors();
+
+    $settings = app(SettingsRepository::class);
+    expect(Setting::query()->where('key', 'budget.monthly_minutes')->exists())->toBeTrue()
+        ->and($settings->get('budget.monthly_minutes'))->toBeNull()
+        ->and($settings->get('budget.monthly_usd'))->toBeNull();
+});
+
+it('rejects monthly limits and prices outside their ranges', function (string $field, mixed $value) {
+    $this->signInAsAdmin();
+
+    adminSettingsPage($this)->fillForm(adminChangedSettings([$field => $value]))->call('save')->assertHasFormErrors([$field]);
+
+    expect(Setting::query()->count())->toBe(0);
+})->with([
+    'zero minutes' => ['monthly_minutes', 0],
+    'negative minutes' => ['monthly_minutes', -10],
+    'fractional minutes' => ['monthly_minutes', '12.5'],
+    'text minutes' => ['monthly_minutes', 'lots'],
+    'dollars below a cent' => ['monthly_usd', '0.001'],
+    'negative dollars' => ['monthly_usd', -5],
+    'warning at zero' => ['warn_percent', 0],
+    'warning above 100' => ['warn_percent', 101],
+    'warning left empty' => ['warn_percent', ''],
+    'negative price' => ['price__elevenlabs__live_captions', -0.01],
+    'price above 100' => ['price__assemblyai__dictation', 100.5],
+    'price left empty' => ['price__azure_mai__final_transcript', ''],
+]);
+
+it('shows the defaults again when stored limit values are not usable', function () {
+    $this->signInAsAdmin();
+    $settings = app(SettingsRepository::class);
+    $settings->set('budget.monthly_minutes', 'many');
+    $settings->set('budget.warn_percent', 500);
+    $settings->set('budget.prices', ['assemblyai' => ['live_captions' => 'free']]);
+
+    adminAssertFormShows(adminSettingsPage($this), ['monthly_minutes' => null, 'warn_percent' => 80, 'price__assemblyai__live_captions' => 0.45]);
 });

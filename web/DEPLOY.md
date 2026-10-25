@@ -14,8 +14,10 @@ reconciler and the 30-day retention cleanup.
 ## First deploy
 1. Upload the `web/` folder above `public_html` and point the domain's document root at `web/public`.
    On hosts that force `public_html`, symlink it: `ln -s ~/echoledger/web/public ~/public_html`.
-2. Locally run `composer install --no-dev --optimize-autoloader` and `npm ci && npm run build`, then upload
-   `vendor/` and `public/build/` (or run them on the host if SSH + Composer are available).
+2. Locally run `composer install --no-dev --optimize-autoloader` and `npm install && npm run build` (the repo
+   has no npm lock file, so `npm ci` would refuse to run), then upload `vendor/` and `public/build/` (or run
+   them on the host if SSH + Composer are available). Composer also publishes the console's own scripts,
+   styles and fonts into `public/` (`php artisan filament:upgrade`); the console loads nothing from other hosts.
 3. Create `.env` from `.env.example` and set at least:
    ```
    APP_ENV=production
@@ -31,8 +33,11 @@ reconciler and the 30-day retention cleanup.
    **Back this key up offline (password manager).** Without it every stored recording is unreadable. It is
    deliberately separate from `APP_KEY`; never rotate it while recordings exist.
 6. `php artisan migrate --force`
-7. `php artisan echoledger:make-admin --email=you@example.com` (min 12-char password). The first login forces
-   TOTP 2FA enrolment and shows recovery codes once — store them safely.
+7. `php artisan echoledger:make-admin --email=you@example.com` (min 12-char password).
+   Two-factor sign-in is optional and recommended. Turn it on from the profile page after the first sign-in; it
+   shows the recovery codes once — store them safely. Prefer this command to `db:seed` on a server; outside
+   `APP_ENV=local` the seeder never uses the demo password (it needs `ADMIN_PASSWORD` with 12+ characters, or it
+   prints a random one once).
 8. `php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan filament:optimize`
 9. In **Admin → API Credentials** paste the AssemblyAI API key and press **Generate** for the webhook secret.
    In **Admin → Settings** pick providers per use-case and add the certificate pins (see below).
@@ -72,7 +77,7 @@ Upload the new code, then: `php artisan migrate --force && php artisan optimize:
 
 ## Local development (this repo)
 ```
-php artisan migrate:fresh --seed      # owner@echoledger.local / change-me-now-please + demo library
+php artisan migrate:fresh --seed      # APP_ENV=local: owner@echoledger.local / change-me-now-please + demo library
 php artisan serve
 php artisan queue:work --stop-when-empty
 ```

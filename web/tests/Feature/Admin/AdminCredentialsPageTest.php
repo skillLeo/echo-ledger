@@ -50,6 +50,15 @@ it('lists the webhook URL to configure at the provider', function () {
         ->assertSee(rtrim((string) config('app.url'), '/').'/api/webhooks/stt/elevenlabs');
 });
 
+it('lets the long webhook URL wrap so the page fits a phone screen (A6.W26)', function () {
+    $this->signInAsAdmin();
+
+    $html = $this->get('/admin/api-credentials')->assertOk()->getContent();
+    $url = rtrim((string) config('app.url'), '/').'/api/webhooks/stt/elevenlabs';
+
+    expect($html)->toMatch('#style="overflow-wrap: anywhere; word-break: break-all;"[^>]*>\s*(<[^>]+>\s*)*'.preg_quote($url, '#').'#');
+});
+
 it('uses a masked, revealable input without autofill for every secret', function () {
     $this->signInAsAdmin();
 

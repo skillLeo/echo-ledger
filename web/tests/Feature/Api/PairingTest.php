@@ -75,7 +75,8 @@ describe('code generation', function () {
 
     it('builds the QR payload documented in API.md', function () {
         config(['app.url' => 'https://ledger.example.com/']);
-        app(SettingsRepository::class)->set('app.pins', ['sha256/AAAA=', 'sha256/BBBB=']);
+        $pins = ['sha256/'.str_repeat('A', 43).'=', 'sha256/'.str_repeat('B', 43).'='];
+        app(SettingsRepository::class)->set('app.pins', $pins);
 
         $payload = json_decode(app(PairingService::class)->qrPayload('7kq2-m9xd'), true, flags: JSON_THROW_ON_ERROR);
 
@@ -83,7 +84,7 @@ describe('code generation', function () {
             'v' => 1,
             'url' => 'https://ledger.example.com',
             'code' => '7KQ2M9XD',
-            'pins' => ['sha256/AAAA=', 'sha256/BBBB='],
+            'pins' => $pins,
         ]);
     });
 });

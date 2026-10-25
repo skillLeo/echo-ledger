@@ -115,10 +115,16 @@ class CaptureSession extends Model
             return $this->title;
         }
 
-        return match ($this->source_app) {
+        return self::fallbackTitleFor($this->source_app);
+    }
+
+    /** The title shown for an untitled session of this app ("WhatsApp call", "Voice note", "Recording"). */
+    public static function fallbackTitleFor(SourceApp $app): string
+    {
+        return match ($app) {
             SourceApp::VoiceNote => 'Voice note',
             SourceApp::Other => 'Recording',
-            default => $this->source_app->getLabel().' call',
+            default => $app->getLabel().' call',
         };
     }
 

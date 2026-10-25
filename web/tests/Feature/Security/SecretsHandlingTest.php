@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\SessionStatus;
 use App\Filament\Pages\ApiCredentials;
 use App\Models\User;
 use App\Services\CredentialVault;
@@ -186,7 +187,7 @@ it('defaults the environment template to a production-safe debug setting', funct
     $template = (string) file_get_contents(base_path('.env.example'));
 
     expect($template)->toMatch('/^APP_DEBUG=false\s*$/m');
-})->skip('A6.W29: .env.example ships APP_DEBUG=true');
+});
 
 it('never tracks the real environment file or the encrypted recordings', function () {
     $ignore = (string) file_get_contents(base_path('.gitignore'));
@@ -253,7 +254,7 @@ it('does not create a super admin with the published default password outside lo
     }
 
     expect($usable)->toBeFalse('the seeder created an admin whose password is the documented default');
-})->skip('A6.W11: the seeder creates a super admin with the published default password in any environment');
+});
 
 it('shows only a masked status for stored credentials on the console page and never echoes what was typed', function () {
     secStoreSentinels();
@@ -302,16 +303,16 @@ it('sends provider API keys only to the provider\'s own hosts even when a hostil
     $settings->set('provider.live_captions', $provider);
     app(CredentialVault::class)->put($provider === 'azure_mai' ? 'azure' : $provider, 'api_key', 'EXFIL-SENTINEL-KEY-'.$credential);
     Http::fake(['*' => Http::response(['token' => 'temporary-streaming-token'], 200)]);
-    $token = Fx::token(Fx::device());
+    $device = Fx::device();
+    $token = Fx::token($device);
+    // Live captions need an open recording session of this device, so the request reaches the provider driver.
+    $open = Fx::session($device->user, $device, ['status' => SessionStatus::Recording, 'created_at' => now()->subMinute()]);
 
-    $this->api($token)->postJson('/api/stt/token', ['use_case' => 'live_captions']);
+    $response = $this->api($token)->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $open->id]);
 
-    $urls = [];
-    Http::assertSent(function ($request) use (&$urls) {
-        $urls[] = $request->url();
-
-        return true;
-    });
+    // The driver refuses the configured address before sending the key (503 provider_not_configured).
+    $response->assertStatus(503);
+    $urls = Http::recorded()->map(fn (array $pair) => $pair[0]->url())->all();
     $allowed = ['api.elevenlabs.io', 'api.assemblyai.com', 'api.eu.assemblyai.com', 'streaming.assemblyai.com'];
     // Every request carries the key, so each one must go over HTTPS to one of the provider's own hosts.
     $foreign = array_values(array_filter($urls, function (string $url) use ($allowed): bool {
@@ -326,4 +327,23 @@ it('sends provider API keys only to the provider\'s own hosts even when a hostil
     'ElevenLabs base URL over plain http' => ['elevenlabs.base_url', 'http://api.elevenlabs.io', 'elevenlabs', 'el2'],
     'Azure region that injects a host' => ['azure.region', 'attacker.example/x?', 'azure_mai', 'az'],
     'Azure region with userinfo' => ['azure.region', 'x@attacker.example#', 'azure_mai', 'az2'],
-])->skip('A6.W10: a configured provider endpoint can send the provider key over plain HTTP or to any host');
+]);
+
+it('still sends the provider key to the provider\'s own host when the configured address is allowed', function (string $setting, string $value, string $provider, string $expectedHost) {
+    $settings = app(SettingsRepository::class);
+    $settings->set($setting, $value);
+    $settings->set('provider.live_captions', $provider);
+    app(CredentialVault::class)->put($provider === 'azure_mai' ? 'azure' : $provider, 'api_key', 'ALLOWED-SENTINEL-KEY');
+    Http::fake(['*' => Http::response(['token' => 'temporary-streaming-token'], 200)]);
+    $device = Fx::device();
+    $open = Fx::session($device->user, $device, ['status' => SessionStatus::Recording, 'created_at' => now()->subMinute()]);
+
+    $this->api(Fx::token($device))->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $open->id])->assertOk();
+
+    $hosts = Http::recorded()->map(fn (array $pair) => parse_url($pair[0]->url(), PHP_URL_HOST))->unique()->values()->all();
+    expect($hosts)->toBe([$expectedHost]);
+})->with([
+    'ElevenLabs default host' => ['elevenlabs.base_url', 'https://api.elevenlabs.io', 'elevenlabs', 'api.elevenlabs.io'],
+    'ElevenLabs regional host' => ['elevenlabs.base_url', 'https://api.eu.residency.elevenlabs.io', 'elevenlabs', 'api.eu.residency.elevenlabs.io'],
+    'Azure region' => ['azure.region', 'centralindia', 'azure_mai', 'centralindia.api.cognitive.microsoft.com'],
+]);

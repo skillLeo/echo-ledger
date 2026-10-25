@@ -147,12 +147,13 @@ it('builds the pairing QR from the configured URL and never from the request hos
 });
 
 it('returns the pin set with the pairing response and never an admin credential', function () {
-    app(SettingsRepository::class)->set('app.pins', ['sha256/AAAA=', 'sha256/BBBB=']);
+    $pins = ['sha256/'.str_repeat('A', 43).'=', 'sha256/'.str_repeat('B', 43).'='];
+    app(SettingsRepository::class)->set('app.pins', $pins);
     $display = app(PairingService::class)->createCode(Fx::user());
 
     $response = secRegister($display, '198.51.100.80')->assertCreated();
 
-    expect($response->json('config.pins'))->toBe(['sha256/AAAA=', 'sha256/BBBB='])
+    expect($response->json('config.pins'))->toBe($pins)
         ->and($response->getContent())->not->toContain('password')->not->toContain('email')->not->toContain('is_super_admin');
 });
 

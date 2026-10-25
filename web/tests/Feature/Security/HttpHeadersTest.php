@@ -30,28 +30,28 @@ it('stops the console login page from being framed', function () {
     $frameOptions = strtolower((string) $response->headers->get('X-Frame-Options'));
     $csp = strtolower((string) $response->headers->get('Content-Security-Policy'));
     expect(in_array($frameOptions, ['deny', 'sameorigin'], true) || str_contains($csp, 'frame-ancestors'))->toBeTrue();
-})->skip('A6.W25: the app sends no security headers; they exist only in the hosting .htaccess');
+});
 
 it('sends X-Content-Type-Options nosniff on console pages and API responses', function () {
     expect($this->get('/admin/login')->headers->get('X-Content-Type-Options'))->toBe('nosniff');
     expect($this->api()->getJson('/api/config')->headers->get('X-Content-Type-Options'))->toBe('nosniff');
     expect($this->api(Fx::token(Fx::device()))->getJson('/api/config')->headers->get('X-Content-Type-Options'))->toBe('nosniff');
-})->skip('A6.W25: the app sends no security headers; they exist only in the hosting .htaccess');
+});
 
 it('sends a Referrer-Policy header on console pages', function () {
     expect($this->get('/admin/login')->headers->get('Referrer-Policy'))->not->toBeNull();
-})->skip('A6.W25: the app sends no security headers; they exist only in the hosting .htaccess');
+});
 
 it('sends Strict-Transport-Security on HTTPS responses', function () {
     $response = $this->get('/admin/login');
 
     expect($this->app['request']->isSecure() || str_starts_with((string) config('app.url'), 'https://'))->toBeTrue();
     expect((string) $response->headers->get('Strict-Transport-Security'))->toContain('max-age=');
-})->skip('A6.W25: the app sends no security headers; they exist only in the hosting .htaccess');
+});
 
 it('sends a Content-Security-Policy on console pages', function () {
     expect($this->get('/admin/login')->headers->get('Content-Security-Policy'))->not->toBeNull();
-})->skip('A6.W25: the app sends no security headers; they exist only in the hosting .htaccess');
+});
 
 it('marks the session cookie HttpOnly and SameSite', function () {
     $cookie = secSessionCookie();
@@ -120,4 +120,46 @@ it('serves error pages for unknown console URLs without version or path details'
     $body = $this->get('/admin/does-not-exist-'.bin2hex(random_bytes(3)))->getContent();
 
     expect($body)->not->toContain('vendor')->not->toContain('Stack trace')->not->toContain(base_path());
+});
+
+it('limits the console to its own origin with a Content-Security-Policy that forbids framing', function () {
+    $csp = (string) $this->get('/admin/login')->headers->get('Content-Security-Policy');
+
+    expect($csp)->toContain("default-src 'self'")
+        ->toContain("frame-ancestors 'none'")
+        ->toContain("object-src 'none'")
+        ->toContain("img-src 'self' data:")
+        ->not->toContain('*')
+        ->not->toContain('http');
+    expect($this->get('/admin/login')->headers->get('X-Frame-Options'))->toBe('DENY')
+        ->and($this->get('/admin/login')->headers->get('Referrer-Policy'))->toBe('same-origin');
+});
+
+it('keeps the security headers on API answers, without the console policy', function () {
+    $response = $this->api(Fx::token(Fx::device()))->getJson('/api/config');
+
+    expect($response->headers->get('X-Content-Type-Options'))->toBe('nosniff')
+        ->and($response->headers->get('Referrer-Policy'))->toBe('same-origin')
+        ->and($response->headers->get('Content-Security-Policy'))->toBeNull()
+        ->and((string) $response->headers->get('Strict-Transport-Security'))->toBe('max-age=31536000');
+});
+
+it('keeps the security headers on error answers', function () {
+    $this->get('/admin/does-not-exist-'.bin2hex(random_bytes(3)))->assertHeader('X-Content-Type-Options', 'nosniff');
+    $this->api()->getJson('/api/config')->assertUnauthorized()->assertHeader('X-Frame-Options', 'DENY');
+});
+
+it('sends Strict-Transport-Security only over HTTPS', function () {
+    $plain = $this->get('http://echoledger.test/admin/login');
+
+    expect($plain->headers->get('Strict-Transport-Security'))->toBeNull()
+        ->and($plain->headers->get('X-Content-Type-Options'))->toBe('nosniff');
+});
+
+it('answers API preflight requests without any CORS headers', function () {
+    $response = $this->withHeaders(['Origin' => 'https://evil.example', 'Access-Control-Request-Method' => 'GET'])->call('OPTIONS', '/api/config');
+
+    expect($response->headers->get('Access-Control-Allow-Origin'))->toBeNull()
+        ->and($response->headers->get('Access-Control-Allow-Methods'))->toBeNull()
+        ->and(config('cors.paths'))->toBe([]);
 });

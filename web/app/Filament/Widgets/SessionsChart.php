@@ -6,6 +6,7 @@ namespace App\Filament\Widgets;
 
 use App\Enums\SourceDevice;
 use App\Models\CaptureSession;
+use App\Services\SettingsRepository;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Carbon;
 
@@ -24,15 +25,20 @@ class SessionsChart extends ChartWidget
 
     protected function getData(): array
     {
-        $start = now()->subDays(13)->startOfDay();
+        // Days are cut in the console's time zone, the zone the Sessions list shows times in.
+        $zone = app(SettingsRepository::class)->displayTimezone();
+        $start = now($zone)->subDays(13)->startOfDay();
         $rows = CaptureSession::query()
             ->where('user_id', auth()->id())
-            ->where('started_at', '>=', $start)
+            ->where('started_at', '>=', $start->copy()->utc())
             ->get(['started_at', 'source_device']);
 
         $labels = [];
+        $dayIndex = [];
         for ($i = 0; $i < 14; $i++) {
-            $labels[] = $start->copy()->addDays($i)->format('M j');
+            $day = $start->copy()->addDays($i);
+            $labels[] = $day->format('M j');
+            $dayIndex[$day->format('Y-m-d')] = $i;
         }
 
         $colors = [SourceDevice::Phone->value => '#10B981', SourceDevice::Desktop->value => '#22D3EE', SourceDevice::Web->value => '#8B5CF6'];
@@ -41,8 +47,8 @@ class SessionsChart extends ChartWidget
             $series = array_fill(0, 14, 0);
             foreach ($rows as $row) {
                 if ($row->source_device === $device) {
-                    $index = (int) $start->diffInDays(Carbon::parse($row->started_at)->startOfDay());
-                    if ($index >= 0 && $index < 14) {
+                    $index = $dayIndex[Carbon::parse($row->started_at)->setTimezone($zone)->format('Y-m-d')] ?? null;
+                    if ($index !== null) {
                         $series[$index]++;
                     }
                 }

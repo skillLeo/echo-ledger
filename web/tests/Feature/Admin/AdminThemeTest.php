@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Filament\Support\InitialsAvatarProvider;
+use App\Filament\Support\LocalInterFontProvider;
 use Filament\Enums\ThemeMode;
 use Filament\Facades\Filament;
 use Filament\Support\Colors\Color;
@@ -109,4 +111,44 @@ it('does not load fonts, avatars or scripts from third-party hosts', function ()
 
     $own = parse_url((string) config('app.url'), PHP_URL_HOST);
     Assert::assertSame([], array_values(array_diff($hosts, [$own])), 'the console page asks the browser to contact third-party hosts');
-})->skip('A6.W27: the console loads fonts and avatars from third-party hosts');
+});
+
+it('names no font or avatar service anywhere in the console page (A6.W27)', function () {
+    $this->signInAsAdmin(['name' => 'Farah Khan']);
+
+    $html = $this->get('/admin')->assertOk()->getContent();
+
+    expect($html)->not->toContain('fonts.bunny.net')->not->toContain('ui-avatars.com')->not->toContain('fonts.googleapis.com');
+    expect($this->panel->getFontProvider())->toBe(LocalInterFontProvider::class)
+        ->and($this->panel->getDefaultAvatarProvider())->toBe(InitialsAvatarProvider::class);
+});
+
+it('draws the account avatar locally from the initials', function () {
+    $admin = $this->signInAsAdmin(['name' => 'Farah Khan']);
+
+    $url = Filament::getUserAvatarUrl($admin);
+    $svg = base64_decode(substr($url, strlen('data:image/svg+xml;base64,')), true);
+
+    expect($url)->toStartWith('data:image/svg+xml;base64,')
+        ->and($svg)->toContain('>FK</text>')
+        ->and(InitialsAvatarProvider::initials('farah  ali khan'))->toBe('FK')
+        ->and(InitialsAvatarProvider::initials('[SYSTEM] admin'))->toBe('SA')
+        ->and(InitialsAvatarProvider::initials('  '))->toBe('');
+    expect(base64_decode(substr(InitialsAvatarProvider::dataUri('<script>&'), 26), true))->not->toContain('<script>');
+});
+
+it('declares the Inter font from the published files on this server', function () {
+    $css = LocalInterFontProvider::css('Inter');
+
+    if (! is_file(public_path(LocalInterFontProvider::PUBLISHED_DIR.'/index.css'))) {
+        expect($css)->toBe(''); // assets not published: the theme falls back to the system font stack
+    } else {
+        preg_match_all('/url\(["\']?([^"\')]+)/', $css, $urls);
+        expect($css)->toContain("font-family:'Inter'")->not->toContain('Inter Variable')
+            ->and($urls[1])->not->toBeEmpty();
+        foreach ($urls[1] as $url) {
+            expect($url)->toStartWith(asset(LocalInterFontProvider::PUBLISHED_DIR).'/')->toEndWith('.woff2');
+        }
+    }
+    expect(LocalInterFontProvider::css('Inter;}body{x'))->toBe('');
+});

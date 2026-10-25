@@ -308,16 +308,42 @@ it('rejects plain http, ftp and gopher for every outbound provider URL in the se
     Filament::setCurrentPanel('admin');
 
     Livewire::test(Settings::class)->fillForm([$field => $url])->call('save')->assertHasFormErrors([$field]);
-})->with(secProviderUrlCases(['gopher://127.0.0.1:6379/_PING', 'ftp://example.com/x', 'http://example.com/plain-text-key']))
-    ->skip('A6.W10: provider endpoint URLs accept non-HTTPS schemes');
+})->with(secProviderUrlCases(['gopher://127.0.0.1:6379/_PING', 'ftp://example.com/x', 'http://example.com/plain-text-key']));
 
-it('accepts https provider URLs in the settings', function (string $field) {
+it('accepts https provider URLs on the provider\'s own hosts in the settings', function (string $field, string $url) {
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
     Filament::setCurrentPanel('admin');
 
-    Livewire::test(Settings::class)->fillForm([$field => 'https://example.com/path'])->call('save')->assertHasNoFormErrors();
-})->with(['elevenlabs_base_url', 'azure_endpoint', 'whisper_base_url']);
+    Livewire::test(Settings::class)->fillForm([$field => $url])->call('save')->assertHasNoFormErrors();
+})->with([
+    ['elevenlabs_base_url', 'https://api.elevenlabs.io'],
+    ['elevenlabs_base_url', 'https://api.eu.residency.elevenlabs.io'],
+    ['azure_endpoint', 'https://acme.cognitiveservices.azure.com'],
+    ['azure_endpoint', 'https://westeurope.api.cognitive.microsoft.com'],
+    ['whisper_base_url', 'https://example.com/path'],
+    ['whisper_base_url', 'http://localhost:8080'],
+    ['whisper_base_url', 'http://127.0.0.1:8080'],
+]);
+
+it('rejects provider URLs that would send the key to another host (A6.W10)', function (string $field, string $url) {
+    $admin = Fx::superAdmin();
+    $this->actingAs($admin);
+    Filament::setCurrentPanel('admin');
+
+    Livewire::test(Settings::class)->fillForm([$field => $url])->call('save')->assertHasFormErrors([$field]);
+    expect(DB::table('settings')->count())->toBe(0);
+})->with([
+    ['elevenlabs_base_url', 'https://attacker.example'],
+    ['elevenlabs_base_url', 'https://elevenlabs.io.attacker.example'],
+    ['elevenlabs_base_url', 'https://notelevenlabs.io'],
+    ['elevenlabs_base_url', 'https://user:pass@api.elevenlabs.io'],
+    ['elevenlabs_base_url', 'https://api.elevenlabs.io?next=https://attacker.example'],
+    ['azure_endpoint', 'https://example.com/path'],
+    ['azure_endpoint', 'https://cognitiveservices.azure.com.attacker.example'],
+    ['whisper_base_url', 'http://whisper.example.test'],
+    ['whisper_base_url', 'http://localhost.attacker.example'],
+]);
 
 it('refuses settings that would break the service', function () {
     $admin = Fx::superAdmin();
@@ -335,8 +361,7 @@ it('rejects an Azure region that is not a plain region name, because it is place
     Filament::setCurrentPanel('admin');
 
     Livewire::test(Settings::class)->fillForm(['azure_region' => $region])->call('save')->assertHasFormErrors(['azure_region']);
-})->with(['attacker.example/x?', 'x@attacker.example#', 'a b', '../x', 'east.us', "a\nb", 'EASTUS!', str_repeat('a', 80)])
-    ->skip('A6.W10: the Azure region is not validated although it becomes part of the provider host name');
+})->with(['attacker.example/x?', 'x@attacker.example#', 'a b', '../x', 'east.us', "a\nb", 'EASTUS!', str_repeat('a', 80)]);
 
 it('accepts ordinary Azure region names', function (string $region) {
     $admin = Fx::superAdmin();

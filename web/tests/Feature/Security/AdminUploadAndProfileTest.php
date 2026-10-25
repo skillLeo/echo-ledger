@@ -109,15 +109,19 @@ it('never lets the uploaded file name reach a stored path', function () {
 
 it('refuses a new profile password shorter than the twelve characters the CLI demands', function (string $password) {
     $admin = auth()->user();
+    $storedHash = $admin->fresh()->password;
 
     Livewire::test(EditProfile::class)
         ->fillForm(['name' => $admin->name, 'email' => $admin->email, 'currentPassword' => 'password', 'password' => $password, 'passwordConfirmation' => $password])
         ->call('save')
         ->assertHasFormErrors(['password']);
 
-    expect(Hash::check($password, $admin->fresh()->password))->toBeFalse();
-})->with(['12345678', 'password', 'abcdefgh', 'Aa1!aaaa', 'elevenchars'])
-    ->skip('A6.W23: the console profile accepts passwords shorter than the 12 characters the CLI requires');
+    // Nothing was saved. (Comparing hashes also covers the "password" case, which equals the current password.)
+    expect($admin->fresh()->password)->toBe($storedHash);
+    if ($password !== 'password') {
+        expect(Hash::check($password, $admin->fresh()->password))->toBeFalse();
+    }
+})->with(['12345678', 'password', 'abcdefgh', 'Aa1!aaaa', 'elevenchars']);
 
 it('accepts a long profile password', function () {
     $admin = auth()->user();

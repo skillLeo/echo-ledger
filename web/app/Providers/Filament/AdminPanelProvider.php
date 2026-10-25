@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Providers\Filament;
 
-use Filament\Auth\MultiFactor\App\AppAuthentication;
+use App\Filament\Auth\AppAuthentication;
+use App\Filament\Support\InitialsAvatarProvider;
+use App\Filament\Support\LocalInterFontProvider;
 use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -44,7 +46,9 @@ class AdminPanelProvider extends PanelProvider
                 'info' => Color::Cyan,
                 'gray' => Color::Slate,
             ])
-            ->font('Inter')
+            // Self-hosted font and initials avatars: the console asks no third-party host for anything.
+            ->font('Inter', provider: LocalInterFontProvider::class)
+            ->defaultAvatarProvider(InitialsAvatarProvider::class)
             ->globalSearch(false)
             ->sidebarCollapsibleOnDesktop()
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')

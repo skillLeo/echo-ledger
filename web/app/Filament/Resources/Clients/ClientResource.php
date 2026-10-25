@@ -50,7 +50,10 @@ class ClientResource extends Resource
             Section::make()->columns(2)->schema([
                 TextInput::make('name')->required()->maxLength(120)
                     ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('user_id', auth()->id())),
-                ColorPicker::make('color')->default('#8B5CF6'),
+                // Devices parse this as #RRGGBB, so anything else is refused on the server too.
+                ColorPicker::make('color')->default('#8B5CF6')
+                    ->regex('/^#[0-9A-Fa-f]{6}\z/')
+                    ->validationMessages(['regex' => 'Use a colour like #8B5CF6.']),
                 TextInput::make('language')->label('Language (optional)')->maxLength(16)
                     ->helperText('e.g. en, ur, ar. Leave empty for auto-detect (best for mixed-language calls).'),
                 Textarea::make('notes')->rows(3)->maxLength(2000)->columnSpanFull(),

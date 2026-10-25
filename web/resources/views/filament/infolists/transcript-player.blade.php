@@ -2,9 +2,15 @@
     $data = $entry->getPlayerData();
     $segments = $data['segments'];
     $starts = array_map(fn (array $s): float => ((int) ($s['start_ms'] ?? 0)) / 1000, $segments);
+    $stamp = function (array $s): string {
+        $sec = intdiv(max(0, (int) ($s['start_ms'] ?? 0)), 1000);
+
+        return $sec >= 3600 ? sprintf('%d:%02d:%02d', intdiv($sec, 3600), intdiv($sec % 3600, 60), $sec % 60) : sprintf('%02d:%02d', intdiv($sec, 60), $sec % 60);
+    };
 @endphp
 <x-dynamic-component :component="$getEntryWrapperView()" :entry="$entry">
-    <div class="el-player" wire:ignore x-data="{
+    <div class="el-player" wire:ignore tabindex="0" role="group" aria-label="Transcript player. Press Space to play or pause."
+        x-on:keydown="onKey($event)" x-data="{
             starts: @js($starts), active: -1, raf: null,
             init() {
                 const a = this.$refs.audio;
@@ -19,11 +25,21 @@
                 while (lo <= hi) { const m = (lo + hi) >> 1; if (this.starts[m] <= t) { i = m; lo = m + 1; } else { hi = m - 1; } }
                 if (i === this.active) return;
                 const rows = this.$refs.list.children;
-                if (this.active >= 0 && rows[this.active]) rows[this.active].removeAttribute('data-active');
-                if (i >= 0 && rows[i]) { rows[i].setAttribute('data-active', ''); rows[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+                if (this.active >= 0 && rows[this.active]) { rows[this.active].removeAttribute('data-active'); rows[this.active].removeAttribute('aria-current'); }
+                if (i >= 0 && rows[i]) { rows[i].setAttribute('data-active', ''); rows[i].setAttribute('aria-current', 'true'); rows[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
                 this.active = i;
             },
             seek(i) { const a = this.$refs.audio; if (!a) return; a.currentTime = this.starts[i]; a.play(); },
+            toggle() { const a = this.$refs.audio; if (!a) return; if (a.paused) { a.play(); } else { a.pause(); } },
+            // Space toggles playback while the player itself has focus; on a line or a button Space keeps its native
+            // meaning (a line seeks, a button presses), and the audio element handles its own keys.
+            onKey(e) {
+                if (e.key !== ' ' && e.code !== 'Space') return;
+                const tag = (e.target && e.target.tagName) || '';
+                if (['BUTTON', 'AUDIO', 'INPUT', 'TEXTAREA', 'SELECT', 'A'].includes(tag)) return;
+                e.preventDefault();
+                this.toggle();
+            },
             segments: @js(array_map(fn (array $s): array => ['speaker' => $s['speaker'] ?? 'Speaker', 'start_ms' => (int) ($s['start_ms'] ?? 0), 'text' => $s['text'] ?? ''], $segments)),
             copied: null,
             // Same text format as the desktop and Android apps: '[m:ss] Speaker: text', speaker omitted when there is only one.
@@ -40,23 +56,45 @@
             },
         }">
         <style>
-            .el-player { border: 1px solid rgba(255,255,255,.08); border-radius: 1rem; padding: 1rem;
-                background: linear-gradient(135deg, rgba(139,92,246,.10), rgba(34,211,238,.06)); }
+            /* Light theme first; .dark (set by Filament on <html>) swaps the palette. Text colours meet WCAG AA (4.5:1). */
+            .el-player { --el-border: #E2E8F0; --el-bg: linear-gradient(135deg, rgba(139,92,246,.06), rgba(34,211,238,.04)), #FFFFFF;
+                --el-text: #0F172A; --el-muted: #475569; --el-me: #6D28D9; --el-client: #155E75; --el-hover: rgba(15,23,42,.05);
+                --el-active: rgba(139,92,246,.14); --el-bar: #7C3AED; --el-focus: #7C3AED; --el-btn-border: #CBD5E1;
+                --el-btn-bg: #FFFFFF; --el-btn-hover: rgba(139,92,246,.12);
+                color: var(--el-text); border: 1px solid var(--el-border); border-radius: 1rem; padding: 1rem; background: var(--el-bg); }
+            .dark .el-player { --el-border: rgba(255,255,255,.10); --el-bg: linear-gradient(135deg, rgba(139,92,246,.12), rgba(34,211,238,.06));
+                --el-text: #F1F5F9; --el-muted: #CBD5E1; --el-me: #C4B5FD; --el-client: #67E8F9; --el-hover: rgba(255,255,255,.06);
+                --el-active: rgba(139,92,246,.30); --el-bar: #A78BFA; --el-focus: #C4B5FD; --el-btn-border: rgba(255,255,255,.22);
+                --el-btn-bg: rgba(255,255,255,.04); --el-btn-hover: rgba(139,92,246,.28); }
+            .el-player:focus-visible, .el-player .el-seg:focus-visible, .el-player .el-btn:focus-visible, .el-player audio:focus-visible {
+                outline: 2px solid var(--el-focus); outline-offset: 2px; }
             .el-player audio { width: 100%; margin-bottom: .75rem; border-radius: .75rem; }
-            .el-player .el-meta { display: flex; gap: .5rem; align-items: center; font-size: .75rem; opacity: .7; margin-bottom: .5rem; }
-            .el-player ol { max-height: 30rem; overflow-y: auto; list-style: none; padding: 0; margin: 0; }
-            .el-player li { display: grid; grid-template-columns: 4.5rem 5.5rem 1fr; gap: .5rem; cursor: pointer;
-                padding: .45rem .6rem; border-radius: .6rem; line-height: 1.45; transition: background .15s; }
-            .el-player li:hover { background: rgba(255,255,255,.04); }
-            .el-player li[data-active] { background: rgba(139,92,246,.22); box-shadow: inset 3px 0 0 #8B5CF6; }
-            .el-player .el-time { font-variant-numeric: tabular-nums; opacity: .55; font-size: .8rem; padding-top: .1rem; }
+            .el-player .el-meta { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: .75rem; color: var(--el-muted); margin-bottom: .5rem; }
+            .el-player ol { max-height: 30rem; overflow-y: auto; list-style: none; padding: 2px; margin: 0; }
+            .el-player li { border-radius: .6rem; }
+            .el-player li[data-active] { background: var(--el-active); box-shadow: inset 3px 0 0 var(--el-bar); }
+            .el-player .el-seg { display: grid; grid-template-columns: 4.5rem 5.5rem minmax(0, 1fr); gap: .5rem; width: 100%;
+                padding: .45rem .6rem; border: 0; border-radius: .6rem; background: transparent; color: inherit; font: inherit;
+                text-align: left; line-height: 1.45; cursor: pointer; transition: background .15s; }
+            .el-player .el-seg:hover { background: var(--el-hover); }
+            .el-player .el-time { font-variant-numeric: tabular-nums; color: var(--el-muted); font-size: .8rem; padding-top: .1rem; }
             .el-player .el-spk { font-weight: 600; font-size: .8rem; padding-top: .1rem; }
-            .el-player .el-spk-1 { color: #A78BFA; } .el-player .el-spk-2 { color: #22D3EE; }
-            .el-player .el-empty { opacity: .6; font-size: .9rem; padding: .75rem 0; }
-            .el-player .el-actions { margin-left: auto; display: flex; gap: .4rem; }
-            .el-player .el-btn { font-size: .75rem; padding: .3rem .7rem; border-radius: .5rem; border: 1px solid rgba(255,255,255,.14);
-                background: rgba(255,255,255,.04); color: inherit; cursor: pointer; transition: background .15s; }
-            .el-player .el-btn:hover { background: rgba(139,92,246,.22); }
+            .el-player .el-spk-1 { color: var(--el-me); } .el-player .el-spk-2 { color: var(--el-client); }
+            .el-player .el-text { overflow-wrap: anywhere; }
+            .el-player .el-empty { color: var(--el-muted); font-size: .9rem; padding: .75rem 0; }
+            .el-player .el-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: .4rem; }
+            .el-player .el-btn { font-size: .75rem; padding: .3rem .7rem; border-radius: .5rem; border: 1px solid var(--el-btn-border);
+                background: var(--el-btn-bg); color: var(--el-text); cursor: pointer; transition: background .15s; }
+            .el-player .el-btn:hover { background: var(--el-btn-hover); }
+            .el-player .el-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+                clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+            /* Phones: time and speaker on one line, the text below at full width. */
+            @media (max-width: 640px) {
+                .el-player { padding: .75rem; }
+                .el-player .el-seg { grid-template-columns: auto minmax(0, 1fr); row-gap: .15rem; }
+                .el-player .el-seg .el-text { grid-column: 1 / -1; }
+                .el-player .el-actions { margin-left: 0; }
+            }
         </style>
 
         @if ($data['audio_url'])
@@ -73,6 +111,7 @@
                     <button type="button" class="el-btn" x-on:click="copy(false)" x-text="copied === 'text' ? 'Copied' : 'Copy text'"></button>
                     <button type="button" class="el-btn" x-on:click="copy(true)" x-text="copied === 'times' ? 'Copied' : (copied === 'failed' ? 'Copy failed' : 'Copy with timestamps')"></button>
                 </span>
+                <span class="el-sr" role="status" aria-live="polite" x-text="copied === 'failed' ? 'Copy failed' : (copied ? 'Copied to the clipboard' : '')"></span>
             @endif
         </div>
 
@@ -80,13 +119,14 @@
             <div class="el-empty">No transcript yet.</div>
             <ol x-ref="list"></ol>
         @else
-            <ol x-ref="list">
+            <ol x-ref="list" aria-label="Transcript lines. Choose a line to play from there.">
                 @foreach ($segments as $i => $s)
-                    @php $sec = intdiv((int) ($s['start_ms'] ?? 0), 1000); @endphp
-                    <li x-on:click="seek({{ $i }})">
-                        <span class="el-time">{{ $sec >= 3600 ? gmdate('G:i:s', $sec) : gmdate('i:s', $sec) }}</span>
-                        <span class="el-spk el-spk-{{ (int) ($s['channel'] ?? 1) === 2 ? 2 : 1 }}">{{ $s['speaker'] ?? 'Speaker' }}</span>
-                        <span>{{ $s['text'] ?? '' }}</span>
+                    <li>
+                        <button type="button" class="el-seg" x-on:click="seek({{ $i }})">
+                            <span class="el-time">{{ $stamp($s) }}</span>
+                            <span class="el-spk el-spk-{{ (int) ($s['channel'] ?? 1) === 2 ? 2 : 1 }}">{{ $s['speaker'] ?? 'Speaker' }}</span>
+                            <span class="el-text">{{ $s['text'] ?? '' }}</span>
+                        </button>
                     </li>
                 @endforeach
             </ol>

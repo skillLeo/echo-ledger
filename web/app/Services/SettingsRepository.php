@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Models\Setting;
+use App\Rules\CertificatePin;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -38,6 +39,16 @@ final class SettingsRepository
         'whisper.vad' => true,
         'app.pins' => [],                            // SPKI pins ("sha256/<base64>") handed to devices
         'display.timezone' => 'UTC',                 // IANA zone the admin console shows times in
+        // Monthly transcription limit (whole server). Minutes = billable provider minutes (audio minutes × channels).
+        'budget.monthly_minutes' => null,            // int >= 1, or null = no minutes limit
+        'budget.monthly_usd' => null,                // decimal >= 0.01, or null = no US$ limit
+        'budget.warn_percent' => 80,                 // 1-100
+        // US$ per audio hour per channel; pairs that are missing price 0 (provider list prices, 2026-10).
+        'budget.prices' => [
+            'assemblyai' => ['live_captions' => 0.45, 'dictation' => 0.45, 'final_transcript' => 0.26, 'voice_note' => 0.26],
+            'elevenlabs' => ['live_captions' => 0.47, 'dictation' => 0.47, 'final_transcript' => 0.27, 'voice_note' => 0.27],
+            'azure_mai' => ['final_transcript' => 0.10, 'voice_note' => 0.10],
+        ],
     ];
 
     /** @var array<string, mixed>|null */
@@ -118,7 +129,8 @@ final class SettingsRepository
     {
         $pins = $this->get('app.pins', []);
 
-        return is_array($pins) ? array_values(array_filter(array_map('strval', $pins))) : [];
+        // A malformed stored pin would make every pinned connection fail on the devices: hand out only valid ones.
+        return is_array($pins) ? array_values(array_filter($pins, CertificatePin::isValid(...))) : [];
     }
 
     public function flush(): void

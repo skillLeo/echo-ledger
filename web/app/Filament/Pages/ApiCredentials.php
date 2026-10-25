@@ -17,6 +17,7 @@ use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontFamily;
 use Filament\Support\Icons\Heroicon;
 use UnitEnum;
 
@@ -56,7 +57,11 @@ class ApiCredentials extends Page
         $sections = [
             Section::make('Webhook URLs')->description('Configure these in the provider dashboards.')->schema([
                 Text::make('AssemblyAI: set per request automatically (needs a public HTTPS APP_URL).'),
-                Text::make('ElevenLabs workspace webhook: '.rtrim((string) config('app.url'), '/').'/api/webhooks/stt/elevenlabs'),
+                Text::make('ElevenLabs workspace webhook:'),
+                // The long URL wraps anywhere so the page fits a 360 px wide phone screen.
+                Text::make(rtrim((string) config('app.url'), '/').'/api/webhooks/stt/elevenlabs')
+                    ->fontFamily(FontFamily::Mono)->copyable()
+                    ->extraAttributes(['style' => 'overflow-wrap: anywhere; word-break: break-all;']),
             ]),
         ];
 

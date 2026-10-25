@@ -26,6 +26,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -45,6 +46,10 @@ class AppServiceProvider extends ServiceProvider
 
         // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
         FilamentTimezone::set(fn (): string => app(SettingsRepository::class)->displayTimezone());
+
+        // Console passwords follow the same 12-character minimum as `echoledger:make-admin` (Filament's profile
+        // page validates new passwords with Password::default()).
+        Password::defaults(static fn (): Password => Password::min(12));
 
         // Short, stable morph names: tokens and Livewire payloads never carry PHP class names.
         Relation::enforceMorphMap([

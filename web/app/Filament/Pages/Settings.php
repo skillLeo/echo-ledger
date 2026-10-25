@@ -7,7 +7,10 @@ namespace App\Filament\Pages;
 use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Models\User;
+use App\Rules\CertificatePin;
+use App\Rules\ProviderEndpoint;
 use App\Services\SettingsRepository;
+use App\Stt\ProviderEndpoints;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -71,7 +74,54 @@ class Settings extends Page
             'whisper_chunk_seconds' => $all['whisper.chunk_seconds'],
             'whisper_vad' => (bool) $all['whisper.vad'],
             'app_pins' => $all['app.pins'],
+            ...self::budgetFormState($all),
         ]);
+    }
+
+    /**
+     * One price input per (provider, use case) pair of the default table: field name => [provider, use case, label].
+     *
+     * @return array<string, array{0: string, 1: string, 2: string}>
+     */
+    public static function priceFields(): array
+    {
+        $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI'];
+        $useCases = ['live_captions' => 'Live captions', 'dictation' => 'Dictation', 'final_transcript' => 'Final transcript', 'voice_note' => 'Voice notes'];
+        $fields = [];
+        foreach (SettingsRepository::DEFAULTS['budget.prices'] as $provider => $pairs) {
+            foreach (array_keys($pairs) as $useCase) {
+                $fields["price__{$provider}__{$useCase}"] = [$provider, $useCase, $providers[$provider].' · '.$useCases[$useCase]];
+            }
+        }
+
+        return $fields;
+    }
+
+    /**
+     * Form state for the monthly limit section; stored values that are not usable fall back to the defaults.
+     *
+     * @param  array<string, mixed>  $all
+     * @return array<string, mixed>
+     */
+    private static function budgetFormState(array $all): array
+    {
+        $minutes = $all['budget.monthly_minutes'] ?? null;
+        $usd = $all['budget.monthly_usd'] ?? null;
+        $warn = $all['budget.warn_percent'] ?? null;
+        $state = [
+            'monthly_minutes' => is_int($minutes) && $minutes >= 1 ? $minutes : null,
+            'monthly_usd' => (is_int($usd) || is_float($usd)) && $usd >= 0.01 ? $usd : null,
+            'warn_percent' => is_int($warn) && $warn >= 1 && $warn <= 100 ? $warn : 80,
+        ];
+        $stored = is_array($all['budget.prices'] ?? null) ? $all['budget.prices'] : [];
+        foreach (self::priceFields() as $field => [$provider, $useCase]) {
+            $value = $stored[$provider][$useCase] ?? null;
+            $state[$field] = (is_int($value) || is_float($value)) && $value >= 0 && $value <= 100
+                ? $value
+                : SettingsRepository::DEFAULTS['budget.prices'][$provider][$useCase];
+        }
+
+        return $state;
     }
 
     public function form(Schema $schema): Schema
@@ -106,6 +156,26 @@ class Settings extends Page
                     'off' => 'Off',
                 ])->required(),
             ]),
+            Section::make('Monthly limit')
+                ->description('For the whole server, per calendar month in the time zone above. At the limit, devices show "Monthly transcription limit reached" and new transcripts wait. Leave a limit empty for none.')
+                ->columns(3)->schema([
+                    TextInput::make('monthly_minutes')->label('Monthly limit (minutes)')
+                        ->integer()->minValue(1)->nullable()
+                        ->helperText('Billable provider minutes: audio minutes × channels.'),
+                    TextInput::make('monthly_usd')->label('Monthly limit (US$)')
+                        ->numeric()->minValue(0.01)->step(0.01)->nullable(),
+                    TextInput::make('warn_percent')->label('Warn at (%)')
+                        ->integer()->minValue(1)->maxValue(100)->default(80)->required(),
+                    Section::make('Prices (US$ per audio hour per channel)')
+                        ->description('Defaults follow the providers\' list prices. Edit them when you change model or plan.')
+                        ->collapsible()->collapsed()->columns(2)->columnSpanFull()
+                        ->schema(array_map(
+                            fn (string $field, array $pair): TextInput => TextInput::make($field)->label($pair[2])
+                                ->numeric()->minValue(0)->maxValue(100)->step(0.0001)->required(),
+                            array_keys(self::priceFields()),
+                            self::priceFields(),
+                        )),
+                ]),
             Section::make('AssemblyAI')->collapsible()->columns(2)->schema([
                 Select::make('assemblyai_region')->label('Data region')->options(['us' => 'US (default)', 'eu' => 'EU'])->required(),
                 Select::make('assemblyai_streaming_model')->label('Streaming model')->options([
@@ -116,25 +186,30 @@ class Settings extends Page
                 TagsInput::make('assemblyai_async_models')->label('Final transcript models (priority order)')->columnSpanFull(),
             ]),
             Section::make('ElevenLabs')->collapsible()->collapsed()->columns(2)->schema([
-                TextInput::make('elevenlabs_base_url')->label('API base URL')->url()->required(),
+                TextInput::make('elevenlabs_base_url')->label('API base URL')->url()->required()->rule(new ProviderEndpoint('elevenlabs')),
                 Select::make('elevenlabs_model_id')->label('Batch model')->options(['scribe_v2' => 'Scribe v2', 'scribe_v2_medical' => 'Scribe v2 Medical'])->required(),
             ]),
             Section::make('Azure Speech')->collapsible()->collapsed()->columns(2)->schema([
-                TextInput::make('azure_region')->label('Region')->placeholder('centralindia'),
-                TextInput::make('azure_endpoint')->label('Resource endpoint')->url()->placeholder('https://<resource>.cognitiveservices.azure.com'),
+                TextInput::make('azure_region')->label('Region')->placeholder('centralindia')
+                    ->regex(ProviderEndpoints::AZURE_REGION_PATTERN)
+                    ->validationMessages(['regex' => ProviderEndpoints::AZURE_REGION_MESSAGE]),
+                TextInput::make('azure_endpoint')->label('Resource endpoint')->url()->rule(new ProviderEndpoint('azure'))
+                    ->placeholder('https://<resource>.cognitiveservices.azure.com'),
                 Select::make('azure_model')->label('Model')->options([
                     'MAI-Transcribe-2' => 'MAI-Transcribe-2 (per-channel WAV/FLAC)',
                     'standard' => 'Standard fast transcription (stereo, Opus OK)',
                 ])->required(),
             ]),
             Section::make('whisper.cpp (self-hosted)')->collapsible()->collapsed()->columns(3)->schema([
-                TextInput::make('whisper_base_url')->label('whisper-server URL (HTTPS, behind auth proxy)')->url()->columnSpan(2),
+                TextInput::make('whisper_base_url')->label('whisper-server URL (HTTPS, behind auth proxy)')->url()
+                    ->rule(new ProviderEndpoint('whisper'))->columnSpan(2),
                 TextInput::make('whisper_chunk_seconds')->label('Slice length (s)')->numeric()->minValue(60)->maxValue(1800),
                 Toggle::make('whisper_vad')->label('Server-side VAD'),
             ]),
             Section::make('Device security')->collapsible()->collapsed()->schema([
                 TagsInput::make('app_pins')->label('Server certificate pins (SPKI SHA-256)')
                     ->placeholder('sha256/base64…')
+                    ->nestedRecursiveRule(new CertificatePin)
                     ->helperText('Current + backup key pins sent to devices at pairing. Leave empty only for local development.'),
             ]),
         ]);
@@ -174,8 +249,26 @@ class Settings extends Page
             'whisper.chunk_seconds' => (int) ($state['whisper_chunk_seconds'] ?: 600),
             'whisper.vad' => (bool) ($state['whisper_vad'] ?? true),
             'app.pins' => array_values(array_filter((array) ($state['app_pins'] ?? []))),
+            'budget.monthly_minutes' => filled($state['monthly_minutes'] ?? null) ? (int) $state['monthly_minutes'] : null,
+            'budget.monthly_usd' => filled($state['monthly_usd'] ?? null) ? round((float) $state['monthly_usd'], 2) : null,
+            'budget.warn_percent' => filled($state['warn_percent'] ?? null) ? (int) $state['warn_percent'] : 80,
+            'budget.prices' => self::pricesFromState($state),
         ]);
 
         Notification::make()->title('Settings saved')->success()->send();
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<string, array<string, float>>
+     */
+    private static function pricesFromState(array $state): array
+    {
+        $prices = [];
+        foreach (self::priceFields() as $field => [$provider, $useCase]) {
+            $prices[$provider][$useCase] = round((float) ($state[$field] ?? 0), 4);
+        }
+
+        return $prices;
     }
 }

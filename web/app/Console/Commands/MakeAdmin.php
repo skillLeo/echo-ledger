@@ -41,7 +41,8 @@ final class MakeAdmin extends Command
         $user->is_super_admin = true; // never mass-assignable
         $user->save();
 
-        $this->info("Super admin ready: {$email}. Log in at /admin — you will be asked to set up 2FA on first login.");
+        $this->info("Super admin ready: {$email}. Sign in at /admin.");
+        $this->line('Two-factor sign-in is optional and recommended. Set it up on your profile page.');
 
         return self::SUCCESS;
     }

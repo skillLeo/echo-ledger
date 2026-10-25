@@ -82,6 +82,34 @@ final class RecordingCipher
      */
     public function decryptToStream(string $srcPath, $out, string $recordingId): int
     {
+        return $this->pull($srcPath, $recordingId, static function (string $plain) use ($out): void {
+            fwrite($out, $plain);
+        });
+    }
+
+    /**
+     * SHA-256 and length of the plaintext, computed while decrypting: nothing decrypted is kept in memory or on disk.
+     *
+     * @return array{sha256: string, size: int}
+     */
+    public function digest(string $srcPath, string $recordingId): array
+    {
+        $hash = hash_init('sha256');
+        $size = $this->pull($srcPath, $recordingId, static function (string $plain) use ($hash): void {
+            hash_update($hash, $plain);
+        });
+
+        return ['sha256' => hash_final($hash), 'size' => $size];
+    }
+
+    /**
+     * Authenticates and decrypts the file one frame at a time, handing each plaintext frame to $sink.
+     *
+     * @param  callable(string): void  $sink
+     * @return int plaintext bytes produced
+     */
+    private function pull(string $srcPath, string $recordingId, callable $sink): int
+    {
         $in = fopen($srcPath, 'rb');
         if ($in === false) {
             throw new RuntimeException('Cannot open encrypted recording.');
@@ -95,6 +123,10 @@ final class RecordingCipher
                 throw new RuntimeException('Not an EchoLedger encrypted recording.');
             }
             $header = (string) fread($in, SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES);
+            // init_pull throws SodiumException (not a RuntimeException) for a short header.
+            if (strlen($header) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES) {
+                throw new RuntimeException('Recording is truncated or has trailing data.');
+            }
             $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $this->key);
             while (! feof($in)) {
                 $cipher = fread($in, self::CHUNK + SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_ABYTES);
@@ -106,7 +138,7 @@ final class RecordingCipher
                     throw new RuntimeException('Recording is corrupt or was tampered with.');
                 }
                 [$plain, $tag] = $result;
-                fwrite($out, $plain);
+                $sink($plain);
                 $written += strlen($plain);
                 if ($tag === SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_TAG_FINAL) {
                     $final = true;
@@ -132,7 +164,8 @@ final class RecordingCipher
         }
         try {
             return $this->decryptToStream($srcPath, $out, $recordingId);
-        } catch (RuntimeException $e) {
+        } catch (\Throwable $e) {
+            // Whatever failed (tampering, truncation, a full disk), no partial plaintext may stay behind.
             fclose($out);
             @unlink($dstPath);
             throw $e;
@@ -143,7 +176,10 @@ final class RecordingCipher
         }
     }
 
-    /** Memory-only plaintext (never spills to disk) for HTTP Range playback. */
+    /**
+     * Memory-only plaintext (never spills to disk). Holds the whole recording in memory, so playback does not use it
+     * (RecordingController::streamDecrypted decrypts to a private temp file instead).
+     */
     public function decryptToMemory(string $srcPath, string $recordingId): SplTempFileObject
     {
         $memory = new SplTempFileObject(-1);

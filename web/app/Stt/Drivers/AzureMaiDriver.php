@@ -23,6 +23,7 @@ use App\Stt\Data\Word;
 use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\Exceptions\UnsupportedFeature;
 use App\Stt\KeytermPolicy;
+use App\Stt\ProviderEndpoints;
 use App\Stt\Support\WavFile;
 use App\Stt\TranscriptNormalizer;
 use Illuminate\Http\Request;
@@ -64,9 +65,14 @@ final class AzureMaiDriver implements SttProvider
 
     private function endpoint(): string
     {
-        $endpoint = rtrim((string) $this->settings->get('azure.endpoint', ''), '/');
+        $stored = $this->settings->get('azure.endpoint', '');
+        $endpoint = rtrim(is_string($stored) ? $stored : '', '/');
         if ($endpoint === '') {
             throw new ProviderNotConfigured('Set the Azure Speech endpoint on Admin → Settings.');
+        }
+        // The request carries the subscription key: only Azure's own hosts over HTTPS (A6.W10).
+        if (! ProviderEndpoints::allowsAzureEndpoint($endpoint)) {
+            throw new ProviderNotConfigured('Set an HTTPS Azure Speech resource endpoint on Admin → Settings.');
         }
 
         return $endpoint;
@@ -74,9 +80,14 @@ final class AzureMaiDriver implements SttProvider
 
     public function streamingGrant(StreamingRequest $request): StreamingGrant
     {
-        $region = (string) $this->settings->get('azure.region', '');
+        $stored = $this->settings->get('azure.region', '');
+        $region = is_string($stored) ? $stored : '';
         if ($region === '') {
             throw new ProviderNotConfigured('Set the Azure Speech region on Admin → Settings.');
+        }
+        // The region becomes part of the token host name, so it must be a plain region name (A6.W10).
+        if (! ProviderEndpoints::allowsAzureRegion($region)) {
+            throw new ProviderNotConfigured('Set a valid Azure Speech region on Admin → Settings, such as centralindia.');
         }
         $token = Http::withHeaders(['Ocp-Apim-Subscription-Key' => $this->vault->require('azure', 'api_key')])
             ->connectTimeout(10)->timeout(10)

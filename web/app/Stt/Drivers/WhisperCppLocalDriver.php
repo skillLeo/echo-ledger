@@ -22,6 +22,7 @@ use App\Stt\Data\Word;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\Exceptions\UnsupportedFeature;
+use App\Stt\ProviderEndpoints;
 use App\Stt\Support\WavFile;
 use App\Stt\TranscriptNormalizer;
 use Illuminate\Http\Request;
@@ -61,9 +62,14 @@ final class WhisperCppLocalDriver implements SttProvider
 
     public function submitFinal(FinalJobRequest $request): SubmitResult
     {
-        $baseUrl = rtrim((string) $this->settings->get('whisper.base_url', ''), '/');
+        $stored = $this->settings->get('whisper.base_url', '');
+        $baseUrl = rtrim(is_string($stored) ? $stored : '', '/');
         if ($baseUrl === '') {
             throw new ProviderNotConfigured('Set the whisper-server URL on Admin → Settings.');
+        }
+        // The bearer token travels with every request: HTTPS only, plain HTTP just for localhost (A6.W10).
+        if (! ProviderEndpoints::allowsWhisper($baseUrl)) {
+            throw new ProviderNotConfigured('Set an HTTPS whisper-server URL on Admin → Settings.');
         }
 
         $temps = [];

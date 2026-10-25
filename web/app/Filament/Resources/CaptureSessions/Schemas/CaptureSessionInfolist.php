@@ -25,7 +25,8 @@ final class CaptureSessionInfolist
                     TextEntry::make('duration_ms')->label('Duration')
                         ->state(fn (CaptureSession $r): string => CaptureSessionsTable::duration($r->duration_ms) ?: '—'),
                     TextEntry::make('client.name')->label('Client')->placeholder('—'),
-                    TextEntry::make('device.name')->label('Device')->placeholder('Web upload'),
+                    TextEntry::make('device.name')->label('Device')
+                        ->state(fn (CaptureSession $r): string => CaptureSessionsTable::deviceLabel($r)),
                     TextEntry::make('status')->badge(),
                     TextEntry::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('Not started'),
                     TextEntry::make('finalTranscript.provider')->label('Engine')->placeholder('—'),

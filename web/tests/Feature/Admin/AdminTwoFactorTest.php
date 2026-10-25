@@ -441,3 +441,34 @@ it('throttles repeated wrong authenticator codes at the challenge', function () 
 
     $this->assertGuest();
 });
+
+it('binds the recovery-code field without a blur update, so one click on Confirm signs in (A6.W26)', function () {
+    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    adminEnrolTotp($admin);
+
+    $html = $this->panelComponent(Login::class)
+        ->fillForm(['email' => 'owner@example.test', 'password' => 'password'])
+        ->call('authenticate')
+        ->set('data.multiFactor.app.useRecoveryCode', true)
+        ->html();
+
+    expect($html)->toContain('wire:model="data.multiFactor.app.recoveryCode"')
+        ->not->toMatch('/wire:model\.[a-z.]*="data\.multiFactor\.app\.recoveryCode"/');
+    expect(Filament::getPanel('admin')->getMultiFactorAuthenticationProviders()['app'])->toBeInstanceOf(AppAuthentication::class);
+});
+
+it('asks for the recovery code, not the 6-digit code, once the admin chose to use a recovery code', function () {
+    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    adminEnrolTotp($admin);
+
+    $login = $this->panelComponent(Login::class)
+        ->fillForm(['email' => 'owner@example.test', 'password' => 'password'])
+        ->call('authenticate');
+    $login->call('authenticate')->assertHasErrors(['data.multiFactor.app.code' => 'required']);
+
+    $login->set('data.multiFactor.app.useRecoveryCode', true)
+        ->call('authenticate')
+        ->assertHasErrors(['data.multiFactor.app.recoveryCode' => 'required'])
+        ->assertHasNoErrors(['data.multiFactor.app.code']);
+    $this->assertGuest();
+});

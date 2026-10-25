@@ -162,7 +162,7 @@ it('keeps a revoked device\'s sessions in the library without calling them web u
         ->assertCanSeeTableRecords([$session])
         ->assertSee('Call from phone')
         ->assertDontSee('Web upload');
-})->skip('A6.W26: sessions of a revoked device are labelled "Web upload"');
+});
 
 it('cannot revoke or rename another admin\'s device', function () {
     $this->signInAsAdmin();

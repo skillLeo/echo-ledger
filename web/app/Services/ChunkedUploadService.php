@@ -33,7 +33,7 @@ final class ChunkedUploadService
 
     /**
      * Safe chunk size for raw octet-stream bodies: only post_max_size applies (not upload_max_filesize).
-     * Must be computed inside an HTTP request â€” CLI ini values differ.
+     * Must be computed inside an HTTP request — CLI ini values differ.
      */
     public static function advertisedChunkSize(): int
     {
@@ -105,6 +105,7 @@ final class ChunkedUploadService
      */
     public function storeChunk(Recording $recording, int $index, string $expectedSha256, $body): Recording
     {
+        // A failed upload accepts chunks again: the client sends the whole file from chunk 0 (docs/API.md).
         if (in_array($recording->upload_status, [UploadStatus::Assembling, UploadStatus::Ready], true)) {
             throw new ConflictHttpException('Recording upload is already complete.');
         }
@@ -164,9 +165,11 @@ final class ChunkedUploadService
         return DB::transaction(function () use ($recording, $index): Recording {
             /** @var Recording $locked */
             $locked = Recording::query()->lockForUpdate()->findOrFail($recording->id);
-            $received = array_values(array_unique([...$locked->received_chunks, $index]));
+            // The first chunk after a failure starts afresh: nothing received earlier is still on disk.
+            $earlier = $locked->upload_status === UploadStatus::Failed ? [] : $locked->received_chunks;
+            $received = array_values(array_unique([...$earlier, $index]));
             sort($received);
-            $locked->update(['received_chunks' => $received, 'upload_status' => UploadStatus::Uploading]);
+            $locked->update(['received_chunks' => $received, 'upload_status' => UploadStatus::Uploading, 'error' => null]);
             $locked->captureSession->update(['status' => SessionStatus::Uploading]);
 
             return $locked;
@@ -219,7 +222,7 @@ final class ChunkedUploadService
         return [];
     }
 
-    /** Called by AssembleRecordingJob: concatenate â†’ verify size + SHA-256 â†’ encrypt â†’ delete parts. */
+    /** Called by AssembleRecordingJob: concatenate → verify size + SHA-256 → encrypt → delete parts. */
     public function assemble(Recording $recording): void
     {
         $disk = Storage::disk('recordings');

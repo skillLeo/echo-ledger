@@ -244,7 +244,7 @@ it('forbids framing the console, so its buttons cannot be clickjacked', function
     $csp = strtolower((string) $headers->get('Content-Security-Policy'));
 
     expect($framing === 'deny' || $framing === 'sameorigin' || str_contains($csp, "frame-ancestors 'none'") || str_contains($csp, "frame-ancestors 'self'"))->toBeTrue();
-})->skip('A6.W25: the app sends no security headers; they exist only in the hosting .htaccess');
+});
 
 it('does not let browsers cache the console pages', function () {
     $this->signInAsAdmin();

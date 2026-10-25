@@ -7,11 +7,12 @@ namespace App\Filament\Widgets;
 use App\Enums\SessionStatus;
 use App\Enums\SourceDevice;
 use App\Models\CaptureSession;
+use App\Services\Usage\UsageSummary;
 use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
-/** Counts by source device (icon + label) plus transcribed minutes in the last 30 days. */
+/** Counts by source device (icon + label), transcribed minutes in the last 30 days and this month's usage. */
 class SourceStatsOverview extends StatsOverviewWidget
 {
     protected static ?int $sort = -2;
@@ -37,6 +38,36 @@ class SourceStatsOverview extends StatsOverviewWidget
             ->icon(Heroicon::OutlinedClock)
             ->color('primary');
 
+        $stats[] = self::monthStat(app(UsageSummary::class)->toArray());
+
         return $stats;
+    }
+
+    /**
+     * Billable usage this calendar month against the monthly limit (A5.2): warning colour from the warn threshold,
+     * danger once the limit is reached.
+     *
+     * @param  array<string, mixed>  $usage  the documented `usage` block (docs/API.md)
+     */
+    public static function monthStat(array $usage): Stat
+    {
+        $minutes = (float) ($usage['minutes'] ?? 0);
+        $cost = (float) ($usage['cost_usd'] ?? 0);
+        $limits = [];
+        if (is_numeric($usage['limit_minutes'] ?? null)) {
+            $limits[] = number_format((float) $usage['limit_minutes'], 0).' min';
+        }
+        if (is_numeric($usage['limit_usd'] ?? null)) {
+            $limits[] = '$'.number_format((float) $usage['limit_usd'], 2);
+        }
+
+        return Stat::make('This month', number_format($minutes, 1).' min · $'.number_format($cost, 2))
+            ->description($limits === [] ? 'No monthly limit' : 'of '.implode(' · ', $limits))
+            ->icon(Heroicon::OutlinedBanknotes)
+            ->color(match (true) {
+                (bool) ($usage['limit_reached'] ?? false) => 'danger',
+                (bool) ($usage['warn'] ?? false) => 'warning',
+                default => 'gray',
+            });
     }
 }
