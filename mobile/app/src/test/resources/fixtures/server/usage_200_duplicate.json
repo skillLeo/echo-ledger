@@ -1,0 +1,28 @@
+{
+  "report": {
+    "id": "01jc2m8x4v6b8n0q2s4t6w8y0a",
+    "report_id": "6c0d0b2e-2a4e-4c8e-9a9f-0c3f1f5b7d11",
+    "use_case": "live_captions",
+    "provider": "assemblyai",
+    "session_id": "01jb8qa0m1x2c3v4b5n6m7k8j9",
+    "streamed_ms": 61000,
+    "channels": 2,
+    "billed_ms": 122000,
+    "cost_usd": 0.0153,
+    "occurred_at": "2026-10-24T09:43:00+00:00",
+    "duplicate": true
+  },
+  "usage": {
+    "month": "2026-10",
+    "time_zone": "Asia/Karachi",
+    "period_start": "2026-09-30T19:00:00+00:00",
+    "period_end": "2026-10-31T19:00:00+00:00",
+    "minutes": 812.5,
+    "cost_usd": 6.42,
+    "limit_minutes": 3000,
+    "limit_usd": null,
+    "warn_at_percent": 80,
+    "warn": false,
+    "limit_reached": false
+  }
+}

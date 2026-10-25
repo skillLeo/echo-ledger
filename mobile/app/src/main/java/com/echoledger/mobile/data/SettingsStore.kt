@@ -32,8 +32,11 @@ data class AppSettings(
     /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
     val secureScreen: Boolean = true,
     /** What happens to a recording nobody decided on within 60 s: "keep", "discard" or "wait" (same as the desktop). */
-    val decisionTimeout: String = "keep"
+    val decisionTimeout: String = "keep",
+    /** The server's `api_version` ("1.1") from the last config; null for a v1 server or before the first fetch. */
+    val serverApiVersion: String? = null
 ) {
+    val serverIsV1_1: Boolean get() = serverApiVersion != null
     val paired: Boolean get() = serverUrl != null && deviceId != null
 }
 

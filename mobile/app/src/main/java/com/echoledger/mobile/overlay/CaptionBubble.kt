@@ -38,6 +38,7 @@ class CaptionBubble(private val context: Context) {
     private var owner: OverlayOwner? = null
     private val lines = mutableStateListOf<Pair<String, String>>()
     private val partialLine = mutableStateOf<Pair<String, String>?>(null)
+    private val noticeLine = mutableStateOf<String?>(null)
 
     fun show() {
         if (view != null || !Settings.canDrawOverlays(context)) return
@@ -45,7 +46,7 @@ class CaptionBubble(private val context: Context) {
         val compose = ComposeView(context).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
-            setContent { Bubble(lines, partialLine.value) }
+            setContent { Bubble(lines, partialLine.value, noticeLine.value) }
         }
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -75,6 +76,11 @@ class CaptionBubble(private val context: Context) {
         while (lines.size > 2) lines.removeAt(0)
     }
 
+    /** A short status line instead of captions, e.g. why captions stopped while the recording continues. */
+    fun notice(text: String) {
+        noticeLine.value = text
+    }
+
     fun hide() {
         view?.let { runCatching { windowManager.removeView(it) } }
         owner?.stop()
@@ -84,14 +90,15 @@ class CaptionBubble(private val context: Context) {
 }
 
 @androidx.compose.runtime.Composable
-private fun Bubble(lines: List<Pair<String, String>>, partial: Pair<String, String>?) {
+private fun Bubble(lines: List<Pair<String, String>>, partial: Pair<String, String>?, notice: String?) {
     Column(
         Modifier
             .widthIn(max = 340.dp)
             .background(Color(0xE60C0E14), RoundedCornerShape(16.dp))
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
-        if (lines.isEmpty() && partial == null) Text("Listening…", color = Color(0xFF9AA3B2), fontSize = 13.sp)
+        notice?.let { Text(it, color = Color(0xFFF59E0B), fontSize = 13.sp) }
+        if (lines.isEmpty() && partial == null && notice == null) Text("Listening…", color = Color(0xFF9AA3B2), fontSize = 13.sp)
         (lines + listOfNotNull(partial)).forEachIndexed { index, (speaker, text) ->
             val isPartial = partial != null && index == lines.size
             Text(

@@ -110,6 +110,7 @@ class BackgroundWorkTest : AppTest() {
 
     @Test
     fun `the post-call question is a heads-up with Keep and Discard and can be withdrawn`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val rec = app.storeRecording(
             id = "rec-1",
             state = "pending_decision",
@@ -136,12 +137,22 @@ class BackgroundWorkTest : AppTest() {
 
     @Test
     fun `with Keep waiting the post-call question never times out`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         val rec = app.storeRecording(id = "rec-1", state = "pending_decision", sourceApp = "voice_note", durationMs = 42_000)
         Notifications.showSaveDecision(app, rec, clientName = null, decisionTimeout = "wait")
 
         val posted = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.single()
         assertEquals("Voice note · 0:42", shadowOf(posted).contentText.toString())
         assertEquals(0L, posted.timeoutAfter)
+    }
+
+    @Test
+    fun `without the notification permission the question stays in the app only`() {
+        shadowOf(app).denyPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val rec = app.storeRecording(id = "rec-1", state = "pending_decision")
+        Notifications.showSaveDecision(app, rec, clientName = null, decisionTimeout = "keep")
+
+        assertTrue(shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.isEmpty())
     }
 
     @Test

@@ -16,7 +16,6 @@ class SttProtocolEdgeCasesTest {
         }
     }
 
-    @Ignore("A6.M7: SttProtocol throws on a word that is not a JSON object")
     @Test
     fun `AssemblyAI messages with missing or mistyped fields never throw`() {
         listOf(

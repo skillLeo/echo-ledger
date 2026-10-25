@@ -84,7 +84,6 @@ class LibraryScreenTest : ScreenTest() {
         compose.onNodeWithText("Calls, meetings and voice notes you capture will appear here.").assertIsDisplayed()
     }
 
-    @Ignore("A6.M8: the library shows \"No recordings yet\" while the first sync is still running")
     @Test
     fun `the empty state is not shown while the first sync is still running`() {
         runBlocking { app.pairLocally(server) }

@@ -15,7 +15,7 @@ object ShareIntentParser {
     private val ACCEPTED_EXACT = setOf("application/ogg", "application/octet-stream")
 
     fun isAcceptedMime(mime: String?): Boolean {
-        val m = mime?.lowercase() ?: return false
+        val m = mime?.let(::bareType) ?: return false
         return ACCEPTED_PREFIXES.any { m.startsWith(it) } || m in ACCEPTED_EXACT
     }
 
@@ -28,6 +28,10 @@ object ShareIntentParser {
             Intent.ACTION_SEND_MULTIPLE -> IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
             else -> emptyList()
         }
-        return uris.filter { it.scheme == "content" || it.scheme == "file" }.map { SharedAudio(it, type!!.lowercase()) }
+        // Only content:// URIs: a file:// URI bypasses the sender's access grant and could point at this app's own files.
+        return uris.filter { it.scheme == "content" }.map { SharedAudio(it, bareType(type!!)) }
     }
+
+    /** "audio/ogg; codecs=opus" → "audio/ogg": the server's allowlist knows bare media types only. */
+    fun bareType(mime: String): String = mime.substringBefore(';').trim().lowercase()
 }

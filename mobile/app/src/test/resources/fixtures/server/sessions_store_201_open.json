@@ -1,0 +1,34 @@
+{
+  "session": {
+    "id": "01jb8qa0m1x2c3v4b5n6m7k8j9",
+    "client_ref": "3f2b6c1e-8d4a-4d3e-9a51-2c7f0e9b1a22",
+    "deleted": false,
+    "source_device": "desktop",
+    "source_device_label": "Desktop",
+    "source_device_icon": "computer-desktop",
+    "source_app": "google_meet",
+    "source_app_label": "Google Meet",
+    "device": {
+      "id": "01jb8q3r0z5v1k7m9n2p4s6t8w",
+      "name": "Work laptop"
+    },
+    "client": null,
+    "title": null,
+    "started_at": "2026-10-24T09:00:00+00:00",
+    "ended_at": null,
+    "duration_ms": null,
+    "status": "recording",
+    "transcript": {
+      "final_status": null,
+      "final_transcript_id": null,
+      "live_available": false,
+      "live_transcript_id": null,
+      "preview": null
+    },
+    "updated_at": "2026-10-24T09:00:00+00:00"
+  },
+  "recordings": [],
+  "required_artifacts": [
+    "primary"
+  ]
+}

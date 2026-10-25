@@ -75,7 +75,6 @@ class PcmEdgeCasesTest {
         }
     }
 
-    @Ignore("A6.M7: Pcm.rms returns more than 1 for full-scale negative samples")
     @Test
     fun `rms stays within zero and one even for full-scale negative samples`() {
         val full = Pcm.rms(ShortArray(256) { Short.MIN_VALUE })

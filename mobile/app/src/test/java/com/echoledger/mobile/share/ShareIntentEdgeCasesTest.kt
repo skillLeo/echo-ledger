@@ -39,7 +39,8 @@ class ShareIntentEdgeCasesTest {
     @Test
     fun `media types with parameters are still audio`() {
         assertTrue(ShareIntentParser.isAcceptedMime("audio/ogg; codecs=opus"))
-        assertEquals("audio/ogg; codecs=opus", ShareIntentParser.parse(send("audio/ogg; codecs=opus", "content://a/1")).single().mime)
+        // The server allowlist knows bare media types only, so the parameters are dropped.
+        assertEquals("audio/ogg", ShareIntentParser.parse(send("audio/ogg; codecs=opus", "content://a/1")).single().mime)
     }
 
     @Test
@@ -125,7 +126,6 @@ class ShareIntentEdgeCasesTest {
         assertEquals("content", unicode.uri.scheme)
     }
 
-    @Ignore("A6.M3: the share entry accepts file:// URIs")
     @Test
     fun `file uris are not accepted because they bypass the sender's access grant`() {
         assertTrue(

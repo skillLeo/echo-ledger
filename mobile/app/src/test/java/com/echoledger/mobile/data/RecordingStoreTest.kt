@@ -180,7 +180,6 @@ class RecordingStoreTest : AppTest() {
         assertTrue(read.liveSegments.isEmpty())
     }
 
-    @Ignore("A6.M1: a failed import leaves an orphaned encrypted file")
     @Test
     fun `a stream that fails halfway is reported and does not leave an orphaned encrypted file`() {
         val failing = object : InputStream() {

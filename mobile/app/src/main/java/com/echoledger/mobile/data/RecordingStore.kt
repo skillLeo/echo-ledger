@@ -25,7 +25,9 @@ data class LocalRecording(
     val state: String,
     val lastError: String? = null,
     val liveSegments: List<SegmentDto> = emptyList(),
-    val liveProvider: String? = null
+    val liveProvider: String? = null,
+    /** The open server session captions used (v1.1); Keep finishes it, Discard deletes it. */
+    val serverSessionId: String? = null
 )
 
 /**
@@ -43,15 +45,17 @@ class RecordingStore(context: Context, private val cipher: RecordingCipher) {
     fun importPlainFile(meta: LocalRecording, plain: File): LocalRecording {
         val digest = MessageDigest.getInstance("SHA-256")
         var size = 0L
-        plain.inputStream().use { input ->
-            cipher.encrypting(encryptedFile(meta.id).outputStream(), meta.id).use { out ->
-                val buf = ByteArray(64 * 1024)
-                while (true) {
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    digest.update(buf, 0, n)
-                    out.write(buf, 0, n)
-                    size += n
+        encryptOrClean(meta.id) {
+            plain.inputStream().use { input ->
+                cipher.encrypting(encryptedFile(meta.id).outputStream(), meta.id).use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        digest.update(buf, 0, n)
+                        out.write(buf, 0, n)
+                        size += n
+                    }
                 }
             }
         }
@@ -65,21 +69,33 @@ class RecordingStore(context: Context, private val cipher: RecordingCipher) {
     fun importStream(meta: LocalRecording, input: InputStream): LocalRecording {
         val digest = MessageDigest.getInstance("SHA-256")
         var size = 0L
-        input.use { src ->
-            cipher.encrypting(encryptedFile(meta.id).outputStream(), meta.id).use { out ->
-                val buf = ByteArray(64 * 1024)
-                while (true) {
-                    val n = src.read(buf)
-                    if (n < 0) break
-                    digest.update(buf, 0, n)
-                    out.write(buf, 0, n)
-                    size += n
+        encryptOrClean(meta.id) {
+            input.use { src ->
+                cipher.encrypting(encryptedFile(meta.id).outputStream(), meta.id).use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    while (true) {
+                        val n = src.read(buf)
+                        if (n < 0) break
+                        digest.update(buf, 0, n)
+                        out.write(buf, 0, n)
+                        size += n
+                    }
                 }
             }
         }
         val stored = meta.copy(plainSize = size, sha256 = digest.digest().joinToString("") { "%02x".format(it) })
         save(stored)
         return stored
+    }
+
+    /** Runs [write]; when it fails, the half-written encrypted file is removed so no orphan is left behind. */
+    private inline fun encryptOrClean(id: String, write: () -> Unit) {
+        try {
+            write()
+        } catch (e: Throwable) {
+            encryptedFile(id).delete()
+            throw e
+        }
     }
 
     /** Reads [length] plaintext bytes at [offset] through Tink's seekable decrypting channel (no plaintext on disk). */

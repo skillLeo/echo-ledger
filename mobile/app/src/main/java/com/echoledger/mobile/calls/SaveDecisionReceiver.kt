@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.net.DiscardWorker
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.widget.WidgetStateStore
@@ -42,6 +43,8 @@ object Decisions {
             graph.recordings.update(recordingId) { it.copy(state = "queued") }
             UploadWorker.enqueue(context, recordingId)
         } else {
+            // Nothing is uploaded; a server session that captions opened is deleted, so no transcript is ever made.
+            graph.recordings.get(recordingId)?.serverSessionId?.let { DiscardWorker.enqueue(context, recordingId, it) }
             graph.recordings.delete(recordingId)
         }
         WidgetStateStore.refresh(context)

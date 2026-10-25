@@ -35,6 +35,8 @@ class RecordTileService : TileService() {
                 )
             )
         } else {
+            // Below API 34 only the Intent overload exists (the PendingIntent one was added in 34).
+            @Suppress("DEPRECATION", "StartActivityAndCollapseDeprecated")
             startActivityAndCollapse(intent)
         }
     }

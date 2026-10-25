@@ -2,10 +2,13 @@ package com.echoledger.mobile.net
 
 import com.echoledger.mobile.data.ApiJson
 import com.echoledger.mobile.data.ClientsResponse
+import com.echoledger.mobile.data.CompleteAnswer
 import com.echoledger.mobile.data.CreateSessionRequest
 import com.echoledger.mobile.data.CreateSessionResponse
 import com.echoledger.mobile.data.DeviceTranscript
+import com.echoledger.mobile.data.FinishSessionRequest
 import com.echoledger.mobile.data.LibraryResponse
+import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.RecordingUpload
 import com.echoledger.mobile.data.RegisterResponse
 import com.echoledger.mobile.data.ServerConfig
@@ -13,11 +16,13 @@ import com.echoledger.mobile.data.SessionDetailDto
 import com.echoledger.mobile.data.SttTokenResponse
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.data.UploadState
+import com.echoledger.mobile.data.UsageReport
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -33,7 +38,8 @@ import okhttp3.Response
 
 class NotPairedException : IOException("This phone is not paired with an EchoLedger server.")
 
-class ApiException(val status: Int, message: String) : IOException(message)
+/** A server answer other than 2xx/401: `code` is the machine-readable reason, `retryAfterSeconds` the `Retry-After` delay. */
+class ApiException(val status: Int, message: String, val code: String? = null, val retryAfterSeconds: Long? = null) : IOException(message)
 
 /**
  * Typed client for docs/API.md over a pinned OkHttp client (pins apply to the server host only).
@@ -70,8 +76,11 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
             return if (serializer == null || body.isBlank()) null else ApiJson.decodeFromString(serializer, body)
         }
         if (resp.code == 401) throw NotPairedException()
-        val message = runCatching { ApiJson.parseToJsonElement(body).jsonObject["message"]?.jsonPrimitive?.contentOrNull }.getOrNull()
-        throw ApiException(resp.code, message ?: "Request failed (${resp.code})")
+        val json = runCatching { ApiJson.parseToJsonElement(body).jsonObject }.getOrNull()
+        val message = json?.get("message")?.let { (it as? JsonPrimitive)?.contentOrNull }
+        val code = json?.get("code")?.let { (it as? JsonPrimitive)?.contentOrNull }
+        val retryAfter = resp.header("Retry-After")?.trim()?.toLongOrNull()?.coerceAtLeast(0)
+        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter)
     }
 
     private val jsonType = "application/json".toMediaType()
@@ -91,9 +100,10 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
 
     suspend fun clients(): ClientsResponse = call(request("clients").get().build(), ClientsResponse.serializer())!!
 
-    suspend fun sttToken(useCase: String, channels: List<String>, clientId: String?): SttTokenResponse {
+    suspend fun sttToken(useCase: String, channels: List<String>, clientId: String?, sessionId: String? = null): SttTokenResponse {
         val body = buildJsonObject {
             put("use_case", useCase)
+            sessionId?.let { put("session_id", it) }
             put("channels", buildJsonArray { channels.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
             clientId?.let { put("client_id", it) }
             put("sample_rate", 16_000)
@@ -117,8 +127,28 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(req, UploadState.serializer())!!
     }
 
-    suspend fun complete(recordingId: String) {
-        call(request("recordings/$recordingId/complete").post(ByteArray(0).toRequestBody(null)).build(), null as KSerializer<Unit>?)
+    /** Returns the upload status after `complete`: `ready`, or `assembling` while the server is still verifying. */
+    suspend fun complete(recordingId: String): String = call(
+        request("recordings/$recordingId/complete").post(ByteArray(0).toRequestBody(null)).build(),
+        CompleteAnswer.serializer()
+    )?.status ?: "assembling"
+
+    /** Opens a session for live captions (status `recording`, no artifacts; since v1.1). */
+    suspend fun openSession(req: OpenSessionRequest): CreateSessionResponse {
+        val body = ApiJson.encodeToString(OpenSessionRequest.serializer(), req).toRequestBody(jsonType)
+        return call(request("sessions").post(body).build(), CreateSessionResponse.serializer())!!
+    }
+
+    /** Finishes an open session with its artifacts and returns the upload slots (idempotent; since v1.1). */
+    suspend fun finishSession(id: String, req: FinishSessionRequest): CreateSessionResponse {
+        val body = ApiJson.encodeToString(FinishSessionRequest.serializer(), req).toRequestBody(jsonType)
+        return call(request("sessions/$id/finish").post(body).build(), CreateSessionResponse.serializer())!!
+    }
+
+    /** Reports one streaming period (idempotent on `report_id`; since v1.1). */
+    suspend fun reportUsage(report: UsageReport) {
+        val body = ApiJson.encodeToString(UsageReport.serializer(), report).toRequestBody(jsonType)
+        call(request("usage").post(body).build(), null as KSerializer<Unit>?)
     }
 
     suspend fun postTranscript(sessionId: String, transcript: DeviceTranscript) {

@@ -41,7 +41,23 @@ data class ServerConfig(
     val upload: UploadConfig,
     val providers: Map<String, ProviderConfig> = emptyMap(),
     val captions: CaptionsConfig = CaptionsConfig(),
-    val pins: List<String> = emptyList()
+    val pins: List<String> = emptyList(),
+    /** "1.1" on a v1.1 server; absent on a v1 server (the app then uses the v1 flows). */
+    @SerialName("api_version") val apiVersion: String? = null,
+    val usage: UsageDto? = null
+)
+
+/** The month's speech-to-text use and the console limits (docs/API.md `GET /api/config` `usage`, since v1.1). */
+@Serializable
+data class UsageDto(
+    val month: String? = null,
+    val minutes: Double = 0.0,
+    @SerialName("cost_usd") val costUsd: Double = 0.0,
+    @SerialName("limit_minutes") val limitMinutes: Int? = null,
+    @SerialName("limit_usd") val limitUsd: Double? = null,
+    @SerialName("warn_at_percent") val warnAtPercent: Int = 80,
+    val warn: Boolean = false,
+    @SerialName("limit_reached") val limitReached: Boolean = false
 )
 
 @Serializable
@@ -110,8 +126,44 @@ data class UploadState(
     @SerialName("chunk_size_bytes") val chunkSizeBytes: Long = 0,
     @SerialName("total_chunks") val totalChunks: Int,
     @SerialName("received_chunks") val receivedChunks: List<Int> = emptyList(),
-    val status: String
+    val status: String,
+    /** Why the server gave up on the file (status `failed`): the device uploads it again from the start. */
+    val error: String? = null
 )
+
+/** `POST /api/sessions` without artifacts: an open session for live captions (since v1.1). */
+@Serializable
+data class OpenSessionRequest(
+    @SerialName("client_ref") val clientRef: String,
+    @SerialName("source_app") val sourceApp: String,
+    @SerialName("client_id") val clientId: String?,
+    @SerialName("started_at") val startedAt: String
+)
+
+/** `POST /api/sessions/{id}/finish`: a null `client_id` is left out, so the server keeps the stored client. */
+@Serializable
+data class FinishSessionRequest(
+    @SerialName("ended_at") val endedAt: String,
+    @SerialName("duration_ms") val durationMs: Long?,
+    @SerialName("client_id") val clientId: String? = null,
+    val artifacts: List<ArtifactDto>
+)
+
+/** One streaming period (socket open → close) for `POST /api/usage` (since v1.1). */
+@Serializable
+data class UsageReport(
+    @SerialName("report_id") val reportId: String,
+    @SerialName("use_case") val useCase: String,
+    val provider: String,
+    @SerialName("session_id") val sessionId: String? = null,
+    @SerialName("streamed_ms") val streamedMs: Long,
+    val channels: Int,
+    @SerialName("ended_at") val endedAt: String? = null
+)
+
+/** `POST /api/recordings/{id}/complete`: `ready` or `assembling`. */
+@Serializable
+data class CompleteAnswer(val status: String = "assembling")
 
 @Serializable
 data class RecordingUpload(val id: String, val role: String, val upload: UploadState)

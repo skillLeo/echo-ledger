@@ -1,13 +1,17 @@
 package com.echoledger.mobile.notify
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.echoledger.mobile.MainActivity
 import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.DecisionTimeoutWorker
@@ -138,6 +142,12 @@ object Notifications {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText("$text\n$line"))
         }
         if (decisionTimeout != "wait") builder.setTimeoutAfter(DecisionTimeoutWorker.WINDOW_SECONDS * 1000)
+        // Android 13+ needs the notification permission; without it the question is in the app's Record tab only.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
         runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
     }
 

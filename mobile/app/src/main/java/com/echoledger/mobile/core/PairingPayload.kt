@@ -16,14 +16,19 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 data class PairingPayload(val url: String, val code: String, val pins: List<String>) {
     companion object {
         private val CODE = Regex("^[A-Za-z0-9-]{4,32}$")
+        private val SCHEME = Regex("^(?i)(https?)://")
 
         /** Returns null for anything that is not a well-formed EchoLedger pairing payload (any other QR code). */
         fun parse(text: String): PairingPayload? {
             val obj = runCatching { ApiJson.parseToJsonElement(text.trim()).jsonObject }.getOrNull() ?: return null
             val version = (obj["v"] as? JsonPrimitive)?.intOrNull
             if (version != null && version != 1) return null
-            val url = (obj["url"] as? JsonPrimitive)?.contentOrNull?.trim()?.trimEnd('/') ?: return null
-            if (url.toHttpUrlOrNull() == null || (!url.startsWith("https://") && !Pins.isLocalDev(url))) return null
+            val raw = (obj["url"] as? JsonPrimitive)?.contentOrNull?.trim()?.trimEnd('/') ?: return null
+            // The scheme is case-insensitive ("HTTPS://" is https); the address shown to the user must be the one contacted.
+            val url = SCHEME.replace(raw) { it.groupValues[1].lowercase() + "://" }
+            val parsed = url.toHttpUrlOrNull() ?: return null
+            if (parsed.username.isNotEmpty() || parsed.password.isNotEmpty()) return null
+            if (!url.startsWith("https://") && !Pins.isLocalDev(url)) return null
             val code = (obj["code"] as? JsonPrimitive)?.contentOrNull?.trim() ?: return null
             if (!CODE.matches(code)) return null
             val pins = (obj["pins"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()

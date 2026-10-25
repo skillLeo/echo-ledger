@@ -30,13 +30,36 @@ class SttStreamer(
 
     @Volatile private var closed = false
 
+    @Volatile private var openedAtMs: Long? = null
+
+    @Volatile private var closedAtMs: Long? = null
+
+    @Volatile private var providerSeconds: Long? = null
+
+    /**
+     * How long the socket was open (the provider bills streaming by open time, idle included), or the provider's own
+     * billed seconds when AssemblyAI reported them at the end; 0 when the socket never opened.
+     */
+    fun streamedMs(nowMs: Long = System.currentTimeMillis()): Long {
+        providerSeconds?.let { return it * 1000 }
+        val opened = openedAtMs ?: return 0
+        return ((closedAtMs ?: nowMs) - opened).coerceAtLeast(0)
+    }
+
+    fun opened(): Boolean = openedAtMs != null
+
     fun start() {
         val url = grant.wsUrl ?: error("grant has no ws_url")
         socket = http.newWebSocket(Request.Builder().url(url).header("User-Agent", "EchoLedger-Android").build(), listener)
     }
 
     private val listener = object : WebSocketListener() {
+        override fun onOpen(webSocket: WebSocket, response: Response) {
+            openedAtMs = System.currentTimeMillis()
+        }
+
         override fun onMessage(webSocket: WebSocket, text: String) {
+            if (!elevenLabs) SttProtocol.assemblyAiSessionSeconds(text)?.let { providerSeconds = it }
             val event = if (elevenLabs) SttProtocol.parseElevenLabs(text) else SttProtocol.parseAssemblyAi(text)
             if (event == SttEvent.Started && !started) {
                 grant.initMessages.forEach { webSocket.send(it.toString()) }
@@ -48,11 +71,16 @@ class SttStreamer(
         }
 
         override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            if (openedAtMs != null && closedAtMs == null) closedAtMs = System.currentTimeMillis()
             if (!closed) onEvent(SttEvent.Error(t.message ?: "connection failed"))
         }
 
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
             webSocket.close(1000, null)
+        }
+
+        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+            if (openedAtMs != null && closedAtMs == null) closedAtMs = System.currentTimeMillis()
         }
     }
 

@@ -1,0 +1,4 @@
+{
+  "message": "The uploaded file did not match its checksum. Send it again.",
+  "code": "verification_failed"
+}

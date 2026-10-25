@@ -74,6 +74,7 @@ class UploadWorkerTest : AppTest() {
             FakeServer.json(200, ServerFixtures.chunkAck(listOf(request.headers["Upload-Chunk-Index"]!!.toInt()), total))
         }
         server.on("POST", completeRoute(), FakeServer.json(202, """{"status":"assembling"}"""))
+        server.on("GET", "/api/recordings/$serverRecording", FakeServer.json(200, ServerFixtures.recordingStatus(status = "ready")))
         server.on("POST", "/api/sessions/$serverSession/transcripts", FakeServer.json(201, ServerFixtures.transcript(kind = "live")))
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
     }
@@ -265,6 +266,7 @@ class UploadWorkerTest : AppTest() {
             }
         }
         server.on("POST", completeRoute(), FakeServer.json(202, """{"status":"assembling"}"""))
+        server.on("GET", "/api/recordings/$serverRecording", FakeServer.json(200, ServerFixtures.recordingStatus(status = "ready")))
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
 
         assertEquals(ListenableWorker.Result.retry(), run(attempt = 0))
@@ -464,8 +466,6 @@ class UploadWorkerTest : AppTest() {
     }
 
     // ---- hostile server answers ------------------------------------------------------------------------------------------------
-
-    @Ignore("A6.M1: an unexpected exception leaves the recording stuck as uploading")
     @Test
     fun `an HTML page answered to the session request does not leave the recording stuck as uploading`() {
         app.storeRecording(bytes = payload)
@@ -480,7 +480,6 @@ class UploadWorkerTest : AppTest() {
         assertNotEquals("uploading", recording()!!.state)
     }
 
-    @Ignore("A6.M1: an unexpected exception leaves the recording stuck as uploading")
     @Test
     fun `a session answer without a primary upload slot does not leave the recording stuck as uploading`() {
         app.storeRecording(bytes = payload)
@@ -492,7 +491,6 @@ class UploadWorkerTest : AppTest() {
         assertNotEquals("uploading", recording()!!.state)
     }
 
-    @Ignore("A6.M1: a recording whose encrypted file is missing is retried 12 times")
     @Test
     fun `a missing encrypted file is reported as a final failure instead of retrying for hours`() {
         app.storeRecording(bytes = payload)

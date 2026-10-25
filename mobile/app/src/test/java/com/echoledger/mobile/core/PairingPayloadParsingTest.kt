@@ -71,13 +71,11 @@ class PairingPayloadParsingTest {
         }
     }
 
-    @Ignore("A6.M7: a pairing payload with an upper-case HTTPS scheme is rejected")
     @Test
     fun `an upper case https scheme is the same address`() {
         assertNotNull("URL schemes are case-insensitive", PairingPayload.parse(payload("HTTPS://ledger.example.com")))
     }
 
-    @Ignore("A6.M7: a pairing payload whose address embeds credentials is accepted")
     @Test
     fun `an address with embedded credentials is rejected so the host shown to the user is the host contacted`() {
         assertNull(PairingPayload.parse(payload("https://trusted.example.com@evil.example.net")))

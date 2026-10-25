@@ -14,6 +14,7 @@ import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.net.ApiClient
+import com.echoledger.mobile.net.ApiException
 import com.echoledger.mobile.net.NotPairedException
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.privilege.HelperConnection
@@ -99,7 +100,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             graph.settings.saveToken(response.token)
             val finalPins = response.config.pins.ifEmpty { payload.pins }
             graph.settings.update {
-                it.copy(serverUrl = payload.url, pins = finalPins, deviceId = response.device.id, deviceName = response.device.name)
+                it.copy(
+                    serverUrl = payload.url,
+                    pins = finalPins,
+                    deviceId = response.device.id,
+                    deviceName = response.device.name,
+                    serverApiVersion = response.config.apiVersion
+                )
             }
             graph.invalidateApi()
             refresh()
@@ -129,7 +136,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() = viewModelScope.launch {
         _syncing.value = true
         try {
-            withContext(Dispatchers.IO) { graph.library.refresh() }
+            withContext(Dispatchers.IO) {
+                // The server's contract version decides the v1 or v1.1 flows (open sessions, usage reports).
+                try {
+                    graph.api()?.config()?.let { config -> graph.settings.update { it.copy(serverApiVersion = config.apiVersion) } }
+                } catch (e: ApiException) {
+                    // No config answer is no reason to skip the library: keep the last known contract version.
+                }
+                graph.library.refresh()
+            }
             _clients.value = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
             WidgetStateStore.refresh(getApplication())
         } catch (e: NotPairedException) {

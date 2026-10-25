@@ -1,6 +1,7 @@
 package com.echoledger.mobile.core
 
 import com.echoledger.mobile.data.SegmentDto
+import java.util.Locale
 
 /**
  * Plain-text export of a transcript, identical on Android, desktop and the web console (pure; unit-tested):
@@ -24,6 +25,7 @@ object TranscriptText {
         val h = total / 3600
         val m = (total % 3600) / 60
         val s = total % 60
-        return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
+        // ASCII digits whatever the phone language, so copied text reads the same everywhere.
+        return if (h > 0) String.format(Locale.ROOT, "%d:%02d:%02d", h, m, s) else String.format(Locale.ROOT, "%d:%02d", m, s)
     }
 }

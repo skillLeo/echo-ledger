@@ -67,7 +67,8 @@ object Pcm {
         if (samples.isEmpty()) return 0f
         var acc = 0.0
         for (s in samples) acc += (s.toDouble() / Short.MAX_VALUE).let { it * it }
-        return sqrt(acc / samples.size).toFloat()
+        // Short.MIN_VALUE / Short.MAX_VALUE is slightly below -1, so full-scale negative audio is clamped to 1.
+        return sqrt(acc / samples.size).toFloat().coerceIn(0f, 1f)
     }
 
     fun durationMs(frames: Long, rate: Int = CAPTURE_RATE): Long = (frames * 1000.0 / rate).roundToInt().toLong()

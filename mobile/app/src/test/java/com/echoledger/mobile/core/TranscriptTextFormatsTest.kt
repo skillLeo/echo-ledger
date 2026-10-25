@@ -101,8 +101,6 @@ class TranscriptTextFormatsTest {
     }
 
     // ---- locale independence ---------------------------------------------------------------------------------------
-
-    @Ignore("A6.M7: copied transcript timestamps use the phone's locale digits")
     @Test
     fun `timestamps stay in ASCII digits whatever the phone language is`() {
         val saved = Locale.getDefault()

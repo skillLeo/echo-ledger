@@ -1,0 +1,77 @@
+{
+  "api_version": "1.1",
+  "device": {
+    "id": "01jb8q3r0z5v1k7m9n2p4s6t8w",
+    "name": "S25 Ultra",
+    "platform": "android",
+    "source_device": "phone"
+  },
+  "server_time": "2026-10-24T09:00:00+00:00",
+  "retention_days": 30,
+  "upload": {
+    "chunk_size_bytes": 5242880,
+    "max_recording_bytes": 2147483648,
+    "accepted_mimes": [
+      "audio/ogg",
+      "audio/opus",
+      "audio/flac",
+      "audio/x-flac",
+      "audio/wav",
+      "audio/x-wav",
+      "audio/wave",
+      "audio/mpeg",
+      "audio/mp4",
+      "audio/x-m4a",
+      "audio/aac",
+      "audio/webm",
+      "audio/amr",
+      "application/ogg"
+    ]
+  },
+  "providers": {
+    "live_captions": {
+      "provider": "assemblyai",
+      "mode": "cloud"
+    },
+    "dictation": {
+      "provider": "assemblyai",
+      "mode": "cloud"
+    },
+    "final_transcript": {
+      "provider": "assemblyai",
+      "mode": "async_webhook",
+      "required_artifacts": [
+        "primary"
+      ],
+      "preferred_primary": "ogg_opus"
+    },
+    "voice_note": {
+      "provider": "assemblyai",
+      "mode": "async_webhook",
+      "required_artifacts": [
+        "primary"
+      ],
+      "preferred_primary": "ogg_opus"
+    }
+  },
+  "captions": {
+    "channels": "both"
+  },
+  "pins": [
+    "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+    "sha256/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA="
+  ],
+  "usage": {
+    "month": "2026-10",
+    "time_zone": "Asia/Karachi",
+    "period_start": "2026-09-30T19:00:00+00:00",
+    "period_end": "2026-10-31T19:00:00+00:00",
+    "minutes": 812.5,
+    "cost_usd": 6.42,
+    "limit_minutes": 3000,
+    "limit_usd": null,
+    "warn_at_percent": 80,
+    "warn": false,
+    "limit_reached": false
+  }
+}

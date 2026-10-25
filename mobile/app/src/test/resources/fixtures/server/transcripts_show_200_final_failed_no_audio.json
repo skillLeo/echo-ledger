@@ -1,0 +1,14 @@
+{
+  "id": "01jb8qb6t7v8w9x0y1z2a3b4c5",
+  "session_id": "01jb8qa0m1x2c3v4b5n6m7k8j9",
+  "kind": "final",
+  "provider": "assemblyai",
+  "status": "failed",
+  "language": null,
+  "text": null,
+  "segments": [],
+  "error": "No audio was captured in this recording.",
+  "error_code": "no_audio",
+  "created_at": "2026-10-24T09:42:30+00:00",
+  "completed_at": null
+}

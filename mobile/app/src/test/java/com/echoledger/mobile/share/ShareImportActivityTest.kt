@@ -153,7 +153,6 @@ class ShareImportActivityTest : AppTest() {
         }
     }
 
-    @Ignore("A6.M7: a shared media type with codec parameters is not reduced to the bare type")
     @Test
     fun `a media type with codec parameters is reduced to the bare type the server accepts`() {
         pair()
@@ -244,7 +243,6 @@ class ShareImportActivityTest : AppTest() {
         assertTrue("the upload runs later as queued work", server.requests.isEmpty())
     }
 
-    @Ignore("A6.M3: the share entry accepts file:// URIs")
     @Test
     fun `a file URI that points into the app's own private storage is not imported`() {
         pair()

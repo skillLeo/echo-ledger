@@ -29,10 +29,14 @@ import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.Speakers
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LocalRecording
+import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.SegmentDto
+import com.echoledger.mobile.data.UsageReport
+import com.echoledger.mobile.net.CaptionTokens
 import com.echoledger.mobile.net.SttEvent
 import com.echoledger.mobile.net.SttStreamer
 import com.echoledger.mobile.net.UploadWorker
+import com.echoledger.mobile.net.UsageWorker
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.overlay.CaptionBubble
 import com.echoledger.mobile.widget.WidgetStateStore
@@ -319,8 +323,25 @@ class RecordingService : LifecycleService() {
     private suspend fun startCaptions(session: Capture, clientId: String?) {
         val api = graph.api() ?: return
         val channels = if (session.channels == 2) listOf("me", "client") else listOf("me")
-        val token = runCatching { api.sttToken("live_captions", channels, clientId) }.getOrNull() ?: return
-        if (token.mode != "cloud" || !session.active) return
+        val open = OpenSessionRequest(session.id, session.sourceApp, clientId, session.startedAt.toString())
+        val outcome = CaptionTokens(api).fetch(settings.serverIsV1_1, open, channels, session.serverSessionId) {
+            graph.settings.update { it.copy(clientId = null) }
+        }
+        session.serverSessionId = outcome.sessionId
+        if (!session.active) return
+        val token = when (outcome) {
+            is CaptionTokens.Outcome.Token -> outcome.token
+
+            is CaptionTokens.Outcome.Refused -> {
+                // Captions never stop the recording; the bubble says why they are missing.
+                if (Settings.canDrawOverlays(this)) {
+                    if (bubble == null) bubble = CaptionBubble(this).also { it.show() }
+                    bubble?.notice(outcome.message)
+                }
+                return
+            }
+        }
+        if (token.mode != "cloud") return
         if (Settings.canDrawOverlays(this)) {
             bubble = CaptionBubble(this).also { it.show() }
         }
@@ -376,7 +397,8 @@ class RecordingService : LifecycleService() {
                     sha256 = "",
                     state = if (session.fromCall || fromCall) "pending_decision" else "queued",
                     liveSegments = synchronized(session.segments) { session.segments.sortedBy { it.startMs } },
-                    liveProvider = session.provider
+                    liveProvider = session.provider,
+                    serverSessionId = session.serverSessionId
                 )
                 graph.recordings.importPlainFile(meta, session.file)
             }.onFailure {
@@ -445,6 +467,9 @@ class RecordingService : LifecycleService() {
         val segments = mutableListOf<SegmentDto>()
 
         @Volatile var provider: String? = null
+
+        /** The open server session captions used on a v1.1 server (Keep finishes it, Discard deletes it). */
+        @Volatile var serverSessionId: String? = null
         var readerThread: Thread? = null
         var helperStop: (() -> Unit)? = null
 
@@ -471,7 +496,26 @@ class RecordingService : LifecycleService() {
             readerThread?.join(3_000)
             streamers.values.forEach { it.stop() }
             if (streamers.isNotEmpty()) Thread.sleep(1_500) // last caption turns arrive
+            reportUsage()
             encoder.finish()
+        }
+
+        /** One usage report per captions run (A5.4); a v1 server has no usage endpoint, so nothing is queued. */
+        fun reportUsage() {
+            val opened = streamers.values.filter { it.opened() }
+            if (opened.isEmpty() || !settings.serverIsV1_1) return
+            UsageWorker.report(
+                this@RecordingService,
+                UsageReport(
+                    reportId = UUID.randomUUID().toString(),
+                    useCase = "live_captions",
+                    provider = provider ?: "assemblyai",
+                    sessionId = serverSessionId,
+                    streamedMs = opened.maxOf { it.streamedMs() }.coerceAtMost(86_400_000),
+                    channels = opened.size.coerceIn(1, 2),
+                    endedAt = Instant.now().toString()
+                )
+            )
         }
 
         fun cancel() {
@@ -479,6 +523,7 @@ class RecordingService : LifecycleService() {
             helperStop?.invoke()
             readerThread?.join(3_000)
             streamers.values.forEach { it.stop() }
+            reportUsage()
             runCatching { encoder.finish() }
             file.delete()
         }

@@ -2,7 +2,9 @@ package com.echoledger.mobile.net
 
 import android.util.Base64
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -46,8 +48,8 @@ object SttProtocol {
                 when {
                     endOfTurn && formatted -> {
                         val words = runCatching { obj["words"]?.jsonArray }.getOrNull()
-                        val start = words?.firstOrNull()?.jsonObject?.get("start")?.jsonPrimitive?.longOrNull
-                        val end = words?.lastOrNull()?.jsonObject?.get("end")?.jsonPrimitive?.longOrNull
+                        val start = words?.firstNotNullOfOrNull { it.field("start")?.longOrNull }
+                        val end = words?.lastOrNull { it.field("end") != null }?.field("end")?.longOrNull
                         if (text.isEmpty()) null else SttEvent.Final(text, start, end)
                     }
 
@@ -78,8 +80,10 @@ object SttProtocol {
             "committed_transcript", "committed_transcript_with_timestamps" -> {
                 if (text.isEmpty()) return null
                 val words = runCatching { obj["words"]?.jsonArray }.getOrNull()
-                val start = words?.firstOrNull()?.jsonObject?.get("start")?.jsonPrimitive?.doubleOrNull?.let { (it * 1000).toLong() }
-                val end = words?.lastOrNull()?.jsonObject?.get("end")?.jsonPrimitive?.doubleOrNull?.let { (it * 1000).toLong() }
+                val start = words?.firstNotNullOfOrNull { it.field("start")?.doubleOrNull }?.let { (it * 1000).toLong() }
+                val end = words?.lastOrNull {
+                    it.field("end")?.doubleOrNull != null
+                }?.field("end")?.doubleOrNull?.let { (it * 1000).toLong() }
                 SttEvent.Final(text, start, end)
             }
 
@@ -94,5 +98,16 @@ object SttProtocol {
         put("sample_rate", 16_000)
     }.toString()
 
-    private fun JsonObject.str(key: String): String? = this[key]?.jsonPrimitive?.contentOrNull
+    /** AssemblyAI's billed seconds from a `Termination` message (`session_duration_seconds`), else null. */
+    fun assemblyAiSessionSeconds(raw: String): Long? {
+        val obj = runCatching { json.parseToJsonElement(raw) as? JsonObject }.getOrNull() ?: return null
+        if (obj.str("type") != "Termination") return null
+        val seconds = obj["session_duration_seconds"] as? JsonPrimitive ?: return null
+        return seconds.longOrNull ?: seconds.doubleOrNull?.takeIf { it.isFinite() && it >= 0 }?.let { kotlin.math.ceil(it).toLong() }
+    }
+
+    private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
+
+    /** A primitive field of a word; null for words that are not objects or fields of another type (never throws). */
+    private fun JsonElement.field(key: String): JsonPrimitive? = ((this as? JsonObject)?.get(key)) as? JsonPrimitive
 }
