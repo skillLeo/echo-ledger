@@ -238,10 +238,10 @@ Severity in brackets. Each item lists the platform; the matching regression test
 
 **Repository (R)**
 
-- [ ] A6.R1 [medium] docs/research notes reference files that no longer exist and read as working logs.
-- [ ] A6.R2 [medium] `.gitignore` does not ignore `.env` files outside `web/`.
+- [x] A6.R1 [medium] docs/research notes reference files that no longer exist and read as working logs.
+- [x] A6.R2 [medium] `.gitignore` does not ignore `.env` files outside `web/`.
 - [ ] A6.R3 [low] Unreachable objects in the local object store; pushed history verified clean.
-- [ ] A6.R4 [low] A unit test contains the production host name, a real-looking pairing code and production pins.
+- [x] A6.R4 [low] A unit test contains the production host name, a real-looking pairing code and production pins.
 - [ ] A6.R5 [low] Dead files, stale docs, inconsistent metadata across manifests.
 - [-] A6.R6 [info] The Windows installer is not Authenticode-signed: needs a code-signing certificate from the
       owner (documented in the release notes).
