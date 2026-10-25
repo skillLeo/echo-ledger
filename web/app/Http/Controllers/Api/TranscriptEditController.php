@@ -96,7 +96,7 @@ final class TranscriptEditController extends Controller
         /** @var Device $device */
         $device = $request->user();
         $transcript = Transcript::query()
-            ->whereHas('captureSession', fn ($q) => $q->where('user_id', $device->user_id)->whereNull('deleted_at'))
+            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->whereNull('deleted_at'))
             ->find($id);
         if (! $transcript instanceof Transcript) {
             throw new ApiError(404, 'transcript_not_found', 'Transcript not found.');
@@ -109,7 +109,7 @@ final class TranscriptEditController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $session = CaptureSession::query()->where('user_id', $device->user_id)->find($id);
+        $session = CaptureSession::query()->where('workspace_id', $device->workspace_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }

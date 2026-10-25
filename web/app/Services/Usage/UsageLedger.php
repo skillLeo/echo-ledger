@@ -51,11 +51,12 @@ final class UsageLedger
         $streamed = (int) $data['streamed_ms'];
         $channels = (int) $data['channels'];
         $sessionId = empty($data['session_id']) ? null
-            : CaptureSession::withTrashed()->where('user_id', $device->user_id)->find($data['session_id'])?->id;
+            : CaptureSession::withTrashed()->where('workspace_id', $device->workspace_id)->find($data['session_id'])?->id;
 
         $entry = UsageLedgerEntry::query()->firstOrCreate(
             ['user_id' => $device->user_id, 'report_id' => $data['report_id']],
             [
+                'workspace_id' => $device->workspace_id,
                 'device_id' => $device->id,
                 'capture_session_id' => $sessionId,
                 'source' => UsageLedgerEntry::SOURCE_DEVICE,
@@ -108,6 +109,7 @@ final class UsageLedger
         return UsageLedgerEntry::query()->firstOrCreate(
             ['user_id' => $session->user_id, 'report_id' => self::finalReportId($transcript)],
             [
+                'workspace_id' => $session->workspace_id,
                 'device_id' => $session->device_id,
                 'capture_session_id' => $session->id,
                 'transcript_id' => $transcript->id,

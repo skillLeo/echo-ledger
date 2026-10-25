@@ -10,6 +10,7 @@ use App\Http\Resources\LibraryItemResource;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Services\RetentionPolicy;
+use App\Services\Workspaces\Workspaces;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -22,7 +23,7 @@ final class BinController extends Controller
     /** GET /api/bin */
     public function index(Request $request): JsonResponse
     {
-        $sessions = $this->policy->bin($this->device($request)->user_id);
+        $sessions = $this->policy->bin($this->device($request)->workspace_id);
 
         return response()->json(['data' => $sessions->map(fn (CaptureSession $s): array => [
             'id' => $s->id,
@@ -38,7 +39,9 @@ final class BinController extends Controller
     /** POST /api/sessions/{id}/restore */
     public function restore(Request $request, string $id): JsonResponse
     {
-        $session = $this->policy->restore($this->binned($request, $id));
+        $binned = $this->binned($request, $id);
+        app(Workspaces::class)->assertCanDeleteSession($this->device($request)->user, $binned);
+        $session = $this->policy->restore($binned);
         $session->load(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels']);
 
         return response()->json(['data' => (new LibraryItemResource($session))->resolve($request)]);
@@ -47,7 +50,9 @@ final class BinController extends Controller
     /** DELETE /api/bin/{id}: erase now instead of after 48 hours. */
     public function destroy(Request $request, string $id): Response
     {
-        $this->policy->deleteNow($this->binned($request, $id));
+        $binned = $this->binned($request, $id);
+        app(Workspaces::class)->assertCanDeleteSession($this->device($request)->user, $binned);
+        $this->policy->deleteNow($binned);
 
         return response()->noContent();
     }
@@ -56,14 +61,14 @@ final class BinController extends Controller
     public function storage(Request $request): JsonResponse
     {
         return response()->json([
-            ...$this->policy->storage($this->device($request)->user_id),
+            ...$this->policy->storage($this->device($request)->workspace_id),
             'retention_days' => $this->policy->daysFor(null),
         ]);
     }
 
     private function binned(Request $request, string $id): CaptureSession
     {
-        $session = CaptureSession::onlyTrashed()->where('user_id', $this->device($request)->user_id)->find($id);
+        $session = CaptureSession::onlyTrashed()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }

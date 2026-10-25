@@ -12,6 +12,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\LibrarySearch;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
@@ -56,7 +57,7 @@ class Search extends Page
 
     public function form(Schema $schema): Schema
     {
-        $userId = (int) auth()->id();
+        $workspaceId = (int) CurrentWorkspace::id();
 
         return $schema->statePath('filters')->components([
             TextInput::make('q')->hiddenLabel()->placeholder('Search titles and transcripts — "quoted words" stay together')
@@ -66,7 +67,7 @@ class Search extends Page
                 }),
             Grid::make(['default' => 2, 'lg' => 4])->schema([
                 Select::make('client_id')->label('Client')->live()->placeholder('Any client')
-                    ->options(fn () => Client::query()->where('user_id', $userId)->orderBy('name')->pluck('name', 'id')->all()),
+                    ->options(fn () => Client::query()->where('workspace_id', $workspaceId)->orderBy('name')->pluck('name', 'id')->all()),
                 Select::make('source_app')->label('App')->live()->placeholder('Any app')->options(SourceApp::class),
                 Select::make('source_device')->label('Device')->live()->placeholder('Any device')->options(SourceDevice::class),
                 Select::make('status')->label('Status')->live()->placeholder('Any status')->options(SessionStatus::class),
@@ -106,7 +107,7 @@ class Search extends Page
             return ['items' => collect(), 'hits' => [], 'more' => false, 'query' => $query, 'page' => $this->page, 'urlFor' => null, 'tz' => 'UTC'];
         }
         $search = app(LibrarySearch::class);
-        $result = $search->search((int) auth()->id(), $query, [
+        $result = $search->search((int) CurrentWorkspace::id(), $query, [
             'client_id' => $state['client_id'] ?? null, 'source_app' => self::value($state['source_app'] ?? null),
             'source_device' => self::value($state['source_device'] ?? null), 'status' => self::value($state['status'] ?? null),
             'from' => $state['from'] ?? null, 'to' => $state['to'] ?? null, 'tag' => $state['tag'] ?? null,

@@ -27,6 +27,7 @@ use App\Services\SessionLifecycle;
 use App\Services\SessionMarkers;
 use App\Services\TranscriptEditor;
 use App\Services\TranscriptStore;
+use App\Services\Workspaces\Workspaces;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
 use App\Stt\SttManager;
@@ -286,7 +287,11 @@ final class SessionController extends Controller
     /** DELETE /api/sessions/{id} — tombstone + immediate media erasure. */
     public function destroy(Request $request, string $id): Response
     {
-        $this->findSession($request, $id)->delete();
+        $session = $this->findSession($request, $id);
+        /** @var Device $device */
+        $device = $request->user();
+        app(Workspaces::class)->assertCanDeleteSession($device->user, $session);
+        $session->delete();
 
         return response()->noContent();
     }
@@ -453,6 +458,6 @@ final class SessionController extends Controller
         /** @var Device $device */
         $device = $request->user();
 
-        return CaptureSession::query()->where('user_id', $device->user_id)->findOrFail($id);
+        return CaptureSession::query()->where('workspace_id', $device->workspace_id)->findOrFail($id);
     }
 }

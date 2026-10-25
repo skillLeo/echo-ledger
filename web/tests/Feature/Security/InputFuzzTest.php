@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\CaptureSession;
 use App\Models\Device;
+use App\Models\Plan;
 use App\Services\CredentialVault;
 use App\Services\PairingService;
 use Illuminate\Support\Facades\Http;
@@ -22,6 +23,8 @@ beforeEach(function () {
 
 it('survives hostile values in every device registration field', function () {
     $owner = Fx::user();
+    // Every accepted payload pairs one more device: lift the plan's device limit (B20) for this run.
+    Plan::personal()->update(['max_devices' => null]);
     $ip = 0;
     $code = '';
     $reset = function () use ($owner, &$code) {

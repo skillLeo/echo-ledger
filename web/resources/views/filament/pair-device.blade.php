@@ -1,4 +1,7 @@
 @php $state = $getState() ?? []; @endphp
+@if (! empty($state['error']))
+    <p role="alert" style="text-align:center;padding:1rem 0">{{ $state['error'] }}</p>
+@else
 <div style="display:flex;flex-direction:column;align-items:center;gap:1rem;padding:.5rem 0">
     @if (! empty($state['qr']))
         <div style="background:#fff;padding:.75rem;border-radius:1rem">
@@ -13,3 +16,4 @@
         The code is stored only as a hash and cannot be shown again.
     </div>
 </div>
+@endif

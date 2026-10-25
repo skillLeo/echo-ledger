@@ -10,6 +10,7 @@ use App\Filament\Resources\CaptureSessions\RelationManagers\ShareLinksRelationMa
 use App\Filament\Resources\CaptureSessions\Schemas\CaptureSessionInfolist;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
+use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -45,7 +46,7 @@ class CaptureSessionResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->where('user_id', auth()->id())
+            ->where('workspace_id', CurrentWorkspace::id())
             ->with(['device', 'client', 'finalTranscript', 'primaryRecording']);
     }
 

@@ -12,6 +12,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -65,7 +66,7 @@ final class CaptureSessionsTable
                 SelectFilter::make('source_device')->label('Source device')->options(SourceDevice::class)->multiple(),
                 SelectFilter::make('source_app')->label('Source app')->options(SourceApp::class)->multiple(),
                 SelectFilter::make('client')
-                    ->relationship('client', 'name', fn (Builder $query): Builder => $query->where('user_id', auth()->id()))
+                    ->relationship('client', 'name', fn (Builder $query): Builder => $query->where('workspace_id', CurrentWorkspace::id()))
                     ->searchable()->preload(),
                 SelectFilter::make('status')->options(SessionStatus::class),
                 SelectFilter::make('tag')->label('Bookmark tag')
@@ -73,7 +74,7 @@ final class CaptureSessionsTable
                     ->query(fn (Builder $query, array $data): Builder => blank($data['value'] ?? null) ? $query
                         : $query->whereHas('markers', fn (Builder $m): Builder => $m->where('tag', $data['value']))),
                 SelectFilter::make('label')->label('Label')
-                    ->options(fn (): array => collect(app(LibraryOrganiser::class)->labels((int) auth()->id()))->pluck('label', 'label')->all())
+                    ->options(fn (): array => collect(app(LibraryOrganiser::class)->labels((int) CurrentWorkspace::id()))->pluck('label', 'label')->all())
                     ->query(fn (Builder $query, array $data): Builder => blank($data['value'] ?? null) ? $query
                         : $query->whereHas('labels', fn (Builder $l): Builder => $l->where('label', $data['value']))),
                 Filter::make('bookmarked')->label('Has bookmarks')->toggle()
@@ -90,7 +91,7 @@ final class CaptureSessionsTable
                 ViewAction::make(),
                 DeleteAction::make()->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for 48 hours.'),
             ])
-            ->toolbarActions([BulkActionGroup::make([...self::bulkActions(), DeleteBulkAction::make()])])
+            ->toolbarActions([BulkActionGroup::make([...self::bulkActions(), DeleteBulkAction::make()->authorizeIndividualRecords('delete')])])
             ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => match (true) {
                 $livewire->hasTableSearch() => 'No sessions match your search',
                 $table->isFiltered() => 'No sessions match these filters',
@@ -111,7 +112,7 @@ final class CaptureSessionsTable
     {
         $run = function (Collection $records, string $action, ?string $client = null, ?string $label = null): void {
             try {
-                $changed = app(LibraryOrganiser::class)->bulk((int) auth()->id(), self::ids($records), $action, $client, $label);
+                $changed = app(LibraryOrganiser::class)->bulk((int) CurrentWorkspace::id(), self::ids($records), $action, $client, $label, auth()->user());
                 Notification::make()->title($changed === 1 ? '1 recording updated' : "{$changed} recordings updated")->success()->send();
             } catch (ApiError $e) {
                 Notification::make()->title($e->getMessage())->danger()->send();
@@ -121,17 +122,17 @@ final class CaptureSessionsTable
         return [
             BulkAction::make('move')->label('Move to client')->icon(Heroicon::OutlinedFolder)
                 ->schema([Select::make('client_id')->label('Client')->placeholder('No client')
-                    ->options(fn (): array => Client::query()->where('user_id', auth()->id())->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all())])
+                    ->options(fn (): array => Client::query()->where('workspace_id', CurrentWorkspace::id())->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all())])
                 ->action(fn (Collection $records, array $data) => $run($records, 'move', $data['client_id'] ?? null))
                 ->deselectRecordsAfterCompletion(),
             BulkAction::make('label')->label('Add label')->icon(Heroicon::OutlinedTag)
                 ->schema([TextInput::make('label')->label('Label')->required()->maxLength(LibraryOrganiser::MAX_LABEL_CHARS)
-                    ->datalist(fn (): array => array_column(app(LibraryOrganiser::class)->labels((int) auth()->id()), 'label'))])
+                    ->datalist(fn (): array => array_column(app(LibraryOrganiser::class)->labels((int) CurrentWorkspace::id()), 'label'))])
                 ->action(fn (Collection $records, array $data) => $run($records, 'label', null, $data['label']))
                 ->deselectRecordsAfterCompletion(),
             BulkAction::make('unlabel')->label('Remove label')->icon(Heroicon::OutlinedXMark)
                 ->schema([Select::make('label')->label('Label')->required()
-                    ->options(fn (): array => collect(app(LibraryOrganiser::class)->labels((int) auth()->id()))->pluck('label', 'label')->all())])
+                    ->options(fn (): array => collect(app(LibraryOrganiser::class)->labels((int) CurrentWorkspace::id()))->pluck('label', 'label')->all())])
                 ->action(fn (Collection $records, array $data) => $run($records, 'unlabel', null, $data['label']))
                 ->deselectRecordsAfterCompletion(),
             BulkAction::make('pin')->label('Pin')->icon(Heroicon::OutlinedStar)
@@ -147,7 +148,7 @@ final class CaptureSessionsTable
                     ->options(['docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Web subtitles (.vtt)', 'json' => 'JSON'])])
                 ->action(function (Collection $records, array $data): ?StreamedResponse {
                     try {
-                        $file = app(LibraryOrganiser::class)->exportZip((int) auth()->id(), self::ids($records), (string) $data['format']);
+                        $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), (string) $data['format']);
                     } catch (ApiError $e) {
                         Notification::make()->title($e->getMessage())->warning()->send();
 

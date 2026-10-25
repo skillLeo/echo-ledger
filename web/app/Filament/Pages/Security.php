@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\Passkeys;
 use App\Services\WebSessions;
+use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -67,7 +68,7 @@ class Security extends Page implements HasTable
         return [
             'available' => WebSessions::available(),
             'browsers' => app(WebSessions::class)->list($userId, session()->getId()),
-            'devices' => Device::query()->where('user_id', $userId)->count(),
+            'devices' => Device::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', $userId)->count(),
             'devicesUrl' => DeviceResource::getUrl(),
         ];
     }

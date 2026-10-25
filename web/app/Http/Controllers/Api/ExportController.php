@@ -30,7 +30,7 @@ final class ExportController extends Controller
         /** @var Device $device */
         $device = $request->user();
         $transcript = Transcript::query()
-            ->whereHas('captureSession', fn ($q) => $q->where('user_id', $device->user_id)->whereNull('deleted_at'))
+            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->whereNull('deleted_at'))
             ->find($id);
         if (! $transcript instanceof Transcript) {
             throw new ApiError(404, 'transcript_not_found', 'Transcript not found.');

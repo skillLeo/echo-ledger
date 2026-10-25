@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\OrganiseController;
 use App\Models\Client;
 use App\Services\SettingsRepository;
 use App\Services\TextReplacements;
+use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
@@ -49,7 +50,7 @@ class ClientResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('user_id', auth()->id())->withCount(['keyterms', 'captureSessions']);
+        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->withCount(['keyterms', 'captureSessions']);
     }
 
     public static function form(Schema $schema): Schema
@@ -57,7 +58,7 @@ class ClientResource extends Resource
         return $schema->components([
             Section::make()->columns(2)->schema([
                 TextInput::make('name')->required()->maxLength(120)
-                    ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('user_id', auth()->id())),
+                    ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('workspace_id', CurrentWorkspace::id())),
                 // Devices parse this as #RRGGBB, so anything else is refused on the server too.
                 ColorPicker::make('color')->default('#8B5CF6')
                     ->regex('/^#[0-9A-Fa-f]{6}\z/')

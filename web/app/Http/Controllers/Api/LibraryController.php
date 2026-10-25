@@ -47,7 +47,7 @@ final class LibraryController extends Controller
         $cursor = empty($data['cursor']) ? null : self::decodeCursor($data['cursor']);
 
         $serverTime = now();
-        $query = CaptureSession::query()->where('user_id', $device->user_id)->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels']);
+        $query = CaptureSession::query()->where('workspace_id', $device->workspace_id)->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels']);
 
         if (! empty($data['since'])) {
             // Any offset names an instant; the stored timestamps are UTC. Inclusive: server_time has whole seconds, so a
@@ -130,7 +130,7 @@ final class LibraryController extends Controller
         /** @var Device $device */
         $device = $request->user();
         $transcript = Transcript::query()
-            ->whereHas('captureSession', fn ($q) => $q->where('user_id', $device->user_id)->whereNull('deleted_at'))
+            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->whereNull('deleted_at'))
             ->findOrFail($id);
 
         return new TranscriptResource($transcript);

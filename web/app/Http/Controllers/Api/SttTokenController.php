@@ -13,6 +13,7 @@ use App\Models\Client;
 use App\Models\Device;
 use App\Services\SettingsRepository;
 use App\Services\Usage\BudgetGuard;
+use App\Services\Workspaces\PlanLimits;
 use App\Stt\Data\StreamingRequest;
 use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\SttManager;
@@ -31,7 +32,7 @@ final class SttTokenController extends Controller
     /** Live captions are refused for a session this old or older (docs/API.md `session_not_recording`). */
     public const MAX_SESSION_HOURS = 4;
 
-    public function __invoke(Request $request, SttManager $stt, SettingsRepository $settings, BudgetGuard $budget): JsonResponse
+    public function __invoke(Request $request, SttManager $stt, SettingsRepository $settings, BudgetGuard $budget, PlanLimits $limits): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
@@ -57,7 +58,7 @@ final class SttTokenController extends Controller
 
         $client = null;
         if (! empty($data['client_id'])) {
-            $client = Client::query()->where('user_id', $device->user_id)->find($data['client_id']);
+            $client = Client::query()->where('workspace_id', $device->workspace_id)->find($data['client_id']);
             if (! $client instanceof Client) {
                 throw new ApiError(404, 'client_not_found', 'Client not found.');
             }
@@ -70,6 +71,7 @@ final class SttTokenController extends Controller
         if ($budget->limitReached()) {
             throw new ApiError(403, 'budget_exceeded', 'Monthly transcription limit reached');
         }
+        $limits->assertMinutes($device->workspace_id);
 
         try {
             $grant = $stt->forUseCase($useCase)->streamingGrant(new StreamingRequest(

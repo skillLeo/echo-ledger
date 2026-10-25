@@ -9,6 +9,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\SttUseCase;
+use App\Exceptions\ApiError;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -16,6 +17,8 @@ use App\Services\FinalTranscriptCoordinator;
 use App\Services\LibraryOrganiser;
 use App\Services\RecordingIngestor;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\CurrentWorkspace;
+use App\Services\Workspaces\PlanLimits;
 use Filament\Actions\Action;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
@@ -46,7 +49,7 @@ class ListCaptureSessions extends ListRecords
     public function getTabs(): array
     {
         $organiser = app(LibraryOrganiser::class);
-        $counts = $organiser->counts((int) auth()->id());
+        $counts = $organiser->counts((int) CurrentWorkspace::id());
         $tabs = ['all' => Tab::make('All')];
         foreach (self::VIEW_LABELS as $view => $label) {
             $tabs[$view] = Tab::make($label)
@@ -75,7 +78,7 @@ class ListCaptureSessions extends ListRecords
                         ->required(),
                     TextInput::make('title')->maxLength(200),
                     Select::make('client_id')->label('Client')
-                        ->options(fn (): array => Client::query()->where('user_id', auth()->id())->orderBy('name')->pluck('name', 'id')->all())
+                        ->options(fn (): array => Client::query()->where('workspace_id', CurrentWorkspace::id())->orderBy('name')->pluck('name', 'id')->all())
                         ->searchable(),
                 ])
                 ->action(function (array $data, RecordingIngestor $ingestor, FinalTranscriptCoordinator $coordinator, SettingsRepository $settings): void {
@@ -83,7 +86,16 @@ class ListCaptureSessions extends ListRecords
                     $relative = (string) $data['audio'];
                     $path = $disk->path($relative);
                     try {
+                        app(PlanLimits::class)->assertStorage((int) CurrentWorkspace::id(), (int) $disk->size($relative));
+                    } catch (ApiError $e) {
+                        $disk->delete($relative);
+                        Notification::make()->title($e->getMessage())->danger()->send();
+
+                        return;
+                    }
+                    try {
                         $session = CaptureSession::query()->create([
+                            'workspace_id' => CurrentWorkspace::id(),
                             'user_id' => auth()->id(),
                             'client_id' => $data['client_id'] ?? null,
                             'client_ref' => (string) Str::uuid(),

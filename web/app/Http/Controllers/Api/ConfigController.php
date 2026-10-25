@@ -27,7 +27,7 @@ final class ConfigController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $clients = Client::query()->where('user_id', $device->user_id)->withCount(['keyterms', 'captureSessions'])
+        $clients = Client::query()->where('workspace_id', $device->workspace_id)->withCount(['keyterms', 'captureSessions'])
             ->orderByDesc('pinned')->orderBy('name')->get();
 
         return response()->json(['data' => $clients->map(fn (Client $c): array => self::clientPayload($c))->values()]);

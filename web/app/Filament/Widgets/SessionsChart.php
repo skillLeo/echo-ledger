@@ -7,6 +7,7 @@ namespace App\Filament\Widgets;
 use App\Enums\SourceDevice;
 use App\Models\CaptureSession;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Carbon;
 
@@ -29,7 +30,7 @@ class SessionsChart extends ChartWidget
         $zone = app(SettingsRepository::class)->displayTimezone();
         $start = now($zone)->subDays(13)->startOfDay();
         $rows = CaptureSession::query()
-            ->where('user_id', auth()->id())
+            ->where('workspace_id', CurrentWorkspace::id())
             ->where('started_at', '>=', $start->copy()->utc())
             ->get(['started_at', 'source_device']);
 

@@ -41,7 +41,7 @@ final class SearchController extends Controller
         }
         $limit = (int) ($data['limit'] ?? 20);
         $page = (int) ($data['page'] ?? 1);
-        $result = $search->search($device->user_id, $data['q'], [...$data, 'bookmarked' => $request->boolean('bookmarked')], $limit, $page);
+        $result = $search->search($device->workspace_id, $data['q'], [...$data, 'bookmarked' => $request->boolean('bookmarked')], $limit, $page);
 
         return response()->json([
             'data' => $result['items']->map(fn (CaptureSession $session): array => [

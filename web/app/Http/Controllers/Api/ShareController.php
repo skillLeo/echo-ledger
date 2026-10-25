@@ -54,7 +54,7 @@ final class ShareController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $link = ShareLink::query()->whereHas('captureSession', fn ($q) => $q->where('user_id', $device->user_id))->find($id);
+        $link = ShareLink::query()->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id))->find($id);
         if (! $link instanceof ShareLink) {
             throw new ApiError(404, 'share_not_found', 'Share link not found.');
         }
@@ -67,7 +67,7 @@ final class ShareController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $session = CaptureSession::query()->where('user_id', $device->user_id)->find($id);
+        $session = CaptureSession::query()->where('workspace_id', $device->workspace_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }

@@ -11,6 +11,8 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
 use App\Models\User;
+use App\Policies\CaptureSessionPolicy;
+use App\Policies\DevicePolicy;
 use Filament\Auth\MultiFactor\App\AppAuthentication;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Gate;
@@ -88,11 +90,12 @@ it('lists the console pages in the navigation for a super admin', function () {
     expect($labels)->toContain('Sessions', 'Clients', 'Devices', 'API Credentials', 'Settings');
 });
 
-it('registers no model policies, so access rests on panel access and owner-scoped queries', function () {
-    expect(Gate::getPolicyFor(CaptureSession::class))->toBeNull()
-        ->and(Gate::getPolicyFor(Client::class))->toBeNull()
-        ->and(Gate::getPolicyFor(Device::class))->toBeNull();
-    expect(is_dir(app_path('Policies')))->toBeFalse();
+it('registers only the B20 role policies: recordings and devices; scoping rests on workspace-scoped queries', function () {
+    expect(Gate::getPolicyFor(CaptureSession::class))->toBeInstanceOf(CaptureSessionPolicy::class)
+        ->and(Gate::getPolicyFor(Device::class))->toBeInstanceOf(DevicePolicy::class)
+        ->and(Gate::getPolicyFor(Client::class))->toBeNull();
+    expect(collect(glob(app_path('Policies/*.php')))->map(fn (string $f): string => basename($f))->sort()->values()->all())
+        ->toBe(['CaptureSessionPolicy.php', 'DevicePolicy.php']);
 });
 
 it('scopes every resource query to the signed-in admin', function () {

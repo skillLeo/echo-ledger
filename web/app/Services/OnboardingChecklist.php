@@ -8,6 +8,7 @@ use App\Models\Device;
 use App\Models\Passkey;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\Workspaces\CurrentWorkspace;
 
 /**
  * The first-login checklist of the console dashboard (plan B19): what a new super admin still has to set up. It goes
@@ -36,7 +37,7 @@ final class OnboardingChecklist
             'two_factor' => filled($user->app_authentication_secret) || Passkey::query()->where('user_id', $user->id)->exists(),
             'provider_key' => $this->hasProviderKey(),
             'cert_pins' => $this->settings->pins() !== [],
-            'first_device' => Device::query()->exists(),
+            'first_device' => Device::query()->where('workspace_id', CurrentWorkspace::id())->exists(),
             // A chosen retention is one that was saved; the default alone is not a choice.
             'retention' => Setting::query()->where('key', 'retention_days')->exists(),
         ];

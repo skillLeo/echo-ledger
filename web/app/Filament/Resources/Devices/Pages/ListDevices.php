@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\Devices\Pages;
 
+use App\Exceptions\ApiError;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\User;
 use App\Services\PairingService;
@@ -29,7 +30,11 @@ class ListDevices extends ListRecords
                 ->fillForm(function (PairingService $pairing): array {
                     /** @var User $user */
                     $user = auth()->user();
-                    $code = $pairing->createCode($user);
+                    try {
+                        $code = $pairing->createCode($user);
+                    } catch (ApiError $e) {
+                        return ['pairing' => ['error' => $e->getMessage()]]; // plan device limit (B20)
+                    }
                     $payload = $pairing->qrPayload($code);
 
                     return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($payload), 'url' => rtrim((string) config('app.url'), '/')]];

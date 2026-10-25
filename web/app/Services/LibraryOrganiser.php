@@ -11,6 +11,8 @@ use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\SessionLabel;
+use App\Models\User;
+use App\Services\Workspaces\Workspaces;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -81,11 +83,11 @@ final class LibraryOrganiser
      *
      * @return array<string, int>
      */
-    public function counts(int $userId, ?string $zone = null): array
+    public function counts(int $workspaceId, ?string $zone = null): array
     {
         $counts = [];
         foreach (self::VIEWS as $view) {
-            $query = CaptureSession::query()->where('user_id', $userId);
+            $query = CaptureSession::query()->where('workspace_id', $workspaceId);
             if ($view !== 'waiting') {
                 $query->where('status', '!=', SessionStatus::Recording->value);
             }
@@ -96,14 +98,14 @@ final class LibraryOrganiser
     }
 
     /**
-     * Every label the owner uses, with how many recordings carry it.
+     * Every label the workspace uses, with how many recordings carry it.
      *
      * @return list<array{label: string, count: int}>
      */
-    public function labels(int $userId): array
+    public function labels(int $workspaceId): array
     {
         return SessionLabel::query()
-            ->whereHas('captureSession', fn (Builder $q) => $q->where('user_id', $userId))
+            ->whereHas('captureSession', fn (Builder $q) => $q->where('workspace_id', $workspaceId))
             ->selectRaw('label, COUNT(*) as aggregate')->groupBy('label')->orderBy('label')->get()
             ->map(fn (SessionLabel $l): array => ['label' => $l->label, 'count' => (int) $l->getAttribute('aggregate')])
             ->values()->all();
@@ -118,7 +120,7 @@ final class LibraryOrganiser
     {
         DB::transaction(function () use ($session, $data): void {
             if (array_key_exists('client_id', $data)) {
-                $session->client_id = $this->ownedClient($session->user_id, $data['client_id'])?->id;
+                $session->client_id = $this->ownedClient($session->workspace_id, $data['client_id'])?->id;
             }
             if (array_key_exists('title', $data)) {
                 $title = trim((string) $data['title']);
@@ -160,14 +162,18 @@ final class LibraryOrganiser
     }
 
     /**
-     * Applies one action to many recordings of the owner; ids that are not theirs are ignored. Returns how many
+     * Applies one action to many recordings of the workspace; ids that are not its own are ignored. Returns how many
      * recordings were changed.
      *
      * @param  list<string>  $ids
      */
-    public function bulk(int $userId, array $ids, string $action, ?string $clientId = null, ?string $label = null): int
+    public function bulk(int $workspaceId, array $ids, string $action, ?string $clientId = null, ?string $label = null, ?User $actor = null): int
     {
-        $sessions = CaptureSession::query()->where('user_id', $userId)->whereIn('id', array_slice(array_values(array_unique($ids)), 0, self::MAX_BULK))->get();
+        $sessions = CaptureSession::query()->where('workspace_id', $workspaceId)->whereIn('id', array_slice(array_values(array_unique($ids)), 0, self::MAX_BULK))->get();
+        if ($action === 'delete' && $actor !== null) {
+            // A member deletes only what they recorded; the rest is skipped like a foreign id (B20 roles).
+            $sessions = $sessions->filter(fn (CaptureSession $s): bool => app(Workspaces::class)->canDeleteSession($actor, $s))->values();
+        }
         if ($sessions->isEmpty()) {
             return 0;
         }
@@ -175,7 +181,7 @@ final class LibraryOrganiser
         if (in_array($action, ['label', 'unlabel'], true) && $label === null) {
             throw new ApiError(422, 'validation_failed', 'The label is required.', ['errors' => ['label' => ['The label is required.']]]);
         }
-        $client = $action === 'move' ? $this->ownedClient($userId, $clientId) : null;
+        $client = $action === 'move' ? $this->ownedClient($workspaceId, $clientId) : null;
 
         DB::transaction(function () use ($sessions, $action, $client, $label): void {
             foreach ($sessions as $session) {
@@ -214,13 +220,13 @@ final class LibraryOrganiser
         $session->labels()->create(['label' => $label]);
     }
 
-    /** The owner's client, or null for "no client"; another owner's or a missing client is 404 client_not_found. */
-    private function ownedClient(int $userId, mixed $clientId): ?Client
+    /** The workspace's client, or null for "no client"; another workspace's or a missing client is 404 client_not_found. */
+    private function ownedClient(int $workspaceId, mixed $clientId): ?Client
     {
         if ($clientId === null || $clientId === '') {
             return null;
         }
-        $client = Client::query()->where('user_id', $userId)->find((string) $clientId);
+        $client = Client::query()->where('workspace_id', $workspaceId)->find((string) $clientId);
         if (! $client instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }
@@ -235,9 +241,9 @@ final class LibraryOrganiser
      * @param  list<string>  $ids
      * @return array{body: string, filename: string, count: int}
      */
-    public function exportZip(int $userId, array $ids, string $format): array
+    public function exportZip(int $workspaceId, array $ids, string $format): array
     {
-        $sessions = CaptureSession::query()->where('user_id', $userId)->whereIn('id', array_slice(array_values(array_unique($ids)), 0, self::MAX_BULK))
+        $sessions = CaptureSession::query()->where('workspace_id', $workspaceId)->whereIn('id', array_slice(array_values(array_unique($ids)), 0, self::MAX_BULK))
             ->with(['finalTranscript', 'client'])->orderBy('started_at')->get();
         $path = tempnam(sys_get_temp_dir(), 'el-export-');
         if ($path === false) {
@@ -262,7 +268,7 @@ final class LibraryOrganiser
             if ($count === 0) {
                 throw new ApiError(409, 'nothing_to_export', 'None of these recordings has a finished transcript.');
             }
-            app(AuditLog::class)->record('sessions_exported', $userId, null, "{$count} transcripts exported as {$format}", ['format' => $format, 'count' => $count]);
+            app(AuditLog::class)->record('sessions_exported', null, null, "{$count} transcripts exported as {$format}", ['format' => $format, 'count' => $count]);
 
             return ['body' => (string) file_get_contents($path), 'filename' => 'EchoLedger transcripts '.now($this->settings->displayTimezone())->format('Y-m-d').'.zip', 'count' => $count];
         } finally {

@@ -8,6 +8,7 @@ use App\Enums\DevicePlatform;
 use App\Models\Device;
 use App\Models\DevicePairingCode;
 use App\Models\User;
+use App\Services\Workspaces\PlanLimits;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\NewAccessToken;
@@ -29,7 +30,10 @@ final class PairingService
             $raw .= self::ALPHABET[random_int(0, 31)];
         }
 
+        // The device joins the workspace the user is working in when they make the code (B20).
+        app(PlanLimits::class)->assertDevices((int) $user->current_workspace_id);
         DevicePairingCode::query()->create([
+            'workspace_id' => $user->current_workspace_id,
             'user_id' => $user->id,
             'code_hash' => hash('sha256', $raw),
             'expires_at' => now()->addMinutes((int) config('echoledger.pairing_code_minutes', 10)),
@@ -72,8 +76,11 @@ final class PairingService
                 throw ValidationException::withMessages(['pairing_code' => 'This pairing code is invalid, expired, or already used.']);
             }
 
+            app(PlanLimits::class)->assertDevices($pairing->workspace_id);
+
             /** @var Device $device */
             $device = Device::query()->create([
+                'workspace_id' => $pairing->workspace_id,
                 'user_id' => $pairing->user_id,
                 'name' => $attributes['name'],
                 'platform' => DevicePlatform::from($attributes['platform']),

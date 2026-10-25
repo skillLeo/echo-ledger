@@ -80,13 +80,13 @@ final class RetentionPolicy
     }
 
     /**
-     * The owner's undo bin, most recently deleted first.
+     * The workspace's undo bin, most recently deleted first.
      *
      * @return Collection<int, CaptureSession>
      */
-    public function bin(int $userId): Collection
+    public function bin(int $workspaceId): Collection
     {
-        return CaptureSession::onlyTrashed()->where('user_id', $userId)->whereNull('media_erased_at')
+        return CaptureSession::onlyTrashed()->where('workspace_id', $workspaceId)->whereNull('media_erased_at')
             ->where('deleted_at', '>', now()->subHours(CaptureSession::BIN_HOURS))->with('client')->orderByDesc('deleted_at')->get();
     }
 
@@ -114,11 +114,11 @@ final class RetentionPolicy
      *
      * @return array{recordings_bytes: int, recordings_count: int, disk_free_bytes: int|null, disk_total_bytes: int|null}
      */
-    public function storage(?int $userId = null): array
+    public function storage(?int $workspaceId = null): array
     {
         $query = Recording::query()->whereNotNull('stored_path');
-        if ($userId !== null) {
-            $query->whereHas('captureSession', fn (Builder $q) => $q->withTrashed()->where('user_id', $userId));
+        if ($workspaceId !== null) {
+            $query->whereHas('captureSession', fn (Builder $q) => $q->withTrashed()->where('workspace_id', $workspaceId));
         }
         $root = Storage::disk('recordings')->path('');
         $free = is_dir($root) ? @disk_free_space($root) : false;

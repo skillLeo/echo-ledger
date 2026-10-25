@@ -14,6 +14,7 @@ use App\Models\Client;
 use App\Services\LibrarySearch;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptExporter;
+use App\Services\Workspaces\CurrentWorkspace;
 use Filament\GlobalSearch\GlobalSearchResult;
 use Filament\GlobalSearch\GlobalSearchResults;
 use Filament\GlobalSearch\Providers\Contracts\GlobalSearchProvider;
@@ -43,7 +44,7 @@ final class CommandPalette implements GlobalSearchProvider
                 $results->category('Recordings', $recordings);
             }
         }
-        $clients = Client::query()->where('user_id', auth()->id())->where('name', 'like', '%'.str_replace(['%', '_'], ['\%', '\_'], $query).'%')
+        $clients = Client::query()->where('workspace_id', CurrentWorkspace::id())->where('name', 'like', '%'.str_replace(['%', '_'], ['\%', '\_'], $query).'%')
             ->orderBy('name')->limit(5)->get()
             ->map(fn (Client $c): GlobalSearchResult => new GlobalSearchResult($c->name, ClientResource::getUrl('edit', ['record' => $c])))->all();
         if ($clients !== []) {
@@ -73,7 +74,7 @@ final class CommandPalette implements GlobalSearchProvider
     private function recordings(string $query): array
     {
         try {
-            $found = app(LibrarySearch::class)->search((int) auth()->id(), $query, [], 6);
+            $found = app(LibrarySearch::class)->search((int) CurrentWorkspace::id(), $query, [], 6);
         } catch (Throwable) {
             return [];
         }

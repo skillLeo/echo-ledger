@@ -17,6 +17,7 @@ use App\Services\SettingsRepository;
 use App\Services\TranscriptStore;
 use App\Services\Usage\BudgetGuard;
 use App\Services\Usage\UsageLedger;
+use App\Services\Workspaces\PlanLimits;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\SubmitResult;
@@ -79,8 +80,9 @@ final class TranscribeFinalJob implements ShouldQueue
         }
 
         $provider = SttProviderKey::from($transcript->provider);
-        // Monthly limit: nothing is sent to a paid provider once it is reached (Retry from the console after raising it).
-        if (UsageLedger::isBillable($provider) && app(BudgetGuard::class)->limitReached()) {
+        // Monthly limit (A5 server cap or the workspace plan, B20): nothing is sent to a paid provider once it is reached
+        // (Retry from the console after raising it).
+        if (UsageLedger::isBillable($provider) && (app(BudgetGuard::class)->limitReached() || app(PlanLimits::class)->minutesReached($session->workspace_id))) {
             $store->failWith($transcript, TranscriptErrorCode::BudgetExceeded);
 
             return;

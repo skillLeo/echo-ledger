@@ -137,7 +137,7 @@ final class RecordingController extends Controller
         $device = $request->user();
 
         return Recording::query()
-            ->whereHas('captureSession', fn ($q) => $q->where('user_id', $device->user_id)->whereNull('deleted_at'))
+            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->whereNull('deleted_at'))
             ->findOrFail($id);
     }
 }

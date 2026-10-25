@@ -35,10 +35,10 @@ final class LibrarySearch
      *     to?: string|null, tag?: string|null, bookmarked?: bool, status?: string|null}  $filters
      * @return array{items: Collection<int, CaptureSession>, hits: array<string, array{hits: list<array<string, mixed>>, count: int}>, more: bool}
      */
-    public function search(int $userId, string $query, array $filters = [], int $limit = 20, int $page = 1): array
+    public function search(int $workspaceId, string $query, array $filters = [], int $limit = 20, int $page = 1): array
     {
         $terms = self::terms($query);
-        $base = $this->filtered($userId, $filters);
+        $base = $this->filtered($workspaceId, $filters);
         $this->engine = 'like';
         $matching = (clone $base)->where(fn (Builder $q) => $q
             ->whereHas('transcripts', fn (Builder $t) => $this->likeAll($t, 'text', $terms))
@@ -182,9 +182,9 @@ final class LibrarySearch
      * @param  array<string, mixed>  $filters
      * @return Builder<CaptureSession>
      */
-    private function filtered(int $userId, array $filters): Builder
+    private function filtered(int $workspaceId, array $filters): Builder
     {
-        $query = CaptureSession::query()->where('user_id', $userId)
+        $query = CaptureSession::query()->where('workspace_id', $workspaceId)
             ->where('status', '!=', SessionStatus::Recording->value)
             ->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms']);
         foreach (['client_id', 'source_app', 'source_device', 'status'] as $field) {

@@ -6,6 +6,7 @@ namespace App\Filament\Resources\Devices;
 
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Models\Device;
+use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -15,6 +16,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Gate;
 use UnitEnum;
 
 /** Paired phones and desktops. Revoking deletes the device and all of its tokens immediately. */
@@ -35,7 +37,7 @@ class DeviceResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('user_id', auth()->id())->withCount('captureSessions');
+        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->withCount('captureSessions');
     }
 
     public static function table(Table $table): Table
@@ -54,6 +56,7 @@ class DeviceResource extends Resource
             ])
             ->recordActions([
                 Action::make('rename')
+                    ->authorize(fn (Device $record): bool => Gate::allows('update', $record))
                     ->icon(Heroicon::OutlinedPencilSquare)
                     ->color('gray')
                     ->fillForm(fn (Device $record): array => ['name' => $record->name])

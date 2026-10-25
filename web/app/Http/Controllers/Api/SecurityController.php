@@ -20,7 +20,8 @@ final class SecurityController extends Controller
     public function index(Request $request): JsonResponse
     {
         $device = $this->device($request);
-        $devices = Device::query()->where('user_id', $device->user_id)->orderByDesc('last_seen_at')->get();
+        // The person's own devices in this workspace; owners manage everyone's from the console.
+        $devices = Device::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->orderByDesc('last_seen_at')->get();
         $names = $devices->pluck('name', 'id');
         $events = AuditEvent::query()->where('user_id', $device->user_id)->latest('id')->limit(50)->get();
 
@@ -50,7 +51,7 @@ final class SecurityController extends Controller
     public function revokeDevice(Request $request, string $id): Response
     {
         $device = $this->device($request);
-        $target = Device::query()->where('user_id', $device->user_id)->find($id);
+        $target = Device::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if (! $target instanceof Device) {
             throw new ApiError(404, 'device_not_found', 'Device not found.');
         }

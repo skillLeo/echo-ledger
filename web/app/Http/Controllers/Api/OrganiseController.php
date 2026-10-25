@@ -32,7 +32,7 @@ final class OrganiseController extends Controller
             'labels' => ['sometimes', 'array', 'max:50'],
             'labels.*' => ['nullable', 'string', 'max:200'],
         ]);
-        $session = CaptureSession::query()->where('user_id', $this->device($request)->user_id)->find($id);
+        $session = CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
@@ -54,11 +54,12 @@ final class OrganiseController extends Controller
             'label' => ['nullable', 'string', 'max:200'],
         ]);
         $changed = $this->organiser->bulk(
-            $this->device($request)->user_id,
+            $this->device($request)->workspace_id,
             array_values($data['ids']),
             $data['action'],
             $data['client_id'] ?? null,
             $data['label'] ?? null,
+            $this->device($request)->user,
         );
 
         return response()->json(['changed' => $changed]);
@@ -72,7 +73,7 @@ final class OrganiseController extends Controller
             'ids.*' => ['string', 'size:26'],
             'format' => ['required', Rule::in(LibraryOrganiser::EXPORT_FORMATS)],
         ]);
-        $file = $this->organiser->exportZip($this->device($request)->user_id, array_values($data['ids']), $data['format']);
+        $file = $this->organiser->exportZip($this->device($request)->workspace_id, array_values($data['ids']), $data['format']);
 
         return response($file['body'], 200, [
             'Content-Type' => 'application/zip',
@@ -87,20 +88,20 @@ final class OrganiseController extends Controller
     public function views(Request $request): JsonResponse
     {
         $data = $request->validate(['tz' => ['nullable', 'timezone:all']]);
-        $userId = $this->device($request)->user_id;
+        $workspaceId = $this->device($request)->workspace_id;
 
         return response()->json([
-            'views' => $this->organiser->counts($userId, $data['tz'] ?? null),
-            'labels' => $this->organiser->labels($userId),
+            'views' => $this->organiser->counts($workspaceId, $data['tz'] ?? null),
+            'labels' => $this->organiser->labels($workspaceId),
         ]);
     }
 
     /** POST /api/clients: a new client folder. */
     public function storeClient(Request $request): JsonResponse
     {
-        $userId = $this->device($request)->user_id;
-        $data = $request->validate(self::clientRules($userId, null, true));
-        $client = Client::query()->create(['user_id' => $userId, ...self::clientValues($data)]);
+        $device = $this->device($request);
+        $data = $request->validate(self::clientRules($device->workspace_id, null, true));
+        $client = Client::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, ...self::clientValues($data)]);
 
         return response()->json(['data' => ConfigController::clientPayload($client->loadCount('keyterms', 'captureSessions'))], 201);
     }
@@ -108,22 +109,22 @@ final class OrganiseController extends Controller
     /** PATCH /api/clients/{id}: rename, colour, avatar or pin a client folder. */
     public function updateClient(Request $request, string $id): JsonResponse
     {
-        $userId = $this->device($request)->user_id;
-        $client = Client::query()->where('user_id', $userId)->find($id);
+        $workspaceId = $this->device($request)->workspace_id;
+        $client = Client::query()->where('workspace_id', $workspaceId)->find($id);
         if (! $client instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }
-        $data = $request->validate(self::clientRules($userId, $client->id, false));
+        $data = $request->validate(self::clientRules($workspaceId, $client->id, false));
         $client->fill(self::clientValues($data))->save();
 
         return response()->json(['data' => ConfigController::clientPayload($client->loadCount('keyterms', 'captureSessions'))]);
     }
 
     /** @return array<string, list<mixed>> */
-    private static function clientRules(int $userId, ?string $ignore, bool $creating): array
+    private static function clientRules(int $workspaceId, ?string $ignore, bool $creating): array
     {
         return [
-            'name' => [$creating ? 'required' : 'sometimes', 'string', 'max:120', Rule::unique('clients', 'name')->where('user_id', $userId)->ignore($ignore)],
+            'name' => [$creating ? 'required' : 'sometimes', 'string', 'max:120', Rule::unique('clients', 'name')->where('workspace_id', $workspaceId)->ignore($ignore)],
             'color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'avatar' => ['sometimes', 'nullable', 'string', 'max:16'],
             'pinned' => ['sometimes', 'boolean'],

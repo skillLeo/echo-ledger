@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Workspaces;
 
 use App\Enums\WorkspaceRole;
+use App\Exceptions\ApiError;
+use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Plan;
 use App\Models\User;
@@ -69,6 +71,33 @@ final class Workspaces
     public function isOwner(User $user, ?int $workspaceId = null): bool
     {
         return $this->roleOf($user, $workspaceId) === WorkspaceRole::Owner;
+    }
+
+    /**
+     * Roles (docs/HANDOFF.md "B20 design"): a member deletes, restores and purges only recordings they made; an
+     * owner any recording of the workspace. Never true across workspaces.
+     */
+    public function canDeleteSession(User $actor, CaptureSession $session): bool
+    {
+        $role = $this->roleOf($actor, $session->workspace_id);
+
+        return $role === WorkspaceRole::Owner || ($role !== null && (int) $session->user_id === (int) $actor->getKey());
+    }
+
+    /** API form of canDeleteSession(): `403 not_allowed` (the recording is visible to them, so this leaks nothing). */
+    public function assertCanDeleteSession(User $actor, CaptureSession $session): void
+    {
+        if (! $this->canDeleteSession($actor, $session)) {
+            throw new ApiError(403, 'not_allowed', 'Only the workspace owner can delete recordings made by someone else.');
+        }
+    }
+
+    /** A member renames and revokes only their own devices; an owner any device of the workspace. */
+    public function canManageDevice(User $actor, Device $device): bool
+    {
+        $role = $this->roleOf($actor, $device->workspace_id);
+
+        return $role === WorkspaceRole::Owner || ($role !== null && (int) $device->user_id === (int) $actor->getKey());
     }
 
     public function addMember(Workspace $workspace, User $user, WorkspaceRole $role = WorkspaceRole::Member): void

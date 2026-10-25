@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Widgets;
 
 use App\Services\RetentionPolicy;
+use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Support\Number;
@@ -20,7 +21,7 @@ class StorageOverview extends StatsOverviewWidget
     protected function getStats(): array
     {
         $policy = app(RetentionPolicy::class);
-        $storage = $policy->storage((int) auth()->id());
+        $storage = $policy->storage((int) CurrentWorkspace::id());
         $stats = [
             Stat::make('Recordings', Number::fileSize($storage['recordings_bytes'], precision: 1))
                 ->description($storage['recordings_count'].' files · deleted after '.$policy->daysFor(null).' days'),

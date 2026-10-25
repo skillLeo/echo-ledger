@@ -132,7 +132,7 @@ it('locks a revoked device out of the API straight away', function () {
 
     // The API call switched the default guard to the device; sign the admin back in for the console.
     $this->app['auth']->forgetGuards();
-    $this->actingAs($admin);
+    $this->actingAs($admin, 'web');
     Filament::setCurrentPanel('admin');
     $this->panelComponent(ListDevices::class)->callAction(TestAction::make(DeleteAction::class)->table($device));
     $this->app['auth']->forgetGuards();
