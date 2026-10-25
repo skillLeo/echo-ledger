@@ -343,9 +343,15 @@ Severity in brackets. Each item lists the platform; the matching regression test
 - [~] B19 Onboarding and system-style settings (W, D, P): first-run wizard, grouped searchable settings, shortcut
       editor with conflict detection, settings import/export without secrets.
 
-  Desktop done and committed (grouped, searchable settings; shortcut conflict warnings and Alt+Shift defaults;
-  settings export / import without the pairing; first-run wizard). Left: the Android wizard and settings groups /
-  search / export-import, the console settings tabs, MANUAL_QA section 15.
+  Built and covered by automated tests on every platform; the device checks are docs/MANUAL_QA.md section 15.
+  Desktop: grouped, searchable settings; shortcut conflict warnings and Ctrl/Cmd+Alt+Shift defaults; settings
+  export / import without the pairing; first-run wizard. Phone: first-run wizard (welcome, permissions, pairing,
+  10-second test with a level meter, done) behind a saved flag (phones paired before v1.1 skip it); Settings in eight
+  groups (General, Recording, Captions, Dictation, Privacy & security, Devices, Storage, About) with a search that
+  jumps to a setting; export / import through the file picker without pairing, token, lock or consent. Console:
+  Settings in the same eight tabs with a search (filters sections, jumps to the first group with a match), JSON
+  export / import validated like a save and never touching the API credentials, and a dashboard checklist
+  (two-factor, provider key, certificate pins, first device, retention) that hides when complete or dismissed.
 - [ ] B20 Usage dashboard and SaaS foundations (W): minutes and cost per provider/month, storage, per device, budget
       alerts; `workspaces` with `workspace_id` scoping, roles, plan limits enforced by one policy; existing data
       migrated into a default workspace.

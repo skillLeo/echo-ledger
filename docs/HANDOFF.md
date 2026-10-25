@@ -1,13 +1,13 @@
 # EchoLedger v1.1 — Handoff
 
 ## Snapshot
-- 2026-10-25 23:32 (Asia/Karachi), branch `v1.1`, last code commit `d9c6db5` "v1.1: checkpoint before handoff" (this file is committed right after).
+- 2026-10-26 00:23 (Asia/Karachi), branch `v1.1`, last code commit `e639ddd` "v1.1: B19 console setup checklist, grouped searchable settings, settings import/export" (this file is committed right after).
 - Tests:
-  - Web (Pest, SQLite, `--parallel`): 2961 passed, 1 failed. MariaDB run of the same suite (last run at B18): all passed.
+  - Web (Pest, SQLite, `--parallel`): 3012 passed, 1 failed (the timing test below). MariaDB run of the same suite (B19): 3013 passed, 0 failed.
   - Desktop core (`cargo test`): 799 passed, 0 failed (1 ignored).
   - Desktop UI (`vitest`): 948 tests; one flaky failure under load (see below), 948/948 when re-run.
-  - Android (`testDebugUnitTest`): 793 passed, 0 failed.
-  - Repo policy (`node --test tools/repo-policy.test.mjs`): 23/23.
+  - Android (`testDebugUnitTest`): 834 passed, 0 failed.
+  - Repo policy (`node --test tools/repo-policy.test.mjs`): 23/23 (re-run after the final commit of B19).
 - Linters: Pint clean, PHPStan 0 errors, `cargo clippy --all-targets -D warnings` clean, macOS clippy (`mac-check.ps1 -Clippy`) clean, `tsc --noEmit` clean, ktlint and Android lint clean.
 - Known failing / flaky tests:
   - `Tests\Feature\Api\TranscriptValidationSpeedTest` "accepts 20,000 segments in under two seconds": timing budget (4 s parallel, 2 s alone). Fails on SQLite only when the laptop runs on battery or under load (seen 2.2-6 s); passes on MariaDB and on mains power. Not a regression (fails the same with the changes stashed).
@@ -15,7 +15,7 @@
 
 ## Progress
 - Plan items: 148 in PLAN_V1_1.md: 93 Done ([x]), 32 Partial ([~]), 22 Not started, 1 Blocked. Ticked = 93/148 = **63 %**.
-- Of the 32 Partial, 31 are built and covered by automated tests on every platform and wait only for on-device checks (docs/MANUAL_QA.md sections 7-14); B19 is genuinely half done. Weighted by remaining effort, about **66 %** of docs/UPGRADE_V1_1.md is done.
+- All 32 Partial items are built and covered by automated tests on every platform and wait only for on-device checks (docs/MANUAL_QA.md sections 7-15). Weighted by remaining effort, about **68 %** of the upgrade brief is done.
 
 | Item | Summary | Status |
 |---|---|---|
@@ -169,23 +169,21 @@
 | P8.4 | `v1.1` merged into `main` and pushed. | Not started |
 
 ## In progress right now
-- **B19 Onboarding and system-style settings.**
-- Done (desktop, committed in `d9c6db5`):
-  - Grouped, searchable settings (General, Recording, Captions, Dictation, Shortcuts, Privacy & security, Devices, Storage, About): `desktop/src/views/main/SettingsView.tsx`.
-  - App lock and devices split into `LockCard` / `DevicesCard`: `desktop/src/views/main/SecuritySettings.tsx`.
-  - Shortcut conflict warnings: `desktop/src/lib/shortcutConflicts.ts`; defaults moved to Ctrl/Cmd+Alt+Shift+R / C: `desktop/src-tauri/src/shortcuts.rs`.
-  - Settings export / import without the pairing: `settings_export` / `settings_import` in `desktop/src-tauri/src/commands.rs`.
-  - First-run wizard: `desktop/src/views/main/OnboardingView.tsx`, gated in `MainApp.tsx`; setting `onboarding_done` (installs paired before v1.1 count as done) in `desktop/src-tauri/src/settings.rs`.
-  - Tests: `desktop/src/views/main/SystemSettings.test.tsx`, `src-tauri/src/settings/tests.rs`, `src-tauri/src/commands/tests.rs`, `src-tauri/tests/shortcut_bindings.rs`.
-- Left: Android wizard (permissions → pairing → 10-second mic test → consent) and grouped / searchable settings with export / import; console settings tabs; MANUAL_QA section 15; tick B19.
+- Nothing open. **B19 Onboarding and system-style settings is built and tested on all three apps** (marked Partial only because of the device checks in docs/MANUAL_QA.md section 15).
+- Phone (committed in `18f19db`):
+  - First-run wizard (Welcome, Permissions, Pair, Test, Done): `mobile/.../ui/OnboardingScreen.kt`, steps in `core/OnboardingStep.kt`, gated in `MainActivity.kt`; flag `onboardingDone` in `data/SettingsStore.kt` (a stored settings JSON without the key and already paired counts as done).
+  - Settings hub with search and eight group screens: `ui/SettingsScreens.kt`; the list of settings and their keywords is `core/SettingsCatalogue.kt`.
+  - Export / import through the system file picker: `core/SettingsTransfer.kt` (allow-list `PORTABLE`; a test forces every new `AppSettings` field into `PORTABLE` or `NOT_PORTABLE`), `MainViewModel.exportSettingsTo / importSettingsFrom`.
+  - Tests: `SettingsTransferTest`, `SettingsCatalogueTest`, `SettingsHubTest`, `SettingsFilesTest`, `OnboardingTest`, plus updated `SettingsScreenTest`, `MainActivityTest`, `SettingsStoreTest`, `CaptureUiTest` and the instrumented e2e tests (not run here).
+- Console (committed in `e639ddd`):
+  - `web/app/Filament/Pages/Settings.php`: eight tabs (keys in `app/Services/SettingsSearch.php`), search box that hides non-matching sections and opens the first matching group, header actions Export settings / Import settings (`app/Services/SettingsTransfer.php`; credentials never read; an import is applied through the form so it is validated like a save).
+  - Dashboard checklist: `app/Filament/Widgets/OnboardingChecklistWidget.php`, `app/Services/OnboardingChecklist.php`, view `resources/views/filament/widgets/onboarding-checklist.blade.php`; dismissal is the setting `onboarding.dismissed`.
+  - Tests: `AdminSettingsGroupsTest`, `AdminOnboardingChecklistTest`, updated `AdminSettingsPageTest`.
+- Desktop B19 (committed earlier in `d9c6db5`): see the plan item.
 
 ## Next steps (in order)
-1. Android B19 wizard: add `onboardingDone` to `AppSettings` (`mobile/app/src/main/java/com/echoledger/mobile/data/SettingsStore.kt`), new `ui/OnboardingScreen.kt`, gate in `MainActivity.kt` (reuse `recording/MicTest.kt` and the pairing screen in `ui/Screens.kt`).
-2. Android settings groups and search plus export / import: `ui/Screens.kt` (`SettingsScreen`), `ui/CaptureScreens.kt`, `ui/SecurityScreens.kt`, `ui/ActivityScreens.kt`; export to the app's `exports/` cache and share it (see `MainViewModel.export`).
-3. Console settings tabs: `web/app/Filament/Pages/Settings.php`; then MANUAL_QA section 15 in `docs/MANUAL_QA.md`; tick B19 in `PLAN_V1_1.md`.
-4. B20 usage dashboard and SaaS foundations: `web/app/Services/Usage/*`, `web/app/Filament/Widgets/*`, new `workspaces` migration scoping every owned table, roles (owner / member), plan-limits table enforced by one policy; migrate existing data into a default workspace owned by the super admin.
-5. Phase 6 (C1-C9), then Phase 7 QA (P7.1-P7.3, write `docs/USER_GUIDE.md`), then Phase 8 release (P8.1-P8.4).
-
+1. B20 usage dashboard and SaaS foundations (use Opus 5.5 Medium): `web/app/Services/Usage/*`, `web/app/Filament/Widgets/*`, new `workspaces` migration scoping every owned table, roles (owner / member), plan-limits table enforced by one policy; migrate existing data into a default workspace owned by the super admin.
+2. Phase 6 (C1-C9), then Phase 7 QA (P7.1-P7.3, write the user guide), then Phase 8 release (P8.1-P8.4).
 ## Decisions made (do not redo)
 - Every server suite run also runs on MariaDB (XAMPP): it found real bugs (`started_at` silently got ON UPDATE CURRENT_TIMESTAMP; `transcripts.kind` too short for `alternate`).
 - Recording tags are called **labels** (`session_labels` table, `labels` field): `tags` already means bookmark tags in the API (B15).
@@ -197,11 +195,15 @@
 - **Undo bin (B17):** every delete (device, console, retention) makes a tombstone at once and erases the provider copy, but keeps our encrypted media 48 h (restorable, never playable or shareable, provider callbacks ignored); recordings deleted while recording / uploading are erased at once. Retention moved from `model:prune` to hourly `recordings:retention`; `model:prune` now removes only tombstones whose media is erased.
 - Activity centre uses Laravel database notifications written synchronously (`notifyNow`), so Filament's bell works and the once-a-month budget checks are deterministic.
 - Desktop polls activity every 60 s; Android every 15 min through WorkManager (no wake locks). A clicked desktop notification opens its recording via the single-instance callback (installed builds only).
+- B19 phone: settings groups are General, Recording, Captions, Dictation, Privacy & security, Devices, Storage, About (no Shortcuts on the phone). Import never turns on the app lock or consent, and never touches the pairing; the lock is switched on only by unlocking once.
+- B19 console: the Settings tabs bind `Tabs::livewireProperty('activeTab')` (value = a group key); inactive tabs are not rendered, a search jumps to the first group with a match. Export / import are page header actions; the import fills the form and saves, and rolls the form back if validation fails.
 - Android dictation is a voice-keyboard IME; its token is `use_case: dictation` with no session (never a recording).
 - Default desktop shortcuts for recording / copying are Ctrl/Cmd+Alt+Shift+R / C (Ctrl+Shift+R / C clash with browsers).
-- The brief `docs/UPGRADE_V1_1.md` stays out of git (repo rule: no instruction or prompt files committed); it is untracked on purpose.
+- The upgrade brief (the untracked file in docs/) stays out of git (repo rule: no instruction or prompt files committed); it is untracked on purpose.
 
 ## Gotchas learned
+- Filament `Tabs::livewireProperty()`: tab keys must be the array keys, the property holds that key, only the active tab is rendered (assert other tabs with `->set('activeTab', 'x')`), and `getFlatFields()` keys are prefixed with the tab key (`general.display_timezone`). `Section::extraAttributes()` lands on the wrapper `div.fi-sc-section`. Dashboard widgets are lazy by default (`$isLazy = false` to see them in a plain GET).
+- Test failures that print a whole page (`assertSee` on a Filament page) flood the output: write the HTML to a file and grep it.
 - PowerShell 5.1: no `&&`; use `;` and `if ($?)`. `[IO.File]` needs absolute paths (`"$PWD\..."`). Inside double quotes backtick sequences (` `, ` 	`) become control characters; use single-quoted here-strings for code with `$`. Write files with `New-Object Text.UTF8Encoding($false)` (no BOM) and a final LF (repo policy checks it).
 - `-like` treats a backtick as an escape: filter lines with `.StartsWith` / `.Contains` instead.
 - `.Replace` of a common substring replaces every occurrence (it duplicated imports and doc comments once); anchor on unique text.
@@ -228,7 +230,7 @@
 - Commits: author/committer `skillLeo <hassam.dev.571@gmail.com>` only; message from a UTF-8 (no BOM) file: `git commit -q -F <file>`; `git push -q origin v1.1`.
 
 ## Not started / blocked
-- On-device checks for B1-B18 (docs/MANUAL_QA.md sections 7-14): needs the user's phone, Windows PC and a Mac.
+- On-device checks for B1-B19 (docs/MANUAL_QA.md sections 7-15): needs the user's phone, Windows PC and a Mac.
 - A6.R6 Authenticode signing of the Windows installer: needs a code-signing certificate.
 - P8.2 signed APK: needs the release keystore and its password (never stored in files; pass via environment at build time).
 - P8.3 production deploy: needs SSH access; take a database backup first; never run seeders on production; never rotate `ECHOLEDGER_RECORDINGS_KEY`; server PHP CLI is `/opt/alt/php84/usr/bin/php`; run `composer install` (new dependency web-auth/webauthn-lib) and migrations; APP_URL must be the final HTTPS host (passkeys are tied to it).

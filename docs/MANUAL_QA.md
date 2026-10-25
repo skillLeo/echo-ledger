@@ -364,3 +364,24 @@ notification shade after every step.
 | N-4 | Turn on quiet hours covering now, on the desktop and the phone; finish another transcript. | No notification; the item waits in the bell / Activity list. |
 | N-5 | Lock the desktop app, then let a notification arrive. | It says only "New activity. Unlock EchoLedger to see it." |
 | N-6 | Pair a new device; set a small monthly limit and record past 80 %. | "Device paired" and the limit notices appear once each. |
+
+## 15. v1.1 — setup and settings
+
+| ID | Steps | Expected |
+|---|---|---|
+| O-1 | Desktop: install fresh (no settings), open EchoLedger. | The setup wizard opens: Permissions, Pair, Test, Done. "Skip setup" ends it; it never returns. A desktop paired before v1.1 does not see it. |
+| O-2 | Desktop: finish the wizard with the 10-second test (speak, and play a sound). | The test says what it heard; Done saves the consent tick only when ticked. |
+| O-3 | Phone: install fresh (clear app data), open EchoLedger. | The wizard opens: Welcome, Permissions, Pair, Test, Done, with "Step n of 5". Back (button and gesture) goes one step back. |
+| O-4 | Phone: on Permissions tap Allow for the microphone, notifications, display over other apps and battery. | Each row turns "Allowed" when you come back; a permanently refused permission shows "Open settings". The helper row says it is optional. |
+| O-5 | Phone: pair by QR or code, run the 10-second test while speaking. | The wizard moves on by itself after pairing; the meter moves; the result says the microphone works. |
+| O-6 | Phone: tap "Skip for now" on Pair, then finish. | The app shows the pairing screen as before; after pairing there is no wizard. |
+| O-7 | Phone: update an install that was already paired. | No wizard. |
+| S-1 | Phone: Settings. | A search box and eight groups: General, Recording, Captions, Dictation, Privacy & security, Devices, Storage, About. Each opens as its own screen; back and the back gesture return to the list. |
+| S-2 | Phone: search "quiet", "fingerprint", "retention". | Each finds its setting; tapping a result opens the group scrolled to it. Clearing the search shows the groups again. |
+| S-3 | Phone: About → Export settings, save the file; change a few settings; Import settings and pick the file. | "Settings saved", then "Settings imported"; the changed settings are back. The file has no server address, token, pins, device name, lock or consent. |
+| S-4 | Phone: import a file that is not a settings file. | "That is not an EchoLedger settings file." and nothing changes. |
+| S-5 | Console: Settings. | Tabs General, Recording, Captions, Dictation, Privacy & security, Devices, Storage, About, with the same names as the apps. |
+| S-6 | Console: type "budget" in the search box. | The Storage tab opens, other tabs show a count where they match, sections that do not match are hidden, and Save still saves every setting. |
+| S-7 | Console: Export settings, change retention, Import settings with the file. | The JSON has no API keys or webhook secrets; retention is back. A file with a value the server refuses (for example 9999 days) changes nothing and says so. |
+| S-8 | Console: new install, open the dashboard as the super admin. | "Finish setting up" lists two-factor, provider key, certificate pins, first device and retention; each opens its page; finished steps lose their link. |
+| S-9 | Console: finish all five steps, or press Dismiss. | The card disappears and does not come back (finishing: it returns if a step is undone). |
