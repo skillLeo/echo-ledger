@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type MicUser } from "../../lib/ipc";
-import { SOURCE_APP_LABELS } from "../../lib/format";
+import { sourceAppLabel } from "../../lib/format";
 import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
 
 /** Live view of which apps hold the microphone, so a missed call can be explained instead of silently lost. */
@@ -22,7 +22,7 @@ function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => 
       <div className="row">
         <b>Automatic call recording</b>
         <span className="spacer" />
-        <button className={`switch ${status.autoMode ? "on" : ""}`} aria-label="Toggle automatic call recording"
+        <button type="button" className={`switch ${status.autoMode ? "on" : ""}`} role="switch" aria-checked={status.autoMode} aria-label="Toggle automatic call recording"
           onClick={() => run(() => api.updateSettings({ autoMode: !status.autoMode }).then(() => undefined))} />
       </div>
       <p className="small muted">
@@ -36,7 +36,7 @@ function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => 
           <div key={i} className="row" style={{ gap: 8 }}>
             <span className={`status-dot ${u.app ? "live" : ""}`} />
             <span>{u.name}</span>
-            <span className={u.app ? "" : "muted"}>{u.app ? `→ ${SOURCE_APP_LABELS[u.app] ?? u.app}${status.autoMode ? " (will record after ~3 s)" : ""}` : "→ not a call app, ignored"}</span>
+            <span className={u.app ? "" : "muted"}>{u.app ? `→ ${sourceAppLabel(u.app)}${status.autoMode ? " (will record after ~3 s)" : ""}` : "→ not a call app, ignored"}</span>
           </div>
         ))}
         {users.length > 0 && recognised.length === 0 && <div className="muted" style={{ marginTop: 4 }}>If this is your call app, tell support its name above so it can be added.</div>}
@@ -66,7 +66,7 @@ export function RecordView({ status, run }: { status: AppStatus; run: <T>(fn: ()
             {recording ? "STOP" : "REC"}
           </button>
           <div style={{ display: "grid", gap: 8 }}>
-            <div className="row"><span className={`status-dot ${recording ? "live" : ""}`} />{recording ? `Recording · ${recording.mode === "mic_note" ? "voice note" : recording.sourceApp.replace("_", " ")}` : "Not recording"}</div>
+            <div className="row"><span className={`status-dot ${recording ? "live" : ""}`} />{recording ? `Recording · ${recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp)}` : "Not recording"}</div>
             {recording && <div className="small muted">{BACKEND_LABEL[recording.backend] ?? recording.backend}</div>}
             <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter"><div style={{ width: `${Math.min(100, mic * 400)}%` }} /></div></div>
             <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter"><div style={{ width: `${Math.min(100, sys * 400)}%` }} /></div></div>
@@ -77,18 +77,20 @@ export function RecordView({ status, run }: { status: AppStatus; run: <T>(fn: ()
       <div className="grid-2" style={{ marginTop: 14 }}>
         <div className="card">
           <div className="row"><CaptionsIcon /><b>Live captions</b><span className="spacer" />
-            <button className={`switch ${status.captionsLive ? "on" : ""}`} aria-label="Toggle live captions" onClick={() => run(api.toggleCaptions)} />
+            <button type="button" className={`switch ${status.captionsLive ? "on" : ""}`} role="switch" aria-checked={status.captionsLive} aria-label="Toggle live captions" onClick={() => run(api.toggleCaptions)} />
           </div>
           <p className="small muted">
             A small translucent overlay that never takes focus; clicks pass through everywhere except its buttons.
             {!recording && " Turning captions on starts a recording so there is audio to caption."}
           </p>
-          <button className="btn" onClick={() => run(() => api.copyLastMinutes(2), "Copied the last 2 minutes")}><CopyIcon size={15} />Copy last 2 minutes</button>
+          <div className="card-actions">
+            <button className="btn" onClick={() => run(() => api.copyLastMinutes(2), "Copied the last 2 minutes")}><CopyIcon size={15} />Copy last 2 minutes</button>
+          </div>
         </div>
         <div className="card">
           <div className="row"><MicIcon /><b>Voice notes</b></div>
           <p className="small muted">Voice notes are never recorded automatically. Speak into your microphone, capture audio playing on this computer, or drop an audio file anywhere in this window.</p>
-          <div className="row" style={{ flexWrap: "wrap" }}>
+          <div className="card-actions">
             <button className="btn primary" onClick={() => run(api.toggleMicNote)} disabled={!!recording && recording.mode !== "mic_note"}>
               <MicIcon size={15} />{recording?.mode === "mic_note" ? "Stop and save voice note" : "Record a voice note"}
             </button>

@@ -86,8 +86,10 @@ export function SourceAppIcon({ app, ...p }: IconProps & { app?: string }) {
   switch (app) {
     case "whatsapp": return <ChatIcon {...p} />;
     case "whatsapp_business": return <StoreIcon {...p} />;
+    case "whatsapp_web": return <GlobeIcon {...p} />;
     case "google_meet":
-    case "zoom": return <VideoIcon {...p} />;
+    case "zoom":
+    case "microsoft_teams": return <VideoIcon {...p} />;
     case "voice_note": return <MicIcon {...p} />;
     default: return <DotsIcon {...p} />;
   }

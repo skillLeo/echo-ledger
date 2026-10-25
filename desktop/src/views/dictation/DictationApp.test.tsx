@@ -59,6 +59,19 @@ describe("dictation box", () => {
     expect(textLine(container).textContent?.trim()).toBe("");
   });
 
+  // A6.DU8: long dictation used to run out of the 420 x 110 box.
+  it("wraps long text inside its own scroll area and keeps the newest words in view", async () => {
+    const { container } = await renderDictation();
+    const text = textLine(container);
+    expect(text).toHaveClass("dictation-text");
+    Object.defineProperty(text, "scrollHeight", { configurable: true, value: 480 });
+    await pushChannelMessage({ kind: "final", channel: 1, speaker: "Me", text: "https://example.test/".repeat(20), startMs: 0, endMs: 1 });
+    expect(text.scrollTop).toBe(480);
+    text.scrollTop = 0;
+    await pushChannelMessage({ kind: "partial", channel: 1, speaker: "Me", text: "and more" });
+    expect(text.scrollTop).toBe(480);
+  });
+
   it("removes its visibility listener on unmount", async () => {
     const { unmount } = await renderDictation();
     await waitFor(() => expect(listenerCount("overlay:visibility")).toBe(1));

@@ -224,6 +224,20 @@ describe("LibraryView search and filters", () => {
     expect(titlesInList()).toEqual(["Google Meet standup"]);
   });
 
+  // A6.DU7: the source chips are filter toggles, not a tablist without tabs.
+  it("exposes the source chips as a named group of pressed / not pressed toggles", async () => {
+    await renderLibrary();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    const group = screen.getByRole("group", { name: "Filter by device" });
+    const chips = within(group).getAllByRole("button");
+    expect(chips.map((c) => [c.textContent, c.getAttribute("aria-pressed")])).toEqual([
+      ["All", "true"], ["Phone", "false"], ["Desktop", "false"], ["Web", "false"],
+    ]);
+    fireEvent.click(within(group).getByRole("button", { name: "Web" }));
+    expect(within(group).getByRole("button", { name: "Web" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(group).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
+  });
+
   it("highlights the active chip and explains an empty filter", async () => {
     await renderLibrary([ITEMS[0]]);
     expect(screen.getByRole("button", { name: "All" })).toHaveClass("active");
@@ -321,10 +335,12 @@ describe("LibraryView transcript", () => {
     expect(within(detail()).getByText("Live captions (final transcript pending)")).toBeInTheDocument();
   });
 
+  // pending / submitted / processing read "Transcribing…" everywhere (phase 1 contract, section 1 item 11).
   it.each([
     [null, "Transcript not available yet."],
-    ["processing", "Transcript processing"],
-    ["pending", "Transcript pending"],
+    ["processing", "Transcribing…"],
+    ["pending", "Transcribing…"],
+    ["submitted", "Transcribing…"],
     ["awaiting_device", "Transcript awaiting device"],
   ])("explains a recording without a transcript (final status %s)", async (finalStatus, message) => {
     const pending = makeItem("p", { title: "Pending", status: "processing", transcript: { final_status: finalStatus, final_transcript_id: null, live_available: false, preview: null } });
@@ -374,8 +390,45 @@ describe("LibraryView transcript", () => {
     expect(within(detail()).queryByText("Hello, this is Sam.")).not.toBeInTheDocument();
   });
 
+  // A6.DU3: the final transcript row exists (status submitted / processing, no segments) while the provider works.
+  it.each(["pending", "submitted", "processing"])("shows a %s transcript as Transcribing…, never as empty speech", async (status) => {
+    TRANSCRIPTS["tr-wip"] = makeTranscript({ id: "tr-wip", status, segments: [] });
+    const wip = makeItem("w", { title: "Still working", status: "processing", transcript: { final_status: status, final_transcript_id: "tr-wip", live_available: false, preview: null } });
+    await renderLibrary([wip]);
+    await selectItem("Still working");
+    expect(await within(detail()).findByText("Transcribing…")).toBeInTheDocument();
+    expect(within(detail()).queryByText(/no speech was detected/i)).not.toBeInTheDocument();
+    expect(within(detail()).queryByRole("button", { name: /Copy/ })).not.toBeInTheDocument();
+    expect(callsOf("transcript_detail")).toEqual([{ id: "tr-wip" }]);
+  });
+
+  // A6.DU3: while the final transcript is being made, the live captions are the better thing to show.
+  it("shows the live captions while the final transcript is still being made", async () => {
+    TRANSCRIPTS["tr-wip"] = makeTranscript({ id: "tr-wip", status: "submitted", segments: [] });
+    TRANSCRIPTS["tr-live"] = makeTranscript({ id: "tr-live", kind: "live", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 900, text: "Live words." }] });
+    const both = makeItem("b2", { title: "Both", status: "processing", transcript: { final_status: "submitted", final_transcript_id: "tr-wip", live_available: true, live_transcript_id: "tr-live", preview: null } });
+    await renderLibrary([both]);
+    await selectItem("Both", "Live words.");
+    expect(callsOf("transcript_detail")).toEqual([{ id: "tr-live" }]);
+    expect(within(detail()).getByText("Live captions (final transcript pending)")).toBeInTheDocument();
+  });
+
+  it("loads the finished transcript once a sync reports it completed", async () => {
+    TRANSCRIPTS["tr-wip"] = makeTranscript({ id: "tr-wip", status: "processing", segments: [] });
+    const wip = makeItem("w", { title: "Still working", status: "processing", transcript: { final_status: "processing", final_transcript_id: "tr-wip", live_available: false, preview: null } });
+    await renderLibrary([wip]);
+    await selectItem("Still working");
+    expect(await within(detail()).findByText("Transcribing…")).toBeInTheDocument();
+
+    TRANSCRIPTS["tr-wip"] = makeTranscript({ id: "tr-wip" });
+    respond("library_list", [{ ...wip, status: "completed", transcript: { ...wip.transcript!, final_status: "completed" } }]);
+    await emitEvent("library:updated", 1);
+    expect(await within(detail()).findByText("Hello, this is Sam.")).toBeInTheDocument();
+    expect(within(detail()).queryByText("Transcribing…")).not.toBeInTheDocument();
+  });
+
   // A6.DU2: a late transcript response for the previous selection replaces the transcript of the current one.
-  it.skip("never shows one recording's transcript under another when responses arrive out of order", async () => {
+  it("never shows one recording's transcript under another when responses arrive out of order", async () => {
     let releaseFirst: (t: TranscriptDetail) => void = () => undefined;
     mockBackend();
     respondWith("transcript_detail", ({ id }) => (id === "tr-a" ? new Promise<TranscriptDetail>((resolve) => (releaseFirst = resolve)) : Promise.resolve(TRANSCRIPTS[id as string])));
@@ -389,6 +442,34 @@ describe("LibraryView transcript", () => {
 
     expect(within(detail()).getByRole("heading", { name: "Voice note from Sam" })).toBeInTheDocument();
     expect(within(detail()).queryByText("Hello, this is Sam.")).not.toBeInTheDocument();
+    expect(within(detail()).getByText("Remember to call back.")).toBeInTheDocument();
+  });
+
+  // A6.DU2: the same holds for the playback URL and for a failed transcript request.
+  it("ignores a late playback URL or a late failure that belongs to the previous selection", async () => {
+    let releaseSession: (d: unknown) => void = () => undefined;
+    let failTranscript: (reason: string) => void = () => undefined;
+    mockBackend();
+    respondWith("session_detail", ({ id }) =>
+      id === "a" ? new Promise((resolve) => (releaseSession = resolve)) : Promise.resolve({ id, playback_url: "https://audio.example.test/d.wav" }),
+    );
+    respondWith("transcript_detail", ({ id }) =>
+      id === "tr-a" ? new Promise((_, reject) => (failTranscript = reject)) : Promise.resolve(TRANSCRIPTS[id as string]),
+    );
+    render(<LibraryView notify={vi.fn()} />);
+    await within(list()).findByText("Zoom with Acme");
+
+    fireEvent.click(itemButton("Zoom with Acme"));
+    fireEvent.click(itemButton("Voice note from Sam"));
+    await within(detail()).findByText("Remember to call back.");
+    await waitFor(() => expect(document.querySelector("audio")).toHaveAttribute("src", "https://audio.example.test/d.wav"));
+    await act(async () => {
+      releaseSession({ id: "a", playback_url: "https://audio.example.test/a.wav" });
+      failTranscript("Server returned 404: Not found");
+    });
+    await flushAsync();
+
+    expect(document.querySelector("audio")).toHaveAttribute("src", "https://audio.example.test/d.wav");
     expect(within(detail()).getByText("Remember to call back.")).toBeInTheDocument();
   });
 });
@@ -484,8 +565,63 @@ describe("LibraryView audio playback", () => {
     expect(detail().querySelectorAll(".segment.active")).toHaveLength(0);
   });
 
+  // A6.DU8: a signed playback URL expires after 30 minutes; the player used to fail silently.
+  it("asks for a fresh playback URL once when the audio fails to load", async () => {
+    let served = 0;
+    await renderLibrary();
+    respondWith("session_detail", ({ id }) => ({ id, playback_url: `https://audio.example.test/rec.wav?v=${++served}` }));
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    await waitFor(() => expect(audio()).toHaveAttribute("src", "https://audio.example.test/rec.wav?v=1"));
+    fireEvent.error(audio());
+    await waitFor(() => expect(audio()).toHaveAttribute("src", "https://audio.example.test/rec.wav?v=2"));
+    expect(callsOf("session_detail")).toEqual([{ id: "a" }, { id: "a" }]);
+    expect(within(detail()).queryByText("Playback link expired. Open the recording again.")).not.toBeInTheDocument();
+  });
+
+  it("says the playback link expired when the fresh URL fails as well", async () => {
+    let served = 0;
+    await renderLibrary();
+    respondWith("session_detail", ({ id }) => ({ id, playback_url: `https://audio.example.test/rec.wav?v=${++served}` }));
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    await waitFor(() => expect(audio()).not.toBeNull());
+    fireEvent.error(audio());
+    await waitFor(() => expect(audio()).toHaveAttribute("src", "https://audio.example.test/rec.wav?v=2"));
+    fireEvent.error(audio());
+    expect(await within(detail()).findByText("Playback link expired. Open the recording again.")).toBeInTheDocument();
+    expect(audio()).toBeNull();
+    expect(callsOf("session_detail")).toHaveLength(2);
+    expect(within(detail()).getByText("Hello, this is Sam.")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["the refresh fails", () => Promise.reject("Network error: offline")],
+    ["the server returns the same URL", () => ({ playback_url: "https://audio.example.test/rec.wav" })],
+    ["the server has no URL any more", () => ({ playback_url: null })],
+  ])("says the playback link expired when %s", async (_case, answer) => {
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    await waitFor(() => expect(audio()).not.toBeNull());
+    respondWith("session_detail", answer);
+    fireEvent.error(audio());
+    expect(await within(detail()).findByText("Playback link expired. Open the recording again.")).toBeInTheDocument();
+    expect(audio()).toBeNull();
+  });
+
+  it("starts with a working player again after another recording is opened", async () => {
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    await waitFor(() => expect(audio()).not.toBeNull());
+    respondWith("session_detail", () => Promise.reject("Network error: offline"));
+    fireEvent.error(audio());
+    await within(detail()).findByText("Playback link expired. Open the recording again.");
+    respondWith("session_detail", ({ id }) => ({ id, playback_url: "https://audio.example.test/d.wav" }));
+    await selectItem("Voice note from Sam", "Remember to call back.");
+    await waitFor(() => expect(audio()).toHaveAttribute("src", "https://audio.example.test/d.wav"));
+    expect(within(detail()).queryByText("Playback link expired. Open the recording again.")).not.toBeInTheDocument();
+  });
+
   // A6.DU7: seekable transcript rows have role=button but cannot take focus and ignore Enter and Space.
-  it.skip("makes transcript rows reachable and operable from the keyboard when they act as buttons", async () => {
+  it("makes transcript rows reachable and operable from the keyboard when they act as buttons", async () => {
     await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     await waitFor(() => expect(audio()).not.toBeNull());

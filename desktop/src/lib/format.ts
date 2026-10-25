@@ -1,14 +1,22 @@
 // Formatting helpers shared by views (pure; covered by Vitest in Phase 4).
 
 export const SOURCE_DEVICE_LABELS: Record<string, string> = { phone: "Phone", desktop: "Desktop", web: "Web" };
+/** Display names of the server's `source_app` values (web/app/Enums/SourceApp.php). */
 export const SOURCE_APP_LABELS: Record<string, string> = {
   whatsapp: "WhatsApp",
   whatsapp_business: "WhatsApp Business",
+  whatsapp_web: "WhatsApp Web",
   google_meet: "Google Meet",
   zoom: "Zoom",
+  microsoft_teams: "Microsoft Teams",
   voice_note: "Voice note",
   other: "Other",
 };
+
+/** The display label of a `source_app` id; an id the app does not know yet is shown as is. */
+export function sourceAppLabel(app: string): string {
+  return SOURCE_APP_LABELS[app] ?? app;
+}
 
 export function formatDuration(ms?: number | null): string {
   if (ms == null || ms <= 0) return "";
@@ -61,6 +69,8 @@ export function prettyShortcut(accelerator: string | undefined, platform: string
     .map((k) => {
       const key = k.trim();
       if (/^(CommandOrControl|CmdOrCtrl)$/i.test(key)) return platform === "macos" ? "⌘" : "Ctrl";
+      // A physical Control key: acceleratorFromEvent records it on macOS next to Command.
+      if (/^(Control|Ctrl)$/i.test(key)) return platform === "macos" ? "⌃" : "Ctrl";
       if (/^Shift$/i.test(key)) return platform === "macos" ? "⇧" : "Shift";
       if (/^(Alt|Option)$/i.test(key)) return platform === "macos" ? "⌥" : "Alt";
       if (/^Space$/i.test(key)) return "Space";

@@ -80,7 +80,7 @@ describe("MainApp start-up and pairing gate", () => {
   });
 
   // A6.DU1: pairing errors are never shown; MainApp returns the pairing form before it renders the toast.
-  it.skip("shows the pairing error in an error toast and stays on the pairing form", async () => {
+  it("shows the pairing error in an error toast and stays on the pairing form", async () => {
     mockBackend({ paired: false });
     respondWith("pair_device", () => Promise.reject("Server returned 422: The pairing code is invalid or has expired."));
     render(<MainApp />);
@@ -97,6 +97,42 @@ describe("MainApp start-up and pairing gate", () => {
     await renderPaired();
     await emitEvent("app:status", makeStatus({ paired: false }));
     expect(await screen.findByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+  });
+
+  // A6.DU1: the 401 "unpaired on the server" error arrives together with the status that shows the pairing form.
+  it("keeps the 'unpaired on the server' error visible on the pairing form", async () => {
+    await renderPaired();
+    await emitEvent("app:error", "This computer was unpaired on the server. Pair it again to upload.");
+    await emitEvent("app:status", makeStatus({ paired: false }));
+    expect(await screen.findByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    const toast = screen.getByRole("status");
+    expect(toast).toHaveTextContent("This computer was unpaired on the server. Pair it again to upload.");
+    expect(toast).toHaveClass("toast", "error");
+  });
+
+  // A6.DU1: errors that reach an unpaired window (network, certificate pin) are shown too.
+  it("shows an app:error toast while the pairing form is open", async () => {
+    mockBackend({ paired: false, serverUrl: null, deviceName: null });
+    render(<MainApp />);
+    await screen.findByRole("heading", { name: "Pair this computer" });
+    await emitEvent("app:error", "Network error: the server's TLS certificate was not accepted (pin mismatch)");
+    expect(screen.getByRole("status")).toHaveTextContent("Network error: the server's TLS certificate was not accepted (pin mismatch)");
+    expect(screen.getByRole("status")).toHaveClass("error");
+  });
+
+  // A6.DU7: every screen has a main landmark (start-up, pairing form and the paired app).
+  it("has a main landmark before and after pairing", async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mockBackend({ paired: false, serverUrl: null, deviceName: null });
+    respondWith("app_status", () => new Promise((resolve) => (release = resolve)));
+    render(<MainApp />);
+    expect(screen.getByRole("main")).toHaveTextContent("Starting EchoLedger…");
+    await act(async () => release(makeStatus({ paired: false, serverUrl: null, deviceName: null })));
+    expect(within(await screen.findByRole("main")).getByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    await emitEvent("app:status", makeStatus());
+    expect(within(screen.getByRole("main")).getByRole("heading", { name: "Library" })).toBeInTheDocument();
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    await flushAsync();
   });
 
   it("stays on the start-up message when the status can never be read", async () => {
@@ -304,8 +340,8 @@ describe("MainApp action runner", () => {
     fireEvent.click(nav("Record"));
     respond("toggle_captions", makeStatus({ captionsLive: true }));
     respond("app_status", makeStatus({ captionsLive: true }));
-    fireEvent.click(screen.getByRole("button", { name: "Toggle live captions" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Toggle live captions" })).toHaveClass("on"));
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle live captions" }));
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Toggle live captions" })).toHaveClass("on"));
     expect(within(sidebar()).getByText("Captions live")).toBeInTheDocument();
   });
 

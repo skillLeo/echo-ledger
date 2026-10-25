@@ -4,6 +4,7 @@ import { SettingsView } from "./SettingsView";
 import { errorMessage, type AppStatus, type Settings } from "../../lib/ipc";
 import { callsOf, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeSettings, makeStatus } from "../../test/fixtures";
+import commandsRs from "../../../src-tauri/src/commands.rs?raw";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -166,6 +167,34 @@ describe("SettingsView selects", () => {
     expect(callsOf("update_settings")[0]).toEqual({ patch: { clientId: null } });
   });
 
+  // A6.DU4: the key must reach the core as an explicit null (clear), never be dropped (keep the stored client).
+  it("keeps clientId as an explicit null in the serialised command and shows No client afterwards", async () => {
+    await setup({ clientId: "c1" });
+    echoSettings(makeSettings({ clientId: "c1" }));
+    await screen.findByRole("option", { name: "Acme Holdings" });
+    const select = screen.getByLabelText("Client keyterms") as HTMLSelectElement;
+    expect(select.value).toBe("c1");
+    fireEvent.change(select, { target: { value: "" } });
+    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
+    // Command arguments travel to Rust as JSON: null survives JSON.stringify, undefined would drop the key.
+    expect(JSON.stringify(callsOf("update_settings")[0])).toBe('{"patch":{"clientId":null}}');
+    await waitFor(() => expect(select.value).toBe(""));
+    expect(screen.getByDisplayValue("No client")).toBe(select);
+  });
+
+  // A6.DU4 (core side, DESKTOP-CORE): plain serde turns `"clientId": null` into `None` for an Option<Option<String>>
+  // field, which update_settings reads as "keep". The field needs `#[serde(default, deserialize_with = ...)]` (or
+  // serde_with's double_option) so null arrives as Some(None). Un-skip once src-tauri/src/commands.rs has it.
+  it.skip("A6.DU4: the core SettingsPatch keeps an explicit clientId null apart from a missing key", () => {
+    const patch = commandsRs.slice(commandsRs.indexOf("pub struct SettingsPatch"), commandsRs.indexOf("\n}\n", commandsRs.indexOf("pub struct SettingsPatch")));
+    const lines = patch.split("\n");
+    const at = lines.findIndex((l) => /^\s*(pub\s+)?client_id: Option<Option<String>>,/.test(l));
+    expect(at, "client_id is an Option<Option<String>>").toBeGreaterThan(0);
+    const attributes = lines.slice(0, at).reverse();
+    const own = attributes.slice(0, attributes.findIndex((l) => !/^\s*(#\[|\/\/)/.test(l)));
+    expect(own.join("\n"), "client_id needs a deserialiser that maps null to Some(None)").toMatch(/deserialize_with|with\s*=|double_option/);
+  });
+
   it("changes the dictation output between typing and clipboard", async () => {
     await setup({ dictationOutput: "type" });
     const select = screen.getByDisplayValue("Type into the focused app");
@@ -174,12 +203,29 @@ describe("SettingsView selects", () => {
   });
 
   // A6.DU7: the caption position, client keyterms and dictation output selects have no accessible name.
-  it.skip("gives each select an accessible name", async () => {
+  it("gives each select an accessible name", async () => {
     await setup();
     await screen.findByRole("option", { name: "Acme Holdings" });
     for (const select of screen.getAllByRole("combobox")) {
       expect(select, "select has no label / aria-label").toHaveAccessibleName();
     }
+  });
+
+  it("names each select after its visible label and describes the client select with its hint", async () => {
+    await setup();
+    await screen.findByRole("option", { name: "Acme Holdings" });
+    expect(screen.getByRole("combobox", { name: "Caption position" })).toHaveValue("bottom_right");
+    expect(screen.getByRole("combobox", { name: "Dictation output" })).toHaveValue("type");
+    const client = screen.getByRole("combobox", { name: "Client keyterms" });
+    expect(client).toHaveAccessibleDescription("Names and jargon from this client boost accuracy.");
+  });
+
+  it("describes a switch with its hint", async () => {
+    await setup();
+    expect(screen.getByRole("switch", { name: "Auto-record calls" })).toHaveAccessibleDescription(
+      "Starts when WhatsApp, Zoom or a browser (Meet) uses the mic; stops when it releases it.",
+    );
+    expect(screen.getByRole("switch", { name: "Start EchoLedger when I sign in" })).not.toHaveAttribute("aria-describedby");
   });
 });
 

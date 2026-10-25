@@ -92,10 +92,19 @@ describe("RecordView main control", () => {
   });
 
   // A6.DU8: the Record view shows the raw app id ("whatsapp business") instead of the shared display label.
-  it.skip("names the source app with its display label while recording", async () => {
+  it("names the source app with its display label while recording", async () => {
     // The shared label map ("WhatsApp Business", "Google Meet") is what every other screen uses.
     await setup({ recording: makeRecording({ sourceApp: "whatsapp_business" }) });
     expect(screen.getByText("Recording · WhatsApp Business")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["whatsapp_web", "Recording · WhatsApp Web"],
+    ["microsoft_teams", "Recording · Microsoft Teams"],
+    ["google_meet", "Recording · Google Meet"],
+  ])("labels a %s recording with its display name", async (sourceApp, text) => {
+    await setup({ recording: makeRecording({ sourceApp }) });
+    expect(screen.getByText(text)).toBeInTheDocument();
   });
 
   it("calls a microphone note a voice note", async () => {
@@ -159,7 +168,7 @@ describe("RecordView captions and copy", () => {
 
   it("toggles live captions", async () => {
     await setup({ captionsLive: false });
-    const toggle = screen.getByRole("button", { name: "Toggle live captions" });
+    const toggle = screen.getByRole("switch", { name: "Toggle live captions" });
     expect(toggle).not.toHaveClass("on");
     fireEvent.click(toggle);
     await waitFor(() => expect(callsOf("toggle_captions")).toHaveLength(1));
@@ -167,7 +176,7 @@ describe("RecordView captions and copy", () => {
 
   it("marks the captions switch as on when captions are live", async () => {
     await setup({ captionsLive: true });
-    expect(screen.getByRole("button", { name: "Toggle live captions" })).toHaveClass("on");
+    expect(screen.getByRole("switch", { name: "Toggle live captions" })).toHaveClass("on");
   });
 
   it("warns that captions start a recording only when nothing is recording", async () => {
@@ -186,13 +195,24 @@ describe("RecordView captions and copy", () => {
   });
 
   // A6.DU7: the Record view switches show their state only through a CSS class (no aria-pressed / aria-checked).
-  it.skip("exposes the on/off state of each switch to assistive technology", async () => {
+  // Phase 1 contract 5.4: switches are role="switch" with aria-checked, so they are looked up by that role.
+  it("exposes the on/off state of each switch to assistive technology", async () => {
     await setup({ captionsLive: true });
     for (const name of ["Toggle live captions", "Toggle automatic call recording"]) {
-      const control = screen.getByRole("button", { name });
+      const control = screen.getByRole("switch", { name });
       const state = control.getAttribute("aria-pressed") ?? control.getAttribute("aria-checked");
       expect(state, `${name} has no aria-pressed / aria-checked`).not.toBeNull();
     }
+  });
+
+  it("reports each switch as checked exactly when its feature is on", async () => {
+    const on = await setup({ captionsLive: true, autoMode: true });
+    expect(screen.getByRole("switch", { name: "Toggle live captions" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Toggle automatic call recording" })).toBeChecked();
+    on.unmount();
+    await setup({ captionsLive: false, autoMode: false });
+    expect(screen.getByRole("switch", { name: "Toggle live captions" })).not.toBeChecked();
+    expect(screen.getByRole("switch", { name: "Toggle automatic call recording" })).not.toBeChecked();
   });
 });
 
@@ -205,7 +225,7 @@ describe("RecordView automatic call recording", () => {
   ])("with auto mode %s the switch sends autoMode=%s and the text matches", async (autoMode, next, text) => {
     await setup({ autoMode });
     expect(screen.getByText(text)).toBeInTheDocument();
-    const toggle = screen.getByRole("button", { name: "Toggle automatic call recording" });
+    const toggle = screen.getByRole("switch", { name: "Toggle automatic call recording" });
     if (autoMode) expect(toggle).toHaveClass("on");
     else expect(toggle).not.toHaveClass("on");
     fireEvent.click(toggle);

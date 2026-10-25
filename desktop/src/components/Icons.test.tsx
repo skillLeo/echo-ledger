@@ -33,6 +33,13 @@ describe("icons", () => {
     expect(new Set([whatsapp, business, meet, note, other]).size).toBe(5);
   });
 
+  it("gives WhatsApp Web the web glyph and Microsoft Teams the video-call glyph", () => {
+    const other = markup(<SourceAppIcon app="other" />);
+    expect(markup(<SourceAppIcon app="microsoft_teams" />)).toBe(markup(<SourceAppIcon app="zoom" />));
+    expect(markup(<SourceAppIcon app="whatsapp_web" />)).toBe(markup(<SourceDeviceIcon source="web" />));
+    expect(markup(<SourceAppIcon app="whatsapp_web" />)).not.toBe(other);
+  });
+
   it("falls back to the generic glyph for an unknown or missing app", () => {
     const other = markup(<SourceAppIcon app="other" />);
     expect(markup(<SourceAppIcon app="signal" />)).toBe(other);

@@ -128,9 +128,16 @@ describe("prettyShortcut edge cases", () => {
   });
 
   // A6.DU8: prettyShortcut prints the macOS Control modifier as the word "Control" ("⌘ControlR").
-  it.skip("shows the macOS Control modifier as a symbol rather than the raw word", () => {
+  it("shows the macOS Control modifier as a symbol rather than the raw word", () => {
     // acceleratorFromEvent produces "Control" for a physical Ctrl press on macOS, so the recorder can display it.
     expect(prettyShortcut("CommandOrControl+Control+R", "macos")).toBe("⌘⌃R");
+  });
+
+  it("round-trips a recorded macOS Control shortcut and keeps Ctrl on Windows", () => {
+    const recorded = acceleratorFromEvent(keys({ ctrlKey: true, altKey: true, code: "KeyM" }), "macos");
+    expect(recorded).toBe("Control+Alt+M");
+    expect(prettyShortcut(recorded ?? "", "macos")).toBe("⌃⌥M");
+    expect(prettyShortcut("Control+Shift+K", "windows")).toBe("Ctrl + Shift + K");
   });
 });
 

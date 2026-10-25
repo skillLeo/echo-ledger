@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { subscribeCaptions } from "../../lib/ipc";
 
@@ -8,6 +8,7 @@ export default function DictationApp() {
   const [finals, setFinals] = useState<string[]>([]);
   const [partial, setPartial] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const textRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     subscribeCaptions((e) => {
@@ -27,6 +28,12 @@ export default function DictationApp() {
     };
   }, []);
 
+  // Long dictation wraps inside the small box and scrolls; the newest words stay in view (A6.DU8).
+  useEffect(() => {
+    const el = textRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [finals, partial]);
+
   return (
     <div className={`overlay-root ${visible ? "" : "overlay-hidden"}`} style={{ alignItems: "flex-start" }}>
       <div className="overlay-card dictation-card">
@@ -35,7 +42,7 @@ export default function DictationApp() {
           <span>Dictating — press the shortcut again to insert</span>
         </div>
         {message && <div className="caption-line small" style={{ color: "#fda4af" }}>{message}</div>}
-        <div className="caption-line">{finals.join(" ")} <span className="partial" style={{ opacity: 0.7 }}>{partial}</span></div>
+        <div ref={textRef} className="caption-line dictation-text">{finals.join(" ")} <span className="partial" style={{ opacity: 0.7 }}>{partial}</span></div>
       </div>
     </div>
   );

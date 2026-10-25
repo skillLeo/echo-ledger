@@ -6,9 +6,16 @@ import {
   prettyShortcut,
   SOURCE_APP_LABELS,
   SOURCE_DEVICE_LABELS,
+  sourceAppLabel,
   timestamp,
   transcriptText,
 } from "./format";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// The server enum lives outside the Vite root, so it is read from disk (the Rust test classify_apps.rs does the same).
+const serverSourceAppEnum = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../../web/app/Enums/SourceApp.php"), "utf8");
 
 describe("formatDuration", () => {
   it("is blank for empty or non-positive input", () => {
@@ -103,5 +110,20 @@ describe("shared labels", () => {
     expect(SOURCE_DEVICE_LABELS).toMatchObject({ phone: "Phone", desktop: "Desktop", web: "Web" });
     expect(SOURCE_APP_LABELS.whatsapp_business).toBe("WhatsApp Business");
     expect(SOURCE_APP_LABELS.voice_note).toBe("Voice note");
+  });
+
+  // A6.DU8: the desktop shows the same label as the server and the phone for every source app.
+  it("match the server's source app enum, value for value and label for label", () => {
+    const values = [...serverSourceAppEnum.matchAll(/case (\w+) = '(\w+)';/g)].map(([, name, value]) => ({ name, value }));
+    const getLabel = serverSourceAppEnum.slice(serverSourceAppEnum.indexOf("function getLabel"), serverSourceAppEnum.indexOf("function getIcon"));
+    const labels = new Map([...getLabel.matchAll(/self::(\w+) => '([^']+)'/g)].map(([, name, label]) => [name, label]));
+    expect(values.map((v) => v.value)).toEqual(expect.arrayContaining(["whatsapp_web", "microsoft_teams"]));
+    expect(Object.fromEntries(values.map((v) => [v.value, labels.get(v.name)]))).toEqual(SOURCE_APP_LABELS);
+  });
+
+  it("fall back to the raw id for an app this version does not know", () => {
+    expect(sourceAppLabel("microsoft_teams")).toBe("Microsoft Teams");
+    expect(sourceAppLabel("whatsapp_web")).toBe("WhatsApp Web");
+    expect(sourceAppLabel("signal")).toBe("signal");
   });
 });

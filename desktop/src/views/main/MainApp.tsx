@@ -60,8 +60,18 @@ export default function MainApp() {
     }
   };
 
-  if (!status) return <div className="empty">Starting EchoLedger…</div>;
-  if (!status.paired) return <PairingView onPaired={setStatus} notify={notify} />;
+  // Rendered in every branch: a pairing error, or "unpaired on the server" arriving with the status that sends the
+  // window back to the pairing form, must stay visible (A6.DU1).
+  const toastView = toast && <div className={`toast ${toast.error ? "error" : ""}`} role="status">{toast.text}</div>;
+
+  if (!status || !status.paired) {
+    return (
+      <main className="gate">
+        {status ? <PairingView onPaired={setStatus} notify={notify} /> : <div className="empty">Starting EchoLedger…</div>}
+        {toastView}
+      </main>
+    );
+  }
 
   return (
     <div className="app">
@@ -87,7 +97,7 @@ export default function MainApp() {
         {tab === "record" && <RecordView status={status} run={run} />}
         {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} />}
       </main>
-      {toast && <div className={`toast ${toast.error ? "error" : ""}`} role="status">{toast.text}</div>}
+      {toastView}
     </div>
   );
 }

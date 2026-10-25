@@ -282,7 +282,7 @@ describe("Library screen fed with server data", () => {
   });
 
   // A6.DU3: a transcript that is still submitted or processing is shown as "no speech was detected".
-  it.skip("does not present a transcript that is still processing as an empty one", async () => {
+  it("does not present a transcript that is still processing as an empty one", async () => {
     // The server creates the final transcript row when it submits the job (status "submitted", no segments), and the
     // library item already references it, so the screen fetches it while the provider is still working.
     await open("Vendor sync");
@@ -291,5 +291,6 @@ describe("Library screen fed with server data", () => {
       for (let i = 0; i < 25; i++) await Promise.resolve();
     });
     expect(screen.queryByText(/no speech was detected/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Transcribing…")).toBeInTheDocument();
   });
 });

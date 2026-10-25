@@ -14,6 +14,13 @@ export function filterItems(items: LibraryItem[], source: SourceFilter): Library
 
 const STATE_LABEL = { ready: "Ready", processing: "Processing", failed: "Failed" } as const;
 
+/** Transcript states in which the provider is still working: never shown as an empty transcript (A6.DU3). */
+const IN_FLIGHT = new Set(["pending", "submitted", "processing"]);
+const isTranscribing = (status?: string | null): boolean => !!status && IN_FLIGHT.has(status);
+
+const PLAYBACK_EXPIRED = "Playback link expired. Open the recording again.";
+const playbackUrlOf = (detail: Record<string, unknown>): string | null => (typeof detail.playback_url === "string" ? detail.playback_url : null);
+
 /** Unified library: every recording from every device, searchable by title and transcript text. */
 export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => void }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
@@ -24,7 +31,11 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
   const [transcript, setTranscript] = useState<TranscriptDetail | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [activeSegment, setActiveSegment] = useState(-1);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  /** Bumped on every selection change; an answer that belongs to an older selection is dropped (A6.DU2). */
+  const selection = useRef(0);
+  const playbackRefreshed = useRef(false);
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -53,15 +64,47 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
   const groups = useMemo(() => groupItems(filtered, sort), [filtered, sort]);
   const current = filtered.find((i) => i.id === selected) ?? null;
 
+  const finalStatus = current?.transcript?.final_status ?? null;
+  const finalId = current?.transcript?.final_transcript_id ?? null;
+  const liveId = current?.transcript?.live_transcript_id ?? null;
   useEffect(() => {
+    const token = ++selection.current;
+    const latest = () => token === selection.current;
     setTranscript(null);
     setPlaybackUrl(null);
+    setPlaybackError(null);
     setActiveSegment(-1);
-    const id = current?.transcript?.final_transcript_id ?? current?.transcript?.live_transcript_id;
-    if (id) api.transcript(id).then(setTranscript).catch(() => setTranscript(null));
+    playbackRefreshed.current = false;
+    // While the final transcript is still being made, the live captions (when there are any) are worth reading.
+    const id = (isTranscribing(finalStatus) && liveId) || finalId || liveId;
+    if (id) api.transcript(id).then((t) => latest() && setTranscript(t)).catch(() => latest() && setTranscript(null));
     // Temporary signed URL to the decrypted recording; the server streams it with Range support.
-    if (current) api.session(current.id).then((d) => setPlaybackUrl(typeof d.playback_url === "string" ? d.playback_url : null)).catch(() => setPlaybackUrl(null));
-  }, [current?.id, current?.transcript?.final_transcript_id, current?.transcript?.live_transcript_id]);
+    if (current) api.session(current.id).then((d) => latest() && setPlaybackUrl(playbackUrlOf(d))).catch(() => latest() && setPlaybackUrl(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, finalId, liveId, finalStatus]);
+
+  /** The signed playback URL lives 30 minutes (docs/API.md); a failed load asks for a fresh one once (A6.DU8). */
+  const onPlaybackError = () => {
+    if (!current) return;
+    const token = selection.current;
+    const failedUrl = playbackUrl;
+    const expired = () => {
+      if (token !== selection.current) return;
+      setPlaybackUrl(null);
+      setPlaybackError(PLAYBACK_EXPIRED);
+    };
+    if (playbackRefreshed.current) return expired();
+    playbackRefreshed.current = true;
+    api
+      .session(current.id)
+      .then((d) => {
+        if (token !== selection.current) return;
+        const next = playbackUrlOf(d);
+        if (next && next !== failedUrl) setPlaybackUrl(next);
+        else expired();
+      })
+      .catch(expired);
+  };
 
   const copy = async (withTimestamps: boolean) => {
     if (!transcript) return;
@@ -125,9 +168,10 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
           {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => <option key={k} value={k}>{SORT_LABELS[k]}</option>)}
         </select>
       </div>
-      <div className="chips" role="tablist">
+      {/* Filter toggles, not tabs: a group of pressed / not pressed buttons (A6.DU7). */}
+      <div className="chips" role="group" aria-label="Filter by device">
         {([["all", "All", null], ["phone", "Phone", <PhoneIcon key="p" size={13} />], ["desktop", "Desktop", <DesktopIcon key="d" size={13} />], ["web", "Web", <GlobeIcon key="w" size={13} />]] as const).map(([key, label, icon]) => (
-          <button key={key} className={`chip ${source === key ? "active" : ""}`} onClick={() => setSource(key)}>{icon}{label}</button>
+          <button key={key} type="button" className={`chip ${source === key ? "active" : ""}`} aria-pressed={source === key} onClick={() => setSource(key)}>{icon}{label}</button>
         ))}
       </div>
       <div className="library">
@@ -141,7 +185,7 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
               {group.items.map((item) => {
                 const state = itemState(item);
                 return (
-                  <button key={item.id} className={`item ${item.id === selected ? "selected" : ""}`} onClick={() => setSelected(item.id)}>
+                  <button key={item.id} type="button" className={`item ${item.id === selected ? "selected" : ""}`} aria-current={item.id === selected ? "true" : undefined} onClick={() => setSelected(item.id)}>
                     <div className="row">
                       <span className={`avatar ${item.source_device ?? "web"}`}><SourceAppIcon app={item.source_app} size={18} /></span>
                       <div className="item-main">
@@ -167,16 +211,19 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
                 <span className="spacer" />
                 <button className="btn danger ghost" onClick={() => remove(current.id)}><TrashIcon size={15} />Delete</button>
               </div>
-              <h2 style={{ margin: "12px 0 2px" }}>{current.title}</h2>
+              <h2 className="detail-title">{current.title}</h2>
               <div className="small muted">{formatWhen(current.started_at)} · {formatDuration(current.duration_ms)}{current.client ? ` · ${current.client.name}` : ""}</div>
               {playbackUrl && (
-                <audio ref={audioRef} className="player" controls preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} data-testid="player" />
+                <audio ref={audioRef} className="player" controls preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} onError={onPlaybackError} data-testid="player" />
               )}
+              {playbackError && <div className="notice" style={{ marginTop: 12 }}>{playbackError}</div>}
               {transcript ? (
                 transcript.status === "failed" ? (
                   <div className="notice error" style={{ marginTop: 12 }}>
                     <strong>Transcription failed.</strong> {transcript.error ?? "The speech provider could not process this recording."}
                   </div>
+                ) : isTranscribing(transcript.status) ? (
+                  <div className="empty">Transcribing…</div>
                 ) : (
                   <>
                     <div className="row" style={{ marginTop: 10 }}>
@@ -187,18 +234,28 @@ export function LibraryView({ notify }: { notify: (t: string, e?: boolean) => vo
                     </div>
                     {transcript.segments.length === 0 && <div className="empty">The transcript is empty: no speech was detected.</div>}
                     <div className="segments">
-                      {transcript.segments.map((s, i) => (
-                        <div key={i} className={`segment ${i === activeSegment ? "active" : ""} ${playbackUrl ? "seekable" : ""}`} onClick={() => seek(s.start_ms)} role={playbackUrl ? "button" : undefined}>
-                          <span className="seg-time">{timestamp(s.start_ms)}</span>
-                          <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{s.speaker}</span>
-                          <span>{s.text}</span>
-                        </div>
-                      ))}
+                      {transcript.segments.map((s, i) => {
+                        const cells = (
+                          <>
+                            <span className="seg-time">{timestamp(s.start_ms)}</span>
+                            <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{s.speaker}</span>
+                            <span className="seg-text">{s.text}</span>
+                          </>
+                        );
+                        const className = `segment ${i === activeSegment ? "active" : ""}`;
+                        const playing = i === activeSegment ? "true" : undefined;
+                        // A row that seeks is a real button: it takes focus and Enter / Space activate it (A6.DU7).
+                        return playbackUrl ? (
+                          <button key={i} type="button" className={`${className} seekable`} aria-current={playing} onClick={() => seek(s.start_ms)}>{cells}</button>
+                        ) : (
+                          <div key={i} className={className}>{cells}</div>
+                        );
+                      })}
                     </div>
                   </>
                 )
               ) : (
-                <div className="empty">{current.transcript?.final_status ? `Transcript ${current.transcript.final_status.replace("_", " ")}` : "Transcript not available yet."}</div>
+                <div className="empty">{isTranscribing(finalStatus) ? "Transcribing…" : finalStatus ? `Transcript ${finalStatus.replace("_", " ")}` : "Transcript not available yet."}</div>
               )}
             </>
           )}

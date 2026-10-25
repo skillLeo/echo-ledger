@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { api, type AppStatus, type Corner, type Settings, type ShortcutAction } from "../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut } from "../../lib/format";
 
@@ -11,10 +11,11 @@ const ACTIONS: [ShortcutAction, string][] = [
 ];
 
 function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: (v: boolean) => void; label: string; hint?: string }) {
+  const hintId = useId();
   return (
     <div className="toggle">
-      <div><div>{label}</div>{hint && <div className="small muted">{hint}</div>}</div>
-      <button className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)} />
+      <div><div>{label}</div>{hint && <div id={hintId} className="small muted">{hint}</div>}</div>
+      <button type="button" className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label={label} aria-describedby={hint ? hintId : undefined} onClick={() => onChange(!on)} />
     </div>
   );
 }
@@ -66,22 +67,23 @@ export function SettingsView({ status, run, onUnpaired }: {
         <Toggle label="Hide overlays from screen sharing" hint="Captions stay visible to you but not in Zoom/Meet screen shares." on={settings.contentProtection} onChange={(v) => patch({ contentProtection: v })} />
         <Toggle label="Start EchoLedger when I sign in" on={settings.autostart} onChange={(v) => patch({ autostart: v })} />
         <div className="toggle">
-          <div>Caption position</div>
-          <select className="input" style={{ width: 180 }} value={settings.overlayCorner} onChange={(e) => patch({ overlayCorner: e.target.value as Corner })}>
+          <label htmlFor="settings-overlay-corner">Caption position</label>
+          <select id="settings-overlay-corner" className="input" style={{ width: 180 }} value={settings.overlayCorner} onChange={(e) => patch({ overlayCorner: e.target.value as Corner })}>
             <option value="bottom_right">Bottom right</option><option value="top_right">Top right</option>
             <option value="bottom_left">Bottom left</option><option value="top_left">Top left</option>
           </select>
         </div>
         <div className="toggle">
-          <div><div>Client keyterms</div><div className="small muted">Names and jargon from this client boost accuracy.</div></div>
-          <select className="input" style={{ width: 220 }} value={settings.clientId ?? ""} onChange={(e) => patch({ clientId: e.target.value || null })}>
+          <div><label htmlFor="settings-client">Client keyterms</label><div id="settings-client-hint" className="small muted">Names and jargon from this client boost accuracy.</div></div>
+          {/* "No client" sends clientId: null (clears it); a missing key would keep the stored client (A6.DU4). */}
+          <select id="settings-client" aria-describedby="settings-client-hint" className="input" style={{ width: 220 }} value={settings.clientId ?? ""} onChange={(e) => patch({ clientId: e.target.value || null })}>
             <option value="">No client</option>
             {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div className="toggle">
-          <div>Dictation output</div>
-          <select className="input" style={{ width: 220 }} value={settings.dictationOutput} onChange={(e) => patch({ dictationOutput: e.target.value as "type" | "clipboard" })}>
+          <label htmlFor="settings-dictation-output">Dictation output</label>
+          <select id="settings-dictation-output" className="input" style={{ width: 220 }} value={settings.dictationOutput} onChange={(e) => patch({ dictationOutput: e.target.value as "type" | "clipboard" })}>
             <option value="type">Type into the focused app</option><option value="clipboard">Copy to clipboard</option>
           </select>
         </div>
