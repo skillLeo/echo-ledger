@@ -32,7 +32,8 @@ pub async fn start(app: &AppHandle) -> AppResult<()> {
     set_overlay_visible(app, DICTATION, true);
     app.state::<CaptionHub>().send(TARGETS, CaptionEvent::Clear);
 
-    let senders = match state.dictation_live.start(app, "dictation", &[Channel::Mic], TARGETS, false, None).await {
+    // Dictation needs no server session; its streaming period is reported without one (A5.4).
+    let senders = match state.dictation_live.start(app, "dictation", &[Channel::Mic], TARGETS, false, 0, None).await {
         Ok(s) => s,
         Err(e) => {
             app.state::<CaptionHub>().send(TARGETS, CaptionEvent::Status { live: false, recording: false, provider: None, message: Some(e.to_string()) });
@@ -40,8 +41,13 @@ pub async fn start(app: &AppHandle) -> AppResult<()> {
         }
     };
     if let Some((_, sink)) = senders.into_iter().next() {
-        let mic = MicStream::start(sink)?;
-        *state.dictation.lock().unwrap() = Some(mic);
+        match MicStream::start(sink) {
+            Ok(mic) => *state.dictation.lock().unwrap() = Some(mic),
+            Err(e) => {
+                state.dictation_live.stop(); // the socket must not stay open without audio
+                return Err(e);
+            }
+        }
     }
     Ok(())
 }

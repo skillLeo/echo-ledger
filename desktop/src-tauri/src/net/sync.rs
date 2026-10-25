@@ -112,6 +112,11 @@ pub mod paths {
         data_dir.join("uploads.json")
     }
 
+    /// Recordings waiting for Keep / Discard (A2.1).
+    pub fn pending(data_dir: &std::path::Path) -> PathBuf {
+        data_dir.join("pending.json")
+    }
+
     pub fn recordings(data_dir: &std::path::Path) -> PathBuf {
         data_dir.join("recordings")
     }

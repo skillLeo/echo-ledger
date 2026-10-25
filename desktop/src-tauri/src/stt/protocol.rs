@@ -41,6 +41,17 @@ pub fn parse_assemblyai(raw: &str) -> Option<SttEvent> {
     }
 }
 
+/// The billed length of an AssemblyAI session: `session_duration_seconds` of its `Termination` message
+/// (docs/research/stt-assemblyai.md R3; docs/API.md `POST /api/usage` "streamed_ms"). `None` for any other message.
+pub fn assemblyai_session_seconds(raw: &str) -> Option<u64> {
+    let v: Value = serde_json::from_str(raw).ok()?;
+    if v.get("type")?.as_str()? != "Termination" {
+        return None;
+    }
+    let seconds = v.get("session_duration_seconds")?;
+    seconds.as_u64().or_else(|| seconds.as_f64().filter(|s| s.is_finite() && *s >= 0.0).map(|s| s.ceil() as u64))
+}
+
 pub fn parse_elevenlabs(raw: &str) -> Option<SttEvent> {
     let v: Value = serde_json::from_str(raw).ok()?;
     let kind = v.get("message_type")?.as_str()?;

@@ -1,7 +1,9 @@
 //! High-level actions shared by shortcuts, the tray, auto mode and UI commands.
 
 use std::sync::atomic::Ordering;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+use chrono::Utc;
 
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -9,7 +11,8 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use crate::audio::types::Channel;
 use crate::audio::{FinishedRecording, RecordingMode};
 use crate::error::{AppError, AppResult};
-use crate::net::models::UsageReport;
+use crate::net::models::{OpenSessionRequest, UsageReport};
+use crate::pending::{self, Attach, DecisionFiles, DecisionInput, PendingDecision};
 use crate::net::sync::paths;
 use crate::net::uploader::{
     AfterAttempt, DiscardQueue, PendingUpload, UploadOutcome, UploadQueue, UploadTiming, UsageQueue, after_attempt, delete_local_audio, states,
@@ -86,21 +89,85 @@ pub fn stop_captions(app: &AppHandle) {
 
 pub async fn start_captions(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
-    if !state.capture.is_recording() {
+    let Some(info) = state.capture.info() else {
         return Err(AppError::msg("Start a recording (or let auto mode detect a call) to see live captions."));
+    };
+    if state.capture.is_paused() {
+        state.captions_on_resume.store(true, Ordering::SeqCst);
+        return Err(AppError::msg("Resume the recording to turn on live captions."));
     }
     set_overlay_visible(app, OVERLAY, true);
     let channels = match state.server_caption_channels().as_str() {
         "client_only" => vec![Channel::System],
         _ => vec![Channel::Mic, Channel::System],
     };
-    let started_at = *state.recording_started_at.lock().unwrap();
-    let senders = state.live.start(app, "live_captions", &channels, CAPTION_TARGETS, true, started_at).await?;
+    // A v1.1 server hands out caption tokens only for an open session of this recording (A5.1); with captions off
+    // nothing reaches the server until Keep.
+    let session_id = if state.server_is_v1_1() {
+        match ensure_server_session(app, &info).await {
+            Ok(id) => Some(id),
+            Err(e) => {
+                set_overlay_visible(app, OVERLAY, false);
+                return Err(e);
+            }
+        }
+    } else {
+        None
+    };
+    let base_offset_ms = state.capture.elapsed_ms();
+    let senders = match state.live.start(app, "live_captions", &channels, CAPTION_TARGETS, true, base_offset_ms, session_id).await {
+        Ok(senders) => senders,
+        Err(e) => {
+            set_overlay_visible(app, OVERLAY, false);
+            emit_status(app);
+            return Err(e);
+        }
+    };
     for (channel, sink) in senders {
         state.capture.set_live_sink(channel, Some(sink));
     }
     emit_status(app);
+    emit_recording_state(app);
     Ok(())
+}
+
+/// The open server session of the running recording, opened on first use (live captions on a v1.1 server).
+async fn ensure_server_session(app: &AppHandle, info: &crate::audio::RecordingInfo) -> AppResult<String> {
+    let state = app.state::<crate::AppState>();
+    if let Some(id) = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).session_for(&info.client_ref) {
+        return Ok(id);
+    }
+    let api = state.api()?;
+    let request = OpenSessionRequest {
+        client_ref: info.client_ref.clone(),
+        source_app: info.source_app.clone(),
+        client_id: info.client_id.clone(),
+        title: None,
+        started_at: info.started_at.to_rfc3339(),
+        language: None,
+    };
+    let (response, cleared) = crate::net::api::with_client_fallback(info.client_id.clone(), |client| {
+        let (api, mut request) = (api.clone(), request.clone());
+        request.client_id = client;
+        async move { api.open_session(&request).await }
+    })
+    .await
+    .map_err(|e| crate::stt::token_error("live_captions", e))?;
+    if let Some(client) = cleared {
+        forget_client(app, &client);
+        state.capture.clear_client(&client);
+    }
+    let id = response.session.id;
+    let placed = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).attach(&info.client_ref, &id);
+    match placed {
+        Attach::Current => Ok(id),
+        // The recording stopped meanwhile: the stop flow (or its outcome) owns the session now.
+        Attach::Deferred => Err(AppError::msg("The recording ended before live captions could start.")),
+        Attach::Orphan => {
+            queue_discard(app, id)?;
+            Err(AppError::msg("The recording ended before live captions could start."))
+        }
+    }
 }
 
 pub async fn start_call_recording(app: &AppHandle, source_app: &str, auto: bool) -> AppResult<()> {
@@ -119,10 +186,10 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
     }
     let client_id = state.settings().client_id.clone();
     clear_captions(app); // a new recording never inherits the previous one's lines
-    state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
+    let info = state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(auto, Ordering::SeqCst);
-    emit_status(app);
+    on_recording_started(app, &info);
     if captions && let Err(e) = start_captions(app).await {
         let _ = app.emit("app:error", e.to_string());
     }
@@ -148,10 +215,10 @@ async fn toggle_note(app: &AppHandle, mode: RecordingMode) -> AppResult<()> {
         return Err(AppError::NotPaired);
     }
     clear_captions(app);
-    state.capture.start(&paths::recordings(&state.data_dir), mode, "voice_note", state.settings().client_id.clone())?;
+    let info = state.capture.start(&paths::recordings(&state.data_dir), mode, "voice_note", state.settings().client_id.clone())?;
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(false, Ordering::SeqCst);
-    emit_status(app);
+    on_recording_started(app, &info);
     Ok(())
 }
 
@@ -164,58 +231,366 @@ pub async fn toggle_recording(app: &AppHandle) -> AppResult<()> {
     }
 }
 
-/// Stops the recording, queues the upload, and kicks the upload worker. Auto mode never stops manual recordings.
+/// Smaller than any real recording: the container headers alone are a few hundred bytes.
+const MIN_AUDIO_BYTES: u64 = 1024;
+
+/// A recording started: fresh session link, pill shown (unless the user hides it later), state ticker running.
+fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
+    let state = app.state::<crate::AppState>();
+    state.session_link.lock().unwrap_or_else(|p| p.into_inner()).start(&info.client_ref);
+    state.pill_hidden.store(false, Ordering::SeqCst);
+    state.captions_on_resume.store(false, Ordering::SeqCst);
+    let _ = app.emit_to(crate::overlay::PILL, "pill:visibility", true);
+    start_ticker(app);
+    emit_status(app);
+    emit_recording_state(app);
+}
+
+/// Stops captions (waiting for their final turns) and the capture. Returns the finished files, the server session
+/// that captions opened (if any) and the caption provider.
+async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Option<String>, Option<String>)>> {
+    let state = app.state::<crate::AppState>();
+    let provider = state.live.provider();
+    if state.live.is_live() {
+        state.live.stop();
+        state.live.wait_closed(Duration::from_secs(3)).await; // final turns flush
+    }
+    state.captions_on_resume.store(false, Ordering::SeqCst);
+    let session = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).begin_stop();
+    let finished = state.capture.stop()?;
+    set_overlay_visible(app, OVERLAY, false);
+    let _ = app.emit_to(crate::overlay::PILL, "pill:visibility", false);
+    *state.recording_started_at.lock().unwrap() = None;
+    Ok(finished.map(|f| (f, session, provider)))
+}
+
+/// Stops the recording and asks Keep / Discard (A2), or keeps it at once when the "Ask before saving" policy says
+/// so. Auto mode never stops a manual recording.
 pub async fn stop_recording(app: &AppHandle, from_auto: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if from_auto && !state.auto_started.load(Ordering::SeqCst) {
         return Ok(());
     }
-    if state.live.is_live() {
-        state.live.stop();
-        tokio::time::sleep(std::time::Duration::from_millis(800)).await; // final turns flush
+    let auto = state.auto_started.load(Ordering::SeqCst);
+    if let Some((finished, session, provider)) = end_capture(app).await? {
+        decide_finished(app, finished, session, provider, auto, true)?;
     }
-    let finished = state.capture.stop()?;
-    set_overlay_visible(app, OVERLAY, false);
-    *state.recording_started_at.lock().unwrap() = None;
-    if let Some(finished) = finished {
-        // A container with (almost) no audio frames means nothing was heard: tell the user instead of uploading a
-        // recording the server would reject (the server enforces the same floor).
-        let silent = std::fs::metadata(&finished.output.primary).map(|m| m.len() < MIN_AUDIO_BYTES).unwrap_or(true);
-        if silent {
-            let _ = std::fs::remove_dir_all(&finished.output.dir);
-            let _ = app.emit("app:error", "No sound was captured, so nothing was saved. Check your microphone and the audio device, then try again.");
-        } else {
-            enqueue(app, finished)?;
-        }
-    }
-    clear_captions(app); // after enqueue (it reads the buffered turns), so the next session starts empty
+    clear_captions(app); // after the decision (it reads the buffered turns), so the next session starts empty
     emit_status(app);
+    emit_recording_state(app);
     Ok(())
 }
 
-/// Smaller than any real recording: the container headers alone are a few hundred bytes.
-const MIN_AUDIO_BYTES: u64 = 1024;
-
-fn enqueue(app: &AppHandle, finished: FinishedRecording) -> AppResult<()> {
+/// Quit while recording: the recording is stopped and stays as a decision (never discarded); no card.
+pub async fn stop_recording_for_quit(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
+    let auto = state.auto_started.load(Ordering::SeqCst);
+    if let Some((finished, session, provider)) = end_capture(app).await? {
+        decide_finished(app, finished, session, provider, auto, false)?;
+    }
+    Ok(())
+}
+
+/// Stop and discard at once (the pill's Cancel): nothing is kept, uploaded or transcribed; no card.
+pub async fn cancel_recording(app: &AppHandle) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    if !state.capture.is_recording() {
+        return Err(AppError::msg("Nothing is recording."));
+    }
+    if let Some((finished, session, _)) = end_capture(app).await? {
+        let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&finished.info.client_ref);
+        let _ = std::fs::remove_dir_all(&finished.output.dir);
+        for id in session.into_iter().chain(late) {
+            queue_discard(app, id)?;
+        }
+    }
+    clear_captions(app);
+    emit_status(app);
+    emit_recording_state(app);
+    Ok(())
+}
+
+fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option<String>, provider: Option<String>, auto: bool, show_card: bool) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let client_ref = finished.info.client_ref.clone();
+    let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&client_ref);
+    // A container with (almost) no audio frames means nothing was heard: tell the user instead of keeping a
+    // recording the server would reject (the server enforces the same floor).
+    let silent = std::fs::metadata(&finished.output.primary).map(|m| m.len() < MIN_AUDIO_BYTES).unwrap_or(true);
+    if silent {
+        let _ = std::fs::remove_dir_all(&finished.output.dir);
+        for id in session.into_iter().chain(late) {
+            queue_discard(app, id)?;
+        }
+        let _ = app.emit("app:error", "No sound was captured, so nothing was saved. Check your microphone and the audio device, then try again.");
+        return Ok(());
+    }
+
+    let settings = state.settings();
     let live_segments = state.captions.lock().unwrap().segments();
-    let item = PendingUpload {
-        client_ref: finished.info.client_ref.clone(),
-        source_app: finished.info.source_app.clone(),
-        client_id: finished.info.client_id.clone(),
-        started_at: finished.info.started_at.to_rfc3339(),
-        ended_at: finished.ended_at.to_rfc3339(),
-        duration_ms: finished.output.duration_ms,
-        dir: finished.output.dir.clone(),
-        primary: finished.output.primary.clone(),
-        primary_channels: finished.output.channels,
-        mic_wav: (finished.info.mode == RecordingMode::Call).then(|| finished.output.mic_wav.clone()),
-        system_wav: (finished.info.mode == RecordingMode::Call).then(|| finished.output.system_wav.clone()),
-        live_segments,
-        live_provider: state.live.provider(),
-        ..PendingUpload::default()
+    let mode = finished.info.mode;
+    let decision = PendingDecision::from_recording(
+        &finished,
+        DecisionInput { auto, client_name: None, live_segments, live_provider: provider, server_session_id: session, created_at: Utc::now() },
+    );
+    let id = decision.id.clone();
+    let created_at = decision.created_at;
+    {
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        files.add(decision)?;
+        if let Some(late) = late {
+            files.set_server_session(&id, &late)?;
+        }
+    }
+    if !pending::should_ask(settings.ask_before_saving, auto, mode) {
+        return keep_decision(app, &id);
+    }
+    if show_card {
+        state.review_run.lock().unwrap_or_else(|p| p.into_inner()).push(id);
+    }
+    emit_pending(app);
+    refresh_review(app);
+    schedule_timeout(app, created_at);
+    Ok(())
+}
+
+/// Keep: the recording moves to the upload queue and the final transcript follows.
+pub fn keep_decision(app: &AppHandle, id: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).keep(id)?;
+    }
+    state.upload_notify.notify_one();
+    after_decision(app, id);
+    emit_uploads(app);
+    Ok(())
+}
+
+/// Discard: files deleted, nothing uploaded, no transcript requested; an open server session is deleted.
+pub fn discard_decision(app: &AppHandle, id: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).discard(id)?;
+    }
+    state.upload_notify.notify_one(); // the worker deletes a queued server session
+    after_decision(app, id);
+    Ok(())
+}
+
+fn after_decision(app: &AppHandle, id: &str) {
+    app.state::<crate::AppState>().review_run.lock().unwrap_or_else(|p| p.into_inner()).retain(|r| r != id);
+    emit_pending(app);
+    refresh_review(app);
+    emit_status(app);
+}
+
+pub fn pending_items(app: &AppHandle) -> Vec<pending::PendingItem> {
+    let state = app.state::<crate::AppState>();
+    let policy = state.settings().decision_timeout;
+    let mut items = DecisionFiles::in_dir(&state.data_dir).load().ui_items(policy);
+    items.sort_by(|a, b| b.ended_at.cmp(&a.ended_at));
+    items
+}
+
+pub fn emit_pending(app: &AppHandle) {
+    let _ = app.emit("pending:changed", pending_items(app));
+    emit_status(app);
+}
+
+/// What the review card shows: the newest undecided recording of this run.
+pub fn review_payload(app: &AppHandle) -> Option<crate::commands::ReviewPayload> {
+    let state = app.state::<crate::AppState>();
+    let policy = state.settings().decision_timeout;
+    let store = DecisionFiles::in_dir(&state.data_dir).load();
+    let run = state.review_run.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let waiting: Vec<&String> = run.iter().filter(|id| store.find(id).is_some()).collect();
+    let newest = waiting.last()?;
+    Some(crate::commands::ReviewPayload { item: store.find(newest)?.item(policy), timeout: policy, queue_length: waiting.len() })
+}
+
+/// Shows the card for the newest undecided recording of this run, or hides it when there is none.
+pub fn refresh_review(app: &AppHandle) {
+    match review_payload(app) {
+        Some(payload) => {
+            let _ = app.emit_to(crate::overlay::REVIEW, "review:show", payload);
+        }
+        None => {
+            let _ = app.emit_to(crate::overlay::REVIEW, "review:hide", ());
+        }
+    }
+}
+
+/// Applies the current "If I don't choose within 60 s" policy to every recording whose time is up.
+pub fn apply_due_timeouts(app: &AppHandle) {
+    let state = app.state::<crate::AppState>();
+    let policy = state.settings().decision_timeout;
+    let done = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).apply_timeouts(Utc::now(), policy)
     };
-    queue_upload(app, item)
+    match done {
+        Ok(done) if !done.is_empty() => {
+            {
+                let mut run = state.review_run.lock().unwrap_or_else(|p| p.into_inner());
+                run.retain(|r| !done.iter().any(|(id, _)| id == r));
+            }
+            state.upload_notify.notify_one();
+            emit_pending(app);
+            emit_uploads(app);
+            refresh_review(app);
+        }
+        Ok(_) => {}
+        Err(e) => eprintln!("[echoledger] decision timeout: {e}"),
+    }
+}
+
+/// Wakes up when a recording's time is up and applies the policy in force then.
+fn schedule_timeout(app: &AppHandle, created_at: chrono::DateTime<Utc>) {
+    let due = created_at + chrono::Duration::seconds(pending::DECISION_WINDOW_SECS);
+    let wait = (due - Utc::now()).to_std().unwrap_or_default() + Duration::from_millis(200);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(wait).await;
+        apply_due_timeouts(&app);
+    });
+}
+
+/// At start: overdue decisions get the current policy; the others get timers. The card is not shown for them.
+pub fn restore_pending(app: &AppHandle) {
+    apply_due_timeouts(app);
+    let state = app.state::<crate::AppState>();
+    for decision in DecisionFiles::in_dir(&state.data_dir).load().items {
+        schedule_timeout(app, decision.created_at);
+    }
+    emit_pending(app);
+}
+
+pub fn pending_rename(app: &AppHandle, id: &str, title: &str) -> AppResult<pending::PendingItem> {
+    let state = app.state::<crate::AppState>();
+    let updated = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).rename(id, title)?
+    };
+    emit_pending(app);
+    refresh_review(app);
+    Ok(updated.item(state.settings().decision_timeout))
+}
+
+pub async fn pending_assign_client(app: &AppHandle, id: &str, client_id: Option<String>) -> AppResult<pending::PendingItem> {
+    let state = app.state::<crate::AppState>();
+    if DecisionFiles::in_dir(&state.data_dir).load().find(id).is_none() {
+        return Err(AppError::msg(pending::NOT_WAITING));
+    }
+    let client_name = match (&client_id, state.api()) {
+        (Some(wanted), Ok(api)) => api.clients().await.ok().and_then(|list| {
+            list["data"].as_array()?.iter().find(|c| c["id"].as_str() == Some(wanted.as_str()))?["name"].as_str().map(str::to_string)
+        }),
+        _ => None,
+    };
+    let updated = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).assign_client(id, client_id, client_name)?
+    };
+    emit_pending(app);
+    refresh_review(app);
+    Ok(updated.item(state.settings().decision_timeout))
+}
+
+/// Shows the main window on a view (tray "Review recordings", the card's Open / Rename).
+pub fn navigate(app: &AppHandle, view: &str, pending_id: Option<String>, rename: bool) {
+    let payload = crate::commands::NavigatePayload { view: view.to_string(), pending_id, rename };
+    crate::tray::show_main(app);
+    let _ = app.emit_to("main", "main:navigate", payload);
+}
+
+pub fn pending_open(app: &AppHandle, id: &str, rename: bool) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    if DecisionFiles::in_dir(&state.data_dir).load().find(id).is_none() {
+        return Err(AppError::msg(pending::NOT_WAITING));
+    }
+    state.review_run.lock().unwrap_or_else(|p| p.into_inner()).retain(|r| r != id);
+    let _ = app.emit_to(crate::overlay::REVIEW, "review:hide", ());
+    navigate(app, "library", Some(id.to_string()), rename);
+    Ok(())
+}
+
+/// Pause: the capture stops (the OS microphone indicator turns off) and caption sockets close, so nothing is
+/// captured, streamed or billed while paused (A3.3, A5.3).
+pub async fn pause_recording(app: &AppHandle) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    if !state.capture.is_recording() {
+        return Err(AppError::msg("Nothing is recording."));
+    }
+    if state.capture.is_paused() {
+        return Ok(());
+    }
+    let captions = state.live.is_live();
+    if captions {
+        stop_captions(app);
+    }
+    state.capture.pause()?;
+    state.captions_on_resume.store(captions, Ordering::SeqCst);
+    emit_status(app);
+    emit_recording_state(app);
+    Ok(())
+}
+
+pub async fn resume_recording(app: &AppHandle) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    if !state.capture.is_paused() {
+        return Err(AppError::msg("Nothing is paused."));
+    }
+    state.capture.resume()?;
+    if state.captions_on_resume.swap(false, Ordering::SeqCst)
+        && let Err(e) = start_captions(app).await
+    {
+        let _ = app.emit("app:error", e.to_string());
+    }
+    emit_status(app);
+    emit_recording_state(app);
+    Ok(())
+}
+
+pub async fn toggle_pause(app: &AppHandle) -> AppResult<()> {
+    if app.state::<crate::AppState>().capture.is_paused() { resume_recording(app).await } else { pause_recording(app).await }
+}
+
+/// Hide / show the recording pill; the recording continues and the tray shows its state.
+pub fn set_pill_hidden(app: &AppHandle, hidden: bool) {
+    let state = app.state::<crate::AppState>();
+    state.pill_hidden.store(hidden, Ordering::SeqCst);
+    let visible = !hidden && state.capture.is_recording();
+    let _ = app.emit_to(crate::overlay::PILL, "pill:visibility", visible);
+    emit_status(app);
+    emit_recording_state(app);
+}
+
+pub fn emit_recording_state(app: &AppHandle) {
+    let _ = app.emit("recording:state", crate::commands::recording_state_now(app));
+}
+
+/// One task sends `recording:state` every second while a recording runs and stops when it ends.
+fn start_ticker(app: &AppHandle) {
+    let state = app.state::<crate::AppState>();
+    if state.ticker_running.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let state = app.state::<crate::AppState>();
+            if !state.capture.is_recording() {
+                state.ticker_running.store(false, Ordering::SeqCst);
+                emit_recording_state(&app);
+                break;
+            }
+            emit_recording_state(&app);
+        }
+    });
 }
 
 /// Appends an item to `uploads.json` and wakes the upload worker.
@@ -350,7 +725,7 @@ fn finish_item(app: &AppHandle, item: &PendingUpload) {
 
 /// The server no longer knows a client (`404 client_not_found`, A6.DR7): forget it in the settings and in every
 /// queued item, so nothing else is refused for it.
-fn forget_client(app: &AppHandle, client_id: &str) {
+pub(crate) fn forget_client(app: &AppHandle, client_id: &str) {
     let state = app.state::<crate::AppState>();
     if state.settings().client_id.as_deref() == Some(client_id)
         && let Ok(settings) = state.update_settings(|s| {
@@ -373,6 +748,14 @@ fn forget_client(app: &AppHandle, client_id: &str) {
         if changed {
             let _ = queue.save(&path);
         }
+    }
+    let pending_changed = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).forget_client(client_id).unwrap_or(false)
+    };
+    if pending_changed {
+        emit_pending(app);
+        refresh_review(app);
     }
     let _ = app.emit("app:toast", "The selected client was removed on the server, so no client is set now.");
 }

@@ -8,10 +8,11 @@ pub mod dictation;
 pub mod error;
 pub mod net;
 pub mod overlay;
-mod settings;
+pub mod pending;
+pub mod settings;
 pub mod shortcuts;
 pub mod stt;
-mod tray;
+pub mod tray;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -53,6 +54,16 @@ pub struct AppState {
     api_cache: net::api::ApiClientCache,
     /// Set by a `403 budget_exceeded`; cleared by the next config fetch (`AppStatus.budget`).
     pub budget_blocked: AtomicBool,
+    /// Where a captions server session belongs while a recording runs and stops (A5.1).
+    pub session_link: Mutex<pending::SessionLink>,
+    /// The recording pill is hidden by the user; the recording continues (A3.3).
+    pub pill_hidden: AtomicBool,
+    /// Captions were on when the recording was paused, so resume reopens them (sockets close on pause, A5.3).
+    pub captions_on_resume: AtomicBool,
+    /// Pending ids created by this run, oldest first: the review card shows the newest undecided one.
+    pub review_run: Mutex<Vec<String>>,
+    /// The once-a-second `recording:state` task is running.
+    pub ticker_running: AtomicBool,
 }
 
 impl AppState {
@@ -86,6 +97,11 @@ impl AppState {
             detect: detect::DetectState::default(),
             api_cache: net::api::ApiClientCache::default(),
             budget_blocked: AtomicBool::new(false),
+            session_link: Mutex::new(pending::SessionLink::default()),
+            pill_hidden: AtomicBool::new(false),
+            captions_on_resume: AtomicBool::new(false),
+            review_run: Mutex::new(Vec::new()),
+            ticker_running: AtomicBool::new(false),
         }
     }
 
@@ -176,6 +192,7 @@ pub fn run() {
             *app.state::<AppState>().shortcut_errors.lock().unwrap() = errors;
             detect::spawn_auto_mode(handle.clone());
             actions::spawn_upload_worker(handle.clone());
+            actions::restore_pending(&handle);
 
             // Fetch server config (caption policy, pins rotation) and the library in the background.
             let startup = handle.clone();
@@ -240,6 +257,19 @@ pub fn run() {
             commands::upload_list,
             commands::upload_retry,
             commands::upload_discard,
+            commands::pause_recording,
+            commands::resume_recording,
+            commands::cancel_recording,
+            commands::set_pill_hidden,
+            commands::pill_moved,
+            commands::recording_state,
+            commands::pending_list,
+            commands::pending_keep,
+            commands::pending_discard,
+            commands::pending_rename,
+            commands::pending_assign_client,
+            commands::pending_open,
+            commands::review_state,
         ])
         .build(tauri::generate_context!())
         .expect("error while building EchoLedger");

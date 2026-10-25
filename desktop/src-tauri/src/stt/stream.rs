@@ -10,7 +10,7 @@ use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::{ClientRequestBuilder, Message, http::Uri};
 use tokio_tungstenite::{Connector, connect_async_tls_with_config};
 
-use super::protocol::{ASSEMBLYAI_TERMINATE, SttEvent, elevenlabs_audio_message, parse_assemblyai, parse_elevenlabs};
+use super::protocol::{ASSEMBLYAI_TERMINATE, SttEvent, assemblyai_session_seconds, elevenlabs_audio_message, parse_assemblyai, parse_elevenlabs};
 use crate::net::models::Grant;
 use crate::net::pinning::public_tls_config;
 
@@ -37,23 +37,84 @@ impl Protocol {
     }
 }
 
+/// How long one provider socket was open (A5.4): `open_ms` from the successful connect to the close, and the
+/// provider's own count of billed seconds when it reported one (AssemblyAI `Termination.session_duration_seconds`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SessionUsage {
+    pub open_ms: u64,
+    pub provider_session_s: Option<u64>,
+}
+
+impl SessionUsage {
+    /// True when the socket was opened at all (only such sockets are reported).
+    pub fn opened(&self) -> bool {
+        self.open_ms > 0 || self.provider_session_s.is_some()
+    }
+
+    /// Billed length of this socket: the provider's seconds when known, else the measured open time.
+    pub fn streamed_ms(&self) -> u64 {
+        self.provider_session_s.map(|s| s.saturating_mul(1000)).unwrap_or(self.open_ms)
+    }
+}
+
 /// Runs until `stop` flips to true or the provider closes. `on_event` receives parsed events.
 pub async fn run_session(
     grant: Grant,
-    mut pcm: UnboundedReceiver<Vec<u8>>,
-    mut stop: watch::Receiver<bool>,
+    pcm: UnboundedReceiver<Vec<u8>>,
+    stop: watch::Receiver<bool>,
     on_event: impl Fn(SttEvent) + Send + 'static,
+) -> Result<(), String> {
+    run_session_with_usage(grant, pcm, stop, on_event).await.map(|_| ())
+}
+
+/// [`run_session`] that also returns how long the socket was open.
+pub async fn run_session_with_usage(
+    grant: Grant,
+    pcm: UnboundedReceiver<Vec<u8>>,
+    stop: watch::Receiver<bool>,
+    on_event: impl Fn(SttEvent) + Send + 'static,
+) -> Result<SessionUsage, String> {
+    let mut usage = SessionUsage::default();
+    run_session_into(grant, pcm, stop, on_event, &mut usage).await.map(|_| usage)
+}
+
+/// [`run_session`] writing the socket's usage into `usage` on every way out, so a session that fails after it
+/// connected is still reported (the provider bills it).
+pub async fn run_session_into(
+    grant: Grant,
+    pcm: UnboundedReceiver<Vec<u8>>,
+    stop: watch::Receiver<bool>,
+    on_event: impl Fn(SttEvent) + Send + 'static,
+    usage: &mut SessionUsage,
 ) -> Result<(), String> {
     let protocol = Protocol::from_grant(&grant).ok_or_else(|| format!("unsupported streaming protocol {:?}", grant.protocol))?;
     let url = grant.ws_url.clone().ok_or("grant has no ws_url")?;
-    let frame_ms = grant.audio.as_ref().map(|a| a.frame_ms).unwrap_or(50).clamp(50, 250);
-    let frame_bytes = (16_000 * 2 * frame_ms / 1000) as usize;
-
     let uri: Uri = url.parse().map_err(|e| format!("invalid ws url: {e}"))?;
     let request = ClientRequestBuilder::new(uri).with_header("User-Agent", concat!("EchoLedger-Desktop/", env!("CARGO_PKG_VERSION")));
     let (ws, _) = connect_async_tls_with_config(request, None, true, Some(Connector::Rustls(public_tls_config())))
         .await
         .map_err(|e| format!("connect: {e}"))?;
+    let connected = std::time::Instant::now();
+    let mut provider_seconds: Option<u64> = None;
+    let result = stream_socket(ws, &grant, protocol, pcm, stop, &on_event, &mut provider_seconds).await;
+    usage.open_ms = (connected.elapsed().as_millis() as u64).max(1);
+    usage.provider_session_s = provider_seconds;
+    result
+}
+
+type Socket = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+async fn stream_socket(
+    ws: Socket,
+    grant: &Grant,
+    protocol: Protocol,
+    mut pcm: UnboundedReceiver<Vec<u8>>,
+    mut stop: watch::Receiver<bool>,
+    on_event: &(impl Fn(SttEvent) + Send + 'static),
+    provider_seconds: &mut Option<u64>,
+) -> Result<(), String> {
+    let frame_ms = grant.audio.as_ref().map(|a| a.frame_ms).unwrap_or(50).clamp(50, 250);
+    let frame_bytes = (16_000 * 2 * frame_ms / 1000) as usize;
     let (mut tx, mut rx) = ws.split();
 
     let mut started = false;
@@ -89,6 +150,11 @@ pub async fn run_session(
             msg = rx.next() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
+                        if protocol == Protocol::AssemblyAiV3
+                            && let Some(seconds) = assemblyai_session_seconds(text.as_str())
+                        {
+                            *provider_seconds = Some(seconds);
+                        }
                         if let Some(event) = protocol.parse(text.as_str()) {
                             match &event {
                                 SttEvent::Started if !started => {

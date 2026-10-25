@@ -14,6 +14,9 @@ pub use crate::net::models::BudgetState;
 use crate::net::uploader::{UploadItem, UploadQueue};
 use crate::overlay::geometry::{RectPx, WorkArea, nearest_corner};
 use crate::overlay::{HitRegions, redock};
+use crate::pending::{DecisionFiles, PendingItem};
+use crate::settings::DecisionTimeout;
+use crate::tray::TrayState;
 use crate::settings::Settings;
 use crate::shortcuts::{self, Action};
 use crate::stt::captions::{CaptionEvent, CaptionHub};
@@ -36,6 +39,11 @@ pub struct AppStatus {
     pub platform: &'static str,
     pub failed_uploads: usize,
     pub budget: BudgetState,
+    pub paused: bool,
+    pub elapsed_ms: u64,
+    pub pill_hidden: bool,
+    pub pending_decisions: usize,
+    pub tray_state: TrayState,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
@@ -47,7 +55,11 @@ pub fn status(app: &AppHandle) -> AppStatus {
         BudgetState::from_usage(config.as_ref().and_then(|c| c.usage.as_ref()), state.budget_blocked.load(std::sync::atomic::Ordering::SeqCst))
     };
     let recording = state.capture.info();
-    crate::tray::set_recording_tooltip(app, recording.is_some(), state.live.is_live());
+    let paused = state.capture.is_paused();
+    let pill_hidden = state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst);
+    let pending_decisions = DecisionFiles::in_dir(&state.data_dir).load().items.len();
+    let tray_state = crate::tray::tray_state(recording.is_some(), paused, pending_decisions, queue.failed(), budget == BudgetState::Reached, queue.active() > 0);
+    crate::tray::update(app, tray_state, paused, pill_hidden, pending_decisions);
     AppStatus {
         paired: state.is_paired(),
         server_url: settings.server_url.clone(),
@@ -64,6 +76,11 @@ pub fn status(app: &AppHandle) -> AppStatus {
         platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" },
         failed_uploads: queue.failed(),
         budget,
+        paused,
+        elapsed_ms: state.capture.elapsed_ms(),
+        pill_hidden,
+        pending_decisions,
+        tray_state,
     }
 }
 
@@ -199,6 +216,12 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         && let Some(w) = app.get_webview_window(crate::overlay::OVERLAY)
     {
         redock(&w, corner);
+    }
+    if patch.decision_timeout.is_some() {
+        // The policy in force now applies to recordings whose time is already up (A2.5).
+        crate::actions::apply_due_timeouts(&app);
+        crate::actions::emit_pending(&app);
+        crate::actions::refresh_review(&app);
     }
     crate::actions::emit_status(&app);
     Ok(updated)
@@ -424,3 +447,124 @@ fn os_version() -> String {
 
 #[cfg(test)]
 mod tests;
+
+/// What the recording pill shows (section 4.3).
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingState {
+    pub active: bool,
+    pub paused: bool,
+    pub elapsed_ms: u64,
+    pub source_app: Option<String>,
+    pub mode: Option<crate::audio::RecordingMode>,
+    pub captions: bool,
+    pub levels: [f32; 2],
+    pub auto: bool,
+    pub hidden: bool,
+}
+
+/// What the review card shows: the newest undecided recording of this run.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewPayload {
+    pub item: PendingItem,
+    pub timeout: DecisionTimeout,
+    pub queue_length: usize,
+}
+
+/// `main:navigate`: which view the main window opens on.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NavigatePayload {
+    pub view: String,
+    pub pending_id: Option<String>,
+    pub rename: bool,
+}
+
+pub fn recording_state_now(app: &AppHandle) -> RecordingState {
+    let state = app.state::<AppState>();
+    let info = state.capture.info();
+    RecordingState {
+        active: info.is_some(),
+        paused: state.capture.is_paused(),
+        elapsed_ms: state.capture.elapsed_ms(),
+        source_app: info.as_ref().map(|i| i.source_app.clone()),
+        mode: info.as_ref().map(|i| i.mode),
+        captions: state.live.is_live(),
+        levels: state.capture.levels(),
+        auto: info.is_some() && state.auto_started.load(std::sync::atomic::Ordering::SeqCst),
+        hidden: state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst),
+    }
+}
+
+#[tauri::command]
+pub async fn pause_recording(app: AppHandle) -> AppResult<AppStatus> {
+    crate::actions::pause_recording(&app).await?;
+    Ok(status(&app))
+}
+
+#[tauri::command]
+pub async fn resume_recording(app: AppHandle) -> AppResult<AppStatus> {
+    crate::actions::resume_recording(&app).await?;
+    Ok(status(&app))
+}
+
+#[tauri::command]
+pub async fn cancel_recording(app: AppHandle) -> AppResult<AppStatus> {
+    crate::actions::cancel_recording(&app).await?;
+    Ok(status(&app))
+}
+
+#[tauri::command]
+pub fn set_pill_hidden(app: AppHandle, hidden: bool) -> AppStatus {
+    crate::actions::set_pill_hidden(&app, hidden);
+    status(&app)
+}
+
+#[tauri::command]
+pub fn pill_moved(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
+    let Some(position) = crate::overlay::pill_position(&window) else { return Ok(()) };
+    let settings = app.state::<AppState>().update_settings(|s| s.pill_position = Some(position))?;
+    let _ = app.emit("settings:changed", &settings);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn recording_state(app: AppHandle) -> RecordingState {
+    recording_state_now(&app)
+}
+
+#[tauri::command]
+pub fn pending_list(app: AppHandle) -> Vec<PendingItem> {
+    crate::actions::pending_items(&app)
+}
+
+#[tauri::command]
+pub async fn pending_keep(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::keep_decision(&app, &id)
+}
+
+#[tauri::command]
+pub async fn pending_discard(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::discard_decision(&app, &id)
+}
+
+#[tauri::command]
+pub fn pending_rename(app: AppHandle, id: String, title: String) -> AppResult<PendingItem> {
+    crate::actions::pending_rename(&app, &id, &title)
+}
+
+#[tauri::command]
+pub async fn pending_assign_client(app: AppHandle, id: String, client_id: Option<String>) -> AppResult<PendingItem> {
+    crate::actions::pending_assign_client(&app, &id, client_id).await
+}
+
+#[tauri::command]
+pub async fn pending_open(app: AppHandle, id: String, rename: bool) -> AppResult<()> {
+    crate::actions::pending_open(&app, &id, rename)
+}
+
+#[tauri::command]
+pub fn review_state(app: AppHandle) -> Option<ReviewPayload> {
+    crate::actions::review_payload(&app)
+}

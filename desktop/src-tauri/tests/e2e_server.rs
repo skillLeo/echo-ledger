@@ -1869,8 +1869,7 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.W6: a session created in the same second as a sync must reach the next sync"]
-    a_session_created_in_the_same_second_as_a_sync_is_picked_up_by_the_next_sync,
+        a_session_created_in_the_same_second_as_a_sync_is_picked_up_by_the_next_sync,
     300,
     |cfg, case| {
         let id = identity(cfg).await;
@@ -3044,8 +3043,7 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.DR18: the no-audio message must not send desktop users to Android settings"]
-    audio_below_the_size_floor_ends_as_a_failed_transcript_with_a_readable_message,
+        audio_below_the_size_floor_ends_as_a_failed_transcript_with_a_readable_message,
     300,
     |cfg, case| {
         let id = identity(cfg).await;
@@ -3090,8 +3088,7 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.W15: a Range starting at or past the end of the audio must answer 416"]
-    a_range_that_starts_at_or_after_the_end_of_the_audio_is_unsatisfiable,
+        a_range_that_starts_at_or_after_the_end_of_the_audio_is_unsatisfiable,
     300,
     |cfg, case| {
         let id = identity(cfg).await;
@@ -3305,8 +3302,7 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.W4: a provider error during the inline submit must not leave the transcript processing"]
-    a_provider_that_rejects_the_job_does_not_leave_the_transcript_processing_forever,
+        a_provider_that_rejects_the_job_does_not_leave_the_transcript_processing_forever,
     300,
     |cfg, case| {
         let Some(control) = Control::of(cfg) else {
@@ -3357,8 +3353,7 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.W17: 404 messages must not name internal model classes"]
-    unknown_ids_give_404_with_a_message_that_does_not_name_server_internals,
+        unknown_ids_give_404_with_a_message_that_does_not_name_server_internals,
     120,
     |cfg, case| {
         let id = identity(cfg).await;
@@ -3536,8 +3531,7 @@ async fn session_id_for(api: &ApiClient, client_ref: &str) -> String {
 }
 
 e2e_test!(
-    #[ignore = "A6.W5: a recording left in assembling by a request that died must still be finished"]
-    a_recording_left_in_assembling_by_a_crashed_request_is_not_lost,
+        a_recording_left_in_assembling_by_a_crashed_request_is_not_lost,
     400,
     |cfg, case| {
         let Some(control) = Control::of(cfg) else {
@@ -3755,8 +3749,7 @@ e2e_test!(
 );
 
 e2e_test!(
-    #[ignore = "A6.W6: a deletion in the same second as a sync must reach the next sync"]
-    a_deletion_in_the_same_second_as_a_sync_reaches_the_next_sync,
+        a_deletion_in_the_same_second_as_a_sync_reaches_the_next_sync,
     300,
     |cfg, case| {
         let id = identity(cfg).await;

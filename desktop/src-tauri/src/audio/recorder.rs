@@ -111,14 +111,30 @@ impl Recorder {
         Ok(())
     }
 
-    /// Pads the shorter channel, finalizes both WAVs and encodes the upload file.
-    pub fn finish(mut self) -> Result<RecordingOutput, String> {
+    /// Pads the shorter channel so both end at the same frame (the common cursor).
+    fn even_out(&mut self) -> Result<u64, String> {
         let (mic_frames, sys_frames) = self.frames();
         let total = mic_frames.max(sys_frames);
         self.mic.write_silence((total - mic_frames) as usize)?;
         self.sys.write_silence((total - sys_frames) as usize)?;
         self.mic_tl.advance(total - mic_frames);
         self.sys_tl.advance(total - sys_frames);
+        Ok(total)
+    }
+
+    /// Marks the point where a pause ended (A3.3): both channels are evened out and the next timestamped packet
+    /// re-anchors the timeline so that it lands at the common cursor. The paused span is not written as silence,
+    /// so the file holds the recorded time only.
+    pub fn mark_resume(&mut self) -> Result<(), String> {
+        self.even_out()?;
+        self.t0_ns = None;
+        self.levels = [0.0, 0.0];
+        Ok(())
+    }
+
+    /// Pads the shorter channel, finalizes both WAVs and encodes the upload file.
+    pub fn finish(mut self) -> Result<RecordingOutput, String> {
+        let total = self.even_out()?;
         self.mic.finalize()?;
         self.sys.finalize()?;
 
