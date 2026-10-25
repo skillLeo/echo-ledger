@@ -35,6 +35,7 @@ function abilityRoutes(): array
         'replace in transcript' => ['POST', "/api/transcripts/{$id}/replace", 'sessions:write'],
         'restore transcript' => ['POST', "/api/transcripts/{$id}/restore", 'sessions:write'],
         'transcript revisions' => ['GET', "/api/transcripts/{$id}/revisions", 'library:read'],
+        'search' => ['GET', '/api/search', 'library:read'],
         'add recording' => ['POST', "/api/sessions/{$id}/recordings", 'sessions:write'],
         'post transcript' => ['POST', "/api/sessions/{$id}/transcripts", 'sessions:write'],
         'delete session' => ['DELETE', "/api/sessions/{$id}", 'sessions:write'],

@@ -420,6 +420,26 @@ Sync rule **(since v1.1: inclusive boundary)**:
   paging.
 - Clients poll on open and after each capture (no websockets).
 
+### `GET /api/search` — `library:read`, throttled (60/min/device) (since v1.1)
+Searches titles and transcript text (final and live) of every device. Query: `q` (2–200 characters; every word
+must match, `"quoted phrases"` stay together, case does not matter), and the optional filters `client_id`,
+`source_app`, `source_device`, `from` / `to` (`YYYY-MM-DD`, by start date), `tag`, `bookmarked=1`, `status`, plus
+`limit` (1–50, default 20) and `page` (1-based). Newest first.
+
+```json
+{"data": [{"session": {LibraryItem},
+           "hits": [{"transcript_id": "01J…", "kind": "final", "segment_index": 12, "start_ms": 65000, "end_ms": 69000,
+                     "speaker": "Client", "snippet": "…the invoice is due on Friday.", "highlights": [[5, 7]]}],
+           "hit_count": 4}],
+ "next_page": 2, "engine": "fulltext"}
+```
+- `hits` lists at most 3 matching segments (a title-only match has none); `hit_count` counts them all. The live
+  captions are not counted again when the final transcript has the same line.
+- `highlights` are `[start, length]` character ranges inside `snippet` (not HTML); `snippet` is at most 160
+  characters with `…` where the text was cut. Jump to the moment with `start_ms`.
+- `engine` is `fulltext` (MySQL / MariaDB FULLTEXT index) or `like` (short words, other databases, or when the index
+  finds nothing).
+
 ### `GET /api/sessions/{id}` — `library:read`
 Library item fields plus `"recordings": [{"id","role","mime","size_bytes","duration_ms","status"}]`,
 `"transcripts": [{"id","kind","provider","status","language","error","error_code"}]` (`error`/`error_code` since

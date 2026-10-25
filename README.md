@@ -130,6 +130,9 @@ echoledger/
 | Desktop | Rust stable (MSVC toolchain on Windows), Node.js 22+, Visual Studio Build Tools (C++) on Windows, Xcode CLT on macOS |
 | Android | Android SDK (platform 37), JDK 21 |
 
+On MySQL / MariaDB set `max_allowed_packet` to at least 16 MB: a long call's transcript (up to 20 000 segments) is
+saved in one statement. The migrations work with `explicit_defaults_for_timestamp` on or off.
+
 ### Server
 
 ```bash

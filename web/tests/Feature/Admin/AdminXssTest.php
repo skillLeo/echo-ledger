@@ -31,6 +31,8 @@ beforeEach(function () {
 
 const ADMIN_XSS_SCRIPT = "<script>alert('xss')</script>";
 const ADMIN_XSS_IMG = '"><img src=x onerror=alert(1)>';
+/** Fits a 16-character column such as a language code (MySQL refuses longer values; SQLite does not check). */
+const ADMIN_XSS_SHORT = '"><i>xss</i>';
 
 /** Raw (unescaped) markers that must never appear in any output. */
 function adminRawMarkers(): array
@@ -88,7 +90,7 @@ it('escapes a session title that tries to break out of an attribute', function (
 
 it('escapes a client name in the clients list, the edit page and every place a session shows it', function () {
     $admin = $this->signInAsAdmin();
-    $client = Client::factory()->create(['user_id' => $admin->id, 'name' => ADMIN_XSS_SCRIPT, 'notes' => ADMIN_XSS_IMG, 'language' => ADMIN_XSS_IMG]);
+    $client = Client::factory()->create(['user_id' => $admin->id, 'name' => ADMIN_XSS_SCRIPT, 'notes' => ADMIN_XSS_IMG, 'language' => ADMIN_XSS_SHORT]);
     $session = CaptureSession::factory()->create(['user_id' => $admin->id, 'client_id' => $client->id, 'title' => 'Plain title']);
 
     adminAssertEscaped($this->panelComponent(ListClients::class)->html(), ADMIN_XSS_SCRIPT, 'the clients list');
@@ -154,13 +156,14 @@ it('escapes a provider error message shown on the session page', function () {
     $session = CaptureSession::factory()->create(['user_id' => $admin->id]);
     Transcript::query()->create([
         'capture_session_id' => $session->id, 'kind' => TranscriptKind::Final, 'provider' => ADMIN_XSS_SCRIPT,
-        'status' => TranscriptStatus::Failed, 'error' => ADMIN_XSS_IMG, 'language' => ADMIN_XSS_SCRIPT,
+        'status' => TranscriptStatus::Failed, 'error' => ADMIN_XSS_IMG, 'language' => ADMIN_XSS_SHORT,
     ]);
 
     $html = $this->get('/admin/sessions/'.$session->id)->assertOk()->getContent();
 
     adminAssertEscaped($html, ADMIN_XSS_IMG, 'the error entry');
-    adminAssertEscaped($html, ADMIN_XSS_SCRIPT, 'the engine and language entries');
+    adminAssertEscaped($html, ADMIN_XSS_SCRIPT, 'the engine entry');
+    adminAssertEscaped($html, ADMIN_XSS_SHORT, 'the language entry');
 });
 
 it('escapes free-text settings when the page is shown again', function () {

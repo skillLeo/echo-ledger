@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\LibraryController;
 use App\Http\Controllers\Api\RecordingController;
+use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SessionController;
 use App\Http\Controllers\Api\SttTokenController;
 use App\Http\Controllers\Api\SttWebhookController;
@@ -55,6 +56,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
 
         Route::middleware('abilities:library:read')->group(function (): void {
             Route::get('library', [LibraryController::class, 'index'])->name('api.library');
+            Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');
             Route::get('transcripts/{id}', [LibraryController::class, 'transcript'])->name('api.transcripts.show');
             Route::get('transcripts/{id}/revisions', [TranscriptEditController::class, 'revisions'])->name('api.transcripts.revisions');
