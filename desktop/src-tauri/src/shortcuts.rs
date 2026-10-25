@@ -24,12 +24,13 @@ impl Action {
     pub const ALL: [Action; 6] =
         [Action::ToggleCaptions, Action::ToggleSaving, Action::CopyLast2Min, Action::Dictation, Action::VoiceNote, Action::Mark];
 
-    /// Spec defaults (Cmd on macOS). Ctrl+Shift+C/R collide with browser DevTools/hard-reload, hence configurable.
+    /// Defaults (Cmd on macOS). Recording and copying use Alt+Shift: Ctrl+Shift+R / C reload or open DevTools in
+    /// every browser (B19), so they are never defaults.
     pub fn default_accelerator(self) -> Option<&'static str> {
         match self {
             Action::ToggleCaptions => Some("CommandOrControl+Shift+Space"),
-            Action::ToggleSaving => Some("CommandOrControl+Shift+R"),
-            Action::CopyLast2Min => Some("CommandOrControl+Shift+C"),
+            Action::ToggleSaving => Some("CommandOrControl+Alt+Shift+R"),
+            Action::CopyLast2Min => Some("CommandOrControl+Alt+Shift+C"),
             Action::Dictation => Some("CommandOrControl+Shift+D"),
             Action::VoiceNote => None,
             Action::Mark => Some("CommandOrControl+Shift+B"),

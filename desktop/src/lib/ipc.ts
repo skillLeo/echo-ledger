@@ -85,6 +85,7 @@ export interface Settings {
   quietHours: boolean;
   quietFrom: string;
   quietTo: string;
+  onboardingDone: boolean;
 }
 
 /** One notification of the activity centre (B18). */
@@ -194,6 +195,7 @@ export interface SettingsPatch {
   quietHours?: boolean;
   quietFrom?: string;
   quietTo?: string;
+  onboardingDone?: boolean;
 }
 
 /** A bookmark just made on the current recording (`recording:marked`); `count` is how many it has now. */
@@ -608,6 +610,8 @@ export const api = {
   eraseFromBin: (id: string) => invoke<void>("bin_erase", { id }),
   storage: () => invoke<StorageInfo>("storage_info"),
   activity: (limit = 30) => invoke<{ data: ActivityItem[]; unread_count: number }>("activity_list", { limit }),
+  exportSettings: () => invoke<string>("settings_export"),
+  importSettings: (text: string) => invoke<Settings>("settings_import", { text }),
   markActivityRead: (ids: string[] | null = null) => invoke<{ unread_count: number }>("activity_read", { ids }),
   clearDictationHistory: () => invoke<void>("dictation_history_clear"),
 };

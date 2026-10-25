@@ -253,6 +253,8 @@ pub struct Settings {
     pub quiet_hours: bool,
     pub quiet_from: String,
     pub quiet_to: String,
+    /// The first-run wizard (B19) was finished or skipped. Installs paired before v1.1 count as done.
+    pub onboarding_done: bool,
 }
 
 impl Default for Settings {
@@ -294,6 +296,7 @@ impl Default for Settings {
             quiet_hours: false,
             quiet_from: "22:00".into(),
             quiet_to: "07:00".into(),
+            onboarding_done: false,
         }
     }
 }
@@ -311,6 +314,8 @@ impl Settings {
     /// outside 2 / 3 / 5 becomes 3.
     pub fn from_value(value: Value) -> Self {
         let Value::Object(file) = value else { return Self::default() };
+        // A file from before the wizard (B19) that is already paired: the person has set EchoLedger up.
+        let set_up_before = !file.contains_key("onboardingDone") && file.get("deviceId").is_some_and(|v| !v.is_null());
         let Ok(Value::Object(mut merged)) = serde_json::to_value(Self::default()) else { return Self::default() };
         for (key, value) in file {
             let value = match key.as_str() {
@@ -336,7 +341,9 @@ impl Settings {
                 };
             }
         }
-        serde_json::from_value(Value::Object(merged)).unwrap_or_default()
+        let mut settings: Settings = serde_json::from_value(Value::Object(merged)).unwrap_or_default();
+        settings.onboarding_done |= set_up_before;
+        settings
     }
 
     pub fn save(&self, path: &Path) -> std::io::Result<()> {

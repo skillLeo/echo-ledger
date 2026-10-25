@@ -305,6 +305,8 @@ pub fn run() {
             commands::storage_info,
             commands::activity_list,
             commands::activity_read,
+            commands::settings_export,
+            commands::settings_import,
             commands::session_organise,
             commands::sessions_bulk,
             commands::sessions_export,

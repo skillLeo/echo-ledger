@@ -16,8 +16,8 @@ fn the_defaults_are_the_documented_chords() {
         defaults[&Action::ToggleCaptions],
         "CommandOrControl+Shift+Space"
     );
-    assert_eq!(defaults[&Action::ToggleSaving], "CommandOrControl+Shift+R");
-    assert_eq!(defaults[&Action::CopyLast2Min], "CommandOrControl+Shift+C");
+    assert_eq!(defaults[&Action::ToggleSaving], "CommandOrControl+Alt+Shift+R");
+    assert_eq!(defaults[&Action::CopyLast2Min], "CommandOrControl+Alt+Shift+C");
     assert_eq!(defaults[&Action::Dictation], "CommandOrControl+Shift+D");
     assert_eq!(defaults[&Action::Mark], "CommandOrControl+Shift+B");
     assert!(

@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, listenTo, type AppStatus, type LockStatus } from "../../lib/ipc";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityBell } from "./ActivityCentre";
+import { OnboardingView } from "./OnboardingView";
 import { AlertIcon, CaptionsIcon, CloseIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { PairingView } from "./PairingView";
@@ -30,6 +31,16 @@ export default function MainApp() {
   const [palette, setPalette] = useState(false);
   const [openRequest, setOpenRequest] = useState<{ id: string; ms: number; seq: number } | null>(null);
   const [lock, setLock] = useState<LockStatus | null>(null);
+  const [setupDone, setSetupDone] = useState<boolean | null>(null);
+
+  // First-run wizard (B19): shown until it is finished or skipped.
+  useEffect(() => {
+    api.settings().then((s) => setSetupDone(s.onboardingDone !== false)).catch(() => undefined);
+    const un = listenTo("settings:changed", (s) => s && setSetupDone(s.onboardingDone !== false));
+    return () => {
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
 
   // App lock (B16): the core decides; the window follows "lock:changed" and reports use to reset the timer.
   useEffect(() => {
@@ -119,6 +130,15 @@ export default function MainApp() {
     return (
       <>
         <LockScreen status={lock} onUnlocked={setLock} />
+        {toastView}
+      </>
+    );
+  }
+
+  if (status && setupDone === false) {
+    return (
+      <>
+        <OnboardingView status={status} onStatus={setStatus} onFinished={() => setSetupDone(true)} notify={notify} />
         {toastView}
       </>
     );

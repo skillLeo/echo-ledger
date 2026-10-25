@@ -69,6 +69,7 @@ fn customised() -> Settings {
         quiet_hours: true,
         quiet_from: "23:30".into(),
         quiet_to: "06:15".into(),
+        onboarding_done: true,
     }
 }
 // ---- Defaults --------------------------------------------------------------------------------------------------
@@ -155,6 +156,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "farSideWarning",
             "inputDevice",
             "lockAfterMinutes",
+            "onboardingDone",
             "overlayCorner",
             "pillPosition",
             "pins",
@@ -167,7 +169,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 36, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 37, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "en+ur");
@@ -575,4 +577,12 @@ fn quiet_hours_load_tolerantly() {
     let s = Settings::from_value(json!({"quietHours": true, "quietFrom": "21:45", "quietTo": "25:00"}));
     assert!(s.quiet_hours && s.activity_notifications);
     assert_eq!((s.quiet_from.as_str(), s.quiet_to.as_str()), ("21:45", "07:00"), "an impossible time falls back");
+}
+
+#[test]
+fn installs_paired_before_the_wizard_count_as_set_up() {
+    assert!(Settings::from_value(json!({"deviceId": "01JB8Q3R0Z5V1K7M9N2P4S6T8W"})).onboarding_done);
+    assert!(!Settings::from_value(json!({"deviceId": null})).onboarding_done);
+    assert!(!Settings::from_value(json!({"deviceId": "01JB8Q3R0Z5V1K7M9N2P4S6T8W", "onboardingDone": false})).onboarding_done, "an explicit value wins");
+    assert!(!Settings::default().onboarding_done);
 }

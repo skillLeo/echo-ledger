@@ -98,6 +98,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     quietHours: false,
     quietFrom: "22:00",
     quietTo: "07:00",
+    onboardingDone: true,
     ...overrides,
   };
 }

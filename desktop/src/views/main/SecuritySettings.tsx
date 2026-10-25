@@ -43,8 +43,28 @@ function PinForm({ hasPin, run, onSaved }: { hasPin: boolean; run: Run; onSaved:
   );
 }
 
-export function SecurityCard({ settings, patch, run }: { settings: Settings; patch: (p: SettingsPatch) => Promise<boolean>; run: Run }) {
+/** Privacy & security → App lock. */
+export function LockCard({ settings, patch, run }: { settings: Settings; patch: (p: SettingsPatch) => Promise<boolean>; run: Run }) {
   const [lock, setLock] = useState<LockStatus | null>(null);
+  useEffect(() => {
+    api.lockStatus().then(setLock).catch(() => undefined);
+  }, []);
+  return (
+    <div className="card security-settings">
+      <b>App lock</b>
+      <Toggle label="Lock EchoLedger" hint={lock?.osMethod ? `${SYSTEM_LABEL[lock.osMethod].replace("Use ", "")} or your PIN unlocks it. Recording keeps running while it is locked.` : "Your PIN unlocks it. Recording keeps running while it is locked."}
+        on={settings.appLock} onChange={(v) => void patch({ appLock: v }).then(async (ok) => { if (ok) setLock(await api.lockStatus()); })} />
+      {!lock?.hasPin && <p className="small muted">Set a PIN first: it unlocks the app whenever Windows Hello or Touch ID is not available.</p>}
+      {lock && <PinForm hasPin={lock.hasPin} run={run} onSaved={setLock} />}
+      <SelectRow<string> label="Lock when not used" value={String(settings.lockAfterMinutes)} options={LOCK_AFTER}
+        onChange={(v) => void patch({ lockAfterMinutes: Number(v) as LockAfterMinutes })} />
+      <div className="row"><span className="spacer" /><button type="button" className="btn ghost" disabled={!settings.appLock} onClick={() => void run(() => api.lockNow())}>Lock now</button></div>
+    </div>
+  );
+}
+
+/** Devices: the devices paired with the server (revoke the others) and the recent audit log. */
+export function DevicesCard({ run }: { run: Run }) {
   const [devices, setDevices] = useState<SecurityDevice[]>([]);
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [overviewError, setOverviewError] = useState<string | null>(null);
@@ -57,7 +77,6 @@ export function SecurityCard({ settings, patch, run }: { settings: Settings; pat
     }, (e) => setOverviewError(errorMessage(e)));
 
   useEffect(() => {
-    api.lockStatus().then(setLock).catch(() => undefined);
     void loadOverview();
   }, []);
 
@@ -68,17 +87,8 @@ export function SecurityCard({ settings, patch, run }: { settings: Settings; pat
   };
 
   return (
-    <div className="card security-settings">
-      <b>Privacy & security</b>
-      <Toggle label="Lock EchoLedger" hint={lock?.osMethod ? `${SYSTEM_LABEL[lock.osMethod].replace("Use ", "")} or your PIN unlocks it. Recording keeps running while it is locked.` : "Your PIN unlocks it. Recording keeps running while it is locked."}
-        on={settings.appLock} onChange={(v) => void patch({ appLock: v }).then(async (ok) => { if (ok) setLock(await api.lockStatus()); })} />
-      {!lock?.hasPin && <p className="small muted">Set a PIN first: it unlocks the app whenever Windows Hello or Touch ID is not available.</p>}
-      {lock && <PinForm hasPin={lock.hasPin} run={run} onSaved={setLock} />}
-      <SelectRow<string> label="Lock when not used" value={String(settings.lockAfterMinutes)} options={LOCK_AFTER}
-        onChange={(v) => void patch({ lockAfterMinutes: Number(v) as LockAfterMinutes })} />
-      <div className="row"><span className="spacer" /><button type="button" className="btn ghost" disabled={!settings.appLock} onClick={() => void run(() => api.lockNow())}>Lock now</button></div>
-
-      <b style={{ display: "block", marginTop: 12 }}>Devices</b>
+    <div className="card devices-settings">
+      <b>Devices</b>
       {overviewError && <p className="small muted">{overviewError}</p>}
       <div className="site-list" role="list" aria-label="Paired devices">
         {devices.map((d) => (
@@ -91,7 +101,6 @@ export function SecurityCard({ settings, patch, run }: { settings: Settings; pat
           </div>
         ))}
       </div>
-
       <b style={{ display: "block", marginTop: 12 }}>Recent activity</b>
       {events.length === 0 ? <p className="small muted">Nothing recorded yet.</p> : (
         <ul className="activity" aria-label="Recent activity">
@@ -102,6 +111,15 @@ export function SecurityCard({ settings, patch, run }: { settings: Settings; pat
   );
 }
 
+/** The app lock and the devices together. */
+export function SecurityCard(props: { settings: Settings; patch: (p: SettingsPatch) => Promise<boolean>; run: Run }) {
+  return (
+    <>
+      <LockCard {...props} />
+      <DevicesCard run={props.run} />
+    </>
+  );
+}
 /** "1.5 GB" style sizes. */
 export function fileSize(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];

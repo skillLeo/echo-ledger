@@ -188,6 +188,7 @@ pub struct SettingsPatch {
     quiet_hours: Option<bool>,
     quiet_from: Option<String>,
     quiet_to: Option<String>,
+    onboarding_done: Option<bool>,
 }
 
 /// A present key becomes `Some(value)`, so an explicit `null` reads as `Some(None)` and a missing key (via
@@ -229,6 +230,7 @@ impl SettingsPatch {
         if let Some(v) = self.quiet_hours { s.quiet_hours = v; }
         if let Some(v) = &self.quiet_from && crate::activity::parse_hhmm(v).is_some() { s.quiet_from = v.clone(); }
         if let Some(v) = &self.quiet_to && crate::activity::parse_hhmm(v).is_some() { s.quiet_to = v.clone(); }
+        if let Some(v) = self.onboarding_done { s.onboarding_done = v; }
     }
 }
 
@@ -694,6 +696,86 @@ pub async fn export_transcript(app: AppHandle, id: String, format: String, times
     Ok(path.to_string_lossy().into_owned())
 }
 
+// ---- Settings export / import (B19) -----------------------------------------------------------------------------
+
+/// Keys never exported or imported: the pairing (server, pins, device) and the client of this server.
+pub const NOT_PORTABLE: [&str; 6] = ["serverUrl", "pins", "deviceId", "deviceName", "clientId", "onboardingDone"];
+/// The `format` marker of an exported settings file.
+pub const SETTINGS_FORMAT: &str = "echoledger-settings";
+
+/// The settings as a portable JSON document: everything but the pairing. There are no secrets in settings; the
+/// device token lives in the system keychain and the PIN hash in its own file.
+pub fn portable_settings(settings: &Settings) -> serde_json::Value {
+    let mut value = serde_json::to_value(settings).unwrap_or_default();
+    if let Some(map) = value.as_object_mut() {
+        for key in NOT_PORTABLE {
+            map.remove(key);
+        }
+    }
+    serde_json::json!({ "format": SETTINGS_FORMAT, "version": 1, "settings": value })
+}
+
+/// The patch and shortcuts of an exported file; an error for anything that is not one.
+pub fn read_portable(text: &str) -> AppResult<(SettingsPatch, Option<serde_json::Map<String, serde_json::Value>>)> {
+    let doc: serde_json::Value = serde_json::from_str(text).map_err(|_| AppError::msg("That is not an EchoLedger settings file."))?;
+    if doc.get("format").and_then(serde_json::Value::as_str) != Some(SETTINGS_FORMAT) {
+        return Err(AppError::msg("That is not an EchoLedger settings file."));
+    }
+    let mut map = doc.get("settings").and_then(serde_json::Value::as_object).cloned().ok_or_else(|| AppError::msg("The file has no settings."))?;
+    for key in NOT_PORTABLE {
+        map.remove(key);
+    }
+    let shortcuts = map.remove("shortcuts").and_then(|v| v.as_object().cloned());
+    // Values this build does not know (a newer export) are dropped one by one, like Settings::from_value does.
+    let mut clean = serde_json::Map::new();
+    for (key, value) in map {
+        let mut probe = clean.clone();
+        probe.insert(key.clone(), value.clone());
+        if serde_json::from_value::<SettingsPatch>(serde_json::Value::Object(probe)).is_ok() {
+            clean.insert(key, value);
+        }
+    }
+    let patch = serde_json::from_value::<SettingsPatch>(serde_json::Value::Object(clean)).map_err(|e| AppError::msg(e.to_string()))?;
+    Ok((patch, shortcuts))
+}
+
+/// Saves the settings (without the pairing) as a file in Downloads; returns its path.
+#[tauri::command]
+pub fn settings_export(app: AppHandle) -> AppResult<String> {
+    let state = app.state::<AppState>();
+    let doc = portable_settings(&state.settings());
+    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+    let path = export_target(&dir, &format!("EchoLedger settings {}.json", chrono::Local::now().format("%Y-%m-%d")));
+    std::fs::write(&path, serde_json::to_vec_pretty(&doc)?)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Applies an exported settings file; the pairing stays as it is.
+#[tauri::command]
+pub fn settings_import(app: AppHandle, text: String) -> AppResult<Settings> {
+    let (mut patch, shortcuts) = read_portable(&text)?;
+    if patch.app_lock == Some(true) && !crate::lock::LockFile::load(&paths::app_lock(&app.state::<AppState>().data_dir)).pin_hash.is_some_and(|h| !h.is_empty()) {
+        patch.app_lock = None; // the PIN is not part of an export: set one here first
+    }
+    let mut settings = update_settings(app.clone(), patch)?;
+    if let Some(shortcuts) = shortcuts {
+        let state = app.state::<AppState>();
+        let mut map = settings.shortcuts.clone();
+        for (key, value) in shortcuts {
+            if let (Ok(action), Some(accelerator)) = (serde_json::from_value::<crate::shortcuts::Action>(serde_json::Value::String(key)), value.as_str())
+                && (accelerator.is_empty() || crate::shortcuts::parse(accelerator).is_ok())
+            {
+                map.insert(action, accelerator.to_string());
+            }
+        }
+        if crate::shortcuts::duplicates(&map).is_empty() {
+            settings = state.update_settings(|s| s.shortcuts = map.clone())?;
+            let errors = crate::shortcuts::register_all(&app, &map);
+            *state.shortcut_errors.lock().unwrap_or_else(|p| p.into_inner()) = errors;
+        }
+    }
+    Ok(settings)
+}
 // ---- App lock (B16) ---------------------------------------------------------------------------------------------
 
 /// What the lock screen and Settings need. The PIN hash itself never leaves the Rust side.

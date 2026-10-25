@@ -177,3 +177,48 @@ fn app_lock_settings_take_only_the_offered_minutes() {
     patch(json!({"lockAfterMinutes": 7})).apply(&mut s);
     assert_eq!(s.lock_after_minutes, 15, "7 is not offered");
 }
+
+// ---- settings export / import (B19) ----
+
+#[test]
+fn an_export_leaves_out_the_pairing() {
+    let s = Settings {
+        server_url: Some("https://ledger.example.com".into()),
+        device_id: Some("01JB8Q3R0Z5V1K7M9N2P4S6T8W".into()),
+        client_id: Some("01JCLIENT00000000000000000".into()),
+        caption_lines: 5,
+        ..Settings::default()
+    };
+    let doc = portable_settings(&s);
+    assert_eq!(doc["format"], SETTINGS_FORMAT);
+    let settings = doc["settings"].as_object().unwrap();
+    for key in NOT_PORTABLE {
+        assert!(!settings.contains_key(key), "{key}");
+    }
+    assert_eq!(settings["captionLines"], 5);
+    assert!(settings.contains_key("shortcuts"));
+}
+
+#[test]
+fn an_import_takes_known_values_and_drops_the_rest() {
+    let text = json!({
+        "format": SETTINGS_FORMAT, "version": 1,
+        "settings": {"captionLines": 2, "dictationMode": "push_to_talk", "serverUrl": "https://evil.example", "futureSetting": {"x": 1},
+                     "quietHours": "not a bool", "shortcuts": {"dictation": "CommandOrControl+Alt+K"}}
+    }).to_string();
+    let (patch, shortcuts) = read_portable(&text).unwrap();
+    let mut s = Settings::default();
+    patch.apply(&mut s);
+    assert_eq!(s.caption_lines, 2);
+    assert_eq!(s.dictation_mode, "push_to_talk");
+    assert_eq!(s.server_url, None, "the pairing never comes from a file");
+    assert!(!s.quiet_hours);
+    assert_eq!(shortcuts.unwrap()["dictation"], "CommandOrControl+Alt+K");
+}
+
+#[test]
+fn only_settings_files_are_imported() {
+    for text in ["", "{}", "[1]", r#"{"format":"something-else","settings":{}}"#, r#"{"format":"echoledger-settings"}"#] {
+        assert!(read_portable(text).is_err(), "{text}");
+    }
+}

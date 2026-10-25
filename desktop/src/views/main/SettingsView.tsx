@@ -6,7 +6,9 @@ import { SourceAppIcon } from "../../components/Icons";
 import { SelectRow, Toggle } from "./SettingsControls";
 import { AutoRecordApps, CaptionStyleCard, MicrophoneCard } from "./CaptureSettings";
 import { DictationCard } from "./DictationSettings";
-import { NotificationsCard, SecurityCard, StorageCard } from "./SecuritySettings";
+import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./SecuritySettings";
+import { conflictFor } from "../../lib/shortcutConflicts";
+import { getVersion } from "@tauri-apps/api/app";
 
 const ACTIONS: [ShortcutAction, string][] = [
   ["toggle_captions", "Show / hide live captions"],
@@ -16,6 +18,15 @@ const ACTIONS: [ShortcutAction, string][] = [
   ["voice_note", "Capture voice note playing now"],
   ["mark", "Bookmark this moment of a recording"],
 ];
+
+type Group = "general" | "recording" | "captions" | "dictation" | "shortcuts" | "privacy" | "devices" | "storage" | "about";
+/** Settings groups, in the order a system settings app would show them (B19). */
+export const GROUPS: readonly Group[] = ["general", "recording", "captions", "dictation", "shortcuts", "privacy", "devices", "storage", "about"];
+export const GROUP_LABEL: Record<Group, string> = {
+  general: "General", recording: "Recording", captions: "Captions", dictation: "Dictation", shortcuts: "Shortcuts",
+  privacy: "Privacy & security", devices: "Devices", storage: "Storage", about: "About",
+};
+interface SettingsSection { id: string; group: Group; title: string; keywords: string; node: ReactNode }
 
 const ASK_BEFORE_SAVING: readonly (readonly [AskBeforeSaving, string])[] = [["always", "Always"], ["auto_only", "Only automatic calls"], ["never", "Never"]];
 const DECISION_TIMEOUT: readonly (readonly [DecisionTimeout, string])[] = [["keep", "Keep the recording"], ["discard", "Discard it"], ["wait", "Keep waiting"]];
@@ -101,6 +112,8 @@ export function SettingsView({ status, run, onUnpaired }: {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [recording, setRecording] = useState<ShortcutAction | null>(null);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [group, setGroup] = useState<Group | "all">("all");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     api.settings().then(setSettings).catch(() => undefined);
@@ -136,10 +149,33 @@ export function SettingsView({ status, run, onUnpaired }: {
   };
   const errorFor = (a: ShortcutAction) => status.shortcutErrors.find(([x]) => x === a)?.[1];
 
-  return (
-    <>
-      <h1 className="page-title">Settings</h1>
-      <p className="page-sub">Paired with {status.serverUrl} {status.pinned ? "· certificate pinned" : "· not pinned"}</p>
+  const shortcutConflict = (action: ShortcutAction) => conflictFor(settings.shortcuts[action], status.platform);
+  const sections: SettingsSection[] = [
+    { id: "general", group: "general", title: "General", keywords: "start sign in login autostart language transcription client keyterms", node: (
+      <div className="card">
+        <b>General</b>
+        <Toggle label="Start EchoLedger when I sign in" on={settings.autostart} onChange={(v) => patch({ autostart: v })} />
+        <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={220}
+          onChange={(v) => patch({ transcriptionLanguage: v === "" ? null : v })} />
+        <div className="toggle">
+          <div><label htmlFor="settings-client">Client keyterms</label><div id="settings-client-hint" className="small muted">Names and jargon from this client boost accuracy.</div></div>
+          {/* "No client" sends clientId: null (clears it); a missing key would keep the stored client (A6.DU4). */}
+          <select id="settings-client" aria-describedby="settings-client-hint" className="input" style={{ width: 220 }} value={settings.clientId ?? ""} onChange={(e) => patch({ clientId: e.target.value || null })}>
+            <option value="">No client</option>
+            {clients.map((cl) => <option key={cl.id} value={cl.id}>{cl.name}</option>)}
+          </select>
+        </div>
+      </div>
+    ) },
+    { id: "notifications", group: "general", title: "Notifications", keywords: "notifications quiet hours bell activity", node: <NotificationsCard settings={settings} patch={patch} /> },
+    { id: "consent", group: "general", title: "Privacy & consent", keywords: "consent law participants", node: (
+      <div className="card">
+        <b>Privacy &amp; consent</b>
+        <p className="small muted">Call-recording laws differ by country. Tell participants you are recording where required. EchoLedger shows a red indicator whenever it records.</p>
+        <Toggle label="I understand and will obtain consent where required" on={settings.consentAcknowledged} onChange={(v) => patch({ consentAcknowledged: v })} />
+      </div>
+    ) },
+    { id: "recording", group: "recording", title: "Recording", keywords: "auto record calls unknown apps ask before saving decision timeout browser tab", node: (
       <div className="card">
         <b>Recording</b>
         <Toggle label="Auto-record calls" hint="Records a call when an app both uses your microphone and plays audio. Dictation and voice typing are never recorded." on={settings.autoMode} onChange={(v) => patch({ autoMode: v })} />
@@ -149,12 +185,17 @@ export function SettingsView({ status, run, onUnpaired }: {
         )}
         <SelectRow label="Ask before saving" value={settings.askBeforeSaving} options={ASK_BEFORE_SAVING} onChange={(v) => patch({ askBeforeSaving: v })} />
         <SelectRow label="If I don't choose within 60 s" value={settings.decisionTimeout} options={DECISION_TIMEOUT} onChange={(v) => patch({ decisionTimeout: v })} />
-        <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={220}
-          onChange={(v) => patch({ transcriptionLanguage: v === "" ? null : v })} />
+      </div>
+    ) },
+    { id: "auto-apps", group: "recording", title: "Auto-record apps", keywords: "whatsapp zoom teams meet apps", node: <AutoRecordApps settings={settings} patch={patch} /> },
+    { id: "call-sites", group: "recording", title: "Call sites", keywords: "sites browser never record rules", node: <CallSites rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules: siteRules })} /> },
+    { id: "microphone", group: "recording", title: "Microphone", keywords: "microphone device test permission silence far side", node: <MicrophoneCard settings={settings} patch={patch} disabled={!!status.recording || status.dictationActive} /> },
+    { id: "captions", group: "captions", title: "Captions", keywords: "captions lines overlay screen sharing position corner", node: (
+      <div className="card">
+        <b>Captions</b>
         <Toggle label="Show live captions while recording" on={settings.captionsOnRecord} onChange={(v) => patch({ captionsOnRecord: v })} />
         <SelectRow label="Caption lines" value={String(settings.captionLines) as "2" | "3" | "5"} options={CAPTION_LINES} width={180} onChange={(v) => patch({ captionLines: Number(v) })} />
         <Toggle label="Hide overlays from screen sharing" hint="Captions stay visible to you but not in Zoom/Meet screen shares." on={settings.contentProtection} onChange={(v) => patch({ contentProtection: v })} />
-        <Toggle label="Start EchoLedger when I sign in" on={settings.autostart} onChange={(v) => patch({ autostart: v })} />
         <div className="toggle">
           <label htmlFor="settings-overlay-corner">Caption position</label>
           <select id="settings-overlay-corner" className="input" style={{ width: 180 }} value={settings.overlayCorner} onChange={(e) => patch({ overlayCorner: e.target.value as Corner })}>
@@ -162,29 +203,20 @@ export function SettingsView({ status, run, onUnpaired }: {
             <option value="bottom_left">Bottom left</option><option value="top_left">Top left</option>
           </select>
         </div>
-        <div className="toggle">
-          <div><label htmlFor="settings-client">Client keyterms</label><div id="settings-client-hint" className="small muted">Names and jargon from this client boost accuracy.</div></div>
-          {/* "No client" sends clientId: null (clears it); a missing key would keep the stored client (A6.DU4). */}
-          <select id="settings-client" aria-describedby="settings-client-hint" className="input" style={{ width: 220 }} value={settings.clientId ?? ""} onChange={(e) => patch({ clientId: e.target.value || null })}>
-            <option value="">No client</option>
-            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
       </div>
-      <DictationCard settings={settings} patch={patch} />
-      <SecurityCard settings={settings} patch={patch} run={run} />
-      <NotificationsCard settings={settings} patch={patch} />
-      <StorageCard />
-
-      <AutoRecordApps settings={settings} patch={patch} />
-      <CallSites rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules: siteRules })} />
-      <CaptionStyleCard settings={settings} patch={patch} />
-      <MicrophoneCard settings={settings} patch={patch} disabled={!!status.recording || status.dictationActive} />
+    ) },
+    { id: "caption-style", group: "captions", title: "Caption style", keywords: "size width opacity colour compact", node: <CaptionStyleCard settings={settings} patch={patch} /> },
+    { id: "dictation", group: "dictation", title: "Dictation", keywords: "dictation hold talk clean up sounds replacements snippets history", node: <DictationCard settings={settings} patch={patch} /> },
+    { id: "shortcuts", group: "shortcuts", title: "Global shortcuts", keywords: "shortcuts keys hotkeys keyboard", node: (
       <div className="card">
         <div className="row"><b>Global shortcuts</b><span className="spacer" /><button className="btn ghost small" onClick={async () => { const s = await run(api.resetShortcuts, "Shortcuts reset"); if (s) setSettings(s); }}>Reset defaults</button></div>
         {ACTIONS.map(([action, label]) => (
           <div className="toggle" key={action}>
-            <div><div>{label}</div>{errorFor(action) && <div className="small error-text">{errorFor(action)}</div>}</div>
+            <div>
+              <div>{label}</div>
+              {errorFor(action) && <div className="small error-text">{errorFor(action)}</div>}
+              {!errorFor(action) && shortcutConflict(action) && <div className="small warning-text">{`This shortcut also ${shortcutConflict(action)}; EchoLedger takes it over.`}</div>}
+            </div>
             <div className="row">
               <span className="kbd">{recording === action ? "Press keys…" : prettyShortcut(settings.shortcuts[action], status.platform)}</span>
               <button className="btn" onClick={() => setRecording(action)}>Change</button>
@@ -192,18 +224,72 @@ export function SettingsView({ status, run, onUnpaired }: {
             </div>
           </div>
         ))}
-        <p className="small muted">Tip: Ctrl+Shift+C and Ctrl+Shift+R also open DevTools / hard-reload in browsers; change them if that bothers you.</p>
+        <p className="small muted">A shortcut used by another EchoLedger action is refused; one used by another app is reported here.</p>
       </div>
-      <div className="card">
-        <b>Privacy &amp; consent</b>
-        <p className="small muted">Call-recording laws differ by country. Tell participants you are recording where required. EchoLedger shows a red indicator whenever it records.</p>
-        <Toggle label="I understand and will obtain consent where required" on={settings.consentAcknowledged} onChange={(v) => patch({ consentAcknowledged: v })} />
-      </div>
+    ) },
+    { id: "lock", group: "privacy", title: "App lock", keywords: "lock pin windows hello touch id privacy security", node: <LockCard settings={settings} patch={patch} run={run} /> },
+    { id: "devices", group: "devices", title: "Devices", keywords: "devices revoke paired activity audit", node: <DevicesCard run={run} /> },
+    { id: "this-device", group: "devices", title: "This computer", keywords: "unpair device name", node: (
       <div className="card">
         <div className="row"><div><b>Device</b><div className="small muted">{status.deviceName}</div></div><span className="spacer" />
           <button className="btn danger" onClick={async () => { if (window.confirm("Unpair this computer? Pending uploads stay queued until you pair again.")) { const s = await run(api.unpair); if (s) onUnpaired(s); } }}>Unpair</button>
         </div>
       </div>
+    ) },
+    { id: "storage", group: "storage", title: "Storage and retention", keywords: "storage disk retention deleted bin", node: <StorageCard /> },
+    { id: "about", group: "about", title: "About", keywords: "version server export import backup settings file", node: <AboutCard status={status} run={run} onImported={setSettings} /> },
+  ];
+  const q = query.trim().toLowerCase();
+  const visible = sections.filter((s) => (q ? `${s.title} ${s.keywords} ${GROUP_LABEL[s.group]}`.toLowerCase().includes(q) : group === "all" || s.group === group));
+
+  return (
+    <>
+      <h1 className="page-title">Settings</h1>
+      <p className="page-sub">Paired with {status.serverUrl} {status.pinned ? "· certificate pinned" : "· not pinned"}</p>
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="Settings groups">
+          <label className="searchbox"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
+          {(["all", ...GROUPS] as const).map((g) => (
+            <button key={g} type="button" className={`nav-btn ${!q && group === g ? "active" : ""}`} aria-current={!q && group === g ? "page" : undefined} onClick={() => { setGroup(g); setQuery(""); }}>{g === "all" ? "All settings" : GROUP_LABEL[g]}</button>
+          ))}
+        </nav>
+        <div className="settings-content">
+          {visible.length === 0 && <div className="empty">No setting matches “{query}”.</div>}
+          {visible.map((s, i) => (
+            <section key={s.id} aria-label={s.title}>
+              {(i === 0 || visible[i - 1].group !== s.group) && <h2 className="settings-group-title">{GROUP_LABEL[s.group]}</h2>}
+              {s.node}
+            </section>
+          ))}
+        </div>
+      </div>
     </>
+  );
+}
+
+/** About: the version and server, and settings export / import without the pairing (B19). */
+function AboutCard({ status, run, onImported }: { status: AppStatus; run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>; onImported: (s: Settings) => void }) {
+  const [version, setVersion] = useState<string | null>(null);
+  const fileId = useId();
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => undefined);
+  }, []);
+  const importFile = async (file: File | undefined) => {
+    if (!file) return;
+    const text = await file.text();
+    const next = await run(() => api.importSettings(text), "Settings imported");
+    if (next) onImported(next);
+  };
+  return (
+    <div className="card about-settings">
+      <b>EchoLedger{version ? ` ${version}` : ""}</b>
+      <p className="small muted">Server: {status.serverUrl ?? "not paired"}{status.pinned ? " (certificate pinned)" : " (no certificate pin)"}</p>
+      <div className="row organise-field">
+        <button type="button" className="btn ghost" onClick={() => void run(api.exportSettings, "Settings saved in Downloads")}>Export settings</button>
+        <label htmlFor={fileId} className="btn ghost">Import settings</label>
+        <input id={fileId} type="file" accept="application/json,.json" className="sr-only" aria-label="Import settings" onChange={(e) => void importFile(e.target.files?.[0])} />
+      </div>
+      <p className="small muted">The file has your preferences only, never the pairing, keys or PIN.</p>
+    </div>
   );
 }
