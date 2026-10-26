@@ -452,6 +452,8 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .organise { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; margin-top: var(--space-3); }
 .organise .pinned { color: var(--warning); }
 .organise-field { gap: 6px; flex-wrap: wrap; }
+.notifications-settings .organise-field { gap: var(--space-2); }
+.notifications-settings .organise-field .input { width: 128px; }
 .chips.labels { margin: 0; }
 .label-chip { display: inline-flex; align-items: center; gap: var(--space-1); height: 24px; border: 1px solid var(--border); border-radius: var(--radius-full); padding: 0 var(--space-2); font-size: var(--text-xs); color: var(--text-muted); }
 .label-chip.small { font-size: 11px; height: 20px; padding: 0 7px; }
@@ -504,7 +506,7 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .steps li.current::before { background: var(--accent-strong); border-color: transparent; color: var(--on-accent); }
 .steps li.done { color: var(--success); }
 .steps li.done::before { content: "✓"; border-color: transparent; background: rgba(60, 207, 145, 0.15); }
-.onboarding-card .skip { justify-self: start; }
+.onboarding-actions { margin-top: var(--space-4); }
 
 /* Loading placeholders (C6): a quiet shimmer while a list loads. */
 .skeleton-item { cursor: default; gap: var(--space-2); padding-block: var(--space-3); }

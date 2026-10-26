@@ -7,6 +7,7 @@ mod commands;
 pub mod detect;
 pub mod dictation;
 pub mod error;
+pub mod lifecycle;
 pub mod lock;
 pub mod material;
 pub mod net;
@@ -181,6 +182,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(overlay::HitRegions::default())
+        .manage(lifecycle::WindowLifecycle::default())
         .manage(shortcuts::Bindings::default())
         .manage(stt::captions::CaptionHub::default())
         .setup(|app| {
@@ -191,20 +193,8 @@ pub fn run() {
             let settings = app.state::<AppState>().settings();
 
             tray::create(&handle)?;
-            if let Some(main) = app.get_webview_window("main") {
-                material::apply(&main);
-            }
-            overlay::create_overlays(
-                &handle,
-                overlay::OverlaySetup {
-                    corner: settings.overlay_corner,
-                    content_protected: settings.content_protection,
-                    caption_lines: settings.caption_lines,
-                    caption_size: settings.caption_style.size,
-                    caption_width: settings.caption_style.width,
-                    pill_position: settings.pill_position,
-                },
-            )?;
+            // C9: no window is built here. The main window and the overlays are built when first needed
+            // (lifecycle.rs), so an idle app in the tray runs no web view.
             audio::platform::set_preferred_mic(settings.input_device.clone());
             overlay::spawn_clickthrough_poll(handle.clone());
             let errors = shortcuts::register_all(&handle, &settings.shortcuts);
@@ -236,12 +226,10 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
-                api.prevent_close(); // keep running in the tray
-                let _ = window.hide();
-                // C9: the page stops polling while it is hidden (WebView2 is not told about the hide).
-                let _ = tauri::Emitter::emit(window, "main:visibility", false);
-            }
+            // C9: closing the main window destroys it (the app keeps running in the tray, see `ExitRequested`); the
+            // next open builds a new one on the same page (main_view_get).
+            WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
+            WindowEvent::Destroyed => lifecycle::on_destroyed(window.app_handle(), window.label()),
             WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) if window.label() == "main" => {
                 let app = window.app_handle().clone();
                 let files: Vec<String> = paths.iter().map(|p| p.to_string_lossy().to_string()).collect();
@@ -337,6 +325,9 @@ pub fn run() {
             commands::pending_assign_client,
             commands::pending_open,
             commands::review_state,
+            commands::window_ready,
+            commands::main_view_get,
+            commands::main_view_set,
         ])
         .build(tauri::generate_context!())
         .expect("error while building EchoLedger");

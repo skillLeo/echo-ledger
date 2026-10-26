@@ -390,11 +390,12 @@ Severity in brackets. Each item lists the platform; the matching regression test
 - [x] C8 Copy pass: short, plain, sentence case. Engines by product name (AssemblyAI, not assemblyai), apps by name
       (Google Chrome, not chrome.exe), languages in words, "secure connection" instead of "certificate pinned", plain
       Record-page copy without technical terms or file-extension lists.
-- [ ] C9 Performance budgets measured and reported: desktop idle ≤ 150 MB and < 1 % CPU, recording < 8 % CPU,
+- [x] C9 Performance budgets measured and reported: desktop idle ≤ 150 MB and < 1 % CPU, recording < 8 % CPU,
       detection ≤ 1 Hz without per-tick allocation; Android no wake locks or polling outside recording; web lists
-      paginated, lazy-loading guard test, < 300 ms server time. Measured so far (docs/HANDOFF.md "Phase 6 results"):
-      web met (≤ 231 ms on 3,005 recordings, N+1 guard and query-budget tests), desktop idle CPU 0.03 % met, phone met;
-      desktop idle memory 310 MB (budget 150 MB) open: windows must be created only when used.
+      paginated, lazy-loading guard test, < 300 ms server time. Results (docs/HANDOFF.md "Phase 6 results"): web met
+      (≤ 231 ms on 3,005 recordings, N+1 guard and query-budget tests), phone met; desktop idle 96 MB and 0.04 % CPU
+      (was 310 MB) with windows built on demand (lifecycle.rs: main window destroyed on close, overlays destroyed 30 s
+      after hiding, only the dictation bar kept ready). Recording with captions (< 8 %) is a device check: MANUAL_QA P-2.
 
 ---
 

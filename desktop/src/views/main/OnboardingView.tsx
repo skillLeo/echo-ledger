@@ -1,6 +1,6 @@
 // First-run wizard (plan B19): permissions → pairing → a 10-second test recording → done. Can be skipped; the same
 // controls stay in Settings.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage, type AppStatus, type PermissionsStatus, type TestResult } from "../../lib/ipc";
 import { PairingView } from "./PairingView";
 import { testVerdict } from "./CaptureSettings";
@@ -44,6 +44,14 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
   };
   const index = STEPS.indexOf(step);
   const next = () => setStep(STEPS[Math.min(index + 1, STEPS.length - 1)]);
+  // Skip setup sits on the same row as the step's main action (left), so the two read as one choice.
+  const actions = (primary: ReactNode) => (
+    <div className="row onboarding-actions">
+      <button type="button" className="btn ghost small" onClick={() => void finish()}>Skip setup</button>
+      <span className="spacer" />
+      {primary}
+    </div>
+  );
 
   return (
     <main className="gate onboarding">
@@ -69,7 +77,7 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
                 <button type="button" className="btn ghost small" onClick={() => void api.openPrivacySettings("system_audio")}>Open settings</button>
               </div>
             )}
-            <div className="row"><span className="spacer" /><button type="button" className="btn primary" onClick={next}>Continue</button></div>
+            {actions(<button type="button" className="btn primary" onClick={next}>Continue</button>)}
           </section>
         )}
 
@@ -79,10 +87,13 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
             {status.paired ? (
               <>
                 <p className="small">Paired with {status.serverUrl} as {status.deviceName}.</p>
-                <div className="row"><span className="spacer" /><button type="button" className="btn primary" onClick={next}>Continue</button></div>
+                {actions(<button type="button" className="btn primary" onClick={next}>Continue</button>)}
               </>
             ) : (
-              <PairingView onPaired={(s) => { onStatus(s); if (s.paired) next(); }} notify={notify} />
+              <>
+                <PairingView onPaired={(s) => { onStatus(s); if (s.paired) next(); }} notify={notify} />
+                {actions(null)}
+              </>
             )}
           </section>
         )}
@@ -93,7 +104,7 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
             <p className="small muted">Say a few words and play something on this computer, so both sides of a call are checked.</p>
             <button type="button" className="btn" disabled={testing} onClick={() => void test()}>{testing ? "Recording 10 seconds…" : result ? "Test again" : "Start the test"}</button>
             {result && <ul className="small">{testVerdict(result).map((line) => <li key={line}>{line}</li>)}</ul>}
-            <div className="row"><span className="spacer" /><button type="button" className="btn primary" onClick={next}>{result ? "Continue" : "Skip the test"}</button></div>
+            {actions(<button type="button" className="btn primary" onClick={next}>{result ? "Continue" : "Skip the test"}</button>)}
           </section>
         )}
 
@@ -102,11 +113,10 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
             <h1 id="ob-done" className="page-title">You are set</h1>
             <p className="small muted">Call-recording laws differ by country. Tell participants you are recording where required. A red indicator shows whenever EchoLedger records.</p>
             <label className="row small"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> I understand and will obtain consent where required</label>
-            <div className="row"><span className="spacer" /><button type="button" className="btn primary" onClick={() => void finish()}>Start using EchoLedger</button></div>
+            <div className="row onboarding-actions"><span className="spacer" /><button type="button" className="btn primary" onClick={() => void finish()}>Start using EchoLedger</button></div>
           </section>
         )}
 
-        {step !== "Done" && <button type="button" className="btn ghost small skip" onClick={() => void finish()}>Skip setup</button>}
       </div>
     </main>
   );

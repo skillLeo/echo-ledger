@@ -42,7 +42,7 @@ fn wanted() -> Material {
     }
 }
 
-/// Applies the material to the main window once (setup hook); returns what applied.
+/// Applies the material to the main window each time it is built (lifecycle.rs); returns what applied.
 pub fn apply<R: Runtime>(window: &WebviewWindow<R>) -> Material {
     let material = match wanted() {
         Material::None => Material::None,

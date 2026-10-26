@@ -623,7 +623,21 @@ export const api = {
   importSettings: (text: string) => invoke<Settings>("settings_import", { text }),
   markActivityRead: (ids: string[] | null = null) => invoke<{ unread_count: number }>("activity_read", { ids }),
   clearDictationHistory: () => invoke<void>("dictation_history_clear"),
+  windowReady: () => invoke<void>("window_ready"),
+  mainView: () => invoke<string | null>("main_view_get"),
+  saveMainView: (view: string) => invoke<void>("main_view_set", { view }),
 };
+
+/**
+ * C9: windows are built on demand, so the core keeps the events meant for a window until its page listens. Call
+ * once the listeners are attached; `alive` is false after the effect was cleaned up (React's strict mode runs effects
+ * twice in development).
+ */
+export function announceReady(subscriptions: Promise<unknown>[], alive: () => boolean): void {
+  Promise.allSettled(subscriptions)
+    .then(() => (alive() ? api.windowReady() : undefined))
+    .catch(() => undefined);
+}
 
 /**
  * Listens to a core event and hands the callback only its payload. Resolves to the unlisten function.

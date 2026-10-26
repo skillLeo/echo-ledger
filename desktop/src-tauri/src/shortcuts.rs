@@ -96,7 +96,9 @@ pub fn register_all(app: &AppHandle, map: &HashMap<Action, String>) -> Vec<(Acti
             Err(e) => errors.push((action, e)),
         }
     }
+    let dictation = bound.contains_key(&Action::Dictation);
     *app.state::<Bindings>().0.lock().unwrap() = bound;
+    crate::lifecycle::keep_dictation_warm(app, dictation);
     errors
 }
 
@@ -109,6 +111,9 @@ pub fn rebind(app: &AppHandle, action: Action, accelerator: &str) -> Result<(), 
             let _ = gs.unregister(o);
         }
         app.state::<Bindings>().0.lock().unwrap().remove(&action);
+        if action == Action::Dictation {
+            crate::lifecycle::keep_dictation_warm(app, false);
+        }
         return Ok(());
     }
     let new = parse(accelerator)?;
@@ -123,5 +128,8 @@ pub fn rebind(app: &AppHandle, action: Action, accelerator: &str) -> Result<(), 
         let _ = gs.unregister(o);
     }
     app.state::<Bindings>().0.lock().unwrap().insert(action, new);
+    if action == Action::Dictation {
+        crate::lifecycle::keep_dictation_warm(app, true);
+    }
     Ok(())
 }

@@ -92,7 +92,7 @@ function respond(cmd: string, args: Record<string, unknown> | undefined): unknow
     case "recording_state":
       return makeRecordingState({ active: win === "pill", elapsedMs: 754_000, sourceApp: "google_meet", captions: true, levels: [0.55, 0.3] });
     case "review_state":
-      return win === "review" ? makeReviewPayload({ item: makePendingItem("pend-1", { sourceApp: "google_meet", clientName: "Northwind", firstLine: "Thanks for joining. Let us start with the budget." }) }) : null;
+      return win === "review" ? makeReviewPayload({ item: makePendingItem("pend-1", { sourceApp: "google_meet", clientName: "Northwind", firstLine: "Thanks for joining. Let us start with the budget.", deadlineAt: new Date(Date.now() + 45_000).toISOString() }) }) : null;
     case "subscribe_captions":
       channelId = (args?.onEvent as { id: number } | undefined)?.id ?? null;
       return null;

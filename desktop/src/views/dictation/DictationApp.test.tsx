@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import DictationApp from "./DictationApp";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import DictationApp, { ENDED_MESSAGE_MS } from "./DictationApp";
 import { callsOf, emitEvent, listenerCount, pushChannelMessage, resetTauriMock, respond } from "../../test/tauri";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -32,6 +32,28 @@ describe("dictation box", () => {
     expect(screen.getByText("Dictating — press the shortcut again to insert")).toBeInTheDocument();
     await emitEvent("overlay:visibility", false);
     expect(root(container)).toHaveClass("overlay-hidden");
+  });
+
+  it("hides a few seconds after a dictation that could not start, instead of staying on screen (C9)", async () => {
+    const { container } = await renderDictation();
+    vi.useFakeTimers();
+    try {
+      await emitEvent("overlay:visibility", true);
+      await emitEvent("dictation:state", { active: true, sounds: false, mode: "toggle" });
+      await pushChannelMessage({ kind: "status", live: false, recording: false, provider: null, message: "This computer is not paired with an EchoLedger server yet." });
+      await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle" });
+      await act(async () => void vi.advanceTimersByTime(ENDED_MESSAGE_MS - 100));
+      expect(root(container)).not.toHaveClass("overlay-hidden");
+      await act(async () => void vi.advanceTimersByTime(200));
+      expect(root(container)).toHaveClass("overlay-hidden");
+
+      // The next press shows it again.
+      await emitEvent("overlay:visibility", true);
+      await act(async () => void vi.advanceTimersByTime(ENDED_MESSAGE_MS * 2));
+      expect(root(container)).not.toHaveClass("overlay-hidden");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows the in-progress phrase and replaces it with each final turn", async () => {

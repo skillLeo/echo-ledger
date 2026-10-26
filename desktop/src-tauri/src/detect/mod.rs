@@ -22,8 +22,6 @@ use decide::{AskTracker, CallTracker, IgnoreReason, TreeAudio, Verdict, apply_ap
 use sites::{NEVER, SiteRule, strip_browser_suffix, url_host};
 use state::MicUseEvent;
 
-/// The window that shows the unknown-app chip (the review card window).
-const ASK_WINDOW: &str = "review";
 /// How long the chip stays before it dismisses itself.
 pub const ASK_SECONDS: u64 = 8;
 /// Shown for a process whose identity cannot be read.
@@ -245,12 +243,12 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
         let id = uuid::Uuid::new_v4().to_string();
         let payload = ask_payload(&id, &target);
         lock(&detect.asks).insert(id.clone(), target);
-        let _ = app.emit_to(ASK_WINDOW, "ask:show", payload);
+        crate::overlay::show_ask(app, payload); // the chip shares the review card's window
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(Duration::from_secs(ASK_SECONDS)).await;
             if lock(&app.state::<crate::AppState>().detect.asks).remove(&id).is_some() {
-                let _ = app.emit_to(ASK_WINDOW, "ask:hide", ());
+                crate::overlay::hide_ask(&app);
             }
         });
     }
@@ -265,7 +263,7 @@ pub async fn answer_ask(app: &AppHandle, id: &str, answer: &str) -> AppResult<()
     }
     let state = app.state::<crate::AppState>();
     let target = lock(&state.detect.asks).remove(id);
-    let _ = app.emit_to(ASK_WINDOW, "ask:hide", ());
+    crate::overlay::hide_ask(app);
     match (answer, target) {
         ("record", target) => {
             if let Some(t) = &target {

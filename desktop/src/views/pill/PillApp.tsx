@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState } from "../../lib/ipc";
+import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
 import { elapsedAt, formatTimer, isTwoChannel, meterLevel, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { CaptionsIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
@@ -79,6 +79,7 @@ export default function PillApp() {
         else setConfirming(false);
       }),
     ];
+    announceReady(subscriptions, () => alive);
     return () => {
       alive = false;
       subscriptions.forEach((p) => p.then((unlisten) => unlisten()).catch(() => undefined));

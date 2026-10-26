@@ -32,12 +32,15 @@ const playbackUrlOf = (detail: Record<string, unknown>): string | null => (typeo
  * Unified library: every recording from every device, searchable by title and transcript text. Recordings waiting
  * for a decision and uploads that need the user sit at the top of the list; `focus` brings one of them into view.
  */
-export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null }: {
+export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange }: {
   notify: (t: string, e?: boolean) => void;
   focus?: PendingFocus | null;
   onFocusHandled?: () => void;
   /** Open a recording at a moment (from the command palette). */
   openRequest?: { id: string; ms: number; seq: number } | null;
+  /** The recording that was open when the last main window was closed (C9). */
+  initialSelected?: string | null;
+  onSelectedChange?: (id: string | null) => void;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [source, setSource] = useState<SourceFilter>("all");
@@ -53,7 +56,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(initialSelected);
+  useEffect(() => onSelectedChange?.(selected), [selected, onSelectedChange]);
   const [transcript, setTranscript] = useState<TranscriptDetail | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [activeSegment, setActiveSegment] = useState(-1);

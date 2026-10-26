@@ -343,6 +343,23 @@ pub fn subscribe_captions(window: WebviewWindow, on_event: IpcChannel<CaptionEve
     hub.subscribe(window.label(), on_event);
 }
 
+/// The page has attached its listeners: it gets the events kept while its window was built (C9, lifecycle.rs).
+#[tauri::command]
+pub fn window_ready(app: AppHandle, window: WebviewWindow) {
+    crate::lifecycle::ready(&app, window.label());
+}
+
+/// Where the user was in the main window (page, recording, scroll), kept in memory while the window is closed.
+#[tauri::command]
+pub fn main_view_get(state: State<'_, crate::lifecycle::WindowLifecycle>) -> Option<String> {
+    state.main_view()
+}
+
+#[tauri::command]
+pub fn main_view_set(view: String, state: State<'_, crate::lifecycle::WindowLifecycle>) {
+    state.set_main_view(view);
+}
+
 #[tauri::command]
 pub fn overlay_set_hit_regions(window: WebviewWindow, regions: Vec<RectPx>, state: State<'_, HitRegions>) {
     state.0.lock().unwrap().insert(window.label().to_string(), regions);

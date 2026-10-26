@@ -44,7 +44,10 @@ object SettingsTransfer {
         "quietTo"
     )
 
-    /** Kept on this phone: the pairing and everything tied to this server, the lock, consent and the wizard flag. */
+    /**
+     * Kept on this phone: the pairing and everything tied to this server, the lock, consent, the wizard flag and the
+     * look (theme and wallpaper colours follow this phone, like the desktop's theme).
+     */
     val NOT_PORTABLE: Set<String> = setOf(
         "serverUrl",
         "pins",
@@ -57,7 +60,9 @@ object SettingsTransfer {
         "appLockEnabled",
         "lockAfterMs",
         "secureScreen",
-        "onboardingDone"
+        "onboardingDone",
+        "themeMode",
+        "dynamicColour"
     )
 
     sealed interface Result {

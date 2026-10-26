@@ -107,6 +107,10 @@ export async function pushChannelMessage<T>(message: T): Promise<void> {
 
 export function resetTauriMock(): void {
   handlers.clear();
+  // Every window announces itself and the main window asks for its kept view (C9); a test may override these.
+  handlers.set("window_ready", () => undefined);
+  handlers.set("main_view_get", () => null);
+  handlers.set("main_view_set", () => undefined);
   listeners.clear();
   Channel.instances = [];
   invoke.mockClear();

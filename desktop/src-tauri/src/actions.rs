@@ -271,7 +271,7 @@ fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     state.session_link.lock().unwrap_or_else(|p| p.into_inner()).start(&info.client_ref);
     state.pill_hidden.store(false, Ordering::SeqCst);
     state.captions_on_resume.store(false, Ordering::SeqCst);
-    let _ = app.emit_to(crate::overlay::PILL, "pill:visibility", true);
+    crate::overlay::set_pill_visible(app, true);
     start_ticker(app);
     emit_status(app);
     emit_recording_state(app);
@@ -290,7 +290,7 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     let session = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).begin_stop();
     let finished = state.capture.stop()?;
     set_overlay_visible(app, OVERLAY, false);
-    let _ = app.emit_to(crate::overlay::PILL, "pill:visibility", false);
+    crate::overlay::set_pill_visible(app, false);
     *state.recording_started_at.lock().unwrap() = None;
     Ok(finished.map(|f| (f, session, provider)))
 }
@@ -453,12 +453,8 @@ pub fn review_payload(app: &AppHandle) -> Option<crate::commands::ReviewPayload>
 /// Shows the card for the newest undecided recording of this run, or hides it when there is none.
 pub fn refresh_review(app: &AppHandle) {
     match review_payload(app) {
-        Some(payload) => {
-            let _ = app.emit_to(crate::overlay::REVIEW, "review:show", payload);
-        }
-        None => {
-            let _ = app.emit_to(crate::overlay::REVIEW, "review:hide", ());
-        }
+        Some(payload) => crate::overlay::show_review(app, payload),
+        None => crate::overlay::hide_review(app),
     }
 }
 
@@ -542,7 +538,7 @@ pub async fn pending_assign_client(app: &AppHandle, id: &str, client_id: Option<
 pub fn navigate(app: &AppHandle, view: &str, pending_id: Option<String>, rename: bool) {
     let payload = crate::commands::NavigatePayload { view: view.to_string(), pending_id, rename, recording_id: None };
     crate::tray::show_main(app);
-    let _ = app.emit_to("main", "main:navigate", payload);
+    crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
 }
 
 pub fn pending_open(app: &AppHandle, id: &str, rename: bool) -> AppResult<()> {
@@ -551,7 +547,7 @@ pub fn pending_open(app: &AppHandle, id: &str, rename: bool) -> AppResult<()> {
         return Err(AppError::msg(pending::NOT_WAITING));
     }
     state.review_run.lock().unwrap_or_else(|p| p.into_inner()).retain(|r| r != id);
-    let _ = app.emit_to(crate::overlay::REVIEW, "review:hide", ());
+    crate::overlay::hide_review(app);
     navigate(app, "library", Some(id.to_string()), rename);
     Ok(())
 }
@@ -602,7 +598,7 @@ pub fn set_pill_hidden(app: &AppHandle, hidden: bool) {
     let state = app.state::<crate::AppState>();
     state.pill_hidden.store(hidden, Ordering::SeqCst);
     let visible = !hidden && state.capture.is_recording();
-    let _ = app.emit_to(crate::overlay::PILL, "pill:visibility", visible);
+    crate::overlay::set_pill_visible(app, visible);
     emit_status(app);
     emit_recording_state(app);
 }
@@ -993,7 +989,7 @@ pub fn show_main_from_outside(app: &AppHandle) {
         && at.elapsed() < NOTIFIED_WINDOW
     {
         let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: Some(id) };
-        let _ = app.emit_to("main", "main:navigate", payload);
+        crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
     }
 }
 

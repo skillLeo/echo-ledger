@@ -191,6 +191,88 @@ fn sending_with_no_subscribers_or_no_matching_target_is_harmless() {
     assert!(log.lock().unwrap().is_empty());
 }
 
+// ---- Hub: windows built on demand (C9) ---------------------------------------------------------------------------
+
+fn partial(channel: u8, text: &str) -> CaptionEvent {
+    CaptionEvent::Partial {
+        speaker: if channel == 1 { "Me" } else { "Client" }.into(),
+        channel,
+        text: text.into(),
+    }
+}
+
+fn final_line(channel: u8, text: &str) -> CaptionEvent {
+    CaptionEvent::Final {
+        speaker: if channel == 1 { "Me" } else { "Client" }.into(),
+        channel,
+        text: text.into(),
+        start_ms: 0,
+        end_ms: 1,
+    }
+}
+
+fn live() -> CaptionEvent {
+    CaptionEvent::Status {
+        live: true,
+        recording: true,
+        provider: None,
+        message: None,
+    }
+}
+
+#[test]
+fn a_window_built_after_captions_started_gets_what_it_would_show() {
+    let hub = CaptionHub::default();
+    hub.send(&["overlay"], CaptionEvent::Clear);
+    hub.send(&["overlay"], live());
+    hub.send(&["overlay"], partial(1, "hel"));
+    hub.send(&["overlay"], final_line(1, "hello"));
+    hub.send(&["overlay"], partial(2, "how a"));
+    hub.send(&["overlay"], partial(2, "how are"));
+
+    let (late, log) = recording_channel();
+    hub.subscribe("overlay", late);
+    let texts: Vec<Value> = log.lock().unwrap().iter().map(|e| e["text"].clone()).collect();
+    assert_eq!(log.lock().unwrap()[0]["kind"], "status", "the status comes first");
+    assert_eq!(texts[1..], [json!("hello"), json!("how are")], "the final replaced its partial; one partial per channel");
+
+    hub.send(&["overlay"], final_line(2, "how are you"));
+    assert_eq!(log.lock().unwrap().len(), 4, "then it gets new events as usual");
+}
+
+#[test]
+fn a_clear_forgets_the_kept_captions_and_other_windows_keep_theirs() {
+    let hub = CaptionHub::default();
+    hub.send(&["overlay", "main"], final_line(1, "old call"));
+    hub.send(&["overlay"], CaptionEvent::Clear);
+    let (overlay, overlay_log) = recording_channel();
+    let (main, main_log) = recording_channel();
+    hub.subscribe("overlay", overlay);
+    hub.subscribe("main", main);
+    assert!(overlay_log.lock().unwrap().is_empty(), "a new recording never shows the last one's lines");
+    assert_eq!(main_log.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn a_rebuilt_window_gets_the_newest_lines_up_to_what_the_overlay_keeps() {
+    use desktop_lib::stt::captions::REPLAY_LINES;
+    let hub = CaptionHub::default();
+    for i in 0..REPLAY_LINES + 25 {
+        hub.send(&["overlay"], final_line(1, &format!("line {i}")));
+    }
+    let (first, _) = recording_channel();
+    hub.subscribe("overlay", first);
+    hub.unsubscribe("overlay"); // the window was destroyed
+    hub.send(&["overlay"], final_line(1, "while closed"));
+
+    let (rebuilt, log) = recording_channel();
+    hub.subscribe("overlay", rebuilt);
+    let log = log.lock().unwrap();
+    assert_eq!(log.len(), REPLAY_LINES);
+    assert_eq!(log[0]["text"], format!("line {}", 26));
+    assert_eq!(log[REPLAY_LINES - 1]["text"], "while closed", "nothing sent while it was gone is lost");
+}
+
 // ---- Buffer: windows -------------------------------------------------------------------------------------------
 
 #[test]

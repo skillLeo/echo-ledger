@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use enigo::{Direction, Enigo, Key, Keyboard, Settings};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 use crate::audio::MicStream;
@@ -36,7 +36,7 @@ pub struct DictationState {
 fn emit_state(app: &AppHandle, active: bool) {
     let settings = app.state::<crate::AppState>().settings();
     let state = DictationState { active, sounds: settings.dictation_sounds, mode: settings.dictation_mode.clone() };
-    let _ = app.emit_to(DICTATION, "dictation:state", state);
+    crate::lifecycle::emit(app, DICTATION, "dictation:state", state);
 }
 
 pub async fn start(app: &AppHandle) -> AppResult<()> {
@@ -46,6 +46,7 @@ pub async fn start(app: &AppHandle) -> AppResult<()> {
     }
     state.dictation_text.lock().unwrap().clear();
     state.dictation_stop_requested.store(false, Ordering::SeqCst);
+    // Before the stream opens, so the box is built while the key is still down (C9: it is built on demand).
     set_overlay_visible(app, DICTATION, true);
     emit_state(app, true);
     app.state::<CaptionHub>().send(TARGETS, CaptionEvent::Clear);
@@ -85,7 +86,7 @@ pub async fn start(app: &AppHandle) -> AppResult<()> {
 fn spawn_level_meter(app: AppHandle, level: std::sync::Arc<std::sync::atomic::AtomicU32>) {
     tauri::async_runtime::spawn(async move {
         while is_active(&app) {
-            let _ = app.emit_to(DICTATION, "dictation:level", f32::from_bits(level.load(Ordering::Relaxed)));
+            crate::lifecycle::emit(&app, DICTATION, "dictation:level", f32::from_bits(level.load(Ordering::Relaxed)));
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     });

@@ -13,7 +13,7 @@ const DictationApp = lazy(() => import("./views/dictation/DictationApp"));
 const PillApp = lazy(() => import("./views/pill/PillApp"));
 const ReviewApp = lazy(() => import("./views/review/ReviewApp"));
 
-/** Views of the windows the core creates in its setup hook; any other label is the main window. */
+/** Views of the overlay windows the core builds on demand (lifecycle.rs); any other label is the main window. */
 const WINDOW_VIEWS = new Map([
   ["overlay", OverlayApp],
   ["dictation", DictationApp],

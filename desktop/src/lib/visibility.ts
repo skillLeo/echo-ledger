@@ -1,27 +1,17 @@
-// C9: the main window is hidden, not closed, when the user closes it (it lives in the tray). WebView2 is not told,
-// so timers keep running; the core announces "main:visibility" and the polling views stop while it is hidden.
+// C9: the views that poll stop while the main window is off screen. Closing the window destroys it (an idle app runs
+// no web view), and a new one is built hidden and shown as soon as its page is ready, so the page starts as shown;
+// the core announces "main:visibility" when that changes (WebView2 is not told, so timers would keep running).
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export const VISIBILITY_EVENT = "main:visibility";
 
-/** Whether the main window is on screen (true outside Tauri, so the views behave as before in a browser). */
+/** Whether the main window is on screen (true until the core says otherwise, also outside Tauri). */
 export function useWindowShown(): boolean {
   const [shown, setShown] = useState(true);
   useEffect(() => {
-    let alive = true;
-    try {
-      getCurrentWindow()
-        .isVisible()
-        .then((v) => alive && setShown(v))
-        .catch(() => undefined);
-    } catch {
-      // plain browser or tests: no window to ask
-    }
     const un = listen<boolean>(VISIBILITY_EVENT, (e) => setShown(e.payload !== false));
     return () => {
-      alive = false;
       un.then((f) => f()).catch(() => undefined);
     };
   }, []);

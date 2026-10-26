@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { listenTo, subscribeCaptions } from "../../lib/ipc";
+import { announceReady, listenTo, subscribeCaptions } from "../../lib/ipc";
 import { meterLevel } from "../../lib/controls";
 import { playTone } from "../../lib/sounds";
+
+/**
+ * How long the box stays when a dictation ended while it was still shown (it could not start: not paired, no
+ * microphone): long enough to read why, then it hides, because a box left on screen keeps drawing (C9).
+ */
+export const ENDED_MESSAGE_MS = 4000;
 
 /**
  * Tiny unfocusable dictation box with a flow bar (B14): a level meter and what you say; the text is typed into your
@@ -15,10 +21,12 @@ export default function DictationApp() {
   const [message, setMessage] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
   const [holding, setHolding] = useState(false);
+  const [ended, setEnded] = useState(false);
   const textRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    subscribeCaptions((e) => {
+    let alive = true;
+    const subscribed = subscribeCaptions((e) => {
       if (e.kind === "clear") {
         setFinals([]);
         setPartial("");
@@ -30,19 +38,32 @@ export default function DictationApp() {
       } else if (e.kind === "status") setMessage(e.message);
     }).catch(() => undefined);
     const subscriptions = [
-      listen<boolean>("overlay:visibility", (e) => setVisible(e.payload)),
+      listen<boolean>("overlay:visibility", (e) => {
+        setVisible(e.payload);
+        if (e.payload) setEnded(false);
+      }),
       listenTo("dictation:level", (l) => setLevel(typeof l === "number" ? l : 0)),
       listenTo("dictation:state", (s) => {
         if (!s) return;
         setHolding(s.mode === "push_to_talk");
         if (s.sounds) playTone(s.active ? "start" : "stop");
+        setEnded(!s.active);
         if (!s.active) setLevel(0);
       }),
     ];
+    announceReady([subscribed, ...subscriptions], () => alive);
     return () => {
+      alive = false;
       subscriptions.forEach((p) => p.then((f) => f()).catch(() => undefined));
     };
   }, []);
+
+  // A finished dictation hides the box before it ends; one that could not start leaves it shown with the reason.
+  useEffect(() => {
+    if (!visible || !ended) return;
+    const timer = window.setTimeout(() => setVisible(false), ENDED_MESSAGE_MS);
+    return () => window.clearTimeout(timer);
+  }, [visible, ended]);
 
   // Long dictation wraps inside the small box and scrolls; the newest words stay in view (A6.DU8).
   useEffect(() => {

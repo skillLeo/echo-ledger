@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type AnimationEvent, type MouseEvent } from "react";
-import { api, errorMessage, listenTo, type AskAnswer, type AskPayload, type PendingItem, type ReviewPayload } from "../../lib/ipc";
+import { announceReady, api, errorMessage, listenTo, type AskAnswer, type AskPayload, type PendingItem, type ReviewPayload } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
 import { alwaysIgnoreLabel, askSeconds, askSubject, countdownText, reviewDuration, reviewTitle } from "../../lib/controls";
 import { MicIcon, SourceAppIcon } from "../../components/Icons";
@@ -59,6 +59,7 @@ export default function ReviewApp() {
         setReview((current) => (current && current.timeout !== settings.decisionTimeout ? { ...current, timeout: settings.decisionTimeout } : current));
       }),
     ];
+    announceReady(subscriptions, () => alive);
     return () => {
       alive = false;
       subscriptions.forEach((p) => p.then((unlisten) => unlisten()).catch(() => undefined));

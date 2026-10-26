@@ -1,7 +1,8 @@
-//! Overlay-type windows: caption overlay, dictation box, recording pill and review card. Created once in the setup
-//! hook, visible, unfocused and unfocusable (never `show()` or `set_focus()` afterwards — tao ≥ 0.37.1 would steal
-//! focus); "hidden" = the view renders nothing and reports no hit regions, so the window is fully click-through.
-//! docs/research/desktop-tauri.md §2.
+//! Overlay-type windows: caption overlay, dictation box, recording pill and review card. Built on first use and
+//! destroyed after they have been hidden for a while (lifecycle.rs, C9), always visible, unfocused and unfocusable
+//! (never `show()` or `set_focus()` — tao ≥ 0.37.1 would steal focus; tao builds them with `WS_EX_NOACTIVATE` and
+//! `SW_SHOWNOACTIVATE`, so one built mid-call never takes focus either); "hidden" = the view renders nothing and
+//! reports no hit regions, so the window is fully click-through. docs/research/desktop-tauri.md §2.
 
 pub mod geometry;
 
@@ -9,9 +10,10 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, Monitor, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-use crate::settings::{CaptionSize, CaptionStyle, CaptionWidth};
+use crate::lifecycle;
+use crate::settings::{CaptionSize, CaptionStyle, CaptionWidth, Settings};
 use geometry::{Corner, PillPosition, RectPx, WorkArea, caption_overlay_size_for, cursor_in_regions, dock, pill_origin};
 
 pub const OVERLAY: &str = "overlay";
@@ -42,7 +44,7 @@ pub fn poll_period(has_regions: bool, all_ignoring: bool) -> Duration {
     if has_regions || !all_ignoring { ACTIVE_POLL } else { IDLE_POLL }
 }
 
-/// What `create_overlays` needs from the settings.
+/// What `create_overlay` needs from the settings.
 #[derive(Clone, Copy, Debug)]
 pub struct OverlaySetup {
     pub corner: Corner,
@@ -51,6 +53,20 @@ pub struct OverlaySetup {
     pub caption_size: CaptionSize,
     pub caption_width: CaptionWidth,
     pub pill_position: Option<PillPosition>,
+}
+
+impl OverlaySetup {
+    /// Read when a window is built, so a rebuilt one has the current corner, size, protection and pill position.
+    pub fn from_settings(settings: &Settings) -> Self {
+        Self {
+            corner: settings.overlay_corner,
+            content_protected: settings.content_protection,
+            caption_lines: settings.caption_lines,
+            caption_size: settings.caption_style.size,
+            caption_width: settings.caption_style.width,
+            pill_position: settings.pill_position,
+        }
+    }
 }
 
 fn title(label: &str) -> &'static str {
@@ -86,28 +102,25 @@ fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64), protecte
         .build()
 }
 
-/// Creates every overlay-type window that does not exist yet, all initially click-through (call from the setup
-/// hook or an async task — never from a sync command or an event handler).
-pub fn create_overlays<R: Runtime>(app: &AppHandle<R>, setup: OverlaySetup) -> tauri::Result<()> {
-    if app.get_webview_window(OVERLAY).is_none() {
-        let window = build(app, OVERLAY, caption_overlay_size_for(setup.caption_lines, setup.caption_size, setup.caption_width), setup.content_protected)?;
-        let _ = window.set_ignore_cursor_events(true);
-        redock(&window, setup.corner);
+/// Builds one overlay-type window when it does not exist yet, click-through and docked or placed from the settings
+/// (call from an async task — never from a sync command or an event handler).
+pub fn create_overlay<R: Runtime>(app: &AppHandle<R>, label: &str, setup: OverlaySetup) -> tauri::Result<()> {
+    if app.get_webview_window(label).is_some() {
+        return Ok(());
     }
-    if app.get_webview_window(DICTATION).is_none() {
-        let window = build(app, DICTATION, DICTATION_SIZE, setup.content_protected)?;
-        let _ = window.set_ignore_cursor_events(true);
-        redock(&window, top_center_corner(setup.corner));
-    }
-    if app.get_webview_window(PILL).is_none() {
-        let window = build(app, PILL, PILL_SIZE, setup.content_protected)?;
-        let _ = window.set_ignore_cursor_events(true);
-        place_pill(&window, setup.pill_position);
-    }
-    if app.get_webview_window(REVIEW).is_none() {
-        let window = build(app, REVIEW, REVIEW_SIZE, setup.content_protected)?;
-        let _ = window.set_ignore_cursor_events(true);
-        dock_on_primary(&window, Corner::BottomRight);
+    let size = match label {
+        OVERLAY => caption_overlay_size_for(setup.caption_lines, setup.caption_size, setup.caption_width),
+        DICTATION => DICTATION_SIZE,
+        PILL => PILL_SIZE,
+        _ => REVIEW_SIZE,
+    };
+    let window = build(app, label, size, setup.content_protected)?;
+    let _ = window.set_ignore_cursor_events(true);
+    match label {
+        OVERLAY => redock(&window, setup.corner),
+        DICTATION => redock(&window, top_center_corner(setup.corner)),
+        PILL => place_pill(&window, setup.pill_position),
+        _ => dock_on_primary(&window, Corner::BottomRight),
     }
     Ok(())
 }
@@ -204,13 +217,17 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
             };
             let all_ignoring = WINDOWS.iter().all(|l| ignoring.get(l) == Some(&true));
             period = poll_period(!regions.is_empty(), all_ignoring);
-            // Nothing interactive and every window already click-through: no cursor query, no window calls.
-            if !resync && regions.is_empty() && all_ignoring {
+            // Nothing interactive and every window already click-through (or no overlay built): no cursor query, no
+            // window calls.
+            if (!resync && regions.is_empty() && all_ignoring) || WINDOWS.iter().all(|l| app.get_webview_window(l).is_none()) {
                 continue;
             }
             let Ok(cursor) = app.cursor_position() else { continue };
             for label in WINDOWS {
-                let Some(window) = app.get_webview_window(label) else { continue };
+                let Some(window) = app.get_webview_window(label) else {
+                    ignoring.insert(label, true); // a rebuilt window starts click-through
+                    continue;
+                };
                 let want_ignore = match regions.get(label) {
                     None => true,
                     Some(rects) => match window.inner_position() {
@@ -226,17 +243,59 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
     });
 }
 
-/// Visibility of overlay content (the window itself stays created; see module docs).
-pub fn set_overlay_visible<R: Runtime>(app: &AppHandle<R>, label: &str, visible: bool) {
-    let _ = app.emit_to(label, "overlay:visibility", visible);
-    if !visible {
-        if let Ok(mut map) = app.state::<HitRegions>().0.lock() {
-            map.remove(label);
-        }
-        if let Some(w) = app.get_webview_window(label) {
-            let _ = w.set_ignore_cursor_events(true);
-        }
+/// Shows the caption overlay or the dictation box (built first when needed), or hides its content; a hidden one is
+/// destroyed after the grace (lifecycle.rs).
+pub fn set_overlay_visible(app: &AppHandle, label: &'static str, visible: bool) {
+    if visible {
+        lifecycle::show(app, label, label);
     }
+    lifecycle::emit(app, label, "overlay:visibility", visible);
+    if !visible {
+        make_click_through(app, label);
+        lifecycle::hide(app, label, label);
+    }
+}
+
+fn make_click_through(app: &AppHandle, label: &str) {
+    if let Ok(mut map) = app.state::<HitRegions>().0.lock() {
+        map.remove(label);
+    }
+    if let Some(w) = app.get_webview_window(label) {
+        let _ = w.set_ignore_cursor_events(true);
+    }
+}
+
+/// The recording pill on or off.
+pub fn set_pill_visible(app: &AppHandle, visible: bool) {
+    if visible {
+        lifecycle::show(app, PILL, "pill");
+    }
+    lifecycle::emit(app, PILL, "pill:visibility", visible);
+    if !visible {
+        lifecycle::hide(app, PILL, "pill");
+    }
+}
+
+/// The review card (A2.2): shown with the newest undecided recording, or hidden.
+pub fn show_review<S: serde::Serialize>(app: &AppHandle, payload: S) {
+    lifecycle::show(app, REVIEW, "review");
+    lifecycle::emit(app, REVIEW, "review:show", payload);
+}
+
+pub fn hide_review(app: &AppHandle) {
+    lifecycle::emit(app, REVIEW, "review:hide", ());
+    lifecycle::hide(app, REVIEW, "review");
+}
+
+/// The "ask" chip for an unrecognised call app shares the review card's window.
+pub fn show_ask<S: serde::Serialize>(app: &AppHandle, payload: S) {
+    lifecycle::show(app, REVIEW, "ask");
+    lifecycle::emit(app, REVIEW, "ask:show", payload);
+}
+
+pub fn hide_ask(app: &AppHandle) {
+    lifecycle::emit(app, REVIEW, "ask:hide", ());
+    lifecycle::hide(app, REVIEW, "ask");
 }
 
 #[cfg(test)]

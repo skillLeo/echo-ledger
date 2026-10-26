@@ -1,19 +1,20 @@
 # EchoLedger v1.1 — Handoff
 
 ## Snapshot
-- 2026-10-26 (Asia/Karachi), branch `v1.1`, B20 finished (commits `abef106`..`f9fe21f` plus the final docs commit).
-- Tests (end of B20):
-  - Web (Pest, SQLite, `--parallel`): 3049 passed, 1 failed (the timing test below). MariaDB: 3048 passed, 2 failed (the same timing test and its 20,001 twin, run while Gradle was building; alone: 8/9 then 9/9).
-  - Desktop core (`cargo test`): 801 passed, 0 failed (1 ignored). Desktop UI (`vitest`): 948/948.
-  - Android (`testDebugUnitTest`): 834 passed, 0 failed.
-  - Repo policy (`node --test tools/repo-policy.test.mjs`): 23/23.
-- Linters: Pint clean, PHPStan 0 errors, `cargo clippy --all-targets -D warnings` clean, `tsc --noEmit` clean, ktlint and Android lint clean. macOS cross clippy not re-run (the `mac-check.ps1` script lived in an older session's scratchpad; B20 changed only `error.rs` / `stt/mod.rs` text, no platform code).
+- 2026-10-26 (Asia/Karachi), branch `v1.1`, Phase 6 finished (C1-C9).
+- Tests (end of Phase 6):
+  - Web (Pest, SQLite, `--parallel`): 3055 passed, 1 failed (the timing test below: 4.7 s under load, 2.29 s alone). MariaDB: 3056 passed, 0 failed.
+  - Desktop core (`cargo test`): 824 passed, 0 failed (1 ignored). Desktop UI (`vitest`): 994/994; `npm run build` ok.
+  - Android (`testDebugUnitTest`): 862 tests; the one failure (`SettingsTransferTest`: C4's `themeMode` / `dynamicColour` were in neither list) is fixed and the class re-run green; `assembleDebug`, `assembleDebugAndroidTest`, ktlint and lint passed in the same run.
+  - Repo policy: 23/23. Design tokens: 5/5.
+- Linters: Pint clean, PHPStan 0 errors, `cargo clippy --all-targets -D warnings` clean, `tsc --noEmit` clean, ktlint and Android lint clean. macOS cross clippy not re-run (the `mac-check.ps1` script lived in an older session's scratchpad); C9 adds no platform-specific code.
 - Known failing / flaky tests:
   - `Tests\Feature\Api\TranscriptValidationSpeedTest` "accepts 20,000 segments in under two seconds": timing budget (4 s parallel, 2 s alone). Fails on battery or under load (seen 2.0-8 s on SQLite and MariaDB). Not a B20 regression: with the workspace scope switched off it measured 2.24 s / 2.24 s / pass, the same as with it on.
+  - The same timing test passes on MariaDB (3056/3056) and failed alone on SQLite at 2.29 s (budget 2 s); no web code changed in Phase 6's last session.
   - `LibraryView.test.tsx` "handles a very long transcript without dropping segments" and `PillApp.test.tsx` "brings the pill back when Stop fails": time out only when Gradle or cargo run at the same time; pass alone.
 ## Progress
-- Plan items: 148 in PLAN_V1_1.md: 94 Done ([x]), 32 Partial ([~]), 21 Not started, 1 Blocked. Ticked = 94/148 = **64 %**.
-- All 32 Partial items are built and covered by automated tests on every platform and wait only for on-device checks (docs/MANUAL_QA.md sections 7-15). Weighted by remaining effort, about **71 %** of the upgrade brief is done.
+- Plan items: 148 in PLAN_V1_1.md: 101 Done ([x]), 36 Partial ([~]), 10 Not started, 1 Blocked. Ticked = 101/148 = **68 %**.
+- All 36 Partial items are built and covered by automated tests on every platform and wait only for on-device checks (docs/MANUAL_QA.md sections 7-15 and 17). Weighted by remaining effort, about **77 %** of the upgrade brief is done.
 
 | Item | Summary | Status |
 |---|---|---|
@@ -149,15 +150,15 @@
 | B18 | Notifications and activity centre (W, D, P): bell, OS notifications... | Partial |
 | B19 | Onboarding and system-style settings (W, D, P): first-run wizard, g... | Partial |
 | B20 | Usage dashboard and SaaS foundations (W): minutes and cost per prov... | Done |
-| C1 | One token file per app (colour, 8-pt spacing, radius 8/12/16, shado... | Not started |
-| C2 | Desktop: Mica/Acrylic (Windows 11) with solid fallback, macOS vibra... | Not started |
-| C3 | Web: custom Filament theme (Vite): page headers, breadcrumbs, stick... | Not started |
-| C4 | Android: Material 3 with optional dynamic colour, edge-to-edge, pre... | Not started |
-| C5 | Motion 150–220 ms ease-out, respects reduce-motion. | Not started |
-| C6 | Loading, empty, error (Retry) and offline states on every list and ... | Not started |
-| C7 | Accessibility: WCAG 2.2 AA contrast, focus rings, full keyboard use... | Not started |
-| C8 | Copy pass: short, plain, sentence case. | Not started |
-| C9 | Performance budgets measured and reported: desktop idle ≤ 150 MB an... | Not started |
+| C1 | One token file per app (colour, 8-pt spacing, radius 8/12/16, shado... | Done |
+| C2 | Desktop: Mica/Acrylic (Windows 11) with solid fallback, macOS vibra... | Partial |
+| C3 | Web: custom Filament theme (Vite): page headers, breadcrumbs, stick... | Done |
+| C4 | Android: Material 3 with optional dynamic colour, edge-to-edge, pre... | Partial |
+| C5 | Motion 150–220 ms ease-out, respects reduce-motion. | Done |
+| C6 | Loading, empty, error (Retry) and offline states on every list and ... | Done |
+| C7 | Accessibility: WCAG 2.2 AA contrast, focus rings, full keyboard use... | Partial |
+| C8 | Copy pass: short, plain, sentence case. | Done |
+| C9 | Performance budgets measured and reported: desktop idle ≤ 150 MB an... | Done |
 | P7.1 | All suites and linters green; tests for every new feature. | Not started |
 | P7.2 | Security re-sweep: no key leaks, pins intact, every API route autho... | Not started |
 | P7.3 | docs/MANUAL_QA.md, docs/API.md, docs/ARCHITECTURE.md, README.md upd... | Not started |
@@ -167,7 +168,7 @@
 | P8.4 | `v1.1` merged into `main` and pushed. | Not started |
 
 ## In progress right now
-- **Phase 6 in progress.** Done: C1, C3, C5, C6, C8 [x]; C2, C4, C7 [~] (device checks in docs/MANUAL_QA.md section 17). **Open: C9 desktop idle memory** (see "Phase 6 results" below), then the Phase 6 finish: all suites + linters once (Android full gate not run since C4), re-take the after screenshots (desktop / web / phone; several after shots predate C6-C8), list the pairs, commit, "Next: Phase 7".
+- **Phase 6 done.** C1, C3, C5, C6, C8, C9 [x]; C2, C4, C7 [~] (device checks in docs/MANUAL_QA.md section 17, which now also has V-D8-V-D11 for the windows built on demand). Nothing in progress.
 - B20 is done (Done, not Partial: web only; its checks in docs/MANUAL_QA.md section 16 are deploy verifications).
 - Where things are:
   - Schema: `web/database/migrations/2026_11_01_00000{1,2,3}_*.php`; models `Plan`, `Workspace`, trait `Models/Concerns/BelongsToWorkspace.php`, `Models/Scopes/WorkspaceScope.php`.
@@ -177,8 +178,8 @@
 - Migration cycle result (B20): `WorkspaceMigrationCycleTest` seeds 3 users (2 super admins, 1 plain) × device, pairing code, client + keyterm, 7 sessions (1 binned) each with recording, transcript, marker, label, share link + view and a usage row; up → down → up keeps every row count identical, maps every row to its user's workspace, NOT NULL and the foreign key reject bad rows, and a second backfill run changes nothing. Passed on SQLite and on MariaDB 10.4 (2/2 each). Step 3 refuses to run while a row has no workspace.
 
 ## Next steps (in order)
-1. **Next: finish Phase 6** — C9 desktop idle memory (plan above), then the Phase 6 finish steps (see "In progress right now").
-2. Then Phase 7 QA (P7.1-P7.3, write the user guide), then Phase 8 release (P8.1-P8.4, with the B20 deploy notes below).
+1. **Next: Phase 7 final QA + user guide (use Sonnet 5.5 Medium)**: P7.1-P7.3, docs/USER_GUIDE.md; update docs/ARCHITECTURE.md for the on-demand windows (lifecycle.rs).
+2. Then Phase 8 release (P8.1-P8.4, with the B20 deploy notes below).
 ## Phase 6 audit
 - Screens. Desktop main window: Library (list, detail and player, decision and upload queue, bin), Record, Settings (10 groups), first-run wizard, pairing, lock screen, command palette, activity bell, toasts and banners. Desktop overlays: captions, control pill, review card (and "ask" chip), dictation bar; tray menu. Web: login (passkey), dashboard (checklist, stats, chart), sessions list (smart-view tabs), session page (player, share links, history, compare), search, clients (+ keyterms), recently deleted, security, devices, API credentials, settings (8 tabs), usage, workspace, profile, public share pages. Phone: library, session (player, tools, organise), record, call setup, settings hub + 8 groups, dictation, security and activity, onboarding, pairing, lock screen, QR scanner, home-screen widget.
 - Screenshot tooling: desktop `desktop/screenshots/harness.html` (Vite dev, mocked Tauri IPC through `@tauri-apps/api/mocks`); phone `ScreenshotsTest` (Robolectric native graphics, writes `app/build/screenshots`); web = browser driver against `php artisan serve` on a scratch SQLite seeded with `--seed`. Shots go to `design-review/` (git-ignored).
@@ -193,14 +194,26 @@
   8. Main window has no window material (no Mica / vibrancy), font stack starts with Inter (not bundled), polls status every 1.5 s even when hidden.
   9. All apps: no shared spacing / radius / motion tokens (radii 9-14 px mixed, transitions 0.12 s), several hard-coded colours.
 
-## Phase 6 results (so far)
-- **Desktop idle** (release build, fresh unpaired data, started with `--autostart`, main window never shown, 60 s sample; measure script: docs/MANUAL_QA.md P-1): CPU **0.03 %** of the machine (234 ms CPU in 60 s; budget < 1 %: met). Memory **310 MB private working set** (Task Manager), 763 MB working set, 11 processes: the app 14 MB, the WebView2 browser 86 MB, GPU / utility ~45 MB and one renderer of ~30 MB **per window** (main + caption overlay + dictation + pill + review). Budget ≤ 150 MB: **missed**. `--renderer-process-limit=1` (all windows in one renderer) was tried and changed nothing; reverted.
-  - Plan to meet it (not started, needs care): create windows only when used and close them after, so an idle app runs no WebView2 at all (~15-20 MB): main window `"create": false` in tauri.conf.json, built by `tray::show_main` from the config (`WebviewWindowBuilder::from_config`) and destroyed on close; material, theme and lock commands then target it while it exists; pending navigation (`main:navigate`, notification clicks) must be kept in state and read by the page on mount. Overlays: `overlay::create_overlays` per window on first use (captions start, recording start, a decision, dictation) and closed after the last use; the page must signal "ready" before the core emits its show / caption events (captions arriving before the Channel subscription are lost today's way). Keep the "create unfocused, never show()" rule (overlay/mod.rs header). Device-check focus and click-through after the change.
+## Phase 6 results
+- **Desktop idle** (release build `npx tauri build --no-bundle`, fresh unpaired data with `%APPDATA%\com.echoledger.desktop` moved aside and restored unchanged after each run, `--autostart`, 30 s settle + 60 s sample, private working set as in Task Manager, summed over the app and every `msedgewebview2.exe` in its process tree; method: docs/MANUAL_QA.md P-1). Budgets ≤ 150 MB and < 1 % CPU: **met**.
+  | State | Processes | Private working set | CPU (of 12 cores) |
+  |---|---|---|---|
+  | Before C9 (5 windows built at start) | 11 | 310 MB | 0.03 % |
+  | After: idle, only the dictation bar kept ready | 7 | **96 MB** | **0.04 %** |
+  | After a dictation and opening + closing the main window | 8 | 126 MB | 0.22 % |
+  | No window at all (dictation shortcut unbound) | 1 | 3-5 MB | 0.01-0.02 % |
+  - What the 96 MB is: WebView2 browser ~35 MB, GPU ~27 MB, the dictation bar's renderer ~15-18 MB, utility ~11 MB, the app 4 MB. The browser grows to ~59 MB once the main window has been open (caches), hence 126 MB.
+- **How (C9, `desktop/src-tauri/src/lifecycle.rs`)**: nothing is built in the setup hook. Main window `"create": false`, built from its tauri.conf.json entry when opened (tray, second launch, notification, navigate), shown when its page is ready (fallback 1.5 s), **destroyed on close**; where the user was (page, open recording, scroll of `.content` / `.list` / `.detail`) is kept in the core's memory for this run (`main_view_get` / `main_view_set`, `lib/mainView.ts`). Overlays (captions, pill, review card + ask chip, dictation) are built on first use and **destroyed 30 s after they are hidden** (`HIDE_GRACE`); a rebuilt one reads corner, size, content protection and pill position from the settings. Events for a window still being built are kept (latest of each kind, in order) and sent when the page calls `window_ready` (after its listeners are attached); captions are replayed by `CaptionHub` (status, last 200 final lines, each channel's partial). No-focus rule unchanged: same builder (`focused(false)`, `focusable(false)`, never `show()`); tao-0.37.2 builds such windows with `WS_EX_NOACTIVATE` and `SW_SHOWNOACTIVATE` (window_state.rs 293 / 461), so one built mid-call does not take focus. Device checks: MANUAL_QA V-D8-V-D11.
+- **Open latency** (trigger → page ready = rendered and listening, release build, logged by `lifecycle::ready`): cold, no web view running: captions 1104 ms, pill 990 ms, review 1007 ms, dictation 981 ms. With WebView2 already running (dictation bar kept ready): captions 534 ms, pill 593 ms, review 594 ms, main window 456-695 ms. **Dictation**: building it already starts on the key going down, but ~1 s is not instant, so the **dictation bar is the one window kept warm** (`lifecycle::WARM`, while a dictation shortcut is bound): pressing the shortcut shows it with one event. Overlay latencies were measured with a temporary probe build (not committed) that opened each overlay through `lifecycle::show`, because a real recording needs pairing and pairing a test copy would overwrite the real device token in Windows Credential Manager (see Gotchas).
+- **Fixed on the way**: a dictation that could not start (not paired, no network) left the bar on screen for good, drawing at ~3.9 % CPU; it now hides 4 s after showing why (`DictationApp` `ENDED_MESSAGE_MS`, regression test). The Phase 6 screenshot review also fixed: quiet-hours time fields full width (desktop settings), wizard "Skip setup" and "Continue" on separate rows, review-card harness deadline in the past ("Keeping in 0 s").
 - Fixed in C9: the hidden main window stopped polling (1.5 s status, 2 s microphone scan); the overlay click-through loop idles at 4 Hz (was 30 Hz) and wakes on a new hit region; detection already runs at 1 Hz.
 - **Web** (3,005 recordings with transcripts + 30 clients on SQLite, `php artisan serve` with opcache off, median of 5 warm loads, request start to first byte): dashboard 210 ms, sessions list 231 ms, session page with player 90 ms, clients 100 ms, search 127 ms, usage 86 ms, settings 83 ms (budget < 300 ms: met). Lists are paginated (the members table now too); lazy loading throws outside production and found 3 N+1s (bulk zip export, transcript purge, console player) plus a per-row role query on the sessions list; query-budget tests guard the sessions and clients lists and `/api/library`.
 - **Phone**: no wake locks; the widget updates on events only (`updatePeriodMillis="0"`); the only periodic job is the 15-minute activity check decided in B18.
 - **Recording with captions (< 8 % CPU)**: needs a real call and a provider key; how to measure: docs/MANUAL_QA.md P-2.
-- Before / after screenshots (design-review/, git-ignored): `before/<name>.png` → `after/<name>.png` for desktop-{library,library-empty,record,settings,onboarding,lock,overlay,pill,review,dictation}-{dark,light}, desktop-mica-accent-{dark,light} (after only), web-{dashboard,sessions,player,clients,settings,usage}-{dark,light}[-phone], phone-{library,library-empty,session,record,settings,settings-recording,onboarding,lock} (before: dark only; after: -dark / -light).
+- Before / after screenshots (design-review/, git-ignored; every after shot re-taken at the end of Phase 6 from the final code): `before/<name>.png` → `after/<name>.png` for
+  - desktop (22): desktop-{library,library-empty,record,settings,onboarding,lock,overlay,pill,review,dictation}-{dark,light}, plus desktop-mica-accent-{dark,light} (after only);
+  - web (28): web-{login,dashboard,sessions,player,clients,settings,usage}-{dark,light}[-phone] (the old after "dashboard" shots showed the sign-in page; the new ones are signed in);
+  - phone (16): phone-{library,library-empty,session,record,settings,settings-recording,onboarding,lock}-{dark,light} (before: dark only, without the suffix).
 ## B20 design (workspaces, roles, plan limits, usage)
 - **New tables:** `plans` (key, name, `monthly_minutes`, `storage_bytes`, `max_devices`; null = no limit), `workspaces` (name, `plan_id`), `workspace_user` (workspace, user, `role` owner|member, unique pair); `users.current_workspace_id` (nullable, null on delete).
 - **Get `workspace_id`:** the five root tables that own user data: `devices`, `device_pairing_codes`, `clients`, `capture_sessions`, `usage_ledger`. Their `user_id` stays (creator / device owner; notifications and per-user rules use it).
@@ -241,6 +254,8 @@
 - B19 console: the Settings tabs bind `Tabs::livewireProperty('activeTab')` (value = a group key); inactive tabs are not rendered, a search jumps to the first group with a match. Export / import are page header actions; the import fills the form and saves, and rolls the form back if validation fails.
 - Android dictation is a voice-keyboard IME; its token is `use_case: dictation` with no session (never a recording).
 - Default desktop shortcuts for recording / copying are Ctrl/Cmd+Alt+Shift+R / C (Ctrl+Shift+R / C clash with browsers).
+- C9: windows are built on demand (lifecycle.rs). The main window is destroyed on close (not hidden); its view is kept in memory only for this run (a restart opens the Library as before). Overlays are destroyed 30 s after hiding. Only the dictation bar is kept built while its shortcut is bound, because a cold build takes ~1 s; that one web view is the 96 MB idle cost. Removing it too would give ~4 MB idle but a ~1 s dictation start.
+- C9: phone settings export keeps `themeMode` and `dynamicColour` on the phone (not portable), as the desktop theme is not in its export either.
 - The upgrade brief (the untracked file in docs/) stays out of git (repo rule: no instruction or prompt files committed); it is untracked on purpose.
 
 ## Gotchas learned
@@ -267,6 +282,10 @@
 - Running cargo, vitest and Gradle together can hit "failed to mmap file" (memory): run them one after another. `desktop/src-tauri/target` is ~44 GB.
 - `ZipArchive::close(): Renaming temporary file failed` in the export tests is transient on this PC (antivirus on %TEMP%): rerun the file.
 - Console sign-in is throttled: a browser script that signs in for every page gets locked out for a minute; sign in once and reuse the storage state.
+- Desktop measurements: moving `%APPDATA%\com.echoledger.desktop` aside does **not** isolate the device token: it is in Windows Credential Manager under the fixed service `com.echoledger.desktop`, so pairing a test copy would replace the real one. Measure unpaired, or back up the credential first.
+- Desktop windows: building a webview inside a sync command or an event handler deadlocks on Windows; lifecycle.rs always builds and destroys from `tauri::async_runtime::spawn`. `WindowEvent::Destroyed` reaches `on_window_event` after Tauri freed the label, so the same label can be built again from there.
+- A release build logs `[echoledger] <label> window ready N ms after it was asked for` to stderr; `Start-Process -RedirectStandardError` captures it from the GUI-subsystem exe.
+- PowerShell: a function that returns a `HashSet` unrolls it (a one-element set becomes an int): `return ,$set`.
 - Console pages link the Vite theme; tests call `withoutVite()` (tests/TestCase.php), so they never need `npm run build`.
 
 ## Commands that work here
@@ -278,6 +297,7 @@
 - Android (`mobile/`): `$env:JAVA_HOME="$env:LOCALAPPDATA\Android\Sdk\jdk"`; `.\gradlew.bat ktlintFormat` then `.\gradlew.bat assembleDebug testDebugUnitTest ktlintCheck assembleDebugAndroidTest lintDebug`; count tests from `app\build\test-results\testDebugUnitTest\*.xml`.
 - Repo policy (root): `node --test tools/repo-policy.test.mjs`; design tokens shared by the three apps: `node --test tools/design-tokens.test.mjs`.
 - Screenshots (Phase 6): desktop `npx vite --port 1420` in `desktop/` then open `/screenshots/harness.html?w=main|overlay|pill|review|dictation&theme=dark|light&view=library|record|settings|onboarding|lock` (`&material=mica&accent=0078d4` previews the material); phone `.\gradlew.bat testDebugUnitTest --tests "com.echoledger.mobile.ui.ScreenshotsTest"` writes `app/build/screenshots`; web: `php artisan migrate:fresh --seed` on a scratch SQLite (`DB_DATABASE=<file>`), `php artisan serve`, `npm run build` for the theme. A browser driver (playwright-core in the session scratchpad) takes the PNGs.
+- Desktop footprint: `npx tauri build --no-bundle` in `desktop/` (~4-8 min), then MANUAL_QA P-1 with the data folder moved aside; the Phase 6 script (`measure.ps1`: process tree via `Win32_Process`, private working set via `Win32_PerfFormattedData_PerfProc_Process`, CPU from `TotalProcessorTime`) lived in that session's scratchpad. Web shots: `migrate:fresh --seed` on a scratch SQLite with `ADMIN_EMAIL` / `ADMIN_PASSWORD` set in the environment, `php artisan serve --port=8123`, sign in once and reuse the storage state.
 - Commits: author/committer `skillLeo <hassam.dev.571@gmail.com>` only; message from a UTF-8 (no BOM) file: `git commit -q -F <file>`; `git push -q origin v1.1`.
 
 ## Not started / blocked

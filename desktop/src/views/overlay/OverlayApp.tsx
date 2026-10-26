@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { api, listenTo, subscribeCaptions, type CaptionEvent, type CaptionSize, type CaptionStyle } from "../../lib/ipc";
+import { announceReady, api, listenTo, subscribeCaptions, type CaptionEvent, type CaptionSize, type CaptionStyle } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
 import { CloseIcon, CopyIcon, GripIcon } from "../../components/Icons";
 
@@ -97,13 +97,16 @@ export default function OverlayApp() {
   const followingRef = useRef(true);
 
   useEffect(() => {
-    subscribeCaptions((e) => {
+    let alive = true;
+    const subscribed = subscribeCaptions((e) => {
       dispatch(e);
       if (e.kind === "status" && e.live) setVisible(true);
       if (e.kind === "partial" || e.kind === "final" || (e.kind === "status" && e.live)) setLastActivity(Date.now());
     }).catch(() => undefined);
     const un = listenTo("overlay:visibility", (shown) => setVisible(shown));
+    announceReady([subscribed, un], () => alive);
     return () => {
+      alive = false;
       un.then((f) => f()).catch(() => undefined);
     };
   }, []);

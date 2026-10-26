@@ -234,13 +234,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Opens the main window (built on demand, C9: closing it destroys it).
 pub fn show_main(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-        let _ = tauri::Emitter::emit(&window, "main:visibility", true);
-    }
+    crate::lifecycle::show_main(app);
 }
 
 /// The two tray switches: live captions and automatic call recording.

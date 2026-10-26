@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, listenTo, type AppStatus, type LockStatus } from "../../lib/ipc";
+import { announceReady, api, errorMessage, listenTo, type AppStatus, type LockStatus } from "../../lib/ipc";
+import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityBell } from "./ActivityCentre";
 import { OnboardingView } from "./OnboardingView";
@@ -33,6 +34,10 @@ export default function MainApp() {
   const [openRequest, setOpenRequest] = useState<{ id: string; ms: number; seq: number } | null>(null);
   const [lock, setLock] = useState<LockStatus | null>(null);
   const [setupDone, setSetupDone] = useState<boolean | null>(null);
+  // C9: a new main window opens where the last one was closed (page, open recording, scroll).
+  const [restored, setRestored] = useState(false);
+  const [restoredRecording, setRestoredRecording] = useState<string | null>(null);
+  const restoredScroll = useRef<MainView["scroll"] | null>(null);
 
   // First-run wizard (B19): shown until it is finished or skipped.
   useEffect(() => {
@@ -93,6 +98,16 @@ export default function MainApp() {
   }, [shown, refreshStatus]);
 
   useEffect(() => {
+    let alive = true;
+    const restore = loadMainView().then((view) => {
+      if (!alive) return;
+      if (view) {
+        setTab(view.tab);
+        setRestoredRecording(view.recordingId);
+        restoredScroll.current = view.scroll;
+      }
+      setRestored(true);
+    });
     const unlisten = [
       listen<AppStatus>("app:status", (e) => setStatus(e.payload)),
       listen<string>("app:error", (e) => setToast({ text: e.payload, error: true })),
@@ -106,10 +121,26 @@ export default function MainApp() {
         if (nav.recordingId) setOpenRequest({ id: nav.recordingId, ms: 0, seq: ++navigations.current });
       }),
     ];
+    // After the kept view is applied, so a navigation sent while the window was built wins over it.
+    announceReady([restore, ...unlisten], () => alive);
     return () => {
+      alive = false;
       unlisten.forEach((p) => p.then((f) => f()).catch(() => undefined));
     };
   }, []);
+
+  useEffect(() => trackScroll(), []);
+  useEffect(() => {
+    if (restored) rememberMainView({ tab });
+  }, [restored, tab]);
+  const rememberRecording = useCallback((id: string | null) => rememberMainView({ recordingId: id }), []);
+  const paired = status?.paired === true;
+  useEffect(() => {
+    const scroll = restoredScroll.current;
+    if (!restored || !paired || !scroll) return;
+    restoredScroll.current = null;
+    restoreScroll(scroll);
+  }, [restored, paired]);
 
   useEffect(() => {
     if (!toast) return;
@@ -152,10 +183,10 @@ export default function MainApp() {
     );
   }
 
-  if (!status || !status.paired) {
+  if (!status || !status.paired || !restored) {
     return (
       <main className="gate">
-        {status ? <PairingView onPaired={setStatus} notify={notify} /> : <div className="empty">Starting EchoLedger…</div>}
+        {status && !status.paired ? <PairingView onPaired={setStatus} notify={notify} /> : <div className="empty">Starting EchoLedger…</div>}
         {toastView}
       </main>
     );
@@ -204,7 +235,10 @@ export default function MainApp() {
             <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setBudgetWarnDismissed(true)}><CloseIcon size={14} /></button>
           </div>
         )}
-        {tab === "library" && <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest} />}
+        {tab === "library" && (
+          <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
+            initialSelected={restoredRecording} onSelectedChange={rememberRecording} />
+        )}
         {tab === "record" && <RecordView status={status} run={run} />}
         {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} />}
       </main>
