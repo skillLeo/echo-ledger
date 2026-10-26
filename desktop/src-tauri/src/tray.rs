@@ -5,7 +5,7 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::image::Image;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
@@ -98,6 +98,8 @@ struct MenuShape {
     paused: bool,
     show_controls: bool,
     review: usize,
+    captions: bool,
+    auto: bool,
 }
 
 #[derive(Default)]
@@ -106,87 +108,55 @@ pub struct TrayCache {
     state: Mutex<Option<TrayState>>,
 }
 
-fn build_menu(app: &AppHandle, shape: &MenuShape) -> tauri::Result<Menu<tauri::Wry>> {
-    let open = MenuItem::with_id(app, "open", "Open EchoLedger", true, None::<&str>)?;
-    let record = MenuItem::with_id(
-        app,
-        "record",
-        if shape.recording {
-            "Stop recording"
-        } else {
-            "Start recording"
-        },
-        true,
-        None::<&str>,
-    )?;
-    let pause = MenuItem::with_id(
-        app,
-        "pause",
-        if shape.paused {
-            "Resume recording"
-        } else {
-            "Pause recording"
-        },
-        shape.recording,
-        None::<&str>,
-    )?;
-    let captions = MenuItem::with_id(
-        app,
-        "captions",
-        "Live captions on / off",
-        true,
-        None::<&str>,
-    )?;
-    let voice = MenuItem::with_id(
-        app,
-        "voice_note",
-        "Capture voice note playing now",
-        true,
-        None::<&str>,
-    )?;
-    let auto = MenuItem::with_id(
-        app,
-        "auto",
-        "Auto-record calls on / off",
-        true,
-        None::<&str>,
-    )?;
-    let separator = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit EchoLedger", true, None::<&str>)?;
-    let controls = MenuItem::with_id(
-        app,
-        "controls",
-        "Show recording controls",
-        true,
-        None::<&str>,
-    )?;
-    let review = MenuItem::with_id(
-        app,
-        "review",
-        format!("Review recordings ({})", shape.review),
-        true,
-        None::<&str>,
-    )?;
-
-    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&open, &record, &pause];
-    if shape.show_controls {
-        items.push(&controls);
-    }
-    items.extend([
-        &captions as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
-        &voice,
-        &auto,
-    ]);
-    if shape.review > 0 {
-        items.push(&review);
-    }
-    items.extend([
-        &separator as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
-        &quit,
-    ]);
-    Menu::with_items(app, &items)
+/// One line of the tray menu: an action, a check item (`checked` is `Some`) or a separator (C2: short, grouped).
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Entry {
+    Item { id: &'static str, label: String, enabled: bool, checked: Option<bool> },
+    Separator,
 }
 
+fn item(id: &'static str, label: impl Into<String>) -> Entry {
+    Entry::Item { id, label: label.into(), enabled: true, checked: None }
+}
+
+/// The menu for a state: open, then recording, then the two switches and the review queue, then quit.
+fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
+    let mut entries = vec![item("open", "Open EchoLedger"), Entry::Separator];
+    entries.push(item("record", if shape.recording { "Stop recording" } else { "Start recording" }));
+    entries.push(Entry::Item {
+        id: "pause",
+        label: (if shape.paused { "Resume recording" } else { "Pause recording" }).into(),
+        enabled: shape.recording,
+        checked: None,
+    });
+    if shape.show_controls {
+        entries.push(item("controls", "Show recording controls"));
+    }
+    entries.push(item("voice_note", "Capture voice note playing now"));
+    entries.push(Entry::Separator);
+    entries.push(Entry::Item { id: "captions", label: "Live captions".into(), enabled: true, checked: Some(shape.captions) });
+    entries.push(Entry::Item { id: "auto", label: "Record calls automatically".into(), enabled: true, checked: Some(shape.auto) });
+    if shape.review > 0 {
+        entries.push(item("review", format!("Review recordings ({})", shape.review)));
+    }
+    entries.push(Entry::Separator);
+    entries.push(item("quit", "Quit EchoLedger"));
+    entries
+}
+
+fn build_menu(app: &AppHandle, shape: &MenuShape) -> tauri::Result<Menu<tauri::Wry>> {
+    let menu = Menu::new(app)?;
+    for entry in menu_entries(shape) {
+        match entry {
+            Entry::Separator => menu.append(&PredefinedMenuItem::separator(app)?)?,
+            Entry::Item { id, label, enabled, checked: Some(checked) } => {
+                menu.append(&CheckMenuItem::with_id(app, id, label, enabled, checked, None::<&str>)?)?
+            }
+            Entry::Item { id, label, enabled, checked: None } => menu.append(&MenuItem::with_id(app, id, label, enabled, None::<&str>)?)?,
+        }
+    }
+    Ok(menu)
+}
 pub fn create(app: &AppHandle) -> tauri::Result<()> {
     app.manage(TrayCache::default());
     let shape = MenuShape::default();
@@ -272,8 +242,15 @@ pub fn show_main(app: &AppHandle) {
     }
 }
 
+/// The two tray switches: live captions and automatic call recording.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Switches {
+    pub captions: bool,
+    pub auto: bool,
+}
+
 /// Applies a new state to the tray: icon, tooltip and menu, each only when it changed.
-pub fn update(app: &AppHandle, state: TrayState, paused: bool, pill_hidden: bool, pending: usize) {
+pub fn update(app: &AppHandle, state: TrayState, paused: bool, pill_hidden: bool, pending: usize, switches: Switches) {
     let Some(cache) = app.try_state::<TrayCache>() else {
         return;
     };
@@ -301,6 +278,8 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, pill_hidden: bool
         paused: recording && paused,
         show_controls: recording && pill_hidden,
         review: pending,
+        captions: switches.captions,
+        auto: switches.auto,
     };
     let mut current = cache.shape.lock().unwrap_or_else(|p| p.into_inner());
     if current.as_ref() != Some(&shape) {
@@ -308,5 +287,54 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, pill_hidden: bool
             let _ = tray.set_menu(Some(menu));
         }
         *current = Some(shape);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn labels(shape: &MenuShape) -> Vec<String> {
+        menu_entries(shape)
+            .into_iter()
+            .map(|e| match e {
+                Entry::Separator => "---".into(),
+                Entry::Item { label, checked: Some(true), .. } => format!("[x] {label}"),
+                Entry::Item { label, checked: Some(false), .. } => format!("[ ] {label}"),
+                Entry::Item { label, .. } => label,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn idle_menu_is_short_and_grouped() {
+        let shape = MenuShape { auto: true, ..MenuShape::default() };
+        assert_eq!(
+            labels(&shape),
+            ["Open EchoLedger", "---", "Start recording", "Pause recording", "Capture voice note playing now", "---", "[ ] Live captions", "[x] Record calls automatically", "---", "Quit EchoLedger"]
+        );
+        let pause = menu_entries(&shape).into_iter().find(|e| matches!(e, Entry::Item { id: "pause", .. })).unwrap();
+        assert!(matches!(pause, Entry::Item { enabled: false, .. }), "pause needs a recording");
+    }
+
+    #[test]
+    fn recording_menu_shows_its_state_and_the_review_queue() {
+        let shape = MenuShape { recording: true, paused: true, show_controls: true, review: 2, captions: true, auto: false };
+        let labels = labels(&shape);
+        assert!(labels.contains(&"Stop recording".to_string()));
+        assert!(labels.contains(&"Resume recording".to_string()));
+        assert!(labels.contains(&"Show recording controls".to_string()));
+        assert!(labels.contains(&"[x] Live captions".to_string()));
+        assert!(labels.contains(&"[ ] Record calls automatically".to_string()));
+        assert!(labels.contains(&"Review recordings (2)".to_string()));
+        assert_eq!(labels.iter().filter(|l| *l == "---").count(), 3);
+        assert!(labels.len() <= 13, "the tray menu stays short");
+    }
+
+    #[test]
+    fn menu_ids_keep_their_actions() {
+        let shape = MenuShape { recording: true, show_controls: true, review: 1, ..MenuShape::default() };
+        let ids: Vec<&str> = menu_entries(&shape).into_iter().filter_map(|e| match e { Entry::Item { id, .. } => Some(id), Entry::Separator => None }).collect();
+        assert_eq!(ids, ["open", "record", "pause", "controls", "voice_note", "captions", "auto", "review", "quit"]);
     }
 }

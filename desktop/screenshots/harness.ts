@@ -65,6 +65,8 @@ function respond(cmd: string, args: Record<string, unknown> | undefined): unknow
       return empty ? [] : [makeUploadItem("up-1", { state: "failed", lastError: "No connection to the server", attempts: 3 })];
     case "lock_status":
       return { enabled: view === "lock", locked: view === "lock", hasPin: true, osMethod: "windows_hello", retryAfterSeconds: 0 };
+    case "window_appearance":
+      return { material: params.get("material") ?? "none", accent: params.get("accent") ? `#${params.get("accent")}` : null, platform: params.get("platform") ?? "windows" };
     case "lock_unlock_os":
       return new Promise(() => undefined); // the Windows Hello prompt stays open
     case "activity_list":
@@ -110,6 +112,8 @@ function caption(e: CaptionEvent) {
 mockWindows(win === "main" ? "main" : win);
 mockIPC(respond, { shouldMockEvents: true });
 
+// A window material shows the OS backdrop through the page: stand in for Mica with its usual tint.
+if (win === "main" && params.get("material")) document.body.style.background = theme === "light" ? "#f3f3f3" : "#202020";
 // Overlay-type windows are transparent: put a desktop-like wallpaper behind them so translucency can be judged.
 if (win !== "main") {
   const paper = document.createElement("div");

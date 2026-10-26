@@ -405,3 +405,18 @@ Run W-1 to W-4 on a copy of the production database (or right after the deploy) 
 | W-11 | Settings → Plan limits: set devices to the number paired, then pair one more (QR in the console). | The pairing dialog shows "Device limit reached — raise it in Settings". |
 | W-12 | Set the minutes limit so this month is past 80 %, then past 100 % (or wait for real use). | The bell shows "Transcription at 80% of the monthly limit" once and "Monthly transcription limit reached" once, for each owner. |
 | W-13 | Restore the plan limits to the defaults (30 000 minutes, 500 GB, 25 devices). | Nothing is blocked. |
+
+## 17. v1.1 — premium look and performance (Phase 6)
+
+Visual checks on real screens. Before/after screenshots of every screen (from the screenshot harness, the
+Robolectric screenshot test and the browser) are in `design-review/` on the build machine.
+
+| ID | Steps | Expected |
+|---|---|---|
+| V-D1 | Windows 11: open the main window in the dark and in the light theme. | The sidebar and window background show Mica (the wallpaper tint), the content sits on a slightly lighter layer, the title bar matches the theme. No see-through areas. |
+| V-D2 | Windows 10: open the main window. | A solid background (no Mica, nothing see-through); everything else as on Windows 11. |
+| V-D3 | Windows: Settings > Personalisation > Colours, pick another accent colour, restart EchoLedger. | Primary buttons, the active nav indicator, selections and focus rings use the new accent; white text on buttons stays readable (also with a yellow or a pale accent). |
+| V-D4 | Change the app theme (sidebar Theme button) while the caption overlay, the pill and the review card are visible. | All of them switch between light and dark glass with the main window; the title bar follows too. |
+| V-D5 | macOS: open the main window. | Vibrancy behind the sidebar; the traffic lights sit inset over the sidebar, clear of the brand row; the window drags by its top strip; the accent follows System Settings > Appearance. |
+| V-D6 | Start a recording with captions; speak several long sentences. | The caption card keeps one height (no jumps as lines arrive), shows at most the chosen number of lines with whole lines, its buttons fade in on hover; pill, review card, dictation bar and captions look like one set (same glass, hairline border, radius). |
+| V-D7 | Right-click the tray icon while idle, then while recording and paused. | A short grouped menu: Open; Start/Stop, Pause/Resume, (Show recording controls), Capture voice note; check marks on Live captions and Record calls automatically; Review recordings (N) when something waits; Quit. |

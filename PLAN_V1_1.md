@@ -248,7 +248,7 @@ Severity in brackets. Each item lists the platform; the matching regression test
       does not return to the unpaired state, `Retry-After` ignored.
 
 - [ ] A6.M9 [low] Rotating the phone returns to the library (tab, open recording and setup page are not saved).
-- [ ] A6.M10 [low] Status bar icons are dark on the dark app background in the light system theme.
+- [x] A6.M10 [low] Status bar icons are dark on the dark app background in the light system theme.
 - [ ] A6.M11 [low] In landscape the library header, search, banner and filters leave no room for the list.
 - [ ] A6.M12 [low] The Record tab upload card does not update until the tab is opened again.
 
@@ -363,7 +363,10 @@ Severity in brackets. Each item lists the platform; the matching regression test
 
 ## Part C — premium built-in-app standard (Phase 6)
 
-- [ ] C1 One token file per app (colour, 8-pt spacing, radius 8/12/16, shadows, motion); one icon set; system fonts.
+- [x] C1 One token file per app (colour, 8-pt spacing, radius 8/12/16, shadows, motion); one icon set; system fonts.
+      Same names and values in desktop/src/styles.css, web/resources/css/filament/admin/theme.css and
+      mobile/.../ui/Tokens.kt, checked by tools/design-tokens.test.mjs; light, dark and system themes in every app
+      and window (phone: optional wallpaper colours).
 - [ ] C2 Desktop: Mica/Acrylic (Windows 11) with solid fallback, macOS vibrancy and inset traffic lights, system
       light/dark and accent, tray-first, translucent hairline overlays.
 - [ ] C3 Web: custom Filament theme (Vite): page headers, breadcrumbs, sticky table headers, empty states with one

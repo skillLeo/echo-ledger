@@ -59,7 +59,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let pill_hidden = state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst);
     let pending_decisions = DecisionFiles::in_dir(&state.data_dir).load().items.len();
     let tray_state = crate::tray::tray_state(recording.is_some(), paused, pending_decisions, queue.failed(), budget == BudgetState::Reached, queue.active() > 0);
-    crate::tray::update(app, tray_state, paused, pill_hidden, pending_decisions);
+    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode };
+    crate::tray::update(app, tray_state, paused, pill_hidden, pending_decisions, switches);
     AppStatus {
         paired: state.is_paired(),
         server_url: settings.server_url.clone(),
@@ -82,6 +83,18 @@ pub fn status(app: &AppHandle) -> AppStatus {
         pending_decisions,
         tray_state,
     }
+}
+
+/// Main-window material and system accent (C2).
+#[tauri::command]
+pub fn window_appearance() -> crate::material::Appearance {
+    crate::material::appearance()
+}
+
+/// The native title bar and window material follow the app's theme (`light`, `dark` or `system`).
+#[tauri::command]
+pub fn set_window_theme(app: AppHandle, theme: String) {
+    crate::material::set_theme(&app, &theme);
 }
 
 #[tauri::command]

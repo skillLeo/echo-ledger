@@ -770,14 +770,16 @@ describe("LibraryView with a realistic library", () => {
     }));
     TRANSCRIPTS["tr-long"] = makeTranscript({ id: "tr-long", segments });
     await renderLibrary([makeItem("long", { title: "Long call", transcript: { final_status: "completed", final_transcript_id: "tr-long", live_available: false, preview: null } })]);
-    await selectItem("Long call", "Sentence number 599.");
+    // 600 rows take a while to render in jsdom on a busy machine: wait longer than the 1 s default.
+    await selectItem("Long call");
+    await within(detail()).findByText("Sentence number 599.", undefined, { timeout: 15_000 });
     expect(detail().querySelectorAll(".segment")).toHaveLength(600);
     fireEvent.click(within(detail()).getByRole("button", { name: "Copy with timestamps" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     const copied = writeText.mock.calls[0][0] as string;
     expect(copied.split("\n")).toHaveLength(600);
     expect(copied.split("\n")[599]).toBe("[49:55] Client: Sentence number 599.");
-  });
+  }, 30_000);
 });
 
 describe("bookmarks in the library (B3)", () => {

@@ -105,7 +105,7 @@
 .rec-btn:hover { background: var(--ctl-hover); color: var(--ctl-text); }
 .rec-btn:active { background: var(--ctl-press); }
 .rec-btn[aria-pressed="true"] { color: var(--accent-text); background: var(--accent-soft); }
-.rec-btn[aria-pressed="true"]:hover { background: rgba(139, 92, 246, 0.26); }
+.rec-btn[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--accent-soft), var(--accent) 12%); }
 .rec-btn.stop { color: var(--ctl-rec); }
 .rec-btn.stop:hover { background: rgba(239, 62, 92, 0.16); color: var(--ctl-rec); }
 
@@ -256,8 +256,8 @@
 .ctl-btn:hover { background: var(--ctl-press); }
 .ctl-btn:active { background: var(--ctl-press); }
 .ctl-btn.primary { background: var(--accent-strong); border-color: transparent; color: var(--on-accent); }
-.ctl-btn.primary:hover { background: #6d28d9; }
-.ctl-btn.primary:active { background: #5b21b6; }
+.ctl-btn.primary:hover { background: color-mix(in srgb, var(--accent-strong) 88%, black); }
+.ctl-btn.primary:active { background: color-mix(in srgb, var(--accent-strong) 78%, black); }
 .ctl-btn.icon { width: 32px; padding: 0; color: var(--ctl-muted); background: transparent; border-color: transparent; }
 .ctl-btn.icon:hover { background: var(--ctl-hover); color: var(--ctl-text); }
 .ctl-btn.icon.small { width: 26px; height: 26px; border-radius: 6px; }

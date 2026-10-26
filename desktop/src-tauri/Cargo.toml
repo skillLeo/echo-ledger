@@ -58,6 +58,8 @@ windows = { version = "0.62.2", features = [
   "Win32_System_WinRT",
   "Security_Credentials_UI",
   "Foundation",
+  "UI",
+  "UI_ViewManagement",
 ] }
 windows-future = "0.3.2"
 

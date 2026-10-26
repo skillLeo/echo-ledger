@@ -20,7 +20,11 @@
         "minHeight": 560,
         "center": true,
         "visible": false,
-        "focus": true
+        "focus": true,
+        "transparent": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 18, "y": 22 }
       }
     ],
     "security": {

@@ -73,6 +73,7 @@ export default function MainApp() {
     saveThemeChoice(next);
     applyTheme(next);
     setTheme(next);
+    api.setWindowTheme(next).catch(() => undefined);
   };
 
   const clearFocus = useCallback(() => setFocus(null), []);
@@ -155,6 +156,8 @@ export default function MainApp() {
 
   return (
     <div className="app">
+      {/* macOS: the title bar is inset (traffic lights over the sidebar); this strip keeps the window draggable. */}
+      <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
       <aside className="sidebar">
         <div className="brand"><span className="brand-mark" />EchoLedger<span className="spacer" /><ActivityBell onOpenRecording={(id) => { setTab("library"); setOpenRequest({ id, ms: 0, seq: ++navigations.current }); }} /></div>
         <button className={`nav-btn ${tab === "library" ? "active" : ""}`} onClick={() => setTab("library")}><LibraryIcon />Library</button>

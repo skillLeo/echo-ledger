@@ -8,6 +8,7 @@ pub mod detect;
 pub mod dictation;
 pub mod error;
 pub mod lock;
+pub mod material;
 pub mod net;
 pub mod overlay;
 pub mod pending;
@@ -190,6 +191,9 @@ pub fn run() {
             let settings = app.state::<AppState>().settings();
 
             tray::create(&handle)?;
+            if let Some(main) = app.get_webview_window("main") {
+                material::apply(&main);
+            }
             overlay::create_overlays(
                 &handle,
                 overlay::OverlaySetup {
@@ -245,6 +249,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_status,
+            commands::window_appearance,
+            commands::set_window_theme,
             commands::pair_device,
             commands::unpair,
             commands::get_settings,

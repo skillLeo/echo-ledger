@@ -101,6 +101,13 @@ export interface ActivityItem {
 
 /** App lock (B16): Windows Hello / Touch ID or the PIN; 0 minutes = only when the app starts. */
 export type LockAfterMinutes = 0 | 1 | 5 | 15 | 60;
+/** Main-window material (C2) and the system accent the core can read (Windows); see material.rs. */
+export interface WindowAppearance {
+  material: "mica" | "vibrancy" | "none";
+  accent: string | null;
+  platform: "windows" | "macos" | "other";
+}
+
 export interface LockStatus {
   enabled: boolean;
   locked: boolean;
@@ -528,6 +535,8 @@ export type AppEvent = keyof EventPayloads;
 
 export const api = {
   status: () => invoke<AppStatus>("app_status"),
+  windowAppearance: () => invoke<WindowAppearance>("window_appearance"),
+  setWindowTheme: (theme: "light" | "dark" | "system") => invoke<void>("set_window_theme", { theme }),
   pair: (serverUrl: string, code: string, deviceName: string) => invoke<AppStatus>("pair_device", { serverUrl, code, deviceName }),
   unpair: () => invoke<AppStatus>("unpair"),
   settings: () => invoke<Settings>("get_settings"),
