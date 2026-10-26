@@ -12,7 +12,9 @@ data class WidgetState(
     val lastPreview: String? = null,
     val pendingDecisions: Int = 0,
     /** App lock is on: the widget shows no recording titles or transcript text. */
-    val locked: Boolean = false
+    val locked: Boolean = false,
+    /** The app's "Wallpaper colours" setting: the widget uses the wallpaper's colours too (Android 12+). */
+    val dynamicColour: Boolean = false
 ) {
     val statusLine: String
         get() = when {

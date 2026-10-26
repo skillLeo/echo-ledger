@@ -143,7 +143,8 @@ private fun EchoColors.withScheme(scheme: ColorScheme): EchoColors = copy(
     me = scheme.primary
 )
 
-private fun EchoColors.toScheme(): ColorScheme {
+/** The Material 3 colour scheme of these tokens (the app theme and the home-screen widget). */
+fun EchoColors.toScheme(): ColorScheme {
     val base = if (isDark) darkColorScheme() else lightColorScheme()
     return base.copy(
         primary = accentStrong,

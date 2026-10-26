@@ -367,12 +367,16 @@ Severity in brackets. Each item lists the platform; the matching regression test
       Same names and values in desktop/src/styles.css, web/resources/css/filament/admin/theme.css and
       mobile/.../ui/Tokens.kt, checked by tools/design-tokens.test.mjs; light, dark and system themes in every app
       and window (phone: optional wallpaper colours).
-- [ ] C2 Desktop: Mica/Acrylic (Windows 11) with solid fallback, macOS vibrancy and inset traffic lights, system
-      light/dark and accent, tray-first, translucent hairline overlays.
-- [ ] C3 Web: custom Filament theme (Vite): page headers, breadcrumbs, sticky table headers, empty states with one
-      action, skeleton loaders, responsive to phone width; fonts self-hosted.
-- [ ] C4 Android: Material 3 with optional dynamic colour, edge-to-edge, predictive back, haptics, Glance widgets in
-      2×1, 2×2 and 4×2.
+- [~] C2 Desktop: Mica/Acrylic (Windows 11) with solid fallback, macOS vibrancy and inset traffic lights, system
+      light/dark and accent, tray-first, translucent hairline overlays. Built and tested (material.rs, lib/accent.ts,
+      tray menu tests); overlays keep CSS glass (they stay visible-but-empty, so an OS backdrop would show when hidden).
+      Device checks: docs/MANUAL_QA.md section 17 (V-D1-V-D7).
+- [x] C3 Web: custom Filament theme (Vite): page headers, breadcrumbs, sticky table headers, empty states with one
+      action, skeleton loaders, responsive to phone width; fonts self-hosted. Theme in
+      web/resources/css/filament/admin/theme.css (Filament's own skeletons restyled); list pages fit 1280 px and 390 px.
+- [~] C4 Android: Material 3 with optional dynamic colour, edge-to-edge, predictive back, haptics, Glance widgets in
+      2×1, 2×2 and 4×2. Built and tested (AppearanceTest, SystemBarsThemeTest, NativeFeelTest, RecordWidgetLayoutTest);
+      device checks: docs/MANUAL_QA.md section 17 (V-A1-V-A4).
 - [ ] C5 Motion 150–220 ms ease-out, respects reduce-motion.
 - [ ] C6 Loading, empty, error (Retry) and offline states on every list and screen.
 - [ ] C7 Accessibility: WCAG 2.2 AA contrast, focus rings, full keyboard use, screen-reader labels.

@@ -75,9 +75,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -767,6 +769,7 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
         }
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        val haptics = LocalHapticFeedback.current
         Text("Record", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         SectionCard {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -784,9 +787,12 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                             Brand.Gradient
                         }
                     )
-                        .clickable { context.startForegroundService(RecordingService.intent(context, RecordingService.ACTION_TOGGLE)) },
+                        .clickable(role = Role.Button, onClickLabel = if (recording) "Stop recording" else "Start recording") {
+                            haptics.performHapticFeedback(if (recording) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
+                            context.startForegroundService(RecordingService.intent(context, RecordingService.ACTION_TOGGLE))
+                        },
                     contentAlignment = Alignment.Center
-                ) { Text(if (recording) "STOP" else "REC", fontWeight = FontWeight.Bold) }
+                ) { Text(if (recording) "STOP" else "REC", fontWeight = FontWeight.Bold, color = LocalEchoColors.current.onAccent) }
                 Column {
                     Text(if (recording) "Recording…" else "Not recording", fontWeight = FontWeight.SemiBold)
                     Text(
@@ -837,8 +843,14 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                             Text("${SourceApp.from(rec.sourceApp).label} · ${formatDuration(rec.durationMs)}")
                             Text(formatWhen(rec.startedAt), color = Brand.Muted, fontSize = 12.sp)
                         }
-                        TextButton(onClick = { vm.decide(rec.id, keep = false) }) { Text("Discard", color = Brand.Danger) }
-                        Button(onClick = { vm.decide(rec.id, keep = true) }) { Text("Keep") }
+                        TextButton(onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.Reject)
+                            vm.decide(rec.id, keep = false)
+                        }) { Text("Discard", color = Brand.Danger) }
+                        Button(onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                            vm.decide(rec.id, keep = true)
+                        }) { Text("Keep") }
                     }
                 }
             }
