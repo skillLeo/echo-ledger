@@ -167,7 +167,8 @@
 | P8.4 | `v1.1` merged into `main` and pushed. | Not started |
 
 ## In progress right now
-- Nothing open. **B20 is done** (Done, not Partial: web only; its checks in docs/MANUAL_QA.md section 16 are deploy verifications).
+- **Phase 6 in progress.** Done: C1 (tokens, all apps), C2 [~] (Mica / vibrancy, accent, tray), C3 (console theme), C4 [~] (phone theme, widget sizes, haptics, predictive back), C5 (motion), C6 (states). Next: C7 accessibility, C8 copy, C9 performance numbers, then the Phase 6 finish (all suites, results in this file).
+- B20 is done (Done, not Partial: web only; its checks in docs/MANUAL_QA.md section 16 are deploy verifications).
 - Where things are:
   - Schema: `web/database/migrations/2026_11_01_00000{1,2,3}_*.php`; models `Plan`, `Workspace`, trait `Models/Concerns/BelongsToWorkspace.php`, `Models/Scopes/WorkspaceScope.php`.
   - Services: `Services/Workspaces/{CurrentWorkspace,Workspaces,PlanLimits}.php`, `Services/Usage/UsageReport.php`; `UsageSummary::toArray(?int $workspaceId)`.
@@ -256,6 +257,9 @@
 - Vitest: a failed load that retries in a `useEffect` can loop for ever and hang the run; don't retry on failure. Clear `node_modules/.vitest-cache` if results look stale.
 - Gradle runs > 10 min: start the full Android gate with `run_in_background` and poll the output file.
 - Running cargo, vitest and Gradle together can hit "failed to mmap file" (memory): run them one after another. `desktop/src-tauri/target` is ~44 GB.
+- `ZipArchive::close(): Renaming temporary file failed` in the export tests is transient on this PC (antivirus on %TEMP%): rerun the file.
+- Console sign-in is throttled: a browser script that signs in for every page gets locked out for a minute; sign in once and reuse the storage state.
+- Console pages link the Vite theme; tests call `withoutVite()` (tests/TestCase.php), so they never need `npm run build`.
 
 ## Commands that work here
 - Web (`web/`):
@@ -264,7 +268,8 @@
   - `php vendor/bin/pint` / `php vendor/bin/pint --test`; `php vendor/bin/phpstan analyse --no-progress --memory-limit=2G --error-format=raw`
 - Desktop (`desktop/`): `npx vitest run`, `npx tsc --noEmit`, `npm run build`; in `src-tauri/`: `cargo test --no-fail-fast`, `cargo clippy --all-targets -- -D warnings`; macOS check: `powershell -File <scratchpad>\mac-check.ps1 -Clippy` (cross-target clippy with stub C toolchain; the script lives in the session scratchpad, not the repo). `cargo fmt` is not a gate.
 - Android (`mobile/`): `$env:JAVA_HOME="$env:LOCALAPPDATA\Android\Sdk\jdk"`; `.\gradlew.bat ktlintFormat` then `.\gradlew.bat assembleDebug testDebugUnitTest ktlintCheck assembleDebugAndroidTest lintDebug`; count tests from `app\build\test-results\testDebugUnitTest\*.xml`.
-- Repo policy (root): `node --test tools/repo-policy.test.mjs`.
+- Repo policy (root): `node --test tools/repo-policy.test.mjs`; design tokens shared by the three apps: `node --test tools/design-tokens.test.mjs`.
+- Screenshots (Phase 6): desktop `npx vite --port 1420` in `desktop/` then open `/screenshots/harness.html?w=main|overlay|pill|review|dictation&theme=dark|light&view=library|record|settings|onboarding|lock` (`&material=mica&accent=0078d4` previews the material); phone `.\gradlew.bat testDebugUnitTest --tests "com.echoledger.mobile.ui.ScreenshotsTest"` writes `app/build/screenshots`; web: `php artisan migrate:fresh --seed` on a scratch SQLite (`DB_DATABASE=<file>`), `php artisan serve`, `npm run build` for the theme. A browser driver (playwright-core in the session scratchpad) takes the PNGs.
 - Commits: author/committer `skillLeo <hassam.dev.571@gmail.com>` only; message from a UTF-8 (no BOM) file: `git commit -q -F <file>`; `git push -q origin v1.1`.
 
 ## Not started / blocked
