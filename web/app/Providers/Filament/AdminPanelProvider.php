@@ -50,10 +50,12 @@ class AdminPanelProvider extends PanelProvider
             ], isRequired: false)
             ->revealablePasswords(true)
             ->defaultThemeMode(ThemeMode::System)
+            // C3: our theme (design tokens shared with the apps, density, sticky table headers), built by Vite.
+            ->viteTheme('resources/css/filament/admin/theme.css')
             ->colors([
                 'primary' => Color::Violet,
                 'info' => Color::Cyan,
-                'gray' => Color::Slate,
+                'gray' => Color::Zinc,
             ])
             // Self-hosted font and initials avatars: the console asks no third-party host for anything.
             ->font('Inter', provider: LocalInterFontProvider::class)
@@ -63,6 +65,7 @@ class AdminPanelProvider extends PanelProvider
             ->globalSearchKeyBindings(['mod+k'])
             ->globalSearchFieldSuffix(fn (): string => 'Ctrl K')
             ->sidebarCollapsibleOnDesktop()
+            ->sidebarWidth('16rem')
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([

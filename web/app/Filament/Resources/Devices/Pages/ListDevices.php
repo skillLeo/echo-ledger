@@ -45,4 +45,10 @@ class ListDevices extends ListRecords
                 ->modalWidth('md'),
         ];
     }
+
+    /** A list page is the top of its section: no "Sessions > List" trail (C3). */
+    public function getBreadcrumbs(): array
+    {
+        return [];
+    }
 }

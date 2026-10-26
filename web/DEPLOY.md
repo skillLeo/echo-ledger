@@ -15,8 +15,8 @@ reconciler and the 30-day retention cleanup.
 ## First deploy
 1. Upload the `web/` folder above `public_html` and point the domain's document root at `web/public`.
    On hosts that force `public_html`, symlink it: `ln -s ~/echoledger/web/public ~/public_html`.
-2. Locally run `composer install --no-dev --optimize-autoloader` and `npm install && npm run build` (the repo
-   has no npm lock file, so a clean install uses `npm install`), then upload `vendor/` and `public/build/` (or run
+2. Locally run `composer install --no-dev --optimize-autoloader` and `npm ci && npm run build` (`package-lock.json`
+   pins the build tools; the build also makes the console theme), then upload `vendor/` and `public/build/` (or run
    them on the host if SSH + Composer are available). Composer also publishes the console's own scripts,
    styles and fonts into `public/` (`php artisan filament:upgrade`); the console loads nothing from other hosts.
 3. Create `.env` from `.env.example` and set at least:

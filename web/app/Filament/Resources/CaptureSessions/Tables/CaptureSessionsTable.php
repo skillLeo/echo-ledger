@@ -44,22 +44,22 @@ final class CaptureSessionsTable
             ->columns([
                 TextColumn::make('started_at')->label('When')->dateTime('M j, Y · g:i A')->sortable()
                     ->description(fn (CaptureSession $r): string => self::duration($r->duration_ms)),
-                TextColumn::make('source_device')->label('Source')->badge(),
-                TextColumn::make('source_app')->label('App')->badge(),
+                TextColumn::make('source_device')->label('Source')->badge()->visibleFrom('2xl'),
+                TextColumn::make('source_app')->label('App')->badge()->visibleFrom('md'),
                 TextColumn::make('title')->label('Title')
                     ->state(fn (CaptureSession $r): string => $r->displayTitle())->limit(48)
                     ->searchable(query: fn (Builder $query, string $search): Builder => self::searchDisplayedTitle($query, $search)),
-                TextColumn::make('client.name')->label('Client')->placeholder('—')->searchable(),
-                TextColumn::make('labels.label')->label('Labels')->badge()->color('gray')->placeholder('')->toggleable(),
+                TextColumn::make('client.name')->label('Client')->placeholder('—')->searchable()->visibleFrom('lg'),
+                TextColumn::make('labels.label')->label('Labels')->badge()->color('gray')->placeholder('')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('device.name')->label('Device')
-                    ->state(fn (CaptureSession $r): string => self::deviceLabel($r))->toggleable(),
+                    ->state(fn (CaptureSession $r): string => self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('status')->badge(),
-                TextColumn::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('—')->toggleable(),
+                TextColumn::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)
                     ->trueColor('warning')->falseColor('gray')
                     ->action(fn (CaptureSession $record) => app(LibraryOrganiser::class)->update($record, ['pinned' => ! $record->pinned])),
                 IconColumn::make('keep_forever')->label('Keep')->boolean()->trueIcon(Heroicon::LockClosed)->falseIcon(Heroicon::OutlinedLockOpen)
-                    ->trueColor('success')->falseColor('gray')->tooltip('Kept recordings are never deleted automatically')->toggleable()
+                    ->trueColor('success')->falseColor('gray')->tooltip('Kept recordings are never deleted automatically')->toggleable(isToggledHiddenByDefault: true)
                     ->action(fn (CaptureSession $record) => app(LibraryOrganiser::class)->update($record, ['keep' => ! $record->keep_forever])),
             ])
             ->filters([

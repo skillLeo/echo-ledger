@@ -17,6 +17,8 @@ uses(AdminTestHelpers::class);
 /* Console library organisation (B15): smart-view tabs, labels, pins, bulk actions and client folders. */
 
 beforeEach(function () {
+    // Midday, so "30 minutes ago" is today whatever time the suite runs (it failed just after midnight UTC).
+    $this->travelTo(now()->startOfDay()->addHours(12));
     $this->admin = $this->signInAsAdmin();
     $this->recent = CaptureSession::factory()->create(['user_id' => $this->admin->id, 'started_at' => now()->subMinutes(30), 'title' => 'Recent call']);
     $this->older = CaptureSession::factory()->create(['user_id' => $this->admin->id, 'started_at' => now()->subDays(40), 'title' => 'Older call', 'pinned' => true]);

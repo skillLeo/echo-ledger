@@ -1,0 +1,246 @@
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@source '../../../../app/Filament/**/*';
+@source '../../../../resources/views/filament/**/*';
+
+/*
+ * EchoLedger console theme. The design tokens below use the same names and values as desktop/src/styles.css and
+ * mobile/.../ui/Tokens.kt, so the console, the desktop app and the phone app read as one family. Filament's own
+ * component rules live in CSS layers; the rules here are unlayered, so they win without !important.
+ */
+:root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #f0f1f4;
+    --surface-3: rgba(15, 23, 42, 0.05);
+    --border: rgba(15, 23, 42, 0.1);
+    --border-strong: rgba(15, 23, 42, 0.18);
+    --text: #15171b;
+    --text-muted: #565b69;
+    --text-faint: #636877;
+    --accent: #7c3aed;
+    --accent-text: #6d28d9;
+    --accent-strong: #7c3aed;
+    --accent-soft: rgba(124, 58, 237, 0.1);
+    --on-accent: #ffffff;
+    --danger: #c4183a;
+    --success: #047857;
+    --warning: #8f4a0c;
+    --me: #6d28d9;
+    --client: #0b7187;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-full: 999px;
+    --shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-2: 0 2px 6px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.1);
+    --motion-fast: 150ms;
+    --motion-base: 180ms;
+    --motion-slow: 220ms;
+    --ease-out: cubic-bezier(0, 0, 0, 1);
+    --font-sans-stack: 'Segoe UI Variable Text', 'Segoe UI Variable', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Inter', sans-serif;
+    --text-xs: 12px;
+    --text-sm: 13px;
+    --text-md: 14px;
+    --text-lg: 16px;
+    --text-xl: 20px;
+    --text-2xl: 24px;
+}
+
+.dark {
+    --bg: #111214;
+    --surface: #1a1b1f;
+    --surface-2: #222328;
+    --surface-3: rgba(255, 255, 255, 0.06);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.15);
+    --text: #f2f3f5;
+    --text-muted: #a8acb7;
+    --text-faint: #8d919d;
+    --accent: #8b5cf6;
+    --accent-text: #b4a0fb;
+    --accent-strong: #7c3aed;
+    --accent-soft: rgba(139, 92, 246, 0.16);
+    --on-accent: #ffffff;
+    --danger: #f87185;
+    --success: #3ccf91;
+    --warning: #f5b731;
+    --me: #b4a0fb;
+    --client: #4fd1e8;
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.24);
+    --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.22), 0 8px 24px rgba(0, 0, 0, 0.26);
+}
+
+/* System fonts first (Segoe UI Variable, SF Pro), the self-hosted Inter as the fallback. Filament sets
+   --font-family in an inline style after this sheet, so the selector is one step more specific. */
+html:root {
+    --font-family: var(--font-sans-stack);
+}
+
+html.fi body {
+    background-color: var(--bg);
+}
+
+/* ---------- page header ---------- */
+.fi-header-heading {
+    font-size: var(--text-2xl);
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+}
+
+.fi-header-subheading {
+    margin-top: var(--space-1);
+    font-size: var(--text-md);
+    color: var(--text-muted);
+}
+
+.fi-page-header-main-ctn {
+    row-gap: var(--space-5);
+    padding-block: var(--space-6) var(--space-5);
+}
+
+.fi-page-content {
+    row-gap: var(--space-5);
+}
+
+.fi-breadcrumbs .fi-breadcrumbs-item-label {
+    font-size: var(--text-sm);
+}
+
+/* ---------- sidebar ---------- */
+.fi-sidebar-nav {
+    row-gap: var(--space-5);
+}
+
+.fi-sidebar-item-btn {
+    min-height: 36px;
+    padding-block: 6px;
+    border-radius: var(--radius-sm);
+    transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.fi-sidebar-group-label {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+/* ---------- sections and cards ---------- */
+.fi-section:not(.fi-section-not-contained),
+.fi-ta-ctn,
+.fi-wi-stats-overview-stat {
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-1);
+}
+
+.fi-section-header-heading {
+    font-size: var(--text-md);
+    font-weight: 600;
+}
+
+.fi-section-header-description {
+    font-size: var(--text-sm);
+}
+
+/* ---------- tables: denser rows, quiet header, sticky header on wide screens ---------- */
+.fi-ta-header-cell {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+@media (min-width: 640px) {
+    .fi-ta-header-cell {
+        padding-block: 10px;
+    }
+
+    .fi-ta-cell :is(.fi-ta-text, .fi-ta-icon, .fi-ta-color, .fi-ta-image, .fi-ta-select, .fi-ta-toggle, .fi-ta-checkbox, .fi-ta-text-input):not(.fi-inline),
+    .fi-ta-cell:has(.fi-ta-actions),
+    .fi-ta-cell:has(.fi-ta-record-checkbox) {
+        padding-block: 10px;
+    }
+}
+
+/* The table scrolls with the page under the top bar; overflow is clipped instead of scrolled from 1280 px, where
+   every default column fits, so the header can stick (a scroll container would stop it). */
+@media (min-width: 1280px) {
+    .fi-ta-ctn,
+    .fi-ta-content-ctn {
+        overflow: clip;
+    }
+
+    .fi-ta-table > thead > tr > th {
+        position: sticky;
+        top: 4rem;
+        z-index: 2;
+        background-color: var(--surface-2);
+    }
+}
+
+.fi-ta-row {
+    transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+/* ---------- badges: one size for source app, device and status ---------- */
+.fi-badge {
+    min-height: 22px;
+    border-radius: 6px;
+    font-size: var(--text-xs);
+    font-weight: 500;
+}
+
+/* ---------- tabs (smart views) start at the left edge like the rest of the page ---------- */
+.fi-page-content > .fi-tabs,
+.fi-resource-list-records-page .fi-tabs {
+    margin-inline: 0;
+}
+
+/* ---------- empty states: one short line and one clear action ---------- */
+.fi-ta-empty-state {
+    padding-block: var(--space-7);
+}
+
+.fi-ta-empty-state-heading {
+    font-size: var(--text-lg);
+    font-weight: 600;
+}
+
+.fi-ta-empty-state-description {
+    color: var(--text-muted);
+}
+
+/* ---------- loading: skeleton blocks in the neutral surface colour ---------- */
+.fi-ta-content-loading,
+.fi-loading-section {
+    --loading-skeleton-background-color: var(--surface-3);
+    --loading-skeleton-border-radius: 6px;
+}
+
+/* ---------- media and focus ---------- */
+.dark audio {
+    color-scheme: dark;
+}
+
+:focus-visible {
+    outline-color: var(--accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0ms !important;
+        scroll-behavior: auto !important;
+    }
+}

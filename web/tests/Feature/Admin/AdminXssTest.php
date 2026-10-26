@@ -122,7 +122,8 @@ it('escapes a device name in the devices list, the rename and revoke dialogs and
 
     adminAssertEscaped($this->panelComponent(ListDevices::class)->html(), ADMIN_XSS_SCRIPT, 'the devices list');
     adminAssertEscaped($this->get('/admin/devices')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the devices page');
-    adminAssertEscaped($this->panelComponent(ListCaptureSessions::class)->html(), ADMIN_XSS_SCRIPT, 'the sessions list device column');
+    // The Device column is optional (hidden by default since C3): show every column first.
+    adminAssertEscaped($this->panelComponent(ListCaptureSessions::class)->toggleAllTableColumns()->html(), ADMIN_XSS_SCRIPT, 'the sessions list device column');
     adminAssertEscaped($this->get('/admin/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the session page device entry');
 
     $rename = $this->panelComponent(ListDevices::class)->mountAction(TestAction::make('rename')->table($device));

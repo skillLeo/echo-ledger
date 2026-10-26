@@ -333,4 +333,10 @@ class ViewCaptureSession extends ViewRecord
 
         return $user !== null ? mb_substr((string) $user->getAttribute('name'), 0, 120) : null;
     }
+
+    /** "Sessions > Title", without a trailing "View" (C3). */
+    public function getBreadcrumbs(): array
+    {
+        return $this->getResourceBreadcrumbs();
+    }
 }

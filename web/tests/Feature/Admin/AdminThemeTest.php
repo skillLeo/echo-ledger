@@ -50,12 +50,12 @@ it('applies the stored theme before first paint to avoid a flash of the wrong th
         ->and(strpos($html, 'filament:theme:mode'))->toBeLessThan(strpos($html, '<body'));
 });
 
-it('uses violet as the accent, cyan for info and slate for neutrals', function () {
+it('uses violet as the accent, cyan for info and neutral zinc greys like the apps', function () {
     $colors = $this->panel->getColors();
 
     expect($colors)->toHaveKeys(['primary', 'info', 'gray']);
     $html = $this->get('/admin/login')->assertOk()->getContent();
-    foreach (['primary' => Color::Violet, 'info' => Color::Cyan, 'gray' => Color::Slate] as $name => $palette) {
+    foreach (['primary' => Color::Violet, 'info' => Color::Cyan, 'gray' => Color::Zinc] as $name => $palette) {
         expect($html)->toContain("--{$name}-500:{$palette[500]};");
     }
 });

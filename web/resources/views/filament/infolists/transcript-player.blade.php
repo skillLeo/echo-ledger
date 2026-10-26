@@ -99,20 +99,21 @@
             },
         }">
         <style>
-            /* Light theme first; .dark (set by Filament on <html>) swaps the palette. Text colours meet WCAG AA (4.5:1). */
-            .el-player { --el-border: #E2E8F0; --el-bg: linear-gradient(135deg, rgba(139,92,246,.06), rgba(34,211,238,.04)), #FFFFFF;
-                --el-text: #0F172A; --el-muted: #475569; --el-me: #6D28D9; --el-client: #155E75; --el-hover: rgba(15,23,42,.05);
-                --el-active: rgba(139,92,246,.14); --el-bar: #7C3AED; --el-focus: #7C3AED; --el-btn-border: #CBD5E1;
+            /* Light theme first; .dark (set by Filament on <html>) swaps the palette. The values are the shared design tokens
+               (resources/css/filament/admin/theme.css, C1); text colours meet WCAG AA (4.5:1). */
+            .el-player { --el-border: rgba(15,23,42,.10); --el-bg: #FFFFFF;
+                --el-text: #15171B; --el-muted: #565B69; --el-me: #6D28D9; --el-client: #0B7187; --el-hover: rgba(15,23,42,.05);
+                --el-active: rgba(124,58,237,.10); --el-bar: #7C3AED; --el-focus: #7C3AED; --el-btn-border: rgba(15,23,42,.18);
                 --el-btn-bg: #FFFFFF; --el-btn-hover: rgba(139,92,246,.12); --el-word: rgba(250,204,21,.45); --el-lane-me: rgba(124,58,237,.55);
                 --el-lane-client: rgba(14,116,144,.55);
-                color: var(--el-text); border: 1px solid var(--el-border); border-radius: 1rem; padding: 1rem; background: var(--el-bg); }
-            .dark .el-player { --el-border: rgba(255,255,255,.10); --el-bg: linear-gradient(135deg, rgba(139,92,246,.12), rgba(34,211,238,.06));
-                --el-text: #F1F5F9; --el-muted: #CBD5E1; --el-me: #C4B5FD; --el-client: #67E8F9; --el-hover: rgba(255,255,255,.06);
-                --el-active: rgba(139,92,246,.30); --el-bar: #A78BFA; --el-focus: #C4B5FD; --el-btn-border: rgba(255,255,255,.22);
+                color: var(--el-text); border: 1px solid var(--el-border); border-radius: 12px; padding: 1rem; background: var(--el-bg); }
+            .dark .el-player { --el-border: rgba(255,255,255,.08); --el-bg: #1A1B1F;
+                --el-text: #F2F3F5; --el-muted: #A8ACB7; --el-me: #B4A0FB; --el-client: #4FD1E8; --el-hover: rgba(255,255,255,.06);
+                --el-active: rgba(139,92,246,.22); --el-bar: #A78BFA; --el-focus: #B4A0FB; --el-btn-border: rgba(255,255,255,.15);
                 --el-btn-bg: rgba(255,255,255,.04); --el-btn-hover: rgba(139,92,246,.28); --el-word: rgba(250,204,21,.35);
                 --el-lane-me: rgba(167,139,250,.7); --el-lane-client: rgba(34,211,238,.6); }
             .el-player :focus-visible, .el-player:focus-visible { outline: 2px solid var(--el-focus); outline-offset: 2px; }
-            .el-player audio { width: 100%; margin-bottom: .6rem; border-radius: .75rem; }
+            .el-player audio { width: 100%; height: 40px; margin-bottom: .6rem; border-radius: 8px; }
             .el-player .el-tools { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: .78rem; color: var(--el-muted); margin-bottom: .6rem; }
             .el-player .el-tools label { display: inline-flex; gap: .35rem; align-items: center; cursor: pointer; }
             .el-player .el-tools select { font: inherit; border: 1px solid var(--el-btn-border); background: var(--el-btn-bg); color: var(--el-text); border-radius: .45rem; padding: .15rem .4rem; }
