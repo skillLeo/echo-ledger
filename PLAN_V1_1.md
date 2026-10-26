@@ -392,7 +392,9 @@ Severity in brackets. Each item lists the platform; the matching regression test
       Record-page copy without technical terms or file-extension lists.
 - [ ] C9 Performance budgets measured and reported: desktop idle ≤ 150 MB and < 1 % CPU, recording < 8 % CPU,
       detection ≤ 1 Hz without per-tick allocation; Android no wake locks or polling outside recording; web lists
-      paginated, lazy-loading guard test, < 300 ms server time.
+      paginated, lazy-loading guard test, < 300 ms server time. Measured so far (docs/HANDOFF.md "Phase 6 results"):
+      web met (≤ 231 ms on 3,005 recordings, N+1 guard and query-budget tests), desktop idle CPU 0.03 % met, phone met;
+      desktop idle memory 310 MB (budget 150 MB) open: windows must be created only when used.
 
 ---
 
