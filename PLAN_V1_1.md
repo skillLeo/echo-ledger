@@ -383,7 +383,10 @@ Severity in brackets. Each item lists the platform; the matching regression test
 - [x] C6 Loading, empty, error (Retry) and offline states on every list and screen. Desktop library: skeleton rows,
       sync error with Retry over the saved list, transcript error with Retry; phone: offline banner with Retry, transcript,
       activity, devices and storage errors with Retry; console: empty states with one action and an offline notice.
-- [ ] C7 Accessibility: WCAG 2.2 AA contrast, focus rings, full keyboard use, screen-reader labels.
+- [~] C7 Accessibility: WCAG 2.2 AA contrast, focus rings, full keyboard use, screen-reader labels. Contrast tests
+      for every token pair (also the overlay glass over white and black), name tests for every desktop control (a11y.test.tsx)
+      and every tappable phone element (AccessibilityLabelsTest, found the unlabelled auto-record switch); screen readers:
+      docs/MANUAL_QA.md section 17 (V-X1-V-X3).
 - [ ] C8 Copy pass: short, plain, sentence case.
 - [ ] C9 Performance budgets measured and reported: desktop idle ≤ 150 MB and < 1 % CPU, recording < 8 % CPU,
       detection ≤ 1 Hz without per-tick allocation; Android no wake locks or polling outside recording; web lists

@@ -157,6 +157,8 @@ class RecordScreenTest : ScreenTest() {
         compose.onNodeWithText("Oct 23 · 6:30 PM").assertIsDisplayed()
         compose.onAllNodesWithText("Keep")[0].click()
         awaitUi("the first call to be queued") { app.peekRecording("call-1")?.state == "queued" }
+        // The row turns "queued" just before the upload work is enqueued: wait for the work, not only the row.
+        awaitUi("the upload work to be enqueued") { workStates("call-1").isNotEmpty() }
 
         assertEquals(listOf(WorkInfo.State.ENQUEUED), workStates("call-1"))
         assertEquals("pending_decision", app.graph.recordings.get("call-2")!!.state)

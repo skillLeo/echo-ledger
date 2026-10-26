@@ -259,3 +259,17 @@ describe("motion (C5)", () => {
     expect(all?.style.getPropertyValue("animation-duration")).toBe("0ms");
   });
 });
+
+describe("overlay glass contrast (C7)", () => {
+  // The overlays float over any window: check the text on the glass over a white and a black backdrop.
+  it.each(THEMES)("caption, pill and review text stay readable on the %s glass over any background", (theme) => {
+    const glass = colour(theme, "--glass");
+    for (const backdrop of [[255, 255, 255], [0, 0, 0]] as Rgb[]) {
+      const surface = over(glass, backdrop);
+      for (const fg of ["--glass-text", "--glass-muted"]) {
+        const ratio = contrast(colour(theme, fg).rgb, surface);
+        expect(ratio, `${theme}: ${fg} on glass over ${backdrop.join(",")} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
+      }
+    }
+  });
+});

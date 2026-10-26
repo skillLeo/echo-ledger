@@ -841,6 +841,8 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                 Switch(
                     checked = settings.autoRecordArmed,
                     enabled = capabilities.canCaptureCalls,
+                    // C7: the switch carries its row's title for TalkBack (the text is a sibling, not merged).
+                    modifier = Modifier.semantics { contentDescription = "Auto-record WhatsApp calls" },
                     onCheckedChange = { on ->
                         context.startForegroundService(
                             RecordingService.intent(context, if (on) RecordingService.ACTION_ARM else RecordingService.ACTION_DISARM)
