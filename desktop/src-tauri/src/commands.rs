@@ -346,6 +346,7 @@ pub fn subscribe_captions(window: WebviewWindow, on_event: IpcChannel<CaptionEve
 #[tauri::command]
 pub fn overlay_set_hit_regions(window: WebviewWindow, regions: Vec<RectPx>, state: State<'_, HitRegions>) {
     state.0.lock().unwrap().insert(window.label().to_string(), regions);
+    state.1.notify_one(); // wake the idle click-through poll at once (C9)
 }
 
 /// After the user drags the overlay: snap to the nearest corner of its monitor's work area and remember it.

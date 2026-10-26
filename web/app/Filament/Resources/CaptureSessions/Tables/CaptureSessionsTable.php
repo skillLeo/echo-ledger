@@ -24,6 +24,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
+use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -105,7 +106,8 @@ final class CaptureSessionsTable
             ->emptyStateActions([
                 Action::make('clearSearchAndFilters')->label('Clear search and filters')->color('gray')
                     ->visible(fn (HasTable $livewire, Table $table): bool => $livewire->hasTableSearch() || $table->isFiltered())
-                    ->action(function (HasTable $livewire): void {
+                    // Only the sessions list page shows this table, and its page has the filter form.
+                    ->action(function (ListRecords $livewire): void {
                         $livewire->resetTableSearch();
                         $livewire->removeTableFilters();
                     }),

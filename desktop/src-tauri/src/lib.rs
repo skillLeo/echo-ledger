@@ -239,6 +239,8 @@ pub fn run() {
             WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
                 api.prevent_close(); // keep running in the tray
                 let _ = window.hide();
+                // C9: the page stops polling while it is hidden (WebView2 is not told about the hide).
+                let _ = tauri::Emitter::emit(window, "main:visibility", false);
             }
             WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) if window.label() == "main" => {
                 let app = window.app_handle().clone();

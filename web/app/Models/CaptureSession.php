@@ -205,7 +205,8 @@ class CaptureSession extends Model
     public function purgeMedia(): void
     {
         $this->recordings()->get()->each(fn (Recording $r) => $r->delete());
-        $this->transcripts()->get()->each(fn (Transcript $t) => $t->delete());
+        // The session is already loaded: hand it to each transcript instead of one query per transcript (C9, N+1).
+        $this->transcripts()->get()->each(fn (Transcript $t) => $t->setRelation('captureSession', $this)->delete());
         $this->forceFill(['media_erased_at' => now()])->saveQuietly();
     }
 
@@ -217,7 +218,8 @@ class CaptureSession extends Model
     {
         app(ProviderCopyEraser::class)->eraseFor($this);
         $this->recordings()->get()->each(fn (Recording $r) => $r->delete());
-        $this->transcripts()->get()->each(fn (Transcript $t) => $t->delete());
+        // The session is already loaded: hand it to each transcript instead of one query per transcript (C9, N+1).
+        $this->transcripts()->get()->each(fn (Transcript $t) => $t->setRelation('captureSession', $this)->delete());
     }
 
     protected static function booted(): void

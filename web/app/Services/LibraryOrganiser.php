@@ -260,7 +260,7 @@ final class LibraryOrganiser
                 if ($transcript === null || $transcript->status !== TranscriptStatus::Completed) {
                     continue;
                 }
-                $file = $this->exporter->export($transcript, $format);
+                $file = $this->exporter->export($transcript->setRelation('captureSession', $session), $format);
                 $zip->addFromString(self::uniqueName($file['filename'], $names), $file['body']);
             }
             $count = count($names);

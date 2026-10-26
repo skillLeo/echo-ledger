@@ -91,7 +91,7 @@ class WorkspaceSettings extends Page implements HasTable
                     ->requiresConfirmation()->modalDescription('They lose access to this workspace at once and their devices here are unpaired. Their recordings stay.')
                     ->action(fn (User $record) => $this->attempt(fn () => app(Workspaces::class)->removeMember($this->workspaceOrFail(), $record), "{$record->name} removed")),
             ])
-            ->paginated(false);
+            ->paginated([25, 50, 100]);
     }
 
     protected function getHeaderActions(): array

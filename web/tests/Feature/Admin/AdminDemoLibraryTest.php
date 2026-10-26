@@ -48,7 +48,7 @@ it('shows every demo session in the list with its source and app label', functio
 });
 
 it('opens every demo session with its transcript, speakers and audio player', function () {
-    foreach (CaptureSession::query()->with('transcripts')->get() as $session) {
+    foreach (CaptureSession::query()->with(['transcripts', 'finalTranscript'])->get() as $session) {
         $html = $this->get('/admin/sessions/'.$session->id)->assertOk()->getContent();
         $segments = $session->finalTranscript->segments;
 

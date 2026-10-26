@@ -12,6 +12,7 @@ import type { PendingFocus } from "./LibraryQueue";
 import { RecordView } from "./RecordView";
 import { SettingsView } from "./SettingsView";
 import { CommandPalette } from "./CommandPalette";
+import { useWindowShown } from "../../lib/visibility";
 
 type Tab = "library" | "record" | "settings";
 const TABS: readonly Tab[] = ["library", "record", "settings"];
@@ -82,9 +83,16 @@ export default function MainApp() {
     api.status().then(setStatus).catch(() => undefined);
   }, []);
 
+  // C9: the status poll runs only while the window is on screen; the tray and events keep it current otherwise.
+  const shown = useWindowShown();
   useEffect(() => {
+    if (!shown) return;
     refreshStatus();
     const timer = window.setInterval(refreshStatus, 1500);
+    return () => window.clearInterval(timer);
+  }, [shown, refreshStatus]);
+
+  useEffect(() => {
     const unlisten = [
       listen<AppStatus>("app:status", (e) => setStatus(e.payload)),
       listen<string>("app:error", (e) => setToast({ text: e.payload, error: true })),
@@ -99,10 +107,9 @@ export default function MainApp() {
       }),
     ];
     return () => {
-      window.clearInterval(timer);
       unlisten.forEach((p) => p.then((f) => f()).catch(() => undefined));
     };
-  }, [refreshStatus]);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;

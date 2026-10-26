@@ -20,12 +20,16 @@ use InvalidArgumentException;
  */
 final class Workspaces
 {
+    /** @var array<string, WorkspaceRole|null> Roles looked up in this request, by "workspace:user". */
+    private array $roles = [];
+
     /** A new workspace on the Personal plan with the user as owner; it becomes their current one if they had none. */
     public function createFor(User $user, string $name = 'Personal'): Workspace
     {
         return DB::transaction(function () use ($user, $name): Workspace {
             $workspace = Workspace::query()->create(['name' => mb_substr($name, 0, 120), 'plan_id' => Plan::personal()->id]);
             $workspace->members()->attach($user->getKey(), ['role' => WorkspaceRole::Owner->value]);
+            $this->roles = [];
             if ($user->current_workspace_id === null) {
                 $user->forceFill(['current_workspace_id' => $workspace->id])->save();
             }
@@ -63,9 +67,14 @@ final class Workspaces
         if ($workspaceId === null) {
             return null;
         }
-        $role = DB::table('workspace_user')->where('workspace_id', $workspaceId)->where('user_id', $user->getKey())->value('role');
+        // C9: lists ask once per row (delete permission); one lookup per request is enough.
+        $key = $workspaceId.':'.$user->getKey();
+        if (! array_key_exists($key, $this->roles)) {
+            $role = DB::table('workspace_user')->where('workspace_id', $workspaceId)->where('user_id', $user->getKey())->value('role');
+            $this->roles[$key] = is_string($role) ? WorkspaceRole::tryFrom($role) : null;
+        }
 
-        return is_string($role) ? WorkspaceRole::tryFrom($role) : null;
+        return $this->roles[$key];
     }
 
     public function isOwner(User $user, ?int $workspaceId = null): bool
@@ -106,6 +115,7 @@ final class Workspaces
             throw new InvalidArgumentException('Already a member.');
         }
         $workspace->members()->attach($user->getKey(), ['role' => $role->value]);
+        $this->roles = [];
         if ($user->current_workspace_id === null) {
             $user->forceFill(['current_workspace_id' => $workspace->id])->save();
         }
@@ -121,6 +131,7 @@ final class Workspaces
             throw new InvalidArgumentException('A workspace needs at least one owner.');
         }
         $workspace->members()->updateExistingPivot($user->getKey(), ['role' => $role->value]);
+        $this->roles = [];
     }
 
     public function removeMember(Workspace $workspace, User $user): void
@@ -134,6 +145,7 @@ final class Workspaces
         }
         DB::transaction(function () use ($workspace, $user): void {
             $workspace->members()->detach($user->getKey());
+            $this->roles = [];
             // Their devices stop syncing into this workspace at once (tokens go with the device).
             Device::query()->withoutGlobalScopes()->where('workspace_id', $workspace->id)->where('user_id', $user->getKey())
                 ->get()->each(function (Device $device): void {

@@ -45,6 +45,7 @@ class TranscriptPlayerEntry extends Entry
             return ['audio_url' => null, 'segments' => [], 'speaker_names' => [], 'kind' => null, 'status' => null, 'editable' => false,
                 'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'markers' => [], 'pauses' => [], 'duration_ms' => 1];
         }
+        $record->loadMissing(['primaryRecording', 'client']);
         $primary = $record->primaryRecording;
         $final = $record->transcripts()->where('kind', TranscriptKind::Final->value)->first();
         $live = $record->transcripts()->where('kind', TranscriptKind::Live->value)->first();

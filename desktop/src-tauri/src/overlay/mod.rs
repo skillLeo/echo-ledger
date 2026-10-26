@@ -28,9 +28,19 @@ const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
 const MARGIN_LOGICAL: f64 = 18.0;
 const PILL_MARGIN_LOGICAL: f64 = 12.0;
 
-/// Interactive rects per window label, pushed from React on layout change.
+/// Interactive rects per window label, pushed from React on layout change; the notify wakes the idle poll at once.
 #[derive(Default)]
-pub struct HitRegions(pub Mutex<HashMap<String, Vec<RectPx>>>);
+pub struct HitRegions(pub Mutex<HashMap<String, Vec<RectPx>>>, pub tokio::sync::Notify);
+
+/// Poll period while some overlay is interactive (about 30 Hz, so the pointer is followed smoothly).
+pub const ACTIVE_POLL: Duration = Duration::from_millis(33);
+/// Poll period while every overlay is click-through and empty (C9: idle costs four wake-ups a second).
+pub const IDLE_POLL: Duration = Duration::from_millis(250);
+
+/// How long the click-through loop sleeps: short while a window has hit regions or still accepts clicks.
+pub fn poll_period(has_regions: bool, all_ignoring: bool) -> Duration {
+    if has_regions || !all_ignoring { ACTIVE_POLL } else { IDLE_POLL }
+}
 
 /// What `create_overlays` needs from the settings.
 #[derive(Clone, Copy, Debug)]
@@ -174,20 +184,28 @@ pub fn set_content_protection<R: Runtime>(app: &AppHandle<R>, protected: bool) {
 pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
     tauri::async_runtime::spawn(async move {
         let mut ignoring: HashMap<&'static str, bool> = HashMap::new();
-        let mut tick = tokio::time::interval(Duration::from_millis(33));
-        let mut ticks: u32 = 0;
+        let mut period = ACTIVE_POLL;
+        let mut last_resync = std::time::Instant::now();
         loop {
-            tick.tick().await;
-            ticks = ticks.wrapping_add(1);
+            let regions_changed = app.state::<HitRegions>();
+            tokio::select! {
+                _ = tokio::time::sleep(period) => {}
+                _ = regions_changed.1.notified() => {}
+            }
             // Re-apply the desired state about once a second even when unchanged: the window can be put back to
             // click-through elsewhere (e.g. when hiding), and a stale cache would otherwise leave it stuck.
-            let resync = ticks.is_multiple_of(30);
+            let resync = last_resync.elapsed() >= Duration::from_secs(1);
+            if resync {
+                last_resync = std::time::Instant::now();
+            }
             let regions: HashMap<&'static str, Vec<RectPx>> = match app.state::<HitRegions>().0.lock() {
                 Ok(map) => WINDOWS.iter().filter_map(|l| map.get(*l).filter(|r| !r.is_empty()).map(|r| (*l, r.clone()))).collect(),
                 Err(_) => HashMap::new(),
             };
+            let all_ignoring = WINDOWS.iter().all(|l| ignoring.get(l) == Some(&true));
+            period = poll_period(!regions.is_empty(), all_ignoring);
             // Nothing interactive and every window already click-through: no cursor query, no window calls.
-            if !resync && regions.is_empty() && WINDOWS.iter().all(|l| ignoring.get(l) == Some(&true)) {
+            if !resync && regions.is_empty() && all_ignoring {
                 continue;
             }
             let Ok(cursor) = app.cursor_position() else { continue };
@@ -218,5 +236,25 @@ pub fn set_overlay_visible<R: Runtime>(app: &AppHandle<R>, label: &str, visible:
         if let Some(w) = app.get_webview_window(label) {
             let _ = w.set_ignore_cursor_events(true);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_click_through_poll_slows_down_when_every_overlay_is_idle() {
+        assert_eq!(poll_period(false, true), IDLE_POLL);
+        assert_eq!(poll_period(true, true), ACTIVE_POLL);
+        assert_eq!(poll_period(false, false), ACTIVE_POLL, "a window still accepting clicks is followed closely");
+        assert!(IDLE_POLL.as_millis() >= 250 && ACTIVE_POLL.as_millis() <= 40);
+    }
+
+    #[tokio::test]
+    async fn a_new_hit_region_wakes_the_poll_at_once() {
+        let regions = HitRegions::default();
+        regions.1.notify_one();
+        tokio::time::timeout(Duration::from_millis(50), regions.1.notified()).await.expect("woken without waiting for the idle period");
     }
 }

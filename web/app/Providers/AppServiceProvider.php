@@ -22,9 +22,11 @@ use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -39,12 +41,18 @@ class AppServiceProvider extends ServiceProvider
         // Scoped = fresh per request and per queued job (no stale settings/secrets across jobs).
         $this->app->scoped(SettingsRepository::class);
         $this->app->scoped(CredentialVault::class);
+        // Caches each member's role for one request (C9: no query per table row).
+        $this->app->scoped(Workspaces::class);
         $this->app->scoped(SttManager::class);
         $this->app->bind(RecordingCipher::class, fn (): RecordingCipher => RecordingCipher::fromConfig());
     }
 
     public function boot(): void
     {
+        // C9: outside production a relation loaded lazily on a model from a list of several (an N+1 query) throws,
+        // so every test that renders a list catches a missing eager load. Production only loads lazily.
+        Model::preventLazyLoading(! $this->app->isProduction());
+
         // docs/API.md returns single resources unwrapped ({"id": …}); Laravel would otherwise wrap them in {"data": …}.
         JsonResource::withoutWrapping();
 

@@ -239,6 +239,7 @@ pub fn show_main(app: &AppHandle) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+        let _ = tauri::Emitter::emit(&window, "main:visibility", true);
     }
 }
 

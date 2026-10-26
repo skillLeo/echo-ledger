@@ -3,6 +3,7 @@ import { api, type AppStatus, type MicUser } from "../../lib/ipc";
 import { processName, sourceAppLabel } from "../../lib/format";
 import { explainMicUser, micTone } from "../../lib/explainer";
 import { DISCARD_CONFIRM } from "../../lib/pending";
+import { useWindowShown } from "../../lib/visibility";
 import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
 
 /**
@@ -11,7 +12,9 @@ import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
  */
 function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined> }) {
   const [users, setUsers] = useState<MicUser[]>([]);
+  const shown = useWindowShown();
   useEffect(() => {
+    if (!shown) return; // C9: no microphone scans behind a hidden window
     let alive = true;
     const tick = () => api.micUsers().then((u) => alive && setUsers(u)).catch(() => undefined);
     tick();
@@ -20,7 +23,7 @@ function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => 
       alive = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [shown]);
   return (
     <div className="card" style={{ marginTop: 14 }}>
       <div className="row">
