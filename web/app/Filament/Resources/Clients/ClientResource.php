@@ -103,9 +103,10 @@ class ClientResource extends Resource
                 TextColumn::make('name')->searchable()->sortable()->weight('semibold'),
                 TextColumn::make('keyterms_count')->label('Keyterms')->badge()->color('primary'),
                 TextColumn::make('capture_sessions_count')->label('Sessions')->badge()->color('gray'),
-                TextColumn::make('language')->placeholder('auto'),
+                TextColumn::make('language')->placeholder('Automatic')
+                    ->formatStateUsing(fn (?string $state): string => LanguageChoice::OFFERED[(string) $state] ?? (string) $state),
                 TextColumn::make('updated_at')->since()->label('Updated'),
-                IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)
+                IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)->trueColor('warning')->falseColor('gray')
                     ->action(fn (Client $record) => $record->update(['pinned' => ! $record->pinned])),
             ])
             ->recordActions([EditAction::make(), DeleteAction::make()])

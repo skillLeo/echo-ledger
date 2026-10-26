@@ -47,7 +47,7 @@ it('lists clients with keyterm and session counts, and "auto" for no language', 
     $list = $this->panelComponent(ListClients::class)
         ->assertCanSeeTableRecords([$client])
         ->assertSee('Acme Holdings')
-        ->assertSee('auto');
+        ->assertSee('Automatic');
 
     $record = $list->instance()->getTableRecords()->first();
     expect($record->keyterms_count)->toBe(3)->and($record->capture_sessions_count)->toBe(2);
