@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\Schemas;
 
+use App\Enums\SttProviderKey;
 use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
+use App\Stt\LanguageChoice;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -29,8 +31,10 @@ final class CaptureSessionInfolist
                         ->state(fn (CaptureSession $r): string => CaptureSessionsTable::deviceLabel($r)),
                     TextEntry::make('status')->badge(),
                     TextEntry::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('Not started'),
-                    TextEntry::make('finalTranscript.provider')->label('Engine')->placeholder('—'),
-                    TextEntry::make('finalTranscript.language')->label('Language')->placeholder('auto'),
+                    TextEntry::make('finalTranscript.provider')->label('Transcribed by')->placeholder('—')
+                        ->formatStateUsing(fn (?string $state): string => SttProviderKey::tryFrom((string) $state)?->getLabel() ?? (string) $state),
+                    TextEntry::make('finalTranscript.language')->label('Language')->placeholder('Automatic')
+                        ->formatStateUsing(fn (?string $state): string => LanguageChoice::OFFERED[(string) $state] ?? (string) $state),
                     TextEntry::make('finalTranscript.error')->label('Error')->color('danger')->placeholder('—')
                         ->visible(fn (CaptureSession $r): bool => filled($r->finalTranscript?->error))->columnSpan(2),
                 ]),

@@ -422,7 +422,7 @@ it('shows the session details on the view page', function () {
         ->assertSee('Work laptop')
         ->assertSee('1:02:05')
         ->assertSee('Completed')
-        ->assertSee('assemblyai');
+        ->assertSee('AssemblyAI'); // the engine by its product name, not its id (C8)
 });
 
 it('shows placeholders for a session without client, device or transcript', function () {

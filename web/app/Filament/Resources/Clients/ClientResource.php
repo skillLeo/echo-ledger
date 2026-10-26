@@ -15,6 +15,7 @@ use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use BackedEnum;
+use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\ColorPicker;
@@ -107,7 +108,10 @@ class ClientResource extends Resource
                 IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)
                     ->action(fn (Client $record) => $record->update(['pinned' => ! $record->pinned])),
             ])
-            ->recordActions([EditAction::make(), DeleteAction::make()]);
+            ->recordActions([EditAction::make(), DeleteAction::make()])
+            ->emptyStateHeading('No clients yet')
+            ->emptyStateDescription('A client groups its recordings and teaches the engines its names and words.')
+            ->emptyStateActions([CreateAction::make()->label('Add a client')]);
     }
 
     public static function getRelations(): array

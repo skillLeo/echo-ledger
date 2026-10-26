@@ -8,6 +8,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Exceptions\ApiError;
+use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\LibraryOrganiser;
@@ -99,7 +100,19 @@ final class CaptureSessionsTable
             })
             ->emptyStateDescription(fn (HasTable $livewire, Table $table): string => $livewire->hasTableSearch() || $table->isFiltered()
                 ? 'Try other words, or clear the search and filters.'
-                : 'Pair a phone or desktop under Devices, or upload a voice note.');
+                : 'Pair a phone or desktop under Devices, or upload a voice note.')
+            // C3: one clear next step in the empty state.
+            ->emptyStateActions([
+                Action::make('clearSearchAndFilters')->label('Clear search and filters')->color('gray')
+                    ->visible(fn (HasTable $livewire, Table $table): bool => $livewire->hasTableSearch() || $table->isFiltered())
+                    ->action(function (HasTable $livewire): void {
+                        $livewire->resetTableSearch();
+                        $livewire->removeTableFilters();
+                    }),
+                Action::make('pairDevice')->label('Pair a device')->icon(Heroicon::OutlinedDevicePhoneMobile)
+                    ->visible(fn (HasTable $livewire, Table $table): bool => ! $livewire->hasTableSearch() && ! $table->isFiltered())
+                    ->url(fn (): string => DeviceResource::getUrl('index')),
+            ]);
     }
 
     /**
