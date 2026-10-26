@@ -99,7 +99,8 @@ class SettingsHubTest : ScreenTest() {
         compose.onNodeWithText("Storage and retention").performClick()
 
         compose.onNodeWithText("Storage and retention").assertIsDisplayed()
-        compose.onNodeWithText("Connect to see the server's storage.").assertIsDisplayed()
+        compose.onNodeWithText("Couldn't load the server's storage. Check the connection.").assertIsDisplayed()
+        compose.onNodeWithText("Retry").assertIsDisplayed()
     }
 
     @Test

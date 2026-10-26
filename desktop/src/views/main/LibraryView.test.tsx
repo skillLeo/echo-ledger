@@ -392,12 +392,18 @@ describe("LibraryView transcript", () => {
     expect(within(detail()).getByRole("button", { name: "Copy with timestamps" })).toBeDisabled();
   });
 
-  it("shows the transcript status instead of text when the transcript cannot be loaded", async () => {
+  it("says the transcript could not be loaded and retries it (C6; it used to read 'Transcript completed')", async () => {
     await renderLibrary();
     fail("transcript_detail", "Server returned 404: Not found");
     await selectItem("Zoom with Acme");
     await waitFor(() => expect(callsOf("transcript_detail")).toHaveLength(1));
-    expect(await within(detail()).findByText("Transcript completed")).toBeInTheDocument();
+    expect(await within(detail()).findByText(/Couldn't load the transcript/)).toBeInTheDocument();
+    expect(within(detail()).queryByText("Transcript completed")).not.toBeInTheDocument();
+
+    respond("transcript_detail", makeTranscript());
+    fireEvent.click(within(detail()).getByRole("button", { name: "Retry" }));
+    expect(await within(detail()).findByText("Hello, this is Sam.")).toBeInTheDocument();
+    expect(callsOf("transcript_detail")).toHaveLength(2);
   });
 
   it("returns to the placeholder when the selected row is filtered out", async () => {
@@ -909,5 +915,37 @@ describe("transcript tools in the library (B6-B12)", () => {
     await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
     fireEvent.change(within(detail()).getByLabelText("Speed"), { target: { value: "1.5" } });
     expect(media().playbackRate).toBe(1.5);
+  });
+});
+
+describe("library states (C6)", () => {
+  it("shows placeholders until the saved library is read, then the empty state", async () => {
+    mockBackend([]);
+    let release: (items: LibraryItem[]) => void = () => undefined;
+    respondWith("library_list", () => new Promise<LibraryItem[]>((resolve) => (release = resolve)));
+    render(<LibraryView notify={vi.fn()} />);
+    await flushAsync();
+    expect(within(list()).getByRole("status", { name: "Loading recordings" })).toBeInTheDocument();
+    expect(within(list()).queryByText("No recordings yet.")).not.toBeInTheDocument();
+
+    await act(async () => release([]));
+    await flushAsync();
+    expect(within(list()).queryByRole("status", { name: "Loading recordings" })).not.toBeInTheDocument();
+    expect(within(list()).getByText("No recordings yet.")).toBeInTheDocument();
+  });
+
+  it("keeps the saved recordings when a sync fails and offers Retry", async () => {
+    mockBackend(ITEMS);
+    fail("library_refresh", "No connection to the server");
+    render(<LibraryView notify={vi.fn()} />);
+    await flushAsync();
+    expect(await within(list()).findByText(/Couldn't sync with the server/)).toBeInTheDocument();
+    expect(within(list()).getByText(ITEMS[0].title ?? "")).toBeInTheDocument();
+
+    respond("library_refresh", ITEMS);
+    fireEvent.click(within(list()).getByRole("button", { name: "Retry" }));
+    await flushAsync();
+    expect(within(list()).queryByText(/Couldn't sync with the server/)).not.toBeInTheDocument();
+    expect(callsOf("library_refresh")).toHaveLength(2);
   });
 });

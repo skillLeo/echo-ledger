@@ -140,6 +140,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** A library sync is running (the first one shows a progress indicator instead of an empty library). */
     val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
 
+    private val _offline = MutableStateFlow(false)
+
+    /** The last sync could not reach the server (C6): the library shows a banner with Retry. */
+    val offline: StateFlow<Boolean> = _offline.asStateFlow()
+
     /** Whether this phone has finished at least one library sync since it was paired. */
     fun hasSynced(): Boolean = graph.library.hasSynced()
 
@@ -160,6 +165,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())
             _clients.value = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
             WidgetStateStore.refresh(getApplication())
+            _offline.value = false
         } catch (e: NotPairedException) {
             // Revoked on the server: back to the pairing screen. Recordings waiting to upload stay on the phone.
             graph.settings.clearPairing()
@@ -168,6 +174,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             WidgetStateStore.refresh(getApplication())
             _message.value = "This phone was unpaired on the server. Pair it again."
         } catch (e: Exception) {
+            _offline.value = true
             _message.value = "Offline — showing the last synced library"
         } finally {
             _syncing.value = false

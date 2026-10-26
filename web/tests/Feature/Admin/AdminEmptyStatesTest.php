@@ -43,3 +43,10 @@ it('offers to add a client when there are none', function () {
         ->assertSee('No clients yet')
         ->assertSee('Add a client');
 });
+
+it('shows an offline notice only while the browser is offline', function () {
+    $this->signInAsAdmin();
+
+    $html = $this->get('/admin')->assertOk()->getContent();
+    expect($html)->toContain('wire:offline')->toContain("You're offline.");
+});

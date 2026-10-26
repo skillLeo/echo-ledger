@@ -367,6 +367,11 @@ fun LibraryScreen(
             shape = RoundedCornerShape(Radius.md),
             modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
         )
+        val offline by vm.offline.collectAsState()
+        if (offline) {
+            Spacer(Modifier.height(12.dp))
+            RetryBanner("You're offline. Showing the last synced library.", retrying = syncing, onRetry = { vm.refresh() })
+        }
         if (showCallSetup) {
             Spacer(Modifier.height(12.dp))
             CallSetupBanner(onSetup)
@@ -536,6 +541,8 @@ private fun StatusDot(status: String?, finalStatus: String?) {
 fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, startAtMs: Long? = null) {
     var transcript by remember { mutableStateOf<TranscriptDto?>(null) }
     var loaded by remember { mutableStateOf(false) }
+    var loadFailed by remember { mutableStateOf(false) }
+    var attempt by remember { mutableStateOf(0) }
     var playbackUrl by remember { mutableStateOf<String?>(null) }
     var bookmarks by remember { mutableStateOf<List<SessionMarkerDto>>(emptyList()) }
     var speakerNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -543,9 +550,11 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val clipboard = LocalClipboard.current
     val player = rememberRecordingPlayer(playbackUrl)
-    LaunchedEffect(item.id) {
+    LaunchedEffect(item.id, attempt) {
         val id = item.transcript?.finalTranscriptId ?: item.transcript?.liveTranscriptId
         transcript = id?.let { vm.transcript(it) }
+        // Only a finished transcript that does not arrive is a load failure; otherwise its status says more.
+        loadFailed = id != null && transcript == null && item.transcript?.finalStatus == "completed"
         loaded = true
         val detail = vm.sessionDetail(item.id)
         playbackUrl = detail?.playbackUrl
@@ -641,6 +650,13 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
             }
             when {
                 !loaded -> item { Text("Loading transcript…", color = Brand.Muted) }
+
+                t == null && loadFailed -> item {
+                    RetryBanner("Couldn't load the transcript.", retrying = false, onRetry = {
+                        loaded = false
+                        attempt++
+                    })
+                }
 
                 t == null -> item {
                     val status = item.transcript?.finalStatus

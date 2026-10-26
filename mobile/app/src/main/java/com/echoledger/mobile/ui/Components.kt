@@ -9,17 +9,22 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -182,3 +187,19 @@ fun formatWhen(
     java.time.OffsetDateTime.parse(iso).atZoneSameInstant(zone)
         .format(java.time.format.DateTimeFormatter.ofPattern("MMM d · h:mm a", locale))
 }.getOrDefault("")
+
+/** A quiet warning row with one action: offline, or a part of the screen that did not load (C6). */
+@Composable
+fun RetryBanner(text: String, retrying: Boolean, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(modifier.fillMaxWidth(), shape = RoundedCornerShape(Radius.md), color = Brand.Warning.copy(alpha = 0.12f)) {
+        Row(
+            Modifier.padding(start = Space.s4, end = Space.s1, top = Space.s1, bottom = Space.s1),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Outlined.CloudOff, contentDescription = null, tint = Brand.Warning, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(Space.s3))
+            Text(text, Modifier.weight(1f), color = Brand.Text, fontSize = 13.sp)
+            TextButton(onClick = onRetry, enabled = !retrying) { Text(if (retrying) "Retrying…" else "Retry") }
+        }
+    }
+}

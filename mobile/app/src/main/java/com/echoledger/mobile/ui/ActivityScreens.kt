@@ -40,9 +40,12 @@ fun ActivityPanel(
 ) {
     var items by remember { mutableStateOf<List<ActivityItemDto>?>(null) }
     var unread by remember { mutableStateOf(0) }
+    var failed by remember { mutableStateOf(false) }
+    var attempt by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) {
+    LaunchedEffect(attempt) {
         val answer = load()
+        failed = answer == null
         items = answer?.data.orEmpty()
         unread = answer?.unreadCount ?: 0
         onUnread(unread)
@@ -66,6 +69,11 @@ fun ActivityPanel(
         val list = items
         when {
             list == null -> Text("Loading…", color = Brand.Muted, fontSize = 12.sp)
+
+            failed -> RetryBanner("Couldn't load activity. Check the connection.", retrying = false, onRetry = {
+                items = null
+                attempt++
+            })
 
             list.isEmpty() -> Text(
                 "Nothing yet. Finished transcripts, failed uploads and new devices show up here.",

@@ -37,8 +37,9 @@ fun SecuritySection(load: suspend () -> SecurityResponse?, revoke: suspend (Stri
     var overview by remember { mutableStateOf<SecurityResponse?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) {
+    LaunchedEffect(attempt) {
         overview = load()
         loaded = true
     }
@@ -48,7 +49,10 @@ fun SecuritySection(load: suspend () -> SecurityResponse?, revoke: suspend (Stri
         when {
             !loaded -> Text("Loading…", color = Brand.Muted, fontSize = 12.sp)
 
-            current == null -> Text("Connect to see your devices and recent activity.", color = Brand.Muted, fontSize = 12.sp)
+            current == null -> RetryBanner("Couldn't load your devices. Check the connection.", retrying = false, onRetry = {
+                loaded = false
+                attempt++
+            })
 
             else -> {
                 current.devices.forEach { d ->
@@ -116,7 +120,8 @@ fun fileSize(bytes: Long): String {
 fun StorageSection(load: suspend () -> com.echoledger.mobile.data.StorageDto?) {
     var info by remember { mutableStateOf<com.echoledger.mobile.data.StorageDto?>(null) }
     var loaded by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
+    var attempt by remember { mutableStateOf(0) }
+    LaunchedEffect(attempt) {
         info = load()
         loaded = true
     }
@@ -126,7 +131,10 @@ fun StorageSection(load: suspend () -> com.echoledger.mobile.data.StorageDto?) {
         when {
             !loaded -> Text("Loading…", color = Brand.Muted, fontSize = 12.sp)
 
-            current == null -> Text("Connect to see the server's storage.", color = Brand.Muted, fontSize = 12.sp)
+            current == null -> RetryBanner("Couldn't load the server's storage. Check the connection.", retrying = false, onRetry = {
+                loaded = false
+                attempt++
+            })
 
             else -> {
                 Text(

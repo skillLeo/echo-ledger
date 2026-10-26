@@ -76,13 +76,20 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const selection = useRef(0);
   const playbackRefreshed = useRef(false);
   const [loading, setLoading] = useState(false);
+  // C6: the first local read (skeleton until then), the last sync error (Retry) and a transcript that did not load.
+  const [loaded, setLoaded] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [transcriptError, setTranscriptError] = useState(false);
+  const [transcriptAttempt, setTranscriptAttempt] = useState(0);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       setItems(await api.refreshLibrary());
+      setSyncError(null);
     } catch (e) {
       notify(errorMessage(e), true);
+      setSyncError(errorMessage(e));
       setItems(await api.library().catch(() => []));
     } finally {
       setLoading(false);
@@ -90,7 +97,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   }, [notify]);
 
   useEffect(() => {
-    api.library().then(setItems).catch(() => undefined);
+    api.library().then(setItems).catch(() => undefined).finally(() => setLoaded(true));
     refresh();
     const un = listen("library:updated", () => api.library().then(setItems).catch(() => undefined));
     return () => {
@@ -128,6 +135,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     const token = ++selection.current;
     const latest = () => token === selection.current;
     setTranscript(null);
+    setTranscriptError(false);
     setPlaybackUrl(null);
     setBookmarks([]);
     setSpeakerNames({});
@@ -141,7 +149,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     playbackRefreshed.current = false;
     // While the final transcript is still being made, the live captions (when there are any) are worth reading.
     const id = (isTranscribing(finalStatus) && liveId) || finalId || liveId;
-    if (id) api.transcript(id).then((t) => latest() && setTranscript(t)).catch(() => latest() && setTranscript(null));
+    if (id) {
+      api.transcript(id).then((t) => latest() && setTranscript(t)).catch(() => {
+        if (!latest()) return;
+        setTranscript(null);
+        setTranscriptError(true);
+      });
+    }
     // Temporary signed URL to the decrypted recording; the server streams it with Range support.
     if (current) {
       api
@@ -156,7 +170,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         .catch(() => latest() && setPlaybackUrl(null));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id, finalId, liveId, finalStatus]);
+  }, [current?.id, finalId, liveId, finalStatus, transcriptAttempt]);
 
   /** The signed playback URL lives 30 minutes (docs/API.md); a failed load asks for a fresh one once (A6.DU8). */
   const onPlaybackError = () => {
@@ -421,6 +435,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         <div className="list" data-testid="library-list">
           {binOpen && <BinPanel notify={notify} onClose={() => setBinOpen(false)} />}
           {selecting && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} />}
+          {syncError && (
+            <div className="notice error sync-error" role="alert">
+              <span>Couldn't sync with the server. Showing what is saved on this computer.</span>
+              <button type="button" className="btn compact" onClick={refresh} disabled={loading}>Retry</button>
+            </div>
+          )}
           <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />
           {found.length > 0 && (
             <div className="group search-hits" role="region" aria-label="Matches in transcripts">
@@ -440,7 +460,17 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               ))}
             </div>
           )}
-          {filtered.length === 0 && (
+          {!loaded && items.length === 0 && (
+            <div className="group" role="status" aria-label="Loading recordings">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="item skeleton-item" aria-hidden="true">
+                  <span className="skeleton" style={{ width: "62%", height: 14 }} />
+                  <span className="skeleton" style={{ width: "38%", height: 10 }} />
+                </div>
+              ))}
+            </div>
+          )}
+          {loaded && filtered.length === 0 && (
             <div className="empty">{view === "waiting" ? "Nothing is waiting here. Recordings waiting for Keep or Discard on this computer are listed at the top." : query || source !== "all" || tag !== null || label !== null || folder !== null || view !== "all" ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
           )}
           {groups.map((group) => (
@@ -570,7 +600,14 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   </>
                 )
               ) : (
+                transcriptError ? (
+                  <div className="notice error" role="alert" style={{ marginTop: 12 }}>
+                    Couldn't load the transcript. Check the connection and try again.{" "}
+                    <button type="button" className="btn compact" onClick={() => setTranscriptAttempt((n) => n + 1)}>Retry</button>
+                  </div>
+                ) : (
                 <div className="empty">{isTranscribing(finalStatus) ? "Transcribing…" : finalStatus ? `Transcript ${finalStatus.replace("_", " ")}` : "Transcript not available yet."}</div>
+                )
               )}
             </>
           )}

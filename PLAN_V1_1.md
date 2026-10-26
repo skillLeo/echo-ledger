@@ -380,7 +380,9 @@ Severity in brackets. Each item lists the platform; the matching regression test
 - [x] C5 Motion 150–220 ms ease-out, respects reduce-motion. Motion tokens in all three apps; desktop and console turn
       motion off with reduced motion (contract test in styles.test.ts); the phone uses Material motion, which follows the
       system animation setting.
-- [ ] C6 Loading, empty, error (Retry) and offline states on every list and screen.
+- [x] C6 Loading, empty, error (Retry) and offline states on every list and screen. Desktop library: skeleton rows,
+      sync error with Retry over the saved list, transcript error with Retry; phone: offline banner with Retry, transcript,
+      activity, devices and storage errors with Retry; console: empty states with one action and an offline notice.
 - [ ] C7 Accessibility: WCAG 2.2 AA contrast, focus rings, full keyboard use, screen-reader labels.
 - [ ] C8 Copy pass: short, plain, sentence case.
 - [ ] C9 Performance budgets measured and reported: desktop idle ≤ 150 MB and < 1 % CPU, recording < 8 % CPU,

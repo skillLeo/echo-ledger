@@ -507,6 +507,10 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .onboarding-card .skip { justify-self: start; }
 
 /* Loading placeholders (C6): a quiet shimmer while a list loads. */
+.skeleton-item { cursor: default; gap: var(--space-2); padding-block: var(--space-3); }
+.skeleton-item:hover { background: transparent; }
+.sync-error { display: flex; align-items: center; gap: var(--space-3); }
+.sync-error > span { flex: 1; min-width: 0; }
 .skeleton { display: block; border-radius: 6px; background: var(--surface-3); position: relative; overflow: hidden; }
 .skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent); animation: shimmer 1.4s var(--ease-out) infinite; }
 :root[data-theme="light"] .skeleton::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent); }

@@ -43,6 +43,8 @@ class AdminPanelProvider extends PanelProvider
             ->databaseNotificationsPolling('30s')
             // Passkeys (B16): a second way in, next to the password and the optional two-step code.
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn (): View => view('filament.auth.passkey-login'))
+            // C6: a quiet notice while the browser is offline.
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): View => view('filament.offline-banner'))
             ->profile(isSimple: false)
             // Optional TOTP 2FA with one-time recovery codes: offered in the profile, not forced at login.
             ->multiFactorAuthentication([
