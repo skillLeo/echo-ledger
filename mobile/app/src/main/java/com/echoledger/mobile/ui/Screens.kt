@@ -685,7 +685,13 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                if (t.kind == "final") "Final transcript · ${t.provider}" else "Live captions (final pending)",
+                                if (t.kind ==
+                                    "final"
+                                ) {
+                                    "Final transcript · ${providerName(t.provider)}"
+                                } else {
+                                    "Live captions (final pending)"
+                                },
                                 color = Brand.Muted,
                                 fontSize = 12.sp,
                                 modifier = Modifier.weight(1f)
@@ -1122,6 +1128,17 @@ fun Context.capabilities(helperConnected: Boolean): Capabilities = Capabilities(
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED,
     overlayPermission = Settings.canDrawOverlays(this)
 )
+
+/** A speech engine by its product name ("assemblyai" → "AssemblyAI"); unknown ids as sent (C8). */
+fun providerName(id: String?): String = when (id) {
+    null -> ""
+    "assemblyai" -> "AssemblyAI"
+    "elevenlabs" -> "ElevenLabs"
+    "azure_mai" -> "Azure Speech"
+    "whispercpp_local" -> "whisper.cpp"
+    "parakeet_local" -> "Parakeet"
+    else -> id
+}
 
 /** Final transcript states that are still being worked on: never shown as an empty transcript (A6.M5). */
 private val IN_PROGRESS = setOf("pending", "submitted", "processing", "awaiting_device")

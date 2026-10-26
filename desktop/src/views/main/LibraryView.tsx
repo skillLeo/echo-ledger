@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type ClientFolder, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail } from "../../lib/ipc";
 import { activeIndex, activeWord, continuesTurn, KEY_SECONDS, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName } from "../../lib/player";
 import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, SpeakersPanel, Timeline, VocabularyHint } from "./TranscriptTools";
-import { formatDuration, formatWhen, timestamp, transcriptText } from "../../lib/format";
+import { formatDuration, formatWhen, providerName, timestamp, transcriptText } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, libraryTags, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
 import { CopyIcon, DesktopIcon, GlobeIcon, PhoneIcon, RefreshIcon, SearchIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
@@ -461,7 +461,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             </div>
           )}
           {!loaded && items.length === 0 && (
-            <div className="group" role="status" aria-label="Loading recordings">
+            <div className="group" aria-busy="true">
+              <span className="sr-only">Loading recordings…</span>
               {[0, 1, 2].map((i) => (
                 <div key={i} className="item skeleton-item" aria-hidden="true">
                   <span className="skeleton" style={{ width: "62%", height: 14 }} />
@@ -543,7 +544,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 ) : (
                   <>
                     <div className="row" style={{ marginTop: 10 }}>
-                      <span className="small muted">{transcript.kind === "final" ? `Final transcript · ${transcript.provider}${transcript.model ? ` · ${transcript.model}` : ""}${transcript.edited_at ? " · edited" : ""}` : "Live captions (final transcript pending)"}</span>
+                      <span className="small muted">{transcript.kind === "final" ? `Final transcript · ${providerName(transcript.provider)}${transcript.model ? ` · ${transcript.model}` : ""}${transcript.edited_at ? " · edited" : ""}` : "Live captions (final transcript pending)"}</span>
                       <span className="spacer" />
                       <button className="btn ghost" onClick={() => copy(false)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy text</button>
                       <button className="btn ghost" onClick={() => copy(true)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy with timestamps</button>

@@ -46,7 +46,7 @@ class SessionTest : E2eTest() {
     fun aSessionShowsItsTitleBadgesAndTheFinalTranscriptWithSpeakersAndTimestamps() {
         openGoodSession()
         assertTrue(Ui.has(SeedData.GOOD_ONE))
-        assertTrue(Ui.hasContaining("Final transcript · assemblyai"))
+        assertTrue(Ui.hasContaining("Final transcript · AssemblyAI"))
         assertTrue(Ui.has("Desktop") && Ui.has("Zoom"))
         conversation.forEach { (stamp, speaker, text) ->
             assertTrue("stamp $stamp", Ui.has(stamp))

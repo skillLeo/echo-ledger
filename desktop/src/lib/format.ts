@@ -94,3 +94,40 @@ export function acceleratorFromEvent(e: Pick<KeyboardEvent, "ctrlKey" | "metaKey
   else if (/^Digit\d$/.test(code)) key = code.slice(5);
   return [...modifiers, key].join("+");
 }
+
+const PROVIDER_NAMES: Record<string, string> = {
+  assemblyai: "AssemblyAI",
+  elevenlabs: "ElevenLabs",
+  azure_mai: "Azure Speech",
+  whispercpp_local: "whisper.cpp",
+  parakeet_local: "Parakeet",
+};
+
+/** A speech engine by its product name ("assemblyai" → "AssemblyAI"); unknown ids are shown as sent (C8). */
+export function providerName(id: string | null | undefined): string {
+  if (!id) return "";
+  return PROVIDER_NAMES[id] ?? id;
+}
+
+const PROCESS_NAMES: Record<string, string> = {
+  chrome: "Google Chrome",
+  msedge: "Microsoft Edge",
+  firefox: "Firefox",
+  brave: "Brave",
+  opera: "Opera",
+  arc: "Arc",
+  safari: "Safari",
+  zoom: "Zoom",
+  "ms-teams": "Microsoft Teams",
+  teams: "Microsoft Teams",
+  whatsapp: "WhatsApp",
+  slack: "Slack",
+  discord: "Discord",
+  skype: "Skype",
+};
+
+/** An app as people know it, not its file name ("chrome.exe" → "Google Chrome", "Softphone.exe" → "Softphone"). */
+export function processName(name: string): string {
+  const base = (name.split(/[\\/]/).pop() ?? name).replace(/\.(exe|app)$/i, "");
+  return PROCESS_NAMES[base.toLowerCase()] ?? base;
+}

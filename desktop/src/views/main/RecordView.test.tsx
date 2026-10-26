@@ -159,7 +159,7 @@ describe("RecordView voice notes", () => {
   it("explains that voice notes are never recorded automatically and can be dropped in", async () => {
     await setup();
     expect(screen.getByText(/never recorded automatically/)).toBeInTheDocument();
-    expect(screen.getByText(/Drag & drop .opus \/ .ogg \/ .m4a \/ .mp3 \/ .wav voice notes here/)).toBeInTheDocument();
+    expect(screen.getByText(/Drop voice notes here to transcribe them \(OPUS, OGG, M4A, MP3 or WAV\)/)).toBeInTheDocument();
   });
 });
 
@@ -181,10 +181,10 @@ describe("RecordView captions and copy", () => {
 
   it("warns that captions start a recording only when nothing is recording", async () => {
     const idle = await setup();
-    expect(screen.getByText(/Turning captions on starts a recording/)).toBeInTheDocument();
+    expect(screen.getByText(/Turning them on starts a recording/)).toBeInTheDocument();
     idle.unmount();
     await setup({ recording: makeRecording() });
-    expect(screen.queryByText(/Turning captions on starts a recording/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Turning them on starts a recording/)).not.toBeInTheDocument();
   });
 
   it("copies the last two minutes and passes the success message to the runner", async () => {
@@ -257,8 +257,8 @@ describe("RecordView call detection panel", () => {
   // A1.8: one explainer line per app holding the microphone.
   it("explains a Meet tab that will be recorded, with its site next to the process name", async () => {
     const { container } = await setup({ autoMode: true }, [makeMicUser()]);
-    expect(await screen.findByText("chrome.exe")).toBeInTheDocument();
-    const row = rowOf("chrome.exe");
+    expect(await screen.findByText("Google Chrome")).toBeInTheDocument(); // not "chrome.exe" (C8)
+    const row = rowOf("Google Chrome");
     expect(within(row).getByText("meet.google.com")).toBeInTheDocument();
     expect(within(row).getByText("Holds mic ✓ · Playing audio ✓ · Identified as Google Meet · Decision: auto-record")).toBeInTheDocument();
     expect(container.querySelector(".mic-user .status-dot")).toHaveClass("ok");
@@ -347,7 +347,7 @@ describe("RecordView call detection panel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
-    expect(screen.getByText("ms-teams.exe")).toBeInTheDocument();
+    expect(screen.getByText("Microsoft Teams")).toBeInTheDocument();
   });
 
   it("keeps the last known list when a poll fails", async () => {
@@ -356,13 +356,13 @@ describe("RecordView call detection panel", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(screen.getByText("WhatsApp.exe")).toBeInTheDocument();
+    expect(screen.getByText("WhatsApp")).toBeInTheDocument();
     fail("mic_users", "audio session enumeration failed");
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
     expect(callsOf("mic_users")).toHaveLength(2);
-    expect(screen.getByText("WhatsApp.exe")).toBeInTheDocument();
+    expect(screen.getByText("WhatsApp")).toBeInTheDocument();
   });
 });
 

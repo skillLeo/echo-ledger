@@ -1,3 +1,4 @@
+import { processName } from "./format";
 // Pure helpers behind the recording pill, the review card and the ask chip (unit-tested in controls.test.ts).
 import { SOURCE_APP_LABELS, formatDuration, timestamp } from "./format";
 import type { AskPayload, DecisionTimeout, PendingItem, RecordingState } from "./ipc";
@@ -87,7 +88,7 @@ export function countdownText(timeout: DecisionTimeout, deadlineAt: string | nul
 
 /** Who the ask chip names: the browser site when the core knows it (browsers only), else the process name. */
 export function askSubject(ask: AskPayload): string {
-  return ask.site?.trim() || ask.name;
+  return ask.site?.trim() || processName(ask.name);
 }
 
 /** The core sends `site` only for browsers, so a site means "this site" and its absence "this app". */

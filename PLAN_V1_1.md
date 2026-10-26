@@ -387,7 +387,9 @@ Severity in brackets. Each item lists the platform; the matching regression test
       for every token pair (also the overlay glass over white and black), name tests for every desktop control (a11y.test.tsx)
       and every tappable phone element (AccessibilityLabelsTest, found the unlabelled auto-record switch); screen readers:
       docs/MANUAL_QA.md section 17 (V-X1-V-X3).
-- [ ] C8 Copy pass: short, plain, sentence case.
+- [x] C8 Copy pass: short, plain, sentence case. Engines by product name (AssemblyAI, not assemblyai), apps by name
+      (Google Chrome, not chrome.exe), languages in words, "secure connection" instead of "certificate pinned", plain
+      Record-page copy without technical terms or file-extension lists.
 - [ ] C9 Performance budgets measured and reported: desktop idle ≤ 150 MB and < 1 % CPU, recording < 8 % CPU,
       detection ≤ 1 Hz without per-tick allocation; Android no wake locks or polling outside recording; web lists
       paginated, lazy-loading guard test, < 300 ms server time.

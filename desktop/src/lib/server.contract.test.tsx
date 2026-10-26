@@ -264,7 +264,7 @@ describe("Library screen fed with server data", () => {
     expect(await screen.findByText("Loud and clear. Go ahead.")).toBeInTheDocument();
     expect(screen.getAllByText("Me").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("Client").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/Final transcript · assemblyai/)).toBeInTheDocument();
+    expect(screen.getByText(/Final transcript · AssemblyAI/)).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("player")).toHaveAttribute("src", expect.stringContaining("/audio?expires=")));
   });
 

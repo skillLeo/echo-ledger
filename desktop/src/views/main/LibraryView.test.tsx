@@ -305,7 +305,7 @@ describe("LibraryView transcript", () => {
     expect(panel.getByTestId("source-app")).toHaveTextContent("Zoom");
     expect(panel.getByRole("heading", { name: "Zoom with Acme" })).toBeInTheDocument();
     expect(panel.getByText(/Today · 9:30\s?AM · 2:05 · Acme Holdings/)).toBeInTheDocument();
-    expect(panel.getByText("Final transcript · assemblyai")).toBeInTheDocument();
+    expect(panel.getByText("Final transcript · AssemblyAI")).toBeInTheDocument();
     const rows = [...detail().querySelectorAll(".segment")].map((n) => [...n.children].map((c) => c.textContent));
     expect(rows).toEqual([
       ["0:00", "Me", "Hello, this is Sam."],
@@ -925,12 +925,12 @@ describe("library states (C6)", () => {
     respondWith("library_list", () => new Promise<LibraryItem[]>((resolve) => (release = resolve)));
     render(<LibraryView notify={vi.fn()} />);
     await flushAsync();
-    expect(within(list()).getByRole("status", { name: "Loading recordings" })).toBeInTheDocument();
+    expect(within(list()).getByText("Loading recordings…")).toBeInTheDocument();
     expect(within(list()).queryByText("No recordings yet.")).not.toBeInTheDocument();
 
     await act(async () => release([]));
     await flushAsync();
-    expect(within(list()).queryByRole("status", { name: "Loading recordings" })).not.toBeInTheDocument();
+    expect(within(list()).queryByText("Loading recordings…")).not.toBeInTheDocument();
     expect(within(list()).getByText("No recordings yet.")).toBeInTheDocument();
   });
 

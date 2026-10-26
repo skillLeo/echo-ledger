@@ -66,7 +66,7 @@ class ServerContractScreenTest : ScreenTest() {
         open(libraryItem("Quarterly review"))
 
         compose.onNodeWithText("Quarterly review").assertIsDisplayed()
-        compose.onNodeWithText("Final transcript · assemblyai").assertIsDisplayed()
+        compose.onNodeWithText("Final transcript · AssemblyAI").assertIsDisplayed()
         compose.onNodeWithText("This is a test of the EchoLedger transcription system.").assertIsDisplayed()
         compose.onNodeWithText("Loud and clear. Go ahead.").assertIsDisplayed()
         assertEquals(2, count("Me", substring = false))

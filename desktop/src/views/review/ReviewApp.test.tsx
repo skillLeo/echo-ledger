@@ -287,7 +287,7 @@ describe("ask chip", () => {
   it("names the app and offers Always ignore this app for a non-browser", async () => {
     await renderReview(null);
     await emitEvent("ask:show", makeAskPayload({ name: "Softphone.exe", site: null }));
-    expect(screen.getByTestId("ask-text")).toHaveTextContent("Softphone.exe is using the microphone");
+    expect(screen.getByTestId("ask-text")).toHaveTextContent("Softphone is using the microphone");
     expect(button("Always ignore this app")).toBeInTheDocument();
   });
 

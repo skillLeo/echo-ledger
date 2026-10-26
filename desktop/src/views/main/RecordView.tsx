@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type MicUser } from "../../lib/ipc";
-import { sourceAppLabel } from "../../lib/format";
+import { processName, sourceAppLabel } from "../../lib/format";
 import { explainMicUser, micTone } from "../../lib/explainer";
 import { DISCARD_CONFIRM } from "../../lib/pending";
 import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
@@ -41,7 +41,7 @@ function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => 
             <span className={`status-dot ${micTone(u)}`} aria-hidden="true" />
             <div className="mic-user-main">
               <div className="mic-user-name">
-                <span>{u.name}</span>
+                <span title={u.name}>{processName(u.name)}</span>
                 {u.site && <span className="muted">{u.site}</span>}
               </div>
               <div className={`small mic-user-why ${u.decision === "ignored" || u.decision === "off" ? "muted" : ""}`}>{explainMicUser(u)}</div>
@@ -106,8 +106,8 @@ export function RecordView({ status, run }: { status: AppStatus; run: <T>(fn: ()
             <button type="button" className={`switch ${status.captionsLive ? "on" : ""}`} role="switch" aria-checked={status.captionsLive} aria-label="Toggle live captions" onClick={() => run(api.toggleCaptions)} />
           </div>
           <p className="small muted">
-            A small translucent overlay that never takes focus; clicks pass through everywhere except its buttons.
-            {!recording && " Turning captions on starts a recording so there is audio to caption."}
+            Captions float over your other windows and never get in the way.
+            {!recording && " Turning them on starts a recording."}
           </p>
           <div className="card-actions">
             <button className="btn" onClick={() => run(() => api.copyLastMinutes(2), "Copied the last 2 minutes")}><CopyIcon size={15} />Copy last 2 minutes</button>
@@ -126,7 +126,7 @@ export function RecordView({ status, run }: { status: AppStatus; run: <T>(fn: ()
           </div>
         </div>
       </div>
-      <div className="card dropzone" style={{ marginTop: 14 }}>Drag &amp; drop .opus / .ogg / .m4a / .mp3 / .wav voice notes here to transcribe them.</div>
+      <div className="card dropzone" style={{ marginTop: 14 }}>Drop voice notes here to transcribe them (OPUS, OGG, M4A, MP3 or WAV).</div>
       {status.uploadErrors.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <b>Uploads waiting to retry</b>

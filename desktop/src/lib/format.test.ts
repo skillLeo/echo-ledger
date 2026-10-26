@@ -127,3 +127,22 @@ describe("shared labels", () => {
     expect(sourceAppLabel("signal")).toBe("signal");
   });
 });
+
+describe("plain names (C8)", () => {
+  it("names speech engines by their product names", async () => {
+    const { providerName } = await import("./format");
+    expect(providerName("assemblyai")).toBe("AssemblyAI");
+    expect(providerName("elevenlabs")).toBe("ElevenLabs");
+    expect(providerName("new_engine")).toBe("new_engine");
+    expect(providerName(null)).toBe("");
+  });
+
+  it("names apps as people know them, not by their file names", async () => {
+    const { processName } = await import("./format");
+    expect(processName("chrome.exe")).toBe("Google Chrome");
+    expect(processName("msedge.exe")).toBe("Microsoft Edge");
+    expect(processName("C:\\Program Files\\Zoom\\bin\\Zoom.exe")).toBe("Zoom");
+    expect(processName("/Applications/Safari.app")).toBe("Safari");
+    expect(processName("Softphone.exe")).toBe("Softphone");
+  });
+});

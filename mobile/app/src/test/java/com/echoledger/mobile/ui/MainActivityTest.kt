@@ -162,7 +162,7 @@ class MainActivityTest : AppTest() {
         awaitText("Weekly sync")
 
         compose.onNodeWithText("Weekly sync").performClick()
-        awaitText("Final transcript · assemblyai")
+        awaitText("Final transcript · AssemblyAI")
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
 
         controller.get().onBackPressedDispatcher.onBackPressed()

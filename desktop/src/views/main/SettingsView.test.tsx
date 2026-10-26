@@ -76,12 +76,12 @@ describe("SettingsView loading", () => {
 
   it("shows the paired server and whether the certificate is pinned", async () => {
     await setup({}, { serverUrl: "https://ledger.example.test", pinned: true });
-    expect(screen.getByText(/Paired with https:\/\/ledger\.example\.test\s+· certificate pinned/)).toBeInTheDocument();
+    expect(screen.getByText(/Connected to ledger\.example\.test\s+· secure connection/)).toBeInTheDocument();
   });
 
   it("says when the certificate is not pinned", async () => {
     await setup({}, { pinned: false });
-    expect(screen.getByText(/· not pinned/)).toBeInTheDocument();
+    expect(screen.getByText(/· connection not verified/)).toBeInTheDocument();
   });
 
   it("shows the device name next to the unpair button", async () => {

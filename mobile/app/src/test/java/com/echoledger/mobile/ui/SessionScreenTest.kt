@@ -117,7 +117,7 @@ class SessionScreenTest : ScreenTest() {
         showSession()
         awaitText("Hello there.")
 
-        compose.onNodeWithText("Final transcript · assemblyai").assertIsDisplayed()
+        compose.onNodeWithText("Final transcript · AssemblyAI").assertIsDisplayed()
         compose.onNodeWithText("Hello there.").assertIsDisplayed()
         compose.onNodeWithText("Hi, thanks for calling.").assertIsDisplayed()
         compose.onAllNodesWithText("Me", substring = false).assertCountEquals(1)

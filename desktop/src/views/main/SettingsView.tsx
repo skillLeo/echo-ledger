@@ -245,7 +245,7 @@ export function SettingsView({ status, run, onUnpaired }: {
   return (
     <>
       <h1 className="page-title">Settings</h1>
-      <p className="page-sub">Paired with {status.serverUrl} {status.pinned ? "· certificate pinned" : "· not pinned"}</p>
+      <p className="page-sub">Connected to {hostOf(status.serverUrl)} {status.pinned ? "· secure connection" : "· connection not verified"}</p>
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings groups">
           <label className="searchbox"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
@@ -283,7 +283,7 @@ function AboutCard({ status, run, onImported }: { status: AppStatus; run: <T>(fn
   return (
     <div className="card about-settings">
       <b>EchoLedger{version ? ` ${version}` : ""}</b>
-      <p className="small muted">Server: {status.serverUrl ?? "not paired"}{status.pinned ? " (certificate pinned)" : " (no certificate pin)"}</p>
+      <p className="small muted">Server: {status.serverUrl ?? "not paired"}{status.pinned ? " (secure connection)" : " (connection not verified)"}</p>
       <div className="row organise-field">
         <button type="button" className="btn ghost" onClick={() => void run(api.exportSettings, "Settings saved in Downloads")}>Export settings</button>
         <label htmlFor={fileId} className="btn ghost">Import settings</label>
@@ -292,4 +292,14 @@ function AboutCard({ status, run, onImported }: { status: AppStatus; run: <T>(fn
       <p className="small muted">The file has your preferences only, never the pairing, keys or PIN.</p>
     </div>
   );
+}
+
+/** The server's host name for the page subtitle (the full address is under About). */
+function hostOf(url: string | null): string {
+  if (!url) return "the server";
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
 }

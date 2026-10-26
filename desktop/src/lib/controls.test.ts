@@ -134,7 +134,7 @@ describe("ask chip copy", () => {
     expect(askSubject(browser)).toBe("call.example.test");
     expect(alwaysIgnoreLabel(browser)).toBe("Always ignore this site");
     const app = makeAskPayload({ name: "Softphone.exe", site: null });
-    expect(askSubject(app)).toBe("Softphone.exe");
+    expect(askSubject(app)).toBe("Softphone"); // the app by name, not its file name (C8)
     expect(alwaysIgnoreLabel(app)).toBe("Always ignore this app");
   });
 
