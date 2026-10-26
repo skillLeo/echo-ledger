@@ -377,7 +377,9 @@ Severity in brackets. Each item lists the platform; the matching regression test
 - [~] C4 Android: Material 3 with optional dynamic colour, edge-to-edge, predictive back, haptics, Glance widgets in
       2×1, 2×2 and 4×2. Built and tested (AppearanceTest, SystemBarsThemeTest, NativeFeelTest, RecordWidgetLayoutTest);
       device checks: docs/MANUAL_QA.md section 17 (V-A1-V-A4).
-- [ ] C5 Motion 150–220 ms ease-out, respects reduce-motion.
+- [x] C5 Motion 150–220 ms ease-out, respects reduce-motion. Motion tokens in all three apps; desktop and console turn
+      motion off with reduced motion (contract test in styles.test.ts); the phone uses Material motion, which follows the
+      system animation setting.
 - [ ] C6 Loading, empty, error (Retry) and offline states on every list and screen.
 - [ ] C7 Accessibility: WCAG 2.2 AA contrast, focus rings, full keyboard use, screen-reader labels.
 - [ ] C8 Copy pass: short, plain, sentence case.

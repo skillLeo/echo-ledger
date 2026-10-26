@@ -232,3 +232,30 @@ describe("colour contrast meets WCAG AA in both themes (A6.DU7)", () => {
     expect(contrast(colour(theme, ".switch.on", "background").rgb, card)).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe("motion (C5)", () => {
+  const controls = readFileSync(join(here, "views/controls.css"), "utf8");
+
+  it("defines the motion tokens: 150, 180 and 220 ms, ease-out", () => {
+    expect(tokens("dark")["--motion-fast"]).toBe("150ms");
+    expect(tokens("dark")["--motion-base"]).toBe("180ms");
+    expect(tokens("dark")["--motion-slow"]).toBe("220ms");
+    expect(tokens("dark")["--ease-out"].replace(/\s/g, "")).toBe("cubic-bezier(0,0,0,1)");
+  });
+
+  it("every transition uses a motion token, except level meters that follow the signal", () => {
+    for (const [file, source] of [["styles.css", css], ["controls.css", controls]] as const) {
+      for (const [, value] of source.matchAll(/transition:\s*([^;]+);/g)) {
+        const meter = /\b(width|height) [\d.]+(ms|s) linear\b/.test(value);
+        expect(meter || value.trim() === "none" || value.includes("var(--motion-"), `${file}: transition: ${value}`).toBe(true);
+      }
+    }
+  });
+
+  it("turns motion off with reduced motion", () => {
+    const reduced = media("(prefers-reduced-motion: reduce)");
+    const all = reduced.find((r) => r instanceof CSSStyleRule && r.selectorText.startsWith("*")) as CSSStyleRule | undefined;
+    expect(all?.style.getPropertyValue("transition-duration")).toBe("0ms");
+    expect(all?.style.getPropertyValue("animation-duration")).toBe("0ms");
+  });
+});
