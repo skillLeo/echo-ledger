@@ -6,7 +6,8 @@ namespace App\Stt;
 
 /**
  * Is a transcript written in the script its language uses? Spoken Urdu and Hindi sound alike; an engine that guesses
- * Hindi writes Urdu speech in Devanagari (or romanises it). This counts letters per script and names the problem.
+ * Hindi writes Urdu speech in Devanagari (or romanises it). Hindi is not offered (since v1.2), so Devanagari is wrong
+ * for every recording. This counts letters per script and names the problem.
  */
 final class ScriptCheck
 {
@@ -24,10 +25,16 @@ final class ScriptCheck
         ];
     }
 
+    /** Any Devanagari letter at all (a line of live captions or one segment). */
+    public static function hasDevanagari(string $text): bool
+    {
+        return preg_match('/[\x{0900}-\x{097F}]/u', $text) === 1;
+    }
+
     /**
-     * Null when the script fits; otherwise the script that came back instead (`devanagari`, `latin` or `arabic`).
-     * Urdu: mostly Devanagari is wrong; for Urdu alone (not mixed with English), mostly Latin letters is wrong too.
-     * Hindi: mostly Urdu (Arabic) script is wrong.
+     * Null when the script fits; otherwise the script that came back instead (`devanagari` or `latin`).
+     * Any recording: Devanagari is wrong once it is a fifth of the letters. Urdu or Arabic: text almost entirely in
+     * Latin letters (romanised, "Roman Urdu") is wrong too; English words inside Urdu are normal and stay.
      */
     public static function wrongScript(?string $language, string $text): ?string
     {
@@ -36,17 +43,12 @@ final class ScriptCheck
         if ($letters < self::MIN_LETTERS) {
             return null;
         }
-        if (LanguageChoice::expectsUrduScript($language)) {
-            if ($c['devanagari'] > $c['arabic'] && $c['devanagari'] / $letters >= 0.3) {
-                return 'devanagari';
-            }
-            $mixed = in_array('en', LanguageChoice::codes($language), true);
-            if (! $mixed && $c['arabic'] / $letters < 0.2 && $c['latin'] / $letters >= 0.6) {
-                return 'latin';
-            }
+        if ($c['devanagari'] / $letters >= 0.2) {
+            return 'devanagari';
         }
-        if (LanguageChoice::expectsDevanagari($language) && $c['arabic'] > $c['devanagari'] && $c['arabic'] / $letters >= 0.3) {
-            return 'arabic';
+        $code = LanguageChoice::normalize($language);
+        if (in_array($code, ['ur', 'ar'], true) && $c['latin'] / $letters >= 0.85 && $c['arabic'] / $letters < 0.05) {
+            return 'latin';
         }
 
         return null;
@@ -57,7 +59,6 @@ final class ScriptCheck
         return match ($found) {
             'devanagari' => 'Hindi (Devanagari) script',
             'latin' => 'Latin letters',
-            'arabic' => 'Urdu script',
             default => $found,
         };
     }

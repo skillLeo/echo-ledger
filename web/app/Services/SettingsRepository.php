@@ -26,7 +26,9 @@ final class SettingsRepository
         'provider.final_transcript' => 'assemblyai',
         'provider.voice_note' => 'assemblyai',
         'captions.channels' => 'both',              // both | client_only | off
-        'default_language' => null,                 // null = auto-detect
+        'default_language' => null,                 // null = Auto (English, Urdu or Arabic)
+        'languages.auto_more' => [],                // More languages Auto may also pick (fr, de, …)
+        'languages.auto_fallback' => 'ur',          // what Auto is forced into when it hears a language it may not pick
         'assemblyai.region' => 'us',                // us | eu
         'assemblyai.streaming_model' => 'universal-3-6-pro',
         'assemblyai.async_models' => ['universal-3-5-pro', 'universal-2'],

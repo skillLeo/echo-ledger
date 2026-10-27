@@ -101,28 +101,28 @@ describe('compare engines', function () {
             app(CredentialVault::class)->put($provider, 'api_key', $provider.'_key_1234567890');
         }
         $this->session = $this->sessionWithTranscript($this->admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 2000, 'text' => 'नमस्ते आप कैसे हैं']],
-            ['status' => SessionStatus::Completed, 'language' => 'en+ur']);
+            ['status' => SessionStatus::Completed, 'language' => 'ur']);
         $this->readyRecording($this->session);
     });
 
     it('runs up to three engines in the chosen language as comparison runs', function () {
         Queue::fake();
 
-        $runs = app(EngineComparison::class)->start($this->session, [SttProviderKey::ElevenLabs, SttProviderKey::Soniox, SttProviderKey::AssemblyAi, SttProviderKey::AzureMai], 'en+ur');
+        $runs = app(EngineComparison::class)->start($this->session, [SttProviderKey::ElevenLabs, SttProviderKey::Soniox, SttProviderKey::AssemblyAi, SttProviderKey::AzureMai], 'ur');
 
         expect(array_map(fn (Transcript $t) => [$t->kind, $t->provider, $t->language], $runs))->toBe([
-            [TranscriptKind::Trial, 'elevenlabs', 'en+ur'], [TranscriptKind::Trial, 'soniox', 'en+ur'], [TranscriptKind::Trial, 'assemblyai', 'en+ur'],
+            [TranscriptKind::Trial, 'elevenlabs', 'ur'], [TranscriptKind::Trial, 'soniox', 'ur'], [TranscriptKind::Trial, 'assemblyai', 'ur'],
         ]);
         Queue::assertPushed(TranscribeFinalJob::class, 3);
         expect($this->session->finalTranscript->fresh()->kind)->toBe(TranscriptKind::Final);
 
-        app(EngineComparison::class)->start($this->session, [SttProviderKey::Soniox], 'en+ur');
+        app(EngineComparison::class)->start($this->session, [SttProviderKey::Soniox], 'ur');
         expect($this->session->trials()->where('provider', 'soniox')->count())->toBe(1);
     });
 
     it('lists each run with its text and cost, and the winner becomes the first engine for the language', function () {
         $run = Transcript::query()->create(['capture_session_id' => $this->session->id, 'kind' => TranscriptKind::Trial, 'provider' => 'soniox',
-            'status' => TranscriptStatus::Completed, 'language' => 'en+ur', 'text' => 'آپ کیسے ہیں', 'meta' => ['model' => 'stt-async-v5']]);
+            'status' => TranscriptStatus::Completed, 'language' => 'ur', 'text' => 'آپ کیسے ہیں', 'meta' => ['model' => 'stt-async-v5']]);
         UsageLedgerEntry::query()->create(['user_id' => $this->admin->id, 'transcript_id' => $run->id, 'source' => 'server', 'report_id' => 'final-'.$run->id,
             'use_case' => 'final_transcript', 'provider' => 'soniox', 'duration_ms' => 60_000, 'channels' => 2, 'billed_ms' => 120_000,
             'unit_price_usd' => 0.10, 'cost_usd' => 0.0033, 'billable' => true, 'occurred_at' => now()]);
@@ -131,7 +131,7 @@ describe('compare engines', function () {
         expect($results[0])->toMatchArray(['label' => 'Soniox', 'model' => 'stt-async-v5', 'status' => 'completed', 'cost_usd' => 0.0033, 'minutes' => 2.0, 'text' => 'آپ کیسے ہیں']);
 
         app(EngineComparison::class)->pick($run);
-        expect(app(LanguageRouter::class)->routes('routing.final', LanguageRouter::DEFAULT_FINAL_ROUTES)['en+ur'][0])->toBe('soniox');
+        expect(app(LanguageRouter::class)->routes('routing.final', LanguageRouter::DEFAULT_FINAL_ROUTES)['ur'][0])->toBe('soniox');
 
         app(EngineComparison::class)->useAsTranscript($run);
         $this->session->refresh();
@@ -148,7 +148,7 @@ describe('compare engines', function () {
         $page->assertActionVisible('wrong_script')->assertActionVisible('compare_engines')->assertActionHidden('engine_results');
         $page->callAction('wrong_script')->assertNotified('Second version queued with ElevenLabs Scribe');
 
-        $page->callAction('compare_engines', data: ['language' => 'en+ur', 'engines' => ['elevenlabs', 'soniox']])->assertHasNoActionErrors();
+        $page->callAction('compare_engines', data: ['language' => 'ur', 'engines' => ['elevenlabs', 'soniox']])->assertHasNoActionErrors();
         expect($this->session->trials()->pluck('provider')->sort()->values()->all())->toBe(['elevenlabs', 'soniox']);
         $results = $this->panelComponent(ViewCaptureSession::class, ['record' => $this->session->id])->assertActionVisible('engine_results');
         $html = $this->modalHtml($results->mountAction('engine_results'));

@@ -202,7 +202,7 @@ it('imports a settings file and keeps everything that is not in it', function ()
     $settings->flush();
     expect($settings->retentionDays())->toBe(90)
         ->and($settings->captionChannels())->toBe('client_only')
-        ->and($settings->get('default_language'))->toBe('en+ur')
+        ->and($settings->get('default_language'))->toBe('ur') // a v1.1 file: the mixed choice reads as Urdu
         ->and($settings->displayTimezone())->toBe('Asia/Karachi')
         ->and($settings->markerTags())->toBe(['Follow-up', 'Decision'])
         ->and($settings->providerFor(SttUseCase::LiveCaptions)->value)->toBe('assemblyai');

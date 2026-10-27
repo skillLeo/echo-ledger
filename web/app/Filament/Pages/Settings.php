@@ -24,6 +24,7 @@ use App\Stt\LanguageRouter;
 use App\Stt\ProviderEndpoints;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -101,6 +102,8 @@ class Settings extends Page
             ...self::routingFormState($all['routing.final'] ?? null),
             'captions_channels' => $all['captions.channels'],
             'default_language' => LanguageChoice::normalize($all['default_language']) ?? '',
+            'languages_auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($all['languages.auto_more'] ?? []))),
+            'languages_auto_fallback' => LanguageChoice::fallback(),
             'vocabulary_keyterms' => KeytermPolicy::sanitize((array) ($all['vocabulary.keyterms'] ?? [])),
             'vocabulary_replacements' => TextReplacements::rules($all['vocabulary.replacements'] ?? []),
             'display_timezone' => is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC',
@@ -207,8 +210,13 @@ class Settings extends Page
             Tabs::make('Settings')->livewireProperty('activeTab')->tabs([
                 'general' => $this->tab('general', [
                     $this->section('language')->columns(2)->schema([
-                        Select::make('default_language')->label('Default language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false)
-                            ->helperText('Automatic suits most calls. “English + Urdu” is for calls that switch between the two. A client or recording can choose its own.'),
+                        Select::make('default_language')->label('Default language')->options(LanguageChoice::selectOptions())->selectablePlaceholder(false)
+                            ->helperText('Auto picks English, Urdu or Arabic. Urdu and Arabic always allow English words inside. A client or recording can choose its own.'),
+                        CheckboxList::make('languages_auto_more')->label('Auto may also pick')->options(LanguageChoice::MORE)->columns(4)
+                            ->helperText('English, Urdu and Arabic are always detected. Tick a language only if your calls use it.'),
+                        Select::make('languages_auto_fallback')->label('When Auto hears another language, use')
+                            ->options(array_diff_key(LanguageChoice::OFFERED, ['' => true]))->selectablePlaceholder(false)
+                            ->helperText('The recording is transcribed again in this language (Hindi is always read as Urdu).'),
                         Select::make('display_timezone')->label('Time zone')
                             ->options(array_combine(timezone_identifiers_list(), timezone_identifiers_list()))
                             ->searchable()->required()
@@ -243,7 +251,7 @@ class Settings extends Page
                         Select::make('provider_voice_note')->label(SttUseCase::VoiceNote->getLabel())->options($final)->required(),
                     ]),
                     $this->section('routing')
-                        ->description('Which engine writes each language, in order: the first one with a key on API Credentials is used, the next ones are the fallback. Automatic uses the engine above. Run “Compare engines” on a recording to choose.')
+                        ->description('Which engine writes each language, in order: the first one with a key on API Credentials is used, the next ones are the fallback. Other covers the More languages; Auto is for recordings whose language is not chosen. Run “Compare engines” on a recording to choose.')
                         ->collapsible()->columns(3)->schema(self::routingFields()),
                     $this->section('bookmarks')
                         ->description('One-tap tags offered while recording a call (on the desktop pill and the phone notification).')
@@ -447,7 +455,7 @@ class Settings extends Page
     }
 
     /** The languages that have an engine list, and their form field prefix. */
-    private const ROUTED = ['en' => 'en', 'ur' => 'ur', 'en+ur' => 'en_ur', 'hi' => 'hi', 'en+hi' => 'en_hi'];
+    private const ROUTED = ['en' => 'en', 'ur' => 'ur', 'ar' => 'ar', LanguageRouter::OTHER => 'other', LanguageRouter::AUTO => 'auto'];
 
     /** @return list<Select> three engines per language */
     private static function routingFields(): array
@@ -457,8 +465,9 @@ class Settings extends Page
         $fields = [];
         foreach (self::ROUTED as $language => $slug) {
             foreach ([1 => '1st', 2 => '2nd', 3 => '3rd'] as $n => $order) {
-                $field = Select::make("route_{$slug}_{$n}")->label(LanguageChoice::label($language).' · '.$order)->options($engines)->placeholder('—');
-                $fields[] = $n === 1 ? $field->required() : $field;
+                $field = Select::make("route_{$slug}_{$n}")->label(LanguageRouter::routeLabel($language).' · '.$order)->options($engines)->placeholder('—');
+                // Auto may stay empty: it then keeps the engine chosen for the use case above.
+                $fields[] = $n === 1 && $language !== LanguageRouter::AUTO ? $field->required() : $field;
             }
         }
 
@@ -494,7 +503,10 @@ class Settings extends Page
                     $list[] = $value;
                 }
             }
-            $routes[$language] = $list !== [] ? $list : LanguageRouter::DEFAULT_FINAL_ROUTES[$language];
+            if ($list === [] && $language === LanguageRouter::AUTO) {
+                continue;
+            }
+            $routes[$language] = $list !== [] ? $list : LanguageRouter::defaultsFor($language);
         }
 
         return $routes;
@@ -518,6 +530,8 @@ class Settings extends Page
             'provider.voice_note' => $state['provider_voice_note'],
             'captions.channels' => $state['captions_channels'],
             'default_language' => LanguageChoice::normalize($state['default_language'] ?? null),
+            'languages.auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($state['languages_auto_more'] ?? []))),
+            'languages.auto_fallback' => LanguageChoice::normalize($state['languages_auto_fallback'] ?? null) ?? 'ur',
             'vocabulary.keyterms' => KeytermPolicy::sanitize((array) ($state['vocabulary_keyterms'] ?? [])),
             'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',

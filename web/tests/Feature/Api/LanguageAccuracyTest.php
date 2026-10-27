@@ -52,23 +52,23 @@ describe('which language a recording uses', function () {
 
         expect(app(LanguageRouter::class)->languageFor($session))->toBe($expected);
     })->with([
-        'manual wins' => ['en', 'ur', 'hi', 'en'],
-        'client next' => [null, 'en+ur', 'hi', 'en+ur'],
-        'console default last' => [null, null, 'hi', 'hi'],
+        'manual wins' => ['en', 'ur', 'ar', 'en'],
+        'client next (a v1.1 value reads as Urdu)' => [null, 'en+ur', 'ar', 'ur'],
+        'console default last (Hindi reads as Urdu)' => [null, null, 'hi', 'ur'],
         'automatic' => [null, null, null, null],
     ]);
 
     it('starts the final transcript in that language with the routed engine and records the route', function () {
         Queue::fake();
         keys('assemblyai', 'elevenlabs');
-        $client = Client::factory()->create(['user_id' => $this->device->user_id, 'language' => 'en+ur']);
+        $client = Client::factory()->create(['user_id' => $this->device->user_id, 'language' => 'ur']);
         $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['client_id' => $client->id]);
 
         $transcript = app(FinalTranscriptCoordinator::class)->start($session);
 
-        expect($transcript->language)->toBe('en+ur')
+        expect($transcript->language)->toBe('ur')
             ->and($transcript->provider)->toBe('elevenlabs')
-            ->and($transcript->meta['route'])->toBe(['used' => 'elevenlabs', 'wanted' => 'elevenlabs', 'language' => 'en+ur', 'fallback' => false])
+            ->and($transcript->meta['route'])->toBe(['used' => 'elevenlabs', 'wanted' => 'elevenlabs', 'language' => 'ur', 'fallback' => false])
             ->and($session->fresh()->final_provider)->toBe('elevenlabs');
     });
 
@@ -95,15 +95,29 @@ describe('which language a recording uses', function () {
 });
 
 describe('routing each language to an engine', function () {
-    it('routes Urdu and Urdu + English to ElevenLabs, English and Hindi to AssemblyAI', function () {
+    it('routes Urdu and Arabic to ElevenLabs, English to AssemblyAI, the More languages through Other', function () {
         keys('assemblyai', 'elevenlabs');
         $router = app(LanguageRouter::class);
 
         expect($router->final('ur', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::ElevenLabs)
-            ->and($router->final('en+ur', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::ElevenLabs)
+            ->and($router->final('ar', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::ElevenLabs)
             ->and($router->final('en', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::AssemblyAi)
-            ->and($router->final('hi', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::AssemblyAi)
+            ->and($router->final('de', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::ElevenLabs)
             ->and($router->final(null, SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::AssemblyAi);
+
+        // An Auto list saved in the console is used for recordings without a language.
+        app(SettingsRepository::class)->set('routing.final', [LanguageRouter::AUTO => ['elevenlabs']]);
+        expect(app(LanguageRouter::class)->final(null, SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::ElevenLabs);
+    });
+
+    it('folds the v1.1 routing keys into today and lets a list kept under today\'s key win', function () {
+        $routes = LanguageRouter::merge(['hi' => ['assemblyai'], 'en+ur' => ['soniox'], 'ur' => ['elevenlabs'], 'fr' => ['soniox'], 'auto' => ['soniox']], LanguageRouter::DEFAULT_FINAL_ROUTES);
+
+        expect($routes['ur'])->toBe(['elevenlabs'])
+            ->and($routes[LanguageRouter::OTHER])->toBe(['soniox'])
+            ->and($routes[LanguageRouter::AUTO])->toBe(['soniox'])
+            ->and($routes)->not->toHaveKey('hi')->not->toHaveKey('en+ur');
+        expect(LanguageRouter::merge(['en+ur' => ['soniox']], LanguageRouter::DEFAULT_FINAL_ROUTES)['ur'])->toBe(['soniox']);
     });
 
     it('falls back to the next engine with a key and says so', function () {
@@ -137,14 +151,17 @@ describe('routing each language to an engine', function () {
     });
 
     it('moves the comparison winner to the front of its language', function () {
-        app(LanguageRouter::class)->prefer('en+ur', SttProviderKey::Soniox);
+        app(LanguageRouter::class)->prefer('ur', SttProviderKey::Soniox);
+        app(LanguageRouter::class)->prefer('de', SttProviderKey::Soniox);
 
-        expect(app(LanguageRouter::class)->routes('routing.final', LanguageRouter::DEFAULT_FINAL_ROUTES)['en+ur'])->toBe(['soniox', 'elevenlabs', 'assemblyai']);
+        $routes = app(LanguageRouter::class)->routes('routing.final', LanguageRouter::DEFAULT_FINAL_ROUTES);
+        expect($routes['ur'])->toBe(['soniox', 'elevenlabs', 'assemblyai'])
+            ->and($routes[LanguageRouter::OTHER][0])->toBe('soniox');
     });
 });
 
 describe('telling the engine the language', function () {
-    it('sends Urdu + English to ElevenLabs as Urdu, never as automatic detection', function () {
+    it('sends Urdu (with English words) to ElevenLabs as Urdu, never as automatic detection', function () {
         keys('elevenlabs');
         $captured = null;
         Http::fake(['api.elevenlabs.io/v1/speech-to-text' => function (HttpRequest $request) use (&$captured) {
@@ -155,13 +172,13 @@ describe('telling the engine the language', function () {
                 ['channel_index' => 1, 'words' => [['text' => 'جی', 'start' => 1.1, 'end' => 1.5, 'type' => 'word']]],
             ]], 200);
         }]);
-        $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'en+ur', 'final_provider' => 'elevenlabs']);
-        $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'elevenlabs', 'status' => TranscriptStatus::Pending, 'language' => 'en+ur']);
+        $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'ur', 'final_provider' => 'elevenlabs']);
+        $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'elevenlabs', 'status' => TranscriptStatus::Pending, 'language' => 'ur']);
 
         dispatch_sync(new TranscribeFinalJob($transcript->id));
 
         expect($captured)->toMatch('/name="language_code"\s+ur/');
-        expect($transcript->refresh()->language)->toBe('en+ur')->and($transcript->meta['detected_language'])->toBe('ur');
+        expect($transcript->refresh()->language)->toBe('ur')->and($transcript->meta['detected_language'])->toBe('ur');
     });
 
     it('steers AssemblyAI live captions to the chosen languages with language_codes', function () {
@@ -170,7 +187,7 @@ describe('telling the engine the language', function () {
         $id = $this->openSession(['client_ref' => 'live-ur']);
 
         $grants = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $id, 'channels' => ['me'], 'language' => 'ur+en'])->assertOk()->json('grants');
-        expect($grants[0]['init_messages'][0])->toMatchArray(['type' => 'UpdateConfiguration', 'language_codes' => ['en', 'ur']]);
+        expect($grants[0]['init_messages'][0])->toMatchArray(['type' => 'UpdateConfiguration', 'language_codes' => ['ur', 'en']]);
 
         $auto = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $id, 'channels' => ['me']])->json('grants');
         expect(json_encode($auto))->not->toContain('language_codes');
@@ -190,36 +207,55 @@ describe('telling the engine the language', function () {
 });
 
 describe('the script of the text', function () {
-    it('names Devanagari in an Urdu transcript and Urdu script in a Hindi one', function () {
+    it('calls Hindi letters wrong for every recording, Auto and English included', function () {
         $hindiScript = str_repeat('नमस्ते आप कैसे हैं ', 5);
         $urduScript = str_repeat('السلام علیکم آپ کیسے ہیں ', 5);
 
         expect(ScriptCheck::wrongScript('ur', $hindiScript))->toBe('devanagari')
-            ->and(ScriptCheck::wrongScript('en+ur', $hindiScript))->toBe('devanagari')
+            ->and(ScriptCheck::wrongScript(null, $hindiScript))->toBe('devanagari')
+            ->and(ScriptCheck::wrongScript('en', $hindiScript))->toBe('devanagari')
             ->and(ScriptCheck::wrongScript('ur', $urduScript))->toBeNull()
-            ->and(ScriptCheck::wrongScript('hi', $urduScript))->toBe('arabic')
-            ->and(ScriptCheck::wrongScript('hi', $hindiScript))->toBeNull()
-            ->and(ScriptCheck::wrongScript(null, $hindiScript))->toBeNull();
+            ->and(ScriptCheck::wrongScript('ar', $urduScript))->toBeNull();
     });
 
-    it('accepts English words inside Urdu + English but not a whole Urdu call in Latin letters', function () {
+    it('accepts English words inside Urdu but not a whole Urdu call in Latin letters', function () {
         $roman = str_repeat('aap kaise hain meeting kal hai ', 4);
         $mixed = 'میں نے invoice بھیج دیا ہے اور meeting کل ہوگی '.str_repeat('پھر ہم بات کریں گے ', 3);
 
-        expect(ScriptCheck::wrongScript('en+ur', $roman))->toBeNull()
-            ->and(ScriptCheck::wrongScript('ur', $roman))->toBe('latin')
-            ->and(ScriptCheck::wrongScript('en+ur', $mixed))->toBeNull()
+        expect(ScriptCheck::wrongScript('ur', $roman))->toBe('latin')
+            ->and(ScriptCheck::wrongScript('en', $roman))->toBeNull()
+            ->and(ScriptCheck::wrongScript('ur', $mixed))->toBeNull()
             ->and(ScriptCheck::wrongScript('ur', 'नमस्ते'))->toBeNull(); // too short to judge
     });
 
-    it('marks a finished transcript and shows the warning to the apps', function () {
+    it('runs a Hindi-letter result once more forced as Urdu, then flags lines that stay Hindi', function () {
+        Queue::fake();
         $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'ur']);
-        $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Processing, 'language' => 'ur']);
+        $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Processing, 'language' => 'ur', 'provider_job_id' => 'job-1']);
         $text = str_repeat('नमस्ते आप कैसे हैं ', 5);
+        $result = new NormalizedTranscript($text, [new Segment(1, 'Me', 0, 1000, $text), new Segment(2, 'Client', 1000, 2000, 'جی بالکل')], 'hi', []);
 
-        app(TranscriptStore::class)->complete($transcript, new NormalizedTranscript($text, [new Segment(1, 'Me', 0, 1000, $text)], 'hi', []));
+        app(TranscriptStore::class)->complete($transcript, $result);
 
-        expect($transcript->refresh()->meta['script_warning'])->toBe('devanagari');
+        $transcript->refresh();
+        expect($transcript->status)->toBe(TranscriptStatus::Pending)
+            ->and($transcript->provider_job_id)->toBeNull()
+            ->and($transcript->meta['forced_language'])->toBe('ur')
+            ->and($transcript->meta['forced_reason'])->toBe('devanagari');
+        Queue::assertPushed(TranscribeFinalJob::class, 1);
+
+        $transcript->update(['status' => TranscriptStatus::Processing]);
+        app(TranscriptStore::class)->complete($transcript, $result);
+
+        $transcript->refresh();
+        expect($transcript->status)->toBe(TranscriptStatus::Completed)
+            ->and($transcript->segments[0]['text'])->toBe(TranscriptStore::WRONG_SCRIPT_TEXT)
+            ->and($transcript->segments[0]['flag'])->toBe('wrong_script')
+            ->and($transcript->segments[1]['text'])->toBe('جی بالکل')
+            ->and($transcript->text)->not->toMatch('/[\x{0900}-\x{097F}]/u')
+            ->and($transcript->meta['wrong_script_segments'])->toBe(1)
+            ->and($transcript->meta['script_warning'])->toBe('devanagari');
+        Queue::assertPushed(TranscribeFinalJob::class, 1);
         $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()->assertJsonPath('script_warning', 'devanagari')->assertJsonPath('language', 'ur');
         $item = collect($this->getJson('/api/library')->json('data'))->firstWhere('id', $session->id);
         expect($item['transcript']['script_warning'])->toBe('devanagari')->and($item['language_chip'])->toBe('UR');
@@ -232,18 +268,22 @@ describe('what the apps learn about languages', function () {
 
         $languages = $this->getJson('/api/config')->assertOk()->json('languages');
 
-        expect($languages['default'])->toBe('en+ur')
-            ->and(collect($languages['options'])->pluck('chip')->all())->toBe(['Auto', 'EN', 'UR', 'UR+EN', 'HI', 'HI+EN'])
+        expect($languages['default'])->toBe('ur')
+            ->and(collect($languages['options'])->pluck('chip')->all())->toBe(['Auto', 'EN', 'UR', 'AR', 'FR', 'DE', 'ES', 'IT', 'PT', 'NL', 'TR', 'RU'])
+            ->and(collect($languages['options'])->where('more', true)->pluck('value')->all())->toBe(['fr', 'de', 'es', 'it', 'pt', 'nl', 'tr', 'ru'])
+            ->and($languages['auto'])->toBe(['en', 'ur', 'ar'])
             ->and($languages['options'][0]['value'])->toBeNull();
     });
 
     it('saves a client\'s language (Use Urdu for Ali from now on) and a recording\'s language', function () {
         $client = Client::factory()->create(['user_id' => $this->device->user_id, 'name' => 'Ali']);
-        $this->patchJson("/api/clients/{$client->id}", ['language' => 'ur+en'])->assertOk()->assertJsonPath('data.language', 'en+ur');
-        expect($client->fresh()->language)->toBe('en+ur');
+        $this->patchJson("/api/clients/{$client->id}", ['language' => 'ur+en'])->assertOk()->assertJsonPath('data.language', 'ur');
+        expect($client->fresh()->language)->toBe('ur');
 
         $session = $this->makeReadySession($this->device, Fixtures::audio(4000));
-        $this->patchJson("/api/sessions/{$session->id}", ['language' => 'hi'])->assertOk()->assertJsonPath('data.language', 'hi');
+        // An older app still sending Hindi gets Urdu.
+        $this->patchJson("/api/sessions/{$session->id}", ['language' => 'hi'])->assertOk()->assertJsonPath('data.language', 'ur');
+        $this->patchJson("/api/sessions/{$session->id}", ['language' => 'ar'])->assertOk()->assertJsonPath('data.language', 'ar');
         $this->patchJson("/api/sessions/{$session->id}", ['language' => 'auto'])->assertOk()->assertJsonPath('data.language', null);
     });
 });

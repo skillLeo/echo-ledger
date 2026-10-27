@@ -119,7 +119,8 @@ it('detects the language for automatic and sends the client keyterms as context 
     ), false, 'rid-1');
 
     expect($body['enable_language_identification'])->toBeTrue()
-        ->and($body)->not->toHaveKey('language_hints')
+        ->and($body['language_hints'])->toBe(['en', 'ur', 'ar']) // steered to what Auto may pick, not strict
+        ->and($body)->not->toHaveKey('language_hints_strict')
         ->and($body['context'])->toBe(['terms' => ['Farah Khan', 'EchoLedger']])
         ->and($body)->not->toHaveKey('webhook_url');
 });

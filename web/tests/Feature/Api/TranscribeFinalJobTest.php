@@ -132,12 +132,13 @@ describe('AssemblyAI submission', function () {
 
         $body = sentBody('POST', '/v2/transcript');
         if ($expected === null) {
-            expect($body['language_detection'])->toBeTrue()->and($body)->not->toHaveKey('language_code');
+            expect($body['language_detection'])->toBeTrue()->and($body)->not->toHaveKey('language_code')
+                ->and($body['language_detection_options']['expected_languages'])->toBe(['en', 'ur', 'ar']);
         } else {
             expect($body['language_code'])->toBe($expected)->and($body)->not->toHaveKey('language_detection');
         }
     })->with([
-        'session wins' => ['ur', 'fr', 'ur'],
+        'session wins' => ['en', 'fr', 'en'],
         'client used' => [null, 'fr', 'fr'],
         'none: detect' => [null, null, null],
         'empty strings count as none' => ['', '', null],

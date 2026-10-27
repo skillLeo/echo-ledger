@@ -63,57 +63,82 @@ function submittedBody(object $test, ?string $language, ?Client $client = null):
 }
 
 describe('language choices', function () {
-    it('normalises what is stored', function () {
+    it('keeps one offered language per choice and reads the old ones as today', function () {
         expect(LanguageChoice::normalize(' UR '))->toBe('ur')
             ->and(LanguageChoice::normalize('auto'))->toBeNull()
             ->and(LanguageChoice::normalize(''))->toBeNull()
-            ->and(LanguageChoice::normalize('en+ur'))->toBe('en+ur')
-            ->and(LanguageChoice::normalize('en+ur+hi'))->toBe('en+ur')
             ->and(LanguageChoice::normalize('<script>'))->toBeNull()
-            ->and(LanguageChoice::single('en+ur'))->toBeNull()
-            ->and(LanguageChoice::single('hi'))->toBe('hi')
-            ->and(LanguageChoice::assemblyAiCodeSwitch('en+ur'))->toBeTrue()
-            ->and(LanguageChoice::assemblyAiCodeSwitch('hi+ur'))->toBeFalse()
-            ->and(LanguageChoice::normalize('ur+en'))->toBe('en+ur')
-            ->and(LanguageChoice::primary('en+ur'))->toBe('ur')
-            ->and(LanguageChoice::primary('en'))->toBe('en')
+            // v1.1 values: the mixed choices and Hindi are Urdu (Urdu always allows English words).
+            ->and(LanguageChoice::normalize('en+ur'))->toBe('ur')
+            ->and(LanguageChoice::normalize('ur+en'))->toBe('ur')
+            ->and(LanguageChoice::normalize('hi'))->toBe('ur')
+            ->and(LanguageChoice::normalize('en+hi'))->toBe('ur')
+            ->and(LanguageChoice::normalize('en+ar'))->toBe('ar')
+            ->and(LanguageChoice::normalize('ar-EG'))->toBe('ar')
+            ->and(LanguageChoice::normalize('Urdu'))->toBe('ur')
+            ->and(LanguageChoice::normalize('fr'))->toBe('fr')
+            ->and(LanguageChoice::normalize('ja'))->toBeNull()
+            ->and(LanguageChoice::codes('ur'))->toBe(['ur', 'en'])
+            ->and(LanguageChoice::codes('ar'))->toBe(['ar', 'en'])
+            ->and(LanguageChoice::codes('fr'))->toBe(['fr'])
+            ->and(LanguageChoice::codes(null))->toBe([])
+            ->and(LanguageChoice::single('ur'))->toBe('ur')
             ->and(LanguageChoice::primary(null))->toBeNull()
-            ->and(LanguageChoice::chip('en+ur'))->toBe('UR+EN')
+            ->and(LanguageChoice::chip('ur'))->toBe('UR')
+            ->and(LanguageChoice::chip('en+ur'))->toBe('UR')
             ->and(LanguageChoice::chip(null))->toBe('Auto')
-            ->and(LanguageChoice::label('en+hi'))->toBe('Hindi + English')
-            ->and(LanguageChoice::label('en+ur'))->toBe('Urdu + English')
-            ->and(LanguageChoice::label(null))->toBe('Automatic');
+            ->and(LanguageChoice::label('ar'))->toBe('Arabic')
+            ->and(LanguageChoice::label(null))->toBe('Auto')
+            ->and(array_keys(LanguageChoice::OFFERED))->not->toContain('hi')->not->toContain('en+ur');
     });
 
-    it('sends English + Urdu to AssemblyAI as Universal-2 code switching', function () {
-        $body = submittedBody($this, 'en+ur');
+    it('reads what engines detect, with Hindi as Urdu, and lets Auto pick only English, Urdu or Arabic', function () {
+        expect(LanguageChoice::fromDetected('hi'))->toBe('ur')
+            ->and(LanguageChoice::fromDetected('hindi'))->toBe('ur')
+            ->and(LanguageChoice::fromDetected('urd'))->toBe('ur')
+            ->and(LanguageChoice::fromDetected('english'))->toBe('en')
+            ->and(LanguageChoice::fromDetected('ja'))->toBeNull()
+            ->and(LanguageChoice::allows(null, 'en'))->toBeTrue()
+            ->and(LanguageChoice::allows(null, 'ar'))->toBeTrue()
+            ->and(LanguageChoice::allows(null, 'fr'))->toBeFalse()
+            ->and(LanguageChoice::allows('ur', 'en'))->toBeTrue()
+            ->and(LanguageChoice::allows('en', 'ur'))->toBeFalse()
+            ->and(LanguageChoice::fallback())->toBe('ur');
 
-        expect($body['language_codes'])->toBe(['en', 'ur'])
+        app(SettingsRepository::class)->set('languages.auto_more', ['fr', 'hi', 'junk']);
+        expect(LanguageChoice::autoLanguages())->toBe(['en', 'ur', 'ar', 'fr'])
+            ->and(LanguageChoice::allows(null, 'fr'))->toBeTrue();
+    });
+
+    it('sends Urdu to AssemblyAI as Universal-2 code switching with English', function () {
+        $body = submittedBody($this, 'ur');
+
+        expect($body['language_codes'])->toBe(['ur', 'en'])
             ->and($body['speech_models'])->toBe(['universal-2'])
             ->and($body)->not->toHaveKey('language_code')
             ->and($body)->not->toHaveKey('language_detection');
     });
 
-    it('sends one language as its code and nothing as automatic detection', function () {
-        expect(submittedBody($this, 'ur')['language_code'])->toBe('ur');
+    it('sends English as its code and Auto as detection limited to English, Urdu and Arabic', function () {
+        expect(submittedBody($this, 'en')['language_code'])->toBe('en');
         Http::fake();
         $auto = submittedBody($this, null);
-        expect($auto['language_detection'])->toBeTrue()->and($auto)->not->toHaveKey('language_code');
+        expect($auto['language_detection'])->toBeTrue()
+            ->and($auto['language_detection_options'])->toBe(['expected_languages' => ['en', 'ur', 'ar'], 'fallback_language' => 'auto'])
+            ->and($auto)->not->toHaveKey('language_code');
     });
 
-    it('detects a pair without English automatically, as AssemblyAI requires English in the pair', function () {
-        $body = submittedBody($this, 'hi+ur');
-
-        expect($body['language_detection'])->toBeTrue()->and($body)->not->toHaveKey('language_codes');
+    it('sends a More language as its own code', function () {
+        expect(submittedBody($this, 'de')['language_code'])->toBe('de');
     });
 
-    it('falls back to the client language, then the console default', function () {
+    it('falls back to the client language, then the console default (old codes read as today)', function () {
         $client = Client::factory()->create(['user_id' => $this->device->user_id, 'language' => 'hi']);
-        expect(submittedBody($this, null, $client)['language_code'])->toBe('hi');
+        expect(submittedBody($this, null, $client)['language_codes'])->toBe(['ur', 'en']);
 
         Http::fake();
-        app(SettingsRepository::class)->set('default_language', 'en+ur');
-        expect(submittedBody($this, null)['language_codes'])->toBe(['en', 'ur']);
+        app(SettingsRepository::class)->set('default_language', 'en');
+        expect(submittedBody($this, null)['language_code'])->toBe('en');
     });
 });
 

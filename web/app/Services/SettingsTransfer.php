@@ -29,6 +29,8 @@ final class SettingsTransfer
         'routing.final',
         'captions.channels',
         'default_language',
+        'languages.auto_more',
+        'languages.auto_fallback',
         'display.timezone',
         'vocabulary.keyterms',
         'vocabulary.replacements',

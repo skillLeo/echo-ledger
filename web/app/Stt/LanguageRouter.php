@@ -17,17 +17,23 @@ use App\Stt\Drivers\AssemblyAiDriver;
  * "Engine per language"); the first engine on the list that has its key and supports the language is used, and when
  * it is not the first one the decision says so ("fallback"). Automatic keeps the per-use-case provider.
  *
- * Support tables are from the providers' documentation (checked 2026-10-27):
- * - AssemblyAI pre-recorded: Universal-2 covers Urdu and Hindi; Universal-3.5 Pro covers Hindi, not Urdu; code
- *   switching takes two codes, one of them English. Streaming: Universal-3.6 Pro covers Urdu and Hindi with code
- *   switching (`language_codes`); the English and the six-language multilingual models do not.
- * - ElevenLabs Scribe v2: 90+ languages incl. Urdu (urd) and Hindi (hin); one `language_code`, ISO 639-1 or 639-3.
- * - Soniox: Urdu (ur) and Hindi (hi) through `language_hints`, one model for all languages; final transcripts only
- *   here (the apps cannot stream to it).
+ * Lists are kept for English, Urdu, Arabic, `other` (the More languages) and `auto` (no language chosen).
+ *
+ * Support tables are from the providers' documentation (checked 2026-10-28):
+ * - AssemblyAI pre-recorded: Urdu only on Universal-2 (Universal-3.5 Pro does not list it); code switching takes two
+ *   codes, one of them English. Streaming: Universal-3.6 Pro lists Urdu, steered with `language_codes`.
+ * - ElevenLabs Scribe v2: 90+ languages incl. Urdu (urd) and Arabic; one `language_code`, ISO 639-1 or 639-3.
+ * - Soniox: one model for all languages, `language_hints` (+ strict); final transcripts only here.
  */
 final class LanguageRouter
 {
-    private const ALL = ['en', 'ur', 'en+ur', 'hi', 'en+hi'];
+    /** Routing key of the More languages. */
+    public const OTHER = 'other';
+
+    /** Routing key of recordings whose language is Auto. */
+    public const AUTO = 'auto';
+
+    private const ALL = ['en', 'ur', 'ar', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'tr', 'ru'];
 
     /** @var array<string, list<string>> engine => languages its final transcript supports */
     public const FINAL_SUPPORT = [
@@ -43,10 +49,35 @@ final class LanguageRouter
     public const DEFAULT_FINAL_ROUTES = [
         'en' => ['assemblyai', 'elevenlabs', 'soniox'],
         'ur' => ['elevenlabs', 'soniox', 'assemblyai'],
-        'en+ur' => ['elevenlabs', 'soniox', 'assemblyai'],
-        'hi' => ['assemblyai', 'elevenlabs', 'soniox'],
-        'en+hi' => ['assemblyai', 'soniox', 'elevenlabs'],
+        'ar' => ['elevenlabs', 'soniox', 'assemblyai'],
+        self::OTHER => ['elevenlabs', 'soniox', 'assemblyai'],
     ];
+
+    /** The routing key of a language: its own list for English, Urdu and Arabic, `other` for the rest, `auto`. */
+    public static function routeKey(?string $language): string
+    {
+        $language = LanguageChoice::normalize($language);
+        if ($language === null) {
+            return self::AUTO;
+        }
+
+        return in_array($language, ['en', 'ur', 'ar'], true) ? $language : self::OTHER;
+    }
+
+    public static function routeLabel(string $key): string
+    {
+        return match ($key) {
+            self::OTHER => 'Other languages',
+            self::AUTO => 'Auto',
+            default => LanguageChoice::label($key),
+        };
+    }
+
+    /** @return list<string> the default list of a routing key (Auto: the console's engine, then the others) */
+    public static function defaultsFor(string $key): array
+    {
+        return self::DEFAULT_FINAL_ROUTES[$key] ?? self::DEFAULT_FINAL_ROUTES[self::OTHER];
+    }
 
     /**
      * Live captions follow the engine the console picked for them, then the other streaming engine: no per-language
@@ -76,14 +107,16 @@ final class LanguageRouter
     {
         $language = LanguageChoice::normalize($language);
         $default = $this->settings->providerFor($useCase);
-        if ($language === null) {
+        $routes = $this->routes('routing.final', self::DEFAULT_FINAL_ROUTES);
+        // Auto: the admin's Auto list, else the engine chosen for the use case (Auto checks the language afterwards).
+        if ($language === null && ! isset($routes[self::AUTO])) {
             return new RouteDecision($default, $default, null, false);
         }
-        $list = $this->routes('routing.final', self::DEFAULT_FINAL_ROUTES)[$language] ?? [$default->value];
+        $list = $routes[self::routeKey($language)] ?? [$default->value];
         $wanted = SttProviderKey::tryFrom($list[0] ?? '') ?? $default;
         foreach ($list as $engine) {
             $key = SttProviderKey::tryFrom($engine);
-            if ($key !== null && $this->supportsFinal($key, $language) && $this->configured($key) && $this->fits($key, $session)) {
+            if ($key !== null && ($language === null || $this->supportsFinal($key, $language)) && $this->configured($key) && $this->fits($key, $session)) {
                 return new RouteDecision($key, $wanted, $language, $key !== $wanted);
             }
         }
@@ -121,7 +154,7 @@ final class LanguageRouter
     public function candidates(?string $language, ?CaptureSession $session = null): array
     {
         $language = LanguageChoice::normalize($language);
-        $ordered = $language === null ? [] : ($this->routes('routing.final', self::DEFAULT_FINAL_ROUTES)[$language] ?? []);
+        $ordered = $this->routes('routing.final', self::DEFAULT_FINAL_ROUTES)[self::routeKey($language)] ?? [];
         foreach (array_keys(self::FINAL_SUPPORT) as $engine) {
             if (! in_array($engine, $ordered, true)) {
                 $ordered[] = $engine;
@@ -139,15 +172,15 @@ final class LanguageRouter
         return $out;
     }
 
-    /** Puts [$engine] first for [$language] (the winner of a comparison). */
+    /** Puts [$engine] first for [$language]'s list (the winner of a comparison; a More language moves `other`). */
     public function prefer(string $language, SttProviderKey $engine): void
     {
-        $language = LanguageChoice::normalize($language);
-        if ($language === null) {
+        if (LanguageChoice::normalize($language) === null) {
             return;
         }
+        $key = self::routeKey($language);
         $routes = $this->routes('routing.final', self::DEFAULT_FINAL_ROUTES);
-        $routes[$language] = array_values(array_unique([$engine->value, ...($routes[$language] ?? [])]));
+        $routes[$key] = array_values(array_unique([$engine->value, ...($routes[$key] ?? [])]));
         $this->settings->set('routing.final', $routes);
     }
 
@@ -216,19 +249,32 @@ final class LanguageRouter
     public static function merge(mixed $stored, array $defaults): array
     {
         $routes = $defaults;
-        if (is_array($stored)) {
-            foreach ($stored as $language => $list) {
-                $language = LanguageChoice::normalize((string) $language);
-                if ($language === null || ! is_array($list)) {
-                    continue;
-                }
-                $clean = array_values(array_unique(array_filter(array_map('strval', $list), fn (string $e): bool => SttProviderKey::tryFrom($e) !== null)));
-                if ($clean !== []) {
-                    $routes[$language] = $clean;
+        if (! is_array($stored)) {
+            return $routes;
+        }
+        $exact = [];
+        $legacy = [];
+        $rank = [];
+        foreach ($stored as $raw => $list) {
+            $raw = (string) $raw;
+            $key = in_array($raw, [self::OTHER, self::AUTO], true) ? $raw : (LanguageChoice::normalize($raw) === null ? null : self::routeKey($raw));
+            $clean = is_array($list) ? array_values(array_unique(array_filter(array_map('strval', $list), fn (string $e): bool => SttProviderKey::tryFrom($e) !== null))) : [];
+            if ($key === null || $clean === []) {
+                continue;
+            }
+            // A list kept under today's key wins; v1.1 keys only fill a key that has none, and for Urdu the old
+            // "Urdu + English" list (what Urdu means now) wins over the old Hindi ones.
+            if ($raw === $key) {
+                $exact[$key] = $clean;
+            } else {
+                $score = str_contains($raw, 'ur') || str_contains($raw, 'ar') ? 0 : 1;
+                if (! isset($rank[$key]) || $score < $rank[$key]) {
+                    $legacy[$key] = $clean;
+                    $rank[$key] = $score;
                 }
             }
         }
 
-        return $routes;
+        return array_merge($routes, $legacy, $exact);
     }
 }

@@ -145,15 +145,19 @@ final class AssemblyAiDriver implements SttProvider
             'punctuate' => true,
             'format_text' => true,
         ];
-        // English + another language: Universal-2 code switching (two codes, one English); one language: its code;
-        // otherwise automatic detection. These three options are mutually exclusive (docs/research/stt-assemblyai.md).
-        if (LanguageChoice::assemblyAiCodeSwitch($request->language)) {
-            $body['language_codes'] = LanguageChoice::codes($request->language);
+        // Urdu and Arabic come with English words: Universal-2 code switching (two codes, one English; Universal-3.5 Pro
+        // does not list Urdu). Another language: its code. Auto: detection limited to the languages Auto may pick
+        // (`expected_languages` is a hint, so the result is checked again when it arrives). These three options are
+        // mutually exclusive (docs/research/stt-assemblyai.md).
+        $codes = LanguageChoice::codes($request->language);
+        if (count($codes) === 2) {
+            $body['language_codes'] = $codes;
             $body['speech_models'] = ['universal-2'];
-        } elseif (($single = LanguageChoice::single($request->language)) !== null) {
-            $body['language_code'] = $single;
+        } elseif ($codes !== []) {
+            $body['language_code'] = $codes[0];
         } else {
             $body['language_detection'] = true;
+            $body['language_detection_options'] = ['expected_languages' => LanguageChoice::autoLanguages($this->settings), 'fallback_language' => 'auto'];
         }
         $keyterms = KeytermPolicy::forProvider($request->keyterms, $this->capabilities(), false);
         if ($keyterms !== []) {

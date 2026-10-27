@@ -259,8 +259,11 @@ it('limits the default language to 16 characters and stores blank as auto-detect
     adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => '']))->call('save')->assertHasNoFormErrors();
     expect(app(SettingsRepository::class)->get('default_language'))->toBeNull();
 
-    adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => 'en+ur']))->call('save')->assertHasNoFormErrors();
-    expect(app(SettingsRepository::class)->get('default_language'))->toBe('en+ur');
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => 'ar']))->call('save')->assertHasNoFormErrors();
+    expect(app(SettingsRepository::class)->get('default_language'))->toBe('ar');
+    // Hindi and the mixed choices are not offered any more.
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => 'en+ur']))->call('save')->assertHasFormErrors(['default_language' => 'in']);
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['default_language' => 'hi']))->call('save')->assertHasFormErrors(['default_language' => 'in']);
 });
 
 it('rejects an unknown caption channel mode', function () {

@@ -238,7 +238,7 @@ describe('vocabulary and languages', function () {
             ->fillForm([
                 'vocabulary_keyterms' => ['EchoLedger', 'echoledger', 'Farah Khan'],
                 'vocabulary_replacements' => [['from' => 'eco ledger', 'to' => 'EchoLedger', 'whole_word' => true, 'match_case' => false]],
-                'default_language' => 'en+ur',
+                'default_language' => 'ur',
             ])
             ->call('save')
             ->assertHasNoFormErrors();
@@ -246,7 +246,7 @@ describe('vocabulary and languages', function () {
         $settings = app(SettingsRepository::class);
         expect($settings->globalKeyterms())->toBe(['EchoLedger', 'Farah Khan'])
             ->and($settings->globalReplacements()[0]['to'])->toBe('EchoLedger')
-            ->and($settings->get('default_language'))->toBe('en+ur');
+            ->and($settings->get('default_language'))->toBe('ur');
     });
 
     it('refuses a keyterm that is too long', function () {

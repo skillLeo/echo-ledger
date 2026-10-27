@@ -59,13 +59,17 @@ final class DeviceConfigPayload
             'markers' => ['tags' => $this->settings->markerTags()],
             // Since v1.1.2: the language choices (value, label, chip) and the console default, so every app offers the
             // same list on its language chip. A null value = automatic.
+            // Since v1.2: Auto, English, Urdu, Arabic first, then the "More languages" (`more`: true); `auto` lists the
+            // languages Auto may pick. Hindi and the mixed choices are gone (they read as Urdu).
             'languages' => [
                 'default' => LanguageChoice::normalize($this->settings->get('default_language')),
                 'options' => array_map(fn (string $value): array => [
                     'value' => $value === '' ? null : $value,
                     'label' => LanguageChoice::OFFERED[$value],
                     'chip' => LanguageChoice::CHIPS[$value],
+                    'more' => array_key_exists($value, LanguageChoice::MORE),
                 ], array_keys(LanguageChoice::OFFERED)),
+                'auto' => LanguageChoice::autoLanguages($this->settings),
             ],
             'pins' => $this->settings->pins(),
             'usage' => app(UsageSummary::class)->toArray($device->workspace_id),

@@ -89,7 +89,9 @@ final class SonioxDriver implements SttProvider
         ];
         $codes = LanguageChoice::codes($request->language);
         if ($codes === []) {
-            $body['enable_language_identification'] = true; // automatic: detect per part
+            // Auto: detect per part, steered (not restricted) to the languages Auto may pick; the result is checked again.
+            $body['enable_language_identification'] = true;
+            $body['language_hints'] = LanguageChoice::autoLanguages($this->settings);
         } else {
             // A chosen language is a hint the model should rely on, so Urdu is not drifted to Hindi.
             $body['language_hints'] = array_values(array_unique([...array_filter($codes, fn (string $c): bool => $c !== 'en'), ...array_filter($codes, fn (string $c): bool => $c === 'en')]));
