@@ -371,7 +371,13 @@ Run these when the change touches the area, or before a release.
 | S-08 | Open a session in the console and play it. | Audio plays and seeks (HTTP 206); the active segment highlights and clicking a segment seeks. |
 | S-09 | Set retention to 1 day; age a session in the DB; run `php artisan model:prune --pretend`, then without `--pretend`. | Pretend lists exactly the old rows; the real run deletes rows and their encrypted files. |
 | S-9 | Console: finish all five steps, or press Dismiss. | The card disappears and does not come back (finishing: it returns if a step is undone). |
-| L-1 | Give a client the language Urdu + English; record a call with that client on the desktop. | The pill chip shows UR+EN; the transcript says "Urdu + English" and names the engine. |
+| L-1 | Give a client the language Urdu; record a call with that client on the desktop. | The pill chip shows UR; the transcript says "Urdu" and names the engine. |
+| L-8 | With the Groq key added, record an **English-only** call (language English). | Transcribed by AssemblyAI (Universal-3.5 Pro); no Urdu or Hindi letters. |
+| L-9 | Record an **Urdu-only** call (language Urdu). | Transcribed by Groq Whisper large-v3; Urdu script throughout, no Hindi letters; Me and Client apart. |
+| L-10 | Record a **mixed Urdu + English** call ("کل کی meeting reschedule کر دیں"), language Urdu. | Urdu words in Urdu script, English words in Latin letters, as spoken; nothing translated. |
+| L-11 | Record an **Arabic** call (language Arabic). | Transcribed by ElevenLabs Scribe v2 (with its key) in Arabic script. |
+| L-12 | Record a call with language **Auto** in Urdu, then one in English. | Tagged Urdu and English, never French or Hindi; Settings → General shows what Auto may pick. |
+| L-13 | Record a long call (over 10 minutes) with long silences, language Urdu. | One transcript with times matching the audio across the chunk joins; no invented lines during the silences. |
 | L-2 | During a recording with captions on, tap the pill's language chip twice. | Captions continue in the new language within a few seconds; the timer never stops; the saved file has no gap. |
 | L-3 | Stop a recording, change the chip on the Keep card, then Keep. | The transcript uses the chip's language; with a client of another language you are asked "Use … for … from now on?". |
 | L-4 | Phone: after a call, tap the chip on the popup, then Keep. | The transcript uses the new language. |

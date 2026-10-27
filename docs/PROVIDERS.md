@@ -98,29 +98,52 @@ its own transcript through `POST /api/sessions/{id}/transcripts`. The device-sid
 ## Languages
 
 The spoken language is chosen per recording (the chip on the pill, the Keep card, the phone popup), per client, or
-as the server default (**Settings → General**). The first one set wins: recording, then client, then default. The
-choices are stored as codes: `en`, `ur`, `en+ur`, `hi`, `en+hi`, or none for Automatic. The known language is
-always sent to the engine.
+as the server default (**Settings → General**). The first one set wins: recording, then client, then default.
 
-**Engine per language.** **Settings → Recording → Engine per language** lists up to three engines for each language,
-tried in order. An engine without a key, or one that does not support the language, is skipped; if the first
-engine fails, the next one runs, and the transcript records which engine was used and which one was wanted
-(`meta.route`). Defaults:
+**The choices (since v1.2)**, stored as codes: **Auto** (none), **English** (`en`), **Urdu** (`ur`), **Arabic**
+(`ar`), and the **More languages** `fr`, `de`, `es`, `it`, `pt`, `nl`, `tr`, `ru` (add one in
+`App\Stt\LanguageChoice::MORE`). Urdu and Arabic always allow English words inside. Hindi and the mixed choices are
+gone: stored `hi`, `en+ur`, `en+hi` were rewritten to `ur` (migration `unify_languages`), and an engine that
+detects Hindi is read as Urdu.
 
-| Language | 1st | 2nd | 3rd |
-|---|---|---|---|
-| English, Hindi | AssemblyAI | ElevenLabs | Soniox |
-| Urdu, Urdu + English | ElevenLabs | Soniox | AssemblyAI |
-| Hindi + English | AssemblyAI | Soniox | ElevenLabs |
+**Auto** picks only English, Urdu or Arabic (plus the More languages ticked under **Settings → General → Auto may
+also pick**). When an engine detects another language (French for an Urdu call), the transcript is run once more
+in **When Auto hears another language, use** (Urdu unless changed). Any transcript in Hindi (Devanagari) letters
+is run once more forced as Urdu; lines still in Hindi letters after that are shown as
+`[unclear: wrong script, re-transcribe]`, never as Hindi.
 
-Automatic keeps the provider chosen when the recording was created. Azure MAI and Parakeet are offered for English
-only.
+**Engine per language.** **Settings → Recording → Engine per language** lists up to four engines for English,
+Urdu, Arabic, Other (the More languages) and, optionally, Auto, tried in order. An engine without a key, or one that
+does not support the language, is skipped; the transcript records which engine was used and which one was wanted
+(`meta.route`). Defaults until the Accuracy Lab says otherwise:
 
-| Choice | AssemblyAI | ElevenLabs Scribe | Soniox |
-|---|---|---|---|
-| One language | `language_code` | `language_code` | `language_hints` (strict) |
-| Mixed (Urdu + English, Hindi + English) | code switching, both codes | `language_code` of the non-English one | both hints, non-English first |
-| Automatic | `language_detection: true` | detection | language identification |
+| Language | 1st | 2nd | 3rd | 4th |
+|---|---|---|---|---|
+| English | AssemblyAI (Universal-3.5 Pro) | Groq Whisper large-v3 | ElevenLabs Scribe v2 | Soniox |
+| Urdu | Groq Whisper large-v3 | Soniox | ElevenLabs Scribe v2 | AssemblyAI (Universal-2) |
+| Arabic | ElevenLabs Scribe v2 | Soniox | Groq Whisper large-v3 | AssemblyAI |
+| Other | ElevenLabs Scribe v2 | Soniox | Groq Whisper large-v3 | AssemblyAI |
+
+Auto with no Auto list keeps the provider chosen when the recording was created. Azure MAI and Parakeet are offered
+for English only.
+
+| Choice | AssemblyAI | ElevenLabs Scribe | Soniox | Groq Whisper |
+|---|---|---|---|---|
+| Urdu, Arabic | Universal-2 code switching with English | `language_code` | `language_hints` [ur, en] strict | `language` per chunk + Urdu-script style prompt |
+| English, More | `language_code` | `language_code` | `language_hints` strict | `language` per chunk |
+| Auto | detection limited to `expected_languages` | detection, checked after | identification + hints | detected per chunk, checked |
+
+### Groq Whisper large-v3 (since v1.2)
+
+| | |
+|---|---|
+| Final transcript | `whisper-large-v3` (not turbo), temperature 0, `verbose_json` with segment and word timestamps. Each side of the call as 16 kHz mono, cut at pauses into chunks of at most `audio.chunk_seconds` (600) with exact offsets; silent stretches are not sent. Uses the static ffmpeg on the server (`audio.ffmpeg_path`, else `~/bin/ffmpeg`); without it the whole file is sent (a signed link over 25 MB). |
+| Guards | Per chunk: the recording's language, or Auto then only allowed languages (else run again in the fallback), Hindi letters run again as Urdu. Whisper's invented text is removed and logged in `meta.removed_segments` (`no_speech_prob` > 0.6 with `avg_logprob` < -1.0, `compression_ratio` > 2.4, three identical lines in a row, a phrase looping four times); lines with `avg_logprob` < -0.8 are kept and marked `uncertain`. Urdu letter forms (ي ك ه ة → ی ک ہ ۃ) and Urdu punctuation after Urdu words; no word is changed. |
+| Prompt | A short style sentence in Urdu script with English business words in Latin letters (Arabic and English have their own), then the client's names and keyterms (at most 20). |
+| Credentials | `groq.api_key` (console.groq.com → API Keys). |
+| Price | US$0.111 per audio hour, at least 10 s billed per request; the usage ledger counts exactly what was sent (`meta.billed_audio_ms`). |
+| Live captions | Not available. |
+| Provider-side data | The audio is sent with the request; nothing is kept to delete. |
 
 **Live captions** use the admin's live provider first, then the other streaming engine, and get the language too
 (AssemblyAI `language_codes` with Universal-3 Pro; ElevenLabs `language_code`). Changing the chip during a call

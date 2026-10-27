@@ -145,8 +145,16 @@ opened.
 
 ## 12. Languages
 
-Tell EchoLedger which language is spoken and the transcript gets much better. The choices are **English**, **Urdu**,
-**Urdu + English** (calls that mix both), **Hindi**, **Hindi + English** and **Automatic**.
+Tell EchoLedger which language is spoken and the transcript gets much better. The choices are **Auto**, **English**,
+**Urdu**, **Arabic** and **More languages** (French, German, Spanish, Italian, Portuguese, Dutch, Turkish, Russian).
+
+- **Urdu** always allows English words inside, the way people speak in Pakistan ("کل کی meeting reschedule کر دیں").
+  Arabic does too. There is no separate "Urdu + English" any more.
+- **Auto** only chooses between English, Urdu and Arabic, so a call is never tagged French by mistake. An admin can
+  let Auto pick a More language too (**Settings → General → Auto may also pick**).
+- Hindi is not offered. Urdu is never written in Hindi letters: such text is transcribed again as Urdu.
+- Urdu goes to **Whisper large-v3** (the engine TurboScribe uses), each side of the call on its own. Words Whisper
+  is not sure of are marked; text it invents in silences is removed.
 
 - **For a client:** give the client a default language. Every recording with that client uses it.
 - **For everything else:** the default in **Settings → General → Transcription language** (on the phone:
