@@ -164,6 +164,20 @@ describe('finishing a session', function () {
             ->and($response->json('recordings.0.upload'))->toMatchArray(['received_chunks' => [], 'status' => 'pending', 'error' => null]);
     });
 
+    it('accepts a finish without duration_ms, as the Android app sends for a recording of length 0', function () {
+        $id = $this->openSession();
+        $body = Fixtures::finishBody($this->bytes, ['duration_ms' => null]);
+        unset($body['duration_ms']);
+
+        $this->postJson("/api/sessions/{$id}/finish", $body)->assertOk()->assertJsonPath('session.duration_ms', 60000);
+
+        $id2 = $this->openSession();
+        $body2 = Fixtures::finishBody($this->bytes, ['artifacts' => [Fixtures::artifact($this->bytes, ['duration_ms' => null])]]);
+        unset($body2['duration_ms']);
+        $this->postJson("/api/sessions/{$id2}/finish", $body2)->assertOk();
+        expect(unscoped(fn () => CaptureSession::query()->find($id2)->duration_ms))->toBeInt()->toBeGreaterThanOrEqual(0);
+    });
+
     it('stores the end in UTC whatever offset the device sends', function () {
         $id = $this->openSession();
 
@@ -264,7 +278,6 @@ describe('finishing a session', function () {
         'ended_at missing' => [['ended_at' => '__absent__'], 'ended_at'],
         'ended_at before the start' => [['ended_at' => '2026-10-24T08:59:59Z'], 'ended_at'],
         'ended_at as a number' => [['ended_at' => 1729760530], 'ended_at'],
-        'duration missing' => [['duration_ms' => '__absent__'], 'duration_ms'],
         'duration negative' => [['duration_ms' => -1], 'duration_ms'],
         'duration over a day' => [['duration_ms' => 86400001], 'duration_ms'],
         'title too long' => [['title' => str_repeat('t', 201)], 'title'],

@@ -132,7 +132,7 @@ final class SessionController extends Controller
         $this->normalizeArtifactsInput($request);
         $data = $request->validate([
             'ended_at' => ['required', ...self::instantRules(), self::notBefore($session->started_at, 'the start of the recording')],
-            'duration_ms' => ['required', 'integer', 'min:0', 'max:86400000'],
+            'duration_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],
             'title' => ['nullable', 'string', 'max:200'],
             'client_id' => ['nullable', 'string', 'size:26'],
             'artifacts' => ['required', 'array', 'min:1', 'max:3'],

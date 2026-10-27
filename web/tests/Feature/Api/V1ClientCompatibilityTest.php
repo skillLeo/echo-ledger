@@ -114,3 +114,86 @@ it('keeps v1.0 error handling working: statuses and a plain message', function (
     $this->app['auth']->forgetGuards();
     $this->withHeaders(['Authorization' => ''])->getJson('/api/library')->assertUnauthorized()->assertJsonStructure(['message']);
 });
+
+/*
+ * Replays of the exact JSON the shipped apps send, written from their code at e9e8d93 (v1.0) and from the v1.1 phone:
+ *  - v1.0 phone (Kotlin, `explicitNulls = false`): null fields are left out; a duration or sample rate of 0 is "absent".
+ *  - v1.0 desktop (Rust `serde`): null fields are sent as explicit `null`; the duration is always a number.
+ *  - v1.1 phone `finish` (FinishSessionRequest): `duration_ms` is left out when the recording measured 0 ms. This was the
+ *    request that production refused with "The duration ms field is required." (hotfix 2026-10-27).
+ */
+function replayUpload(object $test, array $create, string $bytes): string
+{
+    $created = $test->postJson('/api/sessions', $create)->assertCreated();
+    $recordingId = $created->json('recordings.0.id');
+    $test->uploadAll($recordingId, $bytes, $created->json('recordings.0.upload.chunk_size_bytes'));
+    $test->postJson("/api/recordings/{$recordingId}/complete")->assertStatus(202);
+
+    return $created->json('session.id');
+}
+
+it('accepts the v1.0 phone one-shot create for a recording that measured 0 ms', function () {
+    [, $token] = $this->enroll(platform: 'android');
+    $this->asToken($token);
+    $this->configureAssemblyAi();
+    $this->fakeAssemblyAi('job_zero');
+    $bytes = Fixtures::audio(20_000, 'V1-PHONE-ZERO');
+
+    // duration_ms and sample_rate are absent, client_id / title / language are absent (explicitNulls = false).
+    $sessionId = replayUpload($this, [
+        'client_ref' => 'c0ffee00-1111-4222-8333-444455556666', 'source_app' => 'whatsapp',
+        'started_at' => '2026-10-27T11:49:00Z', 'ended_at' => '2026-10-27T11:49:00Z',
+        'artifacts' => [['role' => 'primary', 'mime' => 'audio/ogg', 'codec' => 'opus', 'channels' => 2, 'size_bytes' => strlen($bytes), 'sha256' => hash('sha256', $bytes)]],
+    ], $bytes);
+
+    $this->postJson("/api/sessions/{$sessionId}/transcripts", ['kind' => 'live', 'provider' => 'assemblyai', 'segments' => [Fixtures::segment(['start_ms' => 0, 'end_ms' => 100, 'words' => []])]])->assertCreated();
+    $this->deleteJson("/api/sessions/{$sessionId}")->assertNoContent();
+});
+
+it('accepts the v1.0 desktop create with explicit nulls', function () {
+    [, $token] = $this->enroll(platform: 'windows');
+    $this->asToken($token);
+    $this->configureAssemblyAi();
+    $this->fakeAssemblyAi('job_desktop');
+    $bytes = Fixtures::audio(20_000, 'V1-DESKTOP');
+
+    replayUpload($this, [
+        'client_ref' => 'd0d0d0d0-1111-4222-8333-444455556666', 'source_app' => 'zoom', 'client_id' => null, 'title' => null,
+        'started_at' => '2026-10-27T11:00:00Z', 'ended_at' => '2026-10-27T11:20:00Z', 'duration_ms' => 1_200_000, 'language' => null,
+        'artifacts' => [['role' => 'primary', 'mime' => 'audio/flac', 'codec' => 'flac', 'channels' => 2, 'sample_rate' => null,
+            'size_bytes' => strlen($bytes), 'sha256' => hash('sha256', $bytes), 'duration_ms' => 1_200_000]],
+    ], $bytes);
+    $this->getJson('/api/library')->assertOk()->assertJsonCount(1, 'data');
+});
+
+it('accepts the v1.1 phone finish when the recording measured 0 ms and the duration is left out', function () {
+    [, $token] = $this->enroll(platform: 'android');
+    $this->asToken($token);
+    $this->configureAssemblyAi();
+    $this->fakeAssemblyAi('job_finish_zero');
+    $bytes = Fixtures::audio(20_000, 'V11-PHONE-ZERO');
+
+    $open = $this->postJson('/api/sessions', ['client_ref' => 'f1f1f1f1-1111-4222-8333-444455556666', 'source_app' => 'whatsapp', 'started_at' => '2026-10-27T11:49:00Z'])->assertCreated();
+    $id = $open->json('session.id');
+
+    // FinishSessionRequest with durationMs = null (explicitNulls = false): no duration_ms key at all.
+    $finished = $this->postJson("/api/sessions/{$id}/finish", [
+        'ended_at' => '2026-10-27T11:49:00Z',
+        'artifacts' => [['role' => 'primary', 'mime' => 'audio/ogg', 'codec' => 'opus', 'channels' => 2, 'size_bytes' => strlen($bytes), 'sha256' => hash('sha256', $bytes)]],
+    ])->assertOk();
+
+    expect($finished->json('session.duration_ms'))->toBeInt()->toBeGreaterThanOrEqual(0);
+    $this->uploadAll($finished->json('recordings.0.id'), $bytes, $finished->json('recordings.0.upload.chunk_size_bytes'));
+    $this->postJson('/api/recordings/'.$finished->json('recordings.0.id').'/complete')->assertStatus(202);
+});
+
+it('still refuses nonsense durations', function (mixed $value) {
+    [, $token] = $this->enroll(platform: 'android');
+    $this->asToken($token);
+    $id = $this->postJson('/api/sessions', ['client_ref' => 'a1a1a1a1-1111-4222-8333-444455556666', 'source_app' => 'whatsapp', 'started_at' => '2026-10-27T11:49:00Z'])->assertCreated()->json('session.id');
+
+    $this->postJson("/api/sessions/{$id}/finish", [
+        'ended_at' => '2026-10-27T11:50:00Z', 'duration_ms' => $value,
+        'artifacts' => [['role' => 'primary', 'mime' => 'audio/ogg', 'codec' => 'opus', 'channels' => 2, 'size_bytes' => 10, 'sha256' => str_repeat('a', 64)]],
+    ])->assertStatus(422)->assertJsonValidationErrors(['duration_ms']);
+})->with([-1, 86_400_001, 'long', 1.5]);

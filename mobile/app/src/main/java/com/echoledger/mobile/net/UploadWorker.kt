@@ -129,7 +129,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             try {
                 return api.finishSession(
                     sessionId,
-                    FinishSessionRequest(rec.endedAt, rec.durationMs.takeIf { it > 0 }, rec.clientId, artifacts, rec.markers, rec.pauses)
+                    FinishSessionRequest(rec.endedAt, rec.durationMs, rec.clientId, artifacts, rec.markers, rec.pauses)
                 )
             } catch (e: ApiException) {
                 // The open session was swept or deleted meanwhile: create a fresh one with a new reference.

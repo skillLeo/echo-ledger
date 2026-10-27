@@ -66,6 +66,27 @@ final class SessionLifecycle
     }
 
     /**
+     * The length of a finished recording. A device that measured nothing leaves `duration_ms` out (the Android app does
+     * for a recording of length 0), so fall back to the longest artifact, then to the span between start and end.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function finishDuration(array $data, CaptureSession $session): int
+    {
+        if (isset($data['duration_ms'])) {
+            return (int) $data['duration_ms'];
+        }
+        $fromArtifacts = max(array_map(static fn (array $a): int => (int) ($a['duration_ms'] ?? 0), $data['artifacts'] ?? []) ?: [0]);
+        if ($fromArtifacts > 0) {
+            return $fromArtifacts;
+        }
+        $started = $session->started_at;
+        $ended = self::utc($data['ended_at'] ?? null);
+
+        return $ended === null ? 0 : max(0, (int) round($ended->diffInMilliseconds($started, true)));
+    }
+
+    /**
      * Attach the artifacts of an open session and move it to `uploading`. Idempotent: a session that already left
      * `recording` is returned unchanged.
      *
@@ -82,7 +103,7 @@ final class SessionLifecycle
 
             $attributes = [
                 'ended_at' => self::utc($data['ended_at']),
-                'duration_ms' => (int) $data['duration_ms'],
+                'duration_ms' => self::finishDuration($data, $locked),
                 'status' => SessionStatus::Uploading,
             ];
             if (array_key_exists('title', $data)) {
