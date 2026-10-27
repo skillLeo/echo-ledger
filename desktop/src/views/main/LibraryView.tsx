@@ -13,6 +13,7 @@ import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, smartViewCounts } from "../../lib/organise";
 import { BinPanel, BulkBar, OrganisePanel } from "./LibraryOrganise";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
+import { engineLine, scriptWarning } from "../../lib/languages";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -479,6 +480,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         <div className="item-title">{item.pinned && <span className="pin-star" aria-label="Pinned">★ </span>}{item.title}</div>
                         <div className="small muted">{formatWhen(item.started_at)}{item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ""}{item.client ? ` · ${item.client.name}` : ""}{item.marker_count ? ` · ${item.marker_count} bookmark${item.marker_count === 1 ? "" : "s"}` : ""}</div>
                       </div>
+                      {item.language_chip && item.language_chip !== "Auto" && <span className="lang-chip" title="Language">{item.language_chip}</span>}
                       <span className={`pill ${state}`}>{STATE_LABEL[state]}</span>
                     </div>
                     {item.transcript?.preview && <div className="item-preview">{item.transcript.preview}</div>}
@@ -502,6 +504,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               </div>
               <h2 className="detail-title">{current.title}</h2>
               <div className="small muted">{formatWhen(current.started_at)} · {formatDuration(current.duration_ms)}{current.client ? ` · ${current.client.name}` : ""}</div>
+              {engineLine(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {engineLine(current.transcript)}</div>}
+              {scriptWarning(current.transcript?.script_warning) && <div className="notice" role="status" style={{ marginTop: 8 }}>{scriptWarning(current.transcript?.script_warning)}</div>}
               <OrganisePanel item={current} clients={folders} knownLabels={labels} notify={notify} onClientCreated={addClient} />
               {playbackUrl && (
                 <audio ref={audioRef} className="player" controls preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} onError={onPlaybackError} onLoadedMetadata={onLoaded} data-testid="player" />

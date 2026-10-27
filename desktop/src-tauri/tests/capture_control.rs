@@ -194,6 +194,7 @@ fn markers_and_pauses_are_sent_only_when_there_are_some() {
         duration_ms: 600_000,
         title: None,
         client_id: None,
+        language: None,
         artifacts: vec![],
         markers: create.markers.clone(),
         pauses: vec![],

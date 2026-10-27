@@ -8,6 +8,7 @@ import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,11 +21,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -34,6 +37,7 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.calls.Decisions
+import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
 import com.echoledger.mobile.data.LocalRecording
@@ -74,6 +78,7 @@ object DecisionPopup {
         val wm = app.getSystemService(WindowManager::class.java) ?: return false
         val lifecycleOwner = OverlayOwner().also { it.start() }
         val width = (app.resources.displayMetrics.widthPixels * WIDTH_FRACTION).toInt()
+        val language = mutableStateOf(rec.language)
         val compose = ComposeView(app).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
@@ -83,7 +88,18 @@ object DecisionPopup {
                         sourceApp = rec.sourceApp,
                         durationMs = rec.durationMs,
                         onKeep = { decide(app, rec.id, keep = true) },
-                        onDiscard = { decide(app, rec.id, keep = false) }
+                        onDiscard = { decide(app, rec.id, keep = false) },
+                        language = language.value,
+                        onLanguage = {
+                            // The tap is a sign the user is deciding: the card stays its full time again.
+                            language.value = Languages.next(language.value)
+                            handler.removeCallbacks(hideTask)
+                            handler.postDelayed(hideTask, AUTO_HIDE_MS)
+                            val chosen = language.value
+                            CoroutineScope(Dispatchers.IO).launch {
+                                (app as EchoLedgerApp).graph.recordings.update(rec.id) { it.copy(language = chosen) }
+                            }
+                        }
                     )
                 }
             }
@@ -133,9 +149,19 @@ object DecisionPopup {
     private const val BOTTOM_MARGIN_DP = 72
 }
 
-/** The card itself: app icon, the question, the length, and Keep (primary) and Discard. About 72 dp tall. */
+/**
+ * The card itself: app icon, the question, the length with the language chip (a tap steps to the next language, and
+ * Keep transcribes in it), and Keep (primary) and Discard. About 72 dp tall.
+ */
 @Composable
-fun DecisionCard(sourceApp: String, durationMs: Long, onKeep: () -> Unit, onDiscard: () -> Unit) {
+fun DecisionCard(
+    sourceApp: String,
+    durationMs: Long,
+    onKeep: () -> Unit,
+    onDiscard: () -> Unit,
+    language: String? = null,
+    onLanguage: (() -> Unit)? = null
+) {
     val app = SourceApp.from(sourceApp)
     val shape = RoundedCornerShape(Radius.lg)
     Row(
@@ -154,7 +180,24 @@ fun DecisionCard(sourceApp: String, durationMs: Long, onKeep: () -> Unit, onDisc
         SourceAvatar(SourceDevice.PHONE, app, size = 40)
         Column(Modifier.weight(1f)) {
             Text("Save this call recording?", color = Brand.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text("${app.label} · ${formatDuration(durationMs)}", color = Brand.Muted, fontSize = 12.sp, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("${app.label} · ${formatDuration(durationMs)}", color = Brand.Muted, fontSize = 12.sp, maxLines = 1)
+                if (onLanguage != null) {
+                    Text(
+                        Languages.chip(language),
+                        color = Brand.Text,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(1.dp, Brand.Border, RoundedCornerShape(10.dp))
+                            .clickable(role = Role.Button, onClickLabel = "Change the language") { onLanguage() }
+                            .semantics { contentDescription = "Language: ${Languages.label(language)}" }
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    )
+                }
+            }
         }
         TextButton(onClick = onDiscard) { Text("Discard", color = Brand.Danger) }
         Button(onClick = onKeep) { Text("Keep") }

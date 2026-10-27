@@ -164,6 +164,24 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
+    fun `the language chip on the card steps to the next language`() {
+        var language: String? = "ur"
+        compose.setContent {
+            val shown = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(language) }
+            EchoLedgerTheme("light") {
+                DecisionCard("whatsapp", 272_000, onKeep = {}, onDiscard = {}, language = shown.value, onLanguage = {
+                    shown.value = com.echoledger.mobile.core.Languages.next(shown.value)
+                    language = shown.value
+                })
+            }
+        }
+
+        compose.onNodeWithText("UR").performClick()
+        compose.onNodeWithText("UR+EN").assertExists()
+        assertEquals("en+ur", language)
+    }
+
+    @Test
     fun `a recording that captured no sound says so in a notification`() {
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
 

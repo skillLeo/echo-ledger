@@ -25,7 +25,7 @@ pub const REVIEW: &str = "review";
 pub const WINDOWS: [&str; 4] = [OVERLAY, DICTATION, PILL, REVIEW];
 
 const DICTATION_SIZE: (f64, f64) = (420.0, 110.0);
-const PILL_SIZE: (f64, f64) = (308.0, 84.0);
+const PILL_SIZE: (f64, f64) = (352.0, 84.0);
 const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
 const MARGIN_LOGICAL: f64 = 18.0;
 const PILL_MARGIN_LOGICAL: f64 = 12.0;

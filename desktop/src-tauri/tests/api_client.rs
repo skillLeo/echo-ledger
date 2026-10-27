@@ -203,6 +203,7 @@ async fn stt_token_requests_name_the_channels_and_the_sample_rate() {
             &["me", "client"],
             Some("01JB8Q4C1D2E3F4G5H6J7K8M9N"),
             None,
+            None,
         )
         .await
         .unwrap();
@@ -214,7 +215,7 @@ async fn stt_token_requests_name_the_channels_and_the_sample_rate() {
     );
 
     client(&server)
-        .stt_token("dictation", &["me"], None, None)
+        .stt_token("dictation", &["me"], None, None, None)
         .await
         .unwrap();
     assert_eq!(server.requests()[1].json()["client_id"], Value::Null);
@@ -233,6 +234,7 @@ async fn live_caption_tokens_name_the_open_session_when_there_is_one() {
             &["me", "client"],
             None,
             Some("01JB8QA0M1X2C3V4B5N6M7K8J9"),
+            None,
         )
         .await
         .unwrap();
@@ -240,6 +242,20 @@ async fn live_caption_tokens_name_the_open_session_when_there_is_one() {
         server.requests()[0].json(),
         json!({"use_case": "live_captions", "session_id": "01JB8QA0M1X2C3V4B5N6M7K8J9", "channels": ["me", "client"], "client_id": null, "sample_rate": 16000})
     );
+}
+
+#[tokio::test]
+async fn live_caption_tokens_carry_the_recording_language_chip() {
+    let server = MockServer::start(Router::new().fixed(
+        "POST",
+        "/api/stt/token",
+        Reply::json(200, fixture("stt_token_assemblyai.json")),
+    ));
+    client(&server)
+        .stt_token("live_captions", &["me", "client"], None, Some("S1"), Some("en+ur"))
+        .await
+        .unwrap();
+    assert_eq!(server.requests()[0].json()["language"], "en+ur");
 }
 
 #[tokio::test]
@@ -279,6 +295,7 @@ fn finish_request(client_id: Option<Option<String>>) -> FinishSessionRequest {
         duration_ms: 2_530_000,
         title: Some("Budget review".into()),
         client_id,
+        language: Some("en+ur".into()),
         artifacts: vec![ArtifactDto {
             role: "primary".into(),
             mime: "audio/flac".into(),
@@ -312,6 +329,7 @@ async fn finish_posts_the_artifacts_to_the_open_session() {
     let sent = server.requests()[0].json();
     assert_eq!(sent["client_id"], "01JB8Q4C1D2E3F4G5H6J7K8M9N");
     assert_eq!(sent["title"], "Budget review");
+    assert_eq!(sent["language"], "en+ur", "the Keep card's language decides the final transcript");
     assert_eq!(sent["artifacts"][0]["role"], "primary");
 
     // A present null clears the stored client; an absent key keeps it.
@@ -407,7 +425,7 @@ async fn a_503_from_the_token_endpoint_carries_the_admin_hint() {
     ));
     let (status, message) = server_error(
         client(&server)
-            .stt_token("live_captions", &["me"], None, None)
+            .stt_token("live_captions", &["me"], None, None, None)
             .await,
     );
     assert_eq!(
@@ -870,7 +888,7 @@ async fn a_deleted_client_is_dropped_and_the_call_repeated_once_without_it() {
     let c = client(&server);
     let (token, cleared) = with_client_fallback(Some("01DELETEDCLIENT0000000000".to_string()), |client_id| {
         let c = c.clone();
-        async move { c.stt_token("dictation", &["me"], client_id.as_deref(), None).await }
+        async move { c.stt_token("dictation", &["me"], client_id.as_deref(), None, None).await }
     })
     .await
     .unwrap();
@@ -881,7 +899,7 @@ async fn a_deleted_client_is_dropped_and_the_call_repeated_once_without_it() {
     // Without a client, or for another error, nothing is repeated.
     let (_, cleared) = with_client_fallback(None, |client_id| {
         let c = c.clone();
-        async move { c.stt_token("dictation", &["me"], client_id.as_deref(), None).await }
+        async move { c.stt_token("dictation", &["me"], client_id.as_deref(), None, None).await }
     })
     .await
     .unwrap();

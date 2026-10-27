@@ -121,7 +121,8 @@ impl LiveCaptions {
     /// `targets` are the window labels that receive caption events; `record_turns` stores finals for the
     /// live transcript + copy-last-2-minutes; `base_offset_ms` is the recording time at stream start (paused time
     /// excluded), so caption times sit on the recording timeline; `session_id` is the open server session of the
-    /// recording (live captions on a v1.1 server), sent with the token request and the usage report.
+    /// recording (live captions on a v1.1 server), sent with the token request and the usage report; `language` is
+    /// the recording's language chip (none: the server decides).
     #[allow(clippy::too_many_arguments)]
     pub async fn start(
         &self,
@@ -132,6 +133,7 @@ impl LiveCaptions {
         record_turns: bool,
         base_offset_ms: u64,
         session_id: Option<String>,
+        language: Option<String>,
     ) -> AppResult<Vec<(Channel, UnboundedSender<Vec<u8>>)>> {
         self.stop();
         let state = app.state::<crate::AppState>();
@@ -139,9 +141,9 @@ impl LiveCaptions {
         let names: Vec<&'static str> = channels.iter().map(|c| c.grant_name()).collect();
         let client_id = state.settings().client_id.clone();
         let fetched = crate::net::api::with_client_fallback(client_id, |client| {
-            let (api, names, session) = (api.clone(), names.clone(), session_id.clone());
+            let (api, names, session, language) = (api.clone(), names.clone(), session_id.clone(), language.clone());
             let use_case = use_case.to_string();
-            async move { api.stt_token(&use_case, &names, client.as_deref(), session.as_deref()).await }
+            async move { api.stt_token(&use_case, &names, client.as_deref(), session.as_deref(), language.as_deref()).await }
         })
         .await;
         let token = match fetched {

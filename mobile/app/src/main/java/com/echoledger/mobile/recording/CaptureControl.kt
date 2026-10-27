@@ -176,5 +176,7 @@ data class LiveRecording(
     val markers: Int = 0,
     val lastMarker: MarkerDto? = null,
     /** Seconds the other side has been silent, while the warning shows. */
-    val farSideSilentSeconds: Long? = null
+    val farSideSilentSeconds: Long? = null,
+    /** The recording's language chip (null = automatic); changing it reconnects live captions. */
+    val language: String? = null
 )

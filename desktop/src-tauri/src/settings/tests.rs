@@ -543,8 +543,20 @@ fn the_microphone_choice_is_kept_or_cleared() {
 }
 
 #[test]
+fn mixed_languages_are_written_english_first_and_have_short_chips() {
+    use crate::settings::{language_chip, language_or_none};
+    assert_eq!(language_or_none(Some("ur+en")).as_deref(), Some("en+ur"));
+    assert_eq!(language_or_none(Some("HI + EN")).as_deref(), Some("en+hi"));
+    assert_eq!(language_or_none(Some("ur+hi")), None);
+    assert_eq!(language_or_none(Some("")), None);
+    assert_eq!(language_chip(Some("en+ur")), "UR+EN");
+    assert_eq!(language_chip(Some("en+hi")), "HI+EN");
+    assert_eq!(language_chip(None), "Auto");
+}
+
+#[test]
 fn only_the_offered_languages_are_kept() {
-    for (stored, expected) in [(json!("ur"), Some("ur")), (json!(" HI "), Some("hi")), (json!("en+ur"), Some("en+ur")), (json!("fr"), None), (json!(5), None), (json!(null), None)] {
+    for (stored, expected) in [(json!("ur"), Some("ur")), (json!(" HI "), Some("hi")), (json!("en+ur"), Some("en+ur")), (json!("en+hi"), Some("en+hi")), (json!("fr"), None), (json!(5), None), (json!(null), None)] {
         assert_eq!(Settings::from_value(json!({"transcriptionLanguage": stored.clone()})).transcription_language.as_deref(), expected, "{stored}");
     }
 }

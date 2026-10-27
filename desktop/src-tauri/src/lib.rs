@@ -74,6 +74,8 @@ pub struct AppState {
     pub lock: lock::Lock,
     /// The recording of the last OS notification, opened when that notification brings the app forward (B18).
     pub notified: Mutex<Option<(String, Instant)>>,
+    /// The language chip of the running recording (its client_ref and the choice, none = automatic), set on the pill.
+    pub recording_language: Mutex<Option<(String, Option<String>)>>,
 }
 
 impl AppState {
@@ -116,11 +118,21 @@ impl AppState {
             capture_test: AtomicBool::new(false),
             lock: lock::Lock::new(settings_locked),
             notified: Mutex::new(None),
+            recording_language: Mutex::new(None),
         }
     }
 
     pub fn settings(&self) -> Settings {
         self.lock_settings().clone()
+    }
+
+    /// The language of a recording: its chip when one was chosen on the pill, else the app's transcription language
+    /// (none: the server uses the client's or the console default).
+    pub fn recording_language(&self, client_ref: &str) -> Option<String> {
+        match &*self.recording_language.lock().unwrap_or_else(|p| p.into_inner()) {
+            Some((r, language)) if r == client_ref => language.clone(),
+            _ => self.lock_settings().transcription_language.clone(),
+        }
     }
 
     fn lock_settings(&self) -> MutexGuard<'_, Settings> {
@@ -323,6 +335,8 @@ pub fn run() {
             commands::pending_discard,
             commands::pending_rename,
             commands::pending_assign_client,
+            commands::pending_set_language,
+            commands::set_recording_language,
             commands::pending_open,
             commands::review_state,
             commands::window_ready,

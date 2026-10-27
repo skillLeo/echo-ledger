@@ -52,7 +52,7 @@ pub async fn start(app: &AppHandle) -> AppResult<()> {
     app.state::<CaptionHub>().send(TARGETS, CaptionEvent::Clear);
 
     // Dictation needs no server session; its streaming period is reported without one (A5.4).
-    let senders = match state.dictation_live.start(app, "dictation", &[Channel::Mic], TARGETS, false, 0, None).await {
+    let senders = match state.dictation_live.start(app, "dictation", &[Channel::Mic], TARGETS, false, 0, None, state.settings().transcription_language).await {
         Ok(s) => s,
         Err(e) => {
             app.state::<CaptionHub>().send(TARGETS, CaptionEvent::Status { live: false, recording: false, provider: None, message: Some(e.to_string()) });

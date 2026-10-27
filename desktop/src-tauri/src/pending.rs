@@ -95,6 +95,8 @@ pub struct PendingItem {
     pub duration_ms: u64,
     pub first_line: Option<String>,
     pub deadline_at: Option<String>,
+    /// The language the final transcript will use (none = automatic: the client's or the console default).
+    pub language: Option<String>,
 }
 
 /// What `from_recording` needs besides the finished files.
@@ -202,6 +204,7 @@ impl PendingDecision {
             duration_ms: self.duration_ms,
             first_line: self.first_line.clone(),
             deadline_at: deadline(self.created_at, policy).map(|d| d.to_rfc3339()),
+            language: self.language.clone(),
         }
     }
 
@@ -356,6 +359,11 @@ impl DecisionFiles {
     pub fn rename(&self, id: &str, title: &str) -> AppResult<PendingDecision> {
         let title = normalize_title(title)?;
         self.update(id, |d| d.title = title)
+    }
+
+    /// The language chip on the review card or in the waiting list: the final transcript uses it at Keep.
+    pub fn set_language(&self, id: &str, language: Option<String>) -> AppResult<PendingDecision> {
+        self.update(id, |d| d.language = language)
     }
 
     pub fn assign_client(&self, id: &str, client_id: Option<String>, client_name: Option<String>) -> AppResult<PendingDecision> {

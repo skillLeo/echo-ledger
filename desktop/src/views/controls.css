@@ -1,4 +1,4 @@
-/* Recording pill (308 x 84 window: the pill on top, the bookmark tray or a warning below) and review card / ask chip
+/* Recording pill (352 x 84 window: the pill on top, the bookmark tray or a warning below) and review card / ask chip
    (360 x 168 window). Both windows are transparent and never focused; only the visible surface is a hit region.
    They share the caption overlay's glass tokens (styles.css), so the overlay, pill, review card and dictation bar
    read as one set in the light and the dark theme. */
@@ -78,6 +78,23 @@
 .rec-source { display: inline-flex; align-items: center; gap: var(--space-1); flex: 0 1 auto; min-width: 0; font-size: var(--text-xs); color: var(--ctl-muted); }
 .rec-source svg { flex: none; }
 .rec-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The language chip: steps through Auto, EN, UR, UR+EN, HI, HI+EN on click (live captions reconnect). */
+.rec-lang {
+  flex: none;
+  height: 22px;
+  min-width: 34px;
+  padding: 0 6px;
+  border: 1px solid var(--ctl-hover);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--ctl-muted);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.rec-lang:hover { background: var(--ctl-hover); color: var(--ctl-text); }
 .rec-error { color: var(--danger); flex: 1 1 auto; }
 
 /* Two 3 px level bars: Me and Client, the speaker colours of the captions. */
@@ -227,6 +244,10 @@
 .client-chip.empty { color: var(--ctl-muted); }
 .client-chip svg { flex: none; opacity: 0.75; }
 .client-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.client-chip.lang { flex: none; font-weight: 600; letter-spacing: 0.02em; }
+/* "Use Urdu for Acme from now on?" after a language change on the card. */
+.review-learn { display: flex; align-items: center; gap: var(--space-1); min-height: 28px; font-size: var(--text-xs); color: var(--ctl-text); }
+.review-learn-q { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .review-line { margin-top: var(--space-3); font-size: var(--text-sm); line-height: 18px; color: var(--ctl-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .review-line.none { opacity: 0.8; }
@@ -261,6 +282,7 @@
 .ctl-btn.icon { width: 32px; padding: 0; color: var(--ctl-muted); background: transparent; border-color: transparent; }
 .ctl-btn.icon:hover { background: var(--ctl-hover); color: var(--ctl-text); }
 .ctl-btn.icon.small { width: 26px; height: 26px; border-radius: 6px; }
+.review-learn .ctl-btn { height: 24px; padding: 0 var(--space-2); }
 
 .review-menu {
   position: absolute;

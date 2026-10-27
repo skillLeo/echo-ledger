@@ -173,6 +173,8 @@ data class FinishSessionRequest(
     @SerialName("duration_ms") val durationMs: Long?,
     @SerialName("client_id") val clientId: String? = null,
     val artifacts: List<ArtifactDto>,
+    /** The Keep card's language (since v1.1.2): a code, or "" for automatic, so the choice always reaches the server. */
+    val language: String = "",
     /** Sent only when there are some, so a v1 server never sees the keys. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
@@ -348,7 +350,9 @@ data class ClientDto(
     val color: String? = null,
     val avatar: String? = null,
     val pinned: Boolean = false,
-    @SerialName("session_count") val sessionCount: Int = 0
+    @SerialName("session_count") val sessionCount: Int = 0,
+    /** The client's default language (since v1.1.2); null = the console default. */
+    val language: String? = null
 )
 
 @Serializable

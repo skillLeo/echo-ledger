@@ -146,7 +146,8 @@ pub async fn start_captions(app: &AppHandle) -> AppResult<()> {
         None
     };
     let base_offset_ms = state.capture.elapsed_ms();
-    let senders = match state.live.start(app, "live_captions", &channels, CAPTION_TARGETS, true, base_offset_ms, session_id).await {
+    let language = state.recording_language(&info.client_ref);
+    let senders = match state.live.start(app, "live_captions", &channels, CAPTION_TARGETS, true, base_offset_ms, session_id, language).await {
         Ok(senders) => senders,
         Err(e) => {
             set_overlay_visible(app, OVERLAY, false);
@@ -175,7 +176,7 @@ async fn ensure_server_session(app: &AppHandle, info: &crate::audio::RecordingIn
         client_id: info.client_id.clone(),
         title: None,
         started_at: info.started_at.to_rfc3339(),
-        language: state.settings().transcription_language,
+        language: state.recording_language(&info.client_ref),
     };
     let (response, cleared) = crate::net::api::with_client_fallback(info.client_id.clone(), |client| {
         let (api, mut request) = (api.clone(), request.clone());
@@ -369,7 +370,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             live_provider: provider,
             server_session_id: session,
             created_at: Utc::now(),
-            language: settings.transcription_language.clone(),
+            language: state.recording_language(&client_ref),
         },
     );
     let id = decision.id.clone();
@@ -512,6 +513,34 @@ pub fn pending_rename(app: &AppHandle, id: &str, title: &str) -> AppResult<pendi
     emit_pending(app);
     refresh_review(app);
     Ok(updated.item(state.settings().decision_timeout))
+}
+
+pub fn pending_set_language(app: &AppHandle, id: &str, language: Option<String>) -> AppResult<pending::PendingItem> {
+    let state = app.state::<crate::AppState>();
+    let language = crate::settings::language_or_none(language.as_deref());
+    let updated = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).set_language(id, language)?
+    };
+    emit_pending(app);
+    refresh_review(app);
+    Ok(updated.item(state.settings().decision_timeout))
+}
+
+/// The pill's language chip. With live captions on, the caption stream reconnects in the new language; the
+/// recording itself never stops (captions are a side stream of the capture).
+pub async fn set_recording_language(app: &AppHandle, language: Option<String>) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let Some(info) = state.capture.info() else {
+        return Err(AppError::msg("No recording is running."));
+    };
+    let language = crate::settings::language_or_none(language.as_deref());
+    *state.recording_language.lock().unwrap_or_else(|p| p.into_inner()) = Some((info.client_ref.clone(), language));
+    if state.live.is_live() {
+        start_captions(app).await?;
+    }
+    emit_recording_state(app);
+    Ok(())
 }
 
 pub async fn pending_assign_client(app: &AppHandle, id: &str, client_id: Option<String>) -> AppResult<pending::PendingItem> {

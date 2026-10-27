@@ -237,7 +237,7 @@ describe("Waiting for your decision: assign client", () => {
     expect(clientSelect("p1")).toHaveValue("");
     expect(within(row("p1")).getByRole("button", { name: "Assign client" })).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(within(row("p1")).getByRole("button", { name: "Assign client" }));
-    expect(within(row("p1")).queryByRole("combobox")).not.toBeInTheDocument();
+    expect(within(row("p1")).queryByRole("combobox", { name: "Client" })).not.toBeInTheDocument();
     fireEvent.click(within(row("p2")).getByRole("button", { name: "Assign client" }));
     expect(clientSelect("p2")).toBeInTheDocument();
     expect(callsOf("list_clients")).toHaveLength(1);
@@ -251,7 +251,22 @@ describe("Waiting for your decision: assign client", () => {
     fireEvent.change(clientSelect("p1"), { target: { value: "c2" } });
     await waitFor(() => expect(callsOf("pending_assign_client")).toEqual([{ id: "p1", clientId: "c2" }]));
     await waitFor(() => expect(within(row("p1")).getByText(/· Northwind$/)).toBeInTheDocument());
-    expect(within(row("p1")).queryByRole("combobox")).not.toBeInTheDocument();
+    expect(within(row("p1")).queryByRole("combobox", { name: "Client" })).not.toBeInTheDocument();
+  });
+
+  it("the language chip sets the language Keep uses and offers to remember it for the client", async () => {
+    respond("list_clients", { data: [{ id: "c1", name: "Acme Holdings", language: null }] });
+    respond("client_update", { data: { id: "c1", name: "Acme Holdings", language: "ur" } });
+    await renderLibrary([makePendingItem("p1", { clientId: "c1", clientName: "Acme Holdings" })]);
+    respondWith("pending_set_language", ({ id, language }) => makePendingItem(id as string, { clientId: "c1", clientName: "Acme Holdings", language: language as "ur" }));
+    const select = within(row("p1")).getByRole("combobox", { name: "Language" });
+    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["Auto language", "English", "Urdu", "Urdu + English", "Hindi", "Hindi + English"]);
+    fireEvent.change(select, { target: { value: "ur" } });
+    await waitFor(() => expect(callsOf("pending_set_language")).toEqual([{ id: "p1", language: "ur" }]));
+    await waitFor(() => expect(within(row("p1")).getByText("Use Urdu for Acme Holdings from now on?")).toBeInTheDocument());
+    expect(within(row("p1")).getByRole("combobox", { name: "Language" })).toHaveValue("ur");
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Yes" }));
+    await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { language: "ur" } }]));
   });
 
   it("sends an explicit null for No client", async () => {

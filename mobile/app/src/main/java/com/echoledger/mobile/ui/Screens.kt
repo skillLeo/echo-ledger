@@ -790,6 +790,7 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
     val context = LocalContext.current
     val settings by vm.settings.collectAsState()
     val pending by vm.pending.collectAsState()
+    val learn by vm.learn.collectAsState()
     val live by RecordingService.live.collectAsState()
     var recording by remember { mutableStateOf(RecordingService.isRecording) }
     LaunchedEffect(Unit) {
@@ -884,6 +885,15 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                             haptics.performHapticFeedback(HapticFeedbackType.Confirm)
                             vm.decide(rec.id, keep = true)
                         }) { Text("Keep") }
+                    }
+                    // Keep transcribes in this language (Auto: the client's or the console default).
+                    LanguageChips(rec.language) { vm.setPendingLanguage(rec.id, it) }
+                    learn?.takeIf { it.recordingId == rec.id }?.let { asked ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(asked.question, Modifier.weight(1f), fontSize = 13.sp)
+                            TextButton(onClick = { vm.answerLearn(false) }) { Text("No") }
+                            TextButton(onClick = { vm.answerLearn(true) }) { Text("Yes") }
+                        }
                     }
                 }
             }

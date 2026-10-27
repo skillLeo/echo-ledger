@@ -152,7 +152,7 @@ export interface DictationHistoryEntry {
 }
 
 /** Languages offered for new recordings; null is automatic (the client's or the console default). */
-export type TranscriptionLanguage = "en" | "ur" | "hi" | "en+ur";
+export type TranscriptionLanguage = "en" | "ur" | "en+ur" | "hi" | "en+hi";
 
 /** How the caption overlay looks. utoHideSeconds is 0 (never), 5, 10 or 30; colours are #rrggbb or null (theme). */
 export interface CaptionStyle {
@@ -280,12 +280,22 @@ export interface LibraryItem {
   labels?: string[];
   /** Never deleted by retention (B17). */
   keep?: boolean;
+  /** The recording's language (null = automatic) and its chip, "UR+EN" (since v1.1.2). */
+  language?: TranscriptionLanguage | null;
+  language_chip?: string;
   transcript?: {
     final_status: string | null;
     final_transcript_id: string | null;
     live_available: boolean;
     live_transcript_id?: string | null;
     preview: string | null;
+    /** Which language and engine made the final transcript, and a wrong-script warning (since v1.1.2). */
+    final_language?: string | null;
+    final_provider?: string | null;
+    final_provider_label?: string | null;
+    final_model?: string | null;
+    live_language?: string | null;
+    script_warning?: string | null;
   };
 }
 
@@ -296,6 +306,8 @@ export interface ClientFolder {
   color?: string | null;
   avatar?: string | null;
   pinned?: boolean;
+  /** The client's default language (since v1.1.2); null = the console default. */
+  language?: TranscriptionLanguage | null;
   keyterm_count?: number;
   session_count?: number;
 }
@@ -455,6 +467,8 @@ export interface PendingItem {
   durationMs: number;
   firstLine: string | null;
   deadlineAt: string | null;
+  /** The language Keep transcribes in; null = automatic (the client's or the console default). */
+  language?: TranscriptionLanguage | null;
 }
 
 /** A kept recording in the upload queue. */
@@ -480,6 +494,8 @@ export interface RecordingState {
   levels: [number, number];
   auto: boolean;
   hidden: boolean;
+  /** The recording's language chip; null = automatic. */
+  language?: TranscriptionLanguage | null;
 }
 
 /** What the review card shows: the newest pending item of this run and the timeout policy. */
@@ -563,7 +579,7 @@ export const api = {
     invoke<number>("sessions_bulk", { ids, action, clientId, label }),
   exportSessions: (ids: string[], format: BulkExportFormat) => invoke<string>("sessions_export", { ids, format }),
   createClient: (name: string, color: string | null = null, avatar: string | null = null) => invoke<{ data: ClientFolder }>("client_create", { name, color, avatar }),
-  updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
+  updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned" | "language">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
   setHitRegions: (regions: RectPx[]) => invoke<void>("overlay_set_hit_regions", { regions }),
   snapOverlay: () => invoke<void>("overlay_snap"),
   pauseRecording: () => invoke<AppStatus>("pause_recording"),
@@ -577,6 +593,9 @@ export const api = {
   pendingDiscard: (id: string) => invoke<void>("pending_discard", { id }),
   pendingRename: (id: string, title: string) => invoke<PendingItem>("pending_rename", { id, title }),
   pendingAssignClient: (id: string, clientId: string | null) => invoke<PendingItem>("pending_assign_client", { id, clientId }),
+  pendingSetLanguage: (id: string, language: TranscriptionLanguage | null) => invoke<PendingItem>("pending_set_language", { id, language }),
+  /** The pill's language chip: live captions reconnect in it; the recording keeps running. */
+  setRecordingLanguage: (language: TranscriptionLanguage | null) => invoke<void>("set_recording_language", { language }),
   pendingOpen: (id: string, rename: boolean) => invoke<void>("pending_open", { id, rename }),
   reviewState: () => invoke<ReviewPayload | null>("review_state"),
   uploadList: () => invoke<UploadItem[]>("upload_list"),

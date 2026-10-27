@@ -587,6 +587,20 @@ The session's choice wins, then the client's, then the default. AssemblyAI trans
 code switching (two codes, one of them English), one code with that language and nothing with automatic detection;
 the other engines get the single code or detect the language themselves. Live captions always detect the language.
 
+**Since v1.1.2.** The offered codes are `en`, `ur`, `en+ur`, `hi`, `en+hi`; mixed codes are stored English first
+(`ur+en` becomes `en+ur`) and anything else is automatic. New fields:
+- `POST /api/stt/token` takes an optional `language` (the recording's chip); without it the session's, the
+  client's or the default language is used, and live captions are started in it.
+- `POST /api/sessions/{id}/finish` takes `language` (string up to 16 characters, or `null`/`""` for automatic). When
+  the key is present it replaces the session's language, so the Keep card's chip decides the final transcript.
+- `PATCH /api/sessions/{id}` and `PATCH /api/clients/{id}` accept `language`; `GET /api/clients` and the config's
+  clients carry each client's `language`.
+- `GET /api/config` has `languages: {default, options: [{value, label, chip}]}`.
+- Library items have `language` and `language_chip` ("UR+EN"); their `transcript` has `final_language`,
+  `final_provider`, `final_provider_label`, `final_model`, `live_language` and `script_warning` (`devanagari`,
+  `latin`, `arabic` or `null`). Transcripts have `language_label`, `provider_label`, `script_warning` and `fallback`
+  (`{used, wanted, language, fallback}` when another engine than the first one ran).
+
 ### Vocabulary (since v1.1)
 Keyterms (names and jargon) of the session's client come first, then the global ones; each engine receives as many
 as it accepts. Text replacements ("always write X as Y") run on every new final transcript, the client's rules

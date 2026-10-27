@@ -246,6 +246,8 @@ pub struct FinishSessionRequest {
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_id: Option<Option<String>>,
+    /// The Keep card's language (since v1.1.2), always sent: null is automatic (the client's or the console default).
+    pub language: Option<String>,
     pub artifacts: Vec<ArtifactDto>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub markers: Vec<MarkerDto>,

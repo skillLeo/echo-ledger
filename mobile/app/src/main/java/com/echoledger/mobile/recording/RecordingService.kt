@@ -25,6 +25,7 @@ import com.echoledger.mobile.calls.CallState
 import com.echoledger.mobile.calls.CallStateMachine
 import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.capture.ICallListener
+import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.Speakers
 import com.echoledger.mobile.data.AppSettings
@@ -75,7 +76,11 @@ class RecordingService : LifecycleService() {
         const val ACTION_MARK = "com.echoledger.mobile.MARK"
         const val ACTION_TAG_LAST = "com.echoledger.mobile.TAG_LAST"
         const val ACTION_UNDO_MARK = "com.echoledger.mobile.UNDO_MARK"
+
+        /** The language chip (bubble, Record tab): [EXTRA_LANGUAGE] is the new code, absent for automatic. */
+        const val ACTION_LANGUAGE = "com.echoledger.mobile.LANGUAGE"
         const val EXTRA_TAG = "tag"
+        const val EXTRA_LANGUAGE = "language"
         private const val TAG = "EchoLedgerRec"
         private const val TICK_MS = 1_000L
 
@@ -158,6 +163,8 @@ class RecordingService : LifecycleService() {
                 session.notes.undo()
                 refresh(session)
             } ?: settle()
+
+            ACTION_LANGUAGE -> capture?.let { setLanguage(it, Languages.canonical(intent.getStringExtra(EXTRA_LANGUAGE))) } ?: settle()
 
             else -> settle()
         }
@@ -368,7 +375,7 @@ class RecordingService : LifecycleService() {
     private suspend fun startCaptions(session: Capture, clientId: String?) {
         val api = graph.api() ?: return
         val channels = if (session.channels == 2) listOf("me", "client") else listOf("me")
-        val open = OpenSessionRequest(session.id, session.sourceApp, clientId, session.startedAt.toString(), settings.transcriptionLanguage)
+        val open = OpenSessionRequest(session.id, session.sourceApp, clientId, session.startedAt.toString(), session.language)
         val outcome = CaptionTokens(api).fetch(settings.serverIsV1_1, open, channels, session.serverSessionId) {
             graph.settings.update { it.copy(clientId = null) }
         }
@@ -387,9 +394,10 @@ class RecordingService : LifecycleService() {
             }
         }
         if (token.mode != "cloud") return
-        if (Settings.canDrawOverlays(this)) {
+        if (Settings.canDrawOverlays(this) && bubble == null) {
             bubble = CaptionBubble(this, settings.captionStyle).also { it.show() }
         }
+        bubble?.language(Languages.chip(session.language)) { setLanguageFromBubble(session) }
         session.provider = token.provider
         for (grant in token.grants) {
             if (grant.protocol !in setOf("assemblyai_v3", "elevenlabs_realtime")) continue
@@ -413,6 +421,24 @@ class RecordingService : LifecycleService() {
         refresh(session)
     }
 
+    /**
+     * The language chip during a recording: live captions reconnect in the new language (the old sockets close, a new
+     * token is fetched); the capture never stops, so no audio is lost. Keep transcribes in the chip's language.
+     */
+    private fun setLanguage(session: Capture, language: String?) {
+        if (session.language == language) return
+        session.language = language
+        refresh(session, "Language: ${Languages.label(language)}")
+        if (session.streamers.isEmpty()) return
+        val old = session.streamers.values.toList()
+        session.streamers.clear()
+        thread(name = "el-captions-reconnect") {
+            old.forEach { it.stop() }
+            session.reportUsage(old)
+        }
+        lifecycleScope.launch { startCaptions(session, session.clientId) }
+    }
+
     private fun mark(session: Capture, tag: String?) {
         val marker = session.notes.mark(session.recordedMs(), tag)
         refresh(session, if (marker == null) "This recording already has 500 bookmarks." else "Bookmarked ${formatDuration(marker.atMs)}")
@@ -421,7 +447,11 @@ class RecordingService : LifecycleService() {
     /** Updates the recording notification (with [note] instead of the usual detail) and the Record tab. */
     private fun refresh(session: Capture, note: String? = null) {
         val count = session.notes.count()
-        val usual = listOfNotNull(session.detail, "$count bookmark${if (count == 1) "" else "s"}".takeIf { count > 0 }).joinToString(" · ")
+        val usual = listOfNotNull(
+            session.detail,
+            "$count bookmark${if (count == 1) "" else "s"}".takeIf { count > 0 },
+            Languages.chip(session.language).takeIf { session.language != null }
+        ).joinToString(" · ")
         val warning = session.farSideSeconds?.let { "Not hearing the other side for $it s" }
         goForeground(session.micFgs, session.title, note ?: warning ?: usual)
         publish(session)
@@ -440,7 +470,8 @@ class RecordingService : LifecycleService() {
                 clientLevel = session.clientLevel,
                 markers = session.notes.count(),
                 lastMarker = session.notes.last(),
-                farSideSilentSeconds = session.farSideSeconds
+                farSideSilentSeconds = session.farSideSeconds,
+                language = session.language
             )
         }
     }
@@ -458,6 +489,14 @@ class RecordingService : LifecycleService() {
                 publish(session)
             }
             main.postDelayed(this, TICK_MS)
+        }
+    }
+
+    private fun setLanguageFromBubble(session: Capture) = main.post {
+        if (capture ===
+            session
+        ) {
+            setLanguage(session, Languages.next(session.language))
         }
     }
 
@@ -510,7 +549,7 @@ class RecordingService : LifecycleService() {
                     serverSessionId = session.serverSessionId,
                     markers = markers,
                     pauses = pauses,
-                    language = settings.transcriptionLanguage
+                    language = session.language
                 )
                 graph.recordings.importPlainFile(meta, session.file)
             }.onFailure {
@@ -589,6 +628,9 @@ class RecordingService : LifecycleService() {
         val segments = mutableListOf<SegmentDto>()
 
         @Volatile var provider: String? = null
+
+        /** The language chip: Settings' language at the start, changed on the bubble or the Record tab. */
+        @Volatile var language: String? = settings.transcriptionLanguage
 
         /** The open server session captions used on a v1.1 server (Keep finishes it, Discard deletes it). */
         @Volatile var serverSessionId: String? = null
@@ -670,8 +712,8 @@ class RecordingService : LifecycleService() {
         }
 
         /** One usage report per captions run (A5.4); a v1 server has no usage endpoint, so nothing is queued. */
-        fun reportUsage() {
-            val opened = streamers.values.filter { it.opened() }
+        fun reportUsage(run: Collection<SttStreamer> = streamers.values) {
+            val opened = run.filter { it.opened() }
             if (opened.isEmpty() || !settings.serverIsV1_1) return
             UsageWorker.report(
                 this@RecordingService,

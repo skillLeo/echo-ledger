@@ -36,7 +36,7 @@ class CaptionTokens(private val api: ApiClient) {
         while (true) {
             try {
                 if (sessionId == null && serverIsV1_1) sessionId = api.openSession(open.copy(clientId = clientId)).session.id
-                return Outcome.Token(api.sttToken("live_captions", channels, clientId, sessionId), sessionId)
+                return Outcome.Token(api.sttToken("live_captions", channels, clientId, sessionId, open.language), sessionId)
             } catch (e: ApiException) {
                 when {
                     e.code == "budget_exceeded" -> return Outcome.Refused(BUDGET, sessionId)

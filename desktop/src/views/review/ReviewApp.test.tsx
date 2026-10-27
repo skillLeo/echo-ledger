@@ -152,6 +152,38 @@ describe("review card", () => {
     expect(button("No client")).toBeInTheDocument();
   });
 
+  it("the language chip changes the language Keep uses and offers to remember it for the client", async () => {
+    respond("list_clients", { data: [{ id: "cl-1", name: "Acme Ltd", language: "en" }] });
+    respond("client_update", { data: { id: "cl-1", name: "Acme Ltd", language: "en+ur" } });
+    await renderReview(makeReviewPayload({ item: makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: null }) }));
+    respond("pending_set_language", makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: "en+ur" }));
+    expect(button("Language: Automatic")).toHaveTextContent("Auto");
+    fireEvent.click(button("Language: Automatic"));
+    const list = await screen.findByRole("menu", { name: "Languages" });
+    expect(within(list).getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Automatic", "English", "Urdu", "Urdu + English", "Hindi", "Hindi + English"]);
+    fireEvent.click(within(list).getByRole("menuitemradio", { name: "Urdu + English" }));
+    await waitFor(() => expect(callsOf("pending_set_language")).toEqual([{ id: "pend-1", language: "en+ur" }]));
+    await flushAsync();
+    expect(button("Language: Urdu + English")).toHaveTextContent("UR+EN");
+    expect(await screen.findByText("Use Urdu + English for Acme Ltd from now on?")).toBeInTheDocument();
+    fireEvent.click(button("Yes"));
+    await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "cl-1", patch: { language: "en+ur" } }]));
+    expect(screen.queryByTestId("review-learn")).not.toBeInTheDocument();
+    fireEvent.click(button("Keep"));
+    await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "pend-1" }]));
+  });
+
+  it("does not ask to remember a language the client already uses, or for a recording without a client", async () => {
+    respond("list_clients", { data: [{ id: "cl-1", name: "Acme Ltd", language: "ur" }] });
+    await renderReview(makeReviewPayload({ item: makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: "en" }) }));
+    respond("pending_set_language", makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: "ur" }));
+    fireEvent.click(button("Language: English"));
+    fireEvent.click(within(await screen.findByRole("menu", { name: "Languages" })).getByRole("menuitemradio", { name: "Urdu" }));
+    await waitFor(() => expect(callsOf("pending_set_language")).toHaveLength(1));
+    await flushAsync();
+    expect(screen.queryByTestId("review-learn")).not.toBeInTheDocument();
+  });
+
   it("Back closes the client list without assigning", async () => {
     await renderReview();
     fireEvent.click(button("No client"));

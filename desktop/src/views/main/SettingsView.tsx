@@ -32,7 +32,7 @@ const ASK_BEFORE_SAVING: readonly (readonly [AskBeforeSaving, string])[] = [["al
 const DECISION_TIMEOUT: readonly (readonly [DecisionTimeout, string])[] = [["keep", "Keep the recording"], ["discard", "Discard it"], ["wait", "Keep waiting"]];
 const CAPTION_LINES = [["2", "2"], ["3", "3"], ["5", "5"]] as const;
 /** Automatic uses the client's language or the console default, else detects it. */
-const LANGUAGES: readonly (readonly ["" | TranscriptionLanguage, string])[] = [["", "Automatic"], ["en", "English"], ["ur", "Urdu"], ["hi", "Hindi"], ["en+ur", "English + Urdu"]];
+const LANGUAGES: readonly (readonly ["" | TranscriptionLanguage, string])[] = [["", "Automatic"], ["en", "English"], ["ur", "Urdu"], ["en+ur", "Urdu + English"], ["hi", "Hindi"], ["en+hi", "Hindi + English"]];
 
 /**
  * Settings → Call sites (A1.4): the built-in rules with an on/off switch (off = a disabled user rule under the

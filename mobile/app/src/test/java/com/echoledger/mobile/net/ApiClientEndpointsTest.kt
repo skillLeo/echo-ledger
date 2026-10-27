@@ -183,6 +183,29 @@ class ApiClientEndpointsTest {
     }
 
     @Test
+    fun `sttToken sends the recording language chip only when one is chosen`() = runBlocking {
+        server.on("POST", "/api/stt/token", FakeServer.json(200, ServerFixtures.assemblyAiGrants()))
+
+        client().sttToken("live_captions", listOf("me", "client"), null, sessionId = "S1", language = "en+ur")
+        client().sttToken("live_captions", listOf("me", "client"), null, sessionId = "S1")
+
+        val bodies = server.requestsTo("POST", "/api/stt/token").map { it.bodyJson() }
+        assertEquals("en+ur", bodies[0]["language"]!!.jsonPrimitive.content)
+        assertEquals(null, bodies[1]["language"])
+    }
+
+    @Test
+    fun `setClientLanguage patches the client and sends null for the console default`() = runBlocking {
+        server.on("PATCH", "/api/clients/C1", FakeServer.json(200, """{"data":{"id":"C1","name":"Acme"}}"""))
+
+        client().setClientLanguage("C1", "ur")
+        client().setClientLanguage("C1", null)
+
+        val bodies = server.requestsTo("PATCH", "/api/clients/C1").map { it.bodyText() }
+        assertEquals(listOf("""{"language":"ur"}""", """{"language":null}"""), bodies)
+    }
+
+    @Test
     fun `sttToken leaves out the client id when none is selected`() = runBlocking {
         server.on(
             "POST",

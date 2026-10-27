@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.calls.Decisions
+import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.core.SettingsTransfer
@@ -381,6 +382,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun retryPending() = viewModelScope.launch(Dispatchers.IO) {
         graph.recordings.all().filter { it.state == "queued" }.forEach { UploadWorker.retryNow(getApplication(), it.id) }
         reloadLocal()
+    }
+
+    /** "Use Urdu for Acme from now on?" after a language change on a waiting recording; null when nothing is asked. */
+    data class LearnLanguage(val recordingId: String, val clientId: String, val question: String, val language: String?)
+
+    private val _learn = MutableStateFlow<LearnLanguage?>(null)
+    val learn: StateFlow<LearnLanguage?> = _learn.asStateFlow()
+
+    /** The language chip of a waiting recording: Keep transcribes in it. */
+    fun setPendingLanguage(id: String, language: String?) = viewModelScope.launch(Dispatchers.IO) {
+        val updated = graph.recordings.update(id) { it.copy(language = Languages.canonical(language)) } ?: return@launch
+        reloadLocal()
+        val client = updated.clientId?.let { cid -> _clients.value.firstOrNull { it.id == cid } }
+        val question = client?.let { Languages.learnPrompt(it.name, it.language, updated.language) }
+        _learn.value = if (client != null && question != null) LearnLanguage(id, client.id, question, updated.language) else null
+    }
+
+    fun answerLearn(yes: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+        val asked = _learn.value ?: return@launch
+        _learn.value = null
+        if (!yes) return@launch
+        runCatching { graph.api()?.setClientLanguage(asked.clientId, asked.language) }
+            .onSuccess { _clients.value = _clients.value.map { if (it.id == asked.clientId) it.copy(language = asked.language) else it } }
+            .onFailure { _message.value = it.message ?: "The client could not be updated." }
     }
 
     fun decide(id: String, keep: Boolean) = viewModelScope.launch(Dispatchers.IO) {

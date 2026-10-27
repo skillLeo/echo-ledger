@@ -588,7 +588,7 @@ describe("transcription language (B12)", () => {
   it("offers the documented languages and sends null for Automatic", async () => {
     render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
     const select = await screen.findByLabelText("Transcription language");
-    expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(["Automatic", "English", "Urdu", "Hindi", "English + Urdu"]);
+    expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(["Automatic", "English", "Urdu", "Urdu + English", "Hindi", "Hindi + English"]);
     fireEvent.change(select, { target: { value: "en+ur" } });
     await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { transcriptionLanguage: "en+ur" } }));
     fireEvent.change(select, { target: { value: "" } });

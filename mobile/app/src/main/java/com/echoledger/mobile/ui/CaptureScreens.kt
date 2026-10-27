@@ -61,6 +61,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.CaptionStyle
 import com.echoledger.mobile.recording.AutoRecordRules
@@ -77,6 +78,29 @@ internal fun recordingAction(context: Context, action: String, tag: String? = nu
     val intent = RecordingService.intent(context, action)
     if (tag != null) intent.putExtra(RecordingService.EXTRA_TAG, tag)
     runCatching { context.startForegroundService(intent) }
+}
+
+/** The language chip of the running recording: live captions reconnect in [language]; the recording keeps going. */
+internal fun recordingLanguage(context: Context, language: String?) {
+    val intent = RecordingService.intent(context, RecordingService.ACTION_LANGUAGE)
+    if (language != null) intent.putExtra(RecordingService.EXTRA_LANGUAGE, language)
+    runCatching { context.startForegroundService(intent) }
+}
+
+/** A row of language chips (Auto, EN, UR, UR+EN, HI, HI+EN); the selected one is [selected]. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun LanguageChips(selected: String?, onPick: (String?) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Languages.OPTIONS.forEach { option ->
+            FilterChip(
+                selected = Languages.canonical(selected) == option.code,
+                onClick = { onPick(option.code) },
+                label = { Text(option.chip) },
+                modifier = Modifier.semantics { contentDescription = "Language: ${option.label}" }
+            )
+        }
+    }
 }
 
 /** A thin level bar (0-1 RMS on the desktop's scale). */
@@ -139,6 +163,8 @@ fun LiveRecordingCard(live: LiveRecording, settings: AppSettings) {
                 TextButton(onClick = { recordingAction(context, RecordingService.ACTION_UNDO_MARK) }) { Text("Undo") }
             }
         }
+        Text("Language", color = Brand.Muted, fontSize = 12.sp)
+        LanguageChips(live.language) { recordingLanguage(context, it) }
         LevelBar("Me", live.meLevel, Brand.Violet)
         if (live.twoSided) LevelBar("Client", live.clientLevel, Brand.Cyan)
         live.farSideSilentSeconds?.let {

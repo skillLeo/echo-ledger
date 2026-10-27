@@ -499,6 +499,7 @@ async fn open_slots(
                     duration_ms: item.duration_ms,
                     title: item.title.clone(),
                     client_id: Some(item.client_id.clone()),
+                    language: item.language.clone(),
                     artifacts: artifacts.clone(),
                     markers: item.markers.clone(),
                     pauses: item.pauses.clone(),

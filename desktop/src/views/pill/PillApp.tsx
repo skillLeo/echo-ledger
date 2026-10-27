@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
+import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
 import { elapsedAt, formatTimer, isTwoChannel, meterLevel, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { CaptionsIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { AlertIcon, BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon } from "../../components/ControlIcons";
@@ -14,11 +15,11 @@ const DRAG_SAVE_MS = 400;
 /** How long the bookmark tray stays after the last bookmark or tag. */
 export const MARK_TRAY_MS = 6000;
 
-type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark";
+type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark" | "language";
 
 /**
- * Loom-style recording controls in the 308 x 84 `pill` window: REC + timer, source, Me/Client levels, Pause/Resume,
- * Stop (the review card follows), Cancel with an inline confirm, Mark, Captions on/off and Hide. Under the pill, a
+ * Loom-style recording controls in the 352 x 84 `pill` window: REC + timer, source, Me/Client levels, Pause/Resume,
+ * Stop (the review card follows), Cancel with an inline confirm, Mark, the language chip, Captions on/off and Hide. Under the pill, a
  * bookmark (from here or the shortcut) shows its tag presets and Undo for a few seconds, and a call that has not
  * heard the other side for 30 s shows a warning. The window never takes
  * focus: every control works on click, and only the pill itself is reported as a hit region.
@@ -172,6 +173,14 @@ export default function PillApp() {
     void run("captions", api.toggleCaptions);
   };
 
+  // The window cannot open a menu, so the chip steps through the languages; captions reconnect in the new one.
+  const cycleLanguage = () => {
+    if (!rec || busy.current) return;
+    const next = nextLanguage(rec.language);
+    patch({ language: next });
+    void run("language", () => api.setRecordingLanguage(next));
+  };
+
   const markNow = () => void run("mark", api.markMoment);
 
   const tagMark = (tag: string) => {
@@ -255,6 +264,10 @@ export default function PillApp() {
             <PillButton label="Stop and review" className="stop" onClick={stop}><StopIcon size={14} /></PillButton>
             <PillButton label="Cancel recording" onClick={() => setConfirming(true)}><TrashIcon size={15} /></PillButton>
             <PillButton label="Bookmark this moment" onClick={markNow}><BookmarkIcon size={15} /></PillButton>
+            <button type="button" className="rec-lang" data-testid="pill-language" onClick={cycleLanguage}
+              aria-label={`Language: ${languageLabel(live.language)}. Click to change`} title={`Language: ${languageLabel(live.language)} (click to change)`}>
+              {languageChip(live.language)}
+            </button>
             <PillButton label={live.captions ? "Turn captions off" : "Turn captions on"} pressed={live.captions} onClick={toggleCaptions}>
               <CaptionsIcon size={15} />
             </PillButton>

@@ -298,6 +298,10 @@ button.segment { width: 100%; border: 0; background: transparent; color: inherit
 .queue-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .queue-rename { padding: 5px 9px; font-weight: 600; }
 .queue-client { height: 28px; padding: 0 var(--space-2); }
+.lang-chip { flex: none; align-self: center; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--border-strong); font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-muted); }
+.queue-language { height: 28px; width: auto; padding: 0 var(--space-2); margin-left: auto; font-size: var(--text-xs); }
+.queue-learn { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; border-radius: 8px; background: var(--accent-soft, var(--surface-2)); }
+.queue-learn > span { flex: 1 1 auto; min-width: 0; }
 .queue-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-muted); flex: none; }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }

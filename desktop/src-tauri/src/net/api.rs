@@ -95,11 +95,22 @@ impl ApiClient {
     }
 
     /// `POST /api/stt/token`. `session_id` (the open session, since v1.1) is required by v1.1 servers for
-    /// `live_captions` and is only sent when `Some`, so v1 servers see the v1 body.
-    pub async fn stt_token(&self, use_case: &str, channels: &[&str], client_id: Option<&str>, session_id: Option<&str>) -> AppResult<SttTokenResponse> {
+    /// `live_captions` and is only sent when `Some`, so v1 servers see the v1 body. `language` (since v1.1.2) is the
+    /// recording's language chip; none lets the server use the session's, the client's or the console default.
+    pub async fn stt_token(
+        &self,
+        use_case: &str,
+        channels: &[&str],
+        client_id: Option<&str>,
+        session_id: Option<&str>,
+        language: Option<&str>,
+    ) -> AppResult<SttTokenResponse> {
         let mut body = json!({ "use_case": use_case, "channels": channels, "client_id": client_id, "sample_rate": 16000 });
         if let Some(id) = session_id {
             body["session_id"] = json!(id);
+        }
+        if let Some(language) = language {
+            body["language"] = json!(language);
         }
         let resp = self.authed(self.http.post(self.url("stt/token")))?.json(&body).send().await?;
         Self::parse(resp).await

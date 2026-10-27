@@ -111,10 +111,18 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
 
     suspend fun clients(): ClientsResponse = call(request("clients").get().build(), ClientsResponse.serializer())!!
 
-    suspend fun sttToken(useCase: String, channels: List<String>, clientId: String?, sessionId: String? = null): SttTokenResponse {
+    suspend fun sttToken(
+        useCase: String,
+        channels: List<String>,
+        clientId: String?,
+        sessionId: String? = null,
+        language: String? = null
+    ): SttTokenResponse {
         val body = buildJsonObject {
             put("use_case", useCase)
             sessionId?.let { put("session_id", it) }
+            // The recording's language chip (since v1.1.2); left out, the server uses the session's or the client's.
+            language?.let { put("language", it) }
             put("channels", buildJsonArray { channels.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
             clientId?.let { put("client_id", it) }
             put("sample_rate", 16_000)
@@ -274,6 +282,14 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun createClient(name: String): ClientDto {
         val body = buildJsonObject { put("name", name) }.toString().toRequestBody(jsonType)
         return call(request("clients").post(body).build(), ClientResponse.serializer())!!.data
+    }
+
+    /** `PATCH /api/clients/{id}` with the client's default language (since v1.1.2); null = the console default. */
+    suspend fun setClientLanguage(id: String, language: String?) {
+        val body = buildJsonObject {
+            if (language == null) put("language", kotlinx.serialization.json.JsonNull) else put("language", language)
+        }.toString().toRequestBody(jsonType)
+        call(request("clients/$id").patch(body).build(), null as KSerializer<Unit>?)
     }
 
     /** `GET /api/activity` (since v1.1): the activity centre, newest first. */

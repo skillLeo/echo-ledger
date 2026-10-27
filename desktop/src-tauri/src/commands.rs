@@ -573,6 +573,8 @@ pub struct RecordingState {
     pub levels: [f32; 2],
     pub auto: bool,
     pub hidden: bool,
+    /// The recording's language chip (none: automatic, the client's or the console default).
+    pub language: Option<String>,
 }
 
 /// What the review card shows: the newest undecided recording of this run.
@@ -608,6 +610,7 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
         levels: state.capture.levels(),
         auto: info.is_some() && state.auto_started.load(std::sync::atomic::Ordering::SeqCst),
         hidden: state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst),
+        language: info.as_ref().and_then(|i| state.recording_language(&i.client_ref)),
     }
 }
 
@@ -1001,7 +1004,7 @@ fn main_window_handle(app: &AppHandle) -> isize {
 }
 /// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
 pub const SESSION_PATCH_KEYS: [&str; 5] = ["title", "client_id", "pinned", "keep", "labels"];
-pub const CLIENT_PATCH_KEYS: [&str; 4] = ["name", "color", "avatar", "pinned"];
+pub const CLIENT_PATCH_KEYS: [&str; 5] = ["name", "color", "avatar", "pinned", "language"];
 pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
 /// The server takes at most this many recordings per bulk action.
@@ -1267,6 +1270,18 @@ pub async fn pending_discard(app: AppHandle, id: String) -> AppResult<()> {
 #[tauri::command]
 pub fn pending_rename(app: AppHandle, id: String, title: String) -> AppResult<PendingItem> {
     crate::actions::pending_rename(&app, &id, &title)
+}
+
+/// The language chip of a waiting recording (review card, waiting list): Keep transcribes in it.
+#[tauri::command]
+pub fn pending_set_language(app: AppHandle, id: String, language: Option<String>) -> AppResult<PendingItem> {
+    crate::actions::pending_set_language(&app, &id, language)
+}
+
+/// The language chip on the pill: live captions reconnect in it, and Keep transcribes in it.
+#[tauri::command]
+pub async fn set_recording_language(app: AppHandle, language: Option<String>) -> AppResult<()> {
+    crate::actions::set_recording_language(&app, language).await
 }
 
 #[tauri::command]

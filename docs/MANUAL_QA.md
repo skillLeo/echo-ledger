@@ -363,6 +363,13 @@ Run these when the change touches the area, or before a release.
 | S-08 | Open a session in the console and play it. | Audio plays and seeks (HTTP 206); the active segment highlights and clicking a segment seeks. |
 | S-09 | Set retention to 1 day; age a session in the DB; run `php artisan model:prune --pretend`, then without `--pretend`. | Pretend lists exactly the old rows; the real run deletes rows and their encrypted files. |
 | S-9 | Console: finish all five steps, or press Dismiss. | The card disappears and does not come back (finishing: it returns if a step is undone). |
+| L-1 | Give a client the language Urdu + English; record a call with that client on the desktop. | The pill chip shows UR+EN; the transcript says "Urdu + English" and names the engine. |
+| L-2 | During a recording with captions on, tap the pill's language chip twice. | Captions continue in the new language within a few seconds; the timer never stops; the saved file has no gap. |
+| L-3 | Stop a recording, change the chip on the Keep card, then Keep. | The transcript uses the chip's language; with a client of another language you are asked "Use … for … from now on?". |
+| L-4 | Phone: after a call, tap the chip on the popup, then Keep. | The transcript uses the new language. |
+| L-5 | Search the library for a word spelled with Arabic letters (for example كيا) in an Urdu transcript written كیا / کیا. | The recording is found and the word is highlighted. |
+| L-6 | A recording with an Urdu transcript in Hindi letters. | "Wrong script detected" shows; one tap queues the next engine. |
+| L-7 | Add Soniox and ElevenLabs keys, then **⋯ → Compare engines** with Urdu + English and three engines. | Three runs with text and cost; **Make default for Urdu + English** moves that engine to first place in Settings → Engine per language. |
 | R-5 | Console dashboard, desktop Settings and phone Settings. | The storage meter shows the recordings' size and the server disk; the retention days match the console. |
 
 ### macOS 14.4+ (only if you have a Mac)

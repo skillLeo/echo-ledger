@@ -145,11 +145,25 @@ opened.
 
 ## 12. Languages
 
-Choose the spoken language in **Settings → General → Transcription language** (on the phone:
-**Settings → General → Transcription**): **English**, **Urdu**,
-**Hindi**, **English + Urdu** (for calls that mix both), or **Automatic**. The recording page shows which
-language was used. If a transcript is not good, open the recording in the console and choose **Transcribe with
-another engine**, then **Compare versions** and keep the better one.
+Tell EchoLedger which language is spoken and the transcript gets much better. The choices are **English**, **Urdu**,
+**Urdu + English** (calls that mix both), **Hindi**, **Hindi + English** and **Automatic**.
+
+- **For a client:** give the client a default language. Every recording with that client uses it.
+- **For everything else:** the default in **Settings → General → Transcription language** (on the phone:
+  **Settings → General → Transcription**).
+- **During a call:** tap the language chip (for example **UR+EN**) on the desktop recording pill, or on the
+  phone next to the caption bubble or on the Record tab. Live captions switch to the new language; the
+  recording does not stop.
+- **After the call:** the Keep card, the phone popup and the "Waiting for your decision" list have the same chip.
+  The transcript uses whatever it shows when you press **Keep**.
+- If you change the language for a recording with a client, EchoLedger asks **"Use Urdu for Acme from now on?"**.
+  **Yes** makes it that client's default.
+
+The library, the player and exports show the language and the engine that wrote the transcript. If an Urdu
+transcript comes back in Hindi letters (or the other way round), the recording page says **Wrong script detected**:
+one tap transcribes it again with the next engine. Search finds Urdu words however the engine spelled them, and
+English words inside Urdu speech are found too. If a transcript is still not good, open the recording in the
+console and choose **Re-transcribe** or **Compare engines**, then keep the better one.
 
 ## 13. App lock
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type AnimationEvent, type MouseEvent } from "react";
 import { announceReady, api, errorMessage, listenTo, type AskAnswer, type AskPayload, type PendingItem, type ReviewPayload } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
+import { LANGUAGE_OPTIONS, languageChip, languageLabel, learnPrompt, type LanguageChoice } from "../../lib/languages";
 import { alwaysIgnoreLabel, askSeconds, askSubject, countdownText, reviewDuration, reviewTitle } from "../../lib/controls";
 import { MicIcon, SourceAppIcon } from "../../components/Icons";
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, MoreIcon, OpenIcon, PencilIcon, UserIcon } from "../../components/ControlIcons";
@@ -86,6 +87,8 @@ function ReviewCard({ review, onItem, onSync }: { review: ReviewPayload; onItem:
   const [now, setNow] = useState(() => Date.now());
   const [menu, setMenu] = useState(false);
   const [clients, setClients] = useState(false);
+  const [languages, setLanguages] = useState(false);
+  const [learn, setLearn] = useState<{ question: string; clientId: string; language: LanguageChoice } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entered, setEntered] = useState(false);
   const busy = useRef(false);
@@ -105,15 +108,16 @@ function ReviewCard({ review, onItem, onSync }: { review: ReviewPayload; onItem:
   }, [error]);
 
   useEffect(() => {
-    if (!menu && !clients) return;
+    if (!menu && !clients && !languages) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       setMenu(false);
       setClients(false);
+      setLanguages(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [menu, clients]);
+  }, [menu, clients, languages]);
 
   /** One command at a time; afterwards the core says what the card shows next (the next item, or nothing). */
   const act = async (command: () => Promise<unknown>) => {
@@ -148,7 +152,37 @@ function ReviewCard({ review, onItem, onSync }: { review: ReviewPayload; onItem:
 
   const openClients = () => {
     setMenu(false);
+    setLanguages(false);
     setClients(true);
+  };
+
+  /** The language chip: Keep transcribes in the chosen language; a client using another one gets the learn prompt. */
+  const pickLanguage = async (language: LanguageChoice) => {
+    if (busy.current) return;
+    busy.current = true;
+    setError(null);
+    try {
+      const updated = await api.pendingSetLanguage(item.id, language);
+      onItem(updated);
+      if (updated.clientId) {
+        const client = (await api.clients().catch(() => null))?.data.find((c) => c.id === updated.clientId);
+        const question = client ? learnPrompt(client.name, client.language, language) : null;
+        setLearn(question && client ? { question, clientId: client.id, language } : null);
+      }
+    } catch (e) {
+      setError(errorMessage(e));
+      await onSync();
+    } finally {
+      busy.current = false;
+      setLanguages(false);
+    }
+  };
+
+  const answerLearn = async (yes: boolean) => {
+    const asked = learn;
+    setLearn(null);
+    if (!yes || !asked) return;
+    await api.updateClient(asked.clientId, { language: asked.language }).catch((e) => setError(errorMessage(e)));
   };
 
   // A click anywhere else on the card closes the menu (there is no focus to lose).
@@ -180,11 +214,25 @@ function ReviewCard({ review, onItem, onSync }: { review: ReviewPayload; onItem:
               <span className="client-chip-name">{item.clientName ?? "No client"}</span>
               <ChevronDownIcon size={12} />
             </button>
+            <button type="button" className="client-chip lang" data-testid="review-language" title={`Language: ${languageLabel(item.language)}`}
+              aria-label={`Language: ${languageLabel(item.language)}`} aria-haspopup="menu" aria-expanded={languages}
+              onClick={() => { setMenu(false); setClients(false); setLanguages(true); }}>
+              {languageChip(item.language)}
+              <ChevronDownIcon size={12} />
+            </button>
           </div>
         </div>
         {queueLength > 1 && <span className="review-count">1 of {queueLength}</span>}
       </div>
-      <div className={`review-line${item.firstLine ? "" : " none"}`} title={item.firstLine ?? undefined}>{item.firstLine ?? "No captions"}</div>
+      {learn ? (
+        <div className="review-learn" role="group" aria-label="Remember the language" data-testid="review-learn">
+          <span className="review-learn-q" title={learn.question}>{learn.question}</span>
+          <button type="button" className="ctl-btn" onClick={() => answerLearn(true)}>Yes</button>
+          <button type="button" className="ctl-btn" onClick={() => answerLearn(false)}>No</button>
+        </div>
+      ) : (
+        <div className={`review-line${item.firstLine ? "" : " none"}`} title={item.firstLine ?? undefined}>{item.firstLine ?? "No captions"}</div>
+      )}
       <div className="review-foot">
         <button type="button" className="ctl-btn primary" onClick={() => act(() => api.pendingKeep(item.id))}>Keep</button>
         <button type="button" className="ctl-btn" onClick={() => act(() => api.pendingDiscard(item.id))}>Discard</button>
@@ -206,6 +254,7 @@ function ReviewCard({ review, onItem, onSync }: { review: ReviewPayload; onItem:
         </div>
       )}
       {clients && <ClientList selected={item.clientId} onPick={assign} onBack={() => setClients(false)} />}
+      {languages && <LanguageList selected={item.language ?? null} onPick={pickLanguage} onBack={() => setLanguages(false)} />}
     </section>
   );
 }
@@ -253,6 +302,27 @@ function ClientList({ selected, onPick, onBack }: { selected: string | null; onP
         {clients?.map((c) => option(c.id, c.name))}
         {!clients && !error && <div className="review-panel-note">Loading clients…</div>}
         {error && <div className="review-panel-note error" role="alert">{error}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** The language list over the card body; the final transcript uses the choice at Keep. */
+function LanguageList({ selected, onPick, onBack }: { selected: LanguageChoice; onPick: (language: LanguageChoice) => void; onBack: () => void }) {
+  return (
+    <div className="review-panel" data-testid="language-list">
+      <div className="review-panel-head">
+        <button type="button" className="ctl-btn icon small" aria-label="Back" title="Back" onClick={onBack}><ChevronLeftIcon size={15} /></button>
+        <span>Language of this recording</span>
+      </div>
+      <div className="review-panel-list" role="menu" aria-label="Languages">
+        {LANGUAGE_OPTIONS.map((o) => (
+          <button type="button" role="menuitemradio" aria-checked={selected === o.value} className="review-option" key={o.chip}
+            onClick={() => onPick(o.value)}>
+            <span className="review-option-name">{o.label}</span>
+            {selected === o.value && <CheckIcon size={14} />}
+          </button>
+        ))}
       </div>
     </div>
   );

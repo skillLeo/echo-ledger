@@ -9,6 +9,7 @@ import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -19,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -38,6 +40,7 @@ import com.echoledger.mobile.ui.Radius
  * Floating live-caption bubble (SYSTEM_ALERT_WINDOW). Not focusable and not touchable (alpha ≤ 0.8), so it never takes
  * input from the app underneath. Shown only while recording. VERIFY ON DEVICE (OEM overlay policies vary).
  * Styled by the caption settings (B4): size, opacity, lines, top or bottom, compact, auto-hide and speaker colours.
+ * The language chip is a second, tiny window beside it that does take taps (the bubble itself must stay click-through).
  */
 class CaptionBubble(private val context: Context, style: CaptionStyle = CaptionStyle()) {
     private val windowManager = context.getSystemService(WindowManager::class.java)
@@ -50,6 +53,10 @@ class CaptionBubble(private val context: Context, style: CaptionStyle = CaptionS
     private val idle = mutableStateOf(false)
     private val handler = Handler(Looper.getMainLooper())
     private val goIdle = Runnable { idle.value = true }
+    private var chipView: ComposeView? = null
+    private var chipOwner: OverlayOwner? = null
+    private val chipText = mutableStateOf("Auto")
+    private var onChipTap: () -> Unit = {}
 
     fun show() {
         if (view != null || !Settings.canDrawOverlays(context)) return
@@ -68,7 +75,7 @@ class CaptionBubble(private val context: Context, style: CaptionStyle = CaptionS
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = (if (styleState.value.position == "top") Gravity.TOP else Gravity.BOTTOM) or Gravity.CENTER_HORIZONTAL
-            y = 140
+            y = BUBBLE_Y
             alpha = 0.8f // required for click-through overlays on Android 12+
         }
         runCatching { windowManager.addView(compose, params) }.onSuccess {
@@ -103,12 +110,51 @@ class CaptionBubble(private val context: Context, style: CaptionStyle = CaptionS
         if (seconds > 0) handler.postDelayed(goIdle, seconds * 1_000L)
     }
 
+    /** Shows (or updates) the language chip; a tap runs [onTap], which steps to the next language. */
+    fun language(chip: String, onTap: () -> Unit) {
+        chipText.value = chip
+        onChipTap = onTap
+        if (chipView != null || view == null) return
+        val lifecycleOwner = OverlayOwner().also { it.start() }
+        val compose = ComposeView(context).apply {
+            setViewTreeLifecycleOwner(lifecycleOwner)
+            setViewTreeSavedStateRegistryOwner(lifecycleOwner)
+            setContent { LanguageChip(chipText.value) { onChipTap() } }
+        }
+        val density = context.resources.displayMetrics.density
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            // On the screen-edge side of the bubble, so it never covers captions.
+            gravity = (if (styleState.value.position == "top") Gravity.TOP else Gravity.BOTTOM) or Gravity.END
+            x = (16 * density).toInt()
+            y = (BUBBLE_Y - (CHIP_HEIGHT_DP + 8) * density).toInt().coerceAtLeast(0)
+        }
+        runCatching { windowManager.addView(compose, params) }.onSuccess {
+            chipView = compose
+            chipOwner = lifecycleOwner
+        }
+    }
+
     fun hide() {
         handler.removeCallbacks(goIdle)
         view?.let { runCatching { windowManager.removeView(it) } }
         owner?.stop()
         view = null
         owner = null
+        chipView?.let { runCatching { windowManager.removeView(it) } }
+        chipOwner?.stop()
+        chipView = null
+        chipOwner = null
+    }
+
+    private companion object {
+        const val BUBBLE_Y = 140
+        const val CHIP_HEIGHT_DP = 28
     }
 }
 
@@ -156,6 +202,21 @@ private fun Bubble(style: CaptionStyle, lines: List<Pair<String, String>>, parti
             )
         }
     }
+}
+
+@androidx.compose.runtime.Composable
+private fun LanguageChip(chip: String, onTap: () -> Unit) {
+    Text(
+        chip,
+        color = DarkColors.text,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .background(GLASS, RoundedCornerShape(14.dp))
+            .border(1.dp, DarkColors.border, RoundedCornerShape(14.dp))
+            .clickable(role = Role.Button, onClickLabel = "Change the language") { onTap() }
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+    )
 }
 
 /** Minimal lifecycle + saved-state owner so a ComposeView can live in a window owned by a Service. */

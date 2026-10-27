@@ -1162,7 +1162,7 @@ e2e_test!(
         let api = api_for(cfg, &id.token);
         let session = caption_session(&api).await;
         let live = api
-            .stt_token("live_captions", &["me", "client"], None, session.as_deref())
+            .stt_token("live_captions", &["me", "client"], None, session.as_deref(), None)
             .await
             .expect("stt token");
         close_caption_session(&api, session).await;
@@ -1179,7 +1179,7 @@ e2e_test!(
             assert!(grant.max_session_seconds.unwrap_or(0) > 0);
         }
         let dictation = api
-            .stt_token("dictation", &["me", "client"], None, None)
+            .stt_token("dictation", &["me", "client"], None, None, None)
             .await
             .expect("dictation token");
         let channels: Vec<&str> = dictation
@@ -2772,7 +2772,7 @@ async fn every_call_is_not_paired(cfg: &Config, token: Option<&str>) -> Vec<Stri
     check("clients", is_not_paired(&api.clients().await));
     check(
         "stt_token",
-        is_not_paired(&api.stt_token("live_captions", &["me"], None, None).await),
+        is_not_paired(&api.stt_token("live_captions", &["me"], None, None, None).await),
     );
     check(
         "create_session",
@@ -2974,7 +2974,7 @@ e2e_test!(
         assert_eq!(config.device.id, device.id, "same device");
         api.library(None, None).await.expect("library:read");
         // Dictation needs no open session, so this checks the ability alone.
-        api.stt_token("dictation", &["me"], None, None)
+        api.stt_token("dictation", &["me"], None, None, None)
             .await
             .expect("stt:token");
         let created = api
@@ -3436,6 +3436,7 @@ e2e_test!(
                 &["me", "client"],
                 Some(&client_id),
                 session.as_deref(),
+                None,
             )
             .await
             .expect("stt token for a client");
@@ -3508,6 +3509,7 @@ e2e_test!(
                     &["me", "client"],
                     client.as_deref(),
                     session.as_deref(),
+                    None,
                 )
                 .await
             }

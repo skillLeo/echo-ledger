@@ -63,6 +63,21 @@ describe("recording pill", () => {
     }
   });
 
+  it("the language chip steps to the next language and tells the core, which reconnects captions", async () => {
+    respond("set_recording_language", undefined);
+    await renderPill(makeRecordingState({ language: "ur", captions: true }));
+    const chip = screen.getByTestId("pill-language");
+    expect(chip).toHaveTextContent("UR");
+    respond("recording_state", makeRecordingState({ language: "en+ur", captions: true }));
+    fireEvent.click(chip);
+    expect(chip).toHaveTextContent("UR+EN");
+    await waitFor(() => expect(callsOf("set_recording_language")).toEqual([{ language: "en+ur" }]));
+    await flushAsync();
+    expect(pill()).toBeInTheDocument();
+    expect(screen.getByTestId("pill-language")).toHaveTextContent("UR+EN");
+    expect(callsOf("stop_recording")).toHaveLength(0);
+  });
+
   it("renders nothing while no recording runs, and appears with the first recording:state", async () => {
     await renderPill(makeRecordingState({ active: false, elapsedMs: 0, sourceApp: null, mode: null }));
     expect(pill()).not.toBeInTheDocument();

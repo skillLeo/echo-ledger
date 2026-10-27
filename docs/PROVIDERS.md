@@ -71,6 +71,16 @@ dashboard configuration is needed. `APP_URL` must be the public HTTPS address of
 | Live captions | The server can mint 10-minute Azure STS tokens, but the desktop and Android clients stream only to AssemblyAI and ElevenLabs today. Use one of those for live captions and dictation. |
 | Provider-side data | Microsoft does not retain fast-transcription data, so there is nothing to delete remotely. |
 
+### Soniox (optional)
+
+| | |
+|---|---|
+| Final transcript | Async API (`stt-async-v5`, `soniox.async_model`). One job per channel when the device uploaded separate Me and Client files, otherwise one stereo job with speaker diarization ("Speaker 1", "Speaker 2"). The language goes in `language_hints` (non-English first) with `language_hints_strict`; Automatic uses language identification. Keyterms go in `context.terms`. |
+| Credentials | `api_key`; a `webhook_secret` (press **Generate** on API Credentials). The webhook header `X-EchoLedger-Webhook-Token` is an HMAC of the recording, checked on arrival. |
+| Live captions | Not available: the apps stream only to AssemblyAI and ElevenLabs. |
+| Provider-side data | The transcriptions and the uploaded files are deleted at Soniox after the result is saved. |
+| Price | `prices.soniox.final_transcript` (default US$0.10 per hour per channel; check your plan). |
+
 ### whisper.cpp (self-hosted)
 
 | | |
@@ -87,16 +97,48 @@ its own transcript through `POST /api/sessions/{id}/transcripts`. The device-sid
 
 ## Languages
 
-The spoken language is chosen per recording, per client or as the server default (**Settings → General**). The
-choices are **English**, **Urdu**, **Hindi**, **English + Urdu** and **Automatic**. The server picks the model from
-the provider's documented language list; the session page shows which language and model were used. Live captions
-always detect the language themselves.
+The spoken language is chosen per recording (the chip on the pill, the Keep card, the phone popup), per client, or
+as the server default (**Settings → General**). The first one set wins: recording, then client, then default. The
+choices are stored as codes: `en`, `ur`, `en+ur`, `hi`, `en+hi`, or none for Automatic. The known language is
+always sent to the engine.
 
-| Choice | AssemblyAI (final) | ElevenLabs Scribe (final) |
-|---|---|---|
-| English / Urdu / Hindi | `language_code` set to that language | `language_code` set to that language |
-| English + Urdu | Universal-2 with code switching (two language codes, one of them English) | Language detection |
-| Automatic | `language_detection: true` | Language detection |
+**Engine per language.** **Settings → Recording → Engine per language** lists up to three engines for each language,
+tried in order. An engine without a key, or one that does not support the language, is skipped; if the first
+engine fails, the next one runs, and the transcript records which engine was used and which one was wanted
+(`meta.route`). Defaults:
+
+| Language | 1st | 2nd | 3rd |
+|---|---|---|---|
+| English, Hindi | AssemblyAI | ElevenLabs | Soniox |
+| Urdu, Urdu + English | ElevenLabs | Soniox | AssemblyAI |
+| Hindi + English | AssemblyAI | Soniox | ElevenLabs |
+
+Automatic keeps the provider chosen when the recording was created. Azure MAI and Parakeet are offered for English
+only.
+
+| Choice | AssemblyAI | ElevenLabs Scribe | Soniox |
+|---|---|---|---|
+| One language | `language_code` | `language_code` | `language_hints` (strict) |
+| Mixed (Urdu + English, Hindi + English) | code switching, both codes | `language_code` of the non-English one | both hints, non-English first |
+| Automatic | `language_detection: true` | detection | language identification |
+
+**Live captions** use the admin's live provider first, then the other streaming engine, and get the language too
+(AssemblyAI `language_codes` with Universal-3 Pro; ElevenLabs `language_code`). Changing the chip during a call
+reconnects the caption stream; the recording is not interrupted.
+
+**Wrong script.** After a final transcript, the server counts letters per script (at least 40 letters). An Urdu
+transcript that is mostly Devanagari, or mostly Latin letters for plain Urdu, or a Hindi one that is mostly Arabic
+script, gets `meta.script_warning`; the recording page offers **Wrong script detected · Transcribe with …** (the next
+engine for the language).
+
+**Search.** Urdu text is folded before it is searched (`transcripts.search_text`): Arabic and Urdu letter forms
+(ي/ی, ك/ک, ه/ہ, أ/ا …), vowel marks, tatweel and zero-width characters, and Arabic-Indic digits become one form,
+and Latin text is lower-cased, so English loanwords in Urdu speech are found. Highlights still mark the original text.
+
+**Compare engines (console).** On a recording: **⋯ → Compare engines**, a language and up to three engines. Each run
+is kept as a comparison run (never searched or shared). **Engine results** lists them side by side with the cost per
+run; **Make default for …** puts that engine first for the language, and **Use as transcript** swaps it in (the old
+one becomes the second version).
 
 ## Vocabulary
 

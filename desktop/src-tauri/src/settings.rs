@@ -148,11 +148,28 @@ fn tolerant_caption_style(value: Value) -> Value {
 }
 
 /// The language choices offered (docs/API.md "Languages"); anything else is automatic.
-pub const LANGUAGES: [&str; 4] = ["en", "ur", "hi", "en+ur"];
+pub const LANGUAGES: [&str; 5] = ["en", "ur", "en+ur", "hi", "en+hi"];
 
-/// A stored or requested language: one of [`LANGUAGES`], else none (automatic).
+/// A stored or requested language: one of [`LANGUAGES`], else none (automatic). Mixed languages are written with
+/// English first ("ur+en" is "en+ur"), like the server.
 pub fn language_or_none(value: Option<&str>) -> Option<String> {
-    value.map(|v| v.trim().to_ascii_lowercase()).filter(|v| LANGUAGES.contains(&v.as_str()))
+    let value = value?.trim().to_ascii_lowercase();
+    let mut codes: Vec<&str> = value.split('+').map(str::trim).filter(|c| !c.is_empty()).collect();
+    codes.sort_by_key(|c| *c != "en");
+    let canonical = codes.join("+");
+    LANGUAGES.contains(&canonical.as_str()).then_some(canonical)
+}
+
+/// The short label of a language on chips: "UR+EN", "Auto" for none.
+pub fn language_chip(value: Option<&str>) -> &'static str {
+    match value {
+        Some("en") => "EN",
+        Some("ur") => "UR",
+        Some("en+ur") => "UR+EN",
+        Some("hi") => "HI",
+        Some("en+hi") => "HI+EN",
+        _ => "Auto",
+    }
 }
 
 /// Keeps the shortcut entries this version knows (action name and a text accelerator).

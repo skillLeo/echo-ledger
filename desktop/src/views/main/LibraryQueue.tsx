@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, errorMessage, listenTo, type PendingItem, type UploadItem } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type PendingItem, type TranscriptionLanguage, type UploadItem } from "../../lib/ipc";
+import { LANGUAGE_OPTIONS, learnPrompt, type LanguageChoice } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { DISCARD_CONFIRM, failedUploads, pendingTitle, uploadTitle, verifyingUploads } from "../../lib/pending";
 import { AlertIcon, ClockIcon, SourceAppIcon } from "../../components/Icons";
@@ -33,6 +34,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
   const [clients, setClients] = useState<Client[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<{ id: string; seq: number } | null>(null);
+  const [learn, setLearn] = useState<{ itemId: string; clientId: string; question: string; language: LanguageChoice } | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
   const appliedFocus = useRef(0);
   // Mirrors `renaming` so Enter followed by the input's blur saves once.
@@ -160,6 +162,25 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     replace(updated);
   };
 
+  /** The language chip of a waiting recording: Keep transcribes in it; a client using another language is asked. */
+  const setLanguage = async (item: PendingItem, value: string) => {
+    const language = (value || null) as LanguageChoice;
+    if (language === (item.language ?? null)) return;
+    let updated: PendingItem | undefined;
+    if (!(await perform(item.id, async () => (updated = await api.pendingSetLanguage(item.id, language))))) return;
+    replace(updated);
+    if (!item.clientId) return;
+    const client = (await api.clients().catch(() => null))?.data.find((c) => c.id === item.clientId);
+    const question = client ? learnPrompt(client.name, client.language, language) : null;
+    setLearn(question && client ? { itemId: item.id, clientId: client.id, question, language } : null);
+  };
+
+  const answerLearn = async (yes: boolean) => {
+    const asked = learn;
+    setLearn(null);
+    if (yes && asked) await perform(asked.itemId, () => api.updateClient(asked.clientId, { language: asked.language }), "Saved for this client");
+  };
+
   const retry = async (item: UploadItem) => {
     if (await perform(item.id, () => api.uploadRetry(item.id))) {
       setUploads((list) => list.map((i) => (i.id === item.id ? { ...i, state: "queued", lastError: null } : i)));
@@ -225,6 +246,13 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                   </div>
                 </div>
                 {item.firstLine && <div className="item-preview">{item.firstLine}</div>}
+                {learn?.itemId === item.id && (
+                  <div className="queue-learn" role="group" aria-label="Remember the language">
+                    <span className="small">{learn.question}</span>
+                    <button type="button" className="btn primary compact" onClick={() => void answerLearn(true)}>Yes</button>
+                    <button type="button" className="btn ghost compact" onClick={() => void answerLearn(false)}>No</button>
+                  </div>
+                )}
                 {assigning === item.id && (
                   <select
                     className="input queue-client"
@@ -245,6 +273,10 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                   <button type="button" className="btn compact" disabled={isBusy} onClick={() => void discard(item)}>Discard</button>
                   <button type="button" className="btn ghost compact" disabled={isBusy} onClick={() => setRename({ id: item.id, text: item.title ?? "" })}>Rename</button>
                   <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Assign client</button>
+                  <select className="input compact queue-language" aria-label="Language" title="Language of the transcript" disabled={isBusy}
+                    value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
+                    {LANGUAGE_OPTIONS.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.chip === "Auto" ? "Auto language" : o.label}</option>)}
+                  </select>
                 </div>
               </div>
             );
