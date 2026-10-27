@@ -281,7 +281,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 6. **Gemini 3.1 Pro preview driver** (candidate only, paid tier, delete the file after), after confirming audio input on the model page.
 7. **Show as** (Original · Roman Urdu · English): Claude API text-only views cached per transcript, labelled; Noto Nastaliq Urdu / Noto Naskh Arabic bundled in the apps and the console; exports and share links pick the view.
 8. **Accuracy Lab** (owner only): reference transcripts, CER/WER per engine (normalised), speed and cost, "Use the winners" → routing; reuse `EngineComparison` trials. USER_GUIDE how-to with 10 recordings.
-9. **Cost per engine in Usage**; `docs/research/provider-privacy.md` (retention / no-training per provider with links).
+9. **Cost per engine in Usage**; a new provider-privacy page in the research folder (retention / no-training per provider with links).
 10. **Per-contact default language** (needs the client contacts from the caller-names scope).
 11. Progress (chunks done / total) in the apps from `meta.progress`.
 - **Queued after Prompt 1, each in its own session:** Prompt 3 (Live Translate, Phase 0 needs the phone and the games), then Prompt 2 (mobile redesign, plus the Live Translate screens). Earlier, not started: caller names on recordings, SIM calls as a source. Signed APK still waits for the keystore.
