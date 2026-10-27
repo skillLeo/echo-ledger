@@ -36,7 +36,9 @@ data class LocalRecording(
     val markers: List<MarkerDto> = emptyList(),
     val pauses: List<PauseDto> = emptyList(),
     /** The transcription language chosen when the recording ended (null = automatic). */
-    val language: String? = null
+    val language: String? = null,
+    /** The language chip changes during the recording (since v1.2). */
+    val languageMarks: List<LanguageMarkDto> = emptyList()
 )
 
 /**

@@ -123,6 +123,10 @@ data class ArtifactDto(
     @SerialName("duration_ms") val durationMs: Long?
 )
 
+/** The language chip changed during the recording (since v1.2): the recording time and the new language (null = Auto). */
+@Serializable
+data class LanguageMarkDto(@SerialName("at_ms") val atMs: Long, val language: String? = null)
+
 @Serializable
 data class CreateSessionRequest(
     @SerialName("client_ref") val clientRef: String,
@@ -140,7 +144,11 @@ data class CreateSessionRequest(
     val markers: List<MarkerDto> = emptyList(),
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val pauses: List<PauseDto> = emptyList()
+    val pauses: List<PauseDto> = emptyList(),
+    /** Sent only when the chip changed during the recording (since v1.2). */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("language_marks") val languageMarks: List<LanguageMarkDto> = emptyList()
 )
 
 @Serializable
@@ -181,7 +189,11 @@ data class FinishSessionRequest(
     val markers: List<MarkerDto> = emptyList(),
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val pauses: List<PauseDto> = emptyList()
+    val pauses: List<PauseDto> = emptyList(),
+    /** Sent only when the chip changed during the recording (since v1.2). */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("language_marks") val languageMarks: List<LanguageMarkDto> = emptyList()
 )
 
 /** One streaming period (socket open → close) for `POST /api/usage` (since v1.1). */

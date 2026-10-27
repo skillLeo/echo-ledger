@@ -108,10 +108,14 @@ class AudioPrep
      * in the middle of a pause near the limit (never mid-word when a pause exists), with long silences left out.
      * Pure; unit-tested.
      *
+     * [$cuts] are extra cut points in seconds (where the language chip changed): a chunk never spans one, so each
+     * chunk has one language.
+     *
      * @param  list<array{0: float, 1: float}>  $silences
+     * @param  list<float>  $cuts
      * @return list<array{0: float, 1: float}> start and end seconds of each chunk
      */
-    public static function plan(float $durationS, array $silences, float $maxS = 600.0, float $skipSilenceS = 3.0): array
+    public static function plan(float $durationS, array $silences, float $maxS = 600.0, float $skipSilenceS = 3.0, array $cuts = []): array
     {
         if ($durationS <= 0) {
             return [];
@@ -134,6 +138,21 @@ class AudioPrep
             $speech[] = [$cursor, $durationS];
         }
         $pauses = array_map(fn (array $p): float => ($p[0] + $p[1]) / 2, array_values(array_filter($silences, fn (array $p): bool => $skipSilenceS > $p[1] - $p[0])));
+
+        // Language changes cut the speech too.
+        $cuts = array_values(array_filter($cuts, fn (float $c): bool => $c > 0 && $c < $durationS));
+        sort($cuts);
+        $pieces = [];
+        foreach ($speech as [$start, $end]) {
+            foreach ($cuts as $cut) {
+                if ($cut > $start + 0.3 && $cut < $end - 0.3) {
+                    $pieces[] = [$start, $cut];
+                    $start = $cut;
+                }
+            }
+            $pieces[] = [$start, $end];
+        }
+        $speech = $pieces;
 
         $chunks = [];
         foreach ($speech as [$start, $end]) {

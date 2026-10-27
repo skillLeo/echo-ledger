@@ -1097,6 +1097,7 @@ fn request_for(created: &CreateSessionResponse) -> CreateSessionRequest {
     CreateSessionRequest {
         markers: vec![],
         pauses: vec![],
+        language_marks: vec![],
         client_ref: created.session.rest["client_ref"]
             .as_str()
             .expect("client_ref")

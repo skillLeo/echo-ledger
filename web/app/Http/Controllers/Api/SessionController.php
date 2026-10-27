@@ -248,6 +248,7 @@ final class SessionController extends Controller
             ])->values(),
             'markers' => $session->markers->map(fn (SessionMarker $m): array => $m->toApi())->values(),
             'pauses' => $session->pauses ?? [],
+            'language_marks' => $session->language_marks ?? [],
             'speaker_names' => (object) app(TranscriptEditor::class)->speakerNames($session),
             'playback_url' => $primary?->isReady() ? URL::temporarySignedRoute('api.recordings.audio',
                 now()->addMinutes((int) config('echoledger.playback_url_minutes', 30)), ['recording' => $primary->id]) : null,

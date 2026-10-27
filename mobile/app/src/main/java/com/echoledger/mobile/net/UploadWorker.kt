@@ -136,7 +136,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                         artifacts,
                         language = rec.language.orEmpty(),
                         markers = rec.markers,
-                        pauses = rec.pauses
+                        pauses = rec.pauses,
+                        languageMarks = rec.languageMarks
                     )
                 )
             } catch (e: ApiException) {
@@ -159,7 +160,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         language = rec.language,
         artifacts = artifacts,
         markers = rec.markers,
-        pauses = rec.pauses
+        pauses = rec.pauses,
+        languageMarks = rec.languageMarks
     )
 
     private fun artifactOf(rec: LocalRecording) = ArtifactDto(

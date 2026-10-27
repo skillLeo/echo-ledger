@@ -654,6 +654,7 @@ fn session_request(client_ref: &str, source_app: &str, size: u64) -> CreateSessi
     CreateSessionRequest {
         markers: vec![],
         pauses: vec![],
+        language_marks: vec![],
         client_ref: client_ref.into(),
         source_app: source_app.into(),
         client_id: None,

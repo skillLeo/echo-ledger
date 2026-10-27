@@ -371,6 +371,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             server_session_id: session,
             created_at: Utc::now(),
             language: state.recording_language(&client_ref),
+            language_marks: take_language_marks(&state, &client_ref),
         },
     );
     let id = decision.id.clone();
@@ -515,6 +516,18 @@ pub fn pending_rename(app: &AppHandle, id: &str, title: &str) -> AppResult<pendi
     Ok(updated.item(state.settings().decision_timeout))
 }
 
+/// The chip changes of a finished recording (cleared, so the next recording starts without marks).
+fn take_language_marks(state: &crate::AppState, client_ref: &str) -> Vec<crate::net::models::LanguageMarkDto> {
+    let mut marks = state.recording_language_marks.lock().unwrap_or_else(|p| p.into_inner());
+    match marks.take() {
+        Some((r, list)) if r == client_ref => list,
+        other => {
+            *marks = other;
+            Vec::new()
+        }
+    }
+}
+
 pub fn pending_set_language(app: &AppHandle, id: &str, language: Option<String>) -> AppResult<pending::PendingItem> {
     let state = app.state::<crate::AppState>();
     let language = crate::settings::language_or_none(language.as_deref());
@@ -535,6 +548,22 @@ pub async fn set_recording_language(app: &AppHandle, language: Option<String>) -
         return Err(AppError::msg("No recording is running."));
     };
     let language = crate::settings::language_or_none(language.as_deref());
+    // A timestamped mark: the server cuts the audio here and transcribes each piece in its language. The first change
+    // also records the language the recording started with.
+    let before = state.recording_language(&info.client_ref);
+    if before != language {
+        let at_ms = state.capture.elapsed_ms();
+        let mut marks = state.recording_language_marks.lock().unwrap_or_else(|p| p.into_inner());
+        let list = match marks.as_mut() {
+            Some((client_ref, list)) if *client_ref == info.client_ref => list,
+            _ => {
+                *marks = Some((info.client_ref.clone(), vec![crate::net::models::LanguageMarkDto { at_ms: 0, language: before.clone() }]));
+                &mut marks.as_mut().expect("just set").1
+            }
+        };
+        list.retain(|m| m.at_ms < at_ms || m.at_ms == 0);
+        list.push(crate::net::models::LanguageMarkDto { at_ms, language: language.clone() });
+    }
     *state.recording_language.lock().unwrap_or_else(|p| p.into_inner()) = Some((info.client_ref.clone(), language));
     if state.live.is_live() {
         start_captions(app).await?;

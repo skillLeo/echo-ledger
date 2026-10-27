@@ -201,6 +201,14 @@ pub struct MarkerDto {
 }
 
 /// A paused stretch (since v1.1): at recorded time `at_ms` the recording paused for `paused_ms` of wall time.
+/// The language chip changed during the recording (since v1.2): the recording time and the new language (none =
+/// Auto). The server cuts the audio at these times and transcribes each piece in its language.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LanguageMarkDto {
+    pub at_ms: u64,
+    pub language: Option<String>,
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PauseDto {
     pub at_ms: u64,
@@ -223,6 +231,8 @@ pub struct CreateSessionRequest {
     pub markers: Vec<MarkerDto>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub pauses: Vec<PauseDto>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub language_marks: Vec<LanguageMarkDto>,
 }
 
 /// Open session (since v1.1): `POST /api/sessions` without the `artifacts` key, status `recording`. Created only
@@ -253,6 +263,8 @@ pub struct FinishSessionRequest {
     pub markers: Vec<MarkerDto>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub pauses: Vec<PauseDto>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub language_marks: Vec<LanguageMarkDto>,
 }
 
 /// One streaming period (socket open to close) for `POST /api/usage` (since v1.1); queued in `usage.json`.

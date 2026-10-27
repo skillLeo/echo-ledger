@@ -139,6 +139,10 @@ final class SessionLifecycle
      */
     private function annotate(CaptureSession $session, array $data): void
     {
+        if (isset($data['language_marks'])) {
+            $session->language_marks = SessionMarkers::cleanLanguageMarks($data['language_marks']) ?: null;
+            $session->save();
+        }
         if (isset($data['pauses']) && is_array($data['pauses'])) {
             $session->pauses = array_values(array_map(
                 static fn (array $pause): array => ['at_ms' => (int) $pause['at_ms'], 'paused_ms' => (int) $pause['paused_ms']],

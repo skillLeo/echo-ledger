@@ -116,6 +116,31 @@ class MarkersUploadTest : AppTest() {
     }
 
     @Test
+    fun `finishing sends the language chip changes, and nothing when the chip never changed`() {
+        app.storeRecording(bytes = sampleBytes(2_500))
+        app.graph.recordings.update(id) {
+            it.copy(
+                serverSessionId = openSession,
+                languageMarks = listOf(
+                    com.echoledger.mobile.data.LanguageMarkDto(0, "ur"),
+                    com.echoledger.mobile.data.LanguageMarkDto(125_000, "en")
+                )
+            )
+        }
+        server.on("POST", "/api/sessions/$openSession/finish", FakeServer.json(200, answer()))
+        serveUpload()
+
+        assertEquals(ListenableWorker.Result.success(), run())
+
+        val marks = ApiJson.parseToJsonElement(
+            server.requestsTo("POST", "/api/sessions/$openSession/finish").single().bodyText()
+        ).jsonObject
+            .getValue("language_marks").jsonArray
+        assertEquals("125000", marks[1].jsonObject.getValue("at_ms").jsonPrimitive.content)
+        assertEquals("en", marks[1].jsonObject.getValue("language").jsonPrimitive.content)
+    }
+
+    @Test
     fun `a recording without bookmarks sends neither key, so a v1 server sees the old request`() {
         app.storeRecording(bytes = sampleBytes(2_500))
         server.on("POST", "/api/sessions", FakeServer.json(201, answer()))
@@ -126,6 +151,7 @@ class MarkersUploadTest : AppTest() {
         val body = server.requestsTo("POST", "/api/sessions").single().bodyText()
         assertFalse(body.contains("markers"))
         assertFalse(body.contains("pauses"))
+        assertFalse(body.contains("language_marks"))
     }
 
     @Test

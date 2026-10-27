@@ -179,6 +179,7 @@ fn markers_and_pauses_are_sent_only_when_there_are_some() {
         artifacts: vec![],
         markers: vec![],
         pauses: vec![],
+        language_marks: vec![],
     };
     let body = serde_json::to_value(&create).unwrap();
     assert!(body.get("markers").is_none() && body.get("pauses").is_none(), "a v1 server never sees the keys");
@@ -198,6 +199,7 @@ fn markers_and_pauses_are_sent_only_when_there_are_some() {
         artifacts: vec![],
         markers: create.markers.clone(),
         pauses: vec![],
+        language_marks: vec![],
     };
     let body = serde_json::to_value(&finish).unwrap();
     assert_eq!(body["markers"][0]["at_ms"], 5);

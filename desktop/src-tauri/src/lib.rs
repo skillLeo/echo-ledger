@@ -76,6 +76,8 @@ pub struct AppState {
     pub notified: Mutex<Option<(String, Instant)>>,
     /// The language chip of the running recording (its client_ref and the choice, none = automatic), set on the pill.
     pub recording_language: Mutex<Option<(String, Option<String>)>>,
+    /// The chip changes of the running recording (its client_ref and the marks), sent with the upload (v1.2).
+    pub recording_language_marks: Mutex<Option<(String, Vec<net::models::LanguageMarkDto>)>>,
 }
 
 impl AppState {
@@ -119,6 +121,7 @@ impl AppState {
             lock: lock::Lock::new(settings_locked),
             notified: Mutex::new(None),
             recording_language: Mutex::new(None),
+            recording_language_marks: Mutex::new(None),
         }
     }
 

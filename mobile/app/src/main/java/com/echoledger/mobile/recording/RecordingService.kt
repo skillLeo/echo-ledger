@@ -30,6 +30,7 @@ import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.Speakers
 import com.echoledger.mobile.data.AppSettings
+import com.echoledger.mobile.data.LanguageMarkDto
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.SegmentDto
@@ -492,6 +493,12 @@ class RecordingService : LifecycleService() {
      */
     private fun setLanguage(session: Capture, language: String?) {
         if (session.language == language) return
+        // A timestamped mark: the server cuts the audio here and transcribes each piece in its language; the first
+        // change also records the language the recording started with.
+        synchronized(session.languageMarks) {
+            if (session.languageMarks.isEmpty()) session.languageMarks += LanguageMarkDto(0, session.language)
+            session.languageMarks += LanguageMarkDto(session.recordedMs(), language)
+        }
         session.language = language
         refresh(session, "Language: ${Languages.label(language)}")
         if (session.streamers.isEmpty()) return
@@ -622,7 +629,8 @@ class RecordingService : LifecycleService() {
                     serverSessionId = session.serverSessionId,
                     markers = markers,
                     pauses = pauses,
-                    language = session.language
+                    language = session.language,
+                    languageMarks = synchronized(session.languageMarks) { session.languageMarks.toList() }
                 )
                 graph.recordings.importPlainFile(meta, session.file)
             }.onFailure {
@@ -715,6 +723,9 @@ class RecordingService : LifecycleService() {
 
         /** The language chip: Settings' language at the start, changed on the bubble or the Record tab. */
         @Volatile var language: String? = settings.transcriptionLanguage
+
+        /** The chip changes, sent with the upload (v1.2). */
+        val languageMarks = mutableListOf<LanguageMarkDto>()
 
         /** The open server session captions used on a v1.1 server (Keep finishes it, Discard deletes it). */
         @Volatile var serverSessionId: String? = null

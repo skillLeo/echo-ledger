@@ -10,6 +10,7 @@ use App\Models\Recording;
 use App\Models\Transcript;
 use App\Services\ChunkedUploadService;
 use App\Services\CredentialVault;
+use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
 use App\Stt\Audio\AudioPrep;
 use App\Stt\Contracts\SttProvider;
@@ -55,6 +56,9 @@ final class GroqWhisperDriver implements SttProvider
     /** Groq bills at least this much audio per request. */
     public const MIN_BILLED_MS = 10_000;
 
+    /** @var list<array{at_ms: int, language: string|null}> the language marks of the recording being transcribed */
+    private array $marks = [];
+
     public function __construct(
         private readonly CredentialVault $vault,
         private readonly SettingsRepository $settings,
@@ -86,6 +90,9 @@ final class GroqWhisperDriver implements SttProvider
     public function submitFinal(FinalJobRequest $request): SubmitResult
     {
         $language = LanguageChoice::normalize($request->language);
+        // The chip changed during the recording: each chunk takes the language in effect where it starts (the user's
+        // marks win over detection); without marks every chunk has the recording's language.
+        $this->marks = SessionMarkers::cleanLanguageMarks($request->session->language_marks ?? []);
         $prompt = self::stylePrompt($language, $request->keyterms);
         $sides = $this->sides($request);
         $segments = [];
@@ -106,7 +113,9 @@ final class GroqWhisperDriver implements SttProvider
                 foreach ($list as $chunk) {
                     $this->progress($request->transcript, $chunks, $total);
                     $chunks++;
-                    $result = $this->transcribeChunk($chunk, $language, $prompt);
+                    $chunkLanguage = $this->marks === [] ? $language
+                        : LanguageChoice::normalize(SessionMarkers::languageAt($this->marks, (int) round($chunk['start'] * 1000), $language));
+                    $result = $this->transcribeChunk($chunk, $chunkLanguage, $chunkLanguage === $language ? $prompt : self::stylePrompt($chunkLanguage, $request->keyterms));
                     $forced += $result['forced'];
                     $billedMs += max(self::MIN_BILLED_MS, (int) round(($chunk['end'] - $chunk['start']) * 1000)) * $result['requests'];
                     if ($result['language'] !== null) {
@@ -190,7 +199,8 @@ final class GroqWhisperDriver implements SttProvider
         // A two-sided file split here takes one channel; a per-channel file or a mono file is taken as it is.
         $this->prep->extractChannel($path, $sides === 2 && $recording === null ? $channel : null, $wav);
         $duration = $this->prep->durationSeconds($wav);
-        $plan = AudioPrep::plan($duration, $this->prep->silences($wav), (float) $this->settings->get('audio.chunk_seconds', 600));
+        $cuts = array_map(fn (array $m): float => $m['at_ms'] / 1000, $this->marks);
+        $plan = AudioPrep::plan($duration, $this->prep->silences($wav), (float) $this->settings->get('audio.chunk_seconds', 600), 3.0, $cuts);
         $out = [];
         foreach ($plan as $i => [$start, $end]) {
             $file = $temps[] = $this->uploads->tempPath('groq-chunk-'.$i).'.flac';

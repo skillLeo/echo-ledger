@@ -291,6 +291,7 @@ fn finish_request(client_id: Option<Option<String>>) -> FinishSessionRequest {
     FinishSessionRequest {
         markers: vec![],
         pauses: vec![],
+        language_marks: vec![],
         ended_at: "2026-10-24T09:42:10Z".into(),
         duration_ms: 2_530_000,
         title: Some("Budget review".into()),
@@ -342,6 +343,26 @@ async fn finish_posts_the_artifacts_to_the_open_session() {
         .await
         .unwrap();
     assert!(server.requests()[2].json().get("client_id").is_none());
+    assert!(server.requests()[2].json().get("language_marks").is_none(), "no chip change: no marks key");
+}
+
+#[tokio::test]
+async fn finish_sends_the_language_chip_changes_of_the_recording() {
+    let server = MockServer::start(Router::new().fixed(
+        "POST",
+        "/api/sessions/01JB8QA0M1X2C3V4B5N6M7K8J9/finish",
+        Reply::json(200, fixture("server/sessions_finish_200.json")),
+    ));
+    let mut request = finish_request(None);
+    request.language_marks = vec![
+        desktop_lib::net::models::LanguageMarkDto { at_ms: 0, language: Some("ur".into()) },
+        desktop_lib::net::models::LanguageMarkDto { at_ms: 125_000, language: Some("en".into()) },
+    ];
+    client(&server).finish_session("01JB8QA0M1X2C3V4B5N6M7K8J9", &request).await.unwrap();
+    assert_eq!(
+        server.requests()[0].json()["language_marks"],
+        json!([{"at_ms": 0, "language": "ur"}, {"at_ms": 125000, "language": "en"}])
+    );
 }
 
 #[tokio::test]
@@ -507,6 +528,7 @@ async fn create_session_posts_the_request_as_json() {
     let request = CreateSessionRequest {
         markers: vec![],
         pauses: vec![],
+        language_marks: vec![],
         client_ref: "ref-1".into(),
         source_app: "zoom".into(),
         client_id: None,

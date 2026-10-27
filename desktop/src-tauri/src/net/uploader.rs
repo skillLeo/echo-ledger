@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use super::api::ApiClient;
 use super::models::{
-    ArtifactDto, CreateSessionRequest, CreateSessionResponse, DeviceTranscript, FinishSessionRequest, MarkerDto, PauseDto,
+    ArtifactDto, CreateSessionRequest, CreateSessionResponse, DeviceTranscript, FinishSessionRequest, LanguageMarkDto, MarkerDto, PauseDto,
     RecordingUpload, SegmentDto, ServerConfig, UsageDto, UsageReport,
 };
 use crate::error::{AppError, AppResult};
@@ -100,6 +100,9 @@ pub struct PendingUpload {
     pub markers: Vec<MarkerDto>,
     #[serde(default)]
     pub pauses: Vec<PauseDto>,
+    /// Language chip changes during the recording (since v1.2).
+    #[serde(default)]
+    pub language_marks: Vec<LanguageMarkDto>,
     /// Transcription language of the recording (none = automatic), sent when the session is created.
     #[serde(default)]
     pub language: Option<String>,
@@ -131,6 +134,7 @@ impl Default for PendingUpload {
             slots: vec![],
             markers: vec![],
             pauses: vec![],
+            language_marks: vec![],
             language: None,
         }
     }
@@ -503,6 +507,7 @@ async fn open_slots(
                     artifacts: artifacts.clone(),
                     markers: item.markers.clone(),
                     pauses: item.pauses.clone(),
+                    language_marks: item.language_marks.clone(),
                 };
                 api.finish_session(&open, &request).await
             }
@@ -519,6 +524,7 @@ async fn open_slots(
                     artifacts: artifacts.clone(),
                     markers: item.markers.clone(),
                     pauses: item.pauses.clone(),
+                    language_marks: item.language_marks.clone(),
                 };
                 api.create_session(&request).await
             }

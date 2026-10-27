@@ -44,6 +44,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $ended_at
  * @property int|null $duration_ms
  * @property list<array{at_ms: int, paused_ms: int}>|null $pauses
+ * @property list<array{at_ms: int, language: string|null}>|null $language_marks language chip changes during the recording (v1.2)
  * @property-read Collection<int, SessionMarker> $markers
  * @property SessionStatus $status
  * @property bool $pinned kept at the top of the library (B15)
@@ -65,7 +66,7 @@ class CaptureSession extends Model
 
     protected $fillable = [
         'workspace_id', 'user_id', 'device_id', 'client_id', 'client_ref', 'source_device', 'source_app', 'title', 'language',
-        'started_at', 'ended_at', 'duration_ms', 'pauses', 'speaker_names', 'status', 'pinned', 'keep_forever', 'final_provider',
+        'started_at', 'ended_at', 'duration_ms', 'pauses', 'language_marks', 'speaker_names', 'status', 'pinned', 'keep_forever', 'final_provider',
     ];
 
     /** @return BelongsTo<User, $this> */
@@ -280,6 +281,7 @@ class CaptureSession extends Model
             'ended_at' => 'datetime',
             'duration_ms' => 'integer',
             'pauses' => 'array',
+            'language_marks' => 'array',
             'speaker_names' => 'array',
             'pinned' => 'boolean',
             'keep_forever' => 'boolean',
