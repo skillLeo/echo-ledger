@@ -41,7 +41,10 @@ it('ships an environment template with production defaults and the product name'
 it('does not tell deployers to run npm ci without a lock file', function () {
     $deploy = (string) file_get_contents(base_path('DEPLOY.md'));
 
-    if (! file_exists(base_path('package-lock.json'))) {
+    // "npm ci" needs the lock file; with the lock file (the Vite theme added one) it is the right command.
+    if (file_exists(base_path('package-lock.json'))) {
+        expect($deploy)->toContain('npm ci && npm run build');
+    } else {
         expect($deploy)->not->toContain('npm ci &&')->toContain('npm install && npm run build');
     }
 });

@@ -4,6 +4,10 @@ import android.content.Context
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 
 /** Local metadata for an encrypted recording kept in app-private, no-backup storage. */
@@ -41,6 +45,11 @@ data class LocalRecording(
  */
 class RecordingStore(context: Context, private val cipher: RecordingCipher) {
     private val dir = File(context.noBackupFilesDir, "recordings").apply { mkdirs() }
+
+    private val _changes = MutableStateFlow(0L)
+
+    /** Counts every save and delete, so a screen listing the recordings reloads the moment one changes (A6.M12). */
+    val changes: StateFlow<Long> = _changes.asStateFlow()
 
     fun encryptedFile(id: String) = File(dir, "$id.elr")
 
@@ -120,6 +129,7 @@ class RecordingStore(context: Context, private val cipher: RecordingCipher) {
         val tmp = File(dir, "${meta.id}.json.tmp")
         tmp.writeText(ApiJson.encodeToString(LocalRecording.serializer(), meta))
         tmp.renameTo(metaFile(meta.id))
+        announceChange()
     }
 
     fun get(id: String): LocalRecording? = metaFile(id).takeIf {
@@ -137,5 +147,11 @@ class RecordingStore(context: Context, private val cipher: RecordingCipher) {
     fun delete(id: String) {
         encryptedFile(id).delete()
         metaFile(id).delete()
+        announceChange()
+    }
+
+    /** Wakes whoever watches [changes]. */
+    internal fun announceChange() {
+        _changes.update { it + 1 }
     }
 }

@@ -17,6 +17,7 @@ use App\Models\ShareLink;
 use App\Models\Transcript;
 use App\Models\TranscriptRevision;
 use App\Services\SettingsRepository;
+use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
@@ -123,6 +124,29 @@ describe('share links', function () {
 
         expect($link->fresh()->revoked_at)->not->toBeNull();
     });
+
+    it('shows each opening of a link in its access log', function () {
+        toolsPage($this)->callAction('share', data: ['expires_in' => 3_600]);
+        $link = ShareLink::query()->sole();
+        $link->views()->create(['outcome' => 'wrong_password', 'ip_hash' => str_repeat('ab', 32), 'user_agent' => 'Mozilla/5.0 Test', 'viewed_at' => now()->subMinute()]);
+        $link->views()->create(['outcome' => 'viewed', 'ip_hash' => str_repeat('ab', 32), 'user_agent' => 'Mozilla/5.0 Test', 'viewed_at' => now()]);
+
+        $relations = $this->panelComponent(ShareLinksRelationManager::class, ['ownerRecord' => $this->session, 'pageClass' => ViewCaptureSession::class]);
+        $log = $this->modalHtml($relations->mountTableAction('log', $link));
+
+        expect($log)->toContain('Opened')->toContain('Wrong password')->toContain('Mozilla/5.0 Test')
+            ->toContain('visitor abababab')
+            ->not->toContain(str_repeat('ab', 32));
+    });
+
+    it('says so when nobody has opened a link yet', function () {
+        toolsPage($this)->callAction('share', data: ['expires_in' => 3_600]);
+        $link = ShareLink::query()->sole();
+
+        $relations = $this->panelComponent(ShareLinksRelationManager::class, ['ownerRecord' => $this->session, 'pageClass' => ViewCaptureSession::class]);
+
+        expect($this->modalHtml($relations->mountTableAction('log', $link)))->toContain('Nobody has opened this link yet.');
+    });
 });
 
 describe('second engine and comparison', function () {
@@ -153,6 +177,24 @@ describe('second engine and comparison', function () {
 
         expect($alternate->fresh()->kind)->toBe(TranscriptKind::Final)
             ->and($this->session->fresh()->final_provider)->toBe('elevenlabs');
+    });
+});
+
+describe('removing the second version', function () {
+    it('deletes the second version from the comparison and keeps the final transcript', function () {
+        Queue::fake();
+        $alternate = Transcript::query()->create([
+            'capture_session_id' => $this->session->id, 'kind' => TranscriptKind::Alternate, 'provider' => 'elevenlabs',
+            'status' => TranscriptStatus::Completed,
+            'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 2_000, 'text' => 'Hello Acme Limited.']],
+        ]);
+        $final = $this->session->finalTranscript;
+
+        toolsPage($this)->mountAction('compare')->callAction(TestAction::make('discard_second')->arguments([]))->assertNotified('Second version removed');
+
+        expect(Transcript::query()->whereKey($alternate->id)->exists())->toBeFalse()
+            ->and($final->fresh()->kind)->toBe(TranscriptKind::Final)
+            ->and($this->session->fresh()->final_provider)->toBe($final->provider);
     });
 });
 

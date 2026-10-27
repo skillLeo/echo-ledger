@@ -6,13 +6,15 @@ server-side (or, for the on-device engine, uploaded by the device).
 
 ## Choosing providers
 
-**Admin → Settings → Providers** assigns a driver to each use case:
+In the console, **Settings** assigns a driver to each use case: final transcripts and voice notes on the **Recording** tab,
+live captions on **Captions**, dictation on **Dictation**. Each provider's own options (model, region, endpoint) are in
+collapsible sections of the **Recording** tab.
 
 | Use case | Setting | Used for |
 |---|---|---|
-| Live captions | `provider.live_captions` | Desktop overlay and Android caption bubble during calls |
-| Dictation | `provider.dictation` | Desktop dictation box (microphone only) |
-| Final transcript | `provider.final_transcript` | The accurate second pass over every finished call or meeting |
+| Live captions | `provider.live_captions` | Desktop overlay and Android caption bubble during calls the user started or the auto-record rules approved |
+| Dictation | `provider.dictation` | Desktop dictation and the Android voice keyboard (microphone only; never saved as a recording) |
+| Final transcript | `provider.final_transcript` | The accurate second pass over every call or meeting the user **kept**. A discarded recording is never sent. |
 | Voice notes | `provider.voice_note` | Imported or uploaded voice notes (mono) |
 
 Changes apply to the next token request or job; nothing in flight is interrupted. When the final provider needs
@@ -83,6 +85,50 @@ The server side is complete: when selected, final transcripts are marked `awaiti
 its own transcript through `POST /api/sessions/{id}/transcripts`. The device-side engine (sherpa-onnx with a
 600 MB+ model) is not bundled in this release, so choose another final provider for production use.
 
+## Languages
+
+The spoken language is chosen per recording, per client or as the server default (**Settings → General**). The
+choices are **English**, **Urdu**, **Hindi**, **English + Urdu** and **Automatic**. The server picks the model from
+the provider's documented language list; the session page shows which language and model were used. Live captions
+always detect the language themselves.
+
+| Choice | AssemblyAI (final) | ElevenLabs Scribe (final) |
+|---|---|---|
+| English / Urdu / Hindi | `language_code` set to that language | `language_code` set to that language |
+| English + Urdu | Universal-2 with code switching (two language codes, one of them English) | Language detection |
+| Automatic | `language_detection: true` | Language detection |
+
+## Vocabulary
+
+Keyterms come from the client's own list first, then the global list (**Settings → General → Vocabulary**). A name
+added from an edited transcript joins the client's list. Each engine takes as many as it accepts (limits in the
+provider sections above). **Replacements** ("when the transcript says … write …") are applied by the server to every
+new final transcript. The engine's original text stays in the transcript history and **Restore original** brings it
+back.
+
+## A second opinion
+
+On a session page, **Transcribe with another engine** sends the same audio to another provider and keeps the result
+as an `alternate` transcript. **Compare versions** shows the words that differ side by side. **Use the second
+version** swaps it in (the old one becomes the alternate), and **Remove the second version** deletes it and its
+provider copy. This uses the provider's final-transcript price again.
+
+## Usage, prices and the monthly limit
+
+Devices report the minutes they streamed and the server records the minutes of every final transcript in the usage
+ledger. Cost is minutes × the price table in **Settings → Storage → Monthly limit → Prices** (US$ per audio hour per channel,
+filled with the list prices in the table below and editable). The console **Usage** page and the dashboard show the
+totals per month, provider, use case, device and client.
+
+A monthly limit, in minutes or US$, can be set for the server, and the workspace plan has its own minutes limit; the
+tighter one applies. At the limit:
+
+- a new streaming token is refused (`403 budget_exceeded`) and the apps show "Monthly transcription limit reached";
+  recording itself carries on;
+- a final transcript is not sent to a paid provider; it fails with the same message and can be run later with
+  **Transcribe again** after the limit is raised.
+
+Self-hosted engines (whisper.cpp, Parakeet) are not billable and are never blocked by the limit.
 ## Cost per recorded hour
 
 List prices as researched on 2026-10-24 for a two-channel call (Me + Client). Providers bill each channel
@@ -108,5 +154,5 @@ model — the final transcript is unaffected.
 4. Jobs already submitted finish on the provider they were sent to; `stt:reconcile` keeps polling them.
 
 If a provider is unavailable, failed final jobs stay `failed` with the provider's error on the session page. The
-recording remains stored (encrypted); after switching, use **Re-transcribe** on the session page to run the final
+recording remains stored (encrypted); after switching, use **Transcribe again** on the session page to run the final
 pass again with the current provider.

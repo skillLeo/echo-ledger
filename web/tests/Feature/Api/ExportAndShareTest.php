@@ -178,6 +178,31 @@ describe('share links', function () {
         expect(ShareLinkView::query()->pluck('outcome')->all())->toBe(['wrong_password', 'viewed']);
     });
 
+    it('uses a 256-bit random token and never repeats one', function () {
+        $tokens = collect(range(1, 5))->map(fn () => basename(makeShare($this)['url']));
+
+        expect($tokens->unique())->toHaveCount(5);
+        foreach ($tokens as $token) {
+            expect(strlen((string) base64_decode(strtr($token, '-_', '+/'), true)))->toBeGreaterThanOrEqual(32);
+        }
+    });
+
+    it('slows down password guessing and keeps unlocking one link from opening another', function () {
+        $first = makeShare($this, ['password' => 'correct horse']);
+        $second = makeShare($this, ['password' => 'battery staple']);
+        $path = parse_url($first['url'], PHP_URL_PATH);
+        $other = parse_url($second['url'], PHP_URL_PATH);
+
+        $this->post($path, ['password' => 'correct horse'])->assertRedirect($path);
+        $this->get($other)->assertOk()->assertSee('This transcript is protected')->assertDontSee('قیمت');
+
+        foreach (range(1, 10) as $attempt) {
+            $this->post($other, ['password' => "guess {$attempt}"])->assertStatus(422);
+        }
+        $this->post($other, ['password' => 'battery staple'])->assertStatus(429);
+        expect(ShareLinkView::query()->where('outcome', 'wrong_password')->count())->toBe(10);
+    });
+
     it('stops working when it expires, is revoked, or the recording is deleted', function () {
         $expiring = makeShare($this, ['expires_in' => 3_600]);
         $revoked = makeShare($this);

@@ -33,8 +33,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -75,8 +78,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _message.value = null
     }
 
+    private val localReload = MutableStateFlow(0)
+
+    init {
+        // The Record tab's waiting / uploading cards follow the store while the tab stays open (A6.M12). One loader
+        // for every trigger: a newer trigger cancels an older load, so a slow stale read can never overwrite the list.
+        viewModelScope.launch {
+            combine(graph.recordings.changes, localReload) { _, _ -> Unit }.collectLatest {
+                _pending.value = withContext(Dispatchers.IO) { graph.recordings.all().filter { it.state != "uploaded" } }
+            }
+        }
+    }
+
     fun reloadLocal() {
-        viewModelScope.launch(Dispatchers.IO) { _pending.value = graph.recordings.all().filter { it.state != "uploaded" } }
+        localReload.update { it + 1 }
     }
 
     fun showMessage(text: String) {

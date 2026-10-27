@@ -94,6 +94,7 @@ private fun EchoLedgerApp.replacingRecordingStore(real: RecordingStore): Recordi
         val tmp = File(dir, "${meta.id}.json.tmp")
         tmp.writeText(ApiJson.encodeToString(LocalRecording.serializer(), meta))
         moveOverExisting(tmp, File(dir, "${meta.id}.json"))
+        store.announceChange()
         Unit
     }.whenever(store).save(any())
     return store

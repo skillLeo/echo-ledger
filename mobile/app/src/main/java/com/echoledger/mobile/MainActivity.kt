@@ -131,11 +131,19 @@ class MainActivity : FragmentActivity() {
         val helper by vm.helper.collectAsState()
         val message by vm.message.collectAsState()
         val snackbar = remember { SnackbarHostState() }
-        var tab by remember { mutableIntStateOf(0) }
-        var openItem by remember { mutableStateOf<LibraryItem?>(null) }
-        var openAtMs by remember { mutableStateOf<Long?>(null) }
+        // Where the user is survives a rotation (A6.M9): the tab, the open recording (by id) and the setup page.
+        var tab by rememberSaveable { mutableIntStateOf(0) }
+        var openItemId by rememberSaveable { mutableStateOf<String?>(null) }
+        var openItemCache by remember { mutableStateOf<LibraryItem?>(null) }
+        var openAtMs by rememberSaveable { mutableStateOf<Long?>(null) }
         var openSession by remember { mutableStateOf<String?>(null) }
-        var showSetup by remember { mutableStateOf(false) }
+        var showSetup by rememberSaveable { mutableStateOf(false) }
+        val libraryItems by vm.library.collectAsState()
+        val openItem = libraryItems.firstOrNull { it.id == openItemId && !it.deleted } ?: openItemCache?.takeIf { it.id == openItemId }
+        fun showItem(item: LibraryItem?) {
+            openItemCache = item
+            openItemId = item?.id
+        }
         var recheck by remember { mutableIntStateOf(0) }
         val context = LocalContext.current
         val caps = remember(helper.connected, recheck) { context.capabilities(helper.connected) }
@@ -225,20 +233,19 @@ class MainActivity : FragmentActivity() {
         LaunchedEffect(open) {
             if (open == OPEN_PENDING) {
                 tab = 1
-                openItem = null
+                showItem(null)
                 showSetup = false
             }
             open?.takeIf { it.startsWith(OPEN_SESSION_PREFIX) }?.let { openSession = it.removePrefix(OPEN_SESSION_PREFIX) }
             if (open != null) openRequest.value = null
         }
-        val libraryItems by vm.library.collectAsState()
         LaunchedEffect(openSession, libraryItems) {
             val id = openSession ?: return@LaunchedEffect
             libraryItems.firstOrNull { it.id == id && !it.deleted }?.let {
                 tab = 0
                 showSetup = false
                 openAtMs = null
-                openItem = it
+                showItem(it)
                 openSession = null
             }
         }
@@ -250,7 +257,7 @@ class MainActivity : FragmentActivity() {
         }
         val unlocked = loaded && lockState == LockState.Unlocked
         BackHandler(enabled = unlocked && (openItem != null || showSetup)) {
-            openItem = null
+            showItem(null)
             showSetup = false
         }
 
@@ -278,8 +285,8 @@ class MainActivity : FragmentActivity() {
 
                         showSetup -> SetupScreen(vm, caps, onBack = { showSetup = false }, onRecheck = { recheck++ })
 
-                        openItem != null -> SessionScreen(vm, openItem!!, onBack = {
-                            openItem = null
+                        openItem != null -> SessionScreen(vm, openItem, onBack = {
+                            showItem(null)
                             openAtMs = null
                         }, startAtMs = openAtMs)
 
@@ -295,9 +302,9 @@ class MainActivity : FragmentActivity() {
                                     onSetup = { showSetup = true },
                                     onOpenAt = { item, ms ->
                                         openAtMs = ms
-                                        openItem = item
+                                        showItem(item)
                                     }
-                                ) { openItem = it }
+                                ) { showItem(it) }
 
                                 1 -> RecordScreen(vm, caps, onSetup = { showSetup = true })
 

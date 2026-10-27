@@ -730,7 +730,8 @@ pub async fn export_transcript(app: AppHandle, id: String, format: String, times
 // ---- Settings export / import (B19) -----------------------------------------------------------------------------
 
 /// Keys never exported or imported: the pairing (server, pins, device) and the client of this server.
-pub const NOT_PORTABLE: [&str; 6] = ["serverUrl", "pins", "deviceId", "deviceName", "clientId", "onboardingDone"];
+/// `consentAcknowledged` stays out too: the recording-laws notice is acknowledged by the person using this install, never by a file.
+pub const NOT_PORTABLE: [&str; 7] = ["serverUrl", "pins", "deviceId", "deviceName", "clientId", "onboardingDone", "consentAcknowledged"];
 /// The `format` marker of an exported settings file.
 pub const SETTINGS_FORMAT: &str = "echoledger-settings";
 

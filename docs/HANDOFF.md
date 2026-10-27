@@ -1,20 +1,17 @@
 # EchoLedger v1.1 — Handoff
 
 ## Snapshot
-- 2026-10-26 (Asia/Karachi), branch `v1.1`, Phase 6 finished (C1-C9).
-- Tests (end of Phase 6):
-  - Web (Pest, SQLite, `--parallel`): 3055 passed, 1 failed (the timing test below: 4.7 s under load, 2.29 s alone). MariaDB: 3056 passed, 0 failed.
-  - Desktop core (`cargo test`): 824 passed, 0 failed (1 ignored). Desktop UI (`vitest`): 994/994; `npm run build` ok.
-  - Android (`testDebugUnitTest`): 862 tests; the one failure (`SettingsTransferTest`: C4's `themeMode` / `dynamicColour` were in neither list) is fixed and the class re-run green; `assembleDebug`, `assembleDebugAndroidTest`, ktlint and lint passed in the same run.
-  - Repo policy: 23/23. Design tokens: 5/5.
-- Linters: Pint clean, PHPStan 0 errors, `cargo clippy --all-targets -D warnings` clean, `tsc --noEmit` clean, ktlint and Android lint clean. macOS cross clippy not re-run (the `mac-check.ps1` script lived in an older session's scratchpad); C9 adds no platform-specific code.
+- 2026-10-27 (Asia/Karachi), branch `v1.1`, Phase 7 finished (final QA, security re-sweep, docs). Phase 8 (release) is next and has not started. Nothing was deployed.
+- Tests (end of Phase 7):
+  - Web (Pest): SQLite `--parallel` 3065 passed, 0 failed, 0 risky; MariaDB 10.4 `--parallel --processes=6` 3065 passed, 0 failed. The timing test that used to fail on battery is now stable (see "Phase 7 test coverage").
+  - Desktop core (`cargo test`): 825 passed, 0 failed (1 ignored). Desktop UI (`vitest`): 994/994; `npm run build` ok.
+  - Android (`testDebugUnitTest`): 878 tests, 0 failed (862 at the end of Phase 6 + 12 `DictationScreenTest` + 3 `RotationTest` + 1 `MainViewModelTest`); Android lint 0 errors (21 warnings, all older: `PrivateApi`, `UseKtx`, `InlinedApi`, `UnusedAttribute`, `ExportedContentProvider`, `UnusedResources`); `assembleDebug`, `assembleDebugAndroidTest`, ktlint and lint passed in the same run.
+  - Repo policy and design tokens: see "Phase 7 test coverage" (run after the Phase 7 commit, because the policy reads tracked files).
+- Linters: Pint clean, PHPStan 0 errors, `cargo clippy --all-targets -D warnings` clean, `tsc --noEmit` clean, ktlint and Android lint clean. macOS cross clippy not re-run (the `mac-check.ps1` script lived in an older session's scratchpad); Phase 7 added no platform-specific code.
 - Known failing / flaky tests:
-  - `Tests\Feature\Api\TranscriptValidationSpeedTest` "accepts 20,000 segments in under two seconds": timing budget (4 s parallel, 2 s alone). Fails on battery or under load (seen 2.0-8 s on SQLite and MariaDB). Not a B20 regression: with the workspace scope switched off it measured 2.24 s / 2.24 s / pass, the same as with it on.
-  - The same timing test passes on MariaDB (3056/3056) and failed alone on SQLite at 2.29 s (budget 2 s); no web code changed in Phase 6's last session.
-  - `LibraryView.test.tsx` "handles a very long transcript without dropping segments" and `PillApp.test.tsx` "brings the pill back when Stop fails": time out only when Gradle or cargo run at the same time; pass alone.
-## Progress
-- Plan items: 148 in PLAN_V1_1.md: 101 Done ([x]), 36 Partial ([~]), 10 Not started, 1 Blocked. Ticked = 101/148 = **68 %**.
-- All 36 Partial items are built and covered by automated tests on every platform and wait only for on-device checks (docs/MANUAL_QA.md sections 7-15 and 17). Weighted by remaining effort, about **77 %** of the upgrade brief is done.
+  - `LibraryView.test.tsx` "handles a very long transcript without dropping segments" and `PillApp.test.tsx` "brings the pill back when Stop fails" time out only when Gradle or cargo run at the same time; they passed alone and in the sequential Phase 7 run.## Progress
+- Plan items: 148 in PLAN_V1_1.md: 107 Done ([x]), 36 Partial ([~]), 4 Not started (Phase 8), 1 Blocked. Ticked = 107/148 = **72 %**.
+- All 36 Partial items are built and covered by automated tests on every platform and wait only for on-device checks, now one ordered list: docs/MANUAL_QA.md (125 steps, about 2 hours; the old section IDs are kept in its last column). Weighted by remaining effort, about **88 %** of the upgrade brief is done; what is left is Phase 8 (installer, signed APK, deploy, merge) and the on-device run.
 
 | Item | Summary | Status |
 |---|---|---|
@@ -120,10 +117,10 @@
 | A6.M6 | [medium] Android lint: 4 errors, 19 warnings. | Done |
 | A6.M7 | [low] Parsing details: media types with codec parameters, pairing p... | Done |
 | A6.M8 | [low] "No recordings yet" during the first sync, "Pull to refresh" ... | Done |
-| A6.M9 | [low] Rotating the phone returns to the library (tab, open recordin... | Not started |
-| A6.M10 | [low] Status bar icons are dark on the dark app background in the l... | Not started |
-| A6.M11 | [low] In landscape the library header, search, banner and filters l... | Not started |
-| A6.M12 | [low] The Record tab upload card does not update until the tab is o... | Not started |
+| A6.M9 | [low] Rotating the phone returns to the library (tab, open recordin... | Done |
+| A6.M10 | [low] Status bar icons are dark on the dark app background in the l... | Done |
+| A6.M11 | [low] In landscape the library header, search, banner and filters l... | Done |
+| A6.M12 | [low] The Record tab upload card does not update until the tab is o... | Done |
 | A6.R1 | [medium] docs/research notes reference files that no longer exist a... | Done |
 | A6.R2 | [medium] `.gitignore` does not ignore `.env` files outside `web/`. | Done |
 | A6.R3 | [low] Unreachable objects in the local object store; pushed history... | Done |
@@ -159,16 +156,16 @@
 | C7 | Accessibility: WCAG 2.2 AA contrast, focus rings, full keyboard use... | Partial |
 | C8 | Copy pass: short, plain, sentence case. | Done |
 | C9 | Performance budgets measured and reported: desktop idle ≤ 150 MB an... | Done |
-| P7.1 | All suites and linters green; tests for every new feature. | Not started |
-| P7.2 | Security re-sweep: no key leaks, pins intact, every API route autho... | Not started |
-| P7.3 | docs/MANUAL_QA.md, docs/API.md, docs/ARCHITECTURE.md, README.md upd... | Not started |
+| P7.1 | All suites and linters green; tests for every new feature. | Done |
+| P7.2 | Security re-sweep: no key leaks, pins intact, every API route autho... | Done |
+| P7.3 | docs/MANUAL_QA.md, docs/API.md, docs/ARCHITECTURE.md, README.md upd... | Done |
 | P8.1 | Windows installer built. | Not started |
 | P8.2 | Android release APK built and signed. | Not started |
 | P8.3 | Production deploy: database backup confirmed, maintenance mode, upl... | Not started |
 | P8.4 | `v1.1` merged into `main` and pushed. | Not started |
 
 ## In progress right now
-- **Phase 6 done.** C1, C3, C5, C6, C8, C9 [x]; C2, C4, C7 [~] (device checks in docs/MANUAL_QA.md section 17, which now also has V-D8-V-D11 for the windows built on demand). Nothing in progress.
+- **Phase 7 done.** Nothing in progress. The session ended with the Phase 7 commit on `v1.1`; no push, no deploy.
 - B20 is done (Done, not Partial: web only; its checks in docs/MANUAL_QA.md section 16 are deploy verifications).
 - Where things are:
   - Schema: `web/database/migrations/2026_11_01_00000{1,2,3}_*.php`; models `Plan`, `Workspace`, trait `Models/Concerns/BelongsToWorkspace.php`, `Models/Scopes/WorkspaceScope.php`.
@@ -178,8 +175,8 @@
 - Migration cycle result (B20): `WorkspaceMigrationCycleTest` seeds 3 users (2 super admins, 1 plain) × device, pairing code, client + keyterm, 7 sessions (1 binned) each with recording, transcript, marker, label, share link + view and a usage row; up → down → up keeps every row count identical, maps every row to its user's workspace, NOT NULL and the foreign key reject bad rows, and a second backfill run changes nothing. Passed on SQLite and on MariaDB 10.4 (2/2 each). Step 3 refuses to run while a row has no workspace.
 
 ## Next steps (in order)
-1. **Next: Phase 7 final QA + user guide (use Sonnet 5.5 Medium)**: P7.1-P7.3, docs/USER_GUIDE.md; update docs/ARCHITECTURE.md for the on-demand windows (lifecycle.rs).
-2. Then Phase 8 release (P8.1-P8.4, with the B20 deploy notes below).
+1. **Next: Phase 8 release** (P8.1-P8.4, with the B20 deploy notes below). Needs from the user: the Windows signing certificate (optional, A6.R6), the Android release keystore and password (P8.2), SSH access (P8.3). Do not deploy before the user has run docs/MANUAL_QA.md Parts 1-4 on a copy or confirmed they accept shipping with the 36 [~] items unchecked.
+2. Before the Windows installer: `tools/scan-secrets.ps1 -Targets <installer folder> <apk>` must print nothing before "done" (also in MANUAL_QA Appendix C).
 ## Phase 6 audit
 - Screens. Desktop main window: Library (list, detail and player, decision and upload queue, bin), Record, Settings (10 groups), first-run wizard, pairing, lock screen, command palette, activity bell, toasts and banners. Desktop overlays: captions, control pill, review card (and "ask" chip), dictation bar; tray menu. Web: login (passkey), dashboard (checklist, stats, chart), sessions list (smart-view tabs), session page (player, share links, history, compare), search, clients (+ keyterms), recently deleted, security, devices, API credentials, settings (8 tabs), usage, workspace, profile, public share pages. Phone: library, session (player, tools, organise), record, call setup, settings hub + 8 groups, dictation, security and activity, onboarding, pairing, lock screen, QR scanner, home-screen widget.
 - Screenshot tooling: desktop `desktop/screenshots/harness.html` (Vite dev, mocked Tauri IPC through `@tauri-apps/api/mocks`); phone `ScreenshotsTest` (Robolectric native graphics, writes `app/build/screenshots`); web = browser driver against `php artisan serve` on a scratch SQLite seeded with `--seed`. Shots go to `design-review/` (git-ignored).
@@ -214,6 +211,59 @@
   - desktop (22): desktop-{library,library-empty,record,settings,onboarding,lock,overlay,pill,review,dictation}-{dark,light}, plus desktop-mica-accent-{dark,light} (after only);
   - web (28): web-{login,dashboard,sessions,player,clients,settings,usage}-{dark,light}[-phone] (the old after "dashboard" shots showed the sign-in page; the new ones are signed in);
   - phone (16): phone-{library,library-empty,session,record,settings,settings-recording,onboarding,lock}-{dark,light} (before: dark only, without the suffix).
+## Phase 7 gap check
+Every item of PLAN_V1_1.md that was not `[x]` when Phase 7 started, and what became of it.
+
+| Item(s) | State | Result |
+|---|---|---|
+| A6.M9, A6.M11, A6.M12 | (b) unfinished code | **Finished with tests.** M9: `MainActivity` keeps the tab, the open recording (id) and the setup page with `rememberSaveable`, and takes the recording from the live library (`RotationTest`, 2 tests). M11: below 480 dp of height the Library page (header, search, banners, filters) scrolls inside the list (`RotationTest`, fails with `compact = false`). M12: `RecordingStore.changes` counts every save / delete and `MainViewModel` reloads `pending` from it through one `collectLatest` loader that `reloadLocal()` also feeds, so a newer trigger cancels an older read (`MainViewModelTest`). The A6.M10 row of the table below was stale (the item was already done). |
+| A1.1-A1.3, A1.5, A1.8 | (a) device check | MANUAL_QA steps 25-29; appendix W-04, W-05, W-06, C-D1, V-D5, V-D6, M-03. |
+| A2.2, A2.7 | (a) | Steps 37, 41-44 (desktop review card) and 77-80 (phone heads-up). |
+| A3.1-A3.4 | (a) | Steps 27-28, 30-34, 44-45; appendix C-D5. |
+| A4.2, A4.3, A4.5 | (a) | Steps 96-98; appendix V-A3, V-A4 (old section 7 IDs are kept in the Ref column). |
+| B1-B5 | (a) | Steps 24-36, 70-76, 82; appendix C-D1, C-D5-C-D7, C-A1-C-A7. |
+| B6-B13 | (a) | Steps 46-52, 84-88, 108-116 and appendix T-D3, T-D5, T-A4, T-W8 (languages, vocabulary). |
+| B14 | (a) | Steps 56-60, 92-95; appendix DI-D3, DI-D5-DI-D7, DI-A3-DI-A7. |
+| B15-B17 | (a) | Steps 4-6, 53-55, 63-65, 90-91, 117, 121-123; appendix O-*, S-*, R-4. |
+| B18, B19 | (a) | Steps 7-10, 19-22, 39, 68-73, 99-100; appendix N-*, O-*, S-*. |
+| C2, C4, C7 | (a) | Steps 61, 101; appendix §17 V-D3/V-D5, V-A2/V-A3, B (screen readers, reduce motion). |
+| A6.R6 | blocked | Needs a code-signing certificate (user). Noted in MANUAL_QA step 17 and appendix C R-01. |
+| P8.1-P8.4 | Phase 8 | Not part of this session. |
+
+Every old MANUAL_QA ID is still in the new file (checked by script against `git show HEAD:docs/MANUAL_QA.md`).
+
+## Phase 7 test coverage and the speed tests
+- **Speed tests (`TranscriptValidationSpeedTest`).** The old tests compared the wall clock with 2 s (4 s in parallel) and failed on battery. The new ones never compare with a fixed budget:
+  1. *Linear time:* post 2,000 segments (best of 3) and 20,000 segments (best of 2) in the same process after a warm-up; the ratio must stay under 40 (linear measures about 10, the old super-linear validation about 100, whatever the CPU speed). A 60 s hang guard stays.
+  2. *Same queries:* the 20,000-segment request issues exactly as many queries as a 200-segment one.
+  3. *Refusing 20,001 is no slower than accepting 20,000* (measured in the same test, 3x + 0.2 s).
+  Proof: 3 runs in a row on SQLite and 3 on MariaDB were green, and 2 more with 16 busy loops saturating the CPU. The full suites: SQLite 3065 / MariaDB 3065 passed.
+- **End-to-end web test (`EndToEndMockedSttTest`).** Keep: pair a device through `/api/devices/register`, open a session, mint stream tokens, add a bookmark, assert nothing paid was called yet, finish (stop + Keep), upload chunks out of order, `complete`, the signed webhook, the final transcript, the provider copy erased, usage report, search (by words, bookmark filter, tag filter), export (TXT, SRT), share link (opens, access logged), retention (aged 40 days → bin → share link 404 → bin emptied → audio, transcript and file gone). Discard: open session, token, bookmark, delete the session → no recording, no transcript, no `/v2/` call, no server-side ledger row, no stored file, token for it refused.
+- **Filament coverage.** Added tests for the two actions that had none: the share-link "Access log" (outcomes, user agent, hashed visitor, nothing raw) and "Remove the second version" in the compare dialog. `openSecurity` / `openDevices` are plain links. Every other page / resource / relation manager / widget / action named in `app/Filament` is exercised (checked by name against `tests/`).
+- **API coverage.** All 48 `/api/*` routes appear in the tests (checked from `route:list`), `ApiDocumentationTest` ties them to `docs/API.md`, `WorkspaceIsolationTest` generates one isolation case per route and resource.
+- **Desktop.** Rust logic is in `tests/*.rs` (36 files) plus unit tests in `src/`; UI in 45 Vitest files, one per view or overlay (pill, review card, captions, dictation, lock, onboarding, settings, library, transcript tools). New: the consent-notice test below.
+- **Phone.** Robolectric tests exist per flow (pairing, onboarding, record, setup, library, session, transcript tools, organise, retention, security centre, activity, settings hub / files, app lock, widgets, share import). Added `DictationScreenTest` (12 tests: the voice keyboard keys and status line, the settings cards, replacements, snippets, history) because only the text rules had tests, and `RotationTest` (3).
+
+## Phase 7 security re-sweep
+Checked 2026-10-27 against the code and the built artefacts. Nothing needed the user's keys; the local database has no provider credentials.
+
+| Area | Finding | Result |
+|---|---|---|
+| Provider keys in builds | `tools/scan-secrets.ps1` (new, run by hand; its patterns: ElevenLabs `sk_` keys, private key blocks, minisign secret keys, AWS ids, JWTs, webhook secrets, Laravel app keys, the recordings key name, provider key variable names, Sanctum tokens, long bearer literals) over `desktop/dist`, `echoledger-desktop.exe`, `app-debug.apk` and `app-release.apk` (the 24 Oct build; all entries, dex and resources included). A canary string proved the scanner works. | **0 hits.** |
+| Keys in logs / responses | No `println!`, `eprintln!`, `log::` or `Log.` call prints a token, key, password or authorization value (grep over `desktop/src-tauri/src`, `mobile/app/src/main`); the only server log line mentioning a key is the audit text "Device key renewed". API responses: `AdminSecretLeakTest`, `SecretsHandlingTest`, `ApiAuthenticationTest` pass. | Clean. |
+| API authorisation | All 48 `/api/*` routes listed with middleware: every route except `devices/register` (pairing code, 5/min/IP), `recordings/{recording}/audio` (signed URL) and `webhooks/stt/{provider}` (signature, 300/min) has `auth:sanctum` and a `CheckAbilities`; `devices/rotate-token` has none by design (a token can renew only itself, and keeps its abilities, A6.W18). Workspace scope: `WorkspaceIsolationTest` (route-list driven) passes. | Clean. |
+| Share links | Token = 32 random bytes (256 bit, base64url, 43 chars), only the SHA-256 is stored; expiry, revocation, binned session and password are re-checked on every request; 10 password tries / minute / address / link, 120 requests / minute / address; every opening and wrong password is logged with a keyed hash of the IP; headers `noindex`, no referrer, no store. | Clean. New tests: unique 256-bit tokens, password throttle (11th try gets 429), one unlocked link does not open another. |
+| Uploads, exports, imports | Size, MIME allowlist, per-chunk and whole-file SHA-256, server-generated ULID paths (`UploadAbuseTest`, `MassAssignmentTest`, `RecordingEncryptionTest` include `../../etc/passwd`, `C:\boot.ini`, `%2e%2e%2f`, NUL bytes); export file names are built from the title and stripped for every file system; the bulk zip names are unique. | Clean. |
+| Settings import | Console: unknown keys, `credentials` and `api_key` ignored (`AdminSettingsGroupsTest`). Phone: pairing, token, lock and consent untouched (`SettingsTransferTest`, `SettingsFilesTest`). Desktop: **FIXED** `consentAcknowledged` was importable, so a settings file could tick the recording-law notice for the person; it is now in `NOT_PORTABLE` (not exported, not imported) with test `an_import_never_acknowledges_the_consent_notice`. The app lock still cannot be turned on from a file without a PIN. | One fix. |
+| Pinning, lock, passkeys | `tls_pinning.rs`, `ApiClientPinningTest`, `AppLockTest`, `app_lock.rs`, `AppLock.test.tsx`, `PasskeysTest` all pass. A forgotten desktop PIN has no reset in the app; recovery is deleting `app_lock.json` with the app closed (documented in the user guide). | Intact. |
+| Audit log | Events recorded: login, login_failed, logout, passkey_added / removed / login, password_changed, device_paired / revoked / token_rotated, session_deleted, transcript_exported, **sessions_exported**, share_created / revoked, credentials_changed, web_session_revoked. `sessions_exported` was the only one without a test; added (it also asserts no content in the row). Opening a share link is logged in `share_link_views`. | Clean. |
+| Dependencies | `composer audit`: no advisories. `npm audit --omit=dev`: 0 in `web/` and `desktop/`. `cargo audit` (installed with `cargo install cargo-audit --locked`; 1378 advisories, 626 crates): **0 vulnerabilities**, 5 warnings (`proc-macro-error` unmaintained, `zbus_names`, `zvariant`, `zvariant_derive` unmaintained, `glib` 0.18.5 unsound `VariantStrIter`) that come only through Linux-only GTK / D-Bus crates of Tauri: `cargo tree --target x86_64-pc-windows-msvc` and `aarch64-apple-darwin` show none of them, so they are not in our builds. Gradle: no dependency-check plugin is configured and adding one needs an NVD key; the versions are in `mobile/gradle/libs.versions.toml`. Run the OWASP dependency-check (or a Dependabot-style review) once before the signed APK. | No high / critical issue. |
+| Left as is | After a recording is binned and erased its `share_links` row stays (the page answers 404 because the link checks the session). Harmless; not changed. | Documented. |
+
+## Phase 7 docs
+- New: `docs/USER_GUIDE.md` (plain English: install, pairing, auto-record, captions, Keep / Discard, bookmarks, dictation, search, export / share, clients and vocabulary, languages, app lock, retention, usage, troubleshooting). Statements were checked against the UI strings (e.g. "Auto-record calls", "Transcribe again", Settings → Devices → This phone → Setup guide).
+- Rewritten: `docs/MANUAL_QA.md` is one ordered list of 125 steps in four parts (web 16, Windows 51, Android 38, web again 20), a result table, and appendices for long checks, accessibility, macOS and release day. Each step has one action and one expected result, a tick box and the old ID.
+- Updated to the real code: `README.md`, `docs/ARCHITECTURE.md` (data model with every v1.1 table, Keep / Discard, bookmarks, transcript tools, share links, search, retention and the bin, workspaces and plan limits, usage, sign-in and audit, desktop structure and windows built on demand, security rows, scheduler), `docs/PROVIDERS.md` (where each setting lives, languages, vocabulary, second engine, usage and the monthly limit). `docs/API.md` already matched the router (`ApiDocumentationTest`); no change needed.
 ## B20 design (workspaces, roles, plan limits, usage)
 - **New tables:** `plans` (key, name, `monthly_minutes`, `storage_bytes`, `max_devices`; null = no limit), `workspaces` (name, `plan_id`), `workspace_user` (workspace, user, `role` owner|member, unique pair); `users.current_workspace_id` (nullable, null on delete).
 - **Get `workspace_id`:** the five root tables that own user data: `devices`, `device_pairing_codes`, `clients`, `capture_sessions`, `usage_ledger`. Their `user_id` stays (creator / device owner; notifications and per-user rules use it).
@@ -274,6 +324,7 @@
 - `composer require pkg:^5.3` loses the caret (cmd escape): leave the constraint out.
 - `openssl_pkey_new` on Windows XAMPP needs a config: the test helper writes a minimal openssl.cnf.
 - Robolectric: `runBlocking` + `viewModelScope.launch(...).join()` deadlocks the main looper; don't join refresh. `AlertDialog` never idles under `createComposeRule`: test dialog content composables directly; long settings pages need `performScrollTo()`.
+- Two coroutines that both read the recordings folder and write one `StateFlow` can finish out of order (a read that overlaps a save, seen on Windows, drops the item and then wins): feed them through one `combine(...).collectLatest` loader, as `MainViewModel.pending` does. Tests then wait with `pumpUntil` for the list instead of asserting right after a job.
 - Relations cached by `` (Transcript → CaptureSession) go stale after a delete: re-query (`->captureSession()->first()`).
 - Filament `sendToDatabase` queues; use `notifyNow(`...`->toDatabase())`.
 - Same-second `created_at` ties make ordering differ on MariaDB: compare as sets or add travel.
@@ -295,7 +346,8 @@
   - `php vendor/bin/pint` / `php vendor/bin/pint --test`; `php vendor/bin/phpstan analyse --no-progress --memory-limit=2G --error-format=raw`
 - Desktop (`desktop/`): `npx vitest run`, `npx tsc --noEmit`, `npm run build`; in `src-tauri/`: `cargo test --no-fail-fast`, `cargo clippy --all-targets -- -D warnings`; macOS check: `powershell -File <scratchpad>\mac-check.ps1 -Clippy` (cross-target clippy with stub C toolchain; the script lives in the session scratchpad, not the repo). `cargo fmt` is not a gate.
 - Android (`mobile/`): `$env:JAVA_HOME="$env:LOCALAPPDATA\Android\Sdk\jdk"`; `.\gradlew.bat ktlintFormat` then `.\gradlew.bat assembleDebug testDebugUnitTest ktlintCheck assembleDebugAndroidTest lintDebug`; count tests from `app\build\test-results\testDebugUnitTest\*.xml`.
-- Repo policy (root): `node --test tools/repo-policy.test.mjs`; design tokens shared by the three apps: `node --test tools/design-tokens.test.mjs`.
+- Repo policy (root): `node --test tools/repo-policy.test.mjs` (reads tracked files: `git add` new docs first); design tokens shared by the three apps: `node --test tools/design-tokens.test.mjs`.
+- Secrets in built files: `powershell -File tools/scan-secrets.ps1 -Targets <abs path folder|exe|apk> ...` (absolute paths: .NET ignores PowerShell's location). Dependencies: `composer audit`, `npm audit --omit=dev` (web, desktop), `cargo audit` (needs `cargo install cargo-audit --locked` once).
 - Screenshots (Phase 6): desktop `npx vite --port 1420` in `desktop/` then open `/screenshots/harness.html?w=main|overlay|pill|review|dictation&theme=dark|light&view=library|record|settings|onboarding|lock` (`&material=mica&accent=0078d4` previews the material); phone `.\gradlew.bat testDebugUnitTest --tests "com.echoledger.mobile.ui.ScreenshotsTest"` writes `app/build/screenshots`; web: `php artisan migrate:fresh --seed` on a scratch SQLite (`DB_DATABASE=<file>`), `php artisan serve`, `npm run build` for the theme. A browser driver (playwright-core in the session scratchpad) takes the PNGs.
 - Desktop footprint: `npx tauri build --no-bundle` in `desktop/` (~4-8 min), then MANUAL_QA P-1 with the data folder moved aside; the Phase 6 script (`measure.ps1`: process tree via `Win32_Process`, private working set via `Win32_PerfFormattedData_PerfProc_Process`, CPU from `TotalProcessorTime`) lived in that session's scratchpad. Web shots: `migrate:fresh --seed` on a scratch SQLite with `ADMIN_EMAIL` / `ADMIN_PASSWORD` set in the environment, `php artisan serve --port=8123`, sign in once and reuse the storage state.
 - Commits: author/committer `skillLeo <hassam.dev.571@gmail.com>` only; message from a UTF-8 (no BOM) file: `git commit -q -F <file>`; `git push -q origin v1.1`.

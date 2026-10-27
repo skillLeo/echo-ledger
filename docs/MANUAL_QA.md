@@ -1,436 +1,403 @@
-# Manual QA — real-device verification
+# Manual QA — one ordered checklist
 
-Automated suites cover the pure logic of every app (state machines, protocol parsers, PCM framing, chunk planning,
-pin handling, sync merge, API contract). Everything that depends on real audio hardware, OS permissions, window
-managers, signing infrastructure or live provider accounts is verified here, on real devices, before each
-release.
+Automated tests cover the logic of every app. This list covers what only a real PC, phone, call and browser can
+show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 
-**How to use:** copy this file into the release ticket, run every item, and record the device / OS build and the
-result. An item passes only when the **Expected** outcome is observed exactly. Any failure blocks the release
-unless explicitly waived.
+- Every line is one action and one expected result. Tick the box when you see exactly the expected result.
+- Write down the device, the build and the step number of anything that fails. A failure blocks the release unless
+  you decide to waive it.
+- The last column is the check's old ID, so the older notes in `docs/HANDOFF.md` and `PLAN_V1_1.md` still match. The
+  old file used V-D1 to V-D11 and V-A1 to V-A4 twice: "§17" marks the look-and-feel checks, the others are the
+  recording checks.
+- Checks that take long, need special hardware or only matter on release day are in **Appendix A to C**. They are
+  not part of the 2-hour run.
 
-Test fixtures: a paired desktop, a paired Android 14+ phone, a second phone (or a contact) to call, a WhatsApp and
-WhatsApp Business account, a Zoom account, a Google Meet link, and a server with real provider credentials.
+## What you need
+
+| Item | Notes |
+|---|---|
+| The server | Open at `https://…/admin`, with an owner login and (for the real transcript steps) an AssemblyAI key. |
+| A Windows 11 PC | The current installer, a microphone and a headset. |
+| An Android 14+ phone | The current APK, WhatsApp, and Shizuku set up (or a computer with ADB). |
+| A second person | A second phone or a friend to call, for the call steps. |
+| Browsers | Chrome (for Google Meet) and a private window. |
+| A Google Meet link | And a WhatsApp contact. |
 
 ---
 
-## 1. Server (production-like host)
+## Part 1 — Web console (about 20 minutes)
 
-| ID | Steps | Expected |
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 1 | Open `/admin/login` and sign in with the owner's e-mail and password. | The dashboard opens. "Finish setting up" lists two-factor, provider key, certificate pins, first device and retention. | S-8 |
+| ☐ | 2 | Click the "Provider key" step. | **API Credentials** opens. | S-8 |
+| ☐ | 3 | Enter the AssemblyAI key and the webhook secret (use Generate), save, then reload the page. | Only "configured ••••last4" is shown. View the page source: the key does not appear. | S-03 |
+| ☐ | 4 | Open **Security** and add a passkey (Windows Hello, Touch ID or a phone). | The passkey is listed. | S-W1 |
+| ☐ | 5 | Sign out, then use **Sign in with a passkey** on the login page. | You are signed in without the password or the two-step code. | S-W1 |
+| ☐ | 6 | On **Security**, remove the passkey, sign out and try the passkey again. | The sign-in is refused with a plain message. The password still works. | S-W2 |
+| ☐ | 7 | Open **Settings**. | Eight tabs: General, Recording, Captions, Dictation, Privacy & security, Devices, Storage, About. | S-5 |
+| ☐ | 8 | Type "budget" in the settings search box. | The Storage tab opens and sections without a match are hidden. | S-6 |
+| ☐ | 9 | On **Settings → Storage**, set retention to 7 days and save, then use **Export settings** from the page menu. | A JSON file downloads. It has no API key or secret. | S-7 |
+| ☐ | 10 | Change retention to 30 days, save, then **Import settings** with the file from step 9. | "Settings imported" and retention shows 7 again. Set it back to 30 afterwards. | S-7 |
+| ☐ | 11 | Open **Workspace**. | A workspace named "Personal" with you as owner. | W-1 |
+| ☐ | 12 | Click **Add member**, enter a new e-mail, then sign in as that person in a private window. | A one-time password was shown once. The member sees the same library, cannot open Settings or API credentials, and has no Add member button. | W-5 |
+| ☐ | 13 | As the member, try to delete one of the owner's recordings. | The console offers no delete for it. | W-6 |
+| ☐ | 14 | As the owner, remove the member. | The member is gone and their devices are unpaired. | W-7 |
+| ☐ | 15 | Open **Usage**. | The current month shows with minutes, cost, storage and devices. Nothing is broken. | W-8 |
+| ☐ | 16 | Open **Devices** and click **Pair a device**. | A code and a QR code appear. Keep this page open for Parts 2 and 3. | — |
+
+---
+
+## Part 2 — Windows PC (about 45 minutes)
+
+### Install, pair, first run
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 17 | Run the installer on the PC. | The app starts in the tray. If the installer is not signed yet, Windows says so (known, see Appendix C). | W-01 |
+| ☐ | 18 | Start EchoLedger a second time. | The first window is brought forward. There is no second tray icon. | W-02 |
+| ☐ | 19 | In the setup guide, continue past Permissions, then pair with the server address and the code from step 16. | The library appears. | O-1, W-03 |
+| ☐ | 20 | Open **Credential Manager → Windows Credentials** and look for "EchoLedger". | The device key is there. No key is stored in a file under `%APPDATA%`. | W-03 |
+| ☐ | 21 | In the guide, run the 10-second test while you speak and play a sound. | The test says what it heard on both sides. | O-2 |
+| ☐ | 22 | Finish the guide with the consent tick. | The main window opens. The guide never returns. | O-2 |
+| ☐ | 23 | Open the Library. | "No recordings yet" shows, with no error message. | — |
+| ☐ | 24 | Open **Settings → Recording** and turn on **Auto-record calls**. | The switch is on. The app list shows WhatsApp, Zoom, Teams and Meet. | C-D1 |
+
+### Calls, captions and controls
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 25 | Use voice input in ChatGPT, Claude and Gemini for about 30 seconds each. | Nothing is recorded. The Record screen says "Ignored: never record". | V-D1 |
+| ☐ | 26 | Record a 20-second voice message in WhatsApp Desktop. | No recording starts. The Record screen says "Playing audio ✗ · Ignored: dictation". | V-D2 |
+| ☐ | 27 | Start a Google Meet call in Chrome with your second person. Keep typing in Notepad. | Recording starts within about 3 seconds. The pill appears at the top without taking the focus, and your typing is not interrupted. | V-D3, V-D7 |
+| ☐ | 28 | Click a button on the pill straight away. | It works on the first click. Clicks next to the pill reach the window underneath. | V-D7 |
+| ☐ | 29 | In the Meet call, open a ChatGPT tab for a minute, then come back. | The recording continues, still labelled Google Meet. | V-D4 |
+| ☐ | 30 | Press **Ctrl+Shift+Space**. | Live captions appear: "Me" and "Client" in different colours. Notepad keeps the focus. | W-08 |
+| ☐ | 31 | Let many long sentences come in and scroll the captions up. | The header stays inside the card, long text wraps, and "Jump to live" returns to the newest line. | V-D18 |
+| ☐ | 32 | Share your screen in Meet (or Zoom). | The captions, the pill and the review card cannot be seen in the shared view. | W-09, V-D15 |
+| ☐ | 33 | Press **Ctrl+Shift+B**, then click **Mark** on the pill and pick "Budget". | "Bookmarked m:ss" shows under the pill with the tag presets and Undo. | C-D2 |
+| ☐ | 34 | Click **Pause**, wait 30 seconds, click **Resume**. | The timer freezes and the dot turns amber while paused. Captions stop. Recording continues after Resume. | V-D8, C-D4 |
+| ☐ | 35 | Ask the other side to stay silent for 30 seconds. | The pill says "Not hearing the other side for 30 s". It goes away when they speak. | C-D8 |
+| ☐ | 36 | Press **Ctrl+Alt+Shift+C**, then paste into Notepad. | The last 2 minutes of captions, labelled Me and Client. | W-13 |
+| ☐ | 37 | Click **Stop**. | The review card slides in at the bottom right without taking the focus. It shows the source, the length and the first caption. | V-D12 |
+| ☐ | 38 | Click **Keep**. | The recording uploads. The Library shows it as uploading, then verifying. | V-D19 |
+| ☐ | 39 | Wait a few minutes. | A Windows notification says the transcript is ready. Clicking it opens that recording. | N-2 |
+
+### Keep, Discard and waiting
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 40 | Press **Ctrl+Alt+Shift+R**, speak for 20 seconds, press it again. | A recording starts and stops. The review card appears. | — |
+| ☐ | 41 | Click **Discard**. | The card closes. Nothing is left in the Library and nothing is uploaded. | V-D13 |
+| ☐ | 42 | Record another 20 seconds and let the review card count down without touching it. | After the countdown, the default action happens (Keep). | V-D13 |
+| ☐ | 43 | Record another 20 seconds, press Stop, then quit EchoLedger from the tray, and start it again. | The recording is listed under "Waiting for your decision". | V-D14 |
+| ☐ | 44 | Click **Cancel** on a new recording and answer "Yes". | It is discarded with no review card. "No" restores the buttons. | V-D9 |
+| ☐ | 45 | Watch the tray icon while idle, recording, paused and uploading. | The icon and tooltip change for each state. | V-D17 |
+
+### Library, transcript and search
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 46 | Open the Meet recording in the Library when its transcript is ready. | Speaker blocks with Me and Client. The bookmark from step 33 is on the timeline. | C-D3 |
+| ☐ | 47 | Click a transcript line. | The audio plays from that moment and the current line is highlighted. | T-W1 |
+| ☐ | 48 | Type two letters of a spoken word in the Library search box. | "In transcripts" lists the line. Clicking it opens the recording at that moment. | T-D1 |
+| ☐ | 49 | Edit one line, use **Find and replace**, then open **History**. | The edit is saved. History lists the changes and **Restore original** brings back the engine's text. | T-D2 |
+| ☐ | 50 | Choose **Export → Word**. | A .docx lands in Downloads and opens. | T-D2 |
+| ☐ | 51 | Choose **Print or save as PDF**. | The print page opens in the browser and saves as a PDF. | T-D2 |
+| ☐ | 52 | Press **Ctrl+K**, type "settings", then type a word from the transcript. | "Go to Settings" opens Settings. The word opens the recording at that moment. | T-D4 |
+| ☐ | 53 | Pin the recording, choose a client (or **New client…**) and add a label. | The star and label show on the card at once. | O-D2 |
+| ☐ | 54 | Try the smart views and the client and label filters. | Each lists only its recordings, and the counts match. | O-D1 |
+| ☐ | 55 | Delete a recording, open **Recently deleted** and restore it. | It comes back with its audio and transcript. | R-2 |
+
+### Dictation
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 56 | In Notepad, press **Ctrl+Shift+D**, say "hello team new paragraph thanks", press it again. | A start sound, a moving bar, a stop sound. "Hello team." and "Thanks." appear on separate paragraphs. | DI-D1 |
+| ☐ | 57 | In **Settings → Dictation**, choose **Hold to talk**, hold the shortcut, speak, let go. | The text is inserted when you let go. A very short tap inserts nothing. | DI-D2 |
+| ☐ | 58 | Add the replacement "echo ledger → EchoLedger" and dictate it. | It is written as "EchoLedger". | DI-D4 |
+| ☐ | 59 | Open the Library and the tray menu. | Dictation made no recording, no library item and no Keep / Discard card. | DI-D1 |
+| ☐ | 60 | Disconnect the network and press the dictation shortcut. | The bar shows why for a few seconds, then goes away. | §17 V-D10 |
+
+### Look, lock and memory
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 61 | Switch the theme between dark and light while the pill is visible. | The main window, the title bar and the pill all follow. On Windows 11 the sidebar shows Mica. | §17 V-D1, V-D4 |
+| ☐ | 62 | Resize the main window to its smallest width, then wider. | No horizontal scrollbar. The library stacks when narrow and sits side by side when wide. | V-D23 |
+| ☐ | 63 | In **Settings → Privacy & security**, set a PIN, turn on **App lock**, choose "After 1 minute" and wait. | "EchoLedger is locked" shows and Windows Hello is offered at once. | S-D1 |
+| ☐ | 64 | While locked, start a recording from the tray. | Recording and captions work. The library stays hidden until you unlock. | S-D2 |
+| ☐ | 65 | Enter a wrong PIN five times. | The sixth try is refused with "Try again in 30 seconds". | S-D3 |
+| ☐ | 66 | Close the main window with X, then open it again from the tray. | It opens on the same page. Task Manager shows fewer `msedgewebview2.exe` while it is closed. | §17 V-D11 |
+| ☐ | 67 | Close the main window and wait 30 seconds. In Task Manager add up the private memory of EchoLedger and its `msedgewebview2.exe` processes. | At most 150 MB and under 1 % CPU. | P-1 |
+
+---
+
+## Part 3 — Android phone (about 30 minutes)
+
+### Install, pair, first run
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 68 | Install the APK. | The install finishes and the app opens to the setup guide. | A-01 |
+| ☐ | 69 | In the guide, allow the microphone, notifications, display over other apps and battery. | Each row says "Allowed" when you return. | O-4 |
+| ☐ | 70 | Tap **Scan QR code** and scan any other QR code first. | "That isn't an EchoLedger pairing code" and nothing is paired. | A-02 |
+| ☐ | 71 | Scan the QR code on **Devices → Pair a device** (new code if needed). | The phone pairs and the guide moves on by itself. | O-5 |
+| ☐ | 72 | Run the 10-second test while you speak. | The meter moves and the result says the microphone works. | O-5 |
+| ☐ | 73 | Finish the guide. | The Library shows the recordings from Windows with Phone, Desktop and Web labels. | A-02 |
+| ☐ | 74 | Open **Settings → Devices → This phone → Setup guide** and connect through Shizuku (or paste the ADB command on a computer). | The helper status turns green. | A-10, A-11 |
+
+### Calls
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 75 | On the Record tab, turn on **Auto-record WhatsApp calls**, lock the phone, and take a WhatsApp voice call for 1 minute. | You hear the other side normally. A "Recording call" notification shows. No question appears during the call. | A-12 |
+| ☐ | 76 | While in the call, use **Pause**, **Resume** and **Mark** in the notification. | The title says "Paused ·" while paused. Mark shows "Bookmarked m:ss". | C-A2 |
+| ☐ | 77 | Hang up. | A heads-up "Save this recording?" shows the app, the length, the client and the first caption line. | V-A6 |
+| ☐ | 78 | Tap **Keep**. | It uploads. The recording appears on Windows and the web as Phone · WhatsApp, with Me and Client apart. | A-13 |
+| ☐ | 79 | Take a second call, hang up, and tap **Discard**. | It disappears from the phone. Nothing is uploaded. | A-14 |
+| ☐ | 80 | Take a third call and let the question time out. | After 60 seconds Keep or Discard is chosen, as set. It never "keeps waiting". | V-A6 |
+| ☐ | 81 | Let a WhatsApp call ring out, or reject it. | Nothing is saved and nothing is asked. | A-16 |
+| ☐ | 82 | Take a call with captions on. | The caption bubble shows Me and Client, does not take the focus, and lets touches through. | A-17 |
+| ☐ | 83 | Stay on the Record tab during a Keep that is uploading. | The upload card updates by itself, without leaving the tab. | A6.M12 |
+
+### Library, transcript, voice notes
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 84 | Open a finished recording, choose 1.5× and **Skip silence**, and follow the highlighted word. | Speed and silence skipping work. The speaker name shows once per turn. | T-A1 |
+| ☐ | 85 | Tap a bookmark chip. | The audio jumps to that moment. | C-A3 |
+| ☐ | 86 | Type a spoken word in the Library search. | "In transcripts" shows the line. Tapping it plays from there. | T-A3 |
+| ☐ | 87 | Choose **Export → Word**, then **Print**. | Word opens in a document app and the print dialog saves a PDF with correct shaping. | T-A2 |
+| ☐ | 88 | Make a share link with a password and open it on another device. | The password page appears, then the transcript. | T-A2 |
+| ☐ | 89 | In WhatsApp, share a voice note to EchoLedger. | It is imported as a voice note and uploaded. | A-40 |
+| ☐ | 90 | Long-press a recording, tap two more, then **Move to**, **Add label** and **Pin**. | The changes show after the sync. **Done** leaves selection mode. | O-A2 |
+| ☐ | 91 | Delete a recording on the phone and confirm. | It moves to Recently deleted. Restore brings it back. | R-2 |
+
+### Dictation keyboard
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 92 | Open **Settings → Dictation → Turn on the voice keyboard**, enable it and pick it in a messaging app. | The keyboard shows the microphone, space, delete, enter and switch keyboard. | DI-A1 |
+| ☐ | 93 | Tap the microphone, say "send the invoice new line thanks", tap again. | Beeps at start and end. The text lands at the cursor on two lines. | DI-A2 |
+| ☐ | 94 | Switch the phone to airplane mode and tap the microphone. | A short "No connection" message. Nothing is inserted and nothing is recorded. | DI-A5 |
+| ☐ | 95 | Check the Library. | Dictation made no recording and no Keep / Discard notification. | DI-A2 |
+
+### Lock, settings, widget, turning the phone
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 96 | In **Settings → Privacy & security**, turn on **App lock** and cancel the prompt. | The switch stays off. | V-A1 |
+| ☐ | 97 | Turn it on again and unlock. Choose "Immediately", leave the app and come back. | The app asks to unlock before anything shows. | V-A1, V-A2 |
+| ☐ | 98 | Turn on **Hide content in Recents and screenshots**, open the app switcher. | The thumbnail is blank and screenshots are blocked. | V-A5 |
+| ☐ | 99 | Search "quiet" in **Settings**. | The setting is found and its group opens scrolled to it. | S-2 |
+| ☐ | 100 | In **About**, export the settings, change a few, then import the file. | "Settings imported" and the changes are back. The file holds no server address, token, lock or consent. | S-3 |
+| ☐ | 101 | Add the home-screen widget at 2×1, 2×2 and 4×2. | Each size shows its content. With the app lock on it shows no titles or text. | §17 V-A4, V-A7 |
+| ☐ | 102 | Open a recording, turn the phone sideways, then back. | The same recording stays open. | A6.M9 |
+| ☐ | 103 | Open the Record tab, turn the phone sideways, then back. | The Record tab stays open. | A6.M9 |
+| ☐ | 104 | Open the Library with the phone sideways and scroll. | The header scrolls away with the page and the first recording can be reached. | A6.M11 |
+| ☐ | 105 | Turn on airplane mode, keep three recordings, then turn it off. | The uploads continue by themselves with no duplicates. | A-43 |
+
+---
+
+## Part 4 — Back in the web console (about 25 minutes)
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 106 | Open **Sessions**. | The kept recordings show with source badges (Desktop, Phone) and app labels. The discarded ones are not there. | A-13 |
+| ☐ | 107 | Open the **Bookmarked** tab. | The recordings with a bookmark are listed. | O-W1 |
+| ☐ | 108 | Open the Meet recording. Press J, K, L, the arrows and Space on the player, and set 1.5×. | J and L jump 10 seconds, the arrows 5 seconds, Space and K play and pause. | T-W1 |
+| ☐ | 109 | Look at the timeline. | The bookmark from step 33 and the pause from step 34 are at the right places. | C-D3, C-D4 |
+| ☐ | 110 | Edit a line, then **Edit → Rename speakers** with "remember for this client". | The line is saved. The names show on this client's other recordings. | T-W2 |
+| ☐ | 111 | Use **Find and replace**, then **History → Restore original**. | The count is shown. The history lists your name. | T-W3 |
+| ☐ | 112 | Choose **Export** for Word, Print or PDF, and Subtitles (.srt). | The files download and open. | T-W4 |
+| ☐ | 113 | Choose **Share** with 1 hour, a password and the recording. Open the link in a private window. | The password page, then the transcript and player. | T-W5 |
+| ☐ | 114 | Open **Share links** on the recording. | The link shows its views. Revoke it, then reload the link: "This link is no longer available". | T-W5 |
+| ☐ | 115 | Choose **Transcribe with another engine**, wait, then **Compare versions → Use the second version**. | The differing words are highlighted. The chosen version becomes the transcript. (This costs one more transcript.) | T-W6 |
+| ☐ | 116 | Open **Search** and press **Ctrl+K**. Type a spoken word. | The matching line is highlighted and opens the recording at that moment. | T-W7 |
+| ☐ | 117 | Open **Security → audit log**. | It lists your sign-ins, the passkey, the deletes, the export, the share link and the key change, with who did each. No key or password appears. | S-W4 |
+| ☐ | 118 | Open **Usage**. | The kept recordings' final minutes and the streamed caption minutes appear. The discarded recordings added no final minutes. | W-8 |
+| ☐ | 119 | In **Settings → Storage**, set the monthly limit to 1 minute. Start a recording with captions on Windows. | Windows shows "Monthly transcription limit reached". The recording continues. | V-S5, W-9 |
+| ☐ | 120 | Set the limit back to empty (no limit) and start captions again. | Captions work. | W-9 |
+| ☐ | 121 | Set retention to 7 days and mark one old recording **Keep**. On the server run `php artisan recordings:retention`. | Old recordings move to **Recently deleted**. The kept one stays. | R-1 |
+| ☐ | 122 | Open the old share link of a deleted recording. | "Not found". | R-3 |
+| ☐ | 123 | Set retention back to 30 days. | Saved. | — |
+| ☐ | 124 | Open **Devices** and revoke the phone. | The phone shows "This phone was unpaired on the server. Pair it again." Its waiting uploads stay. | A-42, V-A9 |
+| ☐ | 125 | Pair the phone again. | The library loads again. | A-42 |
+
+---
+
+## Result
+
+| | |
+|---|---|
+| Build / version | |
+| Date and tester | |
+| Windows and Android builds | |
+| Steps that failed (numbers) | |
+| Waived, and why | |
+
+---
+
+## Appendix A — Extra checks (not in the 2-hour run)
+
+Run these when the change touches the area, or before a release.
+
+### Windows
+
+| # | Check | Expected |
 |---|---|---|
-| S-01 | Deploy to the shared host per `web/DEPLOY.md`; add the cron line. | `php artisan schedule:list` shows the queue worker, `stt:reconcile`, `model:prune`, `sanctum:prune-expired`. Queue drains within a minute of a new job. |
-| S-02 | Sign in to `/admin` for the first time, then enrol two-factor sign-in from Profile. | Not forced at first sign-in; a real authenticator app (Google Authenticator, 1Password, Aegis) accepts the QR; recovery codes are shown once and each works exactly once. |
-| S-03 | Enter AssemblyAI + ElevenLabs keys on **API Credentials**; reload. | Only "configured ••••last4" is shown; the raw values are never rendered in HTML (view source). |
-| S-04 | Record a 2-minute two-party call from the desktop with AssemblyAI as final provider. | Webhook arrives (session reaches `completed` without waiting for `stt:reconcile`); Me/Client segments are correct; the AssemblyAI dashboard no longer lists the transcript (deleted after store). |
-| S-05 | Repeat S-04 with ElevenLabs as final provider. | Signed webhook accepted; transcript stored; the ElevenLabs history no longer lists it. |
-| S-06 | Block the webhook URL temporarily (e.g. maintenance mode), record a call, unblock. | Within 5 minutes `stt:reconcile` completes the transcript. |
-| S-07 | Configure Azure MAI (endpoint + key) as final provider; record a call. | Devices upload `channel_1` + `channel_2`; transcript completes synchronously with both speakers. |
-| S-08 | Open a session in the console and play it. | Audio plays and seeks (HTTP 206); the active segment highlights and clicking a segment seeks. |
-| S-09 | Set retention to 1 day; age a session in the DB; run `php artisan model:prune --pretend`, then without `--pretend`. | Pretend lists exactly the old rows; the real run deletes rows and their encrypted files. |
-| S-10 | Configure SPKI pins (current + backup) on **Settings**; pair a device. | Pairing succeeds; replacing the server certificate with one whose key matches the backup pin keeps devices connected; an unpinned certificate is refused by both device apps. |
-
-## 2. Desktop — Windows
-
-Run on **Windows 11 (build ≥ 22000)** and **Windows 10 22H2**.
-
-| ID | Steps | Expected |
-|---|---|---|
-| W-01 | Install the signed NSIS installer on a clean VM. | SmartScreen / UAC shows the publisher name; `signtool verify /pa /v` passes; the app starts in the tray. |
-| W-02 | Launch a second instance. | The existing instance's main window is focused; no second tray icon. |
-| W-03 | Pair with the code and with the QR text. | Library loads; the token is in Credential Manager (`EchoLedger`), not in any file under `%APPDATA%`. |
-| W-04 | Win 11: make a WhatsApp Desktop call while another app plays audio. | Process loopback is used (logged); `system.wav` contains the far party and other apps' audio but nothing from EchoLedger itself; `mic.wav` contains only the local voice; both files have identical length. |
-| W-05 | Win 10: same call. | Endpoint-loopback fallback is used (logged); EchoLedger produces no sound while recording; both channels captured and equal length. |
-| W-06 | Auto mode on: start/stop calls in WhatsApp Desktop, Zoom, Google Meet in Chrome and in Edge. | Recording + captions start within ~2 s of the call's mic use and stop after it ends; `source_app` is correct for each. A browser tab using the mic for something other than Meet is labelled `other`. |
-| W-07 | Unplug the headset mid-call; plug it back. | Capture continues on the new default device without crashing; a short gap (silence) is acceptable; channels stay aligned. |
-| W-08 | Caption overlay during a call. | Translucent, always on top, **never takes focus** (typing in another app continues uninterrupted), clicks on empty areas pass through to the app below, the overlay can be dragged by its handle and docks bottom-right / top-right on each monitor. |
-| W-09 | Share the screen in Zoom/Teams/OBS with captions visible. | With content protection on (default) captions are invisible in the shared stream; turning it off in Settings makes them visible. |
-| W-10 | Multi-monitor with mixed DPI (100 % + 150 %). | Docking positions are correct on both monitors; hit regions match the visible captions. |
-| W-11 | Global shortcuts (defaults and a custom binding). | Each action fires from any app; a binding already used by another app shows a conflict message in Settings. |
-| W-12 | Dictation into Notepad, Word, a browser text field and an elevated (admin) window. | Final text is typed into the focused field after the dictation ends. For the elevated window, Windows blocks synthetic input; the text is left on the clipboard so it can be pasted manually. With output set to "clipboard" the text is only copied. |
-| W-13 | "Copy last 2 minutes" during a call. | Clipboard contains the last two minutes of captions with Me/Client labels. |
-| W-14 | Disconnect the network during an upload; reconnect; also quit and relaunch mid-upload. | Upload resumes from the last confirmed chunk; local audio is deleted only after the server confirms. |
+| W-04 | Windows 11: a WhatsApp Desktop call while another app plays sound. | Process loopback is used. The system channel has the far party and other apps but nothing from EchoLedger. Both channels have the same length. |
+| W-05 | Windows 10: the same call. | Endpoint loopback is used and EchoLedger makes no sound. Both channels are captured. |
+| W-06 | Auto-record with WhatsApp Desktop, Zoom, Meet in Chrome and in Edge. | Each records within 2 seconds and is labelled right. A tab using the microphone for something else is ignored. |
+| W-07 | Unplug the headset mid-call, plug it in again. | Capture continues on the new default device. A short gap is fine. |
+| W-10 | Two monitors with different scaling. | Docking and click areas are right on both. |
+| W-11 | Each global shortcut, and one that another app already uses. | Each works from any app. The conflict shows a message in Settings. |
+| W-12 | Dictation into Word, a browser field, and an app running as administrator. | Text is typed. For the administrator window it is pasted and the old clipboard comes back. |
+| W-14 | Cut the network during an upload, then quit and restart. | The upload resumes. Local audio is deleted only after the server confirms. |
+| C-D1 | Switch Zoom off in **Auto-record apps**, then join a Zoom call. | No recording. The Record screen says "Ignored: auto-record is off for this app". |
+| C-D5 | **Caption style**: Large, Wide, 50 % opacity, compact, auto-hide, a custom Client colour. | The captions restyle at once and fade after the set time. |
+| C-D6 | **Microphone**: pick a USB headset, run the 10-second test, unplug it. | Both meters move and the test plays back. Unplugging falls back with a note. |
+| C-D7 | Block microphone access in Windows privacy settings. | **Microphone** says "Blocked" and **Open settings** opens the right page. |
+| V-D5 | Turn on "Ask me when an unrecognised app uses the microphone" and call on an unknown site. | A chip appears after about 3 seconds and closes after 8. Record, Ignore and "Always ignore this site" work. |
+| V-D20 | Select a client, delete it in the console, record and keep a call. | The toast says the client was removed. The recording uploads. |
+| V-D21 | Stop the server during an upload, start it again. | The upload finishes by itself. A failed item shows Retry and Discard. |
+| V-D22 | Stop a recording that ran over 30 minutes. | Memory does not jump. The file plays completely. |
+| §17 V-D3 | Windows Settings → Colours: pick another accent, restart EchoLedger. | Buttons, selections and focus rings use it. White button text stays readable. |
+| V-D16 | Turn on "Animation effects off". | No pulse and no slide-in. |
+| §17 V-D8 | Overlay latency: in a call, start a recording by shortcut, type in a chat box. | The pill, then captions, then the review card each appear about half a second later without taking the focus. |
+| P-2 | Record a 10-minute call with live captions and watch the CPU for 60 seconds. | All app processes together use less than 8 % of the machine. |
+| N-4 | Turn on quiet hours that include now, then finish a transcript. | No notification. The item waits in the bell. |
+| N-5 | Lock the app, then let a notification arrive. | It says only "New activity. Unlock EchoLedger to see it." |
+| O-1a | Install fresh with no settings. | The guide opens. A computer paired before v1.1 does not see it. |
 | W-15 | Idle resource check: tray only, auto mode on, 10 minutes. | CPU ≈ 0–1 %; RAM within the release budget (record the figure). |
-
-## 3. Desktop — macOS 14.4+
-
-| ID | Steps | Expected |
-|---|---|---|
-| M-01 | Install the notarized DMG on a clean Mac. | Gatekeeper opens it without warnings; `spctl -a -vvv -t install` and `xcrun stapler validate` pass. |
-| M-02 | First recording. | Microphone prompt and system-audio-capture prompt both show the usage strings from `Info.plist`; denying either shows a clear in-app explanation. |
-| M-03 | WhatsApp / Zoom / Meet call with auto mode on. | Process tap captures the far party but not EchoLedger; the aggregate device is created for the session and removed afterwards (Audio MIDI Setup shows no leftovers). |
-| M-04 | Change the default input/output mid-call (AirPods connect). | Capture follows the new devices; no crash; channels aligned. |
-| M-05 | Overlay and dictation. | Same as W-08 and W-12; dictation asks for Accessibility permission once and types into TextEdit, Notes and Safari. |
-| M-06 | App runs as a menu-bar app. | No Dock icon; quitting from the menu ends all capture and removes the tap. |
-
-## 4. Android
-
-Run on **one Pixel (Android 15 or 16)** and **one Samsung (One UI on Android 14+)**; spot-check on an
-**Android 12/13** device.
-
-### 4.1 Install, pairing, storage
-
-| ID | Steps | Expected |
-|---|---|---|
-| A-01 | Install the release APK (signed per `mobile/RELEASE.md`). | `apksigner verify --print-certs` shows the release certificate; Play Protect flow completes; app opens to the pairing screen. |
-| A-02 | Pair three ways: tap **Scan QR code** and scan the code shown in Admin → Devices → Pair a device; type the server address + code; paste the QR text into the code field. | The camera permission prompt appears once; a valid scan pairs immediately and the library loads with icon + text badges for Phone / Desktop / Web items. Scanning an unrelated QR code shows "That isn't an EchoLedger pairing code" and pairs nothing. |
-| A-02b | Deny the camera permission, then press Scan QR code; also press Back while the scanner is open. | A message explains that the code can be entered by hand; Back closes the scanner without pairing; the camera indicator turns off as soon as the scanner closes. |
-| A-03 | Inspect app storage (`adb shell run-as` on a debug build). | Recordings under `no_backup/recordings/*.elr` are not playable (encrypted); `library.bin` is not readable JSON; no plaintext `.ogg` remains in `cache/` after saving. |
-| A-04 | Pinning: point the app at a server whose certificate does not match the pins. | All API calls fail; the app shows the offline message; nothing is uploaded. |
-
-### 4.2 Call capture (Android 14+)
-
-| ID | Steps | Expected |
-|---|---|---|
-| A-10 | Setup → Connect via Shizuku (Shizuku started with Wireless debugging). | Helper status turns green with source `shizuku` and uid 2000. |
-| A-11 | Setup → copy the ADB command; run it from a computer. | Helper status turns green with source `adb`. A third-party app calling the hand-off provider is rejected (verify with a test app or `adb shell content call` as a non-shell UID). |
-| A-12 | Arm auto-record; lock the phone; receive a WhatsApp **voice** call; talk 1 minute; hang up. | During the call the user hears the far party normally (loop-back render); the "Recording call" notification is visible; **no** prompt appears during the call. After hang-up a silent "Save this recording?" notification appears. |
-| A-13 | Tap **Keep** on that notification. | Upload completes (Wi-Fi or mobile data); the session appears on desktop and web as Phone · WhatsApp with Me (left) and Client (right) transcribed separately. |
-| A-14 | Repeat with **Discard**. | The recording disappears locally; nothing is uploaded. |
-| A-15 | Repeat A-12 with WhatsApp **Business** and with a WhatsApp **video** call. | Source app is WhatsApp Business / WhatsApp respectively; both channels captured. |
-| A-16 | Ring a WhatsApp call and reject it / let it go unanswered. | Nothing is saved and no prompt appears (calls under 3 s are discarded). |
-| A-17 | Record a call with captions enabled and the overlay permission granted. | The caption bubble shows Me/Client turns, does not take focus, does not block the call UI, and passes touches through. |
-| A-18 | Reboot the phone with auto-record armed. | After reboot the helper is gone; the Setup screen explains how to restart it (Shizuku or ADB). Re-arming works without re-pairing Wireless debugging. |
-| A-19 | Samsung: leave the phone idle overnight armed, then call. | With Battery set to Unrestricted the call is still captured; if not, the setup guidance is accurate. |
-| A-20 | Android 12/13 device. | Auto-record switch is disabled with "Requires Android 14 or later"; manual recording uses the microphone only. |
-
-### 4.3 Manual recording surfaces
-
-| ID | Steps | Expected |
-|---|---|---|
-| A-30 | In-app REC button (no helper). | Microphone recording starts with a notification containing **Stop**; stopping uploads a mono `other` session. |
-| A-31 | Home-screen widget: add it; tap record with the app in the background. | Recording starts (mic foreground service allowed from widget); widget shows the recording state and returns to idle after stop. |
-| A-32 | Notification action **Record now** (armed notification). | Recording starts from the background without a crash. |
-| A-33 | Quick Settings tile (Android 14+ and 13). | Tile toggles recording; on Android 14+ the shade collapses via the trampoline activity; no `ForegroundServiceStartNotAllowedException` in logcat. |
-| A-34 | Revoke the microphone permission, then press REC / widget / tile. | No crash; nothing records; the Setup screen shows the missing permission. |
-| A-35 | Toggle **Turn off** on the armed notification when the app process was killed. | No crash (`did not then call startForeground` must not appear in logcat). |
-
-### 4.4 Voice notes and sync
-
-| ID | Steps | Expected |
-|---|---|---|
-| A-40 | In WhatsApp, long-press a voice note → Share → EchoLedger (single and multiple notes). | Each note is imported as a Voice note session and uploaded; nothing is recorded automatically when voice notes play. |
-| A-41 | Delete a session on the desktop. | It disappears from the phone after the next sync (pull to refresh / reopen). |
-| A-42 | Revoke the phone under Admin → Devices. | The app shows "This phone was unpaired on the server" and stops syncing; pairing again restores access. |
-| A-43 | Airplane mode while 3 recordings are queued; re-enable network. | WorkManager resumes and completes all uploads; no duplicates on the server. |
-
-## 5. Signing and distribution
-
-| ID | Steps | Expected |
-|---|---|---|
-| R-01 | Windows: verify the installer and the main executable with `signtool verify /pa /v`. | Valid signature chain with timestamp. |
-| R-02 | macOS: verify notarization (`spctl`, `stapler validate`) on a Mac that never ran the app. | Accepted; no quarantine warning. |
-| R-03 | Android: install the new release over the previous one. | Update succeeds (same signing certificate); local pending recordings and pairing survive. |
-| R-04 | Optional desktop auto-update: publish a signed update manifest. | The app downloads, verifies and installs only when not recording; a tampered signature is rejected. |
-
-## 6. Privacy checks per release
-
-- No analytics, crash-reporting or telemetry traffic from any app (watch with a proxy for 10 minutes of use: only
-  the EchoLedger server and the chosen speech provider appear).
-- Search the desktop installer and the APK for provider key patterns (`sk_`, `xi-api-key`, AssemblyAI keys): none.
-- A recording indicator (notification / tray state / overlay dot) is visible whenever audio is being captured.
-
-## 7. v1.1 — recording decisions, call detection and app lock
-
-### 7.1 Server and console
-
-| ID | Steps | Expected |
-|---|---|---|
-| V-S1 | Sign in as an admin without two-factor and play a session's audio. | It plays. |
-| V-S2 | On a session page, Tab to a transcript line and press Enter; focus the player and press Space. | Playback seeks to the line; Space plays and pauses. |
-| V-S3 | With two-factor on, sign in with a recovery code and click "Confirm sign in" once. | Signed in on the first click. |
-| V-S4 | Open a session page and API Credentials at 360 px width. | No horizontal scrolling. |
-| V-S5 | Set Settings → Monthly limit to 1 minute, then start live captions on a device. | The device shows "Monthly transcription limit reached"; the recording continues. |
-
-### 7.2 Desktop — call detection (Windows)
-
-| ID | Steps | Expected |
-|---|---|---|
-| V-D1 | Auto-record on. Use voice input in ChatGPT, Claude and Gemini for 30 s each. | Nothing is recorded; the Record screen shows "Ignored: never record". |
-| V-D2 | Record a 20 s WhatsApp Desktop voice message. | No recording; the explainer shows "Playing audio ✗ · Ignored: dictation". |
-| V-D3 | Start WhatsApp, Zoom, Teams, Google Meet (Chrome) and WhatsApp Web calls. | Each records within about 3 s, labelled WhatsApp, Zoom, Microsoft Teams, Google Meet and WhatsApp Web. |
-| V-D4 | During a Meet call, switch to a ChatGPT tab for a minute. | The recording continues as Google Meet. |
-| V-D5 | Turn on "Ask me when an unrecognised app uses the microphone" and call on an unknown site. | The chip appears after about 3 s and closes after 8 s; Record, Ignore and "Always ignore this site" work. |
-| V-D6 | macOS: with automation on, a Meet call in Chrome or Safari; then with it off. | On: recorded as Google Meet after the permission prompt. Off: ignored as an unknown site. |
-
-### 7.3 Desktop — recording controls and Keep / Discard
-
-| ID | Steps | Expected |
-|---|---|---|
-| V-D7 | Start a call recording while typing in another app. | The pill appears top-centre without taking focus; every button works on the first click; clicks around it pass through. |
-| V-D8 | Pause, then resume. | The timer freezes, the dot turns amber and the OS microphone indicator turns off; resume continues. |
-| V-D9 | Cancel → "Discard? Yes / No". | No restores the buttons; Yes discards with no review card. |
-| V-D10 | Hide the pill, then use the tray item "Show recording controls". | The recording continues while hidden; the pill comes back. |
-| V-D11 | Drag the pill to a second monitor and restart; then unplug that monitor and restart. | It reopens where it was; without the monitor it opens top-centre of the main screen. |
-| V-D12 | Stop a recording. | The review card slides in bottom-right without taking focus; the countdown follows the timeout setting; Rename opens the Library. |
-| V-D13 | Keep one recording, Discard another, let a third time out with "Keep" and with "Discard". | Kept ones upload and get a transcript; discarded ones leave nothing locally or on the server. |
-| V-D14 | Quit from the tray while recording, then start the app again. | The recording is listed under "Waiting for your decision". |
-| V-D15 | Share the screen in a call app. | The pill, the review card and the caption overlay are not visible to the other side. |
-| V-D16 | Turn on the OS "Reduce motion" setting. | No pulse and no slide-in. |
-| V-D17 | Watch the tray icon while idle, recording, paused, uploading and with a recording waiting. | The icon and tooltip change for each state. |
-
-### 7.4 Desktop — captions, uploads and layout
-
-| ID | Steps | Expected |
-|---|---|---|
-| V-D18 | Turn on captions during a call and let 50+ long turns arrive (include a long URL), with 2, 3 and 5 caption lines. | The header (drag, copy, close) stays inside the overlay; long text wraps; scrolling up shows "Jump to live", which returns to the newest line. |
-| V-D19 | Record a call longer than one chunk and keep it. | It shows uploading, then verifying; its local folder is removed only once the server shows it ready. |
-| V-D20 | Select a client, delete it in the console, then record and keep a call. | The toast says the client was removed; Settings shows no client; the recording uploads. |
-| V-D21 | Stop the server during an upload, then start it again. | The upload finishes on its own; a failed item shows Retry and Discard. |
-| V-D22 | Stop a recording that ran over 30 minutes. | Memory does not jump while it stops; the upload file plays completely. |
-| V-D23 | Resize the main window to 860 px wide, then to 1030 px and wider. | The library stacks at 860 px and sits side by side from 1030 px, with no horizontal scrollbar. |
 | V-D24 | In light and dark themes, check group labels, status pills, badges and primary buttons. | All are clearly readable. |
-| V-D25 | macOS: build and run on a Mac. | The pill and review card appear and are hidden from screen recording. |
-
-### 7.5 Android
-
-| ID | Steps | Expected |
-|---|---|---|
-| V-A1 | With a PIN on the phone, switch Settings → App lock on: cancel the prompt, then try again and enter the PIN. Close and reopen the app. | Cancelling leaves it off; after the PIN it stays on; reopening asks to unlock before anything shows. |
-| V-A2 | Lock after "Immediately", "After 1 minute": leave the app and come back. | Immediately locks at once; 1 minute stays open within 30 s and locks after a minute. |
-| V-A3 | Android 10 with only a PIN (no fingerprint). | App lock can be switched on and unlocks with the PIN. |
-| V-A4 | No screen lock on the phone. | The switch is disabled with "Set a screen lock on this phone to use App lock." and "Open security settings" works. |
-| V-A5 | App lock and "Hide content in Recents and screenshots" on. | Recents shows a blank thumbnail and screenshots are blocked; turning the option off restores both. |
-| V-A6 | Finish a WhatsApp call. | A heads-up "Save this recording?" shows app, duration, client and the first caption line; Keep and Discard work; it times out after 60 s with Keep or Discard, never with "Keep waiting". |
-| V-A7 | Add the widget while a recording waits; turn App lock on. | The widget shows "N to review" and opens the waiting list; with App lock on it shows no titles or transcript text. |
-| V-A8 | Start captions on a v1.1 server; let the monthly limit be reached. | Captions show "Monthly transcription limit reached" in the bubble; the recording continues and uploads after Keep. |
-| V-A9 | Revoke the phone in the console, then open the app. | It returns to the pairing screen with "This phone was unpaired on the server. Pair it again."; recordings waiting to upload stay. |
-| V-A10 | Rotate the phone on the library, a recording and the setup page. | Known issue from the emulator run: the screen returns to the library (fixed in a later phase). |
-
-## 8. v1.1 — capture and control
-
-Bookmarks, pauses, per-app auto-record, caption styles and capture health. The server side is covered by the
-automated suite; these checks need real devices and calls.
-
-### 8.1 Desktop
-
-| ID | Steps | Expected |
-|---|---|---|
-| C-D1 | Settings → Auto-record apps: switch Zoom off, then join a Zoom call. Open the Record view. | No recording starts; the explainer says "Ignored: auto-record is off for this app". Switching Zoom back on records the next call. |
-| C-D2 | During a call press Ctrl+Shift+B (Cmd+Shift+B on macOS), then click Mark on the pill. | Each press shows "Bookmarked m:ss" under the pill with the tag presets and Undo; the tray closes after about 6 s. |
-| C-D3 | Tag a bookmark "Budget", undo another, finish and keep the recording. Open it in the console and in the desktop library. | The console player and the desktop library show the remaining bookmarks at the right times; clicking one seeks the audio there; the library filter "Budget" finds the recording. |
-| C-D4 | Pause a call for 30 s, resume, keep it. | The file has no gap; the console timeline shows the pause marker at the right point; captions stop while paused. |
-| C-D5 | Settings → Caption style: Large, Wide, 50 % opacity, compact, auto-hide 5 s, a custom Client colour. | The caption overlay resizes and restyles at once; speakers are coloured without labels; it fades after 5 s of silence and returns with the next caption. |
-| C-D6 | Settings → Microphone: pick a USB headset, run "Test 10 seconds" while speaking and playing a video. | Both meters move; the result says both sides were heard and plays back. Unplugging the headset falls back to the default microphone with the "not connected" note. |
-| C-D7 | Windows: block microphone access for desktop apps in Privacy settings. | Settings → Microphone permission says "Blocked" and "Open settings" opens the Windows microphone page. |
-| C-D8 | Record a call while the other side stays silent (mute the call audio) for 30 s. | The pill shows "Not hearing the other side for 30 s"; it disappears once the other side is heard; switching the warning off in Settings stops it. |
-
-### 8.2 Android
-
-| ID | Steps | Expected |
-|---|---|---|
-| C-A1 | Settings → Capture and captions: switch WhatsApp off with auto-record armed; take a WhatsApp call. | Nothing is recorded; the row explains it is off for WhatsApp; WhatsApp Business calls still record. |
-| C-A2 | During a call use the notification's Pause, then Resume, then Mark. | The notification title shows "Paused ·" while paused; Mark shows "Bookmarked m:ss"; the Record tab shows the same with the tag chips and Undo. |
-| C-A3 | Keep the call and open it in the library. | The bookmark chips seek the player; the library shows "N bookmarks" and the tag filter finds it. |
-| C-A4 | Caption style: Large, top, compact, 30 % less opacity, auto-hide 10 s. | The floating bubble follows every setting on the next recording. |
-| C-A5 | Microphone: pick a Bluetooth headset and run the 10-second test, then play it back. | The meter moves; the verdict says the microphone works; playback is audible. |
-| C-A6 | Permissions: revoke the overlay permission and the notification permission. | Both rows show their reason and "Fix" opens the matching system page. |
-| C-A7 | During a call through the helper, mute the far side for 30 s. | The Record tab and the caption bubble say "Not hearing the other side for 30 s". |
-
-## 9. v1.1 — transcript experience
-
-### 9.1 Console
-
-| ID | Steps | Expected |
-|---|---|---|
-| T-W1 | Open a finished session; play it at 1.5×, turn on Skip silence, press J, K, L and the arrows on the player. | Speed and silence skipping work; J/L jump 10 s, arrows 5 s, Space/K play and pause; the spoken word is highlighted when the engine gave word timings. |
-| T-W2 | Edit text: change a line and leave the field; Edit → Rename speakers with "remember for this client"; then open another recording of the client. | The line is saved (no timing change); the names show on both recordings. |
-| T-W3 | Edit → Find and replace a word, then Edit → History → Restore original. | The count is reported; History lists the change with your name; Restore brings back the engine's text. |
-| T-W4 | Export → Word, Print or save as PDF, Subtitles (.srt) on an Urdu transcript. | Word opens with right-to-left Urdu lines; the print page saves a PDF with correct Urdu shaping; the SRT plays in a video player. |
-| T-W5 | Share → 1 hour, a password and the recording; open the link in a private window. | The password page appears, then the transcript and player; the link stops working after Revoke or an hour; Share links lists the views. |
-| T-W6 | ⋯ → Transcribe with another engine (Urdu); when done ⋯ → Compare versions → Use the second version. | Changed words are highlighted side by side; the chosen version becomes the transcript on every device. |
-| T-W7 | Search page and Ctrl/Cmd+K: type a word from a transcript. | Results show the matching line with the word highlighted; choosing it opens the recording at that moment. |
-| T-W8 | Settings → Vocabulary: add a keyterm and a correction; record a new call. | The correction is applied to the new transcript and can be undone with Restore original. |
-
-### 9.2 Desktop
-
-| ID | Steps | Expected |
-|---|---|---|
-| T-D1 | In the library, type two letters of a word spoken in a call. | "In transcripts" lists the line; clicking it opens the recording and plays from there. |
-| T-D2 | Edit text, Find and replace, Speakers, History and Export → Word / Print or save as PDF. | The same results as in the console; the Word file lands in Downloads; the print page opens in the browser. |
-| T-D3 | After correcting a name in a line, use the vocabulary suggestion. | The name is added to the client's keyterms (visible in the console). |
-| T-D4 | Ctrl/Cmd+K → "pause", "bookmark", "go to settings" and a transcript word. | Each command runs; the word opens the recording at the moment. |
-| T-D5 | Settings → Transcription language: English + Urdu; record a mixed call. | The session's language is en+ur and the transcript keeps both languages. |
-
-### 9.3 Android
-
-| ID | Steps | Expected |
-|---|---|---|
-| T-A1 | Open a recording; choose 1.5× and Skip silence; follow the highlighted word. | Speed and silence skipping work; the speaker label shows once per turn with renamed names. |
-| T-A2 | Export → PDF (print) and Word; Share link with a password. | The print dialog saves a correctly shaped PDF; Word opens in a document app; the link opens as on the web. |
-| T-A3 | Library search for a spoken word. | "In transcripts" shows the line; tapping it plays from that moment. |
-| T-A4 | Settings → Transcription: Urdu; add a vocabulary term. | New recordings are sent with Urdu; the term appears for the selected client in the console. |
-
-## 10. v1.1 — dictation
-
-Dictation must never create a recording, a library item or a Keep / Discard prompt. Check the library and the
-notification shade after every step.
-
-### 10.1 Desktop
-
-| ID | Steps | Expected |
-|---|---|---|
-| DI-D1 | Settings → Dictation: Press to start. In Notepad, press the shortcut, say "hello team new paragraph thanks", press again. | A start sound, the flow bar moves while you speak, then a stop sound; "Hello team." and "Thanks." appear on separate paragraphs at the cursor. |
-| DI-D2 | Switch to Hold to talk; hold the shortcut, speak, let go. | Text is inserted when you let go; a very short tap inserts nothing. |
 | DI-D3 | Windows: copy some text, keep the output on "Type into the focused app", then dictate into an app running as administrator (typing into it is blocked). | The text is pasted instead, and about a second later the earlier clipboard content is back. |
-| DI-D4 | Add the replacement "echo ledger → EchoLedger" and the snippet "insert signature"; dictate both. | The spelling is fixed and the signature text is inserted, line breaks included. |
 | DI-D5 | Turn Clean up off and dictate "um so yes". | The text is inserted as spoken, without capitals or a full stop. |
 | DI-D6 | Recent dictations: Copy one, then Clear history; restart the app. | Copy puts the text on the clipboard; the list stays empty after the restart. |
 | DI-D7 | Turn Start and stop sounds off. | Dictation is silent. |
-
-### 10.2 Android
-
-| ID | Steps | Expected |
-|---|---|---|
-| DI-A1 | Settings → Dictation → Turn on the voice keyboard; enable "EchoLedger voice keyboard", then pick it in a messaging app. | The keyboard shows the microphone, space, delete, enter and switch keyboard. |
-| DI-A2 | Tap the microphone, say "send the invoice new line thanks", tap again. | Beeps at start and stop, the flow bar and phrase update live, the text lands at the cursor on two lines. |
-| DI-A3 | Choose Hold to talk; hold the microphone, speak, let go. | The text is inserted on release. |
-| DI-A4 | Revoke the microphone permission, open the keyboard. | "Allow the microphone in EchoLedger" opens the app; the microphone stays disabled. |
-| DI-A5 | Airplane mode, then tap the microphone. | A short "No connection" message; nothing is inserted and nothing is recorded. |
-| DI-A6 | Replacements, snippets, clean-up off and Recent dictations (copy, clear). | Same results as DI-D4 to DI-D6. |
-| DI-A7 | Switch keyboard button. | Returns to the previous keyboard (or shows the keyboard picker). |
-
-## 11. v1.1 — organising the library
-
-### 11.1 Console
-
-| ID | Steps | Expected |
-|---|---|---|
-| O-W1 | Sessions: open each tab (Today, This week, Waiting for decision, Bookmarked, Failed uploads, Pinned). | Each tab lists only its recordings; the badge matches the count. |
-| O-W2 | Select three sessions → Move to client, Add label, Pin; then Remove label and Unpin. | Client, labels and the star change on all three; phones and the desktop show it after their next sync. |
-| O-W3 | Select sessions with and without transcripts → Export transcripts (Word). | One zip downloads with a .docx per finished transcript; with none finished, a warning instead. |
-| O-W4 | Clients: give a client an avatar (two letters or an emoji) and pin it. | The folder shows the avatar and comes first everywhere. |
-
-### 11.2 Desktop
-
-| ID | Steps | Expected |
-|---|---|---|
-| O-D1 | Library: try each smart view chip, the Client folder and Label filters. | The list and counts match the console. |
-| O-D2 | Open a recording: Pin, choose a client (also New client…), add and remove labels. | The star and labels show on the card at once and in the console. |
+| T-D3 | After correcting a name in a line, use the vocabulary suggestion. | The name is added to the client's keyterms (visible in the console). |
+| T-D5 | Settings → Transcription language: English + Urdu; record a mixed call. | The session's language is en+ur and the transcript keeps both languages. |
 | O-D3 | Select → pick several recordings → Export transcripts → Word. | A zip lands in Downloads; Delete asks once more and removes them on every device. |
+| S-D4 | Revoke another device under Devices. | It disappears there and in the console; that device returns to pairing on its next sync. |
+| §17 V-D2 | Windows 10: open the main window. | A solid background (no Mica, nothing see-through); everything else as on Windows 11. |
+| §17 V-D6 | Start a recording with captions; speak several long sentences. | The caption card keeps one height (no jumps as lines arrive), shows at most the chosen number of lines with whole lines, its buttons fade in on hover; pill, review card, dictation bar and captions look like one set (same glass, hairline border, radius). |
+| §17 V-D7 | Right-click the tray icon while idle, then while recording and paused. | A short grouped menu: Open; Start/Stop, Pause/Resume, (Show recording controls), Capture voice note; check marks on Live captions and Record calls automatically; Review recordings (N) when something waits; Quit. |
+| §17 V-D9 | After V-D8: drag the pill somewhere else; change the caption corner and text size and turn on "Hide from screen sharing"; wait a minute (the overlays are closed), then start a recording with captions and share your screen in the call. | The pill opens where it was dragged, the captions in the chosen corner and size; the shared screen shows neither. Clicks next to the pill and the captions reach the app underneath; their buttons work on the first click. |
+| V-D10 | Hide the pill, then use the tray item "Show recording controls". | The recording continues while hidden; the pill comes back. |
+| V-D11 | Drag the pill to a second monitor and restart; then unplug that monitor and restart. | It reopens where it was; without the monitor it opens top-centre of the main screen. |
 
-### 11.3 Android
+### Android
 
-| ID | Steps | Expected |
+| # | Check | Expected |
 |---|---|---|
+| A-04 | Point the app at a server whose certificate does not match the pins. | Every request fails, the offline message shows and nothing uploads. |
+| A-18 | Restart the phone with auto-record armed. | The setup screen explains how to restart the helper. Re-arming works. |
+| A-19 | Samsung: leave the phone idle overnight armed, then call. | With Battery set to Unrestricted the call is captured. |
+| A-20 | An Android 12 or 13 phone. | Auto-record is off with "Requires Android 14 or later". Manual recording uses the microphone. |
+| A-30 | The **REC** button with no helper. | Microphone recording starts with a **Stop** notification. |
+| A-31 | The widget's record button with the app in the background. | Recording starts and the widget returns to idle after Stop. |
+| A-32 | The "Record now" notification action. | Recording starts from the background without a crash. |
+| A-33 | The Quick Settings tile. | It toggles recording. There is no `ForegroundServiceStartNotAllowedException` in logcat. |
+| A-34 | Revoke the microphone permission, then press REC. | No crash and nothing records. The setup screen shows what is missing. |
+| A-41 | Delete a recording on Windows. | It disappears from the phone after the next sync. |
+| C-A1 | Switch WhatsApp off with auto-record armed and take a call. | Nothing is recorded. WhatsApp Business still records. |
+| C-A4 | **Caption style**: Large, top, compact, less opacity, auto-hide. | The bubble follows every setting on the next recording. |
+| C-A5 | **Microphone**: pick a Bluetooth headset and run the test. | The meter moves and playback is audible. |
+| C-A6 | Revoke the overlay and notification permissions. | Both rows show a reason and **Fix** opens the matching page. |
+| C-A7 | Mute the far side for 30 seconds during a call. | The Record tab and the bubble say "Not hearing the other side for 30 s". |
+| DI-A3 | Choose **Hold to talk** in the voice keyboard. | The text is inserted when you let go. |
+| DI-A4 | Revoke the microphone, open the keyboard. | "Allow the microphone in EchoLedger" opens the app. The microphone stays off. |
+| §17 V-A2 | Predictive back from a recording, the setup guide and a settings group. | The preview shows the screen underneath. |
+| §17 V-A3 | Tap REC, Stop, Keep and Discard. | A short haptic tick on each. |
+| V-A8 | Reach the monthly limit during a call with captions. | The bubble says "Monthly transcription limit reached". The recording continues and uploads after Keep. |
+| O-7 | Update an install that was already paired. | No setup guide. |
+| N-3 | Leave the phone app closed while a transcript finishes. | A notification arrives within about 15 minutes. Tapping it opens the recording. |
+| P-3 | After a day with no recording, open Battery use for EchoLedger. | No wake locks. Background use comes only from the 15-minute check and uploads. |
+| A-02b | Deny the camera permission, then press Scan QR code; also press Back while the scanner is open. | A message explains that the code can be entered by hand; Back closes the scanner without pairing; the camera indicator turns off as soon as the scanner closes. |
+| A-03 | Inspect app storage (`adb shell run-as` on a debug build). | Recordings under `no_backup/recordings/*.elr` are not playable (encrypted); `library.bin` is not readable JSON; no plaintext `.ogg` remains in `cache/` after saving. |
+| A-15 | Repeat A-12 with WhatsApp **Business** and with a WhatsApp **video** call. | Source app is WhatsApp Business / WhatsApp respectively; both channels captured. |
+| A-35 | Toggle **Turn off** on the armed notification when the app process was killed. | No crash (`did not then call startForeground` must not appear in logcat). |
+| O-3 | Phone: install fresh (clear app data), open EchoLedger. | The wizard opens: Welcome, Permissions, Pair, Test, Done, with "Step n of 5". Back (button and gesture) goes one step back. |
+| O-6 | Phone: tap "Skip for now" on Pair, then finish. | The app shows the pairing screen as before; after pairing there is no wizard. |
 | O-A1 | Library: smart view chips, folder and label chips. | Same lists and counts as the desktop. |
-| O-A2 | Long-press a recording, tap two more, then Move to, Add label, Pin. | The changes show after the sync; Done leaves selection mode. |
 | O-A3 | Selection → Export as zip. | The share sheet offers the zip. |
 | O-A4 | Open a recording → Organise: pin, client, labels. | Saved and visible in the library list. |
-
-## 12. v1.1 — security centre
-
-### 12.1 Console
-
-| ID | Steps | Expected |
-|---|---|---|
-| S-W1 | Security → Add a passkey (Windows Hello, Touch ID or a phone), sign out, then Sign in with a passkey on the login page. | Signed in without the password or the two-step code; the audit log shows "Signed in with a passkey". |
-| S-W2 | Remove the passkey; try it again. | The sign-in is refused with a plain message; the password still works. |
-| S-W3 | Sign in from a second browser; on Security, sign that browser out. | The other browser is back at the login page on its next click. |
-| S-W4 | Delete a recording, export a transcript, make and revoke a share link, change a provider key. | Each appears in the audit log with who did it; no key or password appears anywhere. |
-
-### 12.2 Desktop
-
-| ID | Steps | Expected |
-|---|---|---|
-| S-D1 | Settings → Privacy & security: set a PIN, turn on Lock EchoLedger, choose After 1 minute; wait. | The window shows "EchoLedger is locked"; Windows Hello (or Touch ID) is offered at once. |
-| S-D2 | While locked, record a call from the tray or auto-record. | Recording, captions and uploads carry on; the library stays hidden until unlocked. |
-| S-D3 | Type a wrong PIN five times. | The sixth try is refused with "Try again in 30 seconds"; the right PIN works after the wait. |
-| S-D4 | Revoke another device under Devices. | It disappears there and in the console; that device returns to pairing on its next sync. |
-
-### 12.3 Android
-
-| ID | Steps | Expected |
-|---|---|---|
+| S-1 | Phone: Settings. | A search box and eight groups: General, Recording, Captions, Dictation, Privacy & security, Devices, Storage, About. Each opens as its own screen; back and the back gesture return to the list. |
+| S-4 | Phone: import a file that is not a settings file. | "That is not an EchoLedger settings file." and nothing changes. |
+| DI-A6 | Replacements, snippets, clean-up off and Recent dictations (copy, clear). | Same results as DI-D4 to DI-D6. |
+| DI-A7 | Switch keyboard button. | Returns to the previous keyboard (or shows the keyboard picker). |
 | S-A1 | Settings → Devices and activity. | Lists this phone and the other devices, and recent activity with who did it. |
 | S-A2 | Revoke another device (tap Revoke, then Revoke now). | It is gone from the list and the console. |
+| T-A4 | Settings → Transcription: Urdu; add a vocabulary term. | New recordings are sent with Urdu; the term appears for the selected client in the console. |
+| §17 V-A1 | Phone: Settings > General > Appearance: System, Light, Dark; then Wallpaper colours on (Android 12+). | Every screen follows the choice at once; status and navigation bar icons stay readable; with wallpaper colours the accent and surfaces take the wallpaper's tones (also on the widget). |
+| V-A3 | Android 10 with only a PIN (no fingerprint). | App lock can be switched on and unlocks with the PIN. |
+| V-A4 | No screen lock on the phone. | The switch is disabled with "Set a screen lock on this phone to use App lock." and "Open security settings" works. |
+| V-A10 | (Old check) Rotate the phone on the library, a recording and the setup page. | Fixed by A6.M9 and A6.M11; covered by steps 102 to 104. |
 
-## 13. v1.1 — retention and the undo bin
+### Web console
 
-| ID | Steps | Expected |
+| # | Check | Expected |
 |---|---|---|
-| R-1 | Console Settings: choose 7 days; give one client 30 days; mark one old recording Keep. Run `php artisan recordings:retention`. | Recordings older than their retention move to Recently deleted, except the kept one and the client's younger ones. |
-| R-2 | Delete a recording on the phone; on the desktop open Recently deleted and Restore it. | It comes back on every device after the next sync, with its audio and transcript. |
-| R-3 | Delete a recording and try its old playback link or share link. | Both answer "not found" at once. |
-| R-4 | Leave a deleted recording for 48 hours (or run the command after moving its delete time back). | It disappears from Recently deleted; Restore says it can no longer be restored. |
+| V-S1 | Sign in without two-factor and play a recording. | It plays. |
+| V-S2 | Tab to a transcript line and press Enter. | Playback seeks to the line. |
+| V-S3 | With two-factor on, sign in with a recovery code. | Signed in on the first click. |
+| V-S4 | Open a recording and API Credentials at 360 px width. | No horizontal scrolling. |
+| S-W3 | Sign in from a second browser, then sign that browser out on Security. | The other browser is back at the login page on its next click. |
+| T-W8 | **Settings → General → Vocabulary**: add a keyterm and a correction, record a new call. | The correction applies to the new transcript and can be undone with **Restore original**. |
+| O-W2 | Select three recordings: move to a client, label, pin, then undo. | The change shows on all three and on the devices after their next sync. |
+| O-W3 | Select recordings and choose **Export transcripts (Word)**. | One zip with a .docx for each finished transcript. |
+| O-W4 | Give a client an avatar and pin it. | The folder shows the avatar and comes first everywhere. |
+| R-4 | Leave a deleted recording for 48 hours. | It leaves Recently deleted and cannot be restored. |
+| N-1 | Upload a recording. | The bell shows "Transcript ready". |
+| N-6 | Pair a device and go past 80 % of a small monthly limit. | "Device paired" and the limit notices appear once each. |
+| W-11 | Set the device limit to the number paired, then pair one more. | "Device limit reached — raise it in Settings". |
+| W-10 | Set the storage limit below what is used and upload. | "Storage limit reached — raise it in Settings". The recording stays on the device. |
+| W-12 | Pass 80 % and 100 % of the monthly limit. | The bell shows each notice once per owner. |
+| S-02 | Sign in to `/admin` for the first time, then enrol two-factor sign-in from Profile. | Not forced at first sign-in; a real authenticator app (Google Authenticator, 1Password, Aegis) accepts the QR; recovery codes are shown once and each works exactly once. |
+| S-08 | Open a session in the console and play it. | Audio plays and seeks (HTTP 206); the active segment highlights and clicking a segment seeks. |
+| S-09 | Set retention to 1 day; age a session in the DB; run `php artisan model:prune --pretend`, then without `--pretend`. | Pretend lists exactly the old rows; the real run deletes rows and their encrypted files. |
+| S-9 | Console: finish all five steps, or press Dismiss. | The card disappears and does not come back (finishing: it returns if a step is undone). |
 | R-5 | Console dashboard, desktop Settings and phone Settings. | The storage meter shows the recordings' size and the server disk; the retention days match the console. |
 
-## 14. v1.1 — notifications and activity
+### macOS 14.4+ (only if you have a Mac)
 
-| ID | Steps | Expected |
+| # | Check | Expected |
 |---|---|---|
-| N-1 | Upload a recording and wait for its transcript. | The console bell shows "Transcript ready"; Open goes to the recording. |
-| N-2 | Desktop (installed build): leave the app in the tray while a transcript finishes. | A Windows / macOS notification appears within a minute; clicking it opens EchoLedger on that recording. |
-| N-3 | Phone: leave the app closed while a transcript finishes. | A notification appears within about 15 minutes; tapping it opens the recording. |
-| N-4 | Turn on quiet hours covering now, on the desktop and the phone; finish another transcript. | No notification; the item waits in the bell / Activity list. |
-| N-5 | Lock the desktop app, then let a notification arrive. | It says only "New activity. Unlock EchoLedger to see it." |
-| N-6 | Pair a new device; set a small monthly limit and record past 80 %. | "Device paired" and the limit notices appear once each. |
+| M-01 | Install the notarized DMG. | Gatekeeper opens it without warnings. |
+| M-02 | First recording. | The microphone and system-audio prompts show their text. Denying either explains what to do. |
+| M-03 | A WhatsApp, Zoom or Meet call with auto-record on. | The far party is captured, but not EchoLedger. No leftover audio device remains. |
+| M-04 | Change the audio devices mid-call (AirPods). | Capture follows with no crash. |
+| M-05 | Overlays and dictation. | Same as steps 30 and 56. Dictation asks for Accessibility once. |
+| M-06 | Menu-bar behaviour. | No Dock icon. Quitting ends all capture. |
+| §17 V-D5 | The main window. | Vibrancy behind the sidebar; the traffic lights sit inset; the accent follows the system. |
+| V-D6 | Browser tab detection with automation on, then off. | On: recorded as Google Meet after the prompt. Off: ignored as an unknown site. |
+| V-D25 | The pill and review card on screen recording. | They appear but are hidden from the recording. |
 
-## 15. v1.1 — setup and settings
+## Appendix B — Accessibility
 
-| ID | Steps | Expected |
+| # | Check | Expected |
 |---|---|---|
-| O-1 | Desktop: install fresh (no settings), open EchoLedger. | The setup wizard opens: Permissions, Pair, Test, Done. "Skip setup" ends it; it never returns. A desktop paired before v1.1 does not see it. |
-| O-2 | Desktop: finish the wizard with the 10-second test (speak, and play a sound). | The test says what it heard; Done saves the consent tick only when ticked. |
-| O-3 | Phone: install fresh (clear app data), open EchoLedger. | The wizard opens: Welcome, Permissions, Pair, Test, Done, with "Step n of 5". Back (button and gesture) goes one step back. |
-| O-4 | Phone: on Permissions tap Allow for the microphone, notifications, display over other apps and battery. | Each row turns "Allowed" when you come back; a permanently refused permission shows "Open settings". The helper row says it is optional. |
-| O-5 | Phone: pair by QR or code, run the 10-second test while speaking. | The wizard moves on by itself after pairing; the meter moves; the result says the microphone works. |
-| O-6 | Phone: tap "Skip for now" on Pair, then finish. | The app shows the pairing screen as before; after pairing there is no wizard. |
-| O-7 | Phone: update an install that was already paired. | No wizard. |
-| S-1 | Phone: Settings. | A search box and eight groups: General, Recording, Captions, Dictation, Privacy & security, Devices, Storage, About. Each opens as its own screen; back and the back gesture return to the list. |
-| S-2 | Phone: search "quiet", "fingerprint", "retention". | Each finds its setting; tapping a result opens the group scrolled to it. Clearing the search shows the groups again. |
-| S-3 | Phone: About → Export settings, save the file; change a few settings; Import settings and pick the file. | "Settings saved", then "Settings imported"; the changed settings are back. The file has no server address, token, pins, device name, lock or consent. |
-| S-4 | Phone: import a file that is not a settings file. | "That is not an EchoLedger settings file." and nothing changes. |
-| S-5 | Console: Settings. | Tabs General, Recording, Captions, Dictation, Privacy & security, Devices, Storage, About, with the same names as the apps. |
-| S-6 | Console: type "budget" in the search box. | The Storage tab opens, other tabs show a count where they match, sections that do not match are hidden, and Save still saves every setting. |
-| S-7 | Console: Export settings, change retention, Import settings with the file. | The JSON has no API keys or webhook secrets; retention is back. A file with a value the server refuses (for example 9999 days) changes nothing and says so. |
-| S-8 | Console: new install, open the dashboard as the super admin. | "Finish setting up" lists two-factor, provider key, certificate pins, first device and retention; each opens its page; finished steps lose their link. |
-| S-9 | Console: finish all five steps, or press Dismiss. | The card disappears and does not come back (finishing: it returns if a step is undone). |
+| V-X1 | Narrator or NVDA (Windows), VoiceOver (Mac): Tab through the main window. | Every control has a name and a state. The focus ring is visible. |
+| V-X2 | TalkBack: swipe through Library, a recording, Record and Settings. | Every button and switch is read with a name. |
+| V-X3 | Turn on reduce motion in each system. | Overlays appear without sliding. Nothing pulses. |
 
-## 16. v1.1 — workspaces, roles, plan limits and usage
+## Appendix C — Release day
 
-Run W-1 to W-4 on a copy of the production database (or right after the deploy) before anything else.
-
-| ID | Steps | Expected |
+| # | Check | Expected |
 |---|---|---|
-| W-1 | After the migrations: open the console as the owner. | Every recording, client and device is there as before; the dashboard counts are unchanged; Workspace shows "Personal", you as owner. |
-| W-2 | Phone and desktop already paired: record a short call, let it upload. | Sync, upload, live captions and the final transcript work with no re-pairing. |
-| W-3 | Open a share link made before the deploy; play a recording in the console. | The link opens (and plays when it allows audio); console playback works. |
-| W-4 | Wait for the hourly retention run (or run `php artisan recordings:retention`). | It finishes without errors; old recordings move to the bin as before. |
-| W-5 | Workspace → Add member with a new e-mail; sign in as that person in a private window. | A one-time password is shown once; the member sees the same library, cannot open Settings or API credentials, and has no Add member / Rename / Remove buttons. |
-| W-6 | As the member: try to delete one of the owner's recordings (console row, bulk delete, phone, desktop). | The console offers no delete for it; bulk delete skips it; the apps show "Only the workspace owner can delete recordings made by someone else." Their own recordings delete normally. |
-| W-7 | As the owner: Remove the member. | The member's devices in this workspace are unpaired at once; their recordings stay. |
-| W-8 | Usage page, this month. | Minutes by provider (streaming and final), cost, storage, devices, per device and top clients match what you expect; the daily chart has one bar per day. Another month shows that month. |
-| W-9 | Settings → Plan limits: set minutes to a number already used this month. Start live captions on desktop and phone. | Both show "Monthly limit reached — raise it in Settings"; recording continues. Raise the limit: captions work again. |
-| W-10 | Settings → Plan limits: set storage to 1 GB below what is used, then record and upload. | The upload stops with "Storage limit reached — raise it in Settings" and the recording stays on the device. Raise it: the upload goes through. |
-| W-11 | Settings → Plan limits: set devices to the number paired, then pair one more (QR in the console). | The pairing dialog shows "Device limit reached — raise it in Settings". |
-| W-12 | Set the minutes limit so this month is past 80 %, then past 100 % (or wait for real use). | The bell shows "Transcription at 80% of the monthly limit" once and "Monthly transcription limit reached" once, for each owner. |
-| W-13 | Restore the plan limits to the defaults (30 000 minutes, 500 GB, 25 devices). | Nothing is blocked. |
-
-## 17. v1.1 — premium look and performance (Phase 6)
-
-Visual checks on real screens. Before/after screenshots of every screen (from the screenshot harness, the
-Robolectric screenshot test and the browser) are in `design-review/` on the build machine.
-
-| ID | Steps | Expected |
-|---|---|---|
-| V-D1 | Windows 11: open the main window in the dark and in the light theme. | The sidebar and window background show Mica (the wallpaper tint), the content sits on a slightly lighter layer, the title bar matches the theme. No see-through areas. |
-| V-D2 | Windows 10: open the main window. | A solid background (no Mica, nothing see-through); everything else as on Windows 11. |
-| V-D3 | Windows: Settings > Personalisation > Colours, pick another accent colour, restart EchoLedger. | Primary buttons, the active nav indicator, selections and focus rings use the new accent; white text on buttons stays readable (also with a yellow or a pale accent). |
-| V-D4 | Change the app theme (sidebar Theme button) while the caption overlay, the pill and the review card are visible. | All of them switch between light and dark glass with the main window; the title bar follows too. |
-| V-D5 | macOS: open the main window. | Vibrancy behind the sidebar; the traffic lights sit inset over the sidebar, clear of the brand row; the window drags by its top strip; the accent follows System Settings > Appearance. |
-| V-D6 | Start a recording with captions; speak several long sentences. | The caption card keeps one height (no jumps as lines arrive), shows at most the chosen number of lines with whole lines, its buttons fade in on hover; pill, review card, dictation bar and captions look like one set (same glass, hairline border, radius). |
-| V-D7 | Right-click the tray icon while idle, then while recording and paused. | A short grouped menu: Open; Start/Stop, Pause/Resume, (Show recording controls), Capture voice note; check marks on Live captions and Record calls automatically; Review recordings (N) when something waits; Quit. |
-| V-D8 | Overlays are built only when needed (C9). In a Teams, Zoom or Meet call, click into the call's chat box and leave EchoLedger alone for a minute; start a recording with the shortcut, type a few words, turn captions on (Ctrl+Shift+Space), type again, stop the recording. | The pill, then the captions, then the review card appear (each about half a second after the shortcut) without taking focus: the typing goes on in the chat box and the call window stays active. |
-| V-D9 | After V-D8: drag the pill somewhere else; change the caption corner and text size and turn on "Hide from screen sharing"; wait a minute (the overlays are closed), then start a recording with captions and share your screen in the call. | The pill opens where it was dragged, the captions in the chosen corner and size; the shared screen shows neither. Clicks next to the pill and the captions reach the app underneath; their buttons work on the first click. |
-| V-D10 | Press the dictation shortcut in Notepad (paired, after the app has idled for a while); then once with the network off. | The bar is there at once and Notepad keeps the focus and gets the text. Without a network the bar shows why for a few seconds and then goes away. |
-| V-D11 | Open the main window from the tray, go to Settings, scroll down, open a recording in the Library, close the window with X; open it again from the tray. Then close it and click a "Transcript ready" notification. | Closing ends its web view (Task Manager: two or three `msedgewebview2.exe` fewer). It opens again on the same page with the same recording and scroll position; the notification opens its recording. |
-| V-A1 | Phone: Settings > General > Appearance: System, Light, Dark; then Wallpaper colours on (Android 12+). | Every screen follows the choice at once; status and navigation bar icons stay readable; with wallpaper colours the accent and surfaces take the wallpaper's tones (also on the widget). |
-| V-A2 | Swipe back from a recording, the setup guide and a settings group (Android 13+ with predictive back on). | The predictive back preview shows the screen underneath; letting go goes back one step. |
-| V-A3 | Tap REC, Stop, Keep and Discard. | A short haptic tick on each (toggle on / off, confirm, reject). |
-| V-A4 | Add the widget at 2 x 1, 2 x 2 and 4 x 2 (resize it). | 2 x 1: round record button and status; 2 x 2: name, status, review count, button; 4 x 2: last recording and its preview beside the button. Record starts a recording; the button turns into Stop. With the app lock on, no titles are shown. |
-| V-X1 | Windows with Narrator (or NVDA), macOS with VoiceOver: Tab through the main window: navigation, search, filters, a recording, the transcript tools. | Every control is announced with its name and state; the focus ring is visible on each; Space / Enter act on it. |
-| V-X2 | Android with TalkBack: swipe through Library, a recording, Record and Settings > General. | Every button and switch is read with a name (bell, recently deleted, select, sync, REC, auto-record, theme). |
-| V-X3 | Turn on "reduce motion" (Windows: Animation effects off; macOS: Reduce motion; Android: Remove animations). | Overlays and cards appear without sliding; nothing pulses; the phone's screens change without animation. |
-| P-1 | Desktop idle footprint: quit EchoLedger, start it from a terminal with `--autostart` (or close the main window), wait 30 s, then for 60 s watch Task Manager > Details with the "Memory (private working set)" and "CPU" columns for `echoledger-desktop.exe` and every `msedgewebview2.exe` whose parent chain leads to it (Process Explorer shows the tree). | Sum of private working sets ≤ 150 MB; CPU < 1 % (budget C9; measured on the build PC: 96 MB and 0.04 % with only the dictation bar kept ready, 126 MB and 0.22 % after a dictation and opening and closing the main window; before on-demand windows 310 MB). |
-| P-2 | Desktop while recording a 10-minute call with live captions: same view, sample 60 s in the middle of the call (laptop on battery and on power). | CPU of all app processes together < 8 % of the machine. |
-| P-3 | Phone: Settings > Battery > EchoLedger after a day with no recording. | No wake locks reported; background use comes only from the 15-minute activity check and uploads after a recording. |
+| S-01 | Deploy per `web/DEPLOY.md` and add the cron line. | `php artisan schedule:list` shows the queue worker, `stt:reconcile`, `recordings:recover`, `sessions:sweep-open`, `recordings:retention`, `model:prune` and `sanctum:prune-expired`. |
+| S-04 | Record a 2-minute two-party call with AssemblyAI. | The webhook arrives, Me and Client are right, and the provider no longer lists the transcript. |
+| S-05 | The same with ElevenLabs. | The signed webhook is accepted and the provider's history is empty. |
+| S-06 | Block the webhook for a moment, then record a call. | Within 5 minutes `stt:reconcile` completes it. |
+| S-07 | Azure MAI as the final provider. | Devices upload `channel_1` and `channel_2`. The transcript completes at once. |
+| S-10 | Set the certificate pins and pair. | Pairing works. A certificate matching only the backup pin keeps devices connected. An unpinned certificate is refused. |
+| W-1 | After the migrations, open the console as the owner. | Every recording, client and device is there. Workspace shows "Personal". |
+| W-2 | A device paired before the update records a short call. | Sync, upload, captions and the transcript work with no re-pairing. |
+| W-3 | Open a share link made before the update and play a recording. | Both work. |
+| W-4 | Run `php artisan recordings:retention`. | It finishes without errors. |
+| R-01 | `signtool verify /pa /v` on the installer and the main executable. | Valid chain with a timestamp. (The installer is not signed yet: needs a certificate.) |
+| R-02 | macOS: `spctl` and `stapler validate` on a Mac that never ran the app. | Accepted. |
+| R-03 | Install the new APK over the previous one. | The update works. Pairing and waiting recordings survive. |
+| R-04 | Optional auto-update with a signed manifest. | It installs only when not recording. A tampered signature is rejected. |
+| Privacy | Watch a proxy for 10 minutes of use; run `tools/scan-secrets.ps1` on the installer folder and the APK. | Only the server and the chosen speech provider appear. No provider key is found. |

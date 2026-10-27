@@ -38,8 +38,23 @@ The platform consists of three applications that share one data model and one RE
 - **Per-client keyterms.** Names, products and jargon configured per client boost recognition in both passes.
 - **One library, every device.** Phone recordings appear on the desktop and vice versa, each clearly labeled
   with its source device (Phone · Desktop · Web) and app (WhatsApp, Google Meet, Zoom, voice note …).
+- **You decide what is kept.** When a recording ends you choose **Keep** or **Discard**. A discarded recording is
+  never uploaded, never transcribed and costs nothing. Only real calls are recorded automatically: apps and
+  browser sites are recognised by whether they use the microphone and play audio, with an editable site list.
 - **Unobtrusive by default.** A translucent caption overlay that never takes focus, clicks pass through it, it
-  hides from screen sharing, and it never interrupts a call with pop-ups.
+  hides from screen sharing, and it never interrupts a call with pop-ups. The desktop app builds its windows only
+  when needed and idles at about 96 MB.
+- **A transcript you can work with.** A player with speaker blocks, word highlighting and bookmarks; inline
+  editing with history and "restore original"; full-text search across every recording; export to Word, PDF,
+  text, Markdown, SRT, VTT and JSON; and share links with an expiry, an optional password and an access log.
+- **Dictation anywhere.** Push-to-talk or toggle on the desktop and a voice keyboard on Android, with a personal
+  dictionary, snippets and clean-up. Dictation is never saved as a recording.
+- **English, Urdu, Hindi and mixed speech.** Language routing picks the model from the providers' documented
+  language lists, and a second engine can be compared against the first.
+- **Private by design.** App lock (Windows Hello / Touch ID / PIN on the desktop, biometrics on the phone),
+  passkeys and two-step sign-in for the console, an audit log, and a 48-hour undo bin behind every delete.
+- **Ready for teams.** Workspaces with owner and member roles, plan limits (minutes, storage, devices), a usage
+  dashboard with a monthly budget, and activity notifications.
 - **Provider freedom.** AssemblyAI, ElevenLabs Scribe, Azure Speech (MAI-Transcribe) or a self-hosted
   whisper.cpp server, selectable per use case from the admin console. The server side for on-device
   Parakeet transcription is in place for a future release.
@@ -85,8 +100,11 @@ flowchart LR
 | Microphone ("Me") | ✓ | ✓ | ✓ | ✓ | — |
 | Other party ("Client") | ✓ endpoint loopback | ✓ process loopback | ✓ Core Audio tap | ✓ privileged helper | — |
 | Live caption overlay | ✓ | ✓ | ✓ | ✓ bubble | — |
-| Dictation into any app | ✓ | ✓ | ✓ | — | — |
+| Dictation into any app | ✓ | ✓ | ✓ | ✓ voice keyboard | — |
 | Automatic call detection | ✓ | ✓ | ✓ | ✓ WhatsApp | — |
+| Keep / Discard after a call | ✓ | ✓ | ✓ | ✓ | — |
+| Bookmarks, search, export, share links | ✓ | ✓ | ✓ | ✓ | ✓ |
+| App lock | ✓ Hello / PIN | ✓ Hello / PIN | ✓ Touch ID / PIN | ✓ biometrics | passkeys, 2-step |
 | Voice-note import | ✓ drag & drop | ✓ drag & drop | ✓ drag & drop | ✓ share sheet | ✓ upload |
 | Library, playback, transcript | ✓ | ✓ | ✓ | ✓ | ✓ synced player |
 
@@ -100,10 +118,16 @@ iOS does not allow third-party apps to record VoIP calls, so an iPhone client is
   dedicated key on the server, and with Tink streaming AEAD (Android Keystore–wrapped keys) on Android.
 - **Hardened transport.** Device apps pin the server's public key (current + backup pins); uploads are
   verified chunk by chunk with SHA-256.
-- **Strong administration.** The console offers optional TOTP two-factor sign-in with recovery codes (recommended); device
-  tokens are scoped by ability and revocable per device.
-- **Retention.** Recordings, transcripts and webhook payloads are purged automatically after a configurable
-  period (30 days by default). Provider copies are deleted as soon as a transcript is stored.
+- **Strong administration.** The console offers passkeys and optional TOTP two-factor sign-in with recovery codes
+  (recommended); device tokens are scoped by ability and workspace and revocable per device. An audit log records
+  sign-ins, deletes, exports, share links and credential changes.
+- **Share links.** 256-bit random tokens (only a hash is stored), expiry, optional password, instant revocation and
+  an access log.
+- **Settings files carry no secrets.** Exports leave out the pairing, tokens and keys; imports can never change a
+  credential or turn on a lock.
+- **Retention.** Recordings are moved to a 48-hour undo bin after a configurable period (7, 14, 30 days or your own;
+  a client can have its own, and a recording can be marked Keep), then erased. Every delete goes through the same
+  bin. Provider copies are deleted as soon as a transcript is stored.
 - **No telemetry.** None of the applications include analytics or tracking.
 - **Consent.** A visible recording indicator is always shown. Call-recording laws vary by jurisdiction; users
   are responsible for obtaining consent where required.
@@ -115,8 +139,9 @@ echoledger/
 ├── web/        Laravel server: API, admin console, STT orchestration, retention
 ├── desktop/    Tauri desktop app: Rust core (audio, overlay, networking) + React UI
 ├── mobile/     Android app: capture helper, recording service, widget, caption bubble
-├── docs/       API contract, architecture, providers, requirements, manual QA, research notes
-├── PLAN.md     Delivery plan and progress checklist
+├── docs/       User guide, API contract, architecture, providers, requirements, manual QA, research notes
+├── PLAN.md          Delivery plan and progress checklist (v1.0)
+├── PLAN_V1_1.md     v1.1 plan: every item, its status and its tests
 └── CONTRIBUTING.md  Engineering conventions shared by all three apps
 ```
 
@@ -126,7 +151,7 @@ echoledger/
 
 | Component | Requirements |
 |---|---|
-| Server | PHP 8.4+ (`sodium`, `intl`, `zip`, `pdo_*`), Composer 2, MySQL 8 / MariaDB 10.6+ or SQLite |
+| Server | PHP 8.4+ (`sodium`, `intl`, `zip`, `pdo_*`), Composer 2, Node.js 22+ (to build the console theme), MySQL 8 / MariaDB 10.4+ or SQLite |
 | Desktop | Rust stable (MSVC toolchain on Windows), Node.js 22+, Visual Studio Build Tools (C++) on Windows, Xcode CLT on macOS |
 | Android | Android SDK (platform 37), JDK 21 |
 
@@ -145,8 +170,10 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Open `http://localhost:8000/admin`, sign in (two-factor sign-in is optional and recommended), then add provider keys under
-**API Credentials**. Production deployment on shared hosting is covered in [`web/DEPLOY.md`](web/DEPLOY.md).
+Open `http://localhost:8000/admin`, sign in (passkeys and two-factor sign-in are optional and recommended), then add
+provider keys under **API Credentials**. The seeder creates the first super admin from `ADMIN_EMAIL` and
+`ADMIN_PASSWORD` in `.env` (12 characters or more; otherwise a random password is printed once). On a production
+server use `php artisan echoledger:make-admin` instead and never run the seeders. Production deployment on shared hosting is covered in [`web/DEPLOY.md`](web/DEPLOY.md).
 
 ### Desktop
 
@@ -186,9 +213,11 @@ Providers are assigned per use case (live captions, dictation, calls, voice note
 # Server
 cd web && php artisan test && vendor/bin/pint --test && vendor/bin/phpstan analyse
 # Desktop
-cd desktop && npm run test && cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings
+cd desktop && npm run test && npm run build && cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings
 # Android
-cd mobile && ./gradlew test ktlintCheck
+cd mobile && ./gradlew assembleDebug testDebugUnitTest ktlintCheck lintDebug
+# Repository rules and shared design tokens
+node --test tools/repo-policy.test.mjs tools/design-tokens.test.mjs
 ```
 
 Hardware-dependent behaviour (audio capture, overlays, widgets, code signing) is verified with the checklist in
@@ -198,11 +227,12 @@ Hardware-dependent behaviour (audio capture, overlays, widgets, code signing) is
 
 | Document | Contents |
 |---|---|
+| [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | How to install, pair and use EchoLedger, in plain language |
 | [`docs/API.md`](docs/API.md) | REST API contract shared by all clients |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Data model, sync model, audio pipeline, security design |
 | [`docs/PROVIDERS.md`](docs/PROVIDERS.md) | Configuring and switching speech-to-text providers |
 | [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) | Product requirements and scope |
-| [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) | Real-device verification checklist |
+| [`docs/MANUAL_QA.md`](docs/MANUAL_QA.md) | One ordered checklist for real-device verification (1–2 hours) |
 | [`web/DEPLOY.md`](web/DEPLOY.md) | Shared-hosting deployment and cron setup |
 | [`desktop/RELEASE.md`](desktop/RELEASE.md) | Windows code signing, macOS notarization, signed updates |
 | [`mobile/RELEASE.md`](mobile/RELEASE.md) | APK signing and sideload distribution |

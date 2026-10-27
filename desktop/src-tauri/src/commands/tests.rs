@@ -217,6 +217,18 @@ fn an_import_takes_known_values_and_drops_the_rest() {
 }
 
 #[test]
+fn an_import_never_acknowledges_the_consent_notice() {
+    let text = json!({"format": SETTINGS_FORMAT, "version": 1, "settings": {"consentAcknowledged": true, "captionLines": 3}}).to_string();
+    let (patch, _) = read_portable(&text).unwrap();
+    let mut s = Settings::default();
+    patch.apply(&mut s);
+    assert!(!s.consent_acknowledged, "only the person using this install acknowledges the notice");
+    assert_eq!(s.caption_lines, 3);
+    let own = Settings { consent_acknowledged: true, ..Settings::default() };
+    assert!(!portable_settings(&own)["settings"].as_object().unwrap().contains_key("consentAcknowledged"));
+}
+
+#[test]
 fn only_settings_files_are_imported() {
     for text in ["", "{}", "[1]", r#"{"format":"something-else","settings":{}}"#, r#"{"format":"echoledger-settings"}"#] {
         assert!(read_portable(text).is_err(), "{text}");

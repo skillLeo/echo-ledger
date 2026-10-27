@@ -247,10 +247,14 @@ Severity in brackets. Each item lists the platform; the matching regression test
 - [x] A6.M8 [low] "No recordings yet" during the first sync, "Pull to refresh" copy without pull-to-refresh, a 401
       does not return to the unpaired state, `Retry-After` ignored.
 
-- [ ] A6.M9 [low] Rotating the phone returns to the library (tab, open recording and setup page are not saved).
+- [x] A6.M9 [low] Rotating the phone returns to the library (tab, open recording and setup page are not saved).
+      Fixed: the tab, the open recording (by id) and the setup page survive a rotation (RotationTest).
 - [x] A6.M10 [low] Status bar icons are dark on the dark app background in the light system theme.
-- [ ] A6.M11 [low] In landscape the library header, search, banner and filters leave no room for the list.
-- [ ] A6.M12 [low] The Record tab upload card does not update until the tab is opened again.
+- [x] A6.M11 [low] In landscape the library header, search, banner and filters leave no room for the list.
+      Fixed: below 480 dp of height the whole Library page scrolls with the list (RotationTest).
+- [x] A6.M12 [low] The Record tab upload card does not update until the tab is opened again.
+      Fixed: RecordingStore announces every save and delete and the view model reloads the waiting list
+      (MainViewModelTest).
 
 **Repository (R)**
 
@@ -401,9 +405,18 @@ Severity in brackets. Each item lists the platform; the matching regression test
 
 ## Phase 7 — full QA
 
-- [ ] P7.1 All suites and linters green; tests for every new feature.
-- [ ] P7.2 Security re-sweep: no key leaks, pins intact, every API route authorised, share tokens ≥ 128-bit.
-- [ ] P7.3 docs/MANUAL_QA.md, docs/API.md, docs/ARCHITECTURE.md, README.md updated; docs/USER_GUIDE.md written.
+- [x] P7.1 All suites and linters green; tests for every new feature. Added: an end-to-end web test with the speech
+      provider mocked (pair → session → stream token → bookmark → stop → Keep → chunked upload → webhook → final
+      transcript → search → export → share link → retention, and the Discard path), phone dictation screen tests,
+      rotation / landscape tests, console tests for the share-link access log and "Remove the second version", share
+      password throttling, an audit assertion for bulk export. The 20,000-segment timing test no longer compares with a
+      wall clock (ratio against a smaller upload in the same process, query count, hang guard).
+- [x] P7.2 Security re-sweep: no key leaks, pins intact, every API route authorised, share tokens ≥ 128-bit. Findings
+      and fixes: docs/HANDOFF.md "Phase 7 security re-sweep" (one fix: a settings file can no longer set the desktop
+      consent tick).
+- [x] P7.3 docs/MANUAL_QA.md, docs/API.md, docs/ARCHITECTURE.md, README.md updated; docs/USER_GUIDE.md written.
+      MANUAL_QA is now one ordered checklist of 125 steps (about 2 hours) with the long and release-day checks in
+      appendices.
 
 ## Phase 8 — release
 

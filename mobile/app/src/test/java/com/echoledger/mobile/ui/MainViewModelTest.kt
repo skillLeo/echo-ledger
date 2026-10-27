@@ -382,6 +382,21 @@ class MainViewModelTest : AppTest() {
     }
 
     @Test
+    fun `A6 M12 the waiting list follows the store without reloadLocal`() {
+        app.storeRecording(id = "w1", state = "queued")
+        pumpUntil("the first recording") { vm.pending.value.map { it.id } == listOf("w1") }
+
+        app.storeRecording(id = "w2", state = "uploading")
+        pumpUntil("the second recording") { vm.pending.value.map { it.id }.toSet() == setOf("w1", "w2") }
+
+        app.graph.recordings.update("w1") { it.copy(state = "uploaded") }
+        pumpUntil("the uploaded one to leave the list") { vm.pending.value.map { it.id } == listOf("w2") }
+
+        app.graph.recordings.delete("w2")
+        pumpUntil("the deleted one to leave the list") { vm.pending.value.isEmpty() }
+    }
+
+    @Test
     fun `retryUpload requeues a refused recording clears its error and schedules the upload`() {
         app.storeRecording(id = "r1", state = "failed", lastError = "The artifacts.0.sha256 field format is invalid.")
 
@@ -392,8 +407,8 @@ class MainViewModelTest : AppTest() {
         assertEquals("queued", rec.state)
         assertNull(rec.lastError)
         assertEquals(listOf(WorkInfo.State.ENQUEUED), workStates("r1"))
+        pumpUntil("the waiting list to show the requeued recording") { vm.pending.value.singleOrNull()?.state == "queued" }
         assertEquals("r1", vm.pending.value.single().id)
-        assertEquals("queued", vm.pending.value.single().state)
     }
 
     @Test
@@ -446,7 +461,7 @@ class MainViewModelTest : AppTest() {
         assertNull(app.graph.recordings.get("drop"))
         assertFalse(app.graph.recordings.encryptedFile("drop").exists())
         assertTrue(workStates("drop").isEmpty())
-        assertEquals(listOf("keep"), vm.pending.value.map { it.id })
+        pumpUntil("the waiting list to drop the discarded recording") { vm.pending.value.map { it.id } == listOf("keep") }
     }
 
     // ---- reading a session ----------------------------------------------------------------------------------------------------

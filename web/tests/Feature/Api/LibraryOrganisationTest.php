@@ -7,6 +7,7 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Enums\UploadStatus;
 use App\Http\Controllers\Api\OrganiseController;
+use App\Models\AuditEvent;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\User;
@@ -201,6 +202,10 @@ describe('zip export', function () {
             ->and((string) $zip->getFromIndex(0))->toContain('Hello there');
         $zip->close();
         unlink($path);
+
+        // The export is written to the audit log (B16) with how many recordings left, never with their content.
+        $event = AuditEvent::query()->where('event', 'sessions_exported')->sole();
+        expect(json_encode($event->toArray()))->not->toContain('Hello there');
     });
 
     it('says when nothing can be exported and refuses other owners\' recordings', function () {

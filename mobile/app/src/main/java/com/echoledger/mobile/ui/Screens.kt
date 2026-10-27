@@ -19,6 +19,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -78,8 +79,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -261,6 +264,9 @@ private fun CallSetupBanner(onSetup: () -> Unit) {
     }
 }
 
+/** Below this window height (a phone in landscape) the Library page scrolls as one piece. */
+private const val COMPACT_HEIGHT_DP = 480
+
 @Composable
 fun LibraryScreen(
     vm: MainViewModel,
@@ -323,7 +329,11 @@ fun LibraryScreen(
                     }
                 )
     }
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    // In landscape the header, search, banners and filters would leave no room for the list, so there the whole
+    // page scrolls with the list (A6.M11).
+    val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+    val compact = windowHeight < COMPACT_HEIGHT_DP.dp
+    val top: @Composable ColumnScope.() -> Unit = {
         Spacer(Modifier.height(8.dp))
         ScreenHeader("Library", "Recordings from your phone, computer and the web") {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -458,7 +468,11 @@ fun LibraryScreen(
                 }
             )
         }
+    }
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        if (!compact) top()
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (compact) item(key = "library-top") { Column(content = top) }
             if (found.isNotEmpty()) {
                 item(key = "search-hits") { SearchResultsSection(found) { result, ms -> onOpenAt(result.session, ms) } }
             }
