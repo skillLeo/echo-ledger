@@ -95,6 +95,12 @@ async function renderLibrary(items: LibraryItem[] = ITEMS) {
 const list = () => screen.getByTestId("library-list");
 const itemButton = (title: string) => within(list()).getByText(title).closest("button") as HTMLElement;
 const titlesInList = () => [...list().querySelectorAll(".item-title")].map((n) => n.textContent);
+
+/** Ticks (or unticks) one box of the Filters menu, opening the menu first when it is closed. */
+function tick(name: string) {
+  if (!screen.queryByRole("dialog", { name: "Filters" })) fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name }));
+}
 const detail = () => document.querySelector(".detail") as HTMLElement;
 const selectItem = async (title: string, transcriptText?: string) => {
   fireEvent.click(itemButton(title));
@@ -209,45 +215,65 @@ describe("LibraryView search and filters", () => {
     expect(titlesInList()).toHaveLength(5);
   });
 
-  it("filters by source device with the chips and combines with the search", async () => {
+  it("filters by source device from the Filters menu and combines with the search", async () => {
     await renderLibrary();
-    fireEvent.click(screen.getByRole("button", { name: "Phone" }));
+    tick("Phone");
     expect(titlesInList()).toEqual(["WhatsApp call", "Voice note from Sam"]);
-    fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
+    tick("Desktop");
+    expect([...titlesInList()].sort()).toEqual(["Google Meet standup", "Voice note from Sam", "WhatsApp call", "Zoom with Acme"]);
+    tick("Phone");
     expect(titlesInList()).toEqual(["Zoom with Acme", "Google Meet standup"]);
-    fireEvent.click(screen.getByRole("button", { name: "Web" }));
+    tick("Desktop");
+    tick("Web");
     expect(titlesInList()).toEqual(["Client briefing"]);
-    fireEvent.click(screen.getByRole("button", { name: "Desktop" }));
+    tick("Web");
+    tick("Desktop");
     fireEvent.change(screen.getByLabelText("Search recordings"), { target: { value: "standup" } });
     expect(titlesInList()).toEqual(["Google Meet standup"]);
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(titlesInList()).toEqual(["Google Meet standup"]);
   });
 
-  // A6.DU7: the source chips are filter toggles, not a tablist without tabs.
-  it("exposes the source chips as a named group of pressed / not pressed toggles", async () => {
+  // A6.DU7: the filters are checkboxes in a named dialog, not a tablist without tabs.
+  it("offers the filters as checkboxes in one dropdown on one line", async () => {
     await renderLibrary();
     expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
-    const group = screen.getByRole("group", { name: "Filter by device" });
-    const chips = within(group).getAllByRole("button");
-    expect(chips.map((c) => [c.textContent, c.getAttribute("aria-pressed")])).toEqual([
-      ["All", "true"], ["Phone", "false"], ["Desktop", "false"], ["Web", "false"],
+    expect(screen.queryByRole("group", { name: "Filter by device" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    const panel = screen.getByRole("dialog", { name: "Filters" });
+    const recorded = within(within(panel).getByRole("group", { name: "Recorded on" }));
+    expect(recorded.getAllByRole("checkbox").map((c) => [c.getAttribute("aria-label"), (c as HTMLInputElement).checked])).toEqual([
+      ["Phone", false], ["Desktop", false], ["Web", false],
     ]);
-    fireEvent.click(within(group).getByRole("button", { name: "Web" }));
-    expect(within(group).getByRole("button", { name: "Web" })).toHaveAttribute("aria-pressed", "true");
-    expect(within(group).getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(recorded.getByRole("checkbox", { name: "Web" }));
+    expect(recorded.getByRole("checkbox", { name: "Web" })).toBeChecked();
+    expect(screen.getByLabelText("1 filters on")).toBeInTheDocument();
   });
 
-  it("highlights the active chip and explains an empty filter", async () => {
+  it("closes the menu with Escape, its close button and a click outside", async () => {
+    await renderLibrary();
+    const open = () => fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    open();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Filters" })).not.toBeInTheDocument();
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Close filters" }));
+    expect(screen.queryByRole("dialog", { name: "Filters" })).not.toBeInTheDocument();
+    open();
+    fireEvent.mouseDown(within(screen.getByRole("dialog", { name: "Filters" })).getByText("Show"));
+    expect(screen.getByRole("dialog", { name: "Filters" })).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByLabelText("Search recordings"));
+    expect(screen.queryByRole("dialog", { name: "Filters" })).not.toBeInTheDocument();
+  });
+
+  it("marks the button when a filter is on and explains an empty filter", async () => {
     await renderLibrary([ITEMS[0]]);
-    expect(screen.getByRole("button", { name: "All" })).toHaveClass("active");
-    fireEvent.click(screen.getByRole("button", { name: "Phone" }));
-    expect(screen.getByRole("button", { name: "Phone" })).toHaveClass("active");
-    expect(screen.getByRole("button", { name: "All" })).not.toHaveClass("active");
+    expect(screen.queryByLabelText(/filters on/)).not.toBeInTheDocument();
+    tick("Phone");
+    expect(screen.getByLabelText("1 filters on")).toBeInTheDocument();
     expect(screen.getByText("Nothing matches. Try a different search or filter.")).toBeInTheDocument();
   });
 });
-
 describe("LibraryView syncing", () => {
   it("shows cached rows immediately and a disabled 'Syncing…' button until the refresh finishes", async () => {
     let finish: (v: LibraryItem[]) => void = () => undefined;
@@ -761,7 +787,7 @@ describe("LibraryView with a realistic library", () => {
     expect(titlesInList()).toHaveLength(120);
     fireEvent.change(screen.getByLabelText("Search recordings"), { target: { value: "Call 07" } });
     expect(titlesInList()).toHaveLength(10);
-    fireEvent.click(screen.getByRole("button", { name: "Phone" }));
+    tick("Phone");
     expect([...titlesInList()].sort()).toEqual(["Call 072", "Call 075", "Call 078"]);
     expect(titlesInList().every((t) => t?.startsWith("Call 07"))).toBe(true);
   });
@@ -798,19 +824,19 @@ describe("bookmarks in the library (B3)", () => {
   it("shows the bookmark count and filters by bookmark and by tag", async () => {
     await renderLibrary(tagged);
     expect(within(itemButton("Zoom with Acme")).getByText(/2 bookmarks/)).toBeInTheDocument();
-    const filters = screen.getByRole("group", { name: "Filter by bookmark" });
-    fireEvent.click(within(filters).getByRole("button", { name: "Bookmarked" }));
+    tick("Bookmarked");
     expect(titlesInList()).toEqual(["Zoom with Acme", "Voice note from Sam"]);
-    fireEvent.click(within(filters).getByRole("button", { name: "Budget" }));
+    tick("Tag Budget");
     expect(titlesInList()).toEqual(["Zoom with Acme"]);
-    expect(within(filters).getByRole("button", { name: "Budget" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.click(within(filters).getByRole("button", { name: "Any" }));
+    expect(screen.getByRole("checkbox", { name: "Tag Budget" })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Clear all" }));
     expect(titlesInList()).toHaveLength(3);
   });
 
   it("has no bookmark filter while nothing is bookmarked", async () => {
     await renderLibrary();
-    expect(screen.queryByRole("group", { name: "Filter by bookmark" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    expect(screen.queryByRole("group", { name: "Bookmark tags" })).not.toBeInTheDocument();
   });
 
   it("lists the recording's bookmarks and seeks the player to one", async () => {

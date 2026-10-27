@@ -6,17 +6,26 @@ import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, Speak
 import { formatDuration, formatWhen, providerName, timestamp, transcriptText } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, libraryTags, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { CopyIcon, DesktopIcon, GlobeIcon, PhoneIcon, RefreshIcon, SearchIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
+import { CopyIcon, RefreshIcon, SearchIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
-import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, SMART_VIEWS, smartViewCounts, type SmartView } from "../../lib/organise";
+import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, smartViewCounts } from "../../lib/organise";
 import { BinPanel, BulkBar, OrganisePanel } from "./LibraryOrganise";
+import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
 export function filterItems(items: LibraryItem[], source: SourceFilter): LibraryItem[] {
   return items.filter((i) => !i.deleted && (source === "all" || i.source_device === source));
+}
+
+/** The filter menu: ticked boxes of one group add up, the groups narrow each other, nothing ticked filters nothing. */
+export function applyFilters(items: LibraryItem[], f: FilterState): LibraryItem[] {
+  return items.filter((i) => !i.deleted
+    && (f.sources.size === 0 || f.sources.has(i.source_device as Source))
+    && (f.tags.size === 0 || [...f.tags].some((tag) => filterByTag([i], tag).length > 0))
+    && (f.views.size === 0 || [...f.views].some((v) => inSmartView(i, v))));
 }
 
 const STATE_LABEL = { ready: "Ready", processing: "Processing", failed: "Failed" } as const;
@@ -43,9 +52,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   onSelectedChange?: (id: string | null) => void;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
-  const [source, setSource] = useState<SourceFilter>("all");
-  const [tag, setTag] = useState<string | null>(null);
-  const [view, setView] = useState<SmartView>("all");
+  const [filters, setFilters] = useState<FilterState>(NO_FILTERS);
   const [label, setLabel] = useState<string | null>(null);
   const [folder, setFolder] = useState<string | null>(null);
   const [clients, setClients] = useState<ClientFolder[]>([]);
@@ -119,7 +126,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const endSelecting = () => { setSelecting(false); setPicked(new Set()); };
   const folders = useMemo(() => foldersOf(items, clients), [items, clients]);
   const addClient = (client: ClientFolder) => setClients((list) => [...list.filter((c) => c.id !== client.id), client]);
-  const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(filterByTag(filterItems(items, source), tag), label), folder).filter((i) => inSmartView(i, view)), query), sort), [items, source, tag, label, folder, view, query, sort]);
+  const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(applyFilters(items, filters), label), folder), query), sort), [items, filters, label, folder, query, sort]);
   const groups = useMemo(() => groupItems(filtered, sort), [filtered, sort]);
   // A recording opened from a transcript match stays open even when its title does not match the typed words.
   const [hitSelected, setHitSelected] = useState<string | null>(null);
@@ -410,31 +417,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             {labels.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         )}
+        <LibraryFilters state={filters} onChange={setFilters} counts={viewCounts} tags={tags} showBookmarks={anyBookmarks || filters.tags.size > 0} />
         <button type="button" className="btn ghost" aria-pressed={selecting} onClick={() => (selecting ? endSelecting() : setSelecting(true))}>{selecting ? "Cancel selection" : "Select"}</button>
         <button type="button" className="btn ghost" aria-pressed={binOpen} onClick={() => setBinOpen(!binOpen)}>Recently deleted</button>
       </div>
-      <div className="chips views" role="group" aria-label="Smart views">
-        {SMART_VIEWS.map(([key, text]) => (
-          <button key={key} type="button" className={`chip ${view === key ? "active" : ""}`} aria-pressed={view === key} onClick={() => setView(key)}>
-            {text}{key !== "all" && viewCounts[key] > 0 && <span className="count">{viewCounts[key]}</span>}
-          </button>
-        ))}
-      </div>
-      {/* Filter toggles, not tabs: a group of pressed / not pressed buttons (A6.DU7). */}
-      <div className="chips" role="group" aria-label="Filter by device">
-        {([["all", "All", null], ["phone", "Phone", <PhoneIcon key="p" size={13} />], ["desktop", "Desktop", <DesktopIcon key="d" size={13} />], ["web", "Web", <GlobeIcon key="w" size={13} />]] as const).map(([key, label, icon]) => (
-          <button key={key} type="button" className={`chip ${source === key ? "active" : ""}`} aria-pressed={source === key} onClick={() => setSource(key)}>{icon}{label}</button>
-        ))}
-      </div>
-      {(anyBookmarks || tag !== null) && (
-        <div className="chips" role="group" aria-label="Filter by bookmark">
-          <button type="button" className={`chip ${tag === null ? "active" : ""}`} aria-pressed={tag === null} onClick={() => setTag(null)}>Any</button>
-          <button type="button" className={`chip ${tag === "*" ? "active" : ""}`} aria-pressed={tag === "*"} onClick={() => setTag("*")}><BookmarkIcon size={13} />Bookmarked</button>
-          {tags.map((t) => (
-            <button key={t} type="button" className={`chip ${tag === t ? "active" : ""}`} aria-pressed={tag === t} onClick={() => setTag(t)}>{t}</button>
-          ))}
-        </div>
-      )}
       <div className="library">
         <div className="list" data-testid="library-list">
           {binOpen && <BinPanel notify={notify} onClose={() => setBinOpen(false)} />}
@@ -476,7 +462,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             </div>
           )}
           {loaded && filtered.length === 0 && (
-            <div className="empty">{view === "waiting" ? "Nothing is waiting here. Recordings waiting for Keep or Discard on this computer are listed at the top." : query || source !== "all" || tag !== null || label !== null || folder !== null || view !== "all" ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
+            <div className="empty">{filters.views.size === 1 && filters.views.has("waiting") ? "Nothing is waiting here. Recordings waiting for Keep or Discard on this computer are listed at the top." : query || activeFilterCount(filters) > 0 || label !== null || folder !== null ? "Nothing matches. Try a different search or filter." : "No recordings yet."}</div>
           )}
           {groups.map((group) => (
             <div key={group.label ?? "all"} className="group">

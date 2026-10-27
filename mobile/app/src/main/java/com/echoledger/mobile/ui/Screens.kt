@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -79,10 +80,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -264,9 +263,6 @@ private fun CallSetupBanner(onSetup: () -> Unit) {
     }
 }
 
-/** Below this window height (a phone in landscape) the Library page scrolls as one piece. */
-private const val COMPACT_HEIGHT_DP = 480
-
 @Composable
 fun LibraryScreen(
     vm: MainViewModel,
@@ -329,10 +325,6 @@ fun LibraryScreen(
                     }
                 )
     }
-    // In landscape the header, search, banners and filters would leave no room for the list, so there the whole
-    // page scrolls with the list (A6.M11).
-    val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
-    val compact = windowHeight < COMPACT_HEIGHT_DP.dp
     val top: @Composable ColumnScope.() -> Unit = {
         Spacer(Modifier.height(8.dp))
         ScreenHeader("Library", "Recordings from your phone, computer and the web") {
@@ -417,31 +409,6 @@ fun LibraryScreen(
         }
         SmartViewChips(counts, view) { view = it }
         FolderLabelFilters(folders, labels, folder, labelFilter, { folder = it }, { labelFilter = it })
-        if (selecting) {
-            val ids = picked.filter { id -> items.any { it.id == id && !it.deleted } }
-            fun run(action: String, clientId: String? = null, label: String? = null) = scope.launch {
-                if (vm.bulk(ids, action, clientId, label) != null && action == "delete") {
-                    selecting = false
-                    picked = emptySet()
-                }
-            }
-            BulkPanel(
-                count = ids.size,
-                folders = folders,
-                onMove = { run("move", clientId = it) },
-                onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { run("move", clientId = it.id) } } },
-                onLabel = { label, add -> run(if (add) "label" else "unlabel", label = label) },
-                onPin = { run(if (it) "pin" else "unpin") },
-                onExport = { format -> scope.launch { vm.exportSelected(ids, format)?.let { shareFile(context, it) } } },
-                onDelete = { run("delete") },
-                onDone = {
-                    selecting = false
-                    picked = emptySet()
-                },
-                onKeep = { run(if (it) "keep" else "unkeep") }
-            )
-            Spacer(Modifier.height(8.dp))
-        }
         if (visible.isEmpty() && items.isEmpty() && syncing && !vm.hasSynced()) {
             Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -469,10 +436,11 @@ fun LibraryScreen(
             )
         }
     }
+    // The whole page scrolls with the list (header, search and filters go up with it); while selecting, the actions sit
+    // in a panel pinned to the bottom, so the list stays reachable and more recordings can be picked.
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        if (!compact) top()
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (compact) item(key = "library-top") { Column(content = top) }
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item(key = "library-top") { Column(content = top) }
             if (found.isNotEmpty()) {
                 item(key = "search-hits") { SearchResultsSection(found) { result, ms -> onOpenAt(result.session, ms) } }
             }
@@ -485,6 +453,33 @@ fun LibraryScreen(
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }
+        }
+        if (selecting) {
+            val ids = picked.filter { id -> items.any { it.id == id && !it.deleted } }
+            fun run(action: String, clientId: String? = null, label: String? = null) = scope.launch {
+                if (vm.bulk(ids, action, clientId, label) != null && action == "delete") {
+                    selecting = false
+                    picked = emptySet()
+                }
+            }
+            Box(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
+                BulkPanel(
+                    count = ids.size,
+                    folders = folders,
+                    onMove = { run("move", clientId = it) },
+                    onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { run("move", clientId = it.id) } } },
+                    onLabel = { label, add -> run(if (add) "label" else "unlabel", label = label) },
+                    onPin = { run(if (it) "pin" else "unpin") },
+                    onExport = { format -> scope.launch { vm.exportSelected(ids, format)?.let { shareFile(context, it) } } },
+                    onDelete = { run("delete") },
+                    onDone = {
+                        selecting = false
+                        picked = emptySet()
+                    },
+                    onKeep = { run(if (it) "keep" else "unkeep") },
+                    onSelectAll = { picked = visible.map { it.id }.toSet() }
+                )
+            }
         }
     }
 }
@@ -1126,7 +1121,10 @@ internal fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Hide content in Recents and screenshots", modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f)) {
+                    Text("Hide content in Recents and screenshots")
+                    Text("Off by default: screenshots are always allowed unless you turn this on.", color = Brand.Muted, fontSize = 12.sp)
+                }
                 Switch(checked = settings.secureScreen, onCheckedChange = { v -> vm.updateSettings { it.copy(secureScreen = v) } })
             }
         }

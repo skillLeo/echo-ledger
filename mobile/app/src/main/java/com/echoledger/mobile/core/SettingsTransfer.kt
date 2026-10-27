@@ -61,6 +61,7 @@ object SettingsTransfer {
         "appLockEnabled",
         "lockAfterMs",
         "secureScreen",
+        "settingsVersion",
         "onboardingDone",
         "themeMode",
         "dynamicColour"

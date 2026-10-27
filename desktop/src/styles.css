@@ -526,3 +526,16 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
   .flow-bar > span { transition: none; }
   .skeleton::after { animation: none; }
 }
+
+/* Library filters: one dropdown with checkboxes instead of three rows of chips. */
+.filter-menu { position: relative; }
+.filter-menu > .btn.filter-on { background: var(--accent-soft, var(--surface-3)); border-color: var(--accent); color: var(--text); }
+.filter-menu .badge-inline { margin-left: var(--space-1); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 600; display: inline-grid; place-items: center; }
+.filter-panel { position: absolute; left: 0; top: 40px; z-index: 30; width: 280px; max-height: 70vh; overflow: auto; box-shadow: var(--shadow-3); animation: rise var(--motion-base) var(--ease-out) both; }
+.filter-group { border: 0; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: 2px; }
+.filter-group legend { padding: 0; margin-bottom: var(--space-1); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-muted); }
+.filter-option { display: flex; align-items: center; gap: var(--space-2); padding: 6px var(--space-2); border-radius: var(--radius-sm); cursor: pointer; }
+.filter-option:hover { background: var(--surface-3); }
+.filter-option input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+.filter-option .filter-label { display: inline-flex; align-items: center; gap: 6px; flex: 1; }
+.filter-option .count { color: var(--text-muted); font-size: 12px; }

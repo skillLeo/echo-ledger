@@ -171,6 +171,28 @@ object Notifications {
         runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
     }
 
+    /** A recording that captured no sound is dropped: tell the person why, and where to look. */
+    fun noAudio(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val text = "The recording had no sound, so it was not kept. " +
+            "Check Settings, Devices, This phone, Setup guide (call capture) and record again."
+        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("No audio was captured")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(openPending(context))
+        runCatching { NotificationManagerCompat.from(context).notify(NO_AUDIO_ID, builder.build()) }
+    }
+
+    private const val NO_AUDIO_ID = 7_431
+
     /** "WhatsApp call · 4:12 · Acme" or "Voice note · 0:42". */
     fun decisionText(rec: LocalRecording, clientName: String?): String {
         val app = SourceApp.from(rec.sourceApp)

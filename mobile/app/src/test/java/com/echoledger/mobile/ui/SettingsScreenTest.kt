@@ -241,8 +241,11 @@ class SettingsScreenTest : AppTest() {
         compose.onNode(hasText("After 5 minutes") and isSelectable()).assertIsSelected()
 
         compose.onNodeWithText("Hide content in Recents and screenshots").assertIsDisplayed()
+        // Screenshots are allowed by default: the option is off until the person turns it on.
+        compose.onAllNodes(isToggleable())[1].assertIsOff().performClick()
+        pumpUntil("hide content saved on") { settings().secureScreen }
         compose.onAllNodes(isToggleable())[1].assertIsOn().performClick()
-        pumpUntil("hide content saved off") { !settings().secureScreen }
+        pumpUntil("hide content saved off again") { !settings().secureScreen }
     }
 
     @Test

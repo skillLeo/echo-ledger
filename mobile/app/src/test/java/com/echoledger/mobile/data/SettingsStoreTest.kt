@@ -286,4 +286,15 @@ class SettingsStoreTest : AppTest() {
         store.update { it.copy(appLockEnabled = true) }
         assertEquals("7|eld_secret", store.token())
     }
+
+    @Test
+    fun `screenshots are allowed by default and an older stored hide-content default is reset once`() = runBlocking {
+        assertEquals(false, AppSettings().secureScreen)
+
+        plantRaw("settings_json", """{"serverUrl":"https://x.example","deviceId":"d1","secureScreen":true,"onboardingDone":true}""")
+        assertEquals(false, store.current().secureScreen)
+
+        store.update { it.copy(secureScreen = true) }
+        assertEquals("a choice made afterwards is kept", true, store.current().secureScreen)
+    }
 }

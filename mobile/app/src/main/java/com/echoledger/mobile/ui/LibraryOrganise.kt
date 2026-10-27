@@ -207,7 +207,8 @@ fun BulkPanel(
     onExport: (String) -> Unit,
     onDelete: () -> Unit,
     onDone: () -> Unit,
-    onKeep: (Boolean) -> Unit = {}
+    onKeep: (Boolean) -> Unit = {},
+    onSelectAll: () -> Unit = {}
 ) {
     var label by remember { mutableStateOf("") }
     var format by remember { mutableStateOf("docx") }
@@ -225,6 +226,7 @@ fun BulkPanel(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
+            TextButton(onClick = onSelectAll) { Text("Select all") }
             TextButton(onClick = onDone) { Text("Done") }
         }
         if (count == 0) {

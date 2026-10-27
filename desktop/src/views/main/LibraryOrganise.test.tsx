@@ -38,19 +38,27 @@ async function renderLibrary() {
 
 const list = () => screen.getByTestId("library-list");
 const titles = () => [...list().querySelectorAll(".item-title")].map((n) => n.textContent?.replace("★ ", ""));
-const views = () => screen.getByRole("group", { name: "Smart views" });
+/** Ticks (or unticks) one box of the Filters menu, opening the menu first when it is closed. */
+function tick(name: string | RegExp) {
+  if (!screen.queryByRole("dialog", { name: "Filters" })) fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name }));
+}
 
 describe("library organisation (B15)", () => {
   it("shows smart views with counts and filters the list", async () => {
     await renderLibrary();
-    expect(within(views()).getByRole("button", { name: /Pinned/ })).toHaveTextContent("Pinned1");
-    fireEvent.click(within(views()).getByRole("button", { name: /Failed/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Filters" }));
+    expect(screen.getByRole("checkbox", { name: "Pinned" }).closest("label")).toHaveTextContent("Pinned1");
+    tick("Failed");
     expect(titles()).toEqual(["Old call"]);
-    fireEvent.click(within(views()).getByRole("button", { name: /Bookmarked/ }));
+    tick("Failed");
+    tick("Bookmarked");
     expect(titles()).toEqual(["Briefing"]);
-    fireEvent.click(within(views()).getByRole("button", { name: /Today/ }));
+    tick("Bookmarked");
+    tick("Today");
     expect(titles()).toEqual(["Kickoff"]);
-    fireEvent.click(within(views()).getByRole("button", { name: /Waiting for decision/ }));
+    tick("Today");
+    tick("Waiting for decision");
     expect(screen.getByText(/Recordings waiting for Keep or Discard on this computer are listed at the top/)).toBeInTheDocument();
   });
 

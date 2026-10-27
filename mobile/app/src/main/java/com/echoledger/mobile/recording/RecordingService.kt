@@ -33,6 +33,7 @@ import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.data.UsageReport
 import com.echoledger.mobile.net.CaptionTokens
+import com.echoledger.mobile.net.DiscardWorker
 import com.echoledger.mobile.net.SttEvent
 import com.echoledger.mobile.net.SttStreamer
 import com.echoledger.mobile.net.UploadWorker
@@ -516,10 +517,18 @@ class RecordingService : LifecycleService() {
                 Log.e(TAG, "saving recording failed", it)
                 session.file.delete()
             }.getOrNull()
+            // A recording that captured no sound (0 ms) has nothing to keep or transcribe: say why instead of asking.
+            val silent = stored != null && stored.durationMs <= 0
+            if (silent && stored != null) {
+                stored.serverSessionId?.let { DiscardWorker.enqueue(this, stored.id, it) }
+                graph.recordings.delete(stored.id)
+            }
             val decisionTimeout = settings.afterCallTimeout
             val themeMode = settings.themeMode
             main.post {
-                if (stored != null) {
+                if (silent) {
+                    Notifications.noAudio(this)
+                } else if (stored != null) {
                     if (stored.state == "pending_decision") {
                         PostCallPrompt.show(this, stored, decisionTimeout, themeMode)
                     } else {

@@ -30,7 +30,9 @@ data class AppSettings(
     /** How long the app may stay in the background before the lock engages again: 0, 60 000 or 300 000 ms. */
     val lockAfterMs: Long = 0L,
     /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
-    val secureScreen: Boolean = true,
+    val secureScreen: Boolean = false,
+    /** Absent in settings stored before v1.1.1, which also reset the old default "hide content" (on) to off. */
+    val settingsVersion: Int = 2,
     /** What happens to a recording nobody decided on within 60 s: "keep", "discard" or "wait" (same as the desktop). */
     val decisionTimeout: String = "wait",
     /** True once the user picked an option in Settings; until then the phone waits (an older stored "keep" was only the default). */
@@ -159,10 +161,21 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
         val raw = this[Keys.SETTINGS]
         val parsed = raw?.let { runCatching { ApiJson.decodeFromString(AppSettings.serializer(), it) }.getOrNull() } ?: return AppSettings()
         // Settings written before the wizard existed have no such key: a phone that is already paired skips it.
-        return if (!raw.contains("\"onboardingDone\"") && parsed.paired) parsed.copy(onboardingDone = true) else parsed
+        val migrated = if (!raw.contains("\"onboardingDone\"") && parsed.paired) parsed.copy(onboardingDone = true) else parsed
+        // Until v1.1.1 "Hide content in Recents and screenshots" was on by default; screenshots are always allowed now
+        // unless the person turns the option on themselves.
+        return if (!raw.contains(
+                "\"settingsVersion\""
+            )
+        ) {
+            migrated.copy(secureScreen = false, settingsVersion = SETTINGS_VERSION)
+        } else {
+            migrated
+        }
     }
 
     private companion object {
+        const val SETTINGS_VERSION = 2
         val TOKEN_CONTEXT = "echoledger.device_token".toByteArray()
     }
 }

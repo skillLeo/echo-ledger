@@ -106,7 +106,7 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 | ☐ | 51 | Choose **Print or save as PDF**. | The print page opens in the browser and saves as a PDF. | T-D2 |
 | ☐ | 52 | Press **Ctrl+K**, type "settings", then type a word from the transcript. | "Go to Settings" opens Settings. The word opens the recording at that moment. | T-D4 |
 | ☐ | 53 | Pin the recording, choose a client (or **New client…**) and add a label. | The star and label show on the card at once. | O-D2 |
-| ☐ | 54 | Try the smart views and the client and label filters. | Each lists only its recordings, and the counts match. | O-D1 |
+| ☐ | 54 | Open **Filters** and tick the "Show" boxes one at a time, then the "Recorded on" boxes; also try the client and label lists. | Each lists only its recordings, the counts match, ticked boxes add up inside a group, and the menu closes with Esc, the X button or a click outside. | O-D1 |
 | ☐ | 55 | Delete a recording, open **Recently deleted** and restore it. | It comes back with its audio and transcript. | R-2 |
 
 ### Dictation

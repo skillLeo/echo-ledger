@@ -40,6 +40,27 @@ describe("activity bell (B18)", () => {
     expect(screen.queryByRole("dialog", { name: "Activity" })).not.toBeInTheDocument();
   });
 
+  it("closes with its close button, with Escape and with a click anywhere outside", async () => {
+    respond("activity_list", { data: ITEMS, unread_count: 1 });
+    render(<div><ActivityBell onOpenRecording={vi.fn()} /><p>Somewhere else</p></div>);
+    const bell = await screen.findByRole("button", { name: "Activity, 1 unread" });
+
+    fireEvent.click(bell);
+    fireEvent.click(await screen.findByRole("button", { name: "Close activity" }));
+    expect(screen.queryByRole("dialog", { name: "Activity" })).not.toBeInTheDocument();
+
+    fireEvent.click(bell);
+    await screen.findByRole("dialog", { name: "Activity" });
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Activity" })).not.toBeInTheDocument();
+
+    fireEvent.click(bell);
+    const panel = await screen.findByRole("dialog", { name: "Activity" });
+    fireEvent.mouseDown(panel); // a press inside does not close it
+    expect(screen.getByRole("dialog", { name: "Activity" })).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByText("Somewhere else"));
+    expect(screen.queryByRole("dialog", { name: "Activity" })).not.toBeInTheDocument();
+  });
   it("marks everything read and explains an empty list", async () => {
     respondWith("activity_list", () => ({ data: ITEMS, unread_count: 1 }));
     respond("activity_read", { unread_count: 0 });

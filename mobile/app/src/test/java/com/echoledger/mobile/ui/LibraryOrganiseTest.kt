@@ -215,6 +215,24 @@ class LibraryOrganiseTest : ScreenTest() {
     }
 
     @Test
+    fun `the bulk panel offers Select all and can be left with Done`() {
+        var all = 0
+        var done = 0
+        show {
+            BulkPanel(
+                count = 1, folders = emptyList(), onMove = {}, onCreateClient = {}, onLabel = { _, _ -> }, onPin = {}, onExport = {},
+                onDelete = {}, onDone = { done++ }, onSelectAll = { all++ }
+            )
+        }
+
+        compose.onNodeWithText("Select all").performClick()
+        compose.onNodeWithText("Done").performClick()
+
+        assertEquals(1, all)
+        assertEquals(1, done)
+    }
+
+    @Test
     fun `the bulk panel runs each action and asks before deleting`() {
         val events = mutableListOf<String>()
         show {

@@ -164,6 +164,16 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
+    fun `a recording that captured no sound says so in a notification`() {
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+
+        com.echoledger.mobile.notify.Notifications.noAudio(app)
+
+        val posted = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.single()
+        assertEquals("No audio was captured", posted.extras.getString(android.app.Notification.EXTRA_TITLE))
+    }
+
+    @Test
     fun `the auto-hide window is ten seconds`() {
         assertEquals(Duration.ofSeconds(10).toMillis(), DecisionPopup.AUTO_HIDE_MS)
     }
