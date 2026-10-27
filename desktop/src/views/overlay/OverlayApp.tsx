@@ -3,6 +3,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { announceReady, api, listenTo, subscribeCaptions, type CaptionEvent, type CaptionSize, type CaptionStyle } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
 import { CloseIcon, CopyIcon, GripIcon } from "../../components/Icons";
+import { devanagariToUrdu } from "../../lib/devanagari";
 
 /** Final lines kept for scrolling back; older ones are dropped. */
 export const MAX_CAPTION_LINES = 200;
@@ -33,9 +34,10 @@ export const initialCaptions: CaptionState = { lines: [], partial: {}, live: fal
 export function captionsReducer(state: CaptionState, event: CaptionEvent): CaptionState {
   switch (event.kind) {
     case "partial":
-      return { ...state, partial: { ...state.partial, [event.channel]: event.text } };
+      // Display only: Hindi letters from an engine that guessed Hindi are shown in Urdu script.
+      return { ...state, partial: { ...state.partial, [event.channel]: devanagariToUrdu(event.text) } };
     case "final": {
-      const line = { id: state.nextId, channel: event.channel, speaker: event.speaker, text: event.text };
+      const line = { id: state.nextId, channel: event.channel, speaker: event.speaker, text: devanagariToUrdu(event.text) };
       const lines = [...state.lines, line].slice(-MAX_CAPTION_LINES);
       const partial = { ...state.partial };
       delete partial[event.channel];

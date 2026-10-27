@@ -32,6 +32,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.echoledger.mobile.core.Devanagari
 import com.echoledger.mobile.data.CaptionStyle
 import com.echoledger.mobile.ui.DarkColors
 import com.echoledger.mobile.ui.Radius
@@ -85,13 +86,14 @@ class CaptionBubble(private val context: Context, style: CaptionStyle = CaptionS
     }
 
     fun partial(speaker: String, text: String) {
-        partialLine.value = speaker to text
+        // Display only: Hindi letters from an engine that guessed Hindi are shown in Urdu script.
+        partialLine.value = speaker to Devanagari.toUrdu(text)
         active()
     }
 
     fun final(speaker: String, text: String) {
         partialLine.value = null
-        lines += speaker to text
+        lines += speaker to Devanagari.toUrdu(text)
         while (lines.size > maxOf(1, styleState.value.lines - 1)) lines.removeAt(0)
         active()
     }
