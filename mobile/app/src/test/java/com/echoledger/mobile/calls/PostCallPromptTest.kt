@@ -177,8 +177,8 @@ class PostCallPromptTest : AppTest() {
         }
 
         compose.onNodeWithText("UR").performClick()
-        compose.onNodeWithText("UR+EN").assertExists()
-        assertEquals("en+ur", language)
+        compose.onNodeWithText("AR").assertExists()
+        assertEquals("ar", language)
     }
 
     @Test

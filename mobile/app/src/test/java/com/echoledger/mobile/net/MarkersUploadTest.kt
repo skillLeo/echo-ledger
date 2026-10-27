@@ -100,14 +100,14 @@ class MarkersUploadTest : AppTest() {
     @Test
     fun `finishing sends the language chosen on the Keep card, and an empty one for automatic`() {
         app.storeRecording(bytes = sampleBytes(2_500))
-        app.graph.recordings.update(id) { it.copy(serverSessionId = openSession, language = "en+ur") }
+        app.graph.recordings.update(id) { it.copy(serverSessionId = openSession, language = "ur") }
         server.on("POST", "/api/sessions/$openSession/finish", FakeServer.json(200, answer()))
         serveUpload()
 
         assertEquals(ListenableWorker.Result.success(), run())
 
         val body = ApiJson.parseToJsonElement(server.requestsTo("POST", "/api/sessions/$openSession/finish").single().bodyText()).jsonObject
-        assertEquals("en+ur", body.getValue("language").jsonPrimitive.content)
+        assertEquals("ur", body.getValue("language").jsonPrimitive.content)
         val auto = ApiJson.encodeToString(
             com.echoledger.mobile.data.FinishSessionRequest.serializer(),
             com.echoledger.mobile.data.FinishSessionRequest("2026-10-27T10:00:00Z", 1_000, null, emptyList())

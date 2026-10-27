@@ -28,6 +28,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -91,14 +93,34 @@ internal fun recordingLanguage(context: Context, language: String?) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun LanguageChips(selected: String?, onPick: (String?) -> Unit) {
+    val current = Languages.canonical(selected)
+    var moreOpen by remember { mutableStateOf(false) }
+    val moreChosen = Languages.MORE.firstOrNull { it.code == current }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Languages.OPTIONS.forEach { option ->
+        Languages.MAIN.forEach { option ->
             FilterChip(
-                selected = Languages.canonical(selected) == option.code,
+                selected = current == option.code,
                 onClick = { onPick(option.code) },
                 label = { Text(option.chip) },
                 modifier = Modifier.semantics { contentDescription = "Language: ${option.label}" }
             )
+        }
+        // The More languages sit behind one chip, so the row stays short.
+        Box {
+            FilterChip(
+                selected = moreChosen != null,
+                onClick = { moreOpen = true },
+                label = { Text(moreChosen?.chip ?: "More ▾") },
+                modifier = Modifier.semantics { contentDescription = "More languages" }
+            )
+            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                Languages.MORE.forEach { option ->
+                    DropdownMenuItem(text = { Text(option.label) }, onClick = {
+                        moreOpen = false
+                        onPick(option.code)
+                    })
+                }
+            }
         }
     }
 }

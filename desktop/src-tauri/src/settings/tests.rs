@@ -57,7 +57,7 @@ fn customised() -> Settings {
         },
         input_device: Some("{0.0.1.00000000}.{4b3c5f0e-usb-headset}".into()),
         far_side_warning: false,
-        transcription_language: Some("en+ur".into()),
+        transcription_language: Some("ur".into()),
         dictation_mode: "push_to_talk".into(),
         dictation_cleanup: false,
         dictation_sounds: false,
@@ -172,7 +172,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
     assert_eq!(keys.len(), 37, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
-    assert_eq!(v["transcriptionLanguage"], "en+ur");
+    assert_eq!(v["transcriptionLanguage"], "ur");
     assert_eq!(v["autoRecordApps"], json!({"zoom": false}));
     assert_eq!(
         v["captionStyle"],
@@ -543,24 +543,39 @@ fn the_microphone_choice_is_kept_or_cleared() {
 }
 
 #[test]
-fn mixed_languages_are_written_english_first_and_have_short_chips() {
+fn old_languages_read_as_today_and_have_short_chips() {
     use crate::settings::{language_chip, language_or_none};
-    assert_eq!(language_or_none(Some("ur+en")).as_deref(), Some("en+ur"));
-    assert_eq!(language_or_none(Some("HI + EN")).as_deref(), Some("en+hi"));
-    assert_eq!(language_or_none(Some("ur+hi")), None);
+    // v1.1 values: the mixed choices and Hindi are Urdu (Urdu always allows English words).
+    assert_eq!(language_or_none(Some("ur+en")).as_deref(), Some("ur"));
+    assert_eq!(language_or_none(Some("en+ur")).as_deref(), Some("ur"));
+    assert_eq!(language_or_none(Some("HI + EN")).as_deref(), Some("ur"));
+    assert_eq!(language_or_none(Some("hi")).as_deref(), Some("ur"));
+    assert_eq!(language_or_none(Some("en+ar")).as_deref(), Some("ar"));
+    assert_eq!(language_or_none(Some("ar-EG")).as_deref(), Some("ar"));
+    assert_eq!(language_or_none(Some("fr")).as_deref(), Some("fr"));
+    assert_eq!(language_or_none(Some("ja")), None);
     assert_eq!(language_or_none(Some("")), None);
-    assert_eq!(language_chip(Some("en+ur")), "UR+EN");
-    assert_eq!(language_chip(Some("en+hi")), "HI+EN");
+    assert_eq!(language_chip(Some("ur")), "UR");
+    assert_eq!(language_chip(Some("en+ur")), "UR");
+    assert_eq!(language_chip(Some("de")), "DE");
     assert_eq!(language_chip(None), "Auto");
 }
 
 #[test]
 fn only_the_offered_languages_are_kept() {
-    for (stored, expected) in [(json!("ur"), Some("ur")), (json!(" HI "), Some("hi")), (json!("en+ur"), Some("en+ur")), (json!("en+hi"), Some("en+hi")), (json!("fr"), None), (json!(5), None), (json!(null), None)] {
+    for (stored, expected) in [
+        (json!("ur"), Some("ur")),
+        (json!(" HI "), Some("ur")),
+        (json!("en+ur"), Some("ur")),
+        (json!("ar"), Some("ar")),
+        (json!("fr"), Some("fr")),
+        (json!("xx"), None),
+        (json!(5), None),
+        (json!(null), None),
+    ] {
         assert_eq!(Settings::from_value(json!({"transcriptionLanguage": stored.clone()})).transcription_language.as_deref(), expected, "{stored}");
     }
 }
-
 #[test]
 fn dictation_settings_load_tolerantly() {
     let s = Settings::from_value(json!({

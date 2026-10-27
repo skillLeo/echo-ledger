@@ -1,31 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { engineLine, languageChip, languageLabel, learnPrompt, nextLanguage, scriptWarning } from "./languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageChip, languageLabel, learnPrompt, nextLanguage, normalizeLanguage, scriptWarning } from "./languages";
 
 describe("languages", () => {
-  it("labels and chips every offered language, and treats unknown codes as automatic", () => {
-    expect(["", "en", "ur", "en+ur", "hi", "en+hi", "fr"].map((c) => languageChip(c))).toEqual(["Auto", "EN", "UR", "UR+EN", "HI", "HI+EN", "Auto"]);
-    expect(languageLabel("en+hi")).toBe("Hindi + English");
-    expect(languageLabel(null)).toBe("Automatic");
+  it("offers Auto, English, Urdu and Arabic first, then the More languages, without Hindi or mixed choices", () => {
+    expect(MAIN_LANGUAGES.map((o) => o.chip)).toEqual(["Auto", "EN", "UR", "AR"]);
+    expect(MORE_LANGUAGES.map((o) => o.value)).toEqual(["fr", "de", "es", "it", "pt", "nl", "tr", "ru"]);
+    expect(["", "en", "ur", "ar", "de", "xx"].map((c) => languageChip(c))).toEqual(["Auto", "EN", "UR", "AR", "DE", "Auto"]);
+    expect(languageLabel("ar")).toBe("Arabic");
+    expect(languageLabel(null)).toBe("Auto");
   });
 
-  it("steps through the languages in chip order and wraps to Auto", () => {
+  it("reads v1.1 values as today: the mixed choices and Hindi are Urdu", () => {
+    expect(normalizeLanguage("en+ur")).toBe("ur");
+    expect(normalizeLanguage("ur+en")).toBe("ur");
+    expect(normalizeLanguage("hi")).toBe("ur");
+    expect(normalizeLanguage("en+hi")).toBe("ur");
+    expect(normalizeLanguage("en+ar")).toBe("ar");
+    expect(normalizeLanguage("ar-EG")).toBe("ar");
+    expect(normalizeLanguage("ja")).toBeNull();
+    expect(languageChip("en+ur")).toBe("UR");
+  });
+
+  it("steps through the main choices and wraps to Auto; a More language steps back to Auto", () => {
     const seen = [null as string | null];
-    for (let i = 0; i < 6; i++) seen.push(nextLanguage(seen[seen.length - 1]));
-    expect(seen).toEqual([null, "en", "ur", "en+ur", "hi", "en+hi", null]);
+    for (let i = 0; i < 4; i++) seen.push(nextLanguage(seen[seen.length - 1]));
+    expect(seen).toEqual([null, "en", "ur", "ar", null]);
+    expect(nextLanguage("de")).toBeNull();
   });
 
   it("asks to remember a language only for a client that uses another one", () => {
     expect(learnPrompt("Acme", "en", "ur")).toBe("Use Urdu for Acme from now on?");
-    expect(learnPrompt("Acme", null, "en+ur")).toBe("Use Urdu + English for Acme from now on?");
-    expect(learnPrompt("Acme", "ur", "ur")).toBeNull();
+    expect(learnPrompt("Acme", null, "ar")).toBe("Use Arabic for Acme from now on?");
+    expect(learnPrompt("Acme", "en+ur", "ur")).toBeNull();
     expect(learnPrompt("Acme", "ur", null)).toBeNull();
     expect(learnPrompt(null, "ur", "en")).toBeNull();
   });
 
   it("names the language and engine of the final transcript and explains a wrong script", () => {
-    expect(engineLine({ final_language: "en+ur", final_provider_label: "ElevenLabs Scribe", final_model: "scribe_v2" })).toBe("Urdu + English · ElevenLabs Scribe (scribe_v2)");
+    expect(engineLine({ final_language: "ur", final_provider_label: "Groq Whisper large-v3", final_model: "whisper-large-v3" })).toBe("Urdu · Groq Whisper large-v3 (whisper-large-v3)");
     expect(engineLine({ final_language: null, final_provider_label: null })).toBeNull();
-    expect(scriptWarning("devanagari")).toMatch(/Hindi letters in an Urdu transcript/);
+    expect(scriptWarning("devanagari")).toMatch(/Hindi letters came back/);
     expect(scriptWarning(null)).toBeNull();
   });
 });

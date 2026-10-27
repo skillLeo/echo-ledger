@@ -46,6 +46,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.data.SearchItemDto
 import com.echoledger.mobile.data.ShareLinkDto
 import java.io.File
@@ -310,14 +311,8 @@ fun SearchResultsSection(results: List<SearchItemDto>, onOpen: (SearchItemDto, L
     }
 }
 
-/** Languages offered for new recordings (B12); null is automatic (the client's or the console default). */
-val LANGUAGES = listOf<Pair<String?, String>>(
-    null to "Automatic",
-    "en" to "English",
-    "ur" to "Urdu",
-    "hi" to "Hindi",
-    "en+ur" to "English + Urdu"
-)
+/** Languages offered for new recordings: Auto, English, Urdu, Arabic, then the More languages (core/Languages). */
+val LANGUAGES: List<Pair<String?, String>> = Languages.OPTIONS.map { it.code to it.label }
 
 /** Settings → Transcription: the language of new recordings and "Add to vocabulary" (B11, B12). */
 @OptIn(ExperimentalLayoutApi::class)
@@ -327,14 +322,12 @@ fun TranscriptionSection(vm: MainViewModel, settings: com.echoledger.mobile.data
     SectionCard {
         Text("Transcription", fontWeight = FontWeight.SemiBold)
         Text("Language of new recordings", color = Brand.Muted, fontSize = 12.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            LANGUAGES.forEach { (code, label) ->
-                FilterChip(selected = settings.transcriptionLanguage == code, onClick = {
-                    vm.updateSettings { it.copy(transcriptionLanguage = code) }
-                }, label = { Text(label) })
-            }
-        }
-        Text("“English + Urdu” is for calls that switch between the two.", color = Brand.Muted, fontSize = 12.sp)
+        LanguageChips(settings.transcriptionLanguage) { code -> vm.updateSettings { it.copy(transcriptionLanguage = code) } }
+        Text(
+            "Auto picks English, Urdu or Arabic. Urdu and Arabic always allow English words inside.",
+            color = Brand.Muted,
+            fontSize = 12.sp
+        )
         Text("Add to vocabulary", color = Brand.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(

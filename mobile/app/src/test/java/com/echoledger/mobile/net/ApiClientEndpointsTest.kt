@@ -186,11 +186,11 @@ class ApiClientEndpointsTest {
     fun `sttToken sends the recording language chip only when one is chosen`() = runBlocking {
         server.on("POST", "/api/stt/token", FakeServer.json(200, ServerFixtures.assemblyAiGrants()))
 
-        client().sttToken("live_captions", listOf("me", "client"), null, sessionId = "S1", language = "en+ur")
+        client().sttToken("live_captions", listOf("me", "client"), null, sessionId = "S1", language = "ur")
         client().sttToken("live_captions", listOf("me", "client"), null, sessionId = "S1")
 
         val bodies = server.requestsTo("POST", "/api/stt/token").map { it.bodyJson() }
-        assertEquals("en+ur", bodies[0]["language"]!!.jsonPrimitive.content)
+        assertEquals("ur", bodies[0]["language"]!!.jsonPrimitive.content)
         assertEquals(null, bodies[1]["language"])
     }
 

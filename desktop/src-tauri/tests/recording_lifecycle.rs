@@ -223,11 +223,11 @@ fn changing_the_language_chip_before_keep_changes_the_final_transcript_language(
     files.add(decision(root.path(), "m", None, Utc::now())).unwrap();
     assert_eq!(files.load().find("m").unwrap().item(DecisionTimeout::Keep).language.as_deref(), Some("ur"));
 
-    let item = files.set_language("m", Some("en+ur".into())).unwrap().item(DecisionTimeout::Keep);
-    assert_eq!(item.language.as_deref(), Some("en+ur"), "the card shows the new chip");
+    let item = files.set_language("m", Some("ar".into())).unwrap().item(DecisionTimeout::Keep);
+    assert_eq!(item.language.as_deref(), Some("ar"), "the card shows the new chip");
 
     let upload = DecisionFiles::in_dir(root.path()).load().find("m").unwrap().to_upload();
-    assert_eq!(upload.language.as_deref(), Some("en+ur"), "Keep uploads with the chip's value");
+    assert_eq!(upload.language.as_deref(), Some("ar"), "Keep uploads with the chip's value");
     files.set_language("m", None).unwrap();
     assert_eq!(files.load().find("m").unwrap().to_upload().language, None, "Auto: the server decides");
 }

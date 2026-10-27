@@ -115,9 +115,9 @@ fn an_export_never_overwrites_a_file() {
 fn the_transcription_language_is_set_cleared_or_kept() {
     let mut s = Settings::default();
     patch(json!({"transcriptionLanguage": "EN+UR"})).apply(&mut s);
-    assert_eq!(s.transcription_language.as_deref(), Some("en+ur"));
+    assert_eq!(s.transcription_language.as_deref(), Some("ur"), "a v1.1 mixed choice is Urdu");
     patch(json!({"autoMode": true})).apply(&mut s);
-    assert_eq!(s.transcription_language.as_deref(), Some("en+ur"), "a patch without it keeps it");
+    assert_eq!(s.transcription_language.as_deref(), Some("ur"), "a patch without it keeps it");
     patch(json!({"transcriptionLanguage": null})).apply(&mut s);
     assert_eq!(s.transcription_language, None);
 }

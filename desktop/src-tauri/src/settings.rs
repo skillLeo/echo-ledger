@@ -147,31 +147,41 @@ fn tolerant_caption_style(value: Value) -> Value {
     serde_json::to_value(style).unwrap_or(Value::Null)
 }
 
-/// The language choices offered (docs/API.md "Languages"); anything else is automatic.
-pub const LANGUAGES: [&str; 5] = ["en", "ur", "en+ur", "hi", "en+hi"];
+/// The language choices offered (docs/API.md "Languages", since v1.2): English, Urdu and Arabic first, then the
+/// More languages. Anything else is Auto. Urdu and Arabic always allow English words inside.
+pub const LANGUAGES: [&str; 11] = ["en", "ur", "ar", "fr", "de", "es", "it", "pt", "nl", "tr", "ru"];
 
-/// A stored or requested language: one of [`LANGUAGES`], else none (automatic). Mixed languages are written with
-/// English first ("ur+en" is "en+ur"), like the server.
+/// The main choices the recording pill steps through (Auto first, then these).
+pub const MAIN_LANGUAGES: [&str; 3] = ["en", "ur", "ar"];
+
+/// A stored or requested language: one of [`LANGUAGES`], else none (Auto). v1.1 values read as today, like the
+/// server: Hindi is Urdu, a mixed choice keeps its non-English language ("en+ur" is Urdu), regions are dropped.
 pub fn language_or_none(value: Option<&str>) -> Option<String> {
     let value = value?.trim().to_ascii_lowercase();
-    let mut codes: Vec<&str> = value.split('+').map(str::trim).filter(|c| !c.is_empty()).collect();
-    codes.sort_by_key(|c| *c != "en");
-    let canonical = codes.join("+");
-    LANGUAGES.contains(&canonical.as_str()).then_some(canonical)
+    let codes: Vec<&str> = value
+        .split('+')
+        .map(str::trim)
+        .filter(|c| !c.is_empty())
+        .map(|c| c.split(['-', '_']).next().unwrap_or(c))
+        .map(|c| match c {
+            "hi" | "hin" | "hindi" | "urd" | "urdu" => "ur",
+            "eng" | "english" => "en",
+            "ara" | "arabic" => "ar",
+            other => other,
+        })
+        .filter(|c| LANGUAGES.contains(c))
+        .collect();
+    let chosen = codes.iter().find(|c| **c != "en").or(codes.first())?;
+    Some((*chosen).to_string())
 }
 
-/// The short label of a language on chips: "UR+EN", "Auto" for none.
-pub fn language_chip(value: Option<&str>) -> &'static str {
-    match value {
-        Some("en") => "EN",
-        Some("ur") => "UR",
-        Some("en+ur") => "UR+EN",
-        Some("hi") => "HI",
-        Some("en+hi") => "HI+EN",
-        _ => "Auto",
+/// The short label of a language on chips: "UR", "Auto" for none.
+pub fn language_chip(value: Option<&str>) -> String {
+    match language_or_none(value) {
+        Some(code) => code.to_ascii_uppercase(),
+        None => "Auto".to_string(),
     }
 }
-
 /// Keeps the shortcut entries this version knows (action name and a text accelerator).
 fn known_shortcuts(value: Value) -> Value {
     let Value::Object(map) = value else { return value };

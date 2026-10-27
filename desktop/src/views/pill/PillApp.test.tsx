@@ -68,13 +68,13 @@ describe("recording pill", () => {
     await renderPill(makeRecordingState({ language: "ur", captions: true }));
     const chip = screen.getByTestId("pill-language");
     expect(chip).toHaveTextContent("UR");
-    respond("recording_state", makeRecordingState({ language: "en+ur", captions: true }));
+    respond("recording_state", makeRecordingState({ language: "ar", captions: true }));
     fireEvent.click(chip);
-    expect(chip).toHaveTextContent("UR+EN");
-    await waitFor(() => expect(callsOf("set_recording_language")).toEqual([{ language: "en+ur" }]));
+    expect(chip).toHaveTextContent("AR");
+    await waitFor(() => expect(callsOf("set_recording_language")).toEqual([{ language: "ar" }]));
     await flushAsync();
     expect(pill()).toBeInTheDocument();
-    expect(screen.getByTestId("pill-language")).toHaveTextContent("UR+EN");
+    expect(screen.getByTestId("pill-language")).toHaveTextContent("AR");
     expect(callsOf("stop_recording")).toHaveLength(0);
   });
 

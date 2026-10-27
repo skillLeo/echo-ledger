@@ -115,7 +115,7 @@ class SettingsTransferTest {
         val tuned = AppSettings(
             captionStyle = CaptionStyle(size = "large", lines = 5, compact = true),
             autoRecordApps = mapOf("whatsapp" to false),
-            transcriptionLanguage = "en+ur",
+            transcriptionLanguage = "ur",
             inputDevice = "wired"
         )
 

@@ -252,10 +252,10 @@ async fn live_caption_tokens_carry_the_recording_language_chip() {
         Reply::json(200, fixture("stt_token_assemblyai.json")),
     ));
     client(&server)
-        .stt_token("live_captions", &["me", "client"], None, Some("S1"), Some("en+ur"))
+        .stt_token("live_captions", &["me", "client"], None, Some("S1"), Some("ar"))
         .await
         .unwrap();
-    assert_eq!(server.requests()[0].json()["language"], "en+ur");
+    assert_eq!(server.requests()[0].json()["language"], "ar");
 }
 
 #[tokio::test]
@@ -295,7 +295,7 @@ fn finish_request(client_id: Option<Option<String>>) -> FinishSessionRequest {
         duration_ms: 2_530_000,
         title: Some("Budget review".into()),
         client_id,
-        language: Some("en+ur".into()),
+        language: Some("ar".into()),
         artifacts: vec![ArtifactDto {
             role: "primary".into(),
             mime: "audio/flac".into(),
@@ -329,7 +329,7 @@ async fn finish_posts_the_artifacts_to_the_open_session() {
     let sent = server.requests()[0].json();
     assert_eq!(sent["client_id"], "01JB8Q4C1D2E3F4G5H6J7K8M9N");
     assert_eq!(sent["title"], "Budget review");
-    assert_eq!(sent["language"], "en+ur", "the Keep card's language decides the final transcript");
+    assert_eq!(sent["language"], "ar", "the Keep card's language decides the final transcript");
     assert_eq!(sent["artifacts"][0]["role"], "primary");
 
     // A present null clears the stored client; an absent key keeps it.

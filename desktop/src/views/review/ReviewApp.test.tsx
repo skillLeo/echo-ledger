@@ -154,20 +154,23 @@ describe("review card", () => {
 
   it("the language chip changes the language Keep uses and offers to remember it for the client", async () => {
     respond("list_clients", { data: [{ id: "cl-1", name: "Acme Ltd", language: "en" }] });
-    respond("client_update", { data: { id: "cl-1", name: "Acme Ltd", language: "en+ur" } });
+    respond("client_update", { data: { id: "cl-1", name: "Acme Ltd", language: "ur" } });
     await renderReview(makeReviewPayload({ item: makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: null }) }));
-    respond("pending_set_language", makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: "en+ur" }));
-    expect(button("Language: Automatic")).toHaveTextContent("Auto");
-    fireEvent.click(button("Language: Automatic"));
+    respond("pending_set_language", makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: "ur" }));
+    expect(button("Language: Auto")).toHaveTextContent("Auto");
+    fireEvent.click(button("Language: Auto"));
     const list = await screen.findByRole("menu", { name: "Languages" });
-    expect(within(list).getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Automatic", "English", "Urdu", "Urdu + English", "Hindi", "Hindi + English"]);
-    fireEvent.click(within(list).getByRole("menuitemradio", { name: "Urdu + English" }));
-    await waitFor(() => expect(callsOf("pending_set_language")).toEqual([{ id: "pend-1", language: "en+ur" }]));
+    expect(within(list).getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Auto", "English", "Urdu", "Arabic"]);
+    // The More languages are one row away.
+    fireEvent.click(within(list).getByRole("menuitem", { name: "More languages…" }));
+    expect(within(list).getAllByRole("menuitemradio")).toHaveLength(12);
+    fireEvent.click(within(list).getByRole("menuitemradio", { name: "Urdu" }));
+    await waitFor(() => expect(callsOf("pending_set_language")).toEqual([{ id: "pend-1", language: "ur" }]));
     await flushAsync();
-    expect(button("Language: Urdu + English")).toHaveTextContent("UR+EN");
-    expect(await screen.findByText("Use Urdu + English for Acme Ltd from now on?")).toBeInTheDocument();
+    expect(button("Language: Urdu")).toHaveTextContent("UR");
+    expect(await screen.findByText("Use Urdu for Acme Ltd from now on?")).toBeInTheDocument();
     fireEvent.click(button("Yes"));
-    await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "cl-1", patch: { language: "en+ur" } }]));
+    await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "cl-1", patch: { language: "ur" } }]));
     expect(screen.queryByTestId("review-learn")).not.toBeInTheDocument();
     fireEvent.click(button("Keep"));
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "pend-1" }]));

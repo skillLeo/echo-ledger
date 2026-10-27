@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type AnimationEvent, type MouseEvent } from "react";
 import { announceReady, api, errorMessage, listenTo, type AskAnswer, type AskPayload, type PendingItem, type ReviewPayload } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
-import { LANGUAGE_OPTIONS, languageChip, languageLabel, learnPrompt, type LanguageChoice } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, languageChip, languageLabel, learnPrompt, type LanguageChoice } from "../../lib/languages";
 import { alwaysIgnoreLabel, askSeconds, askSubject, countdownText, reviewDuration, reviewTitle } from "../../lib/controls";
 import { MicIcon, SourceAppIcon } from "../../components/Icons";
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, MoreIcon, OpenIcon, PencilIcon, UserIcon } from "../../components/ControlIcons";
@@ -307,8 +307,10 @@ function ClientList({ selected, onPick, onBack }: { selected: string | null; onP
   );
 }
 
-/** The language list over the card body; the final transcript uses the choice at Keep. */
+/** The language list over the card body (More languages behind one row); the final transcript uses the choice at Keep. */
 function LanguageList({ selected, onPick, onBack }: { selected: LanguageChoice; onPick: (language: LanguageChoice) => void; onBack: () => void }) {
+  const [more, setMore] = useState(MORE_LANGUAGES.some((o) => o.value === selected));
+  const shown = more ? [...MAIN_LANGUAGES, ...MORE_LANGUAGES] : MAIN_LANGUAGES;
   return (
     <div className="review-panel" data-testid="language-list">
       <div className="review-panel-head">
@@ -316,13 +318,18 @@ function LanguageList({ selected, onPick, onBack }: { selected: LanguageChoice; 
         <span>Language of this recording</span>
       </div>
       <div className="review-panel-list" role="menu" aria-label="Languages">
-        {LANGUAGE_OPTIONS.map((o) => (
+        {shown.map((o) => (
           <button type="button" role="menuitemradio" aria-checked={selected === o.value} className="review-option" key={o.chip}
             onClick={() => onPick(o.value)}>
             <span className="review-option-name">{o.label}</span>
             {selected === o.value && <CheckIcon size={14} />}
           </button>
         ))}
+        {!more && (
+          <button type="button" role="menuitem" className="review-option" onClick={() => setMore(true)}>
+            <span className="review-option-name">More languages…</span>
+          </button>
+        )}
       </div>
     </div>
   );

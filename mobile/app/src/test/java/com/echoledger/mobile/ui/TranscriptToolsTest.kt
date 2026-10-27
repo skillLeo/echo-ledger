@@ -71,13 +71,13 @@ class TranscriptToolsTest : ScreenTest() {
     fun `the language goes with an open session and a new recording only when chosen`() {
         val open = ApiJson.encodeToString(
             OpenSessionRequest.serializer(),
-            OpenSessionRequest("r", "whatsapp", null, "2026-10-25T09:00:00Z", "en+ur")
+            OpenSessionRequest("r", "whatsapp", null, "2026-10-25T09:00:00Z", "ur")
         )
         val auto = ApiJson.encodeToString(
             OpenSessionRequest.serializer(),
             OpenSessionRequest("r", "whatsapp", null, "2026-10-25T09:00:00Z")
         )
-        assertTrue(open.contains("\"language\":\"en+ur\""))
+        assertTrue(open.contains("\"language\":\"ur\""))
         assertFalse(auto.contains("language"))
         val created = ApiJson.encodeToString(
             CreateSessionRequest.serializer(),
@@ -178,9 +178,9 @@ class TranscriptToolsTest : ScreenTest() {
         server.on("POST", "/api/vocabulary/keyterms", FakeServer.json(201, """{"keyterms":["Farah Khan"]}"""))
         show { TranscriptionSection(vm, vm.settings.collectAsState().value) }
 
-        compose.onNodeWithText("English + Urdu").performClick()
-        pumpUntil("the language to be saved") { settings().transcriptionLanguage == "en+ur" }
-        compose.onNodeWithText("Automatic").performClick()
+        compose.onNodeWithText("UR").performClick()
+        pumpUntil("the language to be saved") { settings().transcriptionLanguage == "ur" }
+        compose.onNodeWithText("Auto").performClick()
         pumpUntil("automatic to be saved") { settings().transcriptionLanguage == null }
 
         compose.onNodeWithText("A name or term the engine gets wrong").performTextInput("Farah Khan")

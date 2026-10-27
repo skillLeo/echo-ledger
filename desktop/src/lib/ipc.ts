@@ -152,7 +152,7 @@ export interface DictationHistoryEntry {
 }
 
 /** Languages offered for new recordings; null is automatic (the client's or the console default). */
-export type TranscriptionLanguage = "en" | "ur" | "en+ur" | "hi" | "en+hi";
+export type TranscriptionLanguage = "en" | "ur" | "ar" | "fr" | "de" | "es" | "it" | "pt" | "nl" | "tr" | "ru";
 
 /** How the caption overlay looks. utoHideSeconds is 0 (never), 5, 10 or 30; colours are #rrggbb or null (theme). */
 export interface CaptionStyle {

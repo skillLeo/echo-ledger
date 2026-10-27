@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type PendingItem, type TranscriptionLanguage, type UploadItem } from "../../lib/ipc";
-import { LANGUAGE_OPTIONS, learnPrompt, type LanguageChoice } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, learnPrompt, type LanguageChoice } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { DISCARD_CONFIRM, failedUploads, pendingTitle, uploadTitle, verifyingUploads } from "../../lib/pending";
 import { AlertIcon, ClockIcon, SourceAppIcon } from "../../components/Icons";
@@ -275,7 +275,10 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                   <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Assign client</button>
                   <select className="input compact queue-language" aria-label="Language" title="Language of the transcript" disabled={isBusy}
                     value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
-                    {LANGUAGE_OPTIONS.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.chip === "Auto" ? "Auto language" : o.label}</option>)}
+                    {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.value === null ? "Auto language" : o.label}</option>)}
+                    <optgroup label="More languages">
+                      {MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
+                    </optgroup>
                   </select>
                 </div>
               </div>
