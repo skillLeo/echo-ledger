@@ -14,6 +14,7 @@ enum SttProviderKey: string implements HasLabel
     case WhisperCppLocal = 'whispercpp_local';
     case ParakeetLocal = 'parakeet_local';
     case Soniox = 'soniox';
+    case Groq = 'groq';
 
     public function getLabel(): string
     {
@@ -24,6 +25,7 @@ enum SttProviderKey: string implements HasLabel
             self::WhisperCppLocal => 'whisper.cpp (self-hosted)',
             self::ParakeetLocal => 'Parakeet (on-device)',
             self::Soniox => 'Soniox',
+            self::Groq => 'Groq Whisper large-v3',
         };
     }
 }

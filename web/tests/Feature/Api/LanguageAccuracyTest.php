@@ -68,7 +68,8 @@ describe('which language a recording uses', function () {
 
         expect($transcript->language)->toBe('ur')
             ->and($transcript->provider)->toBe('elevenlabs')
-            ->and($transcript->meta['route'])->toBe(['used' => 'elevenlabs', 'wanted' => 'elevenlabs', 'language' => 'ur', 'fallback' => false])
+            // Urdu wants Whisper on Groq first; without its key the next engine with a key runs, and the route says so.
+            ->and($transcript->meta['route'])->toBe(['used' => 'elevenlabs', 'wanted' => 'groq', 'language' => 'ur', 'fallback' => true])
             ->and($session->fresh()->final_provider)->toBe('elevenlabs');
     });
 
@@ -125,7 +126,7 @@ describe('routing each language to an engine', function () {
         $decision = app(LanguageRouter::class)->final('ur', SttUseCase::FinalTranscript);
 
         expect($decision->provider)->toBe(SttProviderKey::Soniox)
-            ->and($decision->wanted)->toBe(SttProviderKey::ElevenLabs)
+            ->and($decision->wanted)->toBe(SttProviderKey::Groq)
             ->and($decision->fallback)->toBeTrue();
 
         app(CredentialVault::class)->forget('soniox', 'api_key');
@@ -155,7 +156,7 @@ describe('routing each language to an engine', function () {
         app(LanguageRouter::class)->prefer('de', SttProviderKey::Soniox);
 
         $routes = app(LanguageRouter::class)->routes('routing.final', LanguageRouter::DEFAULT_FINAL_ROUTES);
-        expect($routes['ur'])->toBe(['soniox', 'elevenlabs', 'assemblyai'])
+        expect($routes['ur'])->toBe(['soniox', 'groq', 'elevenlabs', 'assemblyai'])
             ->and($routes[LanguageRouter::OTHER][0])->toBe('soniox');
     });
 });

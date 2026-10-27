@@ -40,6 +40,7 @@ final class LanguageRouter
         'assemblyai' => self::ALL,
         'elevenlabs' => self::ALL,
         'soniox' => self::ALL,
+        'groq' => self::ALL,
         'azure_mai' => ['en'],
         'whispercpp_local' => self::ALL,
         'parakeet_local' => ['en'],
@@ -47,10 +48,12 @@ final class LanguageRouter
 
     /** @var array<string, list<string>> */
     public const DEFAULT_FINAL_ROUTES = [
-        'en' => ['assemblyai', 'elevenlabs', 'soniox'],
-        'ur' => ['elevenlabs', 'soniox', 'assemblyai'],
-        'ar' => ['elevenlabs', 'soniox', 'assemblyai'],
-        self::OTHER => ['elevenlabs', 'soniox', 'assemblyai'],
+        // Starting defaults until the Accuracy Lab proves otherwise: Urdu → Whisper large-v3 (Groq), English →
+        // AssemblyAI (Universal-3.5 Pro), Arabic and the rest → ElevenLabs Scribe v2. A missing key moves to the next.
+        'en' => ['assemblyai', 'groq', 'elevenlabs', 'soniox'],
+        'ur' => ['groq', 'soniox', 'elevenlabs', 'assemblyai'],
+        'ar' => ['elevenlabs', 'soniox', 'groq', 'assemblyai'],
+        self::OTHER => ['elevenlabs', 'soniox', 'groq', 'assemblyai'],
     ];
 
     /** The routing key of a language: its own list for English, Urdu and Arabic, `other` for the rest, `auto`. */
@@ -208,6 +211,7 @@ final class LanguageRouter
             SttProviderKey::AssemblyAi => $this->vault->has('assemblyai', 'api_key'),
             SttProviderKey::ElevenLabs => $this->vault->has('elevenlabs', 'api_key'),
             SttProviderKey::Soniox => $this->vault->has('soniox', 'api_key'),
+            SttProviderKey::Groq => $this->vault->has('groq', 'api_key'),
             SttProviderKey::AzureMai => $this->vault->has('azure', 'api_key') && $this->settings->get('azure.endpoint') !== null,
             SttProviderKey::WhisperCppLocal => $this->settings->get('whisper.base_url') !== null,
             SttProviderKey::ParakeetLocal => true,

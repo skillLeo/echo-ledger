@@ -36,6 +36,10 @@ final class SettingsRepository
         'elevenlabs.model_id' => 'scribe_v2',
         'elevenlabs.realtime_model_id' => 'scribe_v2_realtime',
         'soniox.async_model' => 'stt-async-v5',          // docs: soniox.com/docs/stt/models (2026-10)
+        'groq.model' => 'whisper-large-v3',              // not turbo (docs: console.groq.com/docs/model/whisper-large-v3)
+        'audio.ffmpeg_path' => null,                     // null = FFMPEG_PATH, then ~/bin/ffmpeg, then the system one
+        'audio.chunk_seconds' => 600,                    // Whisper chunks are cut at pauses, at most this long
+        'audio.silence_db' => -40,                       // quieter than this for 0.6 s is a pause
         // Which engine transcribes each language, in order of preference; the first one with a key wins
         // (App\Stt\LanguageRouter). Automatic uses provider.final_transcript / provider.voice_note.
         'routing.final' => LanguageRouter::DEFAULT_FINAL_ROUTES,
@@ -61,6 +65,7 @@ final class SettingsRepository
             'elevenlabs' => ['live_captions' => 0.47, 'dictation' => 0.47, 'final_transcript' => 0.27, 'voice_note' => 0.27],
             'azure_mai' => ['final_transcript' => 0.10, 'voice_note' => 0.10],
             'soniox' => ['final_transcript' => 0.10, 'voice_note' => 0.10],
+            'groq' => ['final_transcript' => 0.111, 'voice_note' => 0.111],
         ],
     ];
 

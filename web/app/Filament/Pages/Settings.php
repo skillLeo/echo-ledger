@@ -131,7 +131,7 @@ class Settings extends Page
      */
     public static function priceFields(): array
     {
-        $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI', 'soniox' => 'Soniox'];
+        $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI', 'soniox' => 'Soniox', 'groq' => 'Groq Whisper'];
         $useCases = ['live_captions' => 'Live captions', 'dictation' => 'Dictation', 'final_transcript' => 'Final transcript', 'voice_note' => 'Voice notes'];
         $fields = [];
         foreach (SettingsRepository::DEFAULTS['budget.prices'] as $provider => $pairs) {
@@ -252,7 +252,7 @@ class Settings extends Page
                     ]),
                     $this->section('routing')
                         ->description('Which engine writes each language, in order: the first one with a key on API Credentials is used, the next ones are the fallback. Other covers the More languages; Auto is for recordings whose language is not chosen. Run “Compare engines” on a recording to choose.')
-                        ->collapsible()->columns(3)->schema(self::routingFields()),
+                        ->collapsible()->columns(4)->schema(self::routingFields()),
                     $this->section('bookmarks')
                         ->description('One-tap tags offered while recording a call (on the desktop pill and the phone notification).')
                         ->schema([
@@ -457,14 +457,14 @@ class Settings extends Page
     /** The languages that have an engine list, and their form field prefix. */
     private const ROUTED = ['en' => 'en', 'ur' => 'ur', 'ar' => 'ar', LanguageRouter::OTHER => 'other', LanguageRouter::AUTO => 'auto'];
 
-    /** @return list<Select> three engines per language */
+    /** @return list<Select> four engines per language */
     private static function routingFields(): array
     {
         $engines = collect(SttProviderKey::cases())->reject(fn (SttProviderKey $k): bool => $k === SttProviderKey::ParakeetLocal)
             ->mapWithKeys(fn (SttProviderKey $k): array => [$k->value => $k->getLabel()])->all();
         $fields = [];
         foreach (self::ROUTED as $language => $slug) {
-            foreach ([1 => '1st', 2 => '2nd', 3 => '3rd'] as $n => $order) {
+            foreach ([1 => '1st', 2 => '2nd', 3 => '3rd', 4 => '4th'] as $n => $order) {
                 $field = Select::make("route_{$slug}_{$n}")->label(LanguageRouter::routeLabel($language).' · '.$order)->options($engines)->placeholder('—');
                 // Auto may stay empty: it then keeps the engine chosen for the use case above.
                 $fields[] = $n === 1 && $language !== LanguageRouter::AUTO ? $field->required() : $field;
@@ -480,7 +480,7 @@ class Settings extends Page
         $routes = LanguageRouter::merge($stored, LanguageRouter::DEFAULT_FINAL_ROUTES);
         $state = [];
         foreach (self::ROUTED as $language => $slug) {
-            foreach ([1, 2, 3] as $n) {
+            foreach ([1, 2, 3, 4] as $n) {
                 $state["route_{$slug}_{$n}"] = $routes[$language][$n - 1] ?? null;
             }
         }
@@ -497,7 +497,7 @@ class Settings extends Page
         $routes = [];
         foreach (self::ROUTED as $language => $slug) {
             $list = [];
-            foreach ([1, 2, 3] as $n) {
+            foreach ([1, 2, 3, 4] as $n) {
                 $value = $state["route_{$slug}_{$n}"] ?? null;
                 if (is_string($value) && SttProviderKey::tryFrom($value) !== null && ! in_array($value, $list, true)) {
                     $list[] = $value;

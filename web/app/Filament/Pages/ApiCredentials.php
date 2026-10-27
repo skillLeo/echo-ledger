@@ -92,10 +92,10 @@ class ApiCredentials extends Page
                 'assemblyai' => 'AssemblyAI (default)',
                 'elevenlabs' => 'ElevenLabs',
                 'soniox' => 'Soniox (optional)',
+                'groq' => 'Groq (Whisper large-v3, for Urdu)',
                 'azure' => 'Azure Speech',
                 'whispercpp' => 'whisper.cpp server',
                 'openai' => 'OpenAI (optional)',
-                'groq' => 'Groq (optional)',
             })->columns(2)->collapsible()->schema($inputs);
         }
 

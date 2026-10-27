@@ -84,7 +84,8 @@ it('matches a setting by its name, a keyword or its group', function () {
 });
 
 it('counts the matches per group for the tab badges', function () {
-    expect(SettingsSearch::count('whisper', 'recording'))->toBe(2)
+    // The engine, the engine-per-language list (Groq Whisper) and whisper.cpp.
+    expect(SettingsSearch::count('whisper', 'recording'))->toBe(3)
         ->and(SettingsSearch::count('whisper', 'general'))->toBe(0)
         ->and(SettingsSearch::count('', 'recording'))->toBe(0)
         ->and(SettingsSearch::firstGroup('limit'))->toBe('storage')

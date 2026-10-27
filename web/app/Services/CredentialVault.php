@@ -19,9 +19,9 @@ final class CredentialVault
         'elevenlabs' => ['api_key' => 'API key', 'webhook_secret' => 'Webhook HMAC secret', 'webhook_id' => 'Webhook ID'],
         'azure' => ['api_key' => 'Speech resource key'],
         'soniox' => ['api_key' => 'API key', 'webhook_secret' => 'Webhook signing secret'],
+        'groq' => ['api_key' => 'API key'],
         'whispercpp' => ['bearer_token' => 'Reverse-proxy bearer token'],
         'openai' => ['api_key' => 'API key (optional, future driver)'],
-        'groq' => ['api_key' => 'API key (optional, future driver)'],
     ];
 
     /** Secrets that EchoLedger can generate for the admin. */

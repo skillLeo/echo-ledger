@@ -146,7 +146,8 @@ describe('compare engines', function () {
         $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $this->session->id]);
 
         $page->assertActionVisible('wrong_script')->assertActionVisible('compare_engines')->assertActionHidden('engine_results');
-        $page->callAction('wrong_script')->assertNotified('Second version queued with ElevenLabs Scribe');
+        // Urdu's list is Groq, Soniox, ElevenLabs: without a Groq key here, Soniox is next.
+        $page->callAction('wrong_script')->assertNotified('Second version queued with Soniox');
 
         $page->callAction('compare_engines', data: ['language' => 'ur', 'engines' => ['elevenlabs', 'soniox']])->assertHasNoActionErrors();
         expect($this->session->trials()->pluck('provider')->sort()->values()->all())->toBe(['elevenlabs', 'soniox']);
@@ -158,9 +159,9 @@ describe('compare engines', function () {
     it('saves the engine order per language from Settings', function () {
         $page = $this->panelComponent(Settings::class)->set('activeTab', 'recording');
 
-        $page->fillForm(['route_ur_1' => 'soniox', 'route_ur_2' => 'elevenlabs', 'route_ur_3' => null])->call('save')->assertHasNoFormErrors();
+        $page->fillForm(['route_ur_1' => 'soniox', 'route_ur_2' => 'elevenlabs', 'route_ur_3' => null, 'route_ur_4' => null])->call('save')->assertHasNoFormErrors();
 
         expect(app(SettingsRepository::class)->get('routing.final')['ur'])->toBe(['soniox', 'elevenlabs'])
-            ->and(app(SettingsRepository::class)->get('routing.final')['en'])->toBe(['assemblyai', 'elevenlabs', 'soniox']);
+            ->and(app(SettingsRepository::class)->get('routing.final')['en'])->toBe(['assemblyai', 'groq', 'elevenlabs', 'soniox']);
     });
 });

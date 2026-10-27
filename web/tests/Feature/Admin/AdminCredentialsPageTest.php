@@ -39,7 +39,7 @@ it('renders the credentials page with a section per provider', function () {
     $this->get('/admin/api-credentials')->assertOk()
         ->assertSee('API Credentials')
         ->assertSee('AssemblyAI (default)')->assertSee('ElevenLabs')->assertSee('Azure Speech')
-        ->assertSee('whisper.cpp server')->assertSee('OpenAI (optional)')->assertSee('Groq (optional)')
+        ->assertSee('whisper.cpp server')->assertSee('OpenAI (optional)')->assertSee('Groq (Whisper large-v3, for Urdu)')
         ->assertSee('Save credentials');
 });
 

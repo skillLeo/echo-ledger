@@ -31,6 +31,28 @@ final class UrduText
         return self::foldWithMap($text)[0];
     }
 
+    /** Arabic letter forms an engine writes in Urdu text, and the Urdu letter each one is. */
+    private const URDU_FORMS = [
+        "\u{064A}" => "\u{06CC}", // ي Arabic Yeh → ی Farsi Yeh
+        "\u{0649}" => "\u{06CC}", // ى Alef Maksura → ی
+        "\u{0643}" => "\u{06A9}", // ك Arabic Kaf → ک Keheh
+        "\u{0647}" => "\u{06C1}", // ه Arabic Heh → ہ Heh Goal (ھ do-chashmi stays: it is a different letter)
+        "\u{0629}" => "\u{06C3}", // ة Teh Marbuta → ۃ Teh Marbuta Goal
+    ];
+
+    /**
+     * The text of an Urdu transcript with Urdu letter forms and Urdu punctuation after Urdu words (since v1.2):
+     * character-level only, no word is changed, Latin words (English inside Urdu) and digits stay as they are.
+     */
+    public static function normaliseUrdu(string $text): string
+    {
+        $text = strtr($text, self::URDU_FORMS);
+        // ?, ; and , right after an Arabic-script letter become ؟ ؛ ،; a full stop ending such a sentence becomes ۔
+        $text = preg_replace_callback('/(\p{Arabic})\s*([?;,])/u', fn (array $m): string => $m[1].['?' => '؟', ';' => '؛', ',' => '،'][$m[2]], $text) ?? $text;
+
+        return preg_replace('/(\p{Arabic})\.(?=\s|$)/u', '$1۔', $text) ?? $text;
+    }
+
     /**
      * The folded text and, for each of its characters, the index of the character it came from, so highlight ranges
      * found in the folded text can be drawn on the original.

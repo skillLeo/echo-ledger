@@ -15,12 +15,14 @@ final readonly class Segment
         public int $endMs,
         public string $text,
         public array $words = [],
+        /** The engine was not sure of this line (it is kept as heard; the apps underline it, a tap plays it). */
+        public bool $uncertain = false,
     ) {}
 
-    /** @return array{channel: int, speaker: string, start_ms: int, end_ms: int, text: string, words: list<array<string, mixed>>} */
+    /** @return array{channel: int, speaker: string, start_ms: int, end_ms: int, text: string, words: list<array<string, mixed>>, uncertain?: true} */
     public function toArray(): array
     {
-        return [
+        $out = [
             'channel' => $this->channel,
             'speaker' => $this->speaker,
             'start_ms' => $this->startMs,
@@ -28,6 +30,11 @@ final readonly class Segment
             'text' => $this->text,
             'words' => array_map(fn (Word $w): array => $w->toArray(), $this->words),
         ];
+        if ($this->uncertain) {
+            $out['uncertain'] = true;
+        }
+
+        return $out;
     }
 
     /** @param array<string, mixed> $data */
@@ -42,6 +49,6 @@ final readonly class Segment
         }
 
         return new self((int) ($data['channel'] ?? 1), (string) ($data['speaker'] ?? 'Speaker'), (int) ($data['start_ms'] ?? 0),
-            (int) ($data['end_ms'] ?? 0), (string) ($data['text'] ?? ''), $words);
+            (int) ($data['end_ms'] ?? 0), (string) ($data['text'] ?? ''), $words, (bool) ($data['uncertain'] ?? false));
     }
 }
