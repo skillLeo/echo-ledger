@@ -204,6 +204,16 @@ console and choose **Re-transcribe** or **Compare engines**, then keep the bette
   sites**, or record by hand.
 - A short sound, such as a voice message, is not a call.
 
+**A phone call says "No audio"**
+- Open **Setup → Call capture → Test call capture** and speak for a few seconds. It checks each step and says
+  what to do in plain words. Run it during a WhatsApp call to check the other side too.
+- After a restart of the phone, start Shizuku again (or run the setup command). While auto-record is on and the
+  helper is not running, the phone says **"Call capture isn't ready — tap to fix"**.
+- Only one app can record a call: turn off other call recorders, for example CallVault.
+- **Copy diagnostics** (same screen) copies a short report you can send to support. It never contains audio,
+  names, numbers or what was said.
+- A recording with no sound is marked **No audio** in grey. It has nothing to play; delete it in one tap.
+
 **An upload is stuck**
 - Open the Library and look at the upload list. Press **Retry**.
 - Check your internet connection and that your server is reachable.

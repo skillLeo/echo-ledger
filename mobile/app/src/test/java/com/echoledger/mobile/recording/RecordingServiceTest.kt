@@ -78,13 +78,16 @@ class RecordingServiceTest : AppTest() {
     }
 
     @Test
-    fun `Arm without the capture helper refuses and leaves the setting off`() {
-        runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = true) } }
+    fun `Arm without the capture helper stays on and says capture is not ready instead of turning off`() {
+        runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = false) } }
 
         val service = start(RecordingService.ACTION_ARM)
-        pumpUntil("the setting to be cleared") { !settings().autoRecordArmed }
+        pumpUntil("the setting to be saved") { settings().autoRecordArmed }
 
-        assertTrue(shadowOf(service).isStoppedBySelf)
+        assertFalse(shadowOf(service).isStoppedBySelf)
+        val notice = shadowOf(service).lastForegroundNotification
+        assertEquals("Call capture isn't ready — tap to fix", notice.extras.getString(android.app.Notification.EXTRA_TITLE))
+        assertTrue(CaptureLog.lines(app).any { it.contains("auto-record on: helper not running") })
     }
 
     @Test

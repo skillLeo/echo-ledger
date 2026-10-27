@@ -227,7 +227,9 @@ data class LibraryItem(
     val pinned: Boolean = false,
     val labels: List<String> = emptyList(),
     /** Never deleted by the retention rules (B17). */
-    val keep: Boolean = false
+    val keep: Boolean = false,
+    /** The recording's language chip, "UR+EN" (since v1.1.2). */
+    @SerialName("language_chip") val languageChip: String? = null
 )
 
 @Serializable
@@ -239,7 +241,9 @@ data class TranscriptSummary(
     @SerialName("final_transcript_id") val finalTranscriptId: String? = null,
     @SerialName("live_available") val liveAvailable: Boolean = false,
     @SerialName("live_transcript_id") val liveTranscriptId: String? = null,
-    val preview: String? = null
+    val preview: String? = null,
+    /** Why the final transcript failed (since v1.1.2); `no_audio`: the recording has no sound. */
+    @SerialName("final_error_code") val finalErrorCode: String? = null
 )
 
 @Serializable

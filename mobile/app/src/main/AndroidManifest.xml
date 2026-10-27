@@ -10,12 +10,20 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
+    <!-- Turns auto-record back on after a restart or an app update (it reconnects the capture helper). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Only for scanning the pairing QR code; requested when the user taps "Scan QR code". -->
     <uses-permission android:name="android.permission.CAMERA" />
 
     <uses-feature
         android:name="android.hardware.camera.any"
         android:required="false" />
+
+    <!-- The capture test checks that WhatsApp or WhatsApp Business is installed (package visibility). -->
+    <queries>
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+    </queries>
 
     <application
         android:name=".EchoLedgerApp"
@@ -121,6 +129,15 @@
         <receiver
             android:name=".calls.SaveDecisionReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".recording.RearmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- The ADB-launched helper hands its binder over here; callers are UID-checked (shell / root / self). -->
         <provider

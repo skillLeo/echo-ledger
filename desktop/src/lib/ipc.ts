@@ -296,6 +296,8 @@ export interface LibraryItem {
     final_model?: string | null;
     live_language?: string | null;
     script_warning?: string | null;
+    /** Why the final transcript failed; `no_audio`: nothing was heard (since v1.1.2). */
+    final_error_code?: string | null;
   };
 }
 

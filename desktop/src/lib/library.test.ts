@@ -70,6 +70,11 @@ describe("itemState", () => {
     expect(itemState({ status: "completed", transcript: { final_status: "failed", final_transcript_id: null, live_available: false, preview: null } })).toBe("failed");
     expect(itemState({ status: "failed" })).toBe("failed");
   });
+
+  it("calls a recording without sound No audio, not failed", () => {
+    expect(itemState({ status: "failed", transcript: { final_status: "failed", final_transcript_id: null, live_available: false, preview: null, final_error_code: "no_audio" } })).toBe("no_audio");
+    expect(itemState({ status: "failed", transcript: { final_status: "failed", final_transcript_id: null, live_available: false, preview: null, final_error_code: "provider_rejected" } })).toBe("failed");
+  });
 });
 
 describe("bookmark tags (B3)", () => {

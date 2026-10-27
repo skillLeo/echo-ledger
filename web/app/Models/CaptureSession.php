@@ -8,7 +8,9 @@ use App\Enums\RecordingRole;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
+use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
+use App\Enums\TranscriptStatus;
 use App\Models\Concerns\BelongsToWorkspace;
 use App\Services\ProviderCopyEraser;
 use App\Services\SettingsRepository;
@@ -172,6 +174,17 @@ class CaptureSession extends Model
         }
 
         return self::fallbackTitleFor($this->source_app);
+    }
+
+    /**
+     * The recording captured no sound (its final transcript failed with `no_audio`): shown as "No audio" with how to
+     * fix capture, never as a failure to retry, and without a player or share link (there is nothing to hear).
+     */
+    public function hasNoAudio(): bool
+    {
+        $final = $this->relationLoaded('finalTranscript') ? $this->finalTranscript : $this->finalTranscript()->first();
+
+        return $final !== null && $final->status === TranscriptStatus::Failed && $final->error_code === TranscriptErrorCode::NoAudio->value;
     }
 
     /** The title shown for an untitled session of this app ("WhatsApp call", "Voice note", "Recording"). */

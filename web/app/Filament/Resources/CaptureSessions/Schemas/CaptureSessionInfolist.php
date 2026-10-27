@@ -29,17 +29,23 @@ final class CaptureSessionInfolist
                     TextEntry::make('client.name')->label('Client')->placeholder('—'),
                     TextEntry::make('device.name')->label('Device')
                         ->state(fn (CaptureSession $r): string => CaptureSessionsTable::deviceLabel($r)),
-                    TextEntry::make('status')->badge(),
-                    TextEntry::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('Not started'),
+                    TextEntry::make('status')->badge()->visible(fn (CaptureSession $r): bool => ! $r->hasNoAudio()),
+                    TextEntry::make('no_audio')->label('Status')->badge()->color('gray')->icon('heroicon-o-speaker-x-mark')
+                        ->state('No audio')->visible(fn (CaptureSession $r): bool => $r->hasNoAudio()),
+                    TextEntry::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('Not started')
+                        ->visible(fn (CaptureSession $r): bool => ! $r->hasNoAudio()),
                     TextEntry::make('finalTranscript.provider')->label('Transcribed by')->placeholder('—')
                         ->formatStateUsing(fn (?string $state): string => SttProviderKey::tryFrom((string) $state)?->getLabel() ?? (string) $state),
                     TextEntry::make('finalTranscript.language')->label('Language')->placeholder('Automatic')
                         ->formatStateUsing(fn (?string $state): string => LanguageChoice::OFFERED[(string) $state] ?? (string) $state),
                     TextEntry::make('finalTranscript.error')->label('Error')->color('danger')->placeholder('—')
-                        ->visible(fn (CaptureSession $r): bool => filled($r->finalTranscript?->error))->columnSpan(2),
+                        ->visible(fn (CaptureSession $r): bool => filled($r->finalTranscript?->error) && ! $r->hasNoAudio())->columnSpan(2),
+                    TextEntry::make('no_audio_help')->label('Why')->columnSpan(3)
+                        ->state('Nothing was heard in this recording, so there is nothing to play or transcribe. On the phone run Setup → Call capture → Test call capture; then delete this recording.')
+                        ->visible(fn (CaptureSession $r): bool => $r->hasNoAudio()),
                 ]),
             ]),
-            TranscriptPlayerEntry::make('player')->hiddenLabel()->columnSpanFull(),
+            TranscriptPlayerEntry::make('player')->hiddenLabel()->columnSpanFull()->visible(fn (CaptureSession $r): bool => ! $r->hasNoAudio()),
         ]);
     }
 }

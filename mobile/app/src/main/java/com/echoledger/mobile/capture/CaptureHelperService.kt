@@ -27,6 +27,11 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
+    companion object {
+        /** About half a second of failed reads in a row ends the capture with a reason. */
+        private const val MAX_FAILED_READS = 50
+    }
+
     @Volatile private var listener: ICallListener? = null
 
     @Volatile private var capturing = false
@@ -38,7 +43,8 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
         startCallMonitor()
     }
 
-    override fun version(): Int = 1
+    /** Changes with every app build, so the app can tell an old helper still running from the one it ships. */
+    override fun version(): Int = com.echoledger.mobile.BuildConfig.HELPER_BUILD
 
     override fun uid(): Int = Process.myUid()
 
@@ -55,50 +61,64 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
     @SuppressLint("MissingPermission") // shell holds RECORD_AUDIO
     override fun startCapture(sink: ParcelFileDescriptor, sampleRate: Int, micSource: Int): Boolean {
         if (capturing) return true
-        capturing = true
         val rate = if (sampleRate > 0) sampleRate else Pcm.CAPTURE_RATE
         val frames = rate / 100 // 10 ms
-        val format = AudioFormat.Builder().setSampleRate(
-            rate
-        ).setChannelMask(AudioFormat.CHANNEL_IN_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build()
-        val minBuffer = AudioRecord.getMinBufferSize(
-            rate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        ).coerceAtLeast(frames * 2 * 8)
+        val problems = mutableListOf<String>()
 
-        val micBuilder = AudioRecord.Builder()
-            .setAudioSource(if (micSource > 0) micSource else MediaRecorder.AudioSource.VOICE_COMMUNICATION)
-            .setAudioFormat(format)
-            .setBufferSizeInBytes(minBuffer * 2)
-        if (Build.VERSION.SDK_INT >= 31) runCatching { micBuilder.setContext(context) }
-        val mic = micBuilder.build()
-
+        val mic = openMic(rate, frames, micSource, problems)
         val far = FarPartyCapture(context, audioManager, rate)
-        val farRecord = runCatching {
-            far.start()
-        }.onFailure { listener?.onError("Far-party capture unavailable: ${it.message}") }.getOrNull()
+        val farRecord = runCatching { far.start() }
+            .onFailure { problems += "far side: ${it.message ?: it.javaClass.simpleName}" }
+            .getOrNull()
+            ?.takeIf { record -> started(record).also { if (!it) problems += "far side: did not start" } }
+        if (farRecord == null) far.stop()
         farParty = far
+
+        // Nothing to record: say why (the app shows it) instead of a recording that stays silent.
+        if (mic == null && farRecord == null) {
+            report("Call capture could not start: ${problems.joinToString("; ")}")
+            runCatching { sink.close() }
+            return false
+        }
+        if (problems.isNotEmpty()) report("Call capture is partly working: ${problems.joinToString("; ")}")
+        capturing = true
 
         captureThread = thread(name = "el-helper-capture") {
             val out = FileOutputStream(sink.fileDescriptor)
             val micBuf = ShortArray(frames)
             val farBuf = ShortArray(frames)
+            var failedReads = 0
             try {
-                mic.startRecording()
-                farRecord?.startRecording()
                 while (capturing) {
-                    val m = mic.read(micBuf, 0, frames)
-                    val f = farRecord?.read(farBuf, 0, frames, AudioRecord.READ_NON_BLOCKING) ?: 0
-                    if (m <= 0) continue
-                    val farSlice = if (f > 0) farBuf.copyOf(m) else ShortArray(m)
-                    out.write(Pcm.toLittleEndianBytes(Pcm.interleave(micBuf.copyOf(m), farSlice)))
+                    // The microphone paces the stream; without it the far side does (blocking read).
+                    val m = mic?.read(micBuf, 0, frames) ?: 0
+                    val f = if (mic != null) {
+                        farRecord?.read(farBuf, 0, frames, AudioRecord.READ_NON_BLOCKING) ?: 0
+                    } else {
+                        farRecord?.read(farBuf, 0, frames) ?: 0
+                    }
+                    val n = if (mic != null) m else f
+                    if (n <= 0) {
+                        // A recorder that keeps failing would leave a silent file: stop and say so.
+                        if (++failedReads >= MAX_FAILED_READS) {
+                            report("Call capture stopped: the recorder returned error $n")
+                            break
+                        }
+                        Thread.sleep(10)
+                        continue
+                    }
+                    failedReads = 0
+                    val me = if (mic != null && m > 0) micBuf.copyOf(n) else ShortArray(n)
+                    val client = if (f > 0) farBuf.copyOf(n) else ShortArray(n)
+                    out.write(Pcm.toLittleEndianBytes(Pcm.interleave(me, client)))
                 }
             } catch (e: Exception) {
-                listener?.onError("Capture stopped: ${e.message}")
+                report("Capture stopped: ${e.message}")
             } finally {
-                runCatching { mic.stop() }
-                mic.release()
+                mic?.let {
+                    runCatching { it.stop() }
+                    it.release()
+                }
                 far.stop()
                 runCatching { out.close() }
                 runCatching { sink.close() }
@@ -108,6 +128,55 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
         return true
     }
 
+    /**
+     * The near-end microphone: the chosen source first, then the others, each with and without the shell attribution
+     * (OEM builds differ). Only a recorder that really started recording is used.
+     */
+    @SuppressLint("MissingPermission")
+    private fun openMic(rate: Int, frames: Int, micSource: Int, problems: MutableList<String>): AudioRecord? {
+        val format = AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+            .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build()
+        val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            .coerceAtLeast(frames * 2 * 8)
+        val sources = listOf(
+            if (micSource > 0) micSource else MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            MediaRecorder.AudioSource.MIC,
+            MediaRecorder.AudioSource.VOICE_RECOGNITION
+        ).distinct()
+        for (source in sources) {
+            for (withContext in listOf(true, false)) {
+                if (withContext && Build.VERSION.SDK_INT < 31) continue
+                val record = runCatching {
+                    val builder = AudioRecord.Builder().setAudioSource(source).setAudioFormat(format).setBufferSizeInBytes(minBuffer * 2)
+                    if (withContext && Build.VERSION.SDK_INT >= 31) builder.setContext(context)
+                    builder.build()
+                }.getOrElse {
+                    problems += "mic source $source: ${it.message ?: it.javaClass.simpleName}"
+                    null
+                } ?: continue
+                if (started(record)) {
+                    problems.clear() // an earlier attempt failing does not matter once one works
+                    return record
+                }
+                problems += "mic source $source: did not start"
+                record.release()
+            }
+        }
+        return null
+    }
+
+    /** Starts [record] and checks it is really recording (Android can refuse silently: state stays stopped). */
+    private fun started(record: AudioRecord): Boolean {
+        if (record.state != AudioRecord.STATE_INITIALIZED) return false
+        runCatching { record.startRecording() }.onFailure { return false }
+        if (record.recordingState == AudioRecord.RECORDSTATE_RECORDING) return true
+        runCatching { record.stop() }
+        return false
+    }
+
+    private fun report(message: String) {
+        runCatching { listener?.onError(message) }
+    }
     override fun stopCapture() {
         capturing = false
         captureThread?.join(2_000)
@@ -149,8 +218,7 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
         for (config in audioManager.activePlaybackConfigurations) {
             if (config.audioAttributes.usage != AudioAttributes.USAGE_VOICE_COMMUNICATION) continue
             val uid = runCatching { config.javaClass.getMethod("getClientUid").invoke(config) as Int }.getOrNull() ?: continue
-            val packages = pm.getPackagesForUid(uid).orEmpty()
-            packages.firstOrNull { it == "com.whatsapp" || it == "com.whatsapp.w4b" }?.let { return it }
+            com.echoledger.mobile.core.CallTargets.firstTarget(pm.getPackagesForUid(uid))?.let { return it }
         }
         return null
     }

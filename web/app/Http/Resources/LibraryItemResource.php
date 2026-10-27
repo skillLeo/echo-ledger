@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use App\Enums\TranscriptKind;
+use App\Enums\TranscriptStatus;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Stt\LanguageChoice;
@@ -72,6 +73,8 @@ final class LibraryItemResource extends JsonResource
                 'final_model' => $final !== null ? TranscriptResource::model($final) : null,
                 'live_language' => $live?->language,
                 'script_warning' => $final?->meta['script_warning'] ?? null,
+                // Since v1.1.2: why the final transcript failed (no_audio: the recording has no sound; apps show "No audio").
+                'final_error_code' => $final?->status === TranscriptStatus::Failed ? ($final->error_code ?: null) : null,
             ],
             'marker_count' => $markers->count(),
             'tags' => $markers->pluck('tag')->filter()->unique()->values()->all(),

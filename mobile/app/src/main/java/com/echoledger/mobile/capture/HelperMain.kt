@@ -1,11 +1,14 @@
 package com.echoledger.mobile.capture
 
 import android.annotation.SuppressLint
+import android.content.AttributionSource
 import android.content.Context
 import android.content.ContextWrapper
 import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
+import android.os.Process
+import kotlin.concurrent.thread
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 
 /** Builds a Context inside a bare `app_process` (no Application) — docs/research/android-capture.md §2c. */
@@ -21,12 +24,21 @@ internal object HelperContext {
         return ShellContext(context)
     }
 
-    /** Identify as the shell package so content/appops checks match UID 2000. */
+    /**
+     * Identify as the shell package so content/appops checks match UID 2000. Since Android 12 the audio server checks
+     * the context's attribution source, not the package name: the system context's one names package "android", which
+     * does not belong to UID 2000, so recording was refused or muted. It now names the shell package.
+     */
     private class ShellContext(base: Context) : ContextWrapper(base) {
-        override fun getPackageName(): String = "com.android.shell"
+        override fun getPackageName(): String = SHELL
 
-        override fun getOpPackageName(): String = "com.android.shell"
+        override fun getOpPackageName(): String = SHELL
+
+        @androidx.annotation.RequiresApi(31)
+        override fun getAttributionSource(): AttributionSource = AttributionSource.Builder(Process.myUid()).setPackageName(SHELL).build()
     }
+
+    private const val SHELL = "com.android.shell"
 }
 
 /**
@@ -36,13 +48,23 @@ internal object HelperContext {
  * VERIFY ON DEVICE (ContentResolver attribution from app_process differs across OEM builds).
  */
 object HelperMain {
+    private const val HANDOFF_EVERY_MS = 30_000L
+
     @JvmStatic
     fun main(args: Array<String>) {
         val context = HelperContext.system()
         val helper = CaptureHelperService(context)
         val extras = Bundle().apply { putBinder(BinderHandoffProvider.EXTRA_BINDER, helper.asBinder()) }
         val authority = args.firstOrNull() ?: "com.echoledger.mobile.handoff"
-        context.contentResolver.call(Uri.parse("content://$authority"), BinderHandoffProvider.METHOD_ATTACH, null, extras)
+        val uri = Uri.parse("content://$authority")
+        context.contentResolver.call(uri, BinderHandoffProvider.METHOD_ATTACH, null, extras)
+        // Android may stop the app at any time; a restarted app has no binder until it is handed over again.
+        thread(name = "el-helper-handoff", isDaemon = true) {
+            while (true) {
+                Thread.sleep(HANDOFF_EVERY_MS)
+                runCatching { context.contentResolver.call(uri, BinderHandoffProvider.METHOD_ATTACH, null, extras) }
+            }
+        }
         Looper.loop() // keep serving binder calls until destroy()
     }
 }

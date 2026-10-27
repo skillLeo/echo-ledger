@@ -18,7 +18,14 @@ import rikka.shizuku.Shizuku
  * helper through BinderHandoffProvider. Shizuku performs the one-time Wireless-debugging pairing itself.
  */
 class HelperConnection(private val context: Context) {
-    data class State(val connected: Boolean = false, val source: String? = null, val helperUid: Int? = null, val error: String? = null)
+    /** [stale]: the running helper was started by an older build of the app (it must be restarted to get fixes). */
+    data class State(
+        val connected: Boolean = false,
+        val source: String? = null,
+        val helperUid: Int? = null,
+        val error: String? = null,
+        val stale: Boolean = false
+    )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state
@@ -34,10 +41,17 @@ class HelperConnection(private val context: Context) {
     }
 
     fun attach(binder: ICaptureHelper, source: String) {
+        if (helper?.asBinder() === binder.asBinder() && _state.value.connected) return // the ADB helper repeats its hand-off
         helper = binder
         runCatching { binder.asBinder().linkToDeath(death, 0) }
         callListener?.let { runCatching { binder.setCallListener(it) } }
-        _state.value = State(connected = true, source = source, helperUid = runCatching { binder.uid() }.getOrNull())
+        val version = runCatching { binder.version() }.getOrNull()
+        _state.value = State(
+            connected = true,
+            source = source,
+            helperUid = runCatching { binder.uid() }.getOrNull(),
+            stale = version != BuildConfig.HELPER_BUILD
+        )
     }
 
     fun setCallListener(listener: ICallListener?) {
@@ -62,7 +76,7 @@ class HelperConnection(private val context: Context) {
             .processNameSuffix("capture")
             .tag("echoledger-capture")
             .debuggable(BuildConfig.DEBUG)
-            .version(BuildConfig.VERSION_CODE)
+            .version(BuildConfig.HELPER_BUILD)
     }
 
     private val serviceConnection = object : ServiceConnection {
@@ -74,6 +88,18 @@ class HelperConnection(private val context: Context) {
         override fun onServiceDisconnected(name: ComponentName?) {
             helper = null
             _state.value = State(error = "Shizuku service disconnected")
+        }
+    }
+
+    /**
+     * Connects by itself whenever Shizuku is (or comes back) up and allowed: after the app was stopped by Android, after
+     * Shizuku restarts. Without it the helper kept running but this app no longer talked to it.
+     */
+    fun autoConnect() {
+        runCatching {
+            Shizuku.addBinderReceivedListenerSticky {
+                if (helper == null && shizukuPermissionGranted()) bindShizuku()
+            }
         }
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\RelationManagers;
 
+use App\Models\CaptureSession;
 use App\Models\ShareLink;
 use App\Services\SettingsRepository;
 use App\Services\ShareLinks;
@@ -14,10 +15,17 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Model;
 
 /** The recording's share links (v1.1): when they expire, how often they were opened, and Revoke. */
 class ShareLinksRelationManager extends RelationManager
 {
+    /** A recording without sound has nothing to share: no share links section. */
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        return ! ($ownerRecord instanceof CaptureSession && $ownerRecord->hasNoAudio()) && parent::canViewForRecord($ownerRecord, $pageClass);
+    }
+
     protected static string $relationship = 'shareLinks';
 
     protected static ?string $title = 'Share links';

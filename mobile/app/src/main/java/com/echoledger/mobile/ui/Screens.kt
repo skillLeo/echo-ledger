@@ -99,6 +99,10 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.core.Bookmarks
+import com.echoledger.mobile.core.ItemStatus
+import com.echoledger.mobile.core.LibraryFilters
+import com.echoledger.mobile.core.LibraryQuery
+import com.echoledger.mobile.core.LibrarySort
 import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.core.SmartView
@@ -273,12 +277,8 @@ fun LibraryScreen(
 ) {
     val items by vm.library.collectAsState()
     val syncing by vm.syncing.collectAsState()
-    var filter by remember { mutableStateOf<SourceDevice?>(null) }
-    var tagFilter by remember { mutableStateOf<String?>(null) }
-    var view by remember { mutableStateOf(SmartView.ALL) }
-    var folder by remember { mutableStateOf<String?>(null) }
-    var labelFilter by remember { mutableStateOf<String?>(null) }
-    var selecting by remember { mutableStateOf(false) }
+    var filters by remember { mutableStateOf(LibraryFilters()) }
+    var sort by remember { mutableStateOf(LibrarySort.NEWEST) }
     var binOpen by remember { mutableStateOf(false) }
     var activityOpen by remember { mutableStateOf(false) }
     var unread by remember { mutableStateOf(0) }
@@ -300,31 +300,12 @@ fun LibraryScreen(
         }
     }
     val tags = Bookmarks.tags(items)
-    val anyBookmarks = items.any { !it.deleted && it.markerCount > 0 }
     val folders = Organise.folders(items, clients)
     val labels = Organise.labels(items)
     val counts = Organise.counts(items)
-    val visible = items.filter {
-        !it.deleted &&
-            Organise.inView(it, view) &&
-            Organise.inFolder(it, folder) &&
-            Organise.hasLabel(it, labelFilter) &&
-            (filter == null || SourceDevice.from(it.sourceDevice) == filter) &&
-            Bookmarks.matches(it, tagFilter) &&
-            (
-                q.isEmpty() ||
-                    (
-                        listOfNotNull(
-                            it.title,
-                            it.transcript?.preview,
-                            it.client?.name,
-                            SourceApp.from(it.sourceApp).label
-                        ) + it.tags
-                        ).any { s ->
-                        s.lowercase().contains(q)
-                    }
-                )
-    }
+    val visible = LibraryQuery.apply(items, filters, query, sort)
+    // Only recordings still in the list count as ticked (a deleted or filtered-out one drops out of the selection).
+    val ticked = picked.filter { id -> visible.any { it.id == id } }.toSet()
     val top: @Composable ColumnScope.() -> Unit = {
         Spacer(Modifier.height(8.dp))
         ScreenHeader("Library", "Recordings from your phone, computer and the web") {
@@ -345,16 +326,6 @@ fun LibraryScreen(
                         Icons.Outlined.DeleteOutline,
                         contentDescription = "Recently deleted",
                         tint = if (binOpen) Brand.Violet else Brand.Muted
-                    )
-                }
-                IconButton(onClick = {
-                    selecting = !selecting
-                    picked = emptySet()
-                }) {
-                    Icon(
-                        if (selecting) Icons.Outlined.Close else Icons.Outlined.Checklist,
-                        contentDescription = if (selecting) "Cancel selection" else "Select",
-                        tint = if (selecting) Brand.Violet else Brand.Muted
                     )
                 }
                 IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, contentDescription = "Sync", tint = Brand.Muted) }
@@ -378,24 +349,6 @@ fun LibraryScreen(
             Spacer(Modifier.height(12.dp))
             CallSetupBanner(onSetup)
         }
-        Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = filter == null, onClick = { filter = null }, label = { Text("All") })
-            SourceDevice.entries.forEach { d ->
-                FilterChip(selected = filter == d, onClick = {
-                    filter = d
-                }, label = { Text(d.label) }, leadingIcon = { Icon(d.icon(), null, Modifier.size(16.dp)) })
-            }
-        }
-        if (anyBookmarks || tagFilter != null) {
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(selected = tagFilter == null, onClick = { tagFilter = null }, label = { Text("Any") })
-                FilterChip(selected = tagFilter == Bookmarks.ANY, onClick = { tagFilter = Bookmarks.ANY }, label = { Text("Bookmarked") })
-                tags.forEach { tag -> FilterChip(selected = tagFilter == tag, onClick = { tagFilter = tag }, label = { Text(tag) }) }
-            }
-        }
         if (activityOpen) {
             ActivityPanel(load = { vm.activity() }, markRead = { vm.markActivityRead(it) }, onOpen = { id ->
                 activityOpen = false
@@ -407,8 +360,19 @@ fun LibraryScreen(
             BinSection(load = { vm.bin() }, restore = { vm.restore(it) }, erase = { vm.eraseNow(it) }, onClose = { binOpen = false })
             Spacer(Modifier.height(8.dp))
         }
-        SmartViewChips(counts, view) { view = it }
-        FolderLabelFilters(folders, labels, folder, labelFilter, { folder = it }, { labelFilter = it })
+        LibraryToolbar(
+            shown = visible.size,
+            picked = ticked.size,
+            filters = filters,
+            onFilters = { filters = it },
+            sort = sort,
+            onSort = { sort = it },
+            counts = counts,
+            folders = folders,
+            labels = labels,
+            tags = tags,
+            onToggleAll = { picked = if (ticked.size >= visible.size) emptySet() else visible.map { it.id }.toSet() }
+        )
         if (visible.isEmpty() && items.isEmpty() && syncing && !vm.hasSynced()) {
             Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -419,16 +383,12 @@ fun LibraryScreen(
         } else if (visible.isEmpty()) {
             EmptyState(
                 icon = Icons.AutoMirrored.Outlined.LibraryBooks,
-                title = if (q.isNotEmpty() || filter != null || tagFilter != null || view != SmartView.ALL || folder != null ||
-                    labelFilter != null
-                ) {
+                title = if (q.isNotEmpty() || filters.count > 0) {
                     "Nothing matches"
                 } else {
                     "No recordings yet"
                 },
-                body = if (q.isNotEmpty() ||
-                    filter != null
-                ) {
+                body = if (q.isNotEmpty() || filters.count > 0) {
                     "Try a different search or filter."
                 } else {
                     "Calls, meetings and voice notes you capture will appear here."
@@ -436,48 +396,43 @@ fun LibraryScreen(
             )
         }
     }
-    // The whole page scrolls with the list (header, search and filters go up with it); while selecting, the actions sit
-    // in a panel pinned to the bottom, so the list stays reachable and more recordings can be picked.
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    // The whole page scrolls with the list (header, search and filters go up with it); while recordings are ticked, the
+    // actions sit in one line at the bottom.
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+        LazyColumn(Modifier.weight(1f)) {
             item(key = "library-top") { Column(content = top) }
             if (found.isNotEmpty()) {
                 item(key = "search-hits") { SearchResultsSection(found) { result, ms -> onOpenAt(result.session, ms) } }
             }
             items(visible, key = { it.id }) { item ->
-                LibraryRow(item, picked = if (selecting) item.id in picked else null, onLongClick = {
-                    selecting = true
-                    picked = picked + item.id
-                }) {
-                    if (selecting) picked = if (item.id in picked) picked - item.id else picked + item.id else onOpen(item)
-                }
+                CompactLibraryRow(
+                    item,
+                    checked = item.id in ticked,
+                    selecting = ticked.isNotEmpty(),
+                    onCheck = { picked = if (item.id in picked) picked - item.id else picked + item.id },
+                    onOpen = { onOpen(item) }
+                )
             }
             item { Spacer(Modifier.height(24.dp)) }
         }
-        if (selecting) {
-            val ids = picked.filter { id -> items.any { it.id == id && !it.deleted } }
+        if (ticked.isNotEmpty()) {
+            val ids = ticked.toList()
             fun run(action: String, clientId: String? = null, label: String? = null) = scope.launch {
-                if (vm.bulk(ids, action, clientId, label) != null && action == "delete") {
-                    selecting = false
-                    picked = emptySet()
-                }
+                if (vm.bulk(ids, action, clientId, label) != null && action == "delete") picked = emptySet()
             }
-            Box(Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-                BulkPanel(
+            Box(Modifier.padding(vertical = 8.dp)) {
+                CompactBulkBar(
                     count = ids.size,
                     folders = folders,
+                    labels = labels,
                     onMove = { run("move", clientId = it) },
                     onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { run("move", clientId = it.id) } } },
                     onLabel = { label, add -> run(if (add) "label" else "unlabel", label = label) },
                     onPin = { run(if (it) "pin" else "unpin") },
+                    onKeep = { run(if (it) "keep" else "unkeep") },
                     onExport = { format -> scope.launch { vm.exportSelected(ids, format)?.let { shareFile(context, it) } } },
                     onDelete = { run("delete") },
-                    onDone = {
-                        selecting = false
-                        picked = emptySet()
-                    },
-                    onKeep = { run(if (it) "keep" else "unkeep") },
-                    onSelectAll = { picked = visible.map { it.id }.toSet() }
+                    onDone = { picked = emptySet() }
                 )
             }
         }
@@ -485,69 +440,7 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun LibraryRow(item: LibraryItem, picked: Boolean? = null, onLongClick: () -> Unit = {}, onClick: () -> Unit) {
-    val selection = Modifier.semantics {
-        if (picked != null) {
-            selected = picked
-            stateDescription = if (picked) "Selected" else "Not selected"
-        }
-    }
-    SectionCard(
-        Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick, onLongClickLabel = "Select").then(selection)
-            .then(if (picked == true) Modifier.border(2.dp, Brand.Violet, RoundedCornerShape(Radius.lg)) else Modifier)
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            SourceAvatar(SourceDevice.from(item.sourceDevice), SourceApp.from(item.sourceApp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    (if (item.pinned) "★ " else "") + (item.title ?: "Untitled"),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 15.sp,
-                    maxLines = 1
-                )
-                Text(
-                    listOfNotNull(
-                        formatWhen(item.startedAt),
-                        formatDuration(item.durationMs).ifEmpty {
-                            null
-                        },
-                        item.client?.name,
-                        Bookmarks.countLabel(item.markerCount)
-                    ).joinToString(" · "),
-                    color = Brand.Muted,
-                    fontSize = 12.sp,
-                    maxLines = 1
-                )
-            }
-            StatusDot(item.status, item.transcript?.finalStatus)
-        }
-        item.transcript?.preview?.let {
-            Text(it, color = Brand.Muted, fontSize = 13.sp, maxLines = 2, lineHeight = 18.sp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            SourceDeviceBadge(SourceDevice.from(item.sourceDevice), item.sourceDeviceLabel)
-            SourceAppBadge(SourceApp.from(item.sourceApp), item.sourceAppLabel)
-        }
-        if (item.labels.isNotEmpty()) Text(item.labels.joinToString("  ") { "# $it" }, color = Brand.Muted, fontSize = 12.sp, maxLines = 1)
-    }
-}
-
-/** A small coloured dot summarising the recording's state. */
-@Composable
-private fun StatusDot(status: String?, finalStatus: String?) {
-    val (color, label) = when {
-        finalStatus == "failed" || status == "failed" -> Brand.Danger to "Failed"
-        status == "completed" || finalStatus == "completed" -> Brand.Success to "Ready"
-        else -> Brand.Warning to "Processing"
-    }
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        Box(Modifier.size(7.dp).clip(CircleShape).background(color))
-        Text(label, color = color, fontSize = 11.sp, fontWeight = FontWeight.Medium)
-    }
-}
-
-@Composable
-fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, startAtMs: Long? = null) {
+fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, startAtMs: Long? = null, onCaptureTest: () -> Unit = {}) {
     var transcript by remember { mutableStateOf<TranscriptDto?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var loadFailed by remember { mutableStateOf(false) }
@@ -579,6 +472,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
         }
     }
     val t = transcript
+    // Nothing was heard: no player, no sharing, no failure card; say what to do and offer delete in one tap.
+    val noAudio = ItemStatus.of(item) == ItemStatus.NO_AUDIO || t?.errorCode == "no_audio"
     val segments = t?.segments.orEmpty()
     val speakerList = segments.map { it.speaker }
     // Highlight the segment under the playhead; binary search keeps this cheap for long calls.
@@ -635,13 +530,42 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                 )
                 Spacer(Modifier.height(12.dp))
             }
-            if (playbackUrl != null) {
+            if (noAudio) {
+                item {
+                    SectionCard {
+                        Text("No audio", fontWeight = FontWeight.SemiBold, color = Brand.Muted)
+                        Text(
+                            "Nothing was heard in this recording, so there is nothing to play or transcribe. Run the capture test to find out why, then delete it.",
+                            color = Brand.Muted,
+                            fontSize = 13.sp
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = onCaptureTest) { Text("Run capture test") }
+                            OutlinedButton(onClick = {
+                                scope.launch {
+                                    vm.delete(item)
+                                    onBack()
+                                }
+                            }) { Text("Delete", color = Brand.Danger) }
+                        }
+                    }
+                }
+            }
+            if (playbackUrl != null && !noAudio) {
                 item { RecordingPlayer(player) }
                 item { PlayerOptions(player) }
                 item { Spacer(Modifier.height(4.dp)) }
             }
-            item {
-                ExportShareRow(vm, item.id, t?.id?.takeIf { t.status == "completed" && t.kind == "final" }, hasAudio = playbackUrl != null)
+            if (!noAudio) {
+                item {
+                    ExportShareRow(
+                        vm,
+                        item.id,
+                        t?.id?.takeIf { t.status == "completed" && t.kind == "final" },
+                        hasAudio =
+                            playbackUrl != null
+                    )
+                }
             }
             if (bookmarks.isNotEmpty()) {
                 item {
@@ -658,6 +582,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                 }
             }
             when {
+                noAudio -> Unit
+
                 !loaded -> item { Text("Loading transcript…", color = Brand.Muted) }
 
                 t == null && loadFailed -> item {
@@ -977,6 +903,20 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
                     color = if (helper.connected) Brand.Success else Brand.Muted,
                     fontSize = 13.sp
                 )
+                if (helper.connected && helper.stale) {
+                    Text(
+                        "The running helper belongs to an older version of the app, so call recording fixes do not reach it. " +
+                            "Restart it: Connect via Shizuku again, or run the command below again (or restart the phone).",
+                        color = Brand.Warning,
+                        fontSize = 13.sp
+                    )
+                }
+                CaptureTestCard(vm)
+                val problem by com.echoledger.mobile.recording.CaptureProblems.last.collectAsState()
+                LaunchedEffect(Unit) { com.echoledger.mobile.recording.CaptureProblems.load(context) }
+                problem?.let {
+                    Text("Last capture problem (${formatWhen(it.at.toString())}): ${it.message}", color = Brand.Danger, fontSize = 12.sp)
+                }
                 Text(
                     "Option A — Shizuku (recommended): install Shizuku, start it with Wireless debugging (one-time 6-digit pairing), then:",
                     fontSize = 13.sp
@@ -1169,4 +1109,59 @@ private val IN_PROGRESS = setOf("pending", "submitted", "processing", "awaiting_
 internal fun failureText(t: TranscriptDto): String {
     val reason = t.error ?: "The speech provider could not process this recording."
     return if (t.errorCode == "no_audio") "$reason Check Setup → Call capture (the helper must be running) and record again." else reason
+}
+
+/** Setup → Call capture: the guided test and "Copy diagnostics". */
+@Composable
+private fun CaptureTestCard(vm: MainViewModel) {
+    val clipboard = LocalClipboard.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val testing by vm.captureTesting.collectAsState()
+    val result by vm.captureTest.collectAsState()
+    var left by remember { mutableStateOf(0) }
+    LaunchedEffect(testing) {
+        left = com.echoledger.mobile.recording.CaptureTest.SECONDS
+        while (testing && left > 0) {
+            kotlinx.coroutines.delay(1_000)
+            left--
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = { vm.runCaptureTest() }, enabled = !testing) { Text(if (testing) "Testing… $left s" else "Test call capture") }
+            TextButton(onClick = {
+                scope.launch { clipboard.setClipEntry(ClipData.newPlainText("diagnostics", vm.captureDiagnostics()).toClipEntry()) }
+            }) { Text("Copy diagnostics") }
+        }
+        if (testing) {
+            Text("Speak for a few seconds. For the other side, run the test during a WhatsApp call.", color = Brand.Muted, fontSize = 12.sp)
+        }
+        result?.let { r ->
+            val colour = when (r.verdict) {
+                com.echoledger.mobile.recording.CaptureTest.Verdict.READY -> Brand.Success
+                com.echoledger.mobile.recording.CaptureTest.Verdict.PARTLY -> Brand.Warning
+                com.echoledger.mobile.recording.CaptureTest.Verdict.NOT_READY -> Brand.Danger
+            }
+            Text(r.headline, color = colour, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            r.stages.forEach { stage ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        when (stage.ok) {
+                            true -> "✓"
+                            false -> "✗"
+                            null -> "–"
+                        },
+                        color = when (stage.ok) {
+                            true -> Brand.Success
+                            false -> Brand.Danger
+                            null -> Brand.Muted
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text("${stage.title}: ${stage.detail}", fontSize = 13.sp)
+                }
+            }
+            r.fix?.let { Text("What to do: $it", fontSize = 13.sp) }
+        }
+    }
 }

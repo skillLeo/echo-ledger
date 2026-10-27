@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -47,8 +48,11 @@ class LibraryScreenTest : ScreenTest() {
         compose.onNode(hasSetTextAction()).performTextInput(text)
     }
 
-    private fun chip(label: String) =
-        compose.onNode(hasText(label) and hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Checkbox))
+    /** Ticks [label] in the Filters menu (it stays open, like a list of checkboxes). */
+    private fun chip(label: String): androidx.compose.ui.test.SemanticsNodeInteraction {
+        compose.onNodeWithContentDescription("Filters").performClick()
+        return compose.onNode(hasText(label) and hasClickAction())
+    }
 
     private fun item(
         id: String,
@@ -115,9 +119,10 @@ class LibraryScreenTest : ScreenTest() {
 
         compose.onNodeWithText("Call with Acme").assertIsDisplayed()
         compose.onNodeWithText("Oct 20 · 10:00 AM · 42:10 · Acme Holdings").assertIsDisplayed()
-        compose.onNodeWithText("Thanks for calling about the invoice").assertIsDisplayed()
-        compose.onNodeWithText("WhatsApp").assertIsDisplayed()
-        assertEquals("the Phone badge and the Phone filter chip", 2, compose.onAllNodesWithText("Phone").fetchSemanticsNodes().size)
+        // Compact rows: no preview text and no badges, the device is an icon and the state a dot.
+        compose.onNodeWithText("Thanks for calling about the invoice").assertDoesNotExist()
+        compose.onAllNodesWithContentDescription("Phone", substring = true).assertCountEquals(1)
+        compose.onNodeWithContentDescription("Select Call with Acme").assertIsDisplayed()
         compose.onNodeWithText("No recordings yet").assertDoesNotExist()
     }
 
@@ -151,8 +156,8 @@ class LibraryScreenTest : ScreenTest() {
 
         showLibrary()
 
-        compose.onNodeWithText("Zoom").assertIsDisplayed()
-        assertEquals(2, compose.onAllNodesWithText("Desktop").fetchSemanticsNodes().size)
+        compose.onNodeWithText("Zoom review").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("Desktop", substring = true).assertCountEquals(1)
     }
 
     @Test
@@ -179,9 +184,9 @@ class LibraryScreenTest : ScreenTest() {
 
         showLibrary()
 
-        compose.onAllNodesWithText("Ready").assertCountEquals(1)
-        compose.onAllNodesWithText("Processing").assertCountEquals(2)
-        compose.onAllNodesWithText("Failed").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("Ready").assertCountEquals(1)
+        compose.onAllNodesWithContentDescription("Processing").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("Failed").assertCountEquals(2)
     }
 
     @Test
@@ -190,7 +195,7 @@ class LibraryScreenTest : ScreenTest() {
 
         showLibrary()
 
-        compose.onAllNodesWithText("Ready").assertCountEquals(1)
+        compose.onAllNodesWithContentDescription("Ready").assertCountEquals(1)
     }
 
     // ---- search ------------------------------------------------------------------------------------------------------------
@@ -306,7 +311,7 @@ class LibraryScreenTest : ScreenTest() {
     )
 
     @Test
-    fun `the device chips narrow the list and All shows everything again`() {
+    fun `the device boxes in the Filters menu add up and Clear all shows everything again`() {
         seedMixedDevices()
         showLibrary()
 
@@ -315,11 +320,13 @@ class LibraryScreenTest : ScreenTest() {
         compose.onAllNodesWithText("Phone call").assertCountEquals(0)
         compose.onAllNodesWithText("Web upload").assertCountEquals(0)
 
+        // Ticked boxes in one group add up.
         chip("Web").performClick()
         compose.onNodeWithText("Web upload").assertIsDisplayed()
-        compose.onAllNodesWithText("Desktop meeting").assertCountEquals(0)
+        compose.onNodeWithText("Desktop meeting").assertIsDisplayed()
+        compose.onAllNodesWithText("Phone call").assertCountEquals(0)
 
-        chip("All").performClick()
+        chip("Clear all").performClick()
         compose.onNodeWithText("Phone call").assertIsDisplayed()
         compose.onNodeWithText("Desktop meeting").assertIsDisplayed()
         compose.onNodeWithText("Web upload").assertIsDisplayed()

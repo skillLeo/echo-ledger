@@ -176,6 +176,7 @@ class ViewCaptureSession extends ViewRecord
     {
         return Action::make('share')
             ->label('Share')
+            ->visible(fn (): bool => ! $this->session()->hasNoAudio())
             ->icon(Heroicon::OutlinedLink)
             ->color('gray')
             ->button()

@@ -15,7 +15,7 @@ class HelperConnectionTest : AppTest() {
     private class Helper(private val reportedUid: Int, private val failUid: Boolean = false) : ICaptureHelper.Stub() {
         var listener: ICallListener? = null
 
-        override fun version() = 1
+        override fun version() = com.echoledger.mobile.BuildConfig.HELPER_BUILD
 
         override fun uid(): Int = if (failUid) throw IllegalStateException("helper died") else reportedUid
 
@@ -60,6 +60,25 @@ class HelperConnectionTest : AppTest() {
 
         assertEquals(HelperConnection.State(connected = true, source = "adb", helperUid = 2000), connection.state.value)
         assertSame(helper, connection.helper)
+    }
+
+    @Test
+    fun `a helper left running by an older build of the app is marked stale`() {
+        val connection = connection()
+        val old = object : ICaptureHelper.Stub() {
+            override fun version() = com.echoledger.mobile.BuildConfig.HELPER_BUILD - 1
+            override fun uid() = 2000
+            override fun capabilities() = ""
+            override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+            override fun stopCapture() = Unit
+            override fun setCallListener(listener: ICallListener?) = Unit
+            override fun destroy() = Unit
+        }
+
+        connection.attach(old, "shizuku")
+
+        assertTrue(connection.state.value.connected)
+        assertTrue(connection.state.value.stale)
     }
 
     @Test

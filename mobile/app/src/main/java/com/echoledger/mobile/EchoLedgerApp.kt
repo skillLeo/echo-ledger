@@ -24,6 +24,7 @@ class EchoLedgerApp : Application() {
         super.onCreate()
         graph = AppGraph(this)
         Notifications.createChannels(this)
+        graph.helper.autoConnect()
     }
 }
 

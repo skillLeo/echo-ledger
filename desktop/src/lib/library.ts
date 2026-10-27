@@ -60,9 +60,11 @@ export function groupItems(items: LibraryItem[], key: SortKey, now: Date = new D
   return groups;
 }
 
-export type ItemState = "ready" | "processing" | "failed";
+export type ItemState = "ready" | "processing" | "failed" | "no_audio";
 
 export function itemState(item: Pick<LibraryItem, "status" | "transcript">): ItemState {
+  // Nothing was heard: a capture problem, not a failure to retry (since v1.1.2).
+  if (item.transcript?.final_error_code === "no_audio") return "no_audio";
   if (item.status === "failed" || item.transcript?.final_status === "failed") return "failed";
   if (item.status === "completed" || item.transcript?.final_status === "completed") return "ready";
   return "processing";

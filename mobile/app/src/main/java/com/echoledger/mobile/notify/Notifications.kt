@@ -112,10 +112,17 @@ object Notifications {
             .addAction(0, "Stop", serviceAction(context, RecordingService.ACTION_STOP, 11))
             .build()
 
-    fun armed(context: Context): Notification = NotificationCompat.Builder(context, CHANNEL_RECORDING)
+    /** Auto-record on; [ready] false: the capture helper is not running, so calls would not be recorded. */
+    fun armed(context: Context, ready: Boolean = true): Notification = NotificationCompat.Builder(context, CHANNEL_RECORDING)
         .setSmallIcon(R.drawable.ic_stat_rec)
-        .setContentTitle("Ready to record WhatsApp calls")
-        .setContentText("Calls are captured automatically; you decide after each call.")
+        .setContentTitle(if (ready) "Ready to record WhatsApp calls" else "Call capture isn't ready — tap to fix")
+        .setContentText(
+            if (ready) {
+                "Calls are captured automatically; you decide after each call."
+            } else {
+                "Start Shizuku (or run the setup command), then open Setup."
+            }
+        )
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setSilent(true)
@@ -171,23 +178,46 @@ object Notifications {
         runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
     }
 
-    /** A recording that captured no sound is dropped: tell the person why, and where to look. */
-    fun noAudio(context: Context) {
+    /** A call started while the capture helper is not running: say so during the call, with the way to fix it. */
+    fun captureNotReady(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             return
         }
-        val text = "The recording had no sound, so it was not kept. " +
-            "Check Settings, Devices, This phone, Setup guide (call capture) and record again."
+        val text = "This call is not being recorded because the capture helper is not running. Tap to open Setup and start it."
         val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
             .setSmallIcon(R.drawable.ic_stat_rec)
-            .setContentTitle("No audio was captured")
+            .setContentTitle("Call capture isn't ready — tap to fix")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
-            .setContentIntent(openPending(context))
+            .setContentIntent(openSetup(context))
+        runCatching { NotificationManagerCompat.from(context).notify(NOT_READY_ID, builder.build()) }
+    }
+
+    /**
+     * A recording that captured no sound is dropped: tell the person why, and where to look. [reason]: what the capture
+     * helper reported, when it said anything (shown so the cause can be fixed).
+     */
+    fun noAudio(context: Context, reason: String? = null, callNotRecorded: Boolean = false) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val first = if (callNotRecorded) "This call could not be recorded." else "The recording had no sound, so it was not kept."
+        val text = listOfNotNull(first, reason?.let { "Reason: $it" }, "Open Setup, Call capture and restart the helper, then test a call.")
+            .joinToString(" ")
+        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(if (callNotRecorded) "Call not recorded" else "No audio was captured")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .setContentIntent(openSetup(context))
         runCatching { NotificationManagerCompat.from(context).notify(NO_AUDIO_ID, builder.build()) }
     }
 
@@ -206,6 +236,18 @@ object Notifications {
         val line = "${first.speaker}: ${first.text.trim()}"
         return if (line.length <= 140) line else line.take(139) + "…"
     }
+
+    private const val NOT_READY_ID = 7_432
+
+    /** Opens Setup (call capture). */
+    private fun openSetup(context: Context): PendingIntent = PendingIntent.getActivity(
+        context,
+        3,
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SETUP),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
 
     /** Opens the app on the Record tab's list of recordings waiting for a decision. */
     private fun openPending(context: Context): PendingIntent = PendingIntent.getActivity(

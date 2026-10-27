@@ -28,8 +28,8 @@ enum class SourceApp(val wire: String, val label: String) {
 
         /** Package → app for call detection (WhatsApp and WhatsApp Business). */
         fun fromPackage(pkg: String?): SourceApp? = when (pkg) {
-            "com.whatsapp" -> WHATSAPP
-            "com.whatsapp.w4b" -> WHATSAPP_BUSINESS
+            CallTargets.WHATSAPP -> WHATSAPP
+            CallTargets.WHATSAPP_BUSINESS -> WHATSAPP_BUSINESS
             else -> null
         }
     }

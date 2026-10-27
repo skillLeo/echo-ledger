@@ -55,7 +55,9 @@ final class CaptureSessionsTable
                 TextColumn::make('labels.label')->label('Labels')->badge()->color('gray')->placeholder('')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('device.name')->label('Device')
                     ->state(fn (CaptureSession $r): string => self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('status')->badge(),
+                TextColumn::make('status')->badge()
+                    ->formatStateUsing(fn ($state, CaptureSession $record): string => $record->hasNoAudio() ? 'No audio' : ($state instanceof SessionStatus ? $state->getLabel() : (string) $state))
+                    ->color(fn ($state, CaptureSession $record): ?string => $record->hasNoAudio() ? 'gray' : ($state instanceof SessionStatus ? $state->getColor() : null)),
                 TextColumn::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('—')->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)
                     ->trueColor('warning')->falseColor('gray')

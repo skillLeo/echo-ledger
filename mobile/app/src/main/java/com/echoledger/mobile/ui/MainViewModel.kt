@@ -465,6 +465,45 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private val _captureTest = MutableStateFlow<com.echoledger.mobile.recording.CaptureTest.Result?>(null)
+    val captureTest: StateFlow<com.echoledger.mobile.recording.CaptureTest.Result?> = _captureTest.asStateFlow()
+
+    private val _captureTesting = MutableStateFlow(false)
+    val captureTesting: StateFlow<Boolean> = _captureTesting.asStateFlow()
+
+    /** Setup → Call capture → Test call capture (about ten seconds; nothing is kept or uploaded). */
+    fun runCaptureTest() = viewModelScope.launch {
+        if (_captureTesting.value) return@launch
+        if (com.echoledger.mobile.recording.RecordingService.isRecording) {
+            _message.value = "Stop the recording first, then run the test."
+            return@launch
+        }
+        _captureTesting.value = true
+        _captureTest.value = null
+        try {
+            val settings = graph.settings.current()
+            _captureTest.value = com.echoledger.mobile.recording.CaptureTest.run(
+                getApplication(),
+                graph.helper.helper,
+                graph.helper.state.value.stale,
+                com.echoledger.mobile.recording.CaptureTest.micSourceFor(settings.micSource)
+            )
+        } finally {
+            _captureTesting.value = false
+        }
+    }
+
+    /** The text "Copy diagnostics" puts on the clipboard (no audio, names or numbers). */
+    fun captureDiagnostics(): String {
+        val h = graph.helper.state.value
+        val state = if (h.connected) {
+            "connected via ${h.source}, uid ${h.helperUid}${if (h.stale) ", older version" else ""}"
+        } else {
+            "not connected (${h.error ?: "never started"})"
+        }
+        return com.echoledger.mobile.recording.CaptureLog.report(getApplication(), state)
+    }
+
     fun connectShizuku() {
         val h = graph.helper
         when {

@@ -29,7 +29,7 @@ export function applyFilters(items: LibraryItem[], f: FilterState): LibraryItem[
     && (f.views.size === 0 || [...f.views].some((v) => inSmartView(i, v))));
 }
 
-const STATE_LABEL = { ready: "Ready", processing: "Processing", failed: "Failed" } as const;
+const STATE_LABEL = { ready: "Ready", processing: "Processing", failed: "Failed", no_audio: "No audio" } as const;
 
 /** Transcript states in which the provider is still working: never shown as an empty transcript (A6.DU3). */
 const IN_FLIGHT = new Set(["pending", "submitted", "processing"]);

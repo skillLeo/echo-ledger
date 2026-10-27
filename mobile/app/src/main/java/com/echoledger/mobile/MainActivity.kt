@@ -236,6 +236,10 @@ class MainActivity : FragmentActivity() {
                 showItem(null)
                 showSetup = false
             }
+            if (open == OPEN_SETUP) {
+                showItem(null)
+                showSetup = true
+            }
             open?.takeIf { it.startsWith(OPEN_SESSION_PREFIX) }?.let { openSession = it.removePrefix(OPEN_SESSION_PREFIX) }
             if (open != null) openRequest.value = null
         }
@@ -288,7 +292,10 @@ class MainActivity : FragmentActivity() {
                         openItem != null -> SessionScreen(vm, openItem, onBack = {
                             showItem(null)
                             openAtMs = null
-                        }, startAtMs = openAtMs)
+                        }, startAtMs = openAtMs, onCaptureTest = {
+                            showItem(null)
+                            showSetup = true
+                        })
 
                         else -> AnimatedContent(
                             targetState = tab,
@@ -323,6 +330,9 @@ class MainActivity : FragmentActivity() {
 
         /** Opens the Record tab, where recordings waiting for Keep / Discard are listed. */
         const val OPEN_PENDING = "pending"
+
+        /** Setup (call capture): from "Call capture isn't ready" and "Run capture test". */
+        const val OPEN_SETUP = "setup"
 
         /** `session:<id>` opens that recording (an activity notification was tapped, B18). */
         const val OPEN_SESSION_PREFIX = "session:"

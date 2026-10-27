@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.media.AudioFormat
+import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
@@ -83,6 +84,7 @@ class RecordingService : LifecycleService() {
         const val EXTRA_LANGUAGE = "language"
         private const val TAG = "EchoLedgerRec"
         private const val TICK_MS = 1_000L
+        private const val WATCHDOG_MS = 5_000L
 
         @Volatile var isRecording = false
             private set
@@ -110,15 +112,21 @@ class RecordingService : LifecycleService() {
     private val callListener = object : ICallListener.Stub() {
         override fun onCallStarted(packageName: String?) {
             val app = SourceApp.fromPackage(packageName) ?: SourceApp.WHATSAPP
+            CaptureLog.add(this@RecordingService, "call started", app.label)
             main.post { onCallEvent(CallEvent.CallStarted(app, UUID.randomUUID().toString(), System.currentTimeMillis())) }
         }
 
         override fun onCallEnded() {
+            CaptureLog.add(this@RecordingService, "call ended")
             main.post { onCallEvent(CallEvent.CallEnded(System.currentTimeMillis())) }
         }
 
         override fun onError(message: String?) {
             Log.w(TAG, "helper: $message")
+            message?.let {
+                CaptureProblems.record(this@RecordingService, it)
+                CaptureLog.add(this@RecordingService, "helper", it)
+            }
         }
     }
 
@@ -174,7 +182,7 @@ class RecordingService : LifecycleService() {
     /** Enters (or updates) the foreground state. Returns false when the system refuses; never crashes. */
     private fun goForeground(mic: Boolean, title: String, detail: String): Boolean {
         val notification = if (!mic && capture == null) {
-            Notifications.armed(this)
+            Notifications.armed(this, ready = helperAlive())
         } else {
             Notifications.recording(this, title, detail, paused = capture?.paused == true)
         }
@@ -211,29 +219,73 @@ class RecordingService : LifecycleService() {
 
     // ---- Armed mode (auto-record WhatsApp calls) ----------------------------------------------------------------
 
+    /**
+     * Auto-record on. Without the helper (after a reboot, or it was stopped) it stays on in a "not ready" state that
+     * says so and keeps trying to reconnect (Shizuku), instead of turning itself off without a word.
+     */
     private fun arm() {
-        if (Build.VERSION.SDK_INT < 34 || graph.helper.helper == null) {
-            Log.w(TAG, "auto-record needs Android 14+ and the capture helper")
+        if (Build.VERSION.SDK_INT < 34) {
+            Log.w(TAG, "auto-record needs Android 14+")
             persistArmed(false)
             settle()
             return
         }
         armed = true
+        graph.helper.setCallListener(callListener)
+        if (graph.helper.helper == null) graph.helper.bindShizuku()
         if (capture == null && !goForeground(mic = false, title = "", detail = "")) {
             armed = false
             persistArmed(false)
             settle()
             return
         }
-        graph.helper.setCallListener(callListener)
+        CaptureLog.add(this, "auto-record on", if (helperAlive()) "helper ready" else "helper not running")
         persistArmed(true)
+        main.removeCallbacks(watchdog)
+        main.postDelayed(watchdog, WATCHDOG_MS)
     }
 
     private fun disarm() {
         armed = false
+        main.removeCallbacks(watchdog)
         graph.helper.setCallListener(null)
         persistArmed(false)
+        CaptureLog.add(this, "auto-record off")
         settle()
+    }
+
+    private fun helperAlive(): Boolean =
+        graph.helper.helper?.asBinder()?.let { b -> runCatching { b.pingBinder() }.getOrDefault(false) } == true
+
+    private var lastReady: Boolean? = null
+    private var warnedThisCall = false
+
+    /**
+     * While auto-record is on: reconnects a helper that went away (Shizuku), keeps the "ready / not ready" notice
+     * true, and when a call starts while the helper is missing says "Call capture isn't ready — tap to fix" at once.
+     */
+    private val watchdog = object : Runnable {
+        override fun run() {
+            if (!armed || destroyed) return
+            var ready = helperAlive()
+            if (!ready) {
+                graph.helper.bindShizuku()
+                ready = helperAlive()
+            }
+            if (ready != lastReady) {
+                lastReady = ready
+                CaptureLog.add(this@RecordingService, "helper", if (ready) "ready" else "not running")
+                if (capture == null) goForeground(mic = false, title = "", detail = "")
+            }
+            val inCall = (getSystemService(AUDIO_SERVICE) as AudioManager).mode == AudioManager.MODE_IN_COMMUNICATION
+            if (inCall && !ready && !warnedThisCall) {
+                warnedThisCall = true
+                CaptureLog.add(this@RecordingService, "call seen without the helper")
+                Notifications.captureNotReady(this@RecordingService)
+            }
+            if (!inCall) warnedThisCall = false
+            main.postDelayed(this, WATCHDOG_MS)
+        }
     }
 
     private fun persistArmed(value: Boolean) {
@@ -289,13 +341,26 @@ class RecordingService : LifecycleService() {
         }
         val pipe = ParcelFileDescriptor.createPipe()
         val micSource = if (settings.micSource == "mic") MediaRecorder.AudioSource.MIC else MediaRecorder.AudioSource.VOICE_COMMUNICATION
-        val started = runCatching { helper.startCapture(pipe[1], Pcm.CAPTURE_RATE, micSource) }.getOrDefault(false)
+        val started = runCatching { helper.startCapture(pipe[1], Pcm.CAPTURE_RATE, micSource) }
+            .onFailure { CaptureProblems.record(this, "Call capture could not start: ${it.message ?: it.javaClass.simpleName}") }
+            .getOrDefault(false)
+        CaptureLog.add(
+            this,
+            "capture start",
+            if (started) "helper recording (both sides)" else "helper refused: ${CaptureProblems.recent(this) ?: "no reason given"}"
+        )
         pipe[1].close()
         if (!started) {
             pipe[0].close()
             session.cancel()
             capture = null
-            if (fromCall) settle() else startMicCapture(id)
+            // A call that could not be recorded is said so at once (the helper's reason), never silently skipped.
+            if (fromCall) {
+                Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = true)
+                settle()
+            } else {
+                startMicCapture(id)
+            }
             return
         }
         session.readerThread = thread(name = "el-pipe-reader") {
@@ -480,6 +545,14 @@ class RecordingService : LifecycleService() {
     private val ticker = object : Runnable {
         override fun run() {
             val session = capture ?: return
+            if (!session.soundLogged && !session.silenceLogged && session.ageMs() >= 5_000) {
+                session.silenceLogged = true
+                CaptureLog.add(
+                    this@RecordingService,
+                    "no sound yet",
+                    "5 s after start nothing has arrived from ${if (session.channels == 2) "the helper" else "the microphone"}"
+                )
+            }
             val change = session.farSide.tick(session.silentMs(System.nanoTime()), settings.farSideWarning)
             if (change != null) {
                 session.farSideSeconds = change.seconds.takeIf { change.silent }
@@ -558,6 +631,17 @@ class RecordingService : LifecycleService() {
             }.getOrNull()
             // A recording that captured no sound (0 ms) has nothing to keep or transcribe: say why instead of asking.
             val silent = stored != null && stored.durationMs <= 0
+            CaptureLog.add(
+                this,
+                "recording saved",
+                if (stored ==
+                    null
+                ) {
+                    "saving failed"
+                } else {
+                    "${stored.durationMs / 1000} s, ${stored.plainSize} bytes${if (silent) ", no sound: dropped" else ""}"
+                }
+            )
             if (silent && stored != null) {
                 stored.serverSessionId?.let { DiscardWorker.enqueue(this, stored.id, it) }
                 graph.recordings.delete(stored.id)
@@ -566,7 +650,7 @@ class RecordingService : LifecycleService() {
             val themeMode = settings.themeMode
             main.post {
                 if (silent) {
-                    Notifications.noAudio(this)
+                    Notifications.noAudio(this, CaptureProblems.recent(this))
                 } else if (stored != null) {
                     if (stored.state == "pending_decision") {
                         PostCallPrompt.show(this, stored, decisionTimeout, themeMode)
@@ -654,9 +738,14 @@ class RecordingService : LifecycleService() {
         @Volatile var clientLevel = 0f
 
         @Volatile var farSideSeconds: Long? = null
+
+        @Volatile var soundLogged = false
+        var silenceLogged = false
         var micFgs = false
         var title = ""
         var detail = ""
+
+        fun ageMs(): Long = (System.nanoTime() - startNanos) / 1_000_000
 
         /** Recorded time: what the file holds (paused stretches excluded). */
         fun recordedMs(): Long = Pcm.durationMs(encoder.framesWritten)
@@ -684,6 +773,10 @@ class RecordingService : LifecycleService() {
 
         fun consume(bytes: ByteArray, length: Int) {
             if (paused) return // not captured, not streamed
+            if (!soundLogged && length > 0) {
+                soundLogged = true
+                CaptureLog.add(this@RecordingService, "sound arriving", "${(System.nanoTime() - startNanos) / 1_000_000} ms after start")
+            }
             encoder.feed(bytes, length)
             val samples = Pcm.fromLittleEndianBytes(bytes, length)
             if (channels == 2) {

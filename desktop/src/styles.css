@@ -214,6 +214,7 @@ label.field { display: grid; gap: 6px; margin-bottom: var(--space-3); color: var
 .pill.ready { color: var(--success); background: rgba(60, 207, 145, 0.12); }
 .pill.processing { color: var(--warning); background: rgba(245, 183, 49, 0.12); }
 .pill.failed { color: var(--danger); background: rgba(248, 113, 133, 0.12); }
+.pill.no_audio { color: var(--text-muted); background: var(--surface-2); }
 .detail { overflow: auto; }
 .segments { display: grid; gap: 2px; margin-top: var(--space-3); }
 .segment { display: grid; grid-template-columns: 48px 72px minmax(0, 1fr); gap: var(--space-2); padding: 6px var(--space-2); border-radius: var(--radius-sm); line-height: 1.55; }
