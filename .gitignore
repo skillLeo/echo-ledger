@@ -22,3 +22,5 @@ local.properties
 
 # Design review screenshots (local only)
 /design-review/
+# Dependencies and tool caches anywhere in the tree (a test run from the wrong folder creates them at the root).
+node_modules/
