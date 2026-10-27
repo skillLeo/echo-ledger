@@ -32,7 +32,9 @@ data class AppSettings(
     /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
     val secureScreen: Boolean = true,
     /** What happens to a recording nobody decided on within 60 s: "keep", "discard" or "wait" (same as the desktop). */
-    val decisionTimeout: String = "keep",
+    val decisionTimeout: String = "wait",
+    /** True once the user picked an option in Settings; until then the phone waits (an older stored "keep" was only the default). */
+    val decisionTimeoutChosen: Boolean = false,
     /** The server's `api_version` ("1.1") from the last config; null for a v1 server or before the first fetch. */
     val serverApiVersion: String? = null,
     /** Per call app (`source_app` wire value): false keeps auto-record from recording it. Missing apps are on. */
@@ -65,6 +67,8 @@ data class AppSettings(
     /** Use the wallpaper's colours (Material You, Android 12 and later) instead of the EchoLedger accent. */
     val dynamicColour: Boolean = false
 ) {
+    /** What happens to an undecided recording: "keep", "discard" or "wait" (the default; nothing is uploaded or paid for). */
+    val afterCallTimeout: String get() = if (decisionTimeoutChosen) decisionTimeout else "wait"
     val serverIsV1_1: Boolean get() = serverApiVersion != null
     val paired: Boolean get() = serverUrl != null && deviceId != null
 }

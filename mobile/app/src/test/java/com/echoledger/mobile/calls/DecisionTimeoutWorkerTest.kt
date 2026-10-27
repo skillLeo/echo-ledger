@@ -15,7 +15,7 @@ import org.junit.Test
 /** "If I don't choose within 60 s" on the phone: the same three choices as the desktop, applied when time is up. */
 class DecisionTimeoutWorkerTest : AppTest() {
     private fun setTimeout(value: String) = runBlocking {
-        (app as EchoLedgerApp).graph.settings.update { it.copy(decisionTimeout = value) }
+        (app as EchoLedgerApp).graph.settings.update { it.copy(decisionTimeout = value, decisionTimeoutChosen = true) }
     }
 
     private fun runWorker(id: String): ListenableWorker.Result = runBlocking {
@@ -26,11 +26,32 @@ class DecisionTimeoutWorkerTest : AppTest() {
     }
 
     @Test
-    fun `keep is the default and queues the recording for upload`() {
+    fun `keep, when chosen, queues the recording for upload`() {
+        setTimeout("keep")
         app.storeRecording(id = "call-1", state = "pending_decision")
 
         assertEquals(ListenableWorker.Result.success(), runWorker("call-1"))
         assertEquals("queued", app.peekRecording("call-1")?.state)
+    }
+
+    @Test
+    fun `waiting is the default, so nothing is decided, uploaded or paid for`() {
+        app.storeRecording(id = "call-1", state = "pending_decision")
+
+        runWorker("call-1")
+
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertEquals("wait", com.echoledger.mobile.data.AppSettings().afterCallTimeout)
+    }
+
+    @Test
+    fun `a stored keep that was only the old default still waits until the user chooses`() {
+        runBlocking { (app as EchoLedgerApp).graph.settings.update { it.copy(decisionTimeout = "keep") } }
+        app.storeRecording(id = "call-1", state = "pending_decision")
+
+        runWorker("call-1")
+
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
     }
 
     @Test

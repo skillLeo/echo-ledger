@@ -20,7 +20,7 @@ class DecisionTimeoutWorker(context: Context, params: WorkerParameters) : Corout
         val graph = (applicationContext as EchoLedgerApp).graph
         val recording = graph.recordings.get(id) ?: return Result.success()
         if (recording.state != "pending_decision") return Result.success()
-        when (timeoutDecision(graph.settings.current().decisionTimeout)) {
+        when (timeoutDecision(graph.settings.current().afterCallTimeout)) {
             true -> Decisions.apply(applicationContext, id, keep = true)
             false -> Decisions.apply(applicationContext, id, keep = false)
             null -> Unit
@@ -34,7 +34,7 @@ class DecisionTimeoutWorker(context: Context, params: WorkerParameters) : Corout
 
         fun workName(recordingId: String) = "decision-timeout-$recordingId"
 
-        /** true = keep, false = discard, null = keep waiting (also for unknown values, which never lose a call). */
+        /** true = keep, false = discard, null = keep waiting (unknown values keep the recording, so a call is never lost). */
         fun timeoutDecision(setting: String): Boolean? = when (setting) {
             "keep" -> true
             "discard" -> false

@@ -1047,17 +1047,17 @@ internal fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
     SectionCard {
         Text("After a call", fontWeight = FontWeight.SemiBold)
         Text("If I don't choose within 60 s", color = Brand.Muted, fontSize = 12.sp)
-        listOf("keep" to "Keep the recording", "discard" to "Discard it", "wait" to "Keep waiting").forEach { (value, label) ->
+        listOf("wait" to "Keep waiting (default)", "keep" to "Keep the recording", "discard" to "Discard it").forEach { (value, label) ->
             Row(
                 Modifier.fillMaxWidth()
                     .selectable(
-                        selected = settings.decisionTimeout == value,
+                        selected = settings.afterCallTimeout == value,
                         role = Role.RadioButton,
-                        onClick = { vm.updateSettings { it.copy(decisionTimeout = value) } }
+                        onClick = { vm.updateSettings { it.copy(decisionTimeout = value, decisionTimeoutChosen = true) } }
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RadioButton(selected = settings.decisionTimeout == value, onClick = null)
+                RadioButton(selected = settings.afterCallTimeout == value, onClick = null)
                 Text(label, modifier = Modifier.padding(start = 8.dp))
             }
         }

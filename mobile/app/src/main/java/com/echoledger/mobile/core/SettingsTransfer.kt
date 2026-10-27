@@ -28,6 +28,7 @@ object SettingsTransfer {
         "captionsEnabled",
         "micSource",
         "decisionTimeout",
+        "decisionTimeoutChosen",
         "autoRecordApps",
         "captionStyle",
         "farSideWarning",

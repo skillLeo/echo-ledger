@@ -3,10 +3,13 @@ package com.echoledger.mobile.calls
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.net.DiscardWorker
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.notify.Notifications
+import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.widget.WidgetStateStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +42,8 @@ object Decisions {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         Notifications.cancelDecision(context, recordingId)
         DecisionTimeoutWorker.cancel(context, recordingId)
+        // A decision made anywhere (card, notification, Record tab) closes the floating card for that recording.
+        if (DecisionPopup.showingFor == recordingId) Handler(Looper.getMainLooper()).post { DecisionPopup.hide() }
         if (keep) {
             graph.recordings.update(recordingId) { it.copy(state = "queued") }
             UploadWorker.enqueue(context, recordingId)

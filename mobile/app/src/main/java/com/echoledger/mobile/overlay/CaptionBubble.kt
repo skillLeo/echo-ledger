@@ -159,7 +159,7 @@ private fun Bubble(style: CaptionStyle, lines: List<Pair<String, String>>, parti
 }
 
 /** Minimal lifecycle + saved-state owner so a ComposeView can live in a window owned by a Service. */
-private class OverlayOwner :
+internal class OverlayOwner :
     LifecycleOwner,
     SavedStateRegistryOwner {
     private val registry = LifecycleRegistry(this)

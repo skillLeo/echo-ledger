@@ -23,7 +23,7 @@ import com.echoledger.mobile.calls.CallEffect
 import com.echoledger.mobile.calls.CallEvent
 import com.echoledger.mobile.calls.CallState
 import com.echoledger.mobile.calls.CallStateMachine
-import com.echoledger.mobile.calls.DecisionTimeoutWorker
+import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.capture.ICallListener
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.Speakers
@@ -516,12 +516,12 @@ class RecordingService : LifecycleService() {
                 Log.e(TAG, "saving recording failed", it)
                 session.file.delete()
             }.getOrNull()
-            val decisionTimeout = settings.decisionTimeout
+            val decisionTimeout = settings.afterCallTimeout
+            val themeMode = settings.themeMode
             main.post {
                 if (stored != null) {
                     if (stored.state == "pending_decision") {
-                        Notifications.showSaveDecision(this, stored, clientName = null, decisionTimeout = decisionTimeout)
-                        DecisionTimeoutWorker.schedule(this, stored.id)
+                        PostCallPrompt.show(this, stored, decisionTimeout, themeMode)
                     } else {
                         UploadWorker.enqueue(this, stored.id)
                     }

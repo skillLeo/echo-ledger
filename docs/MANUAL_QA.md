@@ -157,6 +157,11 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 | ☐ | 78 | Tap **Keep**. | It uploads. The recording appears on Windows and the web as Phone · WhatsApp, with Me and Client apart. | A-13 |
 | ☐ | 79 | Take a second call, hang up, and tap **Discard**. | It disappears from the phone. Nothing is uploaded. | A-14 |
 | ☐ | 80 | Take a third call and let the question time out. | After 60 seconds Keep or Discard is chosen, as set. It never "keeps waiting". | V-A6 |
+| ☐ | 80a | End a WhatsApp call recording with the phone unlocked and WhatsApp still on screen. | A small card appears at the bottom (about 90 % wide): the WhatsApp icon, "Save this call recording?", the length, **Keep** and **Discard**. It does not take the keyboard focus and the screen above it still scrolls and taps. | popup |
+| ☐ | 80b | Leave the card alone for 10 seconds. | It goes away. The recording is still in the Record tab under "Waiting for your decision": nothing is uploaded and no transcript is requested (Usage shows no new final minutes). | popup |
+| ☐ | 80c | End another call and tap **Keep** on the card, then another and tap **Discard**. Also close WhatsApp while the card is showing. | Keep uploads it and a transcript follows. Discard removes it from the phone with no upload and no cost. The card stays when WhatsApp closes. The same Keep / Discard work from the Record tab list and the notification, and closing the card from one place closes it everywhere. | popup |
+| ☐ | 80d | In Android settings turn off "Display over other apps" for EchoLedger, then end a call. | No card; the heads-up "Save this recording?" notification shows instead with Keep and Discard. | popup |
+| ☐ | 80e | Open **Settings → After a call**. | "Keep waiting (default)" is selected on a fresh install, and stays selected until you pick another option. | popup |
 | ☐ | 81 | Let a WhatsApp call ring out, or reject it. | Nothing is saved and nothing is asked. | A-16 |
 | ☐ | 82 | Take a call with captions on. | The caption bubble shows Me and Client, does not take the focus, and lets touches through. | A-17 |
 | ☐ | 83 | Stay on the Record tab during a Keep that is uploading. | The upload card updates by itself, without leaving the tab. | A6.M12 |
