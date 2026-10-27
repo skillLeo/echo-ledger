@@ -11,6 +11,8 @@ use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
+use App\Stt\LanguageChoice;
+use App\Stt\LanguageRouter;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -112,6 +114,10 @@ final class SessionLifecycle
             if (array_key_exists('client_id', $data)) {
                 $attributes['client_id'] = $this->resolveClientId($device, $data['client_id']);
             }
+            // The language on the Keep card (since v1.1.2): it decides the final transcript's language and engine.
+            if (array_key_exists('language', $data)) {
+                $attributes['language'] = LanguageChoice::normalize($data['language']);
+            }
 
             $this->uploads->assertOpenUploadCapacity($device, count($data['artifacts']));
             $chunkSize = ChunkedUploadService::advertisedChunkSize();
@@ -197,6 +203,12 @@ final class SessionLifecycle
         $clientId = $this->resolveClientId($device, $data['client_id'] ?? null);
         $sourceApp = SourceApp::from($data['source_app']);
         $useCase = $sourceApp === SourceApp::VoiceNote ? SttUseCase::VoiceNote : SttUseCase::FinalTranscript;
+        // The engine the language routes to (it decides which files the device should upload); the final transcript
+        // routes again when it starts, with the language chosen by then.
+        $router = app(LanguageRouter::class);
+        $client = $clientId !== null ? Client::query()->find($clientId) : null;
+        $language = LanguageChoice::normalize($data['language'] ?? null) ?? LanguageChoice::normalize($client?->language)
+            ?? LanguageChoice::normalize($this->settings->get('default_language'));
 
         return CaptureSession::query()->create([
             'workspace_id' => $device->workspace_id,
@@ -207,12 +219,12 @@ final class SessionLifecycle
             'source_device' => $device->sourceDevice(),
             'source_app' => $sourceApp,
             'title' => $data['title'] ?? null,
-            'language' => $data['language'] ?? null,
+            'language' => LanguageChoice::normalize($data['language'] ?? null),
             'started_at' => self::utc($data['started_at']),
             'ended_at' => self::utc($data['ended_at'] ?? null),
             'duration_ms' => $data['duration_ms'] ?? null,
             'status' => $status,
-            'final_provider' => $this->settings->providerFor($useCase)->value,
+            'final_provider' => $router->final($language, $useCase)->provider->value,
         ]);
     }
 }

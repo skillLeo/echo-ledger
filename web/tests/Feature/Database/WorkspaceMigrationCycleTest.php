@@ -125,10 +125,14 @@ function assertBackfilled(Connection $db, array $owned): void
     }
 }
 
+/** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
+const WORKSPACE_STEPS = 3;
+const LATER_MIGRATIONS = 1;
+
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
     cycleArtisan('migrate:fresh');
-    cycleArtisan('migrate:rollback', ['--step' => 3]);
+    cycleArtisan('migrate:rollback', ['--step' => WORKSPACE_STEPS + LATER_MIGRATIONS]);
     expect($db->getSchemaBuilder()->hasTable('workspaces'))->toBeFalse();
 
     $owned = seedPreWorkspaceLibrary($db);
@@ -144,7 +148,7 @@ it('runs the workspace migrations up, down and up again without losing or mixing
     expect(fn () => $db->table('clients')->insert(['id' => (string) Str::ulid(), 'user_id' => array_key_first($owned), 'workspace_id' => 999999, 'name' => 'Ghost', 'created_at' => now(), 'updated_at' => now()]))
         ->toThrow(QueryException::class);
 
-    cycleArtisan('migrate:rollback', ['--step' => 3]);
+    cycleArtisan('migrate:rollback', ['--step' => WORKSPACE_STEPS + LATER_MIGRATIONS]);
     $schema = $db->getSchemaBuilder();
     expect($schema->hasTable('workspaces'))->toBeFalse()
         ->and($schema->hasTable('plans'))->toBeFalse()
@@ -179,7 +183,7 @@ it('runs the workspace migrations up, down and up again without losing or mixing
 it('refuses step 3 while a row has no workspace and changes nothing', function () {
     $db = cycleConnection();
     cycleArtisan('migrate:fresh');
-    cycleArtisan('migrate:rollback', ['--step' => 1]);
+    cycleArtisan('migrate:rollback', ['--step' => 1 + LATER_MIGRATIONS]);
     $now = now();
     $userId = $db->table('users')->insertGetId(['name' => 'Late', 'email' => 'late@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
     $db->table('clients')->insert(['id' => (string) Str::ulid(), 'user_id' => $userId, 'name' => 'Orphan', 'created_at' => $now, 'updated_at' => $now]);

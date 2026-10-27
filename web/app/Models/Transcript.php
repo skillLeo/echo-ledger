@@ -8,6 +8,7 @@ use App\Enums\SttProviderKey;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Services\SettingsRepository;
+use App\Support\UrduText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -38,6 +39,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $completed_at
  * @property Carbon|null $edited_at set while the text differs from the provider's original
  * @property Carbon $created_at
+ * @property string|null $search_text
  * @property-read CaptureSession $captureSession
  */
 class Transcript extends Model
@@ -57,6 +59,16 @@ class Transcript extends Model
         'provider_deleted_at', 'language', 'text', 'segments', 'meta', 'error', 'error_code', 'attempts', 'submitted_at', 'completed_at',
         'edited_at',
     ];
+
+    /** Keeps the folded copy that search reads in step with the text (App\Support\UrduText). */
+    protected static function booted(): void
+    {
+        static::saving(function (Transcript $transcript): void {
+            if ($transcript->isDirty('text') || ($transcript->search_text === null && $transcript->text !== null)) {
+                $transcript->search_text = $transcript->text === null ? null : UrduText::fold((string) $transcript->text);
+            }
+        });
+    }
 
     /** @return BelongsTo<CaptureSession, $this> */
     public function captureSession(): BelongsTo

@@ -16,6 +16,8 @@ use App\Services\Usage\BudgetGuard;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\Data\StreamingRequest;
 use App\Stt\Exceptions\ProviderNotConfigured;
+use App\Stt\LanguageChoice;
+use App\Stt\LanguageRouter;
 use App\Stt\SttManager;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -32,7 +34,7 @@ final class SttTokenController extends Controller
     /** Live captions are refused for a session this old or older (docs/API.md `session_not_recording`). */
     public const MAX_SESSION_HOURS = 4;
 
-    public function __invoke(Request $request, SttManager $stt, SettingsRepository $settings, BudgetGuard $budget, PlanLimits $limits): JsonResponse
+    public function __invoke(Request $request, SttManager $stt, SettingsRepository $settings, BudgetGuard $budget, PlanLimits $limits, LanguageRouter $router): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
@@ -73,12 +75,19 @@ final class SttTokenController extends Controller
         }
         $limits->assertMinutes($device->workspace_id);
 
+        // The language picks the engine for live captions too (App\Stt\LanguageRouter): the device's choice (the chip
+        // on the pill or the notification), else the recording's, the client's, the console default.
+        $language = LanguageChoice::normalize($data['language'] ?? null)
+            ?? ($useCase === SttUseCase::LiveCaptions ? LanguageChoice::normalize(CaptureSession::query()->find($data['session_id'] ?? '')?->language) : null)
+            ?? LanguageChoice::normalize($client?->language) ?? LanguageChoice::normalize($settings->get('default_language'));
+        $driver = $useCase === SttUseCase::LiveCaptions ? $stt->driver($router->live($language)->provider) : $stt->forUseCase($useCase);
+
         try {
-            $grant = $stt->forUseCase($useCase)->streamingGrant(new StreamingRequest(
+            $grant = $driver->streamingGrant(new StreamingRequest(
                 useCase: $useCase,
                 channels: $channels,
                 sampleRate: (int) ($data['sample_rate'] ?? 16000),
-                language: $data['language'] ?? ($client?->language ?: $settings->get('default_language')),
+                language: $language,
                 keyterms: $stt->keytermsFor($client),
             ));
         } catch (ProviderNotConfigured $e) {

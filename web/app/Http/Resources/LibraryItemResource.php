@@ -7,6 +7,7 @@ namespace App\Http\Resources;
 use App\Enums\TranscriptKind;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -55,12 +56,22 @@ final class LibraryItemResource extends JsonResource
             'ended_at' => $session->ended_at?->toAtomString(),
             'duration_ms' => $session->duration_ms,
             'status' => $session->status->value,
+            // Since v1.1.2: the language chosen for the recording (null = automatic) and its chip ("UR+EN").
+            'language' => LanguageChoice::normalize($session->language),
+            'language_chip' => LanguageChoice::chip($final->language ?? $session->language),
             'transcript' => [
                 'final_status' => $final?->status->value,
                 'final_transcript_id' => $final?->id,
                 'live_available' => $live !== null,
                 'live_transcript_id' => $live?->id,
                 'preview' => ($final?->text ? $final->preview() : $live?->preview()) ?: null,
+                // Since v1.1.2: which language and engine produced the final transcript, and a wrong-script warning.
+                'final_language' => $final?->language,
+                'final_provider' => $final?->provider,
+                'final_provider_label' => $final?->providerKey()?->getLabel(),
+                'final_model' => $final !== null ? TranscriptResource::model($final) : null,
+                'live_language' => $live?->language,
+                'script_warning' => $final?->meta['script_warning'] ?? null,
             ],
             'marker_count' => $markers->count(),
             'tags' => $markers->pluck('tag')->filter()->unique()->values()->all(),

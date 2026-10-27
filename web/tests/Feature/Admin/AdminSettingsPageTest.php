@@ -470,7 +470,7 @@ it('shows no monthly limit, an 80 % warning and the default price table when not
         'price__azure_mai__final_transcript' => 0.10,
     ]);
     expect(array_column(Settings::priceFields(), 2))->toContain('AssemblyAI · Live captions', 'ElevenLabs · Final transcript', 'Azure MAI · Voice notes')
-        ->and(Settings::priceFields())->toHaveCount(10);
+        ->and(Settings::priceFields())->toHaveCount(12);
 });
 
 it('renders the monthly limit section with its labels and help text', function () {
@@ -505,7 +505,7 @@ it('saves the monthly limits, the warning threshold and the prices', function ()
         ->and($prices['assemblyai']['live_captions'])->toBe(0.1234)
         ->and($prices['assemblyai']['final_transcript'])->toBe(0.26)
         ->and($prices['azure_mai']['voice_note'])->toEqual(0.0)
-        ->and(array_keys($prices))->toBe(['assemblyai', 'elevenlabs', 'azure_mai']);
+        ->and(array_keys($prices))->toBe(['assemblyai', 'elevenlabs', 'azure_mai', 'soniox']);
 
     adminAssertFormShows(adminSettingsPage($this), ['monthly_minutes' => 3000, 'monthly_usd' => 50.0, 'warn_percent' => 75, 'price__assemblyai__live_captions' => 0.1234]);
 });

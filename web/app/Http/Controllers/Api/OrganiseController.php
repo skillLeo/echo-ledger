@@ -11,6 +11,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
 use App\Services\LibraryOrganiser;
+use App\Stt\LanguageChoice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -31,12 +32,18 @@ final class OrganiseController extends Controller
             'keep' => ['sometimes', 'boolean'],
             'labels' => ['sometimes', 'array', 'max:50'],
             'labels.*' => ['nullable', 'string', 'max:200'],
+            // Since v1.1.2: the recording's language (null / auto = automatic); used by its next final transcript.
+            'language' => ['sometimes', 'nullable', 'string', 'max:16'],
         ]);
         $session = CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
-        /** @var array{title?: string|null, client_id?: string|null, pinned?: bool, keep?: bool, labels?: list<mixed>} $data */
+        /** @var array{title?: string|null, client_id?: string|null, pinned?: bool, keep?: bool, labels?: list<mixed>, language?: string|null} $data */
+        if (array_key_exists('language', $data)) {
+            $session->update(['language' => LanguageChoice::normalize($data['language'])]);
+            unset($data['language']);
+        }
         $session = $this->organiser->update($session, $data);
         $session->load(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels']);
 
@@ -129,6 +136,8 @@ final class OrganiseController extends Controller
             'avatar' => ['sometimes', 'nullable', 'string', 'max:16'],
             'pinned' => ['sometimes', 'boolean'],
             'retention_days' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:365'],
+            // Since v1.1.2: the client's default language ("Use Urdu for Ali from now on").
+            'language' => ['sometimes', 'nullable', 'string', 'max:16'],
         ];
     }
 
@@ -150,6 +159,9 @@ final class OrganiseController extends Controller
         }
         if (array_key_exists('pinned', $data)) {
             $values['pinned'] = (bool) $data['pinned'];
+        }
+        if (array_key_exists('language', $data)) {
+            $values['language'] = LanguageChoice::normalize($data['language']);
         }
         if (array_key_exists('retention_days', $data)) {
             $values['retention_days'] = $data['retention_days'] === null ? null : (int) $data['retention_days'];

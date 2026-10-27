@@ -94,7 +94,8 @@ final class TranscribeFinalJob implements ShouldQueue
             $primaryPath = $temps[] = $uploads->decryptToTemp($primary);
             $channel1 = $recordings->get(RecordingRole::Channel1->value);
             $channel2 = $recordings->get(RecordingRole::Channel2->value);
-            $useChannels = $channel1?->isReady() && $channel2?->isReady() && $driver->capabilities()->needsChannelArtifacts;
+            $caps = $driver->capabilities();
+            $useChannels = $channel1?->isReady() && $channel2?->isReady() && ($caps->needsChannelArtifacts || $caps->usesChannelArtifacts);
             $channel1Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel1)) : null;
             $channel2Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel2)) : null;
 

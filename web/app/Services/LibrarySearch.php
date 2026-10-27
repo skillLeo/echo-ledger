@@ -8,6 +8,7 @@ use App\Enums\SessionStatus;
 use App\Enums\TranscriptKind;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Support\UrduText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -38,14 +39,17 @@ final class LibrarySearch
     public function search(int $workspaceId, string $query, array $filters = [], int $limit = 20, int $page = 1): array
     {
         $terms = self::terms($query);
+        // Transcripts are searched in their folded form (Urdu spelling variants made one, App\Support\UrduText), with
+        // folded terms; titles keep the original letters and the original terms.
+        $folded = array_values(array_unique(array_map(UrduText::fold(...), $terms)));
         $base = $this->filtered($workspaceId, $filters);
         $this->engine = 'like';
         $matching = (clone $base)->where(fn (Builder $q) => $q
-            ->whereHas('transcripts', fn (Builder $t) => $this->likeAll($t, 'text', $terms))
+            ->whereHas('transcripts', fn (Builder $t) => $this->likeAll($t, 'search_text', $folded))
             ->orWhere(fn (Builder $title) => $this->likeAll($title, 'title', $terms)));
-        if ($this->fulltextUsable($terms)) {
+        if ($this->fulltextUsable($folded)) {
             $fulltext = (clone $base)->where(fn (Builder $q) => $q
-                ->whereHas('transcripts', fn (Builder $t) => $t->whereFullText('text', self::booleanQuery($terms), ['mode' => 'boolean']))
+                ->whereHas('transcripts', fn (Builder $t) => $t->whereFullText('search_text', self::booleanQuery($folded), ['mode' => 'boolean']))
                 ->orWhere(fn (Builder $title) => $this->likeAll($title, 'title', $terms)));
             // The engine is chosen for the whole query, never per page, so paging stays consistent.
             if ((clone $fulltext)->exists()) {
@@ -135,12 +139,12 @@ final class LibrarySearch
      */
     public static function snippet(string $text, array $terms): array
     {
-        $lower = mb_strtolower($text);
+        [$folded, $map] = UrduText::foldWithMap($text);
         $first = mb_strlen($text);
         foreach ($terms as $term) {
-            $at = mb_strpos($lower, mb_strtolower($term));
+            $at = mb_strpos($folded, UrduText::fold($term));
             if ($at !== false) {
-                $first = min($first, $at);
+                $first = min($first, $map[$at] ?? $first);
             }
         }
         $length = mb_strlen($text);
@@ -150,13 +154,20 @@ final class LibrarySearch
         $suffix = $start + self::SNIPPET_CHARS < $length ? '…' : '';
         $snippet = $prefix.$cut.$suffix;
 
+        // Ranges are found in the folded snippet and mapped back to the snippet's own characters, so a word written
+        // with another Yeh or with vowel marks is highlighted over its whole original length.
         $ranges = [];
-        $snippetLower = mb_strtolower($snippet);
+        [$snippetFolded, $snippetMap] = UrduText::foldWithMap($snippet);
         foreach ($terms as $term) {
-            $needle = mb_strtolower($term);
+            $needle = UrduText::fold($term);
+            if ($needle === '') {
+                continue;
+            }
             $offset = 0;
-            while (($at = mb_strpos($snippetLower, $needle, $offset)) !== false) {
-                $ranges[] = [$at, mb_strlen($needle)];
+            while (($at = mb_strpos($snippetFolded, $needle, $offset)) !== false) {
+                $from = $snippetMap[$at];
+                $to = $snippetMap[$at + mb_strlen($needle) - 1];
+                $ranges[] = [$from, $to - $from + 1];
                 $offset = $at + max(1, mb_strlen($needle));
             }
         }
@@ -168,9 +179,9 @@ final class LibrarySearch
     /** @param list<string> $terms */
     private static function containsAll(string $text, array $terms): bool
     {
-        $lower = mb_strtolower($text);
+        $lower = UrduText::fold($text);
         foreach ($terms as $term) {
-            if (! str_contains($lower, mb_strtolower($term))) {
+            if (! str_contains($lower, UrduText::fold($term))) {
                 return false;
             }
         }

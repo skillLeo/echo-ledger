@@ -20,6 +20,7 @@ use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\KeytermPolicy;
 use App\Stt\LanguageChoice;
+use App\Stt\LanguageRouter;
 use App\Stt\ProviderEndpoints;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -97,6 +98,7 @@ class Settings extends Page
             'provider_dictation' => $all['provider.dictation'],
             'provider_final_transcript' => $all['provider.final_transcript'],
             'provider_voice_note' => $all['provider.voice_note'],
+            ...self::routingFormState($all['routing.final'] ?? null),
             'captions_channels' => $all['captions.channels'],
             'default_language' => LanguageChoice::normalize($all['default_language']) ?? '',
             'vocabulary_keyterms' => KeytermPolicy::sanitize((array) ($all['vocabulary.keyterms'] ?? [])),
@@ -126,7 +128,7 @@ class Settings extends Page
      */
     public static function priceFields(): array
     {
-        $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI'];
+        $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI', 'soniox' => 'Soniox'];
         $useCases = ['live_captions' => 'Live captions', 'dictation' => 'Dictation', 'final_transcript' => 'Final transcript', 'voice_note' => 'Voice notes'];
         $fields = [];
         foreach (SettingsRepository::DEFAULTS['budget.prices'] as $provider => $pairs) {
@@ -240,6 +242,9 @@ class Settings extends Page
                         Select::make('provider_final_transcript')->label(SttUseCase::FinalTranscript->getLabel())->options($final)->required(),
                         Select::make('provider_voice_note')->label(SttUseCase::VoiceNote->getLabel())->options($final)->required(),
                     ]),
+                    $this->section('routing')
+                        ->description('Which engine writes each language, in order: the first one with a key on API Credentials is used, the next ones are the fallback. Automatic uses the engine above. Run “Compare engines” on a recording to choose.')
+                        ->collapsible()->columns(3)->schema(self::routingFields()),
                     $this->section('bookmarks')
                         ->description('One-tap tags offered while recording a call (on the desktop pill and the phone notification).')
                         ->schema([
@@ -441,6 +446,60 @@ class Settings extends Page
         Notification::make()->title('Settings imported')->success()->send();
     }
 
+    /** The languages that have an engine list, and their form field prefix. */
+    private const ROUTED = ['en' => 'en', 'ur' => 'ur', 'en+ur' => 'en_ur', 'hi' => 'hi', 'en+hi' => 'en_hi'];
+
+    /** @return list<Select> three engines per language */
+    private static function routingFields(): array
+    {
+        $engines = collect(SttProviderKey::cases())->reject(fn (SttProviderKey $k): bool => $k === SttProviderKey::ParakeetLocal)
+            ->mapWithKeys(fn (SttProviderKey $k): array => [$k->value => $k->getLabel()])->all();
+        $fields = [];
+        foreach (self::ROUTED as $language => $slug) {
+            foreach ([1 => '1st', 2 => '2nd', 3 => '3rd'] as $n => $order) {
+                $field = Select::make("route_{$slug}_{$n}")->label(LanguageChoice::label($language).' · '.$order)->options($engines)->placeholder('—');
+                $fields[] = $n === 1 ? $field->required() : $field;
+            }
+        }
+
+        return $fields;
+    }
+
+    /** @return array<string, string|null> */
+    private static function routingFormState(mixed $stored): array
+    {
+        $routes = LanguageRouter::merge($stored, LanguageRouter::DEFAULT_FINAL_ROUTES);
+        $state = [];
+        foreach (self::ROUTED as $language => $slug) {
+            foreach ([1, 2, 3] as $n) {
+                $state["route_{$slug}_{$n}"] = $routes[$language][$n - 1] ?? null;
+            }
+        }
+
+        return $state;
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     * @return array<string, list<string>>
+     */
+    private static function routingFromState(array $state): array
+    {
+        $routes = [];
+        foreach (self::ROUTED as $language => $slug) {
+            $list = [];
+            foreach ([1, 2, 3] as $n) {
+                $value = $state["route_{$slug}_{$n}"] ?? null;
+                if (is_string($value) && SttProviderKey::tryFrom($value) !== null && ! in_array($value, $list, true)) {
+                    $list[] = $value;
+                }
+            }
+            $routes[$language] = $list !== [] ? $list : LanguageRouter::DEFAULT_FINAL_ROUTES[$language];
+        }
+
+        return $routes;
+    }
+
     public function save(SettingsRepository $settings): void
     {
         $this->persist($settings);
@@ -479,6 +538,7 @@ class Settings extends Page
             'budget.warn_percent' => filled($state['warn_percent'] ?? null) ? (int) $state['warn_percent'] : 80,
             'budget.prices' => self::pricesFromState($state),
             'markers.tags' => SessionMarkers::presets($state['marker_tags'] ?? []),
+            'routing.final' => self::routingFromState($state),
         ]);
         // Plan limits live on the plan of the current workspace, not in settings (never exported).
         $limit = fn (string $key): ?int => filled($state[$key] ?? null) ? (int) $state[$key] : null;

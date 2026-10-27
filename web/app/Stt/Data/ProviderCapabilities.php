@@ -23,5 +23,7 @@ final readonly class ProviderCapabilities
         public int $maxKeytermWords,
         public int $maxRealtimeKeyterms,
         public int $maxRealtimeKeytermChars,
+        /** The engine uses the per-channel files when a device uploaded them (and copes without them). */
+        public bool $usesChannelArtifacts = false,
     ) {}
 }

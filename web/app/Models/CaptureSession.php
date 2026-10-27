@@ -126,8 +126,25 @@ class CaptureSession extends Model
         return $this->hasMany(ShareLink::class);
     }
 
-    /** @return HasMany<Transcript, $this> */
+    /**
+     * The recording's transcripts (live, final, a second version). Engine comparison runs are not among them: they
+     * are never shown, searched, shared or exported as the recording's transcript ([trials]).
+     *
+     * @return HasMany<Transcript, $this>
+     */
     public function transcripts(): HasMany
+    {
+        return $this->hasMany(Transcript::class)->where('kind', '!=', TranscriptKind::Trial->value);
+    }
+
+    /** @return HasMany<Transcript, $this> runs of Compare engines */
+    public function trials(): HasMany
+    {
+        return $this->hasMany(Transcript::class)->where('kind', TranscriptKind::Trial->value);
+    }
+
+    /** @return HasMany<Transcript, $this> every transcript row, comparison runs included (deleting, erasing) */
+    public function allTranscripts(): HasMany
     {
         return $this->hasMany(Transcript::class);
     }
@@ -206,7 +223,7 @@ class CaptureSession extends Model
     {
         $this->recordings()->get()->each(fn (Recording $r) => $r->delete());
         // The session is already loaded: hand it to each transcript instead of one query per transcript (C9, N+1).
-        $this->transcripts()->get()->each(fn (Transcript $t) => $t->setRelation('captureSession', $this)->delete());
+        $this->allTranscripts()->get()->each(fn (Transcript $t) => $t->setRelation('captureSession', $this)->delete());
         $this->forceFill(['media_erased_at' => now()])->saveQuietly();
     }
 
@@ -219,7 +236,7 @@ class CaptureSession extends Model
         app(ProviderCopyEraser::class)->eraseFor($this);
         $this->recordings()->get()->each(fn (Recording $r) => $r->delete());
         // The session is already loaded: hand it to each transcript instead of one query per transcript (C9, N+1).
-        $this->transcripts()->get()->each(fn (Transcript $t) => $t->setRelation('captureSession', $this)->delete());
+        $this->allTranscripts()->get()->each(fn (Transcript $t) => $t->setRelation('captureSession', $this)->delete());
     }
 
     protected static function booted(): void

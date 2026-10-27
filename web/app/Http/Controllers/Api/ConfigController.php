@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Device;
 use App\Services\DeviceConfigPayload;
+use App\Stt\LanguageChoice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -47,6 +48,8 @@ final class ConfigController extends Controller
             'avatar' => $client->avatar,
             'pinned' => (bool) $client->pinned,
             'retention_days' => $client->retention_days,
+            // Since v1.1.2: the client's default language (null = the console default / automatic).
+            'language' => LanguageChoice::normalize($client->language),
             'keyterm_count' => (int) $client->getAttribute('keyterms_count'),
             'session_count' => (int) $client->getAttribute('capture_sessions_count'),
             'updated_at' => $client->updated_at?->toAtomString(),

@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\SttUseCase;
 use App\Models\Device;
 use App\Services\Usage\UsageSummary;
+use App\Stt\LanguageChoice;
 use App\Stt\SttManager;
 
 /** Body of GET /api/config (docs/API.md). Never contains secrets. */
@@ -56,6 +57,16 @@ final class DeviceConfigPayload
             'providers' => $providers,
             'captions' => ['channels' => $this->settings->captionChannels()],
             'markers' => ['tags' => $this->settings->markerTags()],
+            // Since v1.1.2: the language choices (value, label, chip) and the console default, so every app offers the
+            // same list on its language chip. A null value = automatic.
+            'languages' => [
+                'default' => LanguageChoice::normalize($this->settings->get('default_language')),
+                'options' => array_map(fn (string $value): array => [
+                    'value' => $value === '' ? null : $value,
+                    'label' => LanguageChoice::OFFERED[$value],
+                    'chip' => LanguageChoice::CHIPS[$value],
+                ], array_keys(LanguageChoice::OFFERED)),
+            ],
             'pins' => $this->settings->pins(),
             'usage' => app(UsageSummary::class)->toArray($device->workspace_id),
         ];

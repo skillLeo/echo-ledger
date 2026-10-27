@@ -522,6 +522,12 @@ describe('item contents', function () {
             'live_available' => true,
             'live_transcript_id' => $live->id,
             'preview' => mb_strimwidth(trim($long), 0, 160, '…'),
+            'final_language' => null,
+            'final_provider' => 'assemblyai',
+            'final_provider_label' => 'AssemblyAI',
+            'final_model' => null,
+            'live_language' => null,
+            'script_warning' => null,
         ]);
         expect(mb_strlen($item['transcript']['preview']))->toBeLessThanOrEqual(160)->and($item)->not->toHaveKey('segments');
     });

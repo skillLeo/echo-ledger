@@ -91,6 +91,7 @@ class ApiCredentials extends Page
             $sections[] = Section::make(match ($provider) {
                 'assemblyai' => 'AssemblyAI (default)',
                 'elevenlabs' => 'ElevenLabs',
+                'soniox' => 'Soniox (optional)',
                 'azure' => 'Azure Speech',
                 'whispercpp' => 'whisper.cpp server',
                 'openai' => 'OpenAI (optional)',

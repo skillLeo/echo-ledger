@@ -99,6 +99,8 @@ final class UsageLedger
             SttProviderKey::ElevenLabs => $recordingChannels,
             // The standard model bills one multiplexed file; MAI-Transcribe-2 is sent one file per channel.
             SttProviderKey::AzureMai => ($meta['model'] ?? null) === 'standard' ? 1 : max(1, min(2, (int) ($meta['audio_channels'] ?? 1))),
+            // Soniox: one job per channel file (2), or one job for the whole file (1).
+            SttProviderKey::Soniox => max(1, min(2, (int) ($meta['audio_channels'] ?? 1))),
             default => $recordingChannels,
         };
 

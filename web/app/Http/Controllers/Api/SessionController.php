@@ -135,6 +135,7 @@ final class SessionController extends Controller
             'duration_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],
             'title' => ['nullable', 'string', 'max:200'],
             'client_id' => ['nullable', 'string', 'size:26'],
+            'language' => ['nullable', 'string', 'max:16'],
             'artifacts' => ['required', 'array', 'min:1', 'max:3'],
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),

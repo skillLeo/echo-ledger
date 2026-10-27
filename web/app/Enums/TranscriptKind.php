@@ -12,6 +12,8 @@ enum TranscriptKind: string implements HasLabel
     case Final = 'final';
     /** A second engine's version kept for comparison (since v1.1); `Use this version` swaps it with the final one. */
     case Alternate = 'alternate';
+    /** One engine's run in a comparison (Compare engines, since v1.1.2): never shown as the recording's transcript. */
+    case Trial = 'trial';
 
     public function getLabel(): string
     {
@@ -19,6 +21,7 @@ enum TranscriptKind: string implements HasLabel
             self::Live => 'Live captions',
             self::Final => 'Final transcript',
             self::Alternate => 'Second version',
+            self::Trial => 'Comparison run',
         };
     }
 }

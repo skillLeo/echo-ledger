@@ -91,8 +91,8 @@ final class ElevenLabsDriver implements SttProvider
                 'audio_format=pcm_16000',
                 'commit_strategy=vad',
             ];
-            if (LanguageChoice::single($request->language) !== null) {
-                $query[] = 'language_code='.rawurlencode(LanguageChoice::single($request->language));
+            if (($language = LanguageChoice::primary($request->language)) !== null) {
+                $query[] = 'language_code='.rawurlencode($language);
             }
             foreach ($keyterms as $term) {
                 $query[] = 'keyterms='.rawurlencode($term);
@@ -131,8 +131,10 @@ final class ElevenLabsDriver implements SttProvider
             $parts[] = ['name' => 'webhook_metadata', 'contents' => json_encode(
                 ['transcript_id' => $request->transcript->id, 'session_id' => $request->session->id], JSON_THROW_ON_ERROR)];
         }
-        if (LanguageChoice::single($request->language) !== null) {
-            $parts[] = ['name' => 'language_code', 'contents' => LanguageChoice::single($request->language)];
+        // Scribe takes one language_code (ISO 639-1 or 639-3): a mixed call goes out as its non-English language, so Urdu
+        // with English words is not left to detection (which picks Hindi or English for Urdu speech).
+        if (($language = LanguageChoice::primary($request->language)) !== null) {
+            $parts[] = ['name' => 'language_code', 'contents' => $language];
         }
         foreach (KeytermPolicy::forProvider($request->keyterms, $this->capabilities(), false) as $term) {
             $parts[] = ['name' => 'keyterms', 'contents' => $term]; // repeated field, never keyterms[0]

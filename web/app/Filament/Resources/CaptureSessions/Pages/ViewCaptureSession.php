@@ -12,16 +12,20 @@ use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Services\EngineComparison;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\Retranscriber;
 use App\Services\ShareLinks;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
 use App\Stt\LanguageChoice;
+use App\Stt\LanguageRouter;
+use App\Stt\ScriptCheck;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\Checkbox;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -79,11 +83,14 @@ class ViewCaptureSession extends ViewRecord
                     ]),
             ])->label('Export')->icon(Heroicon::OutlinedArrowDownTray)->button()->color('gray')
                 ->visible(fn (): bool => $this->editableTranscript() !== null),
+            $this->wrongScriptAction(),
             $this->shareAction(),
             ActionGroup::make([
                 $this->retryAction(),
                 $this->secondEngineAction(),
                 $this->compareAction(),
+                $this->compareEnginesAction(),
+                $this->engineResultsAction(),
                 DeleteAction::make()->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
             ])->icon(Heroicon::OutlinedEllipsisVertical)->color('gray'),
         ];
@@ -191,6 +198,141 @@ class ViewCaptureSession extends ViewRecord
                 }
                 Notification::make()->title('Share link ready. Copy it now: it is shown only once.')->body($url)->persistent()->success()->send();
             });
+    }
+
+    /**
+     * Shown when the final transcript came back in the wrong script for its language (Urdu as Devanagari, for
+     * example): one click sends it to the next engine for that language as a second version to compare.
+     */
+    private function wrongScriptAction(): Action
+    {
+        return Action::make('wrong_script')
+            ->label(function (CaptureSession $record): string {
+                $next = $this->nextEngine($record);
+
+                return 'Wrong script detected'.($next !== null ? ' · Transcribe with '.$next->getLabel() : '');
+            })
+            ->icon(Heroicon::OutlinedExclamationTriangle)
+            ->color('warning')
+            ->visible(fn (CaptureSession $record): bool => is_string($record->finalTranscript?->meta['script_warning'] ?? null))
+            ->requiresConfirmation()
+            ->modalHeading('Wrong script detected')
+            ->modalDescription(fn (CaptureSession $record): string => 'The transcript is mostly in '.ScriptCheck::label((string) ($record->finalTranscript?->meta['script_warning'] ?? ''))
+                .', not in the script of '.LanguageChoice::label($record->finalTranscript?->language).'. Send the recording to '
+                .($this->nextEngine($record)?->getLabel() ?? 'another engine').' and compare the two versions.')
+            ->modalSubmitActionLabel('Transcribe again')
+            ->action(function (CaptureSession $record): void {
+                $next = $this->nextEngine($record);
+                if ($next === null) {
+                    Notification::make()->title('No other engine for this language has a key. Add one on API Credentials.')->warning()->send();
+
+                    return;
+                }
+                try {
+                    app(Retranscriber::class)->start($record, $next, $record->finalTranscript?->language);
+                } catch (RuntimeException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+                Notification::make()->title('Second version queued with '.$next->getLabel())->body('Open “Compare versions” when it is done.')->success()->send();
+            });
+    }
+
+    /** The first engine for the transcript's language that is not the one that produced it. */
+    private function nextEngine(CaptureSession $record): ?SttProviderKey
+    {
+        $final = $record->finalTranscript;
+        foreach (app(LanguageRouter::class)->candidates($final?->language, $record) as $engine) {
+            if ($engine->value !== $final?->provider) {
+                return $engine;
+            }
+        }
+
+        return null;
+    }
+
+    /** Compare engines: the same audio through up to three engines for one language (the bake-off). */
+    private function compareEnginesAction(): Action
+    {
+        return Action::make('compare_engines')
+            ->label('Compare engines')
+            ->icon(Heroicon::OutlinedScale)
+            ->visible(fn (CaptureSession $record): bool => $record->primaryRecording?->isReady() === true)
+            ->modalHeading('Compare engines')
+            ->modalDescription('The recording is transcribed again by each engine you pick, in the language you choose. Each run is billed by its engine. Nothing replaces the transcript until you choose.')
+            ->fillForm(fn (CaptureSession $record): array => [
+                'language' => app(LanguageRouter::class)->languageFor($record) ?? 'en+ur',
+                'engines' => array_map(fn (SttProviderKey $k): string => $k->value, array_slice(app(LanguageRouter::class)->candidates(app(LanguageRouter::class)->languageFor($record) ?? 'en+ur', $record), 0, EngineComparison::MAX_ENGINES)),
+            ])
+            ->schema([
+                Select::make('language')->label('Language')->options(array_filter(LanguageChoice::OFFERED, fn (string $k): bool => $k !== '', ARRAY_FILTER_USE_KEY))->required()->live(),
+                CheckboxList::make('engines')->label('Engines (up to 3)')
+                    ->options(fn (CaptureSession $record, $get): array => collect(app(LanguageRouter::class)->candidates((string) $get('language'), $record))
+                        ->mapWithKeys(fn (SttProviderKey $k): array => [$k->value => $k->getLabel()])->all())
+                    ->maxItems(EngineComparison::MAX_ENGINES)->minItems(1)->required()
+                    ->helperText('Only engines with a key on API Credentials that support the language are listed.'),
+            ])
+            ->action(function (array $data, CaptureSession $record): void {
+                try {
+                    $runs = app(EngineComparison::class)->start($record, array_map(fn (string $v): SttProviderKey => SttProviderKey::from($v), (array) $data['engines']), (string) $data['language']);
+                } catch (RuntimeException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+                Notification::make()->title(count($runs).' engine run(s) queued')->body('Open “Engine results” when they are done.')->success()->send();
+            });
+    }
+
+    /** The runs side by side, with cost; pick the winner for the language or use a run as the transcript. */
+    private function engineResultsAction(): Action
+    {
+        return Action::make('engine_results')
+            ->label('Engine results')
+            ->icon(Heroicon::OutlinedTableCells)
+            ->visible(fn (CaptureSession $record): bool => $record->trials()->exists())
+            ->slideOver()
+            ->modalWidth('7xl')
+            ->modalHeading('Engine results')
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close')
+            ->modalContent(fn (CaptureSession $record): View => view('filament.pages.engine-results', ['runs' => app(EngineComparison::class)->results($record)]));
+    }
+
+    /** "Make default for <language>" on a run in Engine results. */
+    public function pickEngine(string $runId): void
+    {
+        $run = $this->session()->trials()->find($runId);
+        if (! $run instanceof Transcript) {
+            return;
+        }
+        try {
+            app(EngineComparison::class)->pick($run);
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->danger()->send();
+
+            return;
+        }
+        Notification::make()->title($run->providerKey()?->getLabel().' is now the first engine for '.LanguageChoice::label($run->language))->success()->send();
+    }
+
+    /** "Use this version" on a run in Engine results. */
+    public function useEngineRun(string $runId): void
+    {
+        $run = $this->session()->trials()->find($runId);
+        if (! $run instanceof Transcript) {
+            return;
+        }
+        try {
+            app(EngineComparison::class)->useAsTranscript($run);
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->danger()->send();
+
+            return;
+        }
+        $this->pushPlayer();
+        Notification::make()->title('That version is now the transcript')->body('The previous one is kept as the second version.')->success()->send();
     }
 
     private function retryAction(): Action

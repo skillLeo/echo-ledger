@@ -80,14 +80,28 @@ final class AssemblyAiDriver implements SttProvider
         }
 
         $keyterms = KeytermPolicy::forProvider($request->keyterms, $this->capabilities(), true);
+        $model = (string) $this->settings->get('assemblyai.streaming_model', 'universal-3-6-pro');
         $query = http_build_query([
-            'speech_model' => (string) $this->settings->get('assemblyai.streaming_model', 'universal-3-6-pro'),
+            'speech_model' => $model,
             'encoding' => 'pcm_s16le',
             'sample_rate' => $request->sampleRate,
             'inactivity_timeout' => 120,
             'token' => $token,
         ], '', '&', PHP_QUERY_RFC3986);
         $wsUrl = 'wss://'.self::STREAM_HOST.'/v3/ws?'.$query;
+        // Universal-3.6 Pro is steered to the chosen languages with language_codes in UpdateConfiguration (an array;
+        // language_code is ignored by streaming). Automatic leaves it out: native code switching.
+        $update = [];
+        if ($keyterms !== []) {
+            $update['keyterms_prompt'] = $keyterms;
+        }
+        if ($request->language !== null && self::streamingSupportsLanguages($model)) {
+            $codes = LanguageChoice::codes($request->language);
+            if ($codes !== []) {
+                $update['language_codes'] = $codes;
+            }
+        }
+        $init = $update === [] ? [] : [['type' => 'UpdateConfiguration', ...$update]];
         $expires = now()->addSeconds(60);
 
         // Tokens are multi-use and not config-bound: one token serves every channel session.
@@ -99,7 +113,7 @@ final class AssemblyAiDriver implements SttProvider
             'redeem_by' => $expires->toAtomString(),
             'max_session_seconds' => 10800,
             'audio' => ['encoding' => 'pcm_s16le', 'sample_rate' => $request->sampleRate, 'channels' => 1, 'frame_ms' => 50],
-            'init_messages' => $keyterms === [] ? [] : [['type' => 'UpdateConfiguration', 'keyterms_prompt' => $keyterms]],
+            'init_messages' => $init,
         ], $request->channels);
 
         return new StreamingGrant('assemblyai', 'cloud', $expires, $keyterms, $grants);
@@ -159,6 +173,15 @@ final class AssemblyAiDriver implements SttProvider
         }
 
         return SubmitResult::submitted($id);
+    }
+
+    /**
+     * Streaming models that take language_codes: Universal-3.6 Pro (32 languages incl. Urdu and Hindi, code switching in
+     * one stream). The English and the six-language multilingual models do not cover Urdu or Hindi (docs: models.md).
+     */
+    public static function streamingSupportsLanguages(string $model): bool
+    {
+        return $model === 'universal-3-6-pro';
     }
 
     /** Stateless per-recording webhook secret: base64url(HMAC-SHA256(secret, "assemblyai|{rid}")). */

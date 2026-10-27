@@ -6,6 +6,7 @@ namespace App\Http\Resources;
 
 use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
+use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -27,6 +28,12 @@ final class TranscriptResource extends JsonResource
             'language' => $transcript->language,
             // Since v1.1: the model the engine reports it used (for example `universal-2`), when it says.
             'model' => self::model($transcript),
+            // Since v1.1.2: readable language and engine, a wrong-script warning, and whether the engine was a fallback
+            // because the preferred one has no key.
+            'language_label' => LanguageChoice::label($transcript->language),
+            'provider_label' => $transcript->providerKey()?->getLabel(),
+            'script_warning' => $transcript->meta['script_warning'] ?? null,
+            'fallback' => (bool) ($transcript->meta['route']['fallback'] ?? false),
             'text' => $transcript->text,
             'segments' => $transcript->segments ?? [],
             ...self::failure($transcript),

@@ -15,6 +15,7 @@ use App\Enums\UploadStatus;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Stt\LanguageRouter;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 
@@ -72,7 +73,12 @@ final class FinalTranscriptCoordinator
     /** (Re)starts transcription, e.g. from the admin "Retry" action. */
     public function start(CaptureSession $session, ?Transcript $existing = null, bool $sync = false): Transcript
     {
-        $provider = $this->providerFor($session);
+        // The language decides the engine (manual choice > client > console default), see App\Stt\LanguageRouter.
+        $router = app(LanguageRouter::class);
+        $language = $router->languageFor($session);
+        $route = $router->final($language, self::useCaseFor($session), $session);
+        // Automatic keeps the engine chosen when the session was created (the device uploaded the files it needs).
+        $provider = $language === null ? $this->providerFor($session) : $route->provider;
         // A retry starts a new provider job: the copy kept by the provider for the previous attempt is deleted.
         $oldJob = $existing?->provider_job_id;
         $oldProvider = $existing?->providerKey();
@@ -88,7 +94,8 @@ final class FinalTranscriptCoordinator
             'error' => null,
             'error_code' => null,
             'attempts' => 0,
-            'language' => $session->language,
+            'language' => $language,
+            'meta' => ['route' => $route->toArray()],
         ];
 
         $transcript = $existing ?? $session->transcripts()->firstOrNew(['kind' => TranscriptKind::Final]);

@@ -13,6 +13,7 @@ enum SttProviderKey: string implements HasLabel
     case AzureMai = 'azure_mai';
     case WhisperCppLocal = 'whispercpp_local';
     case ParakeetLocal = 'parakeet_local';
+    case Soniox = 'soniox';
 
     public function getLabel(): string
     {
@@ -22,6 +23,7 @@ enum SttProviderKey: string implements HasLabel
             self::AzureMai => 'Azure Speech (MAI-Transcribe)',
             self::WhisperCppLocal => 'whisper.cpp (self-hosted)',
             self::ParakeetLocal => 'Parakeet (on-device)',
+            self::Soniox => 'Soniox',
         };
     }
 }

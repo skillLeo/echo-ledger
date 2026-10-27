@@ -29,7 +29,7 @@ final class ProviderCopyEraser
     /** Every transcript of $session that still has a copy at the provider. */
     public function eraseFor(CaptureSession $session): void
     {
-        $session->transcripts()
+        $session->allTranscripts()
             ->whereNotNull('provider_job_id')
             ->whereNull('provider_deleted_at')
             ->get()

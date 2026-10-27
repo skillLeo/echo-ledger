@@ -74,7 +74,14 @@ describe('language choices', function () {
             ->and(LanguageChoice::single('hi'))->toBe('hi')
             ->and(LanguageChoice::assemblyAiCodeSwitch('en+ur'))->toBeTrue()
             ->and(LanguageChoice::assemblyAiCodeSwitch('hi+ur'))->toBeFalse()
-            ->and(LanguageChoice::label('en+ur'))->toBe('English + Urdu')
+            ->and(LanguageChoice::normalize('ur+en'))->toBe('en+ur')
+            ->and(LanguageChoice::primary('en+ur'))->toBe('ur')
+            ->and(LanguageChoice::primary('en'))->toBe('en')
+            ->and(LanguageChoice::primary(null))->toBeNull()
+            ->and(LanguageChoice::chip('en+ur'))->toBe('UR+EN')
+            ->and(LanguageChoice::chip(null))->toBe('Auto')
+            ->and(LanguageChoice::label('en+hi'))->toBe('Hindi + English')
+            ->and(LanguageChoice::label('en+ur'))->toBe('Urdu + English')
             ->and(LanguageChoice::label(null))->toBe('Automatic');
     });
 

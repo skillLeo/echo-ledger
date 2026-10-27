@@ -26,7 +26,8 @@ final class SettingsSearch
     public const SECTIONS = [
         'language' => ['general', 'Language & time', 'default language time zone timezone english urdu hindi automatic'],
         'vocabulary' => ['general', 'Vocabulary', 'keyterms names jargon corrections replace always write words'],
-        'engine' => ['recording', 'Transcription engine', 'final transcript voice notes provider assemblyai elevenlabs azure whisper accuracy'],
+        'engine' => ['recording', 'Transcription engine', 'final transcript voice notes provider assemblyai elevenlabs azure whisper soniox accuracy'],
+        'routing' => ['recording', 'Engine per language', 'language urdu hindi english mixed engine routing order fallback soniox elevenlabs assemblyai script'],
         'bookmarks' => ['recording', 'Bookmarks', 'tags markers one tap during a call'],
         'assemblyai' => ['recording', 'AssemblyAI', 'region eu us streaming model final transcript models'],
         'elevenlabs' => ['recording', 'ElevenLabs', 'scribe base url batch model'],

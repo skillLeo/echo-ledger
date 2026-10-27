@@ -26,6 +26,7 @@ final class SettingsTransfer
         'provider.dictation',
         'provider.final_transcript',
         'provider.voice_note',
+        'routing.final',
         'captions.channels',
         'default_language',
         'display.timezone',

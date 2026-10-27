@@ -25,7 +25,7 @@ final class SttWebhookController extends Controller
     public function __invoke(Request $request, string $provider, SttManager $stt): JsonResponse
     {
         $key = SttProviderKey::tryFrom($provider);
-        if (! in_array($key, [SttProviderKey::AssemblyAi, SttProviderKey::ElevenLabs], true)) {
+        if (! in_array($key, [SttProviderKey::AssemblyAi, SttProviderKey::ElevenLabs, SttProviderKey::Soniox], true)) {
             return response()->json(['message' => 'Not found.', 'code' => 'not_found'], 404);
         }
 

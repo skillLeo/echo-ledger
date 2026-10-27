@@ -12,6 +12,7 @@ use App\Models\Transcript;
 use App\Models\TranscriptRevision;
 use App\Services\Usage\UsageLedger;
 use App\Stt\Data\NormalizedTranscript;
+use App\Stt\ScriptCheck;
 use Illuminate\Support\Facades\DB;
 
 /** Persists normalized transcripts and keeps the parent session status in step. */
@@ -26,8 +27,9 @@ final class TranscriptStore
                 'status' => TranscriptStatus::Completed,
                 'text' => $result->text,
                 'segments' => $result->segmentsArray(),
-                'language' => $result->language ?? $transcript->language,
-                'meta' => array_merge($transcript->meta ?? [], $result->meta),
+                // The language the user chose stays; what the engine detected is kept beside it.
+                'language' => $transcript->language ?? $result->language,
+                'meta' => self::withScriptCheck(array_merge($transcript->meta ?? [], $result->meta, array_filter(['detected_language' => $result->language])), $transcript, $result),
                 'error' => null,
                 'error_code' => null,
                 'completed_at' => now(),
@@ -44,6 +46,27 @@ final class TranscriptStore
         $this->applyVocabulary($transcript->refresh());
 
         return $transcript->refresh();
+    }
+
+    /**
+     * Marks a transcript whose text came back in the wrong script for its language (Urdu as Devanagari, for example):
+     * script_warning names the script found; the console offers "Transcribe with <next engine>".
+     *
+     * @param  array<string, mixed>  $meta
+     * @return array<string, mixed>
+     */
+    private static function withScriptCheck(array $meta, Transcript $transcript, NormalizedTranscript $result): array
+    {
+        unset($meta['script_warning']);
+        if ($transcript->kind === TranscriptKind::Live) {
+            return $meta;
+        }
+        $found = ScriptCheck::wrongScript($transcript->language ?? $result->language, $result->text);
+        if ($found !== null) {
+            $meta['script_warning'] = $found;
+        }
+
+        return $meta;
     }
 
     /**

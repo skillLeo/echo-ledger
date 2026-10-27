@@ -18,13 +18,14 @@ final class CredentialVault
         'assemblyai' => ['api_key' => 'API key', 'webhook_secret' => 'Webhook signing secret'],
         'elevenlabs' => ['api_key' => 'API key', 'webhook_secret' => 'Webhook HMAC secret', 'webhook_id' => 'Webhook ID'],
         'azure' => ['api_key' => 'Speech resource key'],
+        'soniox' => ['api_key' => 'API key', 'webhook_secret' => 'Webhook signing secret'],
         'whispercpp' => ['bearer_token' => 'Reverse-proxy bearer token'],
         'openai' => ['api_key' => 'API key (optional, future driver)'],
         'groq' => ['api_key' => 'API key (optional, future driver)'],
     ];
 
     /** Secrets that EchoLedger can generate for the admin. */
-    public const GENERATABLE = ['assemblyai.webhook_secret'];
+    public const GENERATABLE = ['assemblyai.webhook_secret', 'soniox.webhook_secret'];
 
     /** @var array<string, string|null> */
     private array $memo = [];

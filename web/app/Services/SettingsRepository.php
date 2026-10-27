@@ -9,6 +9,7 @@ use App\Enums\SttUseCase;
 use App\Models\Setting;
 use App\Rules\CertificatePin;
 use App\Stt\KeytermPolicy;
+use App\Stt\LanguageRouter;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -32,6 +33,11 @@ final class SettingsRepository
         'elevenlabs.base_url' => 'https://api.elevenlabs.io',
         'elevenlabs.model_id' => 'scribe_v2',
         'elevenlabs.realtime_model_id' => 'scribe_v2_realtime',
+        'soniox.async_model' => 'stt-async-v5',          // docs: soniox.com/docs/stt/models (2026-10)
+        // Which engine transcribes each language, in order of preference; the first one with a key wins
+        // (App\Stt\LanguageRouter). Automatic uses provider.final_transcript / provider.voice_note.
+        'routing.final' => LanguageRouter::DEFAULT_FINAL_ROUTES,
+        'routing.live' => LanguageRouter::DEFAULT_LIVE_ROUTES,
         'azure.region' => null,
         'azure.endpoint' => null,
         'azure.model' => 'MAI-Transcribe-2',         // MAI-Transcribe-2 | standard
@@ -52,6 +58,7 @@ final class SettingsRepository
             'assemblyai' => ['live_captions' => 0.45, 'dictation' => 0.45, 'final_transcript' => 0.26, 'voice_note' => 0.26],
             'elevenlabs' => ['live_captions' => 0.47, 'dictation' => 0.47, 'final_transcript' => 0.27, 'voice_note' => 0.27],
             'azure_mai' => ['final_transcript' => 0.10, 'voice_note' => 0.10],
+            'soniox' => ['final_transcript' => 0.10, 'voice_note' => 0.10],
         ],
     ];
 
