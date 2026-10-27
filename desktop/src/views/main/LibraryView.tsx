@@ -424,7 +424,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       <div className="library">
         <div className="list" data-testid="library-list">
           {binOpen && <BinPanel notify={notify} onClose={() => setBinOpen(false)} />}
-          {selecting && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} />}
+          {selecting && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} onSelectAll={() => setPicked(new Set(filtered.map((i) => i.id)))} />}
           {syncError && (
             <div className="notice error sync-error" role="alert">
               <span>Couldn't sync with the server. Showing what is saved on this computer.</span>

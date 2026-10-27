@@ -95,6 +95,18 @@ describe("library organisation (B15)", () => {
     await waitFor(() => expect(callsOf("sessions_bulk")).toEqual([{ ids: ["b", "c"], action: "pin", clientId: null, label: null }]));
     expect(notify).toHaveBeenCalledWith("2 recordings updated");
   });
+
+  it("keeps the selection actions on one compact line and selects every listed recording at once", async () => {
+    await renderLibrary();
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    const bar = screen.getByRole("toolbar", { name: "Selected recordings" });
+    fireEvent.click(within(bar).getByRole("button", { name: "Select all" }));
+    expect(bar).toHaveTextContent(`${titles().length} selected`);
+    // The rarer actions are folded away under Label and More.
+    expect(bar.querySelectorAll("details.bulk-menu")).toHaveLength(2);
+    fireEvent.click(within(bar).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).not.toBeInTheDocument();
+  });
 });
 
 describe("organise panel", () => {

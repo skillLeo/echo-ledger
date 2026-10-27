@@ -129,7 +129,9 @@ export function OrganisePanel({ item, clients, knownLabels, notify, onClientCrea
 }
 
 /** Actions for the selected recordings: move, label, pin, export as one zip, delete. */
-export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCreated }: {
+export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCreated, onSelectAll }: {
+  /** Ticks every recording the list shows. */
+  onSelectAll?: () => void;
   ids: string[];
   clients: ClientFolder[];
   knownLabels: string[];
@@ -170,45 +172,54 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
       setBusy(false);
     }
   };
+  // One compact line that stays at the top of the list; the rarer actions sit under "Label" and "More".
   return (
     <div className="bulk-bar card" role="toolbar" aria-label="Selected recordings">
-      <div className="row">
-        <b>{count === 0 ? "Select recordings" : `${count} selected`}</b>
-        <span className="spacer" />
-        <button type="button" className="btn ghost" onClick={onDone}>Done</button>
-      </div>
+      <b className="bulk-count">{count === 0 ? "Select recordings" : `${count} selected`}</b>
+      {onSelectAll && <button type="button" className="btn ghost small" onClick={onSelectAll}>Select all</button>}
       {count > 0 && (
-        <div className="bulk-actions">
+        <>
           <FolderPicker label="Move to" value="" clients={clients} disabled={busy} notify={notify} onCreated={onClientCreated} onPick={(clientId) => void run("move", clientId)} />
-          <div className="row organise-field">
-            <label htmlFor={labelId} className="sr-only">Label</label>
-            <input id={labelId} className="input small" placeholder="Label" list={listId} maxLength={MAX_LABEL_CHARS} value={label} disabled={busy} onChange={(e) => setLabel(e.target.value)} />
-            <datalist id={listId}>{knownLabels.map((k) => <option key={k} value={k} />)}</datalist>
-            <button type="button" className="btn ghost" disabled={busy || !label.trim()} onClick={() => void run("label", null, label)}>Add label</button>
-            <button type="button" className="btn ghost" disabled={busy || !label.trim()} onClick={() => void run("unlabel", null, label)}>Remove label</button>
-          </div>
-          <div className="row organise-field">
-            <button type="button" className="btn ghost" disabled={busy} onClick={() => void run("pin")}>Pin</button>
-            <button type="button" className="btn ghost" disabled={busy} onClick={() => void run("unpin")}>Unpin</button>
-            <button type="button" className="btn ghost" disabled={busy} onClick={() => void run("keep")}>Keep forever</button>
-            <button type="button" className="btn ghost" disabled={busy} onClick={() => void run("unkeep")}>Stop keeping</button>
-            <label htmlFor={formatId} className="sr-only">Export format</label>
-            <select id={formatId} className="select" value={format} disabled={busy} onChange={(e) => setFormat(e.target.value as BulkExportFormat)}>
-              {EXPORT_FORMATS.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
-            </select>
-            <button type="button" className="btn ghost" disabled={busy} onClick={() => void exportZip()}>Export transcripts</button>
-            {confirmDelete ? (
-              <button type="button" className="btn danger" disabled={busy} onClick={() => void run("delete")}>{`Delete ${count} (restorable for 48 hours)`}</button>
-            ) : (
-              <button type="button" className="btn danger ghost" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</button>
-            )}
-          </div>
-        </div>
+          <details className="bulk-menu">
+            <summary className="btn ghost small">Label</summary>
+            <div className="bulk-pop card">
+              <label htmlFor={labelId} className="sr-only">Label</label>
+              <input id={labelId} className="input small" placeholder="Label" list={listId} maxLength={MAX_LABEL_CHARS} value={label} disabled={busy} onChange={(e) => setLabel(e.target.value)} />
+              <datalist id={listId}>{knownLabels.map((k) => <option key={k} value={k} />)}</datalist>
+              <div className="row">
+                <button type="button" className="btn ghost small" disabled={busy || !label.trim()} onClick={() => void run("label", null, label)}>Add label</button>
+                <button type="button" className="btn ghost small" disabled={busy || !label.trim()} onClick={() => void run("unlabel", null, label)}>Remove label</button>
+              </div>
+            </div>
+          </details>
+          <button type="button" className="btn ghost small" disabled={busy} onClick={() => void run("pin")}>Pin</button>
+          <details className="bulk-menu">
+            <summary className="btn ghost small">More</summary>
+            <div className="bulk-pop card">
+              <button type="button" className="btn ghost small" disabled={busy} onClick={() => void run("unpin")}>Unpin</button>
+              <button type="button" className="btn ghost small" disabled={busy} onClick={() => void run("keep")}>Keep forever</button>
+              <button type="button" className="btn ghost small" disabled={busy} onClick={() => void run("unkeep")}>Stop keeping</button>
+              <div className="row">
+                <label htmlFor={formatId} className="sr-only">Export format</label>
+                <select id={formatId} className="select" value={format} disabled={busy} onChange={(e) => setFormat(e.target.value as BulkExportFormat)}>
+                  {EXPORT_FORMATS.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+                </select>
+                <button type="button" className="btn ghost small" disabled={busy} onClick={() => void exportZip()}>Export transcripts</button>
+              </div>
+            </div>
+          </details>
+          {confirmDelete ? (
+            <button type="button" className="btn danger small" disabled={busy} onClick={() => void run("delete")}>{`Delete ${count} (restorable for 48 hours)`}</button>
+          ) : (
+            <button type="button" className="btn danger ghost small" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete</button>
+          )}
+        </>
       )}
+      <span className="spacer" />
+      <button type="button" className="btn ghost small" onClick={onDone}>Done</button>
     </div>
   );
 }
-
 /** "erased in 5 hours" from the erase time; "erased soon" in the last minutes. */
 export function eraseIn(eraseAt: string, now: number = Date.now()): string {
   const hours = Math.floor((Date.parse(eraseAt) - now) / 3_600_000);
