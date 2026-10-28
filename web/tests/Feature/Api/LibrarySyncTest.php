@@ -529,6 +529,9 @@ describe('item contents', function () {
             'live_language' => null,
             'script_warning' => null,
             'final_error_code' => null,
+            'alternate_transcript_id' => null,
+            'alternate_status' => null,
+            'alternate_language' => null,
         ]);
         expect(mb_strlen($item['transcript']['preview']))->toBeLessThanOrEqual(160)->and($item)->not->toHaveKey('segments');
     });

@@ -56,6 +56,7 @@ describe("api wrappers", () => {
     ["pendingAssignClient (none)", () => api.pendingAssignClient("p1", null), "pending_assign_client", { id: "p1", clientId: null }],
     ["pendingSetLanguage", () => api.pendingSetLanguage("p1", "en+ur"), "pending_set_language", { id: "p1", language: "en+ur" }],
     ["setRecordingLanguage", () => api.setRecordingLanguage(null), "set_recording_language", { language: null }],
+    ["retranscribe", () => api.retranscribe("s1", "ur"), "session_retranscribe", { id: "s1", language: "ur" }],
     ["pendingOpen", () => api.pendingOpen("p1", false), "pending_open", { id: "p1", rename: false }],
     ["pendingOpen (rename)", () => api.pendingOpen("p1", true), "pending_open", { id: "p1", rename: true }],
     ["reviewState", () => api.reviewState(), "review_state", undefined],

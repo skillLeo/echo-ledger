@@ -339,6 +339,7 @@ pub fn run() {
             commands::pending_rename,
             commands::pending_assign_client,
             commands::pending_set_language,
+            commands::session_retranscribe,
             commands::set_recording_language,
             commands::pending_open,
             commands::review_state,

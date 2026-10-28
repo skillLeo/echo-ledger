@@ -23,6 +23,7 @@ use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Services\ChunkedUploadService;
 use App\Services\FinalTranscriptCoordinator;
+use App\Services\Retranscriber;
 use App\Services\SessionLifecycle;
 use App\Services\SessionMarkers;
 use App\Services\TranscriptEditor;
@@ -41,6 +42,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 use Throwable;
 
 final class SessionController extends Controller
@@ -253,6 +255,25 @@ final class SessionController extends Controller
             'playback_url' => $primary?->isReady() ? URL::temporarySignedRoute('api.recordings.audio',
                 now()->addMinutes((int) config('echoledger.playback_url_minutes', 30)), ['recording' => $primary->id]) : null,
         ]);
+    }
+
+    /**
+     * POST /api/sessions/{id}/retranscribe — "Re-transcribe as <language>" (since v1.2): `{"language": "ur"}` (null =
+     * Auto). 202 with the run that was started; the current transcript stays until the new one is ready.
+     */
+    public function retranscribe(Request $request, string $id): JsonResponse
+    {
+        $session = $this->findSession($request, $id);
+        $data = $request->validate(['language' => ['present', 'nullable', 'string', 'max:16']]);
+        try {
+            $run = app(Retranscriber::class)->startAs($session, $data['language']);
+        } catch (RuntimeException $e) {
+            throw new ApiError(409, 'cannot_retranscribe', $e->getMessage());
+        }
+
+        return response()->json(['transcript' => [
+            'id' => $run->id, 'kind' => $run->kind->value, 'provider' => $run->provider, 'status' => $run->status->value, 'language' => $run->language,
+        ]], 202);
     }
 
     /** POST /api/sessions/{id}/markers — a bookmark added after the call (since v1.1). */

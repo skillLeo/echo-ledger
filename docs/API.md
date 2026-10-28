@@ -64,6 +64,7 @@ Every addition below is marked **(since v1.1)**.
 | 409 | `too_many_open_sessions` | 10 or more sessions of this device are still `recording` | Finish or discard them, then retry |
 | 409 | `current_device` | `DELETE devices/{id}` for the device making the request | Unpair from the device's own settings |
 | 409 | `nothing_to_export` | `sessions/export`: none of the chosen recordings has a finished transcript | Permanent for those recordings |
+| 409 | `cannot_retranscribe` | `sessions/{id}/retranscribe`: the recording's audio is not on the server (not uploaded yet, or erased; since v1.2) | Retry once the upload has finished |
 | 410 | `restore_expired` | `sessions/{id}/restore` after the 48-hour undo bin ended | Permanent: the recording is gone |
 | 413 | `too_large` | Body or declared size above the limit | Permanent |
 | 422 | `validation_failed` | Field errors in `errors` | Permanent for that request |
@@ -600,6 +601,31 @@ the other engines get the single code or detect the language themselves. Live ca
   `final_provider`, `final_provider_label`, `final_model`, `live_language` and `script_warning` (`devanagari`,
   `latin`, `arabic` or `null`). Transcripts have `language_label`, `provider_label`, `script_warning` and `fallback`
   (`{used, wanted, language, fallback}` when another engine than the first one ran).
+
+**Since v1.2.** The offered codes are `en`, `ur`, `ar` and the "More languages" `fr`, `de`, `es`, `it`, `pt`, `nl`,
+`tr`, `ru`. Urdu and Arabic always allow English words, so the mixed codes are gone: a stored or sent `en+ur`,
+`ur+en`, `hi` or `en+hi` reads as `ur` and `en+ar` as `ar` (stored values were migrated). Automatic detection picks
+only `en`, `ur` or `ar` (plus the More languages ticked in the console); a final transcript in another language is
+run once more in the console's fallback language (Urdu by default), and one written in Hindi letters (Devanagari) is
+run once more as Urdu. New fields:
+- `GET /api/config`: each `languages.options` item has `more` (true for the More languages) and `languages.auto`
+  lists the codes automatic detection may pick.
+- `POST /api/sessions` and `POST /api/sessions/{id}/finish` take `language_marks`: the language chip changed during
+  the recording, `[{"at_ms": 0, "language": "en"}, {"at_ms": 61250, "language": "ur"}]` (at most 50, in time
+  order; `language` null is automatic). The final transcript is cut there and each piece is transcribed in its
+  language (Whisper on Groq); the marks win over detection. `GET /api/sessions/{id}` returns `language_marks`.
+- Library items: `transcript.final_error_code` (since v1.1.2; `no_audio` when nothing was heard),
+  `alternate_transcript_id`, `alternate_status` and `alternate_language` (the other version: the previous
+  transcript after "Re-transcribe as", or a second engine's run).
+
+### `POST /api/sessions/{id}/retranscribe` — `sessions:write` (since v1.2)
+"Re-transcribe as": `{"language": "ur"}` (`null` is automatic; the key is required) →
+`202 {"transcript": {"id","kind","provider","status","language"}}`. The session's language becomes the new one and the
+engine is chosen by the routing for that language. A finished transcript stays the transcript until the new run is
+ready (`kind` `alternate`); then the new one becomes the `final` transcript and the old one is kept as the
+`alternate`. Two versions are kept, the newest and the one before it; a new request replaces a run that is still
+going. A failed or unfinished transcript is simply run again in the new language (`kind` `final`).
+`409 cannot_retranscribe` when the recording's audio is not on the server (not uploaded yet, or erased).
 
 ### Vocabulary (since v1.1)
 Keyterms (names and jargon) of the session's client come first, then the global ones; each engine receives as many

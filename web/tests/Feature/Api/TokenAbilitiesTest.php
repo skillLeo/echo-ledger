@@ -29,6 +29,7 @@ function abilityRoutes(): array
         'create session' => ['POST', '/api/sessions', 'sessions:write'],
         'finish session' => ['POST', "/api/sessions/{$id}/finish", 'sessions:write'],
         'add bookmark' => ['POST', "/api/sessions/{$id}/markers", 'sessions:write'],
+        're-transcribe as' => ['POST', "/api/sessions/{$id}/retranscribe", 'sessions:write'],
         'delete bookmark' => ['DELETE', "/api/sessions/{$id}/markers/{$id}", 'sessions:write'],
         'rename speakers' => ['PUT', "/api/sessions/{$id}/speakers", 'sessions:write'],
         'edit transcript' => ['PATCH', "/api/transcripts/{$id}", 'sessions:write'],

@@ -115,6 +115,7 @@ function isoApiCases(array $b): array
         'api.sessions.restore' => ['POST', "/api/sessions/{$b['binned']->id}/restore", [], 404],
         'api.bin.destroy' => ['DELETE', "/api/bin/{$b['binned']->id}", [], 404],
         'api.sessions.markers.store' => ['POST', "/api/sessions/{$s}/markers", ['at_ms' => 10], 404],
+        'api.sessions.retranscribe' => ['POST', "/api/sessions/{$s}/retranscribe", ['language' => 'ur'], 404],
         'api.sessions.markers.destroy' => ['DELETE', "/api/sessions/{$s}/markers/{$b['marker']->id}", [], 404],
         'api.sessions.speakers' => ['PUT', "/api/sessions/{$s}/speakers", ['names' => ['A' => 'X']], 404],
         'api.sessions.shares.store' => ['POST', "/api/sessions/{$s}/shares", ['expires_in' => 3600], 404],

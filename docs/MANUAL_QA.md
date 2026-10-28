@@ -378,6 +378,11 @@ Run these when the change touches the area, or before a release.
 | L-11 | Record an **Arabic** call (language Arabic). | Transcribed by ElevenLabs Scribe v2 (with its key) in Arabic script. |
 | L-12 | Record a call with language **Auto** in Urdu, then one in English. | Tagged Urdu and English, never French or Hindi; Settings → General shows what Auto may pick. |
 | L-13 | Record a long call (over 10 minutes) with long silences, language Urdu. | One transcript with times matching the audio across the chunk joins; no invented lines during the silences. |
+| L-14 | Record a call: a minute in English with the chip on EN, then tap the chip to UR and speak Urdu; Keep. | The English part is English and the Urdu part is in Urdu script; the switch is where the chip was tapped. |
+| L-15 | With captions on, speak Urdu while the caption engine guesses Hindi (Auto). | Desktop captions and the phone bubble show Urdu letters, never Hindi letters. |
+| L-16 | Desktop Library: open a finished English recording, pick **Urdu** next to **Re-transcribe** and press it. | "Re-transcribing in Urdu…"; the English text stays until the Urdu one is ready, then Urdu shows with **Current / Previous (English)**. |
+| L-17 | Phone: open a finished recording, **Re-transcribe as…**, pick **UR**, **Re-transcribe**. | As L-16; after a sync **Previous (English)** shows the old text. |
+| L-18 | Console: a recording page, **Re-transcribe as…** → Arabic. | "Re-transcribing in Arabic with …" names the engine; when done the Arabic text is the transcript and the old one is the second version. |
 | L-2 | During a recording with captions on, tap the pill's language chip twice. | Captions continue in the new language within a few seconds; the timer never stops; the saved file has no gap. |
 | L-3 | Stop a recording, change the chip on the Keep card, then Keep. | The transcript uses the chip's language; with a client of another language you are asked "Use … for … from now on?". |
 | L-4 | Phone: after a call, tap the chip on the popup, then Keep. | The transcript uses the new language. |

@@ -500,6 +500,17 @@ pub async fn session_detail(state: State<'_, AppState>, id: String) -> AppResult
     state.api()?.session(&id).await
 }
 
+/// "Re-transcribe as <language>": the current transcript stays until the new one is ready (since v1.2).
+#[tauri::command]
+pub async fn session_retranscribe(app: AppHandle, id: String, language: Option<String>) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let language = crate::settings::language_or_none(language.as_deref());
+    let run = state.api()?.retranscribe(&id, language.as_deref()).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(run)
+}
+
 #[tauri::command]
 pub async fn transcript_detail(state: State<'_, AppState>, id: String) -> AppResult<serde_json::Value> {
     ensure_unlocked(&state)?;

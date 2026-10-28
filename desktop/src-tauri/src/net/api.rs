@@ -266,6 +266,12 @@ impl ApiClient {
     }
 
     /// `PATCH /api/sessions/{id}` (since v1.1): title, client folder, pin or labels; returns the library item.
+    /// `POST /api/sessions/{id}/retranscribe` (since v1.2): "Re-transcribe as <language>" (none = Auto); 202 with the run.
+    pub async fn retranscribe(&self, id: &str, language: Option<&str>) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("sessions/{id}/retranscribe"))))?.json(&json!({ "language": language })).send().await?;
+        Self::parse(resp).await
+    }
+
     pub async fn update_session(&self, id: &str, patch: &serde_json::Value) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.patch(self.url(&format!("sessions/{id}"))))?.json(patch).send().await?;
         Self::parse(resp).await

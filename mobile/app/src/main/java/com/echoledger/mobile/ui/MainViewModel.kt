@@ -202,6 +202,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { graph.api()?.transcript(id) }.getOrNull()
     }
 
+    /**
+     * "Re-transcribe as <language>" (null = Auto, since v1.2): the current transcript stays until the new one is
+     * ready, then the new one is shown and the old one is kept as the previous version.
+     */
+    suspend fun retranscribe(sessionId: String, language: String?): Boolean = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.retranscribe(sessionId, language) ?: error("This phone is not paired.") }
+            .onSuccess {
+                _message.value = "Re-transcribing in ${Languages.label(language)}. The current transcript stays until the new one is ready."
+            }
+            .onFailure { _message.value = it.message ?: "The recording could not be re-transcribed." }
+            .isSuccess
+    }
+
     /** Temporary signed streaming URL for the session's recording, or null when it is not (yet) playable. */
     suspend fun playbackUrl(sessionId: String): String? = sessionDetail(sessionId)?.playbackUrl
 

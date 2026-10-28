@@ -975,3 +975,83 @@ describe("library states (C6)", () => {
     expect(callsOf("library_refresh")).toHaveLength(2);
   });
 });
+
+describe("LibraryView Re-transcribe as", () => {
+  const versions = (alternateStatus: string) => [
+    makeItem("v", {
+      title: "Urdu call", language: "ur",
+      transcript: { final_status: "completed", final_transcript_id: "tr-new", live_available: false, preview: null, alternate_transcript_id: "tr-old", alternate_status: alternateStatus, alternate_language: "en" },
+    }),
+  ];
+  const line = (text: string): Segment[] => [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text }];
+
+  it("re-transcribes the selected recording in the chosen language and keeps the current transcript", async () => {
+    respond("session_retranscribe", { transcript: { id: "tr-run", kind: "alternate" } });
+    const { notify } = await renderLibrary();
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Re-transcribe in" }), { target: { value: "ur" } });
+    fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
+    await flushAsync();
+
+    expect(callsOf("session_retranscribe")).toEqual([{ id: "a", language: "ur" }]);
+    expect(notify).toHaveBeenCalledWith("Re-transcribing in Urdu. The current transcript stays until the new one is ready.");
+    expect(within(detail()).getByText("Hello, this is Sam.")).toBeInTheDocument();
+  });
+
+  it("offers every language, the More languages too, and Auto sends no language", async () => {
+    respond("session_retranscribe", {});
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    const select = screen.getByRole("combobox", { name: "Re-transcribe in" });
+    expect([...select.querySelectorAll("option")].map((o) => o.textContent)).toEqual(
+      ["Auto", "English", "Urdu", "Arabic", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Turkish", "Russian"],
+    );
+
+    fireEvent.change(select, { target: { value: "" } });
+    fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
+    await flushAsync();
+    expect(callsOf("session_retranscribe")).toEqual([{ id: "a", language: null }]);
+  });
+
+  it("reports a refused re-transcribe", async () => {
+    fail("session_retranscribe", "This recording cannot be re-transcribed yet");
+    const { notify } = await renderLibrary();
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
+    await flushAsync();
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("cannot be re-transcribed"), true);
+  });
+
+  it("switches between the newest version and the previous one", async () => {
+    TRANSCRIPTS["tr-new"] = makeTranscript({ id: "tr-new", language: "ur", segments: line("میں invoice بھیج دوں گا") });
+    TRANSCRIPTS["tr-old"] = makeTranscript({ id: "tr-old", segments: line("I will send the invoice") });
+    await renderLibrary(versions("completed"));
+    await selectItem("Urdu call", "میں invoice بھیج دوں گا");
+    expect(within(detail()).getByRole("button", { name: "Current" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(within(detail()).getByRole("button", { name: "Previous (English)" }));
+    await flushAsync();
+    expect(await within(detail()).findByText("I will send the invoice")).toBeInTheDocument();
+    expect(within(detail()).getByRole("button", { name: "Previous (English)" })).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(within(detail()).getByRole("button", { name: "Current" }));
+    await flushAsync();
+    expect(await within(detail()).findByText("میں invoice بھیج دوں گا")).toBeInTheDocument();
+  });
+
+  it("shows no version switch while the other version is still being made", async () => {
+    TRANSCRIPTS["tr-new"] = makeTranscript({ id: "tr-new", segments: line("Still the current text") });
+    await renderLibrary(versions("processing"));
+    await selectItem("Urdu call", "Still the current text");
+    expect(within(detail()).queryByRole("button", { name: /^Previous/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Re-transcribe in" })).toHaveValue("ur");
+  });
+
+  it("offers no Re-transcribe for a recording without audio", async () => {
+    TRANSCRIPTS["tr-silent"] = makeTranscript({ id: "tr-silent", status: "failed", segments: [], error: "No audio was captured", error_code: "no_audio" } as Partial<TranscriptDetail>);
+    await renderLibrary([makeItem("silent", { title: "Silent call", status: "failed", transcript: { final_status: "failed", final_transcript_id: "tr-silent", live_available: false, preview: null, final_error_code: "no_audio" } })]);
+    await selectItem("Silent call");
+    expect(within(detail()).queryByRole("button", { name: "Re-transcribe" })).not.toBeInTheDocument();
+  });
+});

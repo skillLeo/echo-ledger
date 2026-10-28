@@ -452,12 +452,17 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val clipboard = LocalClipboard.current
     val player = rememberRecordingPlayer(playbackUrl)
-    LaunchedEffect(item.id, attempt) {
-        val id = item.transcript?.finalTranscriptId ?: item.transcript?.liveTranscriptId
+    // The newest version is shown first; the previous one (after Re-transcribe as) is one tap away.
+    var version by remember(item.id) { mutableStateOf(TranscriptVersion.CURRENT) }
+    LaunchedEffect(item.id, attempt, version) {
+        val previous = previousVersionId(item).takeIf { version == TranscriptVersion.PREVIOUS }
+        val id = previous ?: item.transcript?.finalTranscriptId ?: item.transcript?.liveTranscriptId
         transcript = id?.let { vm.transcript(it) }
         // Only a finished transcript that does not arrive is a load failure; otherwise its status says more.
-        loadFailed = id != null && transcript == null && item.transcript?.finalStatus == "completed"
+        loadFailed = id != null && transcript == null && (previous != null || item.transcript?.finalStatus == "completed")
         loaded = true
+    }
+    LaunchedEffect(item.id, attempt) {
         val detail = vm.sessionDetail(item.id)
         playbackUrl = detail?.playbackUrl
         bookmarks = detail?.markers.orEmpty().sortedBy { it.atMs }
@@ -565,6 +570,9 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                         hasAudio =
                             playbackUrl != null
                     )
+                }
+                if (item.transcript?.finalStatus != null) {
+                    item { RetranscribeRow(vm, item, version) { version = it } }
                 }
             }
             if (bookmarks.isNotEmpty()) {

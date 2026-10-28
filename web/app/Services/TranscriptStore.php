@@ -66,6 +66,10 @@ final class TranscriptStore
         });
 
         $this->applyVocabulary($transcript->refresh());
+        // "Re-transcribe as …": the new version becomes the transcript as soon as it is ready (the old one is kept).
+        if ($transcript->kind === TranscriptKind::Alternate && ($transcript->meta['promote_when_done'] ?? false) === true) {
+            app(Retranscriber::class)->choose($transcript);
+        }
 
         return $transcript->refresh();
     }

@@ -89,7 +89,7 @@ internal fun recordingLanguage(context: Context, language: String?) {
     runCatching { context.startForegroundService(intent) }
 }
 
-/** A row of language chips (Auto, EN, UR, UR+EN, HI, HI+EN); the selected one is [selected]. */
+/** A row of language chips (Auto, EN, UR, AR and More ▾ with the other languages); the selected one is [selected]. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun LanguageChips(selected: String?, onPick: (String?) -> Unit) {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type ClientFolder, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail } from "../../lib/ipc";
+import { api, errorMessage, type ClientFolder, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail, type TranscriptionLanguage } from "../../lib/ipc";
 import { activeIndex, activeWord, continuesTurn, KEY_SECONDS, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName } from "../../lib/player";
 import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, SpeakersPanel, Timeline, VocabularyHint } from "./TranscriptTools";
 import { formatDuration, formatWhen, providerName, timestamp, transcriptText } from "../../lib/format";
@@ -13,7 +13,7 @@ import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, smartViewCounts } from "../../lib/organise";
 import { BinPanel, BulkBar, OrganisePanel } from "./LibraryOrganise";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { engineLine, scriptWarning } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageLabel, scriptWarning } from "../../lib/languages";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -141,8 +141,25 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   }, [needClients, clientsLoaded]);
 
   const finalStatus = current?.transcript?.final_status ?? null;
-  const finalId = current?.transcript?.final_transcript_id ?? null;
+  // Which version is shown: the transcript (newest) or the other one (the previous transcript after Re-transcribe as).
+  const [version, setVersion] = useState<"final" | "alternate">("final");
+  const alternateId = current?.transcript?.alternate_status === "completed" ? current?.transcript?.alternate_transcript_id ?? null : null;
+  const finalId = version === "alternate" && alternateId ? alternateId : current?.transcript?.final_transcript_id ?? null;
   const liveId = current?.transcript?.live_transcript_id ?? null;
+  const [retranscribeLanguage, setRetranscribeLanguage] = useState<string>("");
+  useEffect(() => {
+    setVersion("final");
+    setRetranscribeLanguage(current?.language ?? "");
+  }, [current?.id]);
+  const retranscribe = async () => {
+    if (!current) return;
+    try {
+      await api.retranscribe(current.id, (retranscribeLanguage || null) as TranscriptionLanguage | null);
+      notify(`Re-transcribing in ${languageLabel(retranscribeLanguage || null)}. The current transcript stays until the new one is ready.`);
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
   useEffect(() => {
     const token = ++selection.current;
     const latest = () => token === selection.current;
@@ -505,6 +522,23 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               <h2 className="detail-title">{current.title}</h2>
               <div className="small muted">{formatWhen(current.started_at)} · {formatDuration(current.duration_ms)}{current.client ? ` · ${current.client.name}` : ""}</div>
               {engineLine(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {engineLine(current.transcript)}</div>}
+              {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
+                <div className="row retranscribe-row" style={{ gap: 6, marginTop: 6 }}>
+                  <select className="select compact" aria-label="Re-transcribe in" value={retranscribeLanguage} onChange={(e) => setRetranscribeLanguage(e.target.value)}>
+                    {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
+                    <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}</optgroup>
+                  </select>
+                  <button type="button" className="btn ghost compact" onClick={() => void retranscribe()}>Re-transcribe</button>
+                  {alternateId && (
+                    <span className="row" style={{ gap: 2 }} role="group" aria-label="Version">
+                      <button type="button" className="btn ghost compact" aria-pressed={version === "final"} onClick={() => setVersion("final")}>Current</button>
+                      <button type="button" className="btn ghost compact" aria-pressed={version === "alternate"} onClick={() => setVersion("alternate")}>
+                        Previous{current.transcript?.alternate_language ? ` (${languageLabel(current.transcript.alternate_language)})` : ""}
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
               {scriptWarning(current.transcript?.script_warning) && <div className="notice" role="status" style={{ marginTop: 8 }}>{scriptWarning(current.transcript?.script_warning)}</div>}
               <OrganisePanel item={current} clients={folders} knownLabels={labels} notify={notify} onClientCreated={addClient} />
               {playbackUrl && (

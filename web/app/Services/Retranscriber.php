@@ -12,6 +12,7 @@ use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Stt\LanguageChoice;
+use App\Stt\LanguageRouter;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -44,6 +45,30 @@ final class Retranscriber
         TranscribeFinalJob::dispatch($alternate->id);
 
         return $alternate;
+    }
+
+    /**
+     * "Re-transcribe as <language>" (since v1.2, apps and console): the recording's language becomes [$language] and
+     * the engine for it runs again. The current transcript stays until the new one is ready; then the new one becomes
+     * the transcript (newest is the default) and the old one stays as the other version. Without a finished
+     * transcript (failed or never made) the final one simply runs again in the new language.
+     */
+    public function startAs(CaptureSession $session, ?string $language): Transcript
+    {
+        $language = LanguageChoice::normalize($language);
+        if ($session->recordings()->where('role', 'primary')->first()?->isReady() !== true) {
+            throw new RuntimeException('The recording is not on the server any more, so it cannot be transcribed again.');
+        }
+        $session->update(['language' => $language]);
+        $final = $session->finalTranscript;
+        if (! $final instanceof Transcript || $final->status !== TranscriptStatus::Completed) {
+            return app(FinalTranscriptCoordinator::class)->start($session->refresh(), $final);
+        }
+        $route = app(LanguageRouter::class)->final($language ?? LanguageChoice::normalize($session->client?->language), FinalTranscriptCoordinator::useCaseFor($session), $session);
+        $alternate = $this->start($session, $route->provider, $language);
+        $alternate->update(['meta' => ['promote_when_done' => true, 'route' => $route->toArray()]]);
+
+        return $alternate->refresh();
     }
 
     /** Makes the second version the final one (the old final becomes the second version). */

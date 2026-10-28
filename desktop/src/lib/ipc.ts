@@ -298,6 +298,10 @@ export interface LibraryItem {
     script_warning?: string | null;
     /** Why the final transcript failed; `no_audio`: nothing was heard (since v1.1.2). */
     final_error_code?: string | null;
+    /** The other version: the previous transcript after "Re-transcribe as", or a second engine's run (since v1.2). */
+    alternate_transcript_id?: string | null;
+    alternate_status?: string | null;
+    alternate_language?: string | null;
   };
 }
 
@@ -596,6 +600,8 @@ export const api = {
   pendingRename: (id: string, title: string) => invoke<PendingItem>("pending_rename", { id, title }),
   pendingAssignClient: (id: string, clientId: string | null) => invoke<PendingItem>("pending_assign_client", { id, clientId }),
   pendingSetLanguage: (id: string, language: TranscriptionLanguage | null) => invoke<PendingItem>("pending_set_language", { id, language }),
+  /** "Re-transcribe as <language>": the current transcript stays until the new one is ready (since v1.2). */
+  retranscribe: (id: string, language: TranscriptionLanguage | null) => invoke<unknown>("session_retranscribe", { id, language }),
   /** The pill's language chip: live captions reconnect in it; the recording keeps running. */
   setRecordingLanguage: (language: TranscriptionLanguage | null) => invoke<void>("set_recording_language", { language }),
   pendingOpen: (id: string, rename: boolean) => invoke<void>("pending_open", { id, rename }),

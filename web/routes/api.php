@@ -62,6 +62,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->name('api.sessions.restore');
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->name('api.bin.destroy');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
+            Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->name('api.sessions.retranscribe');
             Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->name('api.sessions.markers.destroy');
             Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');
             Route::post('sessions/{id}/shares', [ShareController::class, 'store'])->name('api.sessions.shares.store');

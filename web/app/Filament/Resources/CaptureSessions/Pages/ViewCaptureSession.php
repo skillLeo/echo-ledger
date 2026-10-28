@@ -87,6 +87,7 @@ class ViewCaptureSession extends ViewRecord
             $this->shareAction(),
             ActionGroup::make([
                 $this->retryAction(),
+                $this->retranscribeAsAction(),
                 $this->secondEngineAction(),
                 $this->compareAction(),
                 $this->compareEnginesAction(),
@@ -351,6 +352,30 @@ class ViewCaptureSession extends ViewRecord
                 $record->update(['language' => LanguageChoice::normalize($data['language'] ?? null)]);
                 $coordinator->start($record, $record->finalTranscript);
                 Notification::make()->title('Transcription queued')->success()->send();
+            });
+    }
+
+    /** "Re-transcribe as …": the engine for the new language runs; its version becomes the transcript when done. */
+    private function retranscribeAsAction(): Action
+    {
+        return Action::make('retranscribe_as')
+            ->label('Re-transcribe as…')
+            ->icon(Heroicon::OutlinedLanguage)
+            ->visible(fn (CaptureSession $record): bool => $record->primaryRecording?->isReady() === true && ! $record->hasNoAudio())
+            ->modalDescription('The current transcript stays until the new one is ready, then the new one is shown and the old one is kept as the other version.')
+            ->fillForm(fn (CaptureSession $record): array => ['language' => LanguageChoice::normalize($record->language) ?? ''])
+            ->schema([
+                Select::make('language')->label('Language')->options(LanguageChoice::selectOptions())->selectablePlaceholder(false),
+            ])
+            ->action(function (array $data, CaptureSession $record): void {
+                try {
+                    $run = app(Retranscriber::class)->startAs($record, $data['language'] ?? null);
+                } catch (RuntimeException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+                Notification::make()->title('Re-transcribing in '.LanguageChoice::label($run->language).' with '.($run->providerKey()?->getLabel() ?? $run->provider))->success()->send();
             });
     }
 

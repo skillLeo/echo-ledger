@@ -241,7 +241,9 @@ data class LibraryItem(
     /** Never deleted by the retention rules (B17). */
     val keep: Boolean = false,
     /** The recording's language chip, "UR+EN" (since v1.1.2). */
-    @SerialName("language_chip") val languageChip: String? = null
+    @SerialName("language_chip") val languageChip: String? = null,
+    /** The language chosen for the recording (since v1.1.2); null = automatic. */
+    val language: String? = null
 )
 
 @Serializable
@@ -255,7 +257,11 @@ data class TranscriptSummary(
     @SerialName("live_transcript_id") val liveTranscriptId: String? = null,
     val preview: String? = null,
     /** Why the final transcript failed (since v1.1.2); `no_audio`: the recording has no sound. */
-    @SerialName("final_error_code") val finalErrorCode: String? = null
+    @SerialName("final_error_code") val finalErrorCode: String? = null,
+    /** The other version (since v1.2): the previous transcript after "Re-transcribe as", or a second engine's run. */
+    @SerialName("alternate_transcript_id") val alternateTranscriptId: String? = null,
+    @SerialName("alternate_status") val alternateStatus: String? = null,
+    @SerialName("alternate_language") val alternateLanguage: String? = null
 )
 
 @Serializable

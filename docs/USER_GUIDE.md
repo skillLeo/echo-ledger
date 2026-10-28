@@ -159,11 +159,14 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
 - **For a client:** give the client a default language. Every recording with that client uses it.
 - **For everything else:** the default in **Settings → General → Transcription language** (on the phone:
   **Settings → General → Transcription**).
-- **During a call:** tap the language chip (for example **UR+EN**) on the desktop recording pill, or on the
+- **During a call:** tap the language chip (for example **UR**) on the desktop recording pill, or on the
   phone next to the caption bubble or on the Record tab. Live captions switch to the new language; the
-  recording does not stop.
+  recording does not stop. The transcript switches language at that moment too.
 - **After the call:** the Keep card, the phone popup and the "Waiting for your decision" list have the same chip.
   The transcript uses whatever it shows when you press **Keep**.
+- **Any time later:** open the recording (desktop Library, the phone's recording page or the console) and choose
+  **Re-transcribe as…** with the language. The current transcript stays until the new one is ready; then the new
+  one is shown and **Current / Previous** switches between the two versions.
 - If you change the language for a recording with a client, EchoLedger asks **"Use Urdu for Acme from now on?"**.
   **Yes** makes it that client's default.
 

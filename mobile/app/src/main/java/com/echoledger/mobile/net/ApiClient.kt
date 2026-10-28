@@ -192,6 +192,12 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("sessions/$id").delete().build(), null as KSerializer<Unit>?)
     }
 
+    /** `POST /api/sessions/{id}/retranscribe` (since v1.2): "Re-transcribe as <language>"; null = Auto. */
+    suspend fun retranscribe(sessionId: String, language: String?) {
+        val body = buildJsonObject { put("language", language) }.toString().toRequestBody(jsonType)
+        call(request("sessions/$sessionId/retranscribe").post(body).build(), null as KSerializer<Unit>?)
+    }
+
     /** `GET /api/search` (since v1.1): every recording's title and transcript. */
     suspend fun search(query: String, tag: String? = null, bookmarked: Boolean = false): SearchResponse {
         val builder = url("search").toHttpUrl().newBuilder().addQueryParameter("q", query.trim())

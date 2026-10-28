@@ -272,18 +272,20 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 - **Deploy:** backup `/home/u290685119/echoledger-backups/pre-v1.2-20261027-223341/` (33 tables, dump completed, 19 replaced files; keep 30+ days) + laptop copy `C:\echoledger-backups\pre-v1.2-20261027-223341\`; 23 files + migration; down 4 s; verified `/admin/login` 200, `/.env` 403, `/api/config` 401, migration ran, 0 old codes left, routing keys en/ur/ar/other, ffmpeg found, no new log errors. **Production has no Groq, Soniox or ElevenLabs key yet**: Urdu falls back to AssemblyAI Universal-2 until the Groq key is added (API Credentials → Groq).
 - Web: 3133 tests on SQLite and MariaDB, PHPStan 0, Pint clean, repo policy 23/23. Old apps keep working (they send `en+ur` / `hi`, read as Urdu) but still show the old menu.
 
-### Prompt 1: next steps (in order; stopped here at the context limit)
-1. **Apps' language list:** desktop `settings.rs` LANGUAGES/canonical + `languages.ts`, phone `core/Languages.kt`: Auto, EN, UR, AR, then "More languages ▸" (use `languages.options[].more` from config); pill/bubble chip cycles Auto → EN → UR → AR; stored `en+ur`/`hi`/`en+hi` read as `ur`; Vitest/Rust/Robolectric tests; installer + APK.
-2. **Language markers:** chip changes during a recording saved as timestamped markers (session markers with a `language:xx` tag or a new field); `AudioPrep::plan` also cuts at marker times and each chunk takes the marker's language (markers win over detection).
-3. **Live captions:** Soniox real-time (stt-rt) when the streaming engine lacks the language; Devanagari in live captions converted to Urdu script for display only.
-4. **Re-transcribe as… with versions:** keep the current transcript until the new one is ready, versions switcher (newest default) on the Keep card / popup / recording page in all apps (B13 alternate is the base).
-5. **Uncertain words in every app** (dotted underline, tap plays), word-level uncertainty for AssemblyAI / Soniox / ElevenLabs confidences; Optional "Double-check" (second engine on uncertain chunks, disagreements shown, no merging).
-6. **Gemini 3.1 Pro preview driver** (candidate only, paid tier, delete the file after), after confirming audio input on the model page.
-7. **Show as** (Original · Roman Urdu · English): Claude API text-only views cached per transcript, labelled; Noto Nastaliq Urdu / Noto Naskh Arabic bundled in the apps and the console; exports and share links pick the view.
-8. **Accuracy Lab** (owner only): reference transcripts, CER/WER per engine (normalised), speed and cost, "Use the winners" → routing; reuse `EngineComparison` trials. USER_GUIDE how-to with 10 recordings.
-9. **Cost per engine in Usage**; a new provider-privacy page in the research folder (retention / no-training per provider with links).
-10. **Per-contact default language** (needs the client contacts from the caller-names scope).
-11. Progress (chunks done / total) in the apps from `meta.progress`.
+### Prompt 1: done after the v1.2 deploy (committed, not deployed yet; the apps need the new installer and APK)
+- **Apps' language list (`d3ec68f`):** desktop and phone offer Auto, EN, UR, AR, then More languages; the chip steps Auto → EN → UR → AR; stored `en+ur` / `hi` / `en+hi` read as `ur`.
+- **Language marks (`4d33bab`):** a chip change during a recording is saved as `{at_ms, language}` (`capture_sessions.language_marks`, migration `2026_11_05_000001_add_language_marks`, at most 50); the desktop and the phone send them with create / finish; `AudioPrep::plan` cuts there and Whisper on Groq takes each piece's language (`SessionMarkers::languageAt`); marks win over detection.
+- **Live captions (`e3a4f64`):** Devanagari from an engine that guessed Hindi is shown in Urdu script (desktop `lib/devanagari.ts`, phone `core/Devanagari.kt`; display only). Soniox real-time for languages the streaming engine lacks moves to Prompt 3 (Live Translate builds the Soniox real-time client).
+- **Re-transcribe as… with versions:** `Retranscriber::startAs` + `POST /api/sessions/{id}/retranscribe` (`sessions:write`, 202, `409 cannot_retranscribe`) + console action `retranscribe_as`. The new run is an `alternate` with `meta.promote_when_done`; `TranscriptStore::complete` makes it the final one when it is done and the old one becomes the `alternate` (two versions kept). A failed transcript runs again as the final one. Library items carry `alternate_transcript_id`, `alternate_status`, `alternate_language`. Desktop Library detail: language select + **Re-transcribe** + **Current / Previous (…)**; phone recording page: **Re-transcribe as…** dialog + the same switch (`ui/Retranscribe.kt`).
+
+### Prompt 1: next steps (in order)
+1. **Uncertain words in every app** (dotted underline, tap plays), word-level uncertainty for AssemblyAI / Soniox / ElevenLabs confidences; Optional "Double-check" (second engine on uncertain chunks, disagreements shown, no merging).
+2. **Gemini 3.1 Pro preview driver** (candidate only, paid tier, delete the file after), after confirming audio input on the model page.
+3. **Show as** (Original · Roman Urdu · English): Claude API text-only views cached per transcript, labelled; Noto Nastaliq Urdu / Noto Naskh Arabic bundled in the apps and the console; exports and share links pick the view.
+4. **Accuracy Lab** (owner only): reference transcripts, CER/WER per engine (normalised), speed and cost, "Use the winners" → routing; reuse `EngineComparison` trials. USER_GUIDE how-to with 10 recordings.
+5. **Cost per engine in Usage**; a new provider-privacy page in the research folder (retention / no-training per provider with links).
+6. **Per-contact default language** (needs the client contacts from the caller-names scope).
+7. Progress (chunks done / total) in the apps from `meta.progress`.
 - **Queued after Prompt 1, each in its own session:** Prompt 3 (Live Translate, Phase 0 needs the phone and the games), then Prompt 2 (mobile redesign, plus the Live Translate screens). Earlier, not started: caller names on recordings, SIM calls as a source. Signed APK still waits for the keystore.
 
 ## v1.1.2 live (production deploy 2026-10-27 18:44 server time)

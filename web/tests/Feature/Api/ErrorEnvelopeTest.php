@@ -122,6 +122,11 @@ function produceError(object $test, string $code): TestResponse
             return $test->deleteJson('/api/devices/'.$test->device->id);
         case 'nothing_to_export':
             return $test->postJson('/api/sessions/export', ['ids' => [ENVELOPE_MISSING_ID], 'format' => 'txt']);
+        case 'cannot_retranscribe':
+            // No audio on the server for this recording.
+            $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id, 'device_id' => $test->device->id, 'status' => SessionStatus::Completed]);
+
+            return $test->postJson("/api/sessions/{$session->id}/retranscribe", ['language' => 'ur']);
         case 'storage_limit_reached':
             Plan::personal()->update(['storage_bytes' => 1]);
 
@@ -182,7 +187,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(30);
+        ->and(count(documentedErrorCodes()))->toBe(31);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

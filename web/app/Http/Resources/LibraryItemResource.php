@@ -40,6 +40,7 @@ final class LibraryItemResource extends JsonResource
         $final = $transcripts->first(fn (Transcript $t) => $t->kind === TranscriptKind::Final);
         /** @var Transcript|null $live */
         $live = $transcripts->first(fn (Transcript $t) => $t->kind === TranscriptKind::Live);
+        $other = $transcripts->first(fn (Transcript $t) => $t->kind === TranscriptKind::Alternate);
 
         return [
             'id' => $session->id,
@@ -75,6 +76,10 @@ final class LibraryItemResource extends JsonResource
                 'script_warning' => $final?->meta['script_warning'] ?? null,
                 // Since v1.1.2: why the final transcript failed (no_audio: the recording has no sound; apps show "No audio").
                 'final_error_code' => $final?->status === TranscriptStatus::Failed ? ($final->error_code ?: null) : null,
+                // Since v1.2: the other version (the previous transcript after Re-transcribe as, or a second engine's run).
+                'alternate_transcript_id' => $other?->id,
+                'alternate_status' => $other?->status->value,
+                'alternate_language' => $other?->language,
             ],
             'marker_count' => $markers->count(),
             'tags' => $markers->pluck('tag')->filter()->unique()->values()->all(),
