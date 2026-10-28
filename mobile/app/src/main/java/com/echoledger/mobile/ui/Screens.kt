@@ -111,8 +111,10 @@ import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.SearchItemDto
 import com.echoledger.mobile.data.SessionMarkerDto
 import com.echoledger.mobile.data.TranscriptDto
+import com.echoledger.mobile.data.TranscriptViewsDto
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.RecordingService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -486,10 +488,35 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
     } else {
         -1
     }
+    // Show as (since v1.2): the Roman Urdu or English view of the transcript, once the server has written it.
+    var showAs by remember(item.id) { mutableStateOf(ShowAs.ORIGINAL) }
+    var views by remember(item.id) { mutableStateOf<TranscriptViewsDto?>(null) }
+    LaunchedEffect(showAs, views?.status, t?.id) {
+        val id = t?.id ?: return@LaunchedEffect
+        if (showAs != ShowAs.ORIGINAL && views?.status == "making") {
+            delay(ShowAs.POLL_MS)
+            views = vm.transcriptViews(id) ?: views
+        }
+    }
+    fun chooseView(view: ShowAs) {
+        showAs = view
+        val id = t?.id ?: return
+        if (view == ShowAs.ORIGINAL || views?.status == "ready") return
+        scope.launch {
+            var state = vm.transcriptViews(id)
+            if (state == null || state.status == "none" || state.status == "failed") state = vm.makeTranscriptViews(id) ?: state
+            views = state
+            if (state == null) showAs = ShowAs.ORIGINAL
+        }
+    }
+    val shown = ShowAs.lines(segments, showAs, views)
     fun copy(withTimestamps: Boolean) {
         scope.launch {
             clipboard.setClipEntry(
-                ClipData.newPlainText("EchoLedger transcript", TranscriptText.render(segments, withTimestamps)).toClipEntry()
+                ClipData.newPlainText(
+                    "EchoLedger transcript",
+                    TranscriptText.render(segments.mapIndexed { i, s -> s.copy(text = shown?.getOrNull(i) ?: s.text) }, withTimestamps)
+                ).toClipEntry()
             )
             vm.showMessage(if (withTimestamps) "Copied with timestamps" else "Copied")
         }
@@ -567,7 +594,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                         item.id,
                         t?.id?.takeIf { t.status == "completed" && t.kind == "final" },
                         hasAudio =
-                            playbackUrl != null
+                            playbackUrl != null,
+                        view = showAs.key.takeIf { shown != null }
                     )
                 }
                 if (item.transcript?.finalStatus != null) {
@@ -653,6 +681,10 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                                 Text("Copy with timestamps")
                             }
                         }
+                        val available = t.views?.available.orEmpty()
+                        if (t.kind == "final" && t.status == "completed" && available.isNotEmpty()) {
+                            ShowAsRow(available, showAs, views) { chooseView(it) }
+                        }
                     }
                     itemsIndexed(segments) { index, s ->
                         val active = index == activeIndex
@@ -676,7 +708,9 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                                 modifier = Modifier.width(60.dp)
                             )
                             val spoken = if (active && s.words.isNotEmpty()) s.words.indexOfLast { it.startMs <= player.positionMs } else -1
-                            TranscriptLine(s, spoken, enabled = player.ready) { player.seekTo(it) }
+                            TranscriptLine(s, spoken, enabled = player.ready, override = shown?.getOrNull(index), language = t.language) {
+                                player.seekTo(it)
+                            }
                         }
                     }
                 }

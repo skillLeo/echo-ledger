@@ -370,7 +370,27 @@ data class TranscriptDto(
     /** Machine-readable reason of a failure (`no_audio`, `provider_rejected`, `budget_exceeded`, ...). */
     @SerialName("error_code") val errorCode: String? = null,
     /** Parts done of all parts while it is being made in pieces (since v1.2). */
-    val progress: ProgressDto? = null
+    val progress: ProgressDto? = null,
+    /** Show as: the views this transcript can have and whether they are made (since v1.2). */
+    val views: ViewsSummaryDto? = null
+)
+
+/** Show as (since v1.2): `roman` and/or `english`, and `status` unavailable | none | making | ready | failed. */
+@Serializable
+data class ViewsSummaryDto(val available: List<String> = emptyList(), val status: String = "unavailable")
+
+/**
+ * `GET /api/transcripts/{id}/views` (since v1.2): the Roman Urdu and English reading views, each a list aligned with the
+ * segments (null for an empty line). The transcript itself never changes.
+ */
+@Serializable
+data class TranscriptViewsDto(
+    val status: String = "none",
+    val available: List<String> = emptyList(),
+    val roman: List<String?>? = null,
+    val english: List<String?>? = null,
+    val model: String? = null,
+    val error: String? = null
 )
 
 /** The part of GET /api/sessions/{id} the app needs: a temporary signed URL to stream the decrypted recording. */

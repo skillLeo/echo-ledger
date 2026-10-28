@@ -187,7 +187,10 @@ console and choose **Re-transcribe** or **Compare engines**, then keep the bette
 
 An Urdu or Arabic transcript can also be read in **Roman Urdu** (the same words in Latin letters) or in **English**.
 In the console open the recording and press **Roman Urdu & English**; after a minute or two the player shows
-**Original · Roman Urdu · English**, and **Export** offers Word, print and text files in each view. The views are
+**Original · Roman Urdu · English**, **Export** offers Word, print and text files in each view, and **Share** can open
+the link in a view. In the desktop Library and on the phone's recording page the same switch writes the views on the
+first tap and shows them when ready (exports from there follow the view on screen). Urdu shows in Nastaliq letters and
+Arabic in Naskh. The views are
 written by Claude (your administrator adds the Anthropic key) and are labelled as views: the transcript itself never
 changes. If you edit the transcript, make the views again.
 

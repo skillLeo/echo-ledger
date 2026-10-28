@@ -21,9 +21,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.Uncertain
 import com.echoledger.mobile.data.SegmentDto
 import kotlin.math.max
@@ -35,7 +38,19 @@ import kotlin.math.min
  * anywhere else plays the line (the row does that). The text stays as heard.
  */
 @Composable
-internal fun TranscriptLine(segment: SegmentDto, spoken: Int, enabled: Boolean, onPlay: (Long) -> Unit) {
+internal fun TranscriptLine(
+    segment: SegmentDto,
+    spoken: Int,
+    enabled: Boolean,
+    override: String? = null,
+    language: String? = null,
+    onPlay: (Long) -> Unit
+) {
+    // Show as: the Roman Urdu or English view of the line (labelled above the transcript), without marks.
+    if (override != null) {
+        Text(override, fontSize = 14.sp)
+        return
+    }
     val unsure = remember(segment) { segment.words.indices.filter { Uncertain.word(segment.words[it]) } }
     val useWords = segment.words.isNotEmpty() && (spoken >= 0 || unsure.isNotEmpty())
     val (text, ranges) = remember(segment, useWords) {
@@ -52,7 +67,7 @@ internal fun TranscriptLine(segment: SegmentDto, spoken: Int, enabled: Boolean, 
         else -> null
     }
     Column {
-        LineText(text, ranges, spoken, marked, described, enabled && unsure.isNotEmpty(), segment, onPlay)
+        LineText(text, ranges, spoken, marked, described, enabled && unsure.isNotEmpty(), segment, language, onPlay)
         segment.check?.let { check ->
             Text("${check.label} heard: ${check.text}", color = Brand.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
         }
@@ -68,6 +83,7 @@ private fun LineText(
     described: String?,
     tappable: Boolean,
     segment: SegmentDto,
+    language: String?,
     onPlay: (Long) -> Unit
 ) {
     var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -80,6 +96,8 @@ private fun LineText(
             }
         },
         fontSize = 14.sp,
+        // Urdu and Arabic get their own letter forms (Android's Nastaliq and Naskh fonts follow the text's locale).
+        style = scriptStyle(language),
         onTextLayout = { layout = it },
         modifier = Modifier
             .then(if (described != null) Modifier.semantics { stateDescription = described } else Modifier)
@@ -97,6 +115,13 @@ private fun LineText(
                 }
             )
     )
+}
+
+/** Urdu text in the Urdu locale (Nastaliq, taller lines), Arabic in the Arabic locale (Naskh); others as they are. */
+internal fun scriptStyle(language: String?): TextStyle = when (Languages.canonical(language)) {
+    "ur" -> TextStyle(localeList = LocaleList("ur"), lineHeight = 28.sp)
+    "ar" -> TextStyle(localeList = LocaleList("ar"), lineHeight = 24.sp)
+    else -> TextStyle.Default
 }
 
 /** A dotted line under [range] of the laid-out text, on every line it spans (right to left text too). */

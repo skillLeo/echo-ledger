@@ -722,8 +722,24 @@ pub fn export_target(dir: &std::path::Path, filename: &str) -> std::path::PathBu
 }
 
 /// Saves an export to Downloads and returns its path; the print page (`html`) opens in the browser for PDF.
+/// "Show as" (since v1.2): the Roman Urdu and English views of a transcript and their state.
 #[tauri::command]
-pub async fn export_transcript(app: AppHandle, id: String, format: String, timestamps: bool, speakers: bool) -> AppResult<String> {
+pub async fn transcript_views(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    state.api()?.transcript_views(&id).await
+}
+
+/// "Show as" (since v1.2): starts making the Roman Urdu and English views (the server writes them on its queue).
+#[tauri::command]
+pub async fn transcript_views_make(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    state.api()?.make_transcript_views(&id).await
+}
+
+#[tauri::command]
+pub async fn export_transcript(app: AppHandle, id: String, format: String, timestamps: bool, speakers: bool, view: Option<String>) -> AppResult<String> {
     ensure_unlocked(&app.state::<AppState>())?;
     use tauri_plugin_opener::OpenerExt;
     const FORMATS: [&str; 7] = ["txt", "md", "srt", "vtt", "json", "docx", "html"];
@@ -731,7 +747,9 @@ pub async fn export_transcript(app: AppHandle, id: String, format: String, times
         return Err(AppError::msg("That export format is not available."));
     }
     let state = app.state::<AppState>();
-    let (bytes, filename) = state.api()?.export_transcript(&id, &format, timestamps, speakers).await?;
+    // Show as: a Roman Urdu or English view instead of the original words (anything else exports the original).
+    let view = view.filter(|v| v == "roman" || v == "english");
+    let (bytes, filename) = state.api()?.export_transcript(&id, &format, timestamps, speakers, view.as_deref()).await?;
     let dir = if format == "html" { std::env::temp_dir() } else { app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone()) };
     let path = export_target(&dir, &filename);
     std::fs::write(&path, bytes)?;

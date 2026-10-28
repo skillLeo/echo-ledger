@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type ClientFolder, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail, type TranscriptionLanguage } from "../../lib/ipc";
+import { api, errorMessage, type ClientFolder, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail, type TranscriptionLanguage, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
 import { activeIndex, activeWord, continuesTurn, hasUncertainWords, KEY_SECONDS, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, uncertainWord } from "../../lib/player";
 import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, SpeakersPanel, Timeline, VocabularyHint } from "./TranscriptTools";
 import { formatDuration, formatWhen, providerName, timestamp, transcriptText } from "../../lib/format";
@@ -13,7 +13,7 @@ import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, smartViewCounts } from "../../lib/organise";
 import { BinPanel, BulkBar, OrganisePanel } from "./LibraryOrganise";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageLabel, partsText, scriptWarning, transcribingText } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageLabel, normalizeLanguage, partsText, scriptWarning, transcribingText } from "../../lib/languages";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -42,6 +42,9 @@ const playbackUrlOf = (detail: Record<string, unknown>): string | null => (typeo
  * Unified library: every recording from every device, searchable by title and transcript text. Recordings waiting
  * for a decision and uploads that need the user sit at the top of the list; `focus` brings one of them into view.
  */
+/** How often the Library asks whether the Show as views are written yet. */
+const VIEWS_POLL_MS = 5_000;
+
 /** Tooltips of what the engine was not sure of (kept as heard). */
 const UNSURE_WORD = "Not sure of this word. Click to hear it.";
 const UNSURE_LINE = "The engine was not sure of this line. Click to hear it.";
@@ -250,7 +253,42 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest?.seq]);
 
-  const named = useMemo(() => (transcript ? transcript.segments.map((s) => ({ ...s, speaker: speakerName(speakerNames, s.speaker) })) : []), [transcript, speakerNames]);
+  // Show as (since v1.2): the Roman Urdu or English view instead of the original words, once the server has made it.
+  const [showAs, setShowAs] = useState<"original" | TranscriptView>("original");
+  const [views, setViews] = useState<TranscriptViewsState | null>(null);
+  const transcriptId = transcript?.id ?? null;
+  useEffect(() => {
+    setShowAs("original");
+    setViews(null);
+  }, [transcriptId]);
+  useEffect(() => {
+    if (editing) setShowAs("original");
+  }, [editing]);
+  // While the server is writing the views, ask again every few seconds.
+  useEffect(() => {
+    if (!transcriptId || showAs === "original" || views?.status !== "making") return;
+    const timer = window.setTimeout(() => {
+      api.transcriptViews(transcriptId).then((v) => setViews(v)).catch(() => undefined);
+    }, VIEWS_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [transcriptId, showAs, views]);
+  const chooseView = async (view: "original" | TranscriptView) => {
+    setShowAs(view);
+    if (view === "original" || !transcriptId || views?.status === "ready") return;
+    try {
+      let state = await api.transcriptViews(transcriptId);
+      if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(transcriptId);
+      setViews(state);
+    } catch (e) {
+      notify(errorMessage(e), true);
+      setShowAs("original");
+    }
+  };
+  const viewText = (i: number): string | null => (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] ?? null : null);
+  const named = useMemo(
+    () => (transcript ? transcript.segments.map((s, i) => ({ ...s, text: (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] : null) ?? s.text, speaker: speakerName(speakerNames, s.speaker) })) : []),
+    [transcript, speakerNames, showAs, views],
+  );
 
   const copy = async (withTimestamps: boolean) => {
     if (!transcript) return;
@@ -377,7 +415,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const exportAs = async (format: ExportFormat) => {
     if (!transcript) return;
     try {
-      const path = await api.exportTranscript(transcript.id, format);
+      const path = await api.exportTranscript(transcript.id, format, true, true, showAs !== "original" && views?.status === "ready" ? showAs : null);
       notify(format === "html" ? "Opened the print page in your browser: choose Save as PDF there" : `Saved to ${path}`);
     } catch (e) {
       notify(errorMessage(e), true);
@@ -588,6 +626,24 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         <button className="btn ghost" aria-pressed={panel === "speakers"} onClick={() => setPanel(panel === "speakers" ? null : "speakers")}>Speakers</button>
                         <button className="btn ghost" aria-pressed={panel === "history"} onClick={() => setPanel(panel === "history" ? null : "history")}>History</button>
                         <ExportMenu onExport={(format) => void exportAs(format)} />
+                        {(transcript.views?.available.length ?? 0) > 0 && (
+                          <span className="row" style={{ gap: 2 }} role="group" aria-label="Show as">
+                            <button type="button" className="btn ghost compact" aria-pressed={showAs === "original"} onClick={() => void chooseView("original")}>Original</button>
+                            {transcript.views!.available.includes("roman") && (
+                              <button type="button" className="btn ghost compact" aria-pressed={showAs === "roman"} onClick={() => void chooseView("roman")}>Roman Urdu</button>
+                            )}
+                            <button type="button" className="btn ghost compact" aria-pressed={showAs === "english"} onClick={() => void chooseView("english")}>English</button>
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {showAs !== "original" && (
+                      <div className="small muted" role="status" data-testid="view-status">
+                        {views?.status === "ready"
+                          ? `${showAs === "roman" ? "Roman Urdu" : "English"} view${views.model ? ` by ${views.model}` : ""}. The transcript itself is unchanged.`
+                          : views?.status === "failed"
+                            ? `The view could not be made: ${views.error ?? "try again later."}`
+                            : `Writing the ${showAs === "roman" ? "Roman Urdu" : "English"} view… this takes a minute or two.`}
                       </div>
                     )}
                     {panel === "replace" && <ReplaceBar onReplace={replaceAll} onClose={() => setPanel(null)} />}
@@ -595,12 +651,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {panel === "history" && <HistoryPanel transcriptId={transcript.id} edited={!!transcript.edited_at} onRestore={restore} onClose={() => setPanel(null)} />}
                     <VocabularyHint terms={vocabTerms} clientName={current.client?.name ?? null} onAdd={(t) => void addToVocabulary(t)} onDismiss={() => setVocabTerms([])} />
                     {transcript.segments.length === 0 && <div className="empty">The transcript is empty: no speech was detected.</div>}
-                    <div className="segments" ref={segmentsRef}>
+                    <div className="segments" ref={segmentsRef} lang={showAs === "original" ? normalizeLanguage(transcript.language) ?? undefined : undefined}>
                       {transcript.segments.map((s, i) => {
+                        const inView = viewText(i);
                         // A turn shows its speaker once: following lines of the same speaker keep the label for screen
                         // readers but hide it on screen (.cont), which groups the lines into a speaker block.
                         // Words the engine was not sure of are underlined (a click plays from that word); the text stays as heard.
-                        const textCell = s.words && s.words.length > 0 && (i === activeSegment || hasUncertainWords(s))
+                        const textCell = inView !== null ? inView : s.words && s.words.length > 0 && (i === activeSegment || hasUncertainWords(s))
                           ? s.words.map((w, wi) => {
                             const unsure = uncertainWord(w);
                             const className = ["word", i === activeSegment && wi === activeWordIndex ? "on" : "", unsure ? "uncertain" : ""].filter(Boolean).join(" ");
@@ -617,9 +674,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                           <>
                             <span className="seg-time">{timestamp(s.start_ms)}</span>
                             <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{speakerName(speakerNames, s.speaker)}</span>
-                            <span className={s.uncertain ? "seg-text uncertain" : "seg-text"} dir="auto" title={s.uncertain ? UNSURE_LINE : undefined}>
+                            <span className={s.uncertain && inView === null ? "seg-text uncertain" : "seg-text"} dir="auto" title={s.uncertain && inView === null ? UNSURE_LINE : undefined}>
                               {textCell}
-                              {s.check && <span className="seg-check" dir="auto"><b>{s.check.label} heard:</b> {s.check.text}</span>}
+                              {s.check && inView === null && <span className="seg-check" dir="auto"><b>{s.check.label} heard:</b> {s.check.text}</span>}
                             </span>
                           </>
                         );

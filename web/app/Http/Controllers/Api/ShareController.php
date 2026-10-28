@@ -10,6 +10,7 @@ use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\ShareLink;
 use App\Services\ShareLinks;
+use App\Services\Views\TranscriptViews;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -27,6 +28,8 @@ final class ShareController extends Controller
             'expires_in' => ['required', 'integer', Rule::in(ShareLinks::LIFETIMES)],
             'password' => ['nullable', 'string', 'min:6', 'max:100'],
             'include_audio' => ['sometimes', 'boolean'],
+            // Since v1.2: open the page in a Show as view (roman, english).
+            'view' => ['sometimes', 'nullable', Rule::in(array_keys(TranscriptViews::VIEWS))],
         ]);
         $session = $this->session($request, $id);
         $device = $request->user();
@@ -36,6 +39,7 @@ final class ShareController extends Controller
             $data['password'] ?? null,
             $request->boolean('include_audio'),
             $device instanceof Device ? $device->name : null,
+            $data['view'] ?? null,
         );
 
         return response()->json([...$link->refresh()->toApi(), 'url' => $url], 201);

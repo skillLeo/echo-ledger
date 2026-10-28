@@ -340,6 +340,8 @@ pub fn run() {
             commands::pending_assign_client,
             commands::pending_set_language,
             commands::session_retranscribe,
+            commands::transcript_views,
+            commands::transcript_views_make,
             commands::set_recording_language,
             commands::pending_open,
             commands::review_state,

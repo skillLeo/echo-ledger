@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $token_hash
  * @property string|null $password_hash
  * @property bool $include_audio
+ * @property string|null $view
  * @property Carbon|null $expires_at
  * @property Carbon|null $revoked_at
  * @property int $view_count
@@ -32,7 +33,7 @@ class ShareLink extends Model
     use HasUlids;
 
     protected $fillable = [
-        'capture_session_id', 'token_hash', 'password_hash', 'include_audio', 'expires_at', 'revoked_at', 'view_count', 'last_viewed_at', 'created_by',
+        'capture_session_id', 'token_hash', 'password_hash', 'include_audio', 'view', 'expires_at', 'revoked_at', 'view_count', 'last_viewed_at', 'created_by',
     ];
 
     protected $hidden = ['token_hash', 'password_hash'];
@@ -65,6 +66,8 @@ class ShareLink extends Model
             'session_id' => $this->capture_session_id,
             'has_password' => $this->password_hash !== null,
             'include_audio' => $this->include_audio,
+            // Since v1.2: the Show as view the page opens in (roman, english), or null for the original words.
+            'view' => $this->view,
             'expires_at' => $this->expires_at?->toAtomString(),
             'revoked_at' => $this->revoked_at?->toAtomString(),
             'active' => $this->isActive(),

@@ -2,6 +2,13 @@
    mobile/.../ui/Tokens.kt, so the three apps read as one family. Dark is the default; every window follows the
    theme choice through <html data-theme> (lib/theme.ts). With a window material (Mica on Windows 11, vibrancy on
    macOS) the main window sets <html data-material> and its backgrounds turn translucent. */
+/* Urdu in Nastaliq and Arabic in Naskh (Noto, SIL Open Font License, assets/fonts/OFL-*.txt). Only Arabic-script letters
+   use them (unicode-range); Latin words inside a line keep the interface font. */
+@font-face { font-family: "Noto Nastaliq Urdu"; src: url("./assets/fonts/noto-nastaliq-urdu-arabic.woff2") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+@font-face { font-family: "Noto Naskh Arabic"; src: url("./assets/fonts/noto-naskh-arabic-arabic.woff2") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+.segments[lang="ur"] .seg-text, .segments[lang="ur"] .seg-edit { font-family: "Noto Nastaliq Urdu", var(--font-sans); line-height: 2.1; }
+.segments[lang="ar"] .seg-text, .segments[lang="ar"] .seg-edit { font-family: "Noto Naskh Arabic", var(--font-sans); line-height: 1.8; }
+
 :root {
   /* colour */
   --bg: #111214;

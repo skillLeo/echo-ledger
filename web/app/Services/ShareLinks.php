@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\ShareLink;
+use App\Services\Views\TranscriptViews;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -23,7 +24,7 @@ final class ShareLinks
     public const MAX_ACTIVE_PER_SESSION = 20;
 
     /** @return array{link: ShareLink, url: string} */
-    public function create(CaptureSession $session, int $expiresIn, ?string $password, bool $includeAudio, ?string $author): array
+    public function create(CaptureSession $session, int $expiresIn, ?string $password, bool $includeAudio, ?string $author, ?string $view = null): array
     {
         if (! in_array($expiresIn, self::LIFETIMES, true)) {
             throw new ApiError(422, 'validation_failed', 'Choose 1 hour, 1 day or 7 days.');
@@ -37,6 +38,8 @@ final class ShareLinks
             'token_hash' => self::hash($token),
             'password_hash' => $password !== null && $password !== '' ? Hash::make($password) : null,
             'include_audio' => $includeAudio,
+            // Show as: the page opens in this view while it is made and fresh, else in the original words.
+            'view' => $view !== null && array_key_exists($view, TranscriptViews::VIEWS) ? $view : null,
             'expires_at' => now()->addSeconds($expiresIn),
             'created_by' => $author !== null ? mb_substr($author, 0, 120) : null,
         ]);

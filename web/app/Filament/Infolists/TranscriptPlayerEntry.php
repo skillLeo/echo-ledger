@@ -38,14 +38,14 @@ class TranscriptPlayerEntry extends Entry
      * Everything the player shows; also sent to it after an edit (`el-transcript-updated`).
      *
      * @return array{audio_url: string|null, segments: list<array<string, mixed>>, speaker_names: array<string, string>, kind: string|null,
-     *     status: string|null, editable: bool, edited: bool, model: string|null, language: string, markers: list<array{at_ms: int, tag: string|null, note: string|null}>,
+     *     status: string|null, editable: bool, edited: bool, model: string|null, language: string, language_code: string|null, markers: list<array{at_ms: int, tag: string|null, note: string|null}>,
      *     pauses: list<array{at_ms: int, paused_ms: int}>, views: array<string, mixed>|null, duration_ms: int}
      */
     public static function payload(?CaptureSession $record): array
     {
         if ($record === null) {
             return ['audio_url' => null, 'segments' => [], 'speaker_names' => [], 'kind' => null, 'status' => null, 'editable' => false,
-                'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'markers' => [], 'pauses' => [], 'views' => null, 'duration_ms' => 1];
+                'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'language_code' => null, 'markers' => [], 'pauses' => [], 'views' => null, 'duration_ms' => 1];
         }
         $record->loadMissing(['primaryRecording', 'client']);
         $primary = $record->primaryRecording;
@@ -87,6 +87,8 @@ class TranscriptPlayerEntry extends Entry
             'edited' => $final?->edited_at !== null,
             'model' => $final !== null ? TranscriptResource::model($final) : null,
             'language' => LanguageChoice::label($final->language ?? $record->language),
+            // The code too (ur, ar…): Urdu lines are set in Nastaliq, Arabic in Naskh.
+            'language_code' => LanguageChoice::normalize($final->language ?? $record->language),
             'markers' => $record->markers()->get(['at_ms', 'tag', 'note'])
                 ->map(fn (SessionMarker $m): array => ['at_ms' => $m->at_ms, 'tag' => $m->tag, 'note' => $m->note])->values()->all(),
             'pauses' => $record->pauses ?? [],

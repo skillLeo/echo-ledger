@@ -25,6 +25,7 @@ import com.echoledger.mobile.data.ShareListResponse
 import com.echoledger.mobile.data.StorageDto
 import com.echoledger.mobile.data.SttTokenResponse
 import com.echoledger.mobile.data.TranscriptDto
+import com.echoledger.mobile.data.TranscriptViewsDto
 import com.echoledger.mobile.data.UnreadAnswer
 import com.echoledger.mobile.data.UploadState
 import com.echoledger.mobile.data.UsageReport
@@ -192,6 +193,14 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("sessions/$id").delete().build(), null as KSerializer<Unit>?)
     }
 
+    /** `GET /api/transcripts/{id}/views` (since v1.2): the Show as views and their state. */
+    suspend fun transcriptViews(transcriptId: String): TranscriptViewsDto =
+        call(request("transcripts/$transcriptId/views").get().build(), TranscriptViewsDto.serializer())!!
+
+    /** `POST /api/transcripts/{id}/views` (since v1.2): starts making the Show as views. */
+    suspend fun makeTranscriptViews(transcriptId: String): TranscriptViewsDto =
+        call(request("transcripts/$transcriptId/views").post("{}".toRequestBody(jsonType)).build(), TranscriptViewsDto.serializer())!!
+
     /** `POST /api/sessions/{id}/retranscribe` (since v1.2): "Re-transcribe as <language>"; null = Auto. */
     suspend fun retranscribe(sessionId: String, language: String?) {
         val body = buildJsonObject { put("language", language) }.toString().toRequestBody(jsonType)
@@ -208,9 +217,10 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(req, SearchResponse.serializer())!!
     }
 
-    /** `GET /api/transcripts/{id}/export`: the file and the name the server gives it. */
-    suspend fun export(transcriptId: String, format: String): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
-        val target = url("transcripts/$transcriptId/export").toHttpUrl().newBuilder().addQueryParameter("format", format).build()
+    /** `GET /api/transcripts/{id}/export`: the file and the name the server gives it; [view] a Show as view (since v1.2). */
+    suspend fun export(transcriptId: String, format: String, view: String? = null): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
+        val target = url("transcripts/$transcriptId/export").toHttpUrl().newBuilder().addQueryParameter("format", format)
+            .apply { view?.let { addQueryParameter("view", it) } }.build()
         val req = Request.Builder().url(target).apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
         http.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) parse(resp, null as KSerializer<Unit>?)

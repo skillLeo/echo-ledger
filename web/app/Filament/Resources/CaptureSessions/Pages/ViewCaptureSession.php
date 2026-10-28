@@ -241,11 +241,16 @@ class ViewCaptureSession extends ViewRecord
                 TextInput::make('password')->label('Password (optional)')->password()->revealable()->minLength(6)->maxLength(100),
                 Toggle::make('include_audio')->label('Include the recording')
                     ->visible(fn (): bool => $this->session()->primaryRecording?->isReady() === true),
+                // Show as: the page can open in a ready Roman Urdu or English view.
+                Select::make('view')->label('Show the transcript as')->placeholder('Original words')
+                    ->options(fn (): array => array_intersect_key(TranscriptViews::VIEWS, array_flip($this->readyViews())))
+                    ->visible(fn (): bool => $this->readyViews() !== []),
             ])
             ->action(function (array $data): void {
                 try {
                     ['url' => $url] = app(ShareLinks::class)->create($this->session(), (int) $data['expires_in'],
-                        filled($data['password'] ?? null) ? (string) $data['password'] : null, (bool) ($data['include_audio'] ?? false), $this->author());
+                        filled($data['password'] ?? null) ? (string) $data['password'] : null, (bool) ($data['include_audio'] ?? false), $this->author(),
+                        is_string($data['view'] ?? null) ? $data['view'] : null);
                 } catch (ApiError $e) {
                     Notification::make()->title($e->getMessage())->danger()->send();
 

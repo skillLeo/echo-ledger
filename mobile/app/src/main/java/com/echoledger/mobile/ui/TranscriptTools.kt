@@ -146,7 +146,7 @@ fun printHtml(context: Context, file: File) {
 
 /** Export and share buttons of a finished transcript. */
 @Composable
-fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, hasAudio: Boolean) {
+fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, hasAudio: Boolean, view: String? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
@@ -160,7 +160,7 @@ fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, 
                         DropdownMenuItem(text = { Text(label) }, onClick = {
                             menu = false
                             scope.launch {
-                                val file = vm.export(transcriptId, if (format == "pdf") "html" else format) ?: return@launch
+                                val file = vm.export(transcriptId, if (format == "pdf") "html" else format, view) ?: return@launch
                                 if (format == "pdf") printHtml(context, file) else shareFile(context, file)
                             }
                         })

@@ -905,7 +905,7 @@ describe("transcript tools in the library (B6-B12)", () => {
     expect(await within(detail()).findByText("Hello, this is Samuel.")).toBeInTheDocument();
     fireEvent.change(within(detail()).getByLabelText("Export"), { target: { value: "docx" } });
     await flushAsync();
-    expect(callsOf("export_transcript")[0]).toEqual({ id: "tr-a", format: "docx", timestamps: true, speakers: true });
+    expect(callsOf("export_transcript")[0]).toEqual({ id: "tr-a", format: "docx", timestamps: true, speakers: true, view: null });
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("Saved to"));
   });
 
@@ -1120,5 +1120,67 @@ describe("LibraryView transcription progress", () => {
     await renderLibrary(items);
     await selectItem("Long Urdu call");
     expect(within(detail()).getByText("Transcribing… part 3 of 5")).toBeInTheDocument();
+  });
+});
+
+describe("LibraryView Show as", () => {
+  const urdu = (): Segment[] => [
+    { channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "آپ کیسے ہیں" },
+    { channel: 2, speaker: "Client", start_ms: 1_500, end_ms: 3_000, text: "میں ٹھیک ہوں" },
+  ];
+  const ready = { status: "ready", available: ["roman", "english"], roman: ["aap kaise hain", "main theek hoon"], english: ["How are you?", "I am fine."], model: "claude-opus-5-5", made_at: null, error: null };
+
+  it("switches to the Roman Urdu and English views and back, and says the transcript is unchanged", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman", "english"], status: "ready" } });
+    respond("transcript_views", ready);
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    expect(detail().querySelector(".segments")).toHaveAttribute("lang", "ur");
+
+    fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
+    await flushAsync();
+    expect(within(detail()).getByText("aap kaise hain")).toBeInTheDocument();
+    expect(within(detail()).getByTestId("view-status")).toHaveTextContent("Roman Urdu view by claude-opus-5-5. The transcript itself is unchanged.");
+    expect(callsOf("transcript_views_make")).toHaveLength(0);
+
+    fireEvent.click(within(detail()).getByRole("button", { name: "English" }));
+    await flushAsync();
+    expect(within(detail()).getByText("I am fine.")).toBeInTheDocument();
+    fireEvent.click(within(detail()).getByRole("button", { name: "Original" }));
+    expect(within(detail()).getByText("میں ٹھیک ہوں")).toBeInTheDocument();
+  });
+
+  it("asks the server to write the views when they are not made yet", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman", "english"], status: "none" } });
+    respond("transcript_views", { ...ready, status: "none", roman: null, english: null, model: null });
+    respond("transcript_views_make", { ...ready, status: "making", roman: null, english: null, model: null });
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+
+    fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
+    await flushAsync();
+    expect(callsOf("transcript_views_make")).toEqual([{ id: "tr-a" }]);
+    expect(within(detail()).getByTestId("view-status")).toHaveTextContent("Writing the Roman Urdu view…");
+    expect(within(detail()).getByText("آپ کیسے ہیں")).toBeInTheDocument();
+  });
+
+  it("exports the view that is shown", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman", "english"], status: "ready" } });
+    respond("transcript_views", ready);
+    respond("export_transcript", "C:/Downloads/call.docx");
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    fireEvent.click(within(detail()).getByRole("button", { name: "English" }));
+    await flushAsync();
+
+    fireEvent.change(within(detail()).getByLabelText("Export"), { target: { value: "docx" } });
+    await flushAsync();
+    expect(callsOf("export_transcript")[0]).toMatchObject({ id: "tr-a", format: "docx", view: "english" });
+  });
+
+  it("offers no switch for an English transcript", async () => {
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    expect(within(detail()).queryByRole("group", { name: "Show as" })).not.toBeInTheDocument();
   });
 });

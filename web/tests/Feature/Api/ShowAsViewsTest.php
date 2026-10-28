@@ -220,3 +220,21 @@ it('offers Roman Urdu & English on the recording page and says when the key is m
         ->callAction('show_as')->assertNotified('Making the Roman Urdu and English views. Reload the page in a minute or two.');
     Queue::assertPushed(MakeTranscriptViewsJob::class, 1);
 });
+
+it('opens a share link in the chosen view once it is made, and in the original words otherwise', function () {
+    app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+    fakeConverter();
+    $transcript = urduTranscript($this);
+    $session = CaptureSession::query()->findOrFail($transcript->capture_session_id);
+
+    $created = $this->postJson("/api/sessions/{$session->id}/shares", ['expires_in' => 3600, 'view' => 'english'])->assertCreated();
+    expect($created->json('view'))->toBe('english');
+    $this->get($created->json('url'))->assertOk()->assertSee('میں ٹھیک ہوں')->assertDontSee('English view, written by Claude');
+    // The page loads the Nastaliq font from this server for the Urdu lines.
+    $plain = $this->postJson("/api/sessions/{$session->id}/shares", ['expires_in' => 3600])->assertCreated();
+    $this->get($plain->json('url'))->assertOk()->assertSee('lang="ur"', false)->assertSee('fonts/noto-nastaliq-urdu-arabic.woff2', false);
+
+    app(TranscriptViews::class)->make($transcript);
+    $this->get($created->json('url'))->assertOk()->assertSee('E: میں ٹھیک ہوں')->assertSee('English view, written by Claude from the transcript.');
+    $this->postJson("/api/sessions/{$session->id}/shares", ['expires_in' => 3600, 'view' => 'french'])->assertStatus(422);
+});

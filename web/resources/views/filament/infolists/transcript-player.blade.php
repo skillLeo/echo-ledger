@@ -102,6 +102,11 @@
             },
         }">
         <style>
+            /* Urdu in Nastaliq, Arabic in Naskh (Noto, OFL: public/fonts); only Arabic-script letters use them. */
+            @font-face { font-family: "Noto Nastaliq Urdu"; src: url("{{ asset('fonts/noto-nastaliq-urdu-arabic.woff2') }}") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+            @font-face { font-family: "Noto Naskh Arabic"; src: url("{{ asset('fonts/noto-naskh-arabic-arabic.woff2') }}") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+            .el-player .el-list[lang="ur"] .el-line, .el-player .el-list[lang="ur"] .el-edit { font-family: "Noto Nastaliq Urdu", inherit; line-height: 2.1; }
+            .el-player .el-list[lang="ar"] .el-line, .el-player .el-list[lang="ar"] .el-edit { font-family: "Noto Naskh Arabic", inherit; line-height: 1.8; }
             /* Light theme first; .dark (set by Filament on <html>) swaps the palette. The values are the shared design tokens
                (resources/css/filament/admin/theme.css, C1); text colours meet WCAG AA (4.5:1). */
             .el-player { --el-border: rgba(15,23,42,.10); --el-bg: #FFFFFF;
@@ -219,7 +224,7 @@
 
         <p class="el-error" role="alert" x-show="error" x-text="error"></p>
         <div class="el-empty" x-show="!d.segments.length">No transcript yet.</div>
-        <div class="el-list" x-ref="list" x-show="d.segments.length" aria-label="Transcript. Choose a line to play from there.">
+        <div class="el-list" x-ref="list" x-show="d.segments.length" :lang="view === 'original' ? d.language_code : null" aria-label="Transcript. Choose a line to play from there.">
             <template x-for="(b, bi) in blocks()" :key="'b' + bi + '-' + b.start">
                 <div class="el-block">
                     <div class="el-who"><span class="el-spk" :class="'el-spk-' + b.channel" x-text="name(d.segments[b.items[0]])"></span><span class="el-time" x-text="clock(b.start)"></span></div>

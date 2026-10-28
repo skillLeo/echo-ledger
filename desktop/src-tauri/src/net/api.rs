@@ -246,9 +246,13 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
-    /// `GET /api/transcripts/{id}/export`: the file and the name the server gives it.
-    pub async fn export_transcript(&self, id: &str, format: &str, timestamps: bool, speakers: bool) -> AppResult<(Vec<u8>, String)> {
-        let query = [("format", format.to_string()), ("timestamps", u8::from(timestamps).to_string()), ("speakers", u8::from(speakers).to_string())];
+    /// `GET /api/transcripts/{id}/export`: the file and the name the server gives it; `view` (since v1.2) exports a
+    /// Show as view (`roman` or `english`) instead of the original words.
+    pub async fn export_transcript(&self, id: &str, format: &str, timestamps: bool, speakers: bool, view: Option<&str>) -> AppResult<(Vec<u8>, String)> {
+        let mut query = vec![("format", format.to_string()), ("timestamps", u8::from(timestamps).to_string()), ("speakers", u8::from(speakers).to_string())];
+        if let Some(view) = view {
+            query.push(("view", view.to_string()));
+        }
         let resp = self.authed(self.http.get(self.url(&format!("transcripts/{id}/export"))).query(&query))?.send().await?;
         if !resp.status().is_success() {
             return Err(Self::error(resp).await);
@@ -256,6 +260,18 @@ impl ApiClient {
         let disposition = resp.headers().get(reqwest::header::CONTENT_DISPOSITION).and_then(|v| v.to_str().ok()).unwrap_or_default().to_string();
         let bytes = resp.bytes().await?.to_vec();
         Ok((bytes, filename_from_disposition(&disposition).unwrap_or_else(|| format!("transcript.{format}"))))
+    }
+
+    /// `GET /api/transcripts/{id}/views` (since v1.2): the Show as views (Roman Urdu, English) and their state.
+    pub async fn transcript_views(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url(&format!("transcripts/{id}/views"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/transcripts/{id}/views` (since v1.2): starts making the Show as views.
+    pub async fn make_transcript_views(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("transcripts/{id}/views"))))?.json(&json!({})).send().await?;
+        Self::parse(resp).await
     }
 
     /// `POST /api/sessions/{id}/shares`: the link (with its URL, shown once).

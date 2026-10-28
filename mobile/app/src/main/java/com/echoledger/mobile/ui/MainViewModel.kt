@@ -22,6 +22,7 @@ import com.echoledger.mobile.data.SessionDetailDto
 import com.echoledger.mobile.data.ShareLinkDto
 import com.echoledger.mobile.data.StorageDto
 import com.echoledger.mobile.data.TranscriptDto
+import com.echoledger.mobile.data.TranscriptViewsDto
 import com.echoledger.mobile.net.ApiClient
 import com.echoledger.mobile.net.ApiException
 import com.echoledger.mobile.net.NotPairedException
@@ -215,6 +216,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .isSuccess
     }
 
+    /** Show as (since v1.2): the Roman Urdu and English views and their state; null when they cannot be read now. */
+    suspend fun transcriptViews(transcriptId: String): TranscriptViewsDto? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.transcriptViews(transcriptId) }.getOrNull()
+    }
+
+    /** Show as (since v1.2): asks the server to write the views; null with a message when it cannot. */
+    suspend fun makeTranscriptViews(transcriptId: String): TranscriptViewsDto? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.makeTranscriptViews(transcriptId) }
+            .onFailure { _message.value = it.message ?: "The views could not be started." }.getOrNull()
+    }
+
     /** Temporary signed streaming URL for the session's recording, or null when it is not (yet) playable. */
     suspend fun playbackUrl(sessionId: String): String? = sessionDetail(sessionId)?.playbackUrl
 
@@ -233,10 +245,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
      * Downloads an export into the app's private cache (`exports/`, emptied first) and returns the file, or null
      * with a message when it failed.
      */
-    suspend fun export(transcriptId: String, format: String): File? = withContext(Dispatchers.IO) {
+    suspend fun export(transcriptId: String, format: String, view: String? = null): File? = withContext(Dispatchers.IO) {
         try {
             val api = graph.api() ?: return@withContext null
-            val (bytes, name) = api.export(transcriptId, format)
+            val (bytes, name) = api.export(transcriptId, format, view)
             val dir = File(getApplication<Application>().cacheDir, "exports").apply {
                 deleteRecursively()
                 mkdirs()

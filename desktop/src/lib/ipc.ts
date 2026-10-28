@@ -385,6 +385,23 @@ export interface TranscriptDetail {
   edited_at?: string | null;
   /** Parts done of all parts while it is being made in pieces (since v1.2). */
   progress?: TranscriptProgress | null;
+  /** Show as: the views this transcript can have and whether they are made (since v1.2). */
+  views?: { available: TranscriptView[]; status: TranscriptViewsStatus } | null;
+}
+
+/** A "Show as" reading view of a transcript (since v1.2); the transcript itself never changes. */
+export type TranscriptView = "roman" | "english";
+export type TranscriptViewsStatus = "unavailable" | "none" | "making" | "ready" | "failed";
+
+/** `GET /api/transcripts/{id}/views`: each view as a list aligned with the segments (null for an empty line). */
+export interface TranscriptViewsState {
+  status: TranscriptViewsStatus;
+  available: TranscriptView[];
+  roman: (string | null)[] | null;
+  english: (string | null)[] | null;
+  model: string | null;
+  made_at: string | null;
+  error: string | null;
 }
 
 /** A transcript search (`GET /api/search`); empty filters are not sent. */
@@ -640,7 +657,11 @@ export const api = {
   transcriptRevisions: (id: string) => invoke<{ data: TranscriptRevision[] }>("transcript_revisions", { id }),
   renameSpeakers: (sessionId: string, names: Record<string, string | null>, rememberForClient: boolean) =>
     invoke<{ speaker_names: Record<string, string> }>("speakers_rename", { sessionId, names, rememberForClient }),
-  exportTranscript: (id: string, format: ExportFormat, timestamps = true, speakers = true) => invoke<string>("export_transcript", { id, format, timestamps, speakers }),
+  exportTranscript: (id: string, format: ExportFormat, timestamps = true, speakers = true, view: TranscriptView | null = null) =>
+    invoke<string>("export_transcript", { id, format, timestamps, speakers, view }),
+  /** Show as (since v1.2): the Roman Urdu and English views and their state; `makeTranscriptViews` starts them. */
+  transcriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views", { id }),
+  makeTranscriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views_make", { id }),
   createShare: (sessionId: string, expiresIn: number, password: string | null, includeAudio: boolean) =>
     invoke<ShareLink>("share_create", { sessionId, expiresIn, password, includeAudio }),
   listShares: (sessionId: string) => invoke<{ data: ShareLink[] }>("share_list", { sessionId }),

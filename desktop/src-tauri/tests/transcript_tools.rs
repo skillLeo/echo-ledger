@@ -80,7 +80,7 @@ async fn an_export_returns_the_file_and_the_server_s_name() {
         Reply::html(200, "WEBVTT\n").header("Content-Disposition", "attachment; filename=\"Acme 2026-10-24.vtt\"; filename*=utf-8''%D9%82%DB%8C%D9%85%D8%AA%202026-10-24.vtt"),
     ));
 
-    let (bytes, name) = client(&server).export_transcript(ID, "vtt", true, false).await.unwrap();
+    let (bytes, name) = client(&server).export_transcript(ID, "vtt", true, false, None).await.unwrap();
 
     assert_eq!(bytes, b"WEBVTT\n");
     assert_eq!(name, "قیمت 2026-10-24.vtt", "the UTF-8 name wins");
@@ -97,7 +97,7 @@ async fn an_unfinished_transcript_cannot_be_exported() {
         Reply::json(409, json!({"message": "The transcript is not finished yet.", "code": "transcript_not_ready"})),
     ));
 
-    match client(&server).export_transcript(ID, "txt", true, true).await {
+    match client(&server).export_transcript(ID, "txt", true, true, None).await {
         Err(AppError::Server { status, code, .. }) => assert_eq!((status, code.as_deref()), (409, Some("transcript_not_ready"))),
         other => panic!("expected a refusal, got {other:?}"),
     }

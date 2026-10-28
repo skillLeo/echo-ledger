@@ -11,6 +11,8 @@ use App\Models\ShareLink;
 use App\Models\Transcript;
 use App\Services\ShareLinks;
 use App\Services\TranscriptExporter;
+use App\Services\Views\TranscriptViews;
+use App\Stt\LanguageChoice;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -49,7 +51,12 @@ final class PublicShareController extends Controller
         return response()->view('share.show', [
             'token' => $token,
             'session' => $session,
-            'lines' => $transcript instanceof Transcript ? $this->exporter->lines($transcript, $session) : [],
+            'lines' => $transcript instanceof Transcript ? $this->exporter->lines($transcript, $session, $link->view) : [],
+            // Urdu and Arabic lines get their own letter forms (not while a Latin-letter view is shown).
+            'languageCode' => $transcript instanceof Transcript && $link->view === null ? LanguageChoice::normalize($transcript->language) : null,
+            // Show as: say which view the reader sees (only when it is ready; otherwise the original words show).
+            'viewLabel' => $transcript instanceof Transcript && $link->view !== null && app(TranscriptViews::class)->textsFor($transcript, $link->view) !== null
+                ? TranscriptViews::VIEWS[$link->view] ?? null : null,
             'transcribing' => ! $transcript instanceof Transcript,
             'audio' => $link->include_audio && $primary !== null && $primary->isReady(),
             'expiresAt' => $link->expires_at,

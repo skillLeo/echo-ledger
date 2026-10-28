@@ -648,7 +648,9 @@ carries `views: {"available", "status"}`.
 ### `POST /api/transcripts/{id}/views` — `sessions:write` (since v1.2)
 Starts making the views on the queue: `202` with the state (`making`), or `200` when they are ready.
 `409 views_unavailable` when the transcript has no view or no Anthropic key is set. `GET /api/transcripts/{id}/export`
-takes `view=roman|english` to export a ready view instead of the original words.
+takes `view=roman|english` to export a ready view instead of the original words, and `POST /api/sessions/{id}/shares`
+takes `view` (share links have `view`): the page opens in that view once it is made, with a label, and in the original
+words until then.
 
 ### Vocabulary (since v1.1)
 Keyterms (names and jargon) of the session's client come first, then the global ones; each engine receives as many

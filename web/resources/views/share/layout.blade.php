@@ -7,6 +7,11 @@
     <meta name="referrer" content="no-referrer">
     <title>@yield('title', 'Shared transcript') · EchoLedger</title>
     <style>
+        /* Urdu in Nastaliq, Arabic in Naskh (Noto, OFL: public/fonts); only Arabic-script letters use them. */
+        @font-face { font-family: "Noto Nastaliq Urdu"; src: url("{{ asset('fonts/noto-nastaliq-urdu-arabic.woff2') }}") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+        @font-face { font-family: "Noto Naskh Arabic"; src: url("{{ asset('fonts/noto-naskh-arabic-arabic.woff2') }}") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
+        [lang="ur"] .line { font-family: "Noto Nastaliq Urdu", inherit; line-height: 2.1; }
+        [lang="ar"] .line { font-family: "Noto Naskh Arabic", inherit; line-height: 1.8; }
         :root { --text: #111827; --muted: #6b7280; --line: #e5e7eb; --bg: #f8fafc; --card: #ffffff; --me: #6d28d9; --client: #0e7490; --accent: #6366f1; }
         @media (prefers-color-scheme: dark) {
             :root { --text: #f1f3f8; --muted: #9ba3b4; --line: #23283a; --bg: #0a0b10; --card: #13151f; --me: #a78bfa; --client: #22d3ee; --accent: #818cf8; }
