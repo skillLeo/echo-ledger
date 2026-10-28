@@ -477,6 +477,25 @@ fn segments_without_words_are_accepted() {
     );
 }
 
+#[test]
+fn uncertain_lines_and_word_scores_reach_the_window_but_are_never_sent() {
+    let s: SegmentDto = serde_json::from_value(json!({
+        "channel": 1, "speaker": "Me", "start_ms": 0, "end_ms": 900, "text": "Farah", "uncertain": true,
+        "words": [{"text": "Farah", "start_ms": 0, "end_ms": 900, "confidence": 0.31}]
+    }))
+    .unwrap();
+    assert!(s.uncertain);
+    let shown = serde_json::to_value(&s).unwrap();
+    assert_eq!(shown["uncertain"], json!(true));
+    assert_eq!(shown["words"][0]["confidence"], json!(0.31));
+
+    let plain: SegmentDto = serde_json::from_value(
+        json!({"channel": 1, "speaker": "Me", "start_ms": 0, "end_ms": 5, "text": "hi"}),
+    )
+    .unwrap();
+    assert!(!plain.uncertain);
+    assert!(serde_json::to_value(&plain).unwrap().get("uncertain").is_none());
+}
 // ---- Requests the client sends ---------------------------------------------------------------------------------
 
 fn artifact() -> ArtifactDto {
@@ -558,6 +577,7 @@ fn device_transcript_serialises_in_the_documented_shape() {
             end_ms: 2_600,
             text: "Hello.".into(),
             words: vec![],
+            uncertain: false,
         }],
     };
     assert_eq!(

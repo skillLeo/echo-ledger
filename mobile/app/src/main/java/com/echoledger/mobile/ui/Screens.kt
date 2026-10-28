@@ -88,10 +88,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.ActivityCompat
@@ -454,6 +451,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
     val player = rememberRecordingPlayer(playbackUrl)
     // The newest version is shown first; the previous one (after Re-transcribe as) is one tap away.
     var version by remember(item.id) { mutableStateOf(TranscriptVersion.CURRENT) }
+    // The recording's details are read once per load; switching the version reads only the other transcript.
+    var detailFor by remember { mutableStateOf<Pair<String, Int>?>(null) }
     LaunchedEffect(item.id, attempt, version) {
         val previous = previousVersionId(item).takeIf { version == TranscriptVersion.PREVIOUS }
         val id = previous ?: item.transcript?.finalTranscriptId ?: item.transcript?.liveTranscriptId
@@ -461,8 +460,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
         // Only a finished transcript that does not arrive is a load failure; otherwise its status says more.
         loadFailed = id != null && transcript == null && (previous != null || item.transcript?.finalStatus == "completed")
         loaded = true
-    }
-    LaunchedEffect(item.id, attempt) {
+        if (detailFor == item.id to attempt) return@LaunchedEffect
+        detailFor = item.id to attempt
         val detail = vm.sessionDetail(item.id)
         playbackUrl = detail?.playbackUrl
         bookmarks = detail?.markers.orEmpty().sortedBy { it.atMs }
@@ -675,23 +674,7 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                                 modifier = Modifier.width(60.dp)
                             )
                             val spoken = if (active && s.words.isNotEmpty()) s.words.indexOfLast { it.startMs <= player.positionMs } else -1
-                            if (spoken >= 0) {
-                                Text(
-                                    buildAnnotatedString {
-                                        s.words.forEachIndexed { wi, w ->
-                                            if (wi == spoken) {
-                                                withStyle(SpanStyle(background = Brand.Warning.copy(alpha = 0.35f))) { append(w.text) }
-                                            } else {
-                                                append(w.text)
-                                            }
-                                            if (wi < s.words.lastIndex) append(" ")
-                                        }
-                                    },
-                                    fontSize = 14.sp
-                                )
-                            } else {
-                                Text(s.text, fontSize = 14.sp)
-                            }
+                            TranscriptLine(s, spoken, enabled = player.ready) { player.seekTo(it) }
                         }
                     }
                 }

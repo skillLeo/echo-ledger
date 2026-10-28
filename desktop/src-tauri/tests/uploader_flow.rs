@@ -1034,6 +1034,7 @@ fn segments() -> Vec<SegmentDto> {
             end_ms: 2_600,
             text: "Hello.".into(),
             words: vec![],
+            uncertain: false,
         },
         SegmentDto {
             channel: 2,
@@ -1042,6 +1043,7 @@ fn segments() -> Vec<SegmentDto> {
             end_ms: 4_100,
             text: "Hi there.".into(),
             words: vec![],
+            uncertain: false,
         },
     ]
 }

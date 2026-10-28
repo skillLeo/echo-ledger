@@ -162,6 +162,7 @@ impl CaptionBuffer {
                 end_ms: t.end_ms.max(t.start_ms),
                 text: t.text.clone(),
                 words: vec![],
+                uncertain: false,
             })
             .collect();
         out.sort_by_key(|s| (s.start_ms, s.channel));

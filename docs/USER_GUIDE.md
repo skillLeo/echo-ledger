@@ -153,8 +153,10 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
 - **Auto** only chooses between English, Urdu and Arabic, so a call is never tagged French by mistake. An admin can
   let Auto pick a More language too (**Settings → General → Auto may also pick**).
 - Hindi is not offered. Urdu is never written in Hindi letters: such text is transcribed again as Urdu.
-- Urdu goes to **Whisper large-v3** (the engine TurboScribe uses), each side of the call on its own. Words Whisper
-  is not sure of are marked; text it invents in silences is removed.
+- Urdu goes to **Whisper large-v3** (the engine TurboScribe uses), each side of the call on its own. Text it
+  invents in silences is removed.
+- Words and lines the engine was not sure of have a **dotted underline** in the desktop app, the phone app and the
+  console. Tap or click one to hear it. The text stays exactly as the engine heard it.
 
 - **For a client:** give the client a default language. Every recording with that client uses it.
 - **For everything else:** the default in **Settings → General → Transcription language** (on the phone:

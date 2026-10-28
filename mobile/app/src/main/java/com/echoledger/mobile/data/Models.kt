@@ -288,11 +288,21 @@ data class SegmentDto(
     /** Word timings when the engine gave them; never sent by the phone. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val words: List<WordDto> = emptyList()
+    val words: List<WordDto> = emptyList(),
+    /** The engine was not sure of this line (since v1.2); kept as heard. Never sent by the phone. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val uncertain: Boolean = false
 )
 
 @Serializable
-data class WordDto(val text: String = "", @SerialName("start_ms") val startMs: Long = 0, @SerialName("end_ms") val endMs: Long = 0)
+data class WordDto(
+    val text: String = "",
+    @SerialName("start_ms") val startMs: Long = 0,
+    @SerialName("end_ms") val endMs: Long = 0,
+    /** 0-1 when the engine scored the word (since v1.2: below [com.echoledger.mobile.core.Uncertain.BELOW] it is uncertain). */
+    val confidence: Double? = null
+)
 
 /** One transcript match of `GET /api/search` (since v1.1): jump to `start_ms`; highlights are [start, length]. */
 @Serializable

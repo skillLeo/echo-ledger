@@ -229,8 +229,10 @@ final class AzureMaiDriver implements SttProvider
             $start = (int) ($phrase['offsetMilliseconds'] ?? 0);
             $words = array_map(fn (array $w): Word => new Word((string) $w['text'], (int) $w['offsetMilliseconds'],
                 (int) $w['offsetMilliseconds'] + (int) $w['durationMilliseconds']), array_values((array) ($phrase['words'] ?? [])));
+            // Azure scores the phrase, not its words: a low score marks the whole line uncertain.
             $segments[] = new Segment($channel, TranscriptNormalizer::speakerFor($channel, $channelCount), $start,
-                $start + (int) ($phrase['durationMilliseconds'] ?? 0), trim((string) ($phrase['text'] ?? '')), $words);
+                $start + (int) ($phrase['durationMilliseconds'] ?? 0), trim((string) ($phrase['text'] ?? '')), $words,
+                Word::isUncertain($phrase['confidence'] ?? null));
         }
 
         return $segments;

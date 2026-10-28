@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeIndex, activeWord, continuesTurn, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, timelinePercent } from "./player";
+import { activeIndex, activeWord, continuesTurn, hasUncertainWords, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, timelinePercent, UNCERTAIN_BELOW, uncertainWord } from "./player";
 
 const segments = [
   { speaker: "Me", start_ms: 0, end_ms: 4_000 },
@@ -65,5 +65,21 @@ describe("transcript player helpers (B6)", () => {
     expect(newTerms("hello acme limited", "Hello Acme Ltd, see Farah at Q3.")).toEqual(["Ltd", "Farah", "Q3"]);
     expect(newTerms("same words", "same words")).toEqual([]);
     expect(newTerms("x", "A B C D E")).toEqual([]); // single letters are not terms
+  });
+});
+
+describe("uncertain words", () => {
+  it("marks a word below the threshold, never one without a score", () => {
+    expect(uncertainWord({ confidence: 0.31 })).toBe(true);
+    expect(uncertainWord({ confidence: UNCERTAIN_BELOW })).toBe(false);
+    expect(uncertainWord({ confidence: 0.98 })).toBe(false);
+    expect(uncertainWord({ confidence: null })).toBe(false);
+    expect(uncertainWord({})).toBe(false);
+  });
+
+  it("finds a line with an uncertain word", () => {
+    expect(hasUncertainWords({ words: [{ text: "a", start_ms: 0, end_ms: 1, confidence: 0.9 }, { text: "b", start_ms: 1, end_ms: 2, confidence: 0.2 }] })).toBe(true);
+    expect(hasUncertainWords({ words: [{ text: "a", start_ms: 0, end_ms: 1 }] })).toBe(false);
+    expect(hasUncertainWords({})).toBe(false);
   });
 });

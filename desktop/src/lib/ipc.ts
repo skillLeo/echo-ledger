@@ -351,8 +351,10 @@ export interface Segment {
   start_ms: number;
   end_ms: number;
   text: string;
-  /** Word timings when the engine gave them (an edited line has none). */
-  words?: { text: string; start_ms: number; end_ms: number }[];
+  /** Word timings when the engine gave them (an edited line has none); `confidence` 0-1 when the engine scored it. */
+  words?: { text: string; start_ms: number; end_ms: number; confidence?: number | null }[];
+  /** The engine was not sure of this line (since v1.2); it is kept as heard. */
+  uncertain?: boolean;
 }
 
 export interface TranscriptDetail {

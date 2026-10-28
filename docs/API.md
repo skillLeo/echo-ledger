@@ -614,6 +614,10 @@ run once more as Urdu. New fields:
   the recording, `[{"at_ms": 0, "language": "en"}, {"at_ms": 61250, "language": "ur"}]` (at most 50, in time
   order; `language` null is automatic). The final transcript is cut there and each piece is transcribed in its
   language (Whisper on Groq); the marks win over detection. `GET /api/sessions/{id}` returns `language_marks`.
+- Transcript segments: `uncertain: true` when the engine was not sure of the whole line (Whisper's average
+  log-probability below -0.8, Azure's phrase confidence below 0.5), and `words[].confidence` (0-1; AssemblyAI,
+  ElevenLabs, Soniox) below 0.5 marks a word uncertain. The apps and the console underline both with dots and a tap
+  plays from there; the text stays as heard.
 - Library items: `transcript.final_error_code` (since v1.1.2; `no_audio` when nothing was heard),
   `alternate_transcript_id`, `alternate_status` and `alternate_language` (the other version: the previous
   transcript after "Re-transcribe as", or a second engine's run).

@@ -367,8 +367,12 @@ pub struct SegmentDto {
     pub start_ms: u64,
     pub end_ms: u64,
     pub text: String,
+    /// Word timings as the server sent them (with `confidence` 0-1 when the engine scored the word).
     #[serde(default)]
     pub words: Vec<serde_json::Value>,
+    /// The engine was not sure of this line (since v1.2); this app never sends it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub uncertain: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]

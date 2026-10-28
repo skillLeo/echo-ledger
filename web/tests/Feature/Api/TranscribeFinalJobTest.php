@@ -551,7 +551,7 @@ describe('other completion modes', function () {
 
             return Http::response(['phrases' => [
                 ['channel' => 0, 'offsetMilliseconds' => 0, 'durationMilliseconds' => 900, 'text' => 'Hello there.', 'words' => [['text' => 'Hello', 'offsetMilliseconds' => 0, 'durationMilliseconds' => 400]]],
-                ['channel' => 1, 'offsetMilliseconds' => 1000, 'durationMilliseconds' => 900, 'text' => 'Hi, thanks for calling.', 'words' => []],
+                ['channel' => 1, 'offsetMilliseconds' => 1000, 'durationMilliseconds' => 900, 'text' => 'Hi, thanks for calling.', 'words' => [], 'confidence' => 0.31],
             ]], 200);
         }]);
         $session = $this->makeReadySession($this->device, $this->audio, ['final_provider' => 'azure_mai']);
@@ -564,6 +564,8 @@ describe('other completion modes', function () {
             ->and($transcript->text)->toBe("Me: Hello there.\nClient: Hi, thanks for calling.")
             ->and($transcript->completed_at)->not->toBeNull()
             ->and($session->refresh()->status)->toBe(SessionStatus::Completed);
+        // Azure scores phrases: a low score marks the line uncertain.
+        expect($transcript->segments[0])->not->toHaveKey('uncertain')->and($transcript->segments[1]['uncertain'])->toBeTrue();
         expect($captured['body'])->toContain('"channels":[0,1]')->and($captured['key'])->toBe('azure_test_key_1234567890');
     });
 

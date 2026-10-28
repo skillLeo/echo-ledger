@@ -104,13 +104,13 @@
             .el-player { --el-border: rgba(15,23,42,.10); --el-bg: #FFFFFF;
                 --el-text: #15171B; --el-muted: #565B69; --el-me: #6D28D9; --el-client: #0B7187; --el-hover: rgba(15,23,42,.05);
                 --el-active: rgba(124,58,237,.10); --el-bar: #7C3AED; --el-focus: #7C3AED; --el-btn-border: rgba(15,23,42,.18);
-                --el-btn-bg: #FFFFFF; --el-btn-hover: rgba(139,92,246,.12); --el-word: rgba(250,204,21,.45); --el-lane-me: rgba(124,58,237,.55);
+                --el-btn-bg: #FFFFFF; --el-btn-hover: rgba(139,92,246,.12); --el-word: rgba(250,204,21,.45); --el-unsure: #D97706; --el-lane-me: rgba(124,58,237,.55);
                 --el-lane-client: rgba(14,116,144,.55);
                 color: var(--el-text); border: 1px solid var(--el-border); border-radius: 12px; padding: 1rem; background: var(--el-bg); }
             .dark .el-player { --el-border: rgba(255,255,255,.08); --el-bg: #1A1B1F;
                 --el-text: #F2F3F5; --el-muted: #A8ACB7; --el-me: #B4A0FB; --el-client: #4FD1E8; --el-hover: rgba(255,255,255,.06);
                 --el-active: rgba(139,92,246,.22); --el-bar: #A78BFA; --el-focus: #B4A0FB; --el-btn-border: rgba(255,255,255,.15);
-                --el-btn-bg: rgba(255,255,255,.04); --el-btn-hover: rgba(139,92,246,.28); --el-word: rgba(250,204,21,.35);
+                --el-btn-bg: rgba(255,255,255,.04); --el-btn-hover: rgba(139,92,246,.28); --el-word: rgba(250,204,21,.35); --el-unsure: #FBBF24;
                 --el-lane-me: rgba(167,139,250,.7); --el-lane-client: rgba(34,211,238,.6); }
             .el-player :focus-visible, .el-player:focus-visible { outline: 2px solid var(--el-focus); outline-offset: 2px; }
             .el-player audio { width: 100%; height: 40px; margin-bottom: .6rem; border-radius: 8px; }
@@ -147,6 +147,9 @@
             .el-player .el-line:hover { background: var(--el-hover); }
             .el-player .el-line[data-active] { background: var(--el-active); box-shadow: inset 3px 0 0 var(--el-bar); }
             .el-player .el-w[data-on] { background: var(--el-word); border-radius: 3px; }
+            /* Words and lines the engine was not sure of: kept as heard, underlined, a click plays them. */
+            .el-player .el-w[data-u], .el-player .el-line[data-u] > span { text-decoration: underline dotted var(--el-unsure); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+            .el-player .el-w[data-u] { cursor: help; }
             .el-player textarea.el-edit { width: 100%; font: inherit; line-height: 1.5; color: var(--el-text); background: var(--el-btn-bg);
                 border: 1px solid var(--el-btn-border); border-radius: .45rem; padding: .3rem .45rem; resize: vertical; unicode-bidi: plaintext; }
             .el-player .el-empty { color: var(--el-muted); font-size: .9rem; padding: .75rem 0; }
@@ -212,9 +215,12 @@
                     <template x-for="i in b.items" :key="'s' + i">
                         <div :data-seg="i">
                             <template x-if="!editing">
-                                <button type="button" class="el-line" :data-active="active === i ? '' : null" :aria-current="active === i ? 'true' : null" x-on:click="seekTo(d.segments[i].start_ms)">
+                                <button type="button" class="el-line" :data-active="active === i ? '' : null" :aria-current="active === i ? 'true' : null" x-on:click="seekTo(d.segments[i].start_ms)"
+                                    :data-u="d.segments[i].uncertain ? '' : null" :title="d.segments[i].uncertain ? 'The engine was not sure of this line. Click to hear it.' : null">
                                     <template x-if="d.segments[i].words.length">
-                                        <span><template x-for="(w, wi) in d.segments[i].words" :key="wi"><span class="el-w" :data-on="active === i && word === wi ? '' : null" x-text="w.t + ' '"></span></template></span>
+                                        <span><template x-for="(w, wi) in d.segments[i].words" :key="wi"><span><span class="el-w" :data-on="active === i && word === wi ? '' : null"
+                                            :data-u="w.u ? '' : null" :title="w.u ? 'Not sure of this word. Click to hear it.' : null"
+                                            x-on:click="if (w.u) { $event.stopPropagation(); seekTo(w.s); }" x-text="w.t"></span> </span></template></span>
                                     </template>
                                     <template x-if="!d.segments[i].words.length"><span x-text="d.segments[i].text"></span></template>
                                 </button>

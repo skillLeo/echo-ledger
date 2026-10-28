@@ -1055,3 +1055,48 @@ describe("LibraryView Re-transcribe as", () => {
     expect(within(detail()).queryByRole("button", { name: "Re-transcribe" })).not.toBeInTheDocument();
   });
 });
+
+describe("LibraryView uncertain words", () => {
+  const audio = () => document.querySelector("audio") as HTMLAudioElement;
+  const unsure = (): Segment[] => [
+    { channel: 1, speaker: "Me", start_ms: 0, end_ms: 900, text: "Hello Farah", words: [
+      { text: "Hello", start_ms: 0, end_ms: 400, confidence: 0.98 },
+      { text: "Farah", start_ms: 450, end_ms: 900, confidence: 0.31 },
+    ] },
+    { channel: 2, speaker: "Client", start_ms: 2_000, end_ms: 3_000, text: "میں کل آؤں گا", uncertain: true },
+  ];
+
+  it("underlines the words and the lines the engine was not sure of, and keeps the text as heard", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", segments: unsure() });
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "Farah");
+
+    const word = within(detail()).getByTitle("Not sure of this word. Click to hear it.");
+    expect(word).toHaveTextContent("Farah");
+    expect(word).toHaveClass("word", "uncertain");
+    expect(within(detail()).getByText("Hello")).not.toHaveClass("uncertain");
+    const line = within(detail()).getByTitle("The engine was not sure of this line. Click to hear it.");
+    expect(line).toHaveTextContent("میں کل آؤں گا");
+    expect(line).toHaveClass("seg-text", "uncertain");
+  });
+
+  it("plays from an uncertain word when it is clicked", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", segments: unsure() });
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "Farah");
+    await waitFor(() => expect(audio()).not.toBeNull());
+
+    fireEvent.click(within(detail()).getByTitle("Not sure of this word. Click to hear it."));
+    expect(audio().currentTime).toBe(0.45);
+    expect(play).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(within(detail()).getByTitle("The engine was not sure of this line. Click to hear it."));
+    expect(audio().currentTime).toBe(2);
+  });
+
+  it("marks nothing when the engine gave no scores", async () => {
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    expect(detail().querySelector(".uncertain")).toBeNull();
+  });
+});

@@ -424,6 +424,9 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .segment.cont .seg-spk { visibility: hidden; }
 .segment.cont { padding-top: 2px; }
 .segment .word.on { background: rgba(250, 204, 21, 0.35); border-radius: 3px; }
+/* What the engine was not sure of: kept as heard, underlined; a click plays it. */
+.segment .word.uncertain, .segment .seg-text.uncertain { text-decoration: underline dotted var(--warning, #d97706); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.segment .word.uncertain { cursor: help; }
 .segment.editing { display: grid; grid-template-columns: 48px 72px minmax(0, 1fr); gap: var(--space-2); align-items: start; }
 .seg-edit { width: 100%; resize: vertical; font: inherit; line-height: 1.5; }
 .search-hits .hit-card { padding: var(--space-2) 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); margin-bottom: var(--space-2); }

@@ -34,6 +34,18 @@ export function activeWord(words: { start_ms: number }[] | undefined, ms: number
 }
 
 /** With "Skip silence": where to jump when `ms` sits in a silence longer than 1.5 s before the next line, else null. */
+/** A word below this confidence (0-1) is shown as uncertain: dotted underline, a click plays it (the server's threshold). */
+export const UNCERTAIN_BELOW = 0.5;
+
+export function uncertainWord(word: { confidence?: number | null }): boolean {
+  return typeof word.confidence === "number" && word.confidence < UNCERTAIN_BELOW;
+}
+
+/** Whether a line has a word the engine was not sure of. */
+export function hasUncertainWords(segment: Pick<Segment, "words">): boolean {
+  return (segment.words ?? []).some(uncertainWord);
+}
+
 export function skipTarget(segments: Pick<Segment, "start_ms" | "end_ms">[], ms: number): number | null {
   if (segments.some((s) => s.start_ms <= ms && s.end_ms >= ms)) return null;
   const next = segments.find((s) => s.start_ms > ms);

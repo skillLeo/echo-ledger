@@ -193,6 +193,26 @@ it('exposes the player data through the entry class', function () {
         ->and($data['duration_ms'])->toBe(3_730_000);
 });
 
+it('marks the words and lines the engine was not sure of, and a click on such a word plays it', function () {
+    $admin = $this->signInAsAdmin();
+    $session = $this->sessionWithTranscript($admin, [
+        ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello Farah', 'words' => [
+            ['text' => 'Hello', 'start_ms' => 0, 'end_ms' => 400, 'confidence' => 0.97],
+            ['text' => 'Farah', 'start_ms' => 450, 'end_ms' => 900, 'confidence' => 0.31],
+        ]],
+        ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 1000, 'end_ms' => 2000, 'text' => 'میں کل آؤں گا', 'uncertain' => true],
+    ]);
+    $this->readyRecording($session);
+
+    $data = TranscriptPlayerEntry::payload($session->fresh());
+
+    expect($data['segments'][0]['words'])->toBe([['s' => 0, 'e' => 400, 't' => 'Hello'], ['s' => 450, 'e' => 900, 't' => 'Farah', 'u' => true]])
+        ->and($data['segments'][0]['uncertain'])->toBeFalse()
+        ->and($data['segments'][1]['uncertain'])->toBeTrue();
+    expect(adminPlayerPage($this, $session))->toContain('Not sure of this word. Click to hear it.')->toContain('seekTo(w.s)')
+        ->toContain('The engine was not sure of this line. Click to hear it.');
+});
+
 it('prefers the final transcript, but falls back to live captions while the final one has no text', function () {
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, [], transcript: ['status' => TranscriptStatus::Processing]);

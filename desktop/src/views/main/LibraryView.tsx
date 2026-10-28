@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type ClientFolder, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail, type TranscriptionLanguage } from "../../lib/ipc";
-import { activeIndex, activeWord, continuesTurn, KEY_SECONDS, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName } from "../../lib/player";
+import { activeIndex, activeWord, continuesTurn, hasUncertainWords, KEY_SECONDS, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, uncertainWord } from "../../lib/player";
 import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, SpeakersPanel, Timeline, VocabularyHint } from "./TranscriptTools";
 import { formatDuration, formatWhen, providerName, timestamp, transcriptText } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, libraryTags, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
@@ -42,6 +42,10 @@ const playbackUrlOf = (detail: Record<string, unknown>): string | null => (typeo
  * Unified library: every recording from every device, searchable by title and transcript text. Recordings waiting
  * for a decision and uploads that need the user sit at the top of the list; `focus` brings one of them into view.
  */
+/** Tooltips of what the engine was not sure of (kept as heard). */
+const UNSURE_WORD = "Not sure of this word. Click to hear it.";
+const UNSURE_LINE = "The engine was not sure of this line. Click to hear it.";
+
 export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange }: {
   notify: (t: string, e?: boolean) => void;
   focus?: PendingFocus | null;
@@ -595,14 +599,25 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       {transcript.segments.map((s, i) => {
                         // A turn shows its speaker once: following lines of the same speaker keep the label for screen
                         // readers but hide it on screen (.cont), which groups the lines into a speaker block.
-                        const textCell = s.words && s.words.length > 0 && i === activeSegment
-                          ? s.words.map((w, wi) => <span key={wi} className={wi === activeWordIndex ? "word on" : "word"}>{w.text}{wi < s.words!.length - 1 ? " " : ""}</span>)
+                        // Words the engine was not sure of are underlined (a click plays from that word); the text stays as heard.
+                        const textCell = s.words && s.words.length > 0 && (i === activeSegment || hasUncertainWords(s))
+                          ? s.words.map((w, wi) => {
+                            const unsure = uncertainWord(w);
+                            const className = ["word", i === activeSegment && wi === activeWordIndex ? "on" : "", unsure ? "uncertain" : ""].filter(Boolean).join(" ");
+                            return (
+                              <span key={wi}>
+                                <span className={className} title={unsure ? UNSURE_WORD : undefined}
+                                  onClick={unsure && playbackUrl ? (e) => { e.stopPropagation(); seek(w.start_ms); } : undefined}>{w.text}</span>
+                                {wi < s.words!.length - 1 ? " " : ""}
+                              </span>
+                            );
+                          })
                           : s.text;
                         const cells = (
                           <>
                             <span className="seg-time">{timestamp(s.start_ms)}</span>
                             <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{speakerName(speakerNames, s.speaker)}</span>
-                            <span className="seg-text" dir="auto">{textCell}</span>
+                            <span className={s.uncertain ? "seg-text uncertain" : "seg-text"} dir="auto" title={s.uncertain ? UNSURE_LINE : undefined}>{textCell}</span>
                           </>
                         );
                         const className = `segment ${i === activeSegment ? "active" : ""} ${continuesTurn(transcript.segments, i) ? "cont" : ""}`.replace(/\s+/g, " ").trim();

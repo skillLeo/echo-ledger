@@ -11,6 +11,7 @@ use App\Models\CaptureSession;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Services\TranscriptEditor;
+use App\Stt\Data\Word;
 use App\Stt\LanguageChoice;
 use Filament\Infolists\Components\Entry;
 
@@ -56,7 +57,9 @@ class TranscriptPlayerEntry extends Entry
             $words = [];
             foreach (is_array($s['words'] ?? null) ? $s['words'] : [] as $w) {
                 if (is_array($w) && isset($w['start_ms'], $w['text'])) {
-                    $words[] = ['s' => (int) $w['start_ms'], 'e' => (int) ($w['end_ms'] ?? $w['start_ms']), 't' => (string) $w['text']];
+                    // `u`: the engine was not sure of the word (underlined; a click plays it).
+                    $words[] = ['s' => (int) $w['start_ms'], 'e' => (int) ($w['end_ms'] ?? $w['start_ms']), 't' => (string) $w['text'],
+                        ...(Word::isUncertain($w['confidence'] ?? null) ? ['u' => true] : [])];
                 }
             }
             $segments[] = [
@@ -66,6 +69,7 @@ class TranscriptPlayerEntry extends Entry
                 'end_ms' => (int) ($s['end_ms'] ?? 0),
                 'text' => (string) ($s['text'] ?? ''),
                 'words' => $words,
+                'uncertain' => (bool) ($s['uncertain'] ?? false),
             ];
         }
 
