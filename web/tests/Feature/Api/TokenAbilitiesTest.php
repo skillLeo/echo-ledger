@@ -38,6 +38,8 @@ function abilityRoutes(): array
         'transcript revisions' => ['GET', "/api/transcripts/{$id}/revisions", 'library:read'],
         'search' => ['GET', '/api/search', 'library:read'],
         'export transcript' => ['GET', "/api/transcripts/{$id}/export", 'library:read'],
+        'show as views' => ['GET', "/api/transcripts/{$id}/views", 'library:read'],
+        'make show as views' => ['POST', "/api/transcripts/{$id}/views", 'sessions:write'],
         'list share links' => ['GET', "/api/sessions/{$id}/shares", 'library:read'],
         'make share link' => ['POST', "/api/sessions/{$id}/shares", 'sessions:write'],
         'revoke share link' => ['DELETE', "/api/shares/{$id}", 'sessions:write'],

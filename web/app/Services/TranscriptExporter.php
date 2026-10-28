@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\CaptureSession;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
+use App\Services\Views\TranscriptViews;
 use Illuminate\Support\Str;
 use RuntimeException;
 use ZipArchive;
@@ -33,7 +34,7 @@ final class TranscriptExporter
     public function __construct(private readonly TranscriptEditor $editor, private readonly SettingsRepository $settings) {}
 
     /**
-     * @param  array{timestamps?: bool, speakers?: bool}  $options
+     * @param  array{timestamps?: bool, speakers?: bool, view?: string|null}  $options  `view`: roman or english (Show as), when ready
      * @return array{body: string, mime: string, filename: string}
      */
     public function export(Transcript $transcript, string $format, array $options = []): array
@@ -44,7 +45,7 @@ final class TranscriptExporter
         $session = $transcript->captureSession;
         $timestamps = $options['timestamps'] ?? true;
         $speakers = $options['speakers'] ?? true;
-        $lines = $this->lines($transcript, $session);
+        $lines = $this->lines($transcript, $session, $options['view'] ?? null);
         $body = match ($format) {
             'txt' => $this->txt($lines, $timestamps, $speakers),
             'md' => $this->markdown($session, $lines, $timestamps, $speakers),
@@ -59,17 +60,18 @@ final class TranscriptExporter
     }
 
     /**
-     * The segments with the speaker names applied.
+     * The segments with the speaker names applied, in the "Show as" view when one is asked for and ready.
      *
      * @return list<array{speaker: string, label: string, channel: int, start_ms: int, end_ms: int, text: string}>
      */
-    public function lines(Transcript $transcript, CaptureSession $session): array
+    public function lines(Transcript $transcript, CaptureSession $session, ?string $view = null): array
     {
         $names = $this->editor->speakerNames($session);
+        $texts = $view !== null ? app(TranscriptViews::class)->textsFor($transcript, $view) : null;
         $lines = [];
-        foreach ($transcript->segments ?? [] as $segment) {
+        foreach ($transcript->segments ?? [] as $i => $segment) {
             $label = (string) ($segment['speaker'] ?? '');
-            $text = trim((string) ($segment['text'] ?? ''));
+            $text = trim((string) ($texts[$i] ?? $segment['text'] ?? ''));
             if ($text === '') {
                 continue;
             }

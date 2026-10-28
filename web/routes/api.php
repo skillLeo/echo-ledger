@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\ShareController;
 use App\Http\Controllers\Api\SttTokenController;
 use App\Http\Controllers\Api\SttWebhookController;
 use App\Http\Controllers\Api\TranscriptEditController;
+use App\Http\Controllers\Api\TranscriptViewsController;
 use App\Http\Controllers\Api\UsageController;
 use App\Http\Controllers\Api\VocabularyController;
 use App\Http\Middleware\TouchDevice;
@@ -71,6 +72,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('vocabulary/replacements', [VocabularyController::class, 'addReplacement'])->name('api.vocabulary.replacements');
             Route::patch('transcripts/{id}', [TranscriptEditController::class, 'update'])->name('api.transcripts.update');
             Route::post('transcripts/{id}/replace', [TranscriptEditController::class, 'replace'])->name('api.transcripts.replace');
+            Route::post('transcripts/{id}/views', [TranscriptViewsController::class, 'store'])->name('api.transcripts.views.make');
             Route::post('transcripts/{id}/restore', [TranscriptEditController::class, 'restore'])->name('api.transcripts.restore');
         });
 
@@ -87,6 +89,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('transcripts/{id}', [LibraryController::class, 'transcript'])->name('api.transcripts.show');
             Route::get('transcripts/{id}/revisions', [TranscriptEditController::class, 'revisions'])->name('api.transcripts.revisions');
             Route::get('transcripts/{id}/export', [ExportController::class, 'show'])->name('api.transcripts.export');
+            Route::get('transcripts/{id}/views', [TranscriptViewsController::class, 'show'])->name('api.transcripts.views');
             Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->name('api.sessions.shares');
             Route::get('vocabulary', [VocabularyController::class, 'show'])->name('api.vocabulary');
         });

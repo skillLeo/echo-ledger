@@ -11,6 +11,7 @@ use App\Models\CaptureSession;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Services\TranscriptEditor;
+use App\Services\Views\TranscriptViews;
 use App\Stt\Data\Word;
 use App\Stt\LanguageChoice;
 use Filament\Infolists\Components\Entry;
@@ -38,13 +39,13 @@ class TranscriptPlayerEntry extends Entry
      *
      * @return array{audio_url: string|null, segments: list<array<string, mixed>>, speaker_names: array<string, string>, kind: string|null,
      *     status: string|null, editable: bool, edited: bool, model: string|null, language: string, markers: list<array{at_ms: int, tag: string|null, note: string|null}>,
-     *     pauses: list<array{at_ms: int, paused_ms: int}>, duration_ms: int}
+     *     pauses: list<array{at_ms: int, paused_ms: int}>, views: array<string, mixed>|null, duration_ms: int}
      */
     public static function payload(?CaptureSession $record): array
     {
         if ($record === null) {
             return ['audio_url' => null, 'segments' => [], 'speaker_names' => [], 'kind' => null, 'status' => null, 'editable' => false,
-                'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'markers' => [], 'pauses' => [], 'duration_ms' => 1];
+                'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'markers' => [], 'pauses' => [], 'views' => null, 'duration_ms' => 1];
         }
         $record->loadMissing(['primaryRecording', 'client']);
         $primary = $record->primaryRecording;
@@ -89,6 +90,8 @@ class TranscriptPlayerEntry extends Entry
             'markers' => $record->markers()->get(['at_ms', 'tag', 'note'])
                 ->map(fn (SessionMarker $m): array => ['at_ms' => $m->at_ms, 'tag' => $m->tag, 'note' => $m->note])->values()->all(),
             'pauses' => $record->pauses ?? [],
+            // Show as: the Roman Urdu and English views of the final transcript, when they are made (labelled as views).
+            'views' => $final !== null && $shown === $final && $final->status === TranscriptStatus::Completed ? app(TranscriptViews::class)->state($final) : null,
             'duration_ms' => max(1, (int) ($record->duration_ms ?? 0), ...array_map(fn (array $s): int => $s['end_ms'], $segments ?: [['end_ms' => 0]])),
         ];
     }

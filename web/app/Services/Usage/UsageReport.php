@@ -127,7 +127,7 @@ final class UsageReport
         foreach ($providers as $key => $v) {
             $rows[] = [
                 'provider' => $key,
-                'label' => SttProviderKey::tryFrom($key)?->getLabel() ?? $key,
+                'label' => SttProviderKey::tryFrom($key)?->getLabel() ?? ($key === 'claude' ? 'Claude (Show as)' : $key),
                 'streaming_minutes' => $v['streaming_minutes'],
                 'final_minutes' => $v['final_minutes'],
                 'cost_usd' => $v['cost_usd'],

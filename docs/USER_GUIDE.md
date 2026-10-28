@@ -183,6 +183,14 @@ one tap transcribes it again with the next engine. Search finds Urdu words howev
 English words inside Urdu speech are found too. If a transcript is still not good, open the recording in the
 console and choose **Re-transcribe** or **Compare engines**, then keep the better one.
 
+### Show as: Roman Urdu and English
+
+An Urdu or Arabic transcript can also be read in **Roman Urdu** (the same words in Latin letters) or in **English**.
+In the console open the recording and press **Roman Urdu & English**; after a minute or two the player shows
+**Original · Roman Urdu · English**, and **Export** offers Word, print and text files in each view. The views are
+written by Claude (your administrator adds the Anthropic key) and are labelled as views: the transcript itself never
+changes. If you edit the transcript, make the views again.
+
 ### Privacy at the speech providers
 
 EchoLedger deletes its copy at each provider as soon as the transcript is stored. Three switches in the providers'

@@ -139,6 +139,8 @@ function isoApiCases(array $b): array
         'api.transcripts.show' => ['GET', "/api/transcripts/{$t}", [], 404],
         'api.transcripts.revisions' => ['GET', "/api/transcripts/{$t}/revisions", [], 404],
         'api.transcripts.export' => ['GET', "/api/transcripts/{$t}/export?format=txt", [], 404],
+        'api.transcripts.views' => ['GET', "/api/transcripts/{$t}/views", [], 404],
+        'api.transcripts.views.make' => ['POST', "/api/transcripts/{$t}/views", [], 404],
         'api.sessions.shares' => ['GET', "/api/sessions/{$s}/shares", [], 404],
         'api.vocabulary' => ['GET', '/api/vocabulary?client_id='.$b['client']->id, [], 404],
         'api.recordings.show' => ['GET', "/api/recordings/{$b['upload']->id}", [], 404],

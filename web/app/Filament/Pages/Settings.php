@@ -77,6 +77,13 @@ class Settings extends Page
         return $user instanceof User && $user->is_super_admin;
     }
 
+    /** The Claude models offered for Show as. */
+    private const CLAUDE_MODELS = [
+        'claude-opus-5-5' => 'Claude Opus 5.5 (best)',
+        'claude-sonnet-5-5' => 'Claude Sonnet 5.5 (cheaper)',
+        'claude-haiku-5-5' => 'Claude Haiku 5.5 (cheapest)',
+    ];
+
     public function mount(SettingsRepository $settings): void
     {
         $this->form->fill([...self::formState($settings->all()), ...self::planState()]);
@@ -105,6 +112,7 @@ class Settings extends Page
             'languages_auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($all['languages.auto_more'] ?? []))),
             'languages_auto_fallback' => LanguageChoice::fallback(),
             'double_check' => (bool) ($all['accuracy.double_check'] ?? false),
+            'claude_model' => (string) ($all['claude.model'] ?? 'claude-opus-5-5'),
             'vocabulary_keyterms' => KeytermPolicy::sanitize((array) ($all['vocabulary.keyterms'] ?? [])),
             'vocabulary_replacements' => TextReplacements::rules($all['vocabulary.replacements'] ?? []),
             'display_timezone' => is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC',
@@ -257,6 +265,8 @@ class Settings extends Page
                             ...self::routingFields(),
                             Toggle::make('double_check')->label('Double-check unsure lines with a second engine')->columnSpanFull()
                                 ->helperText('Whisper on Groq (or ElevenLabs Scribe when Whisper wrote the transcript) listens again to up to 12 lines the first engine was not sure of. When they disagree, both are shown; the transcript is never changed. Each line is billed (Groq: at least 10 seconds).'),
+                            Select::make('claude_model')->label('Show as (Roman Urdu and English views)')->options(self::CLAUDE_MODELS)->required()->columnSpan(2)
+                                ->helperText('The Claude model that writes the views (key on API Credentials → Anthropic). An hour of Urdu call costs about US$1 with Opus, less with Sonnet or Haiku.'),
                         ]),
                     $this->section('bookmarks')
                         ->description('One-tap tags offered while recording a call (on the desktop pill and the phone notification).')
@@ -538,6 +548,7 @@ class Settings extends Page
             'languages.auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($state['languages_auto_more'] ?? []))),
             'languages.auto_fallback' => LanguageChoice::normalize($state['languages_auto_fallback'] ?? null) ?? 'ur',
             'accuracy.double_check' => (bool) ($state['double_check'] ?? false),
+            'claude.model' => in_array($state['claude_model'] ?? null, array_keys(self::CLAUDE_MODELS), true) ? $state['claude_model'] : 'claude-opus-5-5',
             'vocabulary.keyterms' => KeytermPolicy::sanitize((array) ($state['vocabulary_keyterms'] ?? [])),
             'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',

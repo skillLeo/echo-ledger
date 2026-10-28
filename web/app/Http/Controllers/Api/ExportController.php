@@ -11,6 +11,7 @@ use App\Models\Device;
 use App\Models\Transcript;
 use App\Services\AuditLog;
 use App\Services\TranscriptExporter;
+use App\Services\Views\TranscriptViews;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Str;
@@ -26,6 +27,8 @@ final class ExportController extends Controller
             'format' => ['required', Rule::in(TranscriptExporter::FORMATS)],
             'timestamps' => ['sometimes', 'boolean'],
             'speakers' => ['sometimes', 'boolean'],
+            // Since v1.2: a Show as view (Roman Urdu or English) instead of the original words, when it is ready.
+            'view' => ['sometimes', 'nullable', Rule::in(array_keys(TranscriptViews::VIEWS))],
         ]);
         /** @var Device $device */
         $device = $request->user();
@@ -41,6 +44,7 @@ final class ExportController extends Controller
         $file = $exporter->export($transcript, $data['format'], [
             'timestamps' => $request->boolean('timestamps', true),
             'speakers' => $request->boolean('speakers', true),
+            'view' => $data['view'] ?? null,
         ]);
         app(AuditLog::class)->record('transcript_exported', $device->user_id, $transcript->captureSession, "Transcript exported as {$data['format']}", ['format' => $data['format']]);
 

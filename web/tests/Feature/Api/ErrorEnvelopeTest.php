@@ -122,6 +122,12 @@ function produceError(object $test, string $code): TestResponse
             return $test->deleteJson('/api/devices/'.$test->device->id);
         case 'nothing_to_export':
             return $test->postJson('/api/sessions/export', ['ids' => [ENVELOPE_MISSING_ID], 'format' => 'txt']);
+        case 'views_unavailable':
+            $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id, 'device_id' => $test->device->id, 'status' => SessionStatus::Completed]);
+            $transcript = $session->transcripts()->create(['kind' => 'final', 'provider' => 'assemblyai', 'status' => 'completed', 'language' => 'en', 'text' => 'Hello', 'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello']]]);
+
+            // English has no Roman Urdu or English view.
+            return $test->postJson("/api/transcripts/{$transcript->id}/views");
         case 'cannot_retranscribe':
             // No audio on the server for this recording.
             $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id, 'device_id' => $test->device->id, 'status' => SessionStatus::Completed]);
@@ -187,7 +193,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(31);
+        ->and(count(documentedErrorCodes()))->toBe(32);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

@@ -193,6 +193,17 @@ line (`check`) and every app shows them under it. Nothing is merged. The clips a
 deleted right after (stt:reconcile retries). Nothing is sent once the monthly limit is reached, and without ffmpeg on
 the server or a key for the second engine the check is skipped (`meta.double_check.skipped`).
 
+## Show as: Roman Urdu and English views (since v1.2)
+
+The Claude API (Anthropic, official PHP SDK `anthropic-ai/sdk`) writes two reading views of a finished Urdu or Arabic
+transcript: the same words in Roman Urdu (Latin letters) and an English translation (other non-English languages get
+English only). Only the transcript text is sent, in chunks of about 6000 characters, with structured JSON output (one
+entry per line). The model is **Settings → Engine per language → Show as** (Claude Opus 5.5 by default, Sonnet 5.5 or
+Haiku 5.5 to pay less); refusals fall back server-side on Opus and Sonnet. The key goes on **API Credentials →
+Anthropic**. The views are kept with the transcript (`meta.views`) and made again after an edit; they are labelled
+as views everywhere, and the transcript never changes. Each run is one usage row (provider `claude`, token-priced:
+Opus US$4 / US$20 per million input / output tokens, about US$1 for an hour of Urdu call).
+
 ## Privacy per provider
 
 What each provider keeps, whether it trains on the recordings, what EchoLedger deletes there and the three account

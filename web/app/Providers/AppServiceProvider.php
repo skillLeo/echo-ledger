@@ -22,6 +22,8 @@ use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
+use App\Services\Views\ClaudeTranscriptConverter;
+use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
 use Filament\Support\Facades\FilamentTimezone;
@@ -41,6 +43,8 @@ class AppServiceProvider extends ServiceProvider
         // Scoped = fresh per request and per queued job (no stale settings/secrets across jobs).
         $this->app->scoped(SettingsRepository::class);
         $this->app->scoped(CredentialVault::class);
+        // "Show as" views come from the Claude API; tests swap in a fake.
+        $this->app->bind(TranscriptConverter::class, ClaudeTranscriptConverter::class);
         // Caches each member's role for one request (C9: no query per table row).
         $this->app->scoped(Workspaces::class);
         $this->app->scoped(SttManager::class);

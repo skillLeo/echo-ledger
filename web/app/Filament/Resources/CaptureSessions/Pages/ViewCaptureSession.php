@@ -18,6 +18,7 @@ use App\Services\Retranscriber;
 use App\Services\ShareLinks;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
+use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use App\Stt\ScriptCheck;
@@ -81,9 +82,19 @@ class ViewCaptureSession extends ViewRecord
                         ['docx', 'Word (.docx)'], ['html', 'Print or save as PDF'], ['txt', 'Text (.txt)'], ['md', 'Markdown (.md)'],
                         ['srt', 'Subtitles (.srt)'], ['vtt', 'Web subtitles (.vtt)'], ['json', 'JSON'],
                     ]),
+                // Show as: the same files in Roman Urdu or English, once those views are made.
+                ...array_map(fn (array $f): Action => Action::make('export_'.$f[0].'_'.$f[2])->label($f[1])
+                    ->url(fn (): string => route('admin.transcripts.export', ['transcript' => $this->editableTranscript()->id ?? '0', 'format' => $f[0], 'view' => $f[2]]))
+                    ->openUrlInNewTab($f[0] === 'html')
+                    ->visible(fn (): bool => in_array($f[2], $this->readyViews(), true)), [
+                        ['docx', 'Word (.docx) in Roman Urdu', 'roman'], ['docx', 'Word (.docx) in English', 'english'],
+                        ['html', 'Print in Roman Urdu', 'roman'], ['html', 'Print in English', 'english'],
+                        ['txt', 'Text (.txt) in Roman Urdu', 'roman'], ['txt', 'Text (.txt) in English', 'english'],
+                    ]),
             ])->label('Export')->icon(Heroicon::OutlinedArrowDownTray)->button()->color('gray')
                 ->visible(fn (): bool => $this->editableTranscript() !== null),
             $this->wrongScriptAction(),
+            $this->showAsAction(),
             $this->shareAction(),
             ActionGroup::make([
                 $this->retryAction(),
@@ -95,6 +106,48 @@ class ViewCaptureSession extends ViewRecord
                 DeleteAction::make()->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
             ])->icon(Heroicon::OutlinedEllipsisVertical)->color('gray'),
         ];
+    }
+
+    /**
+     * The Show as views that are made and fresh for the transcript on this page.
+     *
+     * @return list<string>
+     */
+    private function readyViews(): array
+    {
+        $transcript = $this->editableTranscript();
+        if ($transcript === null) {
+            return [];
+        }
+        $state = app(TranscriptViews::class)->state($transcript);
+
+        return $state['status'] === 'ready' ? array_values(array_filter($state['available'], fn (string $v): bool => $state[$v] !== null)) : [];
+    }
+
+    /** "Show as…": makes the Roman Urdu and English views with Claude (on the queue); the player then offers them. */
+    private function showAsAction(): Action
+    {
+        return Action::make('show_as')->label('Roman Urdu & English')->icon(Heroicon::OutlinedLanguage)->color('gray')
+            ->visible(function (): bool {
+                $transcript = $this->editableTranscript();
+
+                return $transcript !== null && TranscriptViews::available($transcript) !== []
+                    && ! in_array(app(TranscriptViews::class)->state($transcript)['status'], ['ready'], true);
+            })
+            ->action(function (): void {
+                $transcript = $this->editableTranscript();
+                if ($transcript === null) {
+                    return;
+                }
+                try {
+                    $state = app(TranscriptViews::class)->request($transcript);
+                } catch (RuntimeException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+                Notification::make()->title($state['status'] === 'ready' ? 'The views are ready' : 'Making the Roman Urdu and English views. Reload the page in a minute or two.')->success()->send();
+            });
     }
 
     private function speakersAction(): Action

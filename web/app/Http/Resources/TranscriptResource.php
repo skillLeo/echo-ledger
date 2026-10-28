@@ -6,6 +6,7 @@ namespace App\Http\Resources;
 
 use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
+use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -43,6 +44,8 @@ final class TranscriptResource extends JsonResource
             'edited_at' => $transcript->edited_at?->toAtomString(),
             // Since v1.2: parts done of all parts while a long recording is transcribed in pieces (Whisper on Groq).
             'progress' => self::progress($transcript),
+            // Since v1.2: the Show as views this transcript can have (roman, english) and whether they are made.
+            'views' => ['available' => TranscriptViews::available($transcript), 'status' => app(TranscriptViews::class)->state($transcript)['status']],
         ];
     }
 

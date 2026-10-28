@@ -377,6 +377,16 @@ it('is off by default and stores the Double-check toggle', function () {
     expect(app(SettingsRepository::class)->get('accuracy.double_check'))->toBeFalse();
 });
 
+it('stores the Claude model for Show as and refuses an unknown one', function () {
+    $this->signInAsAdmin();
+    expect(app(SettingsRepository::class)->get('claude.model'))->toBe('claude-opus-5-5');
+
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['claude_model' => 'claude-sonnet-5-5']))->call('save')->assertHasNoFormErrors();
+    expect(app(SettingsRepository::class)->get('claude.model'))->toBe('claude-sonnet-5-5');
+
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['claude_model' => 'gpt-9']))->call('save')->assertHasFormErrors(['claude_model']);
+});
+
 it('falls back to the default AssemblyAI models when the list is emptied', function () {
     $this->signInAsAdmin();
 

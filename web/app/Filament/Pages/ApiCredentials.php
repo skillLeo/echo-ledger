@@ -93,6 +93,7 @@ class ApiCredentials extends Page
                 'elevenlabs' => 'ElevenLabs',
                 'soniox' => 'Soniox (optional)',
                 'groq' => 'Groq (Whisper large-v3, for Urdu)',
+                'anthropic' => 'Anthropic (Claude, for Show as: Roman Urdu and English)',
                 'azure' => 'Azure Speech',
                 'whispercpp' => 'whisper.cpp server',
                 'openai' => 'OpenAI (optional)',

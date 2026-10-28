@@ -10,6 +10,7 @@ use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Services\AuditLog;
 use App\Services\TranscriptExporter;
+use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
 use Illuminate\Http\Response;
 
@@ -24,7 +25,9 @@ final class AdminExportController extends Controller
             ? CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->find($model->capture_session_id)
             : null;
         abort_if(! $session instanceof CaptureSession || $model->status !== TranscriptStatus::Completed, 404);
-        $file = $exporter->export($model, $format);
+        // Since v1.2: ?view=roman|english exports a Show as view (when it is ready) instead of the original words.
+        $view = request()->query('view');
+        $file = $exporter->export($model, $format, ['view' => is_string($view) && array_key_exists($view, TranscriptViews::VIEWS) ? $view : null]);
         app(AuditLog::class)->record('transcript_exported', (int) auth()->id(), $session, "Transcript exported as {$format}", ['format' => $format]);
 
         return response($file['body'], 200, [
