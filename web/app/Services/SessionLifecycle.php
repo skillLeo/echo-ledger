@@ -11,6 +11,7 @@ use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
+use App\Services\Callers\CallerMatcher;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use Illuminate\Support\Carbon;
@@ -126,6 +127,7 @@ final class SessionLifecycle
             }
             $locked->update($attributes);
             $this->annotate($locked, $data);
+            app(CallerMatcher::class)->apply($locked, is_array($data['caller'] ?? null) ? $data['caller'] : null);
 
             return $locked;
         });
@@ -214,7 +216,7 @@ final class SessionLifecycle
         $language = LanguageChoice::normalize($data['language'] ?? null) ?? LanguageChoice::normalize($client?->language)
             ?? LanguageChoice::normalize($this->settings->get('default_language'));
 
-        return CaptureSession::query()->create([
+        $session = CaptureSession::query()->create([
             'workspace_id' => $device->workspace_id,
             'user_id' => $device->user_id,
             'device_id' => $device->id,
@@ -230,5 +232,9 @@ final class SessionLifecycle
             'status' => $status,
             'final_provider' => $router->final($language, $useCase)->provider->value,
         ]);
+        // Caller names (since v1.2): who the recording is with, matched to a client contact.
+        app(CallerMatcher::class)->apply($session, is_array($data['caller'] ?? null) ? $data['caller'] : null);
+
+        return $session;
     }
 }

@@ -12,6 +12,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\SessionLabel;
 use App\Models\User;
+use App\Services\Callers\CallerMatcher;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -119,8 +120,11 @@ final class LibraryOrganiser
     public function update(CaptureSession $session, array $data): CaptureSession
     {
         DB::transaction(function () use ($session, $data): void {
+            $learn = false;
             if (array_key_exists('client_id', $data)) {
+                $before = $session->client_id;
                 $session->client_id = $this->ownedClient($session->workspace_id, $data['client_id'])?->id;
+                $learn = $session->client_id !== null && $session->client_id !== $before;
             }
             if (array_key_exists('title', $data)) {
                 $title = trim((string) $data['title']);
@@ -137,6 +141,10 @@ final class LibraryOrganiser
             }
             $session->updated_at = now();
             $session->save();
+            // Caller names: the person on this recording becomes a contact of the client it was moved to.
+            if ($learn) {
+                app(CallerMatcher::class)->learn($session);
+            }
         });
 
         return $session->refresh();

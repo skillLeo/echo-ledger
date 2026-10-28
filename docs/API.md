@@ -615,6 +615,14 @@ run once more as Urdu. New fields:
   the recording, `[{"at_ms": 0, "language": "en"}, {"at_ms": 61250, "language": "ur"}]` (at most 50, in time
   order; `language` null is automatic). The final transcript is cut there and each piece is transcribed in its
   language (Whisper on Groq); the marks win over detection. `GET /api/sessions/{id}` returns `language_marks`.
+- Caller names: `POST /api/sessions` and `POST /api/sessions/{id}/finish` take `caller: {"name", "number", "source"}`
+  (all optional; name up to 120 characters, number up to 40, `source` one of `whatsapp_notification`, `window_title`,
+  `calendar`, `contacts`, `phone`, `manual`). The server matches it to a client contact (phone number by its last 10
+  digits, then the contact's or the client's name): a match files the recording under that client when the device
+  chose none, and gives it the contact's language when it has none. The title becomes "Call with <name>" (a
+  `window_title` or `calendar` name is used as it is) unless a title was set. Library items and `GET /api/sessions/{id}`
+  carry `caller` (or `null`). Moving a recording into a client folder (`PATCH /api/sessions/{id}`) saves its caller as
+  a contact of that client. Contacts are kept in the console (Clients → Contacts).
 - Transcript segments: `uncertain: true` when the engine was not sure of the whole line (Whisper's average
   log-probability below -0.8, Azure's phrase confidence below 0.5), and `words[].confidence` (0-1; AssemblyAI,
   ElevenLabs, Soniox) below 0.5 marks a word uncertain. The apps and the console underline both with dots and a tap

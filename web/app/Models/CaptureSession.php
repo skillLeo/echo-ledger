@@ -47,6 +47,9 @@ use Illuminate\Support\Carbon;
  * @property list<array{at_ms: int, language: string|null}>|null $language_marks language chip changes during the recording (v1.2)
  * @property string|null $reference_text the owner's corrected transcript for the Accuracy Lab (v1.2)
  * @property Carbon|null $reference_set_at
+ * @property string|null $caller_name who the recording was with, as the device saw them (v1.2)
+ * @property string|null $caller_number
+ * @property string|null $caller_source whatsapp_notification, window_title, calendar, contacts, phone or manual
  * @property-read Collection<int, SessionMarker> $markers
  * @property SessionStatus $status
  * @property bool $pinned kept at the top of the library (B15)
@@ -174,6 +177,10 @@ class CaptureSession extends Model
     {
         if ($this->title !== null && $this->title !== '') {
             return $this->title;
+        }
+        // Caller names (since v1.2): "Call with Omar Khan"; a meeting's window or calendar title is used as it is.
+        if ($this->caller_name !== null && $this->caller_name !== '' && $this->source_app !== SourceApp::VoiceNote) {
+            return in_array($this->caller_source, ['window_title', 'calendar'], true) ? $this->caller_name : 'Call with '.$this->caller_name;
         }
 
         return self::fallbackTitleFor($this->source_app);

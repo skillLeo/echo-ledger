@@ -21,6 +21,7 @@ use App\Models\Device;
 use App\Models\Recording;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
+use App\Services\Callers\CallerMatcher;
 use App\Services\ChunkedUploadService;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\Retranscriber;
@@ -100,6 +101,7 @@ final class SessionController extends Controller
             'artifacts' => ['sometimes', 'array', 'min:1', 'max:3'],
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),
+            ...CallerMatcher::rules(),
         ]);
         if ($withArtifacts) {
             $this->assertArtifactRoles($data['artifacts']);
@@ -141,6 +143,7 @@ final class SessionController extends Controller
             'artifacts' => ['required', 'array', 'min:1', 'max:3'],
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),
+            ...CallerMatcher::rules(),
         ]);
         $this->assertArtifactRoles($data['artifacts']);
 
@@ -251,6 +254,8 @@ final class SessionController extends Controller
             'markers' => $session->markers->map(fn (SessionMarker $m): array => $m->toApi())->values(),
             'pauses' => $session->pauses ?? [],
             'language_marks' => $session->language_marks ?? [],
+            // Since v1.2: who the recording was with, as the device saw them.
+            'caller' => self::caller($session),
             'speaker_names' => (object) app(TranscriptEditor::class)->speakerNames($session),
             'playback_url' => $primary?->isReady() ? URL::temporarySignedRoute('api.recordings.audio',
                 now()->addMinutes((int) config('echoledger.playback_url_minutes', 30)), ['recording' => $primary->id]) : null,
@@ -274,6 +279,13 @@ final class SessionController extends Controller
         return response()->json(['transcript' => [
             'id' => $run->id, 'kind' => $run->kind->value, 'provider' => $run->provider, 'status' => $run->status->value, 'language' => $run->language,
         ]], 202);
+    }
+
+    /** @return array{name: string|null, number: string|null, source: string|null}|null */
+    public static function caller(CaptureSession $session): ?array
+    {
+        return $session->caller_name === null && $session->caller_number === null ? null
+            : ['name' => $session->caller_name, 'number' => $session->caller_number, 'source' => $session->caller_source];
     }
 
     /** POST /api/sessions/{id}/markers — a bookmark added after the call (since v1.1). */

@@ -6,6 +6,7 @@ namespace App\Http\Resources;
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Http\Controllers\Api\SessionController;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Stt\LanguageChoice;
@@ -54,6 +55,8 @@ final class LibraryItemResource extends JsonResource
             'device' => $session->device ? ['id' => $session->device->id, 'name' => $session->device->name] : null,
             'client' => $session->client ? ['id' => $session->client->id, 'name' => $session->client->name, 'color' => $session->client->color, 'avatar' => $session->client->avatar] : null,
             'title' => $session->displayTitle(),
+            // Since v1.2: who the recording was with (name, number, where the device saw it), or null.
+            'caller' => SessionController::caller($session),
             'started_at' => $session->started_at->toAtomString(),
             'ended_at' => $session->ended_at?->toAtomString(),
             'duration_ms' => $session->duration_ms,

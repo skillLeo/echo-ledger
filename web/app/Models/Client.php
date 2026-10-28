@@ -46,6 +46,12 @@ class Client extends Model
         return $this->hasMany(ClientKeyterm::class);
     }
 
+    /** @return HasMany<ClientContact, $this> people at this client, to match callers (since v1.2) */
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(ClientContact::class);
+    }
+
     /** @return HasMany<CaptureSession, $this> */
     public function captureSessions(): HasMany
     {

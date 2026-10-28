@@ -127,7 +127,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 5;
+const LATER_MIGRATIONS = 6;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();

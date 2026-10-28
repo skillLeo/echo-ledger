@@ -7,6 +7,7 @@ namespace App\Filament\Resources\Clients;
 use App\Filament\Resources\Clients\Pages\CreateClient;
 use App\Filament\Resources\Clients\Pages\EditClient;
 use App\Filament\Resources\Clients\Pages\ListClients;
+use App\Filament\Resources\Clients\RelationManagers\ContactsRelationManager;
 use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Models\Client;
@@ -117,7 +118,7 @@ class ClientResource extends Resource
 
     public static function getRelations(): array
     {
-        return [KeytermsRelationManager::class];
+        return [ContactsRelationManager::class, KeytermsRelationManager::class];
     }
 
     public static function getPages(): array
