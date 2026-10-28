@@ -577,13 +577,16 @@ describe('other completion modes', function () {
                 ['channel_index' => 0, 'words' => [['text' => 'Hi', 'start' => 0.1, 'end' => 0.3, 'type' => 'word']]],
                 ['channel_index' => 1, 'words' => [['text' => 'Hello', 'start' => 1.1, 'end' => 1.5, 'type' => 'word']]],
             ],
-        ], 200)]);
+        ], 200), 'api.elevenlabs.io/v1/speech-to-text/transcripts/*' => Http::response([], 200)]);
         $session = $this->makeReadySession($this->device, $this->audio, ['final_provider' => 'elevenlabs']);
         $transcript = pendingFinal($session, 'elevenlabs');
 
         runFinalJob($transcript);
 
         expect($transcript->refresh()->status)->toBe(TranscriptStatus::Completed)->and($transcript->text)->toBe("Me: Hi\nClient: Hello");
+        // Scribe keeps the transcript: its copy is deleted as soon as ours is stored, as after a webhook.
+        expect($transcript->provider_transcript_id)->toBe('tr_9')->and($transcript->provider_deleted_at)->not->toBeNull();
+        Http::assertSent(fn (HttpRequest $r): bool => $r->method() === 'DELETE' && str_ends_with($r->url(), '/v1/speech-to-text/transcripts/tr_9'));
     });
 
     it('submits an ElevenLabs job for a callback when one is possible', function () {
@@ -636,7 +639,7 @@ describe('usage and the monthly limit', function () {
                 ['channel_index' => 0, 'words' => [['text' => 'Hi', 'start' => 0.1, 'end' => 0.3, 'type' => 'word']]],
                 ['channel_index' => 1, 'words' => [['text' => 'Hello', 'start' => 1.1, 'end' => 1.5, 'type' => 'word']]],
             ],
-        ], 200)]);
+        ], 200), 'api.elevenlabs.io/v1/speech-to-text/transcripts/*' => Http::response([], 200)]);
         $session = $this->makeReadySession($this->device, $this->audio, ['final_provider' => 'elevenlabs']);
         $transcript = pendingFinal($session, 'elevenlabs');
 

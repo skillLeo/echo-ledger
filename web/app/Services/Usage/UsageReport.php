@@ -38,7 +38,7 @@ final class UsageReport
     /**
      * @return array{month: string, label: string,
      *     totals: array{minutes: float, cost_usd: float, streaming_minutes: float, final_minutes: float, free_minutes: float},
-     *     providers: list<array{provider: string, label: string, streaming_minutes: float, final_minutes: float, cost_usd: float}>,
+     *     providers: list<array{provider: string, label: string, streaming_minutes: float, final_minutes: float, cost_usd: float, recordings: int, per_hour_usd: float|null, check_usd: float}>,
      *     devices: list<array{name: string, minutes: float, cost_usd: float}>,
      *     clients: list<array{name: string, minutes: float, cost_usd: float}>,
      *     daily: array{labels: list<string>, minutes: list<float>}}
@@ -62,15 +62,25 @@ final class UsageReport
 
         $rows = UsageLedgerEntry::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)
             ->where('occurred_at', '>=', $start->copy()->utc())->where('occurred_at', '<', $end->copy()->utc())
-            ->toBase()->select(['provider', 'source', 'billed_ms', 'cost_usd', 'billable', 'device_id', 'capture_session_id', 'occurred_at'])
+            ->toBase()->select(['provider', 'source', 'duration_ms', 'billed_ms', 'cost_usd', 'billable', 'device_id', 'capture_session_id', 'model', 'occurred_at'])
             ->orderBy('occurred_at')->cursor();
         foreach ($rows as $row) {
             $minutes = (int) $row->billed_ms / 60000;
             $cost = (float) $row->cost_usd;
             $kind = $row->source === UsageLedgerEntry::SOURCE_DEVICE ? 'streaming_minutes' : 'final_minutes';
-            $providers[$row->provider] ??= ['streaming_minutes' => 0.0, 'final_minutes' => 0.0, 'cost_usd' => 0.0];
+            $providers[$row->provider] ??= ['streaming_minutes' => 0.0, 'final_minutes' => 0.0, 'cost_usd' => 0.0, 'check_usd' => 0.0, 'final_usd' => 0.0, 'audio_ms' => 0, 'sessions' => []];
             $providers[$row->provider][$kind] += $minutes;
             $providers[$row->provider]['cost_usd'] += $cost;
+            if ($row->model === 'double-check') {
+                $providers[$row->provider]['check_usd'] += $cost;
+            } elseif ($kind === 'final_minutes') {
+                // What a recorded hour costs with this engine: final transcripts only, per hour of audio (not per channel).
+                $providers[$row->provider]['final_usd'] += $cost;
+                $providers[$row->provider]['audio_ms'] += (int) $row->duration_ms;
+                if ($row->capture_session_id !== null) {
+                    $providers[$row->provider]['sessions'][$row->capture_session_id] = true;
+                }
+            }
             if (! (bool) $row->billable) {
                 $totals['free_minutes'] += $minutes;
 
@@ -105,14 +115,26 @@ final class UsageReport
     }
 
     /**
-     * @param  array<string, array{streaming_minutes: float, final_minutes: float, cost_usd: float}>  $providers
-     * @return list<array{provider: string, label: string, streaming_minutes: float, final_minutes: float, cost_usd: float}>
+     * Per engine: minutes, cost, the recordings it transcribed, what one recorded hour cost with it (final transcripts,
+     * since v1.2) and the part of the cost that was Double-check.
+     *
+     * @param  array<string, array{streaming_minutes: float, final_minutes: float, cost_usd: float, check_usd: float, final_usd: float, audio_ms: int, sessions: array<string, true>}>  $providers
+     * @return list<array{provider: string, label: string, streaming_minutes: float, final_minutes: float, cost_usd: float, recordings: int, per_hour_usd: float|null, check_usd: float}>
      */
     private function providerRows(array $providers): array
     {
         $rows = [];
-        foreach ($providers as $key => $values) {
-            $rows[] = ['provider' => $key, 'label' => SttProviderKey::tryFrom($key)?->getLabel() ?? $key, ...$values];
+        foreach ($providers as $key => $v) {
+            $rows[] = [
+                'provider' => $key,
+                'label' => SttProviderKey::tryFrom($key)?->getLabel() ?? $key,
+                'streaming_minutes' => $v['streaming_minutes'],
+                'final_minutes' => $v['final_minutes'],
+                'cost_usd' => $v['cost_usd'],
+                'recordings' => count($v['sessions']),
+                'per_hour_usd' => $v['audio_ms'] > 0 ? round($v['final_usd'] / ($v['audio_ms'] / 3_600_000), 3) : null,
+                'check_usd' => $v['check_usd'],
+            ];
         }
         usort($rows, fn (array $a, array $b): int => ($b['streaming_minutes'] + $b['final_minutes']) <=> ($a['streaming_minutes'] + $a['final_minutes']));
 

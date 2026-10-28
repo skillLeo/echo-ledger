@@ -149,11 +149,29 @@ final class TranscribeFinalJob implements ShouldQueue
                 'provider_transcript_id' => $result->transcriptId,
                 'submitted_at' => now(),
             ]),
-            'completed' => $store->complete($transcript->fill(['provider_job_id' => $result->jobId ?: null, 'submitted_at' => now()]), $result->result
-                ?? throw new \LogicException('Completed result without transcript.')),
+            'completed' => $this->completed($transcript, $result, $store),
             'awaiting_device' => $transcript->update(['status' => TranscriptStatus::AwaitingDevice, 'submitted_at' => now()]),
             default => throw new \LogicException("Unknown submit state {$result->state}."),
         };
+    }
+
+    /**
+     * Stores a result that came back in the same call. A provider that still keeps a copy (ElevenLabs Scribe) has it
+     * deleted now, as after a webhook; a failed delete is retried by stt:reconcile.
+     */
+    private function completed(Transcript $transcript, SubmitResult $result, TranscriptStore $store): void
+    {
+        $store->complete($transcript->fill([
+            'provider_job_id' => $result->jobId ?: null,
+            'provider_transcript_id' => $result->transcriptId,
+            'submitted_at' => now(),
+        ]), $result->result ?? throw new \LogicException('Completed result without transcript.'));
+        $stored = $transcript->refresh();
+        // A forced re-run (wrong language) has already scheduled the copy's deletion and cleared the job.
+        if ($stored->status === TranscriptStatus::Completed && $stored->provider_transcript_id !== null && $stored->provider_job_id !== null
+            && app(ProviderCopyEraser::class)->erase($stored)) {
+            $stored->update(['provider_deleted_at' => now()]);
+        }
     }
 
     /** The provider call. Any error fails the transcript with its documented code; nothing is retried automatically. */

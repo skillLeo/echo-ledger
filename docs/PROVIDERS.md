@@ -193,6 +193,12 @@ line (`check`) and every app shows them under it. Nothing is merged. The clips a
 deleted right after (stt:reconcile retries). Nothing is sent once the monthly limit is reached, and without ffmpeg on
 the server or a key for the second engine the check is skipped (`meta.double_check.skipped`).
 
+## Privacy per provider
+
+What each provider keeps, whether it trains on the recordings, what EchoLedger deletes there and the three account
+switches worth turning on (AssemblyAI training opt-out or the EU region, ElevenLabs "Improve the models for everyone"
+off, Groq Zero Data Retention on): [research/provider-privacy.md](research/provider-privacy.md), checked 2026-10-28.
+
 ## Usage, prices and the monthly limit
 
 Devices report the minutes they streamed and the server records the minutes of every final transcript in the usage

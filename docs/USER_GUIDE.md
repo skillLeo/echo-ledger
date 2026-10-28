@@ -183,6 +183,13 @@ one tap transcribes it again with the next engine. Search finds Urdu words howev
 English words inside Urdu speech are found too. If a transcript is still not good, open the recording in the
 console and choose **Re-transcribe** or **Compare engines**, then keep the better one.
 
+### Privacy at the speech providers
+
+EchoLedger deletes its copy at each provider as soon as the transcript is stored. Three switches in the providers'
+own accounts make sure none of them trains on your recordings: opt out of model training at AssemblyAI (or choose
+the EU data region in **Settings → AssemblyAI**), turn off **Improve the models for everyone** at ElevenLabs, and turn
+on **Zero Data Retention** at Groq. Your administrator has the details per provider.
+
 ## 13. App lock
 
 - **Windows:** **Settings → Privacy & security → App lock**. Set a PIN. Windows Hello can unlock it too. The

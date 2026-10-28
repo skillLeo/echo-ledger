@@ -76,6 +76,27 @@ it('adds up to the usage ledger exactly: totals, providers, streaming vs final, 
         ->and($november['totals']['minutes'])->toEqualWithDelta(1.0, 1e-9);
 });
 
+it('says per engine how many recordings it transcribed, what a recorded hour cost, and the Double-check part', function () {
+    $owner = Fx::user();
+    $phone = Fx::device($owner, ['name' => 'Pixel']);
+    [$a, $b] = [Fx::session($owner, $phone), Fx::session($owner, $phone)];
+    // Two stereo calls of 30 minutes each with Groq (US$0.111 per hour of audio, billed per side): $0.111 per call.
+    usageReportRow($owner, ['provider' => 'groq', 'capture_session_id' => $a->id, 'duration_ms' => 1_800_000, 'billed_ms' => 3_600_000, 'cost_usd' => 0.111]);
+    usageReportRow($owner, ['provider' => 'groq', 'capture_session_id' => $b->id, 'duration_ms' => 1_800_000, 'billed_ms' => 3_600_000, 'cost_usd' => 0.111]);
+    usageReportRow($owner, ['provider' => 'groq', 'capture_session_id' => $a->id, 'report_id' => 'check/'.Str::ulid().'/20261020120000', 'model' => 'double-check',
+        'duration_ms' => 30_000, 'billed_ms' => 30_000, 'cost_usd' => 0.001]);
+    usageReportRow($owner, ['provider' => 'assemblyai', 'source' => 'device', 'use_case' => 'live_captions', 'report_id' => 'r-'.Str::random(10), 'billed_ms' => 300_000, 'cost_usd' => 0.0125]);
+
+    $rows = collect(app(UsageReport::class)->forMonth($owner->current_workspace_id, '2026-10')['providers'])->keyBy('provider');
+
+    expect($rows['groq']['recordings'])->toBe(2)
+        ->and($rows['groq']['per_hour_usd'])->toEqualWithDelta(0.222, 1e-9)
+        ->and($rows['groq']['check_usd'])->toEqualWithDelta(0.001, 1e-9)
+        ->and($rows['groq']['cost_usd'])->toEqualWithDelta(0.223, 1e-9)
+        ->and($rows['assemblyai']['recordings'])->toBe(0)
+        ->and($rows['assemblyai']['per_hour_usd'])->toBeNull();
+});
+
 it('shows the month, the plan meter and the chart to a member, and the server cap only to the server admin', function () {
     $admin = Fx::superAdmin();
     app(SettingsRepository::class)->set('budget.monthly_minutes', 100);

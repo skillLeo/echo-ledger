@@ -158,7 +158,10 @@ final class ElevenLabsDriver implements ClipTranscriber, SttProvider
 
         $data = (array) $response->json();
         if (! $useWebhook) {
-            return SubmitResult::completed($this->normalize($data), (string) ($data['transcription_id'] ?? ''));
+            // Scribe keeps the transcript: its id is the copy deleted once the result is stored.
+            $id = (string) ($data['transcription_id'] ?? '');
+
+            return SubmitResult::completed($this->normalize($data), $id, $id !== '' ? $id : null);
         }
 
         return SubmitResult::submitted((string) ($data['request_id'] ?? ''), isset($data['transcription_id']) ? (string) $data['transcription_id'] : null);

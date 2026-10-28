@@ -172,7 +172,7 @@ describe('telling the engine the language', function () {
                 ['channel_index' => 0, 'words' => [['text' => 'سلام', 'start' => 0.1, 'end' => 0.3, 'type' => 'word']]],
                 ['channel_index' => 1, 'words' => [['text' => 'جی', 'start' => 1.1, 'end' => 1.5, 'type' => 'word']]],
             ]], 200);
-        }]);
+        }, 'api.elevenlabs.io/v1/speech-to-text/transcripts/*' => Http::response([], 200)]);
         $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'ur', 'final_provider' => 'elevenlabs']);
         $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'elevenlabs', 'status' => TranscriptStatus::Pending, 'language' => 'ur']);
 

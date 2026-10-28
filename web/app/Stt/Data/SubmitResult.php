@@ -18,9 +18,10 @@ final readonly class SubmitResult
         return new self('submitted', $jobId, $providerTranscriptId);
     }
 
-    public static function completed(NormalizedTranscript $result, ?string $jobId = null): self
+    /** A result in the same call; [$providerTranscriptId] names the copy the provider keeps, when it keeps one. */
+    public static function completed(NormalizedTranscript $result, ?string $jobId = null, ?string $providerTranscriptId = null): self
     {
-        return new self('completed', $jobId, null, $result);
+        return new self('completed', $jobId, $providerTranscriptId, $result);
     }
 
     public static function awaitingDevice(): self

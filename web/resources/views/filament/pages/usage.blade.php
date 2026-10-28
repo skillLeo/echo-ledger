@@ -65,16 +65,16 @@
     @livewire(\App\Filament\Widgets\Usage\DailyUsageChart::class, ['month' => $report['month']], key('usage-chart-'.$report['month']))
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));gap:1rem">
-        <x-filament::section heading="By provider" description="Billed minutes: audio minutes × billed channels.">
+        <x-filament::section heading="By provider" description="Billed minutes: audio minutes × billed channels. Per recorded hour: what an hour of recording cost with that engine (final transcripts).">
             @if ($report['providers'] === [])
                 <p style="opacity:.6">No usage in {{ $report['label'] }}.</p>
             @else
                 <div style="overflow-x:auto">
                     <table style="width:100%;font-size:.85rem;border-collapse:collapse">
-                        <thead><tr style="text-align:left;opacity:.7"><th style="padding:.5rem .75rem">Provider</th><th style="padding:.5rem .75rem;text-align:right">Streaming</th><th style="padding:.5rem .75rem;text-align:right">Final</th><th style="padding:.5rem .75rem;text-align:right">Cost</th></tr></thead>
+                        <thead><tr style="text-align:left;opacity:.7"><th style="padding:.5rem .75rem">Provider</th><th style="padding:.5rem .75rem;text-align:right">Streaming</th><th style="padding:.5rem .75rem;text-align:right">Final</th><th style="padding:.5rem .75rem;text-align:right">Recordings</th><th style="padding:.5rem .75rem;text-align:right">Per recorded hour</th><th style="padding:.5rem .75rem;text-align:right">Cost</th></tr></thead>
                         <tbody>
                             @foreach ($report['providers'] as $row)
-                                <tr><td style="{{ $cell }}">{{ $row['label'] }}</td><td style="{{ $num }}">{{ $min($row['streaming_minutes']) }}</td><td style="{{ $num }}">{{ $min($row['final_minutes']) }}</td><td style="{{ $num }}">{{ $usd($row['cost_usd']) }}</td></tr>
+                                <tr><td style="{{ $cell }}">{{ $row['label'] }}</td><td style="{{ $num }}">{{ $min($row['streaming_minutes']) }}</td><td style="{{ $num }}">{{ $min($row['final_minutes']) }}</td><td style="{{ $num }}">{{ $row['recordings'] }}</td><td style="{{ $num }}">{{ $row['per_hour_usd'] === null ? '—' : '$'.number_format($row['per_hour_usd'], 3) }}</td><td style="{{ $num }}">{{ $usd($row['cost_usd']) }}@if ($row['check_usd'] > 0)<div style="font-size:.7rem;opacity:.6">incl. {{ $usd($row['check_usd']) }} Double-check</div>@endif</td></tr>
                             @endforeach
                         </tbody>
                     </table>
