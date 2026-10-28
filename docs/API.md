@@ -64,7 +64,7 @@ Every addition below is marked **(since v1.1)**.
 | 409 | `too_many_open_sessions` | 10 or more sessions of this device are still `recording` | Finish or discard them, then retry |
 | 409 | `current_device` | `DELETE devices/{id}` for the device making the request | Unpair from the device's own settings |
 | 409 | `nothing_to_export` | `sessions/export`: none of the chosen recordings has a finished transcript | Permanent for those recordings |
-| 409 | `views_unavailable` | `transcripts/{id}/views`: the transcript has no Roman Urdu or English view (English, or not finished), or no Anthropic key is set (since v1.2) | Permanent for English transcripts; otherwise add the key or wait for the transcript |
+| 409 | `views_unavailable` | `transcripts/{id}/views`: the transcript is not finished, or no Anthropic key is set (since v1.2) | Add the key, or wait for the transcript |
 | 409 | `cannot_retranscribe` | `sessions/{id}/retranscribe`: the recording's audio is not on the server (not uploaded yet, or erased; since v1.2) | Retry once the upload has finished |
 | 410 | `restore_expired` | `sessions/{id}/restore` after the 48-hour undo bin ended | Permanent: the recording is gone |
 | 413 | `too_large` | Body or declared size above the limit | Permanent |
@@ -637,18 +637,19 @@ going. A failed or unfinished transcript is simply run again in the new language
 `409 cannot_retranscribe` when the recording's audio is not on the server (not uploaded yet, or erased).
 
 ### `GET /api/transcripts/{id}/views` — `library:read` (since v1.2)
-"Show as": the Roman Urdu and English reading views of a finished transcript, made with the Claude API (text only, no
-audio) and kept with the transcript. `200 {"status","available","roman","english","model","made_at","error"}`:
-`status` is `unavailable` (English, or not finished), `none`, `making`, `ready` or `failed` (with `error`);
-`available` lists the views this transcript can have (`roman` and `english` for Urdu and Arabic, `english` for the
-other non-English languages); when ready, `roman` and `english` are lists aligned with the segments (`null` for an
-empty line). An edit to the transcript makes the views stale (`none`) until they are made again. Every transcript
-carries `views: {"available", "status"}`.
+"Show as": reading views of a finished transcript, made with the Claude API (text only, no audio) and kept with
+the transcript: `roman` (Roman Urdu), `english` and `urdu` (translations).
+`200 {"status","available","roman","english","urdu","default","model","made_at","error"}`: `status` is `unavailable`
+(not finished), `none`, `making`, `ready` or `failed` (with `error`); `available` lists the views this transcript can
+have (`roman` and `english` for Urdu, `roman` and `urdu` for English, `english` for Arabic and the other languages);
+when ready, each available view is a list aligned with the segments (`null` for an empty line); `default` is the view
+the apps open it in (console setting, `original` unless that view is available). An edit to the transcript makes the
+views stale (`none`) until they are made again. Every transcript carries `views: {"available", "status", "default"}`.
 
 ### `POST /api/transcripts/{id}/views` — `sessions:write` (since v1.2)
 Starts making the views on the queue: `202` with the state (`making`), or `200` when they are ready.
-`409 views_unavailable` when the transcript has no view or no Anthropic key is set. `GET /api/transcripts/{id}/export`
-takes `view=roman|english` to export a ready view instead of the original words, and `POST /api/sessions/{id}/shares`
+`409 views_unavailable` when the transcript is not finished or no Anthropic key is set. `GET /api/transcripts/{id}/export`
+takes `view=roman|english|urdu` to export a ready view instead of the original words, and `POST /api/sessions/{id}/shares`
 takes `view` (share links have `view`): the page opens in that view once it is made, with a label, and in the original
 words until then.
 

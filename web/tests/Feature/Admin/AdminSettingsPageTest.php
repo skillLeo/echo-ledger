@@ -385,6 +385,8 @@ it('stores the Claude model for Show as and refuses an unknown one', function ()
     expect(app(SettingsRepository::class)->get('claude.model'))->toBe('claude-sonnet-5-5');
 
     adminSettingsPage($this)->fillForm(adminChangedSettings(['claude_model' => 'gpt-9']))->call('save')->assertHasFormErrors(['claude_model']);
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['views_default' => 'urdu']))->call('save')->assertHasNoFormErrors();
+    expect(app(SettingsRepository::class)->get('views.default'))->toBe('urdu');
 });
 
 it('falls back to the default AssemblyAI models when the list is emptied', function () {

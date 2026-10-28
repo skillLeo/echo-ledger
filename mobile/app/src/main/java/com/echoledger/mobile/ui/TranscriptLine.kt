@@ -48,7 +48,7 @@ internal fun TranscriptLine(
 ) {
     // Show as: the Roman Urdu or English view of the line (labelled above the transcript), without marks.
     if (override != null) {
-        Text(override, fontSize = 14.sp)
+        Text(override, fontSize = 14.sp, style = scriptStyle(language))
         return
     }
     val unsure = remember(segment) { segment.words.indices.filter { Uncertain.word(segment.words[it]) } }

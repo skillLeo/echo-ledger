@@ -104,7 +104,14 @@ class ShowAsScreenTest : ScreenTest() {
     @Test
     fun `lines and status follow the chosen view`() {
         val segments = listOf(SegmentDto(1, "Me", 0, 1000, "a"), SegmentDto(2, "Client", 1500, 3000, "b"))
-        val ready = TranscriptViewsDto("ready", listOf("roman", "english"), listOf("ra", null), listOf("ea", "eb"), "claude-opus-5-5")
+        val ready =
+            TranscriptViewsDto(
+                "ready",
+                listOf("roman", "english"),
+                roman = listOf("ra", null),
+                english = listOf("ea", "eb"),
+                model = "claude-opus-5-5"
+            )
 
         assertEquals(listOf("ra", null), ShowAs.lines(segments, ShowAs.ROMAN, ready))
         assertEquals(listOf("ea", "eb"), ShowAs.lines(segments, ShowAs.ENGLISH, ready))
@@ -112,5 +119,37 @@ class ShowAsScreenTest : ScreenTest() {
         assertNull(ShowAs.lines(segments, ShowAs.ROMAN, ready.copy(status = "making")))
         assertEquals("The view could not be made: no key", ShowAs.status(ShowAs.ENGLISH, ready.copy(status = "failed", error = "no key")))
         assertNull(ShowAs.status(ShowAs.ORIGINAL, ready))
+    }
+
+    @Test
+    fun `opens an English call in its Urdu view when that is the default`() {
+        val english = """
+            {"id":"${ServerFixtures.TRANSCRIPT_ID}","session_id":"${ServerFixtures.SESSION_ID}","kind":"final","provider":"assemblyai","status":"completed",
+             "language":"en","text":"x","segments":[{"channel":1,"speaker":"Me","start_ms":0,"end_ms":1000,"text":"I will send the invoice"}],
+             "views":{"available":["roman","urdu"],"status":"ready","default":"urdu"}}
+        """.trimIndent()
+        server.on("GET", "/api/transcripts/${ServerFixtures.TRANSCRIPT_ID}", FakeServer.json(200, english))
+        server.on(
+            "GET",
+            viewsPath,
+            FakeServer.json(
+                200,
+                """{"status":"ready","available":["roman","urdu"],"roman":["main invoice bhej doon ga"],"english":null,
+                    "urdu":["میں invoice بھیج دوں گا"],"default":"urdu","model":"claude-opus-5-5","made_at":null,"error":null}"""
+            )
+        )
+        server.on(
+            "GET",
+            "/api/sessions/${ServerFixtures.SESSION_ID}",
+            FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null))
+        )
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        show { SessionScreen(vm, item, onBack = {}) }
+
+        awaitText("میں invoice بھیج دوں گا")
+        compose.onNodeWithText("Urdu view by claude-opus-5-5. The transcript itself is unchanged.").assertExists()
+        assertTrue(compose.onAllNodesWithText("English").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Original").performClick()
+        awaitText("I will send the invoice")
     }
 }

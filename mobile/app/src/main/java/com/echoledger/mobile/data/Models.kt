@@ -377,7 +377,7 @@ data class TranscriptDto(
 
 /** Show as (since v1.2): `roman` and/or `english`, and `status` unavailable | none | making | ready | failed. */
 @Serializable
-data class ViewsSummaryDto(val available: List<String> = emptyList(), val status: String = "unavailable")
+data class ViewsSummaryDto(val available: List<String> = emptyList(), val status: String = "unavailable", val default: String = "original")
 
 /**
  * `GET /api/transcripts/{id}/views` (since v1.2): the Roman Urdu and English reading views, each a list aligned with the
@@ -389,6 +389,7 @@ data class TranscriptViewsDto(
     val available: List<String> = emptyList(),
     val roman: List<String?>? = null,
     val english: List<String?>? = null,
+    val urdu: List<String?>? = null,
     val model: String? = null,
     val error: String? = null
 )

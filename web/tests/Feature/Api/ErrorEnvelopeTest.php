@@ -126,7 +126,7 @@ function produceError(object $test, string $code): TestResponse
             $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id, 'device_id' => $test->device->id, 'status' => SessionStatus::Completed]);
             $transcript = $session->transcripts()->create(['kind' => 'final', 'provider' => 'assemblyai', 'status' => 'completed', 'language' => 'en', 'text' => 'Hello', 'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello']]]);
 
-            // English has no Roman Urdu or English view.
+            // No Anthropic key is set.
             return $test->postJson("/api/transcripts/{$transcript->id}/views");
         case 'cannot_retranscribe':
             // No audio on the server for this recording.

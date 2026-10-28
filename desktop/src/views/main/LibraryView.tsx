@@ -44,6 +44,9 @@ const playbackUrlOf = (detail: Record<string, unknown>): string | null => (typeo
  */
 /** How often the Library asks whether the Show as views are written yet. */
 const VIEWS_POLL_MS = 5_000;
+/** Show as: the views in the order the switch shows them, and their names. */
+const VIEW_ORDER: TranscriptView[] = ["roman", "english", "urdu"];
+const VIEW_LABELS: Record<TranscriptView, string> = { roman: "Roman Urdu", english: "English", urdu: "Urdu" };
 
 /** Tooltips of what the engine was not sure of (kept as heard). */
 const UNSURE_WORD = "Not sure of this word. Click to hear it.";
@@ -260,6 +263,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   useEffect(() => {
     setShowAs("original");
     setViews(null);
+    // Open in the default view (console setting) when it is made for this recording.
+    const summary = transcript?.views;
+    if (summary?.status === "ready" && summary.default && summary.default !== "original" && summary.available.includes(summary.default)) void chooseView(summary.default);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcriptId]);
   useEffect(() => {
     if (editing) setShowAs("original");
@@ -629,10 +636,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         {(transcript.views?.available.length ?? 0) > 0 && (
                           <span className="row" style={{ gap: 2 }} role="group" aria-label="Show as">
                             <button type="button" className="btn ghost compact" aria-pressed={showAs === "original"} onClick={() => void chooseView("original")}>Original</button>
-                            {transcript.views!.available.includes("roman") && (
-                              <button type="button" className="btn ghost compact" aria-pressed={showAs === "roman"} onClick={() => void chooseView("roman")}>Roman Urdu</button>
-                            )}
-                            <button type="button" className="btn ghost compact" aria-pressed={showAs === "english"} onClick={() => void chooseView("english")}>English</button>
+                            {VIEW_ORDER.filter((v) => transcript.views!.available.includes(v)).map((v) => (
+                              <button key={v} type="button" className="btn ghost compact" aria-pressed={showAs === v} onClick={() => void chooseView(v)}>{VIEW_LABELS[v]}</button>
+                            ))}
                           </span>
                         )}
                       </div>
@@ -640,10 +646,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {showAs !== "original" && (
                       <div className="small muted" role="status" data-testid="view-status">
                         {views?.status === "ready"
-                          ? `${showAs === "roman" ? "Roman Urdu" : "English"} view${views.model ? ` by ${views.model}` : ""}. The transcript itself is unchanged.`
+                          ? `${VIEW_LABELS[showAs]} view${views.model ? ` by ${views.model}` : ""}. The transcript itself is unchanged.`
                           : views?.status === "failed"
                             ? `The view could not be made: ${views.error ?? "try again later."}`
-                            : `Writing the ${showAs === "roman" ? "Roman Urdu" : "English"} view… this takes a minute or two.`}
+                            : `Writing the ${VIEW_LABELS[showAs]} view… this takes a minute or two.`}
                       </div>
                     )}
                     {panel === "replace" && <ReplaceBar onReplace={replaceAll} onClose={() => setPanel(null)} />}
@@ -651,7 +657,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {panel === "history" && <HistoryPanel transcriptId={transcript.id} edited={!!transcript.edited_at} onRestore={restore} onClose={() => setPanel(null)} />}
                     <VocabularyHint terms={vocabTerms} clientName={current.client?.name ?? null} onAdd={(t) => void addToVocabulary(t)} onDismiss={() => setVocabTerms([])} />
                     {transcript.segments.length === 0 && <div className="empty">The transcript is empty: no speech was detected.</div>}
-                    <div className="segments" ref={segmentsRef} lang={showAs === "original" ? normalizeLanguage(transcript.language) ?? undefined : undefined}>
+                    <div className="segments" ref={segmentsRef} lang={showAs === "original" ? normalizeLanguage(transcript.language) ?? undefined : showAs === "urdu" ? "ur" : undefined}>
                       {transcript.segments.map((s, i) => {
                         const inView = viewText(i);
                         // A turn shows its speaker once: following lines of the same speaker keep the label for screen

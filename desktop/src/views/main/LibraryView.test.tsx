@@ -1178,9 +1178,25 @@ describe("LibraryView Show as", () => {
     expect(callsOf("export_transcript")[0]).toMatchObject({ id: "tr-a", format: "docx", view: "english" });
   });
 
-  it("offers no switch for an English transcript", async () => {
+  it("offers no switch when the transcript has no views", async () => {
     await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     expect(within(detail()).queryByRole("group", { name: "Show as" })).not.toBeInTheDocument();
+  });
+
+  it("opens an English call in its Urdu view when that is the default, set in Urdu letters", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "en", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "I will send the invoice" }],
+      views: { available: ["roman", "urdu"], status: "ready", default: "urdu" } });
+    respond("transcript_views", { status: "ready", available: ["roman", "urdu"], roman: ["main invoice bhej doon ga"], english: null, urdu: ["میں invoice بھیج دوں گا"], default: "urdu", model: "claude-opus-5-5", made_at: null, error: null });
+    await renderLibrary();
+    await selectItem("Zoom with Acme");
+    await flushAsync();
+
+    expect(within(detail()).getByText("میں invoice بھیج دوں گا")).toBeInTheDocument();
+    expect(detail().querySelector(".segments")).toHaveAttribute("lang", "ur");
+    expect(within(detail()).getByRole("button", { name: "Urdu" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(detail()).queryByRole("button", { name: "English" })).not.toBeInTheDocument();
+    fireEvent.click(within(detail()).getByRole("button", { name: "Original" }));
+    expect(within(detail()).getByText("I will send the invoice")).toBeInTheDocument();
   });
 });

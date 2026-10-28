@@ -22,16 +22,23 @@ import com.echoledger.mobile.data.TranscriptViewsDto
 enum class ShowAs(val key: String, val label: String) {
     ORIGINAL("original", "Original"),
     ROMAN("roman", "Roman Urdu"),
-    ENGLISH("english", "English");
+    ENGLISH("english", "English"),
+    URDU("urdu", "Urdu");
 
     companion object {
+        fun of(key: String?): ShowAs = entries.firstOrNull { it.key == key } ?: ORIGINAL
+
         /** How often the page asks whether the views are written yet. */
         const val POLL_MS = 5_000L
 
         /** The text of each line in [view], aligned with [segments]; null for the original words or a view not ready. */
         fun lines(segments: List<SegmentDto>, view: ShowAs, views: TranscriptViewsDto?): List<String?>? {
             val ready = views?.takeIf { view != ORIGINAL && it.status == "ready" } ?: return null
-            val texts = (if (view == ROMAN) ready.roman else ready.english) ?: return null
+            val texts = when (view) {
+                ROMAN -> ready.roman
+                ENGLISH -> ready.english
+                else -> ready.urdu
+            } ?: return null
             return segments.indices.map { texts.getOrNull(it) }
         }
 

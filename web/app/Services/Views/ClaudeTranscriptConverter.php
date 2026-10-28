@@ -21,20 +21,22 @@ class ClaudeTranscriptConverter implements TranscriptConverter
     private const FALLBACK_MODELS = ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5'];
 
     private const SYSTEM = <<<'TXT'
-        You convert the lines of a business phone call transcript into two reading views. The input is JSON: the call's
-        language and a list of lines, each with an index and its text.
+        You convert the lines of a business phone call transcript into reading views. The input is JSON: the call's
+        language, the views wanted ("views_wanted") and a list of lines, each with an index and its text.
 
-        For every input line return one entry with the same index:
-        - "roman": the same words written in Latin letters. Urdu in the common Pakistani Roman Urdu spelling ("aap kaise
-          hain", "kal ki meeting reschedule kar dein"); Arabic in a plain, readable Latin transliteration. English
-          words inside the line stay exactly as they are. A line that is already in Latin letters is copied unchanged.
-          Use an empty string when no Roman view was asked for ("roman_wanted": false).
-        - "english": a faithful English translation of the line. Keep it natural but close to the original; a line
-          already in English is copied unchanged.
+        For every input line return one entry with the same index and these fields (an empty string for a view that was
+        not wanted):
+        - "roman": Roman Urdu, in the common Pakistani spelling ("aap kaise hain", "kal ki meeting reschedule kar dein").
+          An Urdu line keeps its own words, written in Latin letters, with English words inside it unchanged. An English
+          line is translated into Urdu and written in Roman Urdu.
+        - "english": a faithful English translation of the line. A line already in English is copied unchanged.
+        - "urdu": a faithful Urdu translation in Urdu script, the way a Pakistani business person writes; English
+          names, brands and technical terms may stay in Latin letters. A line already in Urdu is copied unchanged.
 
-        Rules for both: keep names, numbers, amounts, dates and product names exactly; never add, drop, merge, summarise
-        or explain anything; keep the speaker's tone and any uncertainty; keep markers such as "[unclear: ...]" as they
-        are. Every input index appears exactly once in the output.
+        Rules for every view: keep names, numbers, amounts, dates and product names exactly; never add, drop, merge,
+        summarise or explain anything; keep the speaker's tone and any uncertainty; keep markers such as
+        "[unclear: ...]" as they are; never use Hindi (Devanagari) letters. Every input index appears exactly once in
+        the output.
         TXT;
 
     public function __construct(private readonly CredentialVault $vault, private readonly SettingsRepository $settings) {}
@@ -46,16 +48,16 @@ class ClaudeTranscriptConverter implements TranscriptConverter
         return is_string($model) && $model !== '' ? $model : 'claude-opus-5-5';
     }
 
-    public function convert(array $lines, string $language, bool $roman): array
+    public function convert(array $lines, string $language, array $views): array
     {
         $key = $this->vault->get('anthropic', 'api_key');
         if ($key === null || $key === '') {
-            throw new RuntimeException('Add the Anthropic API key on API Credentials to make Roman Urdu and English views.');
+            throw new RuntimeException('Add the Anthropic API key on API Credentials to make the Show as views.');
         }
         $model = $this->model();
         $input = [
             'language' => LanguageChoice::label($language),
-            'roman_wanted' => $roman,
+            'views_wanted' => $views,
             'lines' => array_map(fn (int $i, string $text): array => ['index' => $i, 'text' => $text], array_keys($lines), array_values($lines)),
         ];
         $arguments = [
@@ -92,10 +94,13 @@ class ClaudeTranscriptConverter implements TranscriptConverter
         $out = [];
         foreach ($data['lines'] as $line) {
             if (is_array($line) && isset($line['index']) && array_key_exists((int) $line['index'], $lines)) {
-                $out[(int) $line['index']] = [
-                    'roman' => $roman && is_string($line['roman'] ?? null) && trim($line['roman']) !== '' ? trim($line['roman']) : null,
-                    'english' => trim((string) ($line['english'] ?? '')),
-                ];
+                $out[(int) $line['index']] = [];
+                foreach ($views as $view) {
+                    $text = is_string($line[$view] ?? null) ? trim($line[$view]) : '';
+                    if ($text !== '') {
+                        $out[(int) $line['index']][$view] = $text;
+                    }
+                }
             }
         }
 
@@ -126,8 +131,9 @@ class ClaudeTranscriptConverter implements TranscriptConverter
                             'index' => ['type' => 'integer'],
                             'roman' => ['type' => 'string'],
                             'english' => ['type' => 'string'],
+                            'urdu' => ['type' => 'string'],
                         ],
-                        'required' => ['index', 'roman', 'english'],
+                        'required' => ['index', 'roman', 'english', 'urdu'],
                         'additionalProperties' => false,
                     ],
                 ],

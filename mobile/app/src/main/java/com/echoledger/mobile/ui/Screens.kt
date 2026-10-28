@@ -509,6 +509,12 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
             if (state == null) showAs = ShowAs.ORIGINAL
         }
     }
+    // Open in the default view (console setting) when it is made for this recording.
+    LaunchedEffect(t?.id) {
+        val summary = t?.views ?: return@LaunchedEffect
+        val default = ShowAs.of(summary.default)
+        if (summary.status == "ready" && default != ShowAs.ORIGINAL && default.key in summary.available) chooseView(default)
+    }
     val shown = ShowAs.lines(segments, showAs, views)
     fun copy(withTimestamps: Boolean) {
         scope.launch {
@@ -708,7 +714,12 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                                 modifier = Modifier.width(60.dp)
                             )
                             val spoken = if (active && s.words.isNotEmpty()) s.words.indexOfLast { it.startMs <= player.positionMs } else -1
-                            TranscriptLine(s, spoken, enabled = player.ready, override = shown?.getOrNull(index), language = t.language) {
+                            val lineLanguage = when (showAs) {
+                                ShowAs.ORIGINAL -> t.language
+                                ShowAs.URDU -> "ur"
+                                else -> "en"
+                            }
+                            TranscriptLine(s, spoken, enabled = player.ready, override = shown?.getOrNull(index), language = lineLanguage) {
                                 player.seekTo(it)
                             }
                         }

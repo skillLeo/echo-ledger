@@ -16,6 +16,7 @@ use App\Services\SettingsRepository;
 use App\Services\SettingsSearch;
 use App\Services\SettingsTransfer;
 use App\Services\TextReplacements;
+use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\KeytermPolicy;
@@ -113,6 +114,7 @@ class Settings extends Page
             'languages_auto_fallback' => LanguageChoice::fallback(),
             'double_check' => (bool) ($all['accuracy.double_check'] ?? false),
             'claude_model' => (string) ($all['claude.model'] ?? 'claude-opus-5-5'),
+            'views_default' => (string) ($all['views.default'] ?? 'original'),
             'vocabulary_keyterms' => KeytermPolicy::sanitize((array) ($all['vocabulary.keyterms'] ?? [])),
             'vocabulary_replacements' => TextReplacements::rules($all['vocabulary.replacements'] ?? []),
             'display_timezone' => is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC',
@@ -267,6 +269,9 @@ class Settings extends Page
                                 ->helperText('Whisper on Groq (or ElevenLabs Scribe when Whisper wrote the transcript) listens again to up to 12 lines the first engine was not sure of. When they disagree, both are shown; the transcript is never changed. Each line is billed (Groq: at least 10 seconds).'),
                             Select::make('claude_model')->label('Show as (Roman Urdu and English views)')->options(self::CLAUDE_MODELS)->required()->columnSpan(2)
                                 ->helperText('The Claude model that writes the views (key on API Credentials → Anthropic). An hour of Urdu call costs about US$1 with Opus, less with Sonnet or Haiku.'),
+                            Select::make('views_default')->label('Open transcripts as')->required()->columnSpan(2)
+                                ->options(['original' => 'Original (as transcribed)', ...TranscriptViews::VIEWS])
+                                ->helperText('The apps and the console open a transcript in this view when it is made for that recording; the original is always one tap away.'),
                         ]),
                     $this->section('bookmarks')
                         ->description('One-tap tags offered while recording a call (on the desktop pill and the phone notification).')
@@ -549,6 +554,7 @@ class Settings extends Page
             'languages.auto_fallback' => LanguageChoice::normalize($state['languages_auto_fallback'] ?? null) ?? 'ur',
             'accuracy.double_check' => (bool) ($state['double_check'] ?? false),
             'claude.model' => in_array($state['claude_model'] ?? null, array_keys(self::CLAUDE_MODELS), true) ? $state['claude_model'] : 'claude-opus-5-5',
+            'views.default' => in_array($state['views_default'] ?? null, ['original', ...array_keys(TranscriptViews::VIEWS)], true) ? $state['views_default'] : 'original',
             'vocabulary.keyterms' => KeytermPolicy::sanitize((array) ($state['vocabulary_keyterms'] ?? [])),
             'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',

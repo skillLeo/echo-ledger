@@ -93,6 +93,7 @@ class ViewCaptureSession extends ViewRecord
                         ['docx', 'Word (.docx) in Roman Urdu', 'roman'], ['docx', 'Word (.docx) in English', 'english'],
                         ['html', 'Print in Roman Urdu', 'roman'], ['html', 'Print in English', 'english'],
                         ['txt', 'Text (.txt) in Roman Urdu', 'roman'], ['txt', 'Text (.txt) in English', 'english'],
+                        ['docx', 'Word (.docx) in Urdu', 'urdu'], ['html', 'Print in Urdu', 'urdu'], ['txt', 'Text (.txt) in Urdu', 'urdu'],
                     ]),
             ])->label('Export')->icon(Heroicon::OutlinedArrowDownTray)->button()->color('gray')
                 ->visible(fn (): bool => $this->editableTranscript() !== null),
@@ -132,7 +133,7 @@ class ViewCaptureSession extends ViewRecord
     /** "Show as…": makes the Roman Urdu and English views with Claude (on the queue); the player then offers them. */
     private function showAsAction(): Action
     {
-        return Action::make('show_as')->label('Roman Urdu & English')->icon(Heroicon::OutlinedLanguage)->color('gray')
+        return Action::make('show_as')->label('Show as…')->icon(Heroicon::OutlinedLanguage)->color('gray')
             ->visible(function (): bool {
                 $transcript = $this->editableTranscript();
 
@@ -151,7 +152,7 @@ class ViewCaptureSession extends ViewRecord
 
                     return;
                 }
-                Notification::make()->title($state['status'] === 'ready' ? 'The views are ready' : 'Making the Roman Urdu and English views. Reload the page in a minute or two.')->success()->send();
+                Notification::make()->title($state['status'] === 'ready' ? 'The views are ready' : 'Making the Show as views (Roman Urdu, English or Urdu). Reload the page in a minute or two.')->success()->send();
             });
     }
 

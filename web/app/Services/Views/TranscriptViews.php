@@ -10,6 +10,7 @@ use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
+use App\Services\SettingsRepository;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
 use Illuminate\Support\Facades\Log;
@@ -17,14 +18,14 @@ use RuntimeException;
 use Throwable;
 
 /**
- * "Show as" (since v1.2): Roman Urdu and English reading views of a finished transcript, made once with the Claude API
+ * "Show as" (since v1.2): Roman Urdu, English and Urdu reading views of a finished transcript, made once with the Claude API
  * on the queue and kept with the transcript (`meta.views`). They are labelled as views everywhere; the transcript
  * itself never changes. An edit to the transcript makes them stale: they are made again on the next request.
  */
 final class TranscriptViews
 {
     /** view => label */
-    public const VIEWS = ['roman' => 'Roman Urdu', 'english' => 'English'];
+    public const VIEWS = ['roman' => 'Roman Urdu', 'english' => 'English', 'urdu' => 'Urdu'];
 
     /** Source characters per request; a chunk whose answer does not fit is split again. */
     public const CHUNK_CHARS = 6000;
@@ -42,8 +43,8 @@ final class TranscriptViews
     public function __construct(private readonly TranscriptConverter $converter, private readonly CredentialVault $vault) {}
 
     /**
-     * The views a transcript can have: Roman Urdu and English for Urdu and Arabic, English for the other non-English
-     * languages, none for English.
+     * The views a transcript can have: Roman Urdu and English for Urdu, Roman Urdu and Urdu (translations) for
+     * English, English for Arabic and the other languages.
      *
      * @return list<string>
      */
@@ -53,9 +54,9 @@ final class TranscriptViews
         $arabicScript = ScriptCheck::counts((string) $transcript->text)['arabic'] > 0;
 
         return match (true) {
-            in_array($language, ['ur', 'ar'], true) || ($language === null && $arabicScript) => ['roman', 'english'],
-            $language !== null && $language !== 'en' => ['english'],
-            default => [],
+            $language === 'ur' || ($language === null && $arabicScript) => ['roman', 'english'],
+            $language === 'en' || $language === null => ['roman', 'urdu'],
+            default => ['english'],
         };
     }
 
@@ -69,7 +70,7 @@ final class TranscriptViews
      * What the apps show: `status` none | making | ready | failed | unavailable, and when ready each view as a list
      * aligned with the segments (null for an empty line).
      *
-     * @return array{status: string, available: list<string>, roman: list<string|null>|null, english: list<string|null>|null, model: string|null, made_at: string|null, error: string|null}
+     * @return array{status: string, available: list<string>, roman: list<string|null>|null, english: list<string|null>|null, urdu: list<string|null>|null, default: string, model: string|null, made_at: string|null, error: string|null}
      */
     public function state(Transcript $transcript): array
     {
@@ -90,11 +91,25 @@ final class TranscriptViews
             'status' => $status,
             'available' => $available,
             'roman' => $ready && in_array('roman', $available, true) ? self::aligned($views['roman'] ?? [], $transcript) : null,
-            'english' => $ready ? self::aligned($views['english'] ?? [], $transcript) : null,
+            'english' => $ready && in_array('english', $available, true) ? self::aligned($views['english'] ?? [], $transcript) : null,
+            'urdu' => $ready && in_array('urdu', $available, true) ? self::aligned($views['urdu'] ?? [], $transcript) : null,
+            'default' => self::defaultView($available),
             'model' => $ready ? ($views['model'] ?? null) : null,
             'made_at' => $ready ? ($views['made_at'] ?? null) : null,
             'error' => $status === 'failed' ? ($views['error'] ?? null) : null,
         ];
+    }
+
+    /**
+     * The view the apps open a transcript in (Settings → Show as, Original by default), when this transcript has it.
+     *
+     * @param  list<string>  $available
+     */
+    public static function defaultView(array $available): string
+    {
+        $default = app(SettingsRepository::class)->get('views.default', 'original');
+
+        return is_string($default) && in_array($default, $available, true) ? $default : 'original';
     }
 
     /** Whether views can be made at all now (a key is set). */
@@ -115,10 +130,10 @@ final class TranscriptViews
     {
         $state = $this->state($transcript);
         if ($state['status'] === 'unavailable') {
-            throw new RuntimeException('This transcript has no Roman Urdu or English view (it is in English, or not finished).');
+            throw new RuntimeException('This transcript has no Show as view yet: it is not finished.');
         }
         if (! $this->configured()) {
-            throw new RuntimeException('Add the Anthropic API key on API Credentials to make Roman Urdu and English views.');
+            throw new RuntimeException('Add the Anthropic API key on API Credentials to make the Show as views.');
         }
         if (in_array($state['status'], ['ready', 'making'], true)) {
             return $state;
@@ -134,7 +149,6 @@ final class TranscriptViews
     {
         $available = self::available($transcript);
         $fingerprint = self::fingerprint($transcript);
-        $roman = in_array('roman', $available, true);
         $lines = [];
         foreach ($transcript->segments ?? [] as $i => $segment) {
             $text = trim((string) ($segment['text'] ?? ''));
@@ -147,7 +161,7 @@ final class TranscriptViews
         $result = [];
         try {
             foreach (self::chunks($lines) as $chunk) {
-                foreach ($this->convertAll($chunk, (string) (LanguageChoice::normalize($transcript->language) ?? 'ur'), $roman, $tokens, $model) as $i => $view) {
+                foreach ($this->convertAll($chunk, (string) (LanguageChoice::normalize($transcript->language) ?? 'en'), $available, $tokens, $model) as $i => $view) {
                     $result[$i] = $view;
                 }
             }
@@ -158,12 +172,12 @@ final class TranscriptViews
 
             return;
         }
-        $views = ['status' => 'ready', 'fingerprint' => $fingerprint, 'model' => $model, 'made_at' => now()->toAtomString(), 'english' => [], 'roman' => $roman ? [] : null];
-        foreach ($lines as $i => $text) {
-            // A line Claude left out keeps its own words, so no line goes missing from a view.
-            $views['english'][(string) $i] = $result[$i]['english'] ?? $text;
-            if ($roman) {
-                $views['roman'][(string) $i] = $result[$i]['roman'] ?? $text;
+        $views = ['status' => 'ready', 'fingerprint' => $fingerprint, 'model' => $model, 'made_at' => now()->toAtomString()];
+        foreach ($available as $view) {
+            $views[$view] = [];
+            foreach ($lines as $i => $text) {
+                // A line Claude left out keeps its own words, so no line goes missing from a view.
+                $views[$view][(string) $i] = $result[$i][$view] ?? $text;
             }
         }
         $this->remember($transcript, $views);
@@ -175,12 +189,13 @@ final class TranscriptViews
      *
      * @param  array<int, string>  $chunk
      * @param  array{input: int, output: int}  $tokens
-     * @return array<int, array{roman: string|null, english: string}>
+     * @param  list<string>  $views
+     * @return array<int, array<string, string>>
      */
-    private function convertAll(array $chunk, string $language, bool $roman, array &$tokens, ?string &$model): array
+    private function convertAll(array $chunk, string $language, array $views, array &$tokens, ?string &$model): array
     {
         try {
-            $answer = $this->converter->convert($chunk, $language, $roman);
+            $answer = $this->converter->convert($chunk, $language, $views);
         } catch (TooLongForOneRequest $e) {
             if (count($chunk) < 2) {
                 throw $e;
@@ -188,8 +203,8 @@ final class TranscriptViews
             $half = (int) ceil(count($chunk) / 2);
 
             return array_replace(
-                $this->convertAll(array_slice($chunk, 0, $half, true), $language, $roman, $tokens, $model),
-                $this->convertAll(array_slice($chunk, $half, null, true), $language, $roman, $tokens, $model),
+                $this->convertAll(array_slice($chunk, 0, $half, true), $language, $views, $tokens, $model),
+                $this->convertAll(array_slice($chunk, $half, null, true), $language, $views, $tokens, $model),
             );
         }
         $tokens['input'] += $answer['input_tokens'];

@@ -386,11 +386,11 @@ export interface TranscriptDetail {
   /** Parts done of all parts while it is being made in pieces (since v1.2). */
   progress?: TranscriptProgress | null;
   /** Show as: the views this transcript can have and whether they are made (since v1.2). */
-  views?: { available: TranscriptView[]; status: TranscriptViewsStatus } | null;
+  views?: { available: TranscriptView[]; status: TranscriptViewsStatus; default?: "original" | TranscriptView } | null;
 }
 
 /** A "Show as" reading view of a transcript (since v1.2); the transcript itself never changes. */
-export type TranscriptView = "roman" | "english";
+export type TranscriptView = "roman" | "english" | "urdu";
 export type TranscriptViewsStatus = "unavailable" | "none" | "making" | "ready" | "failed";
 
 /** `GET /api/transcripts/{id}/views`: each view as a list aligned with the segments (null for an empty line). */
@@ -399,6 +399,8 @@ export interface TranscriptViewsState {
   available: TranscriptView[];
   roman: (string | null)[] | null;
   english: (string | null)[] | null;
+  urdu?: (string | null)[] | null;
+  default?: "original" | TranscriptView;
   model: string | null;
   made_at: string | null;
   error: string | null;

@@ -10,6 +10,8 @@
             d: @js($data), active: -1, word: -1, raf: null, playing: false, now: 0, rate: 1, skipSilence: false, follow: true,
             editing: false, saving: null, error: null, copied: null, view: 'original',
             init() {
+                // Show as: open in the default view (Settings) when it is made for this recording.
+                if (this.d.views && this.d.views.status === 'ready' && this.d.views.default && this.d.views[this.d.views.default]) this.view = this.d.views.default;
                 const a = this.$refs.audio;
                 if (!a) return;
                 a.addEventListener('play', () => { this.playing = true; this.tick(); });
@@ -181,12 +183,13 @@
             <span x-show="d.model" x-text="'· ' + d.model"></span>
             <span x-text="'· ' + d.language"></span>
             <span x-show="d.edited">· edited</span>
-            <span x-show="view !== 'original'" x-text="'· ' + (view === 'roman' ? 'Roman Urdu' : 'English') + ' view by ' + (d.views ? d.views.model : '')"></span>
+            <span x-show="view !== 'original'" x-text="'· ' + ({roman: 'Roman Urdu', english: 'English', urdu: 'Urdu'}[view] || '') + ' view by ' + (d.views ? d.views.model : '')"></span>
             <span class="el-spacer"></span>
             <span x-show="viewReady('roman') || viewReady('english')" role="group" aria-label="Show as" style="display:inline-flex;gap:.25rem">
                 <button type="button" class="el-btn" x-on:click="view = 'original'" :aria-pressed="view === 'original'">Original</button>
                 <button type="button" class="el-btn" x-show="viewReady('roman')" x-on:click="view = 'roman'; editing = false" :aria-pressed="view === 'roman'">Roman Urdu</button>
                 <button type="button" class="el-btn" x-show="viewReady('english')" x-on:click="view = 'english'; editing = false" :aria-pressed="view === 'english'">English</button>
+                <button type="button" class="el-btn" x-show="viewReady('urdu')" x-on:click="view = 'urdu'; editing = false" :aria-pressed="view === 'urdu'">Urdu</button>
             </span>
             @if ($data['audio_url'])
                 <label>Speed
@@ -224,7 +227,7 @@
 
         <p class="el-error" role="alert" x-show="error" x-text="error"></p>
         <div class="el-empty" x-show="!d.segments.length">No transcript yet.</div>
-        <div class="el-list" x-ref="list" x-show="d.segments.length" :lang="view === 'original' ? d.language_code : null" aria-label="Transcript. Choose a line to play from there.">
+        <div class="el-list" x-ref="list" x-show="d.segments.length" :lang="view === 'original' ? d.language_code : (view === 'urdu' ? 'ur' : null)" aria-label="Transcript. Choose a line to play from there.">
             <template x-for="(b, bi) in blocks()" :key="'b' + bi + '-' + b.start">
                 <div class="el-block">
                     <div class="el-who"><span class="el-spk" :class="'el-spk-' + b.channel" x-text="name(d.segments[b.items[0]])"></span><span class="el-time" x-text="clock(b.start)"></span></div>

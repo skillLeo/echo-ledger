@@ -43,7 +43,7 @@ function fakeConverter(int $maxLines = 1000): object
 
         public function __construct(private readonly int $maxLines) {}
 
-        public function convert(array $lines, string $language, bool $roman): array
+        public function convert(array $lines, string $language, array $views): array
         {
             if (count($lines) > $this->maxLines) {
                 throw new TooLongForOneRequest('too long');
@@ -51,7 +51,7 @@ function fakeConverter(int $maxLines = 1000): object
             $this->chunks[] = $lines;
 
             return [
-                'lines' => array_map(fn (string $t): array => ['roman' => $roman ? 'R: '.$t : null, 'english' => 'E: '.$t], $lines),
+                'lines' => array_map(fn (string $t): array => array_intersect_key(['roman' => 'R: '.$t, 'english' => 'E: '.$t, 'urdu' => 'U: '.$t], array_flip($views)), $lines),
                 'input_tokens' => 1000, 'output_tokens' => 2000, 'model' => 'claude-opus-5-5',
             ];
         }
@@ -77,11 +77,11 @@ beforeEach(function () {
     $this->asToken($this->token);
 });
 
-it('offers Roman Urdu and English for Urdu and Arabic, English for the other languages and nothing for English', function () {
+it('offers Roman Urdu and English for Urdu, Roman Urdu and Urdu for English, and English for the other languages', function () {
     expect(TranscriptViews::available(urduTranscript($this)))->toBe(['roman', 'english'])
-        ->and(TranscriptViews::available(urduTranscript($this, 'ar')))->toBe(['roman', 'english'])
+        ->and(TranscriptViews::available(urduTranscript($this, 'ar')))->toBe(['english'])
         ->and(TranscriptViews::available(urduTranscript($this, 'fr')))->toBe(['english'])
-        ->and(TranscriptViews::available(urduTranscript($this, 'en')))->toBe([]);
+        ->and(TranscriptViews::available(urduTranscript($this, 'en')))->toBe(['roman', 'urdu']);
 });
 
 it('needs the Anthropic key, then makes the views on the queue once', function () {
@@ -94,7 +94,7 @@ it('needs the Anthropic key, then makes the views on the queue once', function (
     $this->postJson("/api/transcripts/{$transcript->id}/views")->assertStatus(202)->assertJsonPath('status', 'making');
     $this->postJson("/api/transcripts/{$transcript->id}/views")->assertStatus(202);
     Queue::assertPushed(MakeTranscriptViewsJob::class, 1);
-    $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()->assertJsonPath('views', ['available' => ['roman', 'english'], 'status' => 'making']);
+    $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()->assertJsonPath('views', ['available' => ['roman', 'english'], 'status' => 'making', 'default' => 'original']);
 });
 
 it('stores both views aligned with the lines, bills the tokens and serves them until the transcript is edited', function () {
@@ -136,7 +136,7 @@ it('keeps the reason when the views could not be made', function () {
     app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
     app()->instance(TranscriptConverter::class, new class implements TranscriptConverter
     {
-        public function convert(array $lines, string $language, bool $roman): array
+        public function convert(array $lines, string $language, array $views): array
         {
             throw new RuntimeException('Claude declined to convert this transcript.');
         }
@@ -177,7 +177,7 @@ it('asks Claude for structured JSON with the model from Settings and the refusal
 
         protected function client(string $key): Client
         {
-            $answer = ['lines' => [['index' => 0, 'roman' => 'aap kaise hain', 'english' => 'How are you?'], ['index' => 1, 'roman' => 'main theek hoon', 'english' => 'I am fine.']]];
+            $answer = ['lines' => [['index' => 0, 'roman' => 'aap kaise hain', 'english' => 'How are you?', 'urdu' => ''], ['index' => 1, 'roman' => 'main theek hoon', 'english' => 'I am fine.', 'urdu' => '']]];
 
             return new Client(apiKey: $key, requestOptions: ['maxRetries' => 0, 'middleware' => [function (RequestInterface $request) use (&$answer): Response {
                 $this->sent[] = $request;
@@ -191,7 +191,7 @@ it('asks Claude for structured JSON with the model from Settings and the refusal
         }
     };
 
-    $answer = $converter->convert([0 => 'آپ کیسے ہیں', 1 => 'میں ٹھیک ہوں'], 'ur', true);
+    $answer = $converter->convert([0 => 'آپ کیسے ہیں', 1 => 'میں ٹھیک ہوں'], 'ur', ['roman', 'english']);
 
     expect($answer['lines'])->toBe([0 => ['roman' => 'aap kaise hain', 'english' => 'How are you?'], 1 => ['roman' => 'main theek hoon', 'english' => 'I am fine.']])
         ->and($answer['input_tokens'])->toBe(120)->and($answer['output_tokens'])->toBe(40);
@@ -202,11 +202,12 @@ it('asks Claude for structured JSON with the model from Settings and the refusal
         ->and($body['output_config']['effort'])->toBe('medium')
         ->and($body['fallbacks'])->toBe('default')
         ->and($body['system'][0]['cache_control'])->toBe(['type' => 'ephemeral'])
+        ->and(json_decode($body['messages'][0]['content'], true)['views_wanted'])->toBe(['roman', 'english'])
         ->and(json_decode($body['messages'][0]['content'], true)['lines'][1])->toBe(['index' => 1, 'text' => 'میں ٹھیک ہوں'])
         ->and($sent[0]->getHeaderLine('anthropic-beta'))->toContain('server-side-fallback-2026-07-01');
 });
 
-it('offers Roman Urdu & English on the recording page and says when the key is missing', function () {
+it('offers Show as on the recording page and says when the key is missing', function () {
     Queue::fake();
     Filament::setCurrentPanel('admin');
     $admin = $this->signInAsAdmin();
@@ -214,10 +215,10 @@ it('offers Roman Urdu & English on the recording page and says when the key is m
         ['status' => 'completed', 'language' => 'ur'], transcript: ['language' => 'ur']);
 
     $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])
-        ->callAction('show_as')->assertNotified('Add the Anthropic API key on API Credentials to make Roman Urdu and English views.');
+        ->callAction('show_as')->assertNotified('Add the Anthropic API key on API Credentials to make the Show as views.');
     app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
     $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])
-        ->callAction('show_as')->assertNotified('Making the Roman Urdu and English views. Reload the page in a minute or two.');
+        ->callAction('show_as')->assertNotified('Making the Show as views (Roman Urdu, English or Urdu). Reload the page in a minute or two.');
     Queue::assertPushed(MakeTranscriptViewsJob::class, 1);
 });
 
@@ -237,4 +238,25 @@ it('opens a share link in the chosen view once it is made, and in the original w
     app(TranscriptViews::class)->make($transcript);
     $this->get($created->json('url'))->assertOk()->assertSee('E: میں ٹھیک ہوں')->assertSee('English view, written by Claude from the transcript.');
     $this->postJson("/api/sessions/{$session->id}/shares", ['expires_in' => 3600, 'view' => 'french'])->assertStatus(422);
+});
+
+it('translates an English call into Urdu (and Roman Urdu) and opens it in the default view from Settings', function () {
+    app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+    $fake = fakeConverter();
+    $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'en', 'status' => 'completed']);
+    $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'language' => 'en',
+        'text' => 'Me: I will send the invoice', 'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'I will send the invoice']]]);
+
+    app(TranscriptViews::class)->make($transcript);
+
+    $state = $this->getJson("/api/transcripts/{$transcript->id}/views")->assertOk()->json();
+    expect($state['urdu'])->toBe(['U: I will send the invoice'])->and($state['roman'])->toBe(['R: I will send the invoice'])
+        ->and($state['english'])->toBeNull()->and($state['default'])->toBe('original');
+    $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('views.default', 'original');
+
+    app(SettingsRepository::class)->set('views.default', 'urdu');
+    $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('views', ['available' => ['roman', 'urdu'], 'status' => 'ready', 'default' => 'urdu']);
+    $this->get("/api/transcripts/{$transcript->id}/export?format=txt&view=urdu")->assertOk()->assertSee('U: I will send the invoice');
+    app(SettingsRepository::class)->set('views.default', 'english'); // not a view of this transcript
+    $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('views.default', 'original');
 });

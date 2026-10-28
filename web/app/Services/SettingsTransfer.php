@@ -33,6 +33,7 @@ final class SettingsTransfer
         'languages.auto_fallback',
         'accuracy.double_check',
         'claude.model',
+        'views.default',
         'display.timezone',
         'vocabulary.keyterms',
         'vocabulary.replacements',

@@ -183,26 +183,29 @@ one tap transcribes it again with the next engine. Search finds Urdu words howev
 English words inside Urdu speech are found too. If a transcript is still not good, open the recording in the
 console and choose **Re-transcribe** or **Compare engines**, then keep the better one.
 
-### Show as: Roman Urdu and English
+### Show as: Roman Urdu, English and Urdu
 
-An Urdu or Arabic transcript can also be read in **Roman Urdu** (the same words in Latin letters) or in **English**.
-In the console open the recording and press **Roman Urdu & English**; after a minute or two the player shows
-**Original · Roman Urdu · English**, **Export** offers Word, print and text files in each view, and **Share** can open
+A transcript can also be read in another form: an Urdu call in **Roman Urdu** (the same words in Latin letters) or
+**English**; an English call in **Urdu** or **Roman Urdu**; an Arabic call in **English**. In the console open the
+recording and press **Show as…**; after a minute or two the player shows **Original · Roman Urdu · English · Urdu**
+(the ones that apply), **Export** offers Word, print and text files in each view, and **Share** can open
 the link in a view. In the desktop Library and on the phone's recording page the same switch writes the views on the
 first tap and shows them when ready (exports from there follow the view on screen). Urdu shows in Nastaliq letters and
 Arabic in Naskh. The views are
 written by Claude (your administrator adds the Anthropic key) and are labelled as views: the transcript itself never
-changes. If you edit the transcript, make the views again.
+changes. If you edit the transcript, make the views again. To open transcripts in a view by default (for example always
+Roman Urdu), choose it in **Settings → Engine per language → Open transcripts as**; the original stays one tap away.
 
 ### Find the best engine for your calls (Accuracy Lab)
 
-The console's **Accuracy Lab** (owner only, under System) measures which engine writes your calls best. Do this once
-per language with about 10 typical recordings (both speakers, a few noisy ones, names you use):
+The console's **Accuracy Lab** (owner only, under System) measures which engine writes your calls best. Use 10
+typical recordings: **3 English, 3 Urdu, 3 mixed Urdu + English and 1 Arabic** (both speakers, a few noisy ones,
+names you use). For each one:
 
-1. Open a recording, choose **⋯ → Use as Accuracy Lab reference**, correct the text exactly as it was said (one line
-   per turn, no speaker names) and save.
+1. Open the recording, choose **⋯ → Use as Accuracy Lab reference**, correct the text exactly as it was said (one
+   line per turn, no speaker names) and save. A transcript of the same audio from TurboScribe, corrected, works too.
 2. Choose **⋯ → Compare engines** and pick up to three engines for that language.
-3. Repeat for the other recordings, then open **Accuracy Lab**. Each engine shows its word error rate (WER) and
+3. When all 10 are done, open **Accuracy Lab**. Each engine shows its word error rate (WER) and
    character error rate (CER): the share of words or letters it got wrong, left out or added. Lower is better. You
    also see how long it took and what an hour of audio cost.
 4. Press **Use the winners**: the best engine becomes the first one for each language in **Settings → Engine per
