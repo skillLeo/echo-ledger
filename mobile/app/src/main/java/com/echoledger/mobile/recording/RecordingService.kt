@@ -26,6 +26,7 @@ import com.echoledger.mobile.calls.CallState
 import com.echoledger.mobile.calls.CallStateMachine
 import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.capture.ICallListener
+import com.echoledger.mobile.core.CallerNames
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.Speakers
@@ -630,7 +631,10 @@ class RecordingService : LifecycleService() {
                     markers = markers,
                     pauses = pauses,
                     language = session.language,
-                    languageMarks = synchronized(session.languageMarks) { session.languageMarks.toList() }
+                    languageMarks = synchronized(session.languageMarks) { session.languageMarks.toList() },
+                    // Caller names: the name WhatsApp's call notification showed during this call, when allowed.
+                    callerName = CallerNames.forCall(session.sourceApp, session.startedAt.toEpochMilli(), System.currentTimeMillis()),
+                    callerSource = "whatsapp_notification"
                 )
                 graph.recordings.importPlainFile(meta, session.file)
             }.onFailure {

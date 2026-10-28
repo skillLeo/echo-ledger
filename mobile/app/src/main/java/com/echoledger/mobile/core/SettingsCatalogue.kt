@@ -33,7 +33,7 @@ object SettingsCatalogue {
             "microphone",
             SettingsGroup.Recording,
             "Microphone",
-            "source echo cancelled raw test recording permissions overlay battery helper silent far side"
+            "source echo cancelled raw test recording permissions overlay battery helper silent far side caller names notification access"
         ),
         SettingsEntry("captions", SettingsGroup.Captions, "Captions", "live bubble overlay floating"),
         SettingsEntry("caption-style", SettingsGroup.Captions, "Caption style", "size lines position opacity colour compact hide"),

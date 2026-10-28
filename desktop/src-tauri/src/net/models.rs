@@ -233,6 +233,9 @@ pub struct CreateSessionRequest {
     pub pauses: Vec<PauseDto>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub language_marks: Vec<LanguageMarkDto>,
+    /// Who the recording was with, when this computer saw it (since v1.2: a meeting window's title).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caller: Option<CallerDto>,
 }
 
 /// Open session (since v1.1): `POST /api/sessions` without the `artifacts` key, status `recording`. Created only
@@ -265,6 +268,20 @@ pub struct FinishSessionRequest {
     pub pauses: Vec<PauseDto>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub language_marks: Vec<LanguageMarkDto>,
+    /// Who the recording was with, when this computer saw it (since v1.2: a meeting window's title).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caller: Option<CallerDto>,
+}
+
+/// Caller names (since v1.2): who a recording was with and where the name came from (`window_title` here).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct CallerDto {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub number: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 /// One streaming period (socket open to close) for `POST /api/usage` (since v1.1); queued in `usage.json`.

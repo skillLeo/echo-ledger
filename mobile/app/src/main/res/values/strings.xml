@@ -14,5 +14,6 @@
     <string name="channel_activity">Activity</string>
     <string name="channel_activity_desc">Transcripts ready, failed uploads, new devices and the monthly limit</string>
     <string name="voice_keyboard_label">EchoLedger voice keyboard</string>
+    <string name="caller_names_label">EchoLedger caller names</string>
     <string name="voice_keyboard_subtype">Dictation</string>
 </resources>

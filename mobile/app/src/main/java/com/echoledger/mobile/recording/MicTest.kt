@@ -115,8 +115,9 @@ object CaptureHealth {
         notifications: Boolean,
         overlay: Boolean,
         battery: Boolean,
-        helper: Boolean
-    ): List<PermissionItem> = listOf(
+        helper: Boolean,
+        callerNames: Boolean? = null
+    ): List<PermissionItem> = listOfNotNull(
         PermissionItem("microphone", "Microphone", microphone, "Needed to record you."),
         PermissionItem("helper", "Call capture helper", helper, "Needed to record the other side of calls."),
         PermissionItem(
@@ -126,7 +127,16 @@ object CaptureHealth {
             "Asks Keep or Discard after a call and shows the recording controls."
         ),
         PermissionItem("overlay", "Display over other apps", overlay, "Shows live captions over the call."),
-        PermissionItem("battery", "Unrestricted battery use", battery, "Keeps auto-record ready while the phone sleeps.")
+        PermissionItem("battery", "Unrestricted battery use", battery, "Keeps auto-record ready while the phone sleeps."),
+        // Optional (since v1.2): who each WhatsApp call was with, from its call notification only.
+        callerNames?.let {
+            PermissionItem(
+                "caller_names",
+                "Notification access",
+                it,
+                "Shows who each WhatsApp call was with. Only WhatsApp call notifications are read."
+            )
+        }
     )
 }
 

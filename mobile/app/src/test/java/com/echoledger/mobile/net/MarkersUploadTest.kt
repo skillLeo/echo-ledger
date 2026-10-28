@@ -188,4 +188,24 @@ class MarkersUploadTest : AppTest() {
         assertEquals(65_000L, detail.markers.single().atMs)
         assertNull(detail.playbackUrl)
     }
+
+    @Test
+    fun `a call recording sends who it was with, and nothing when the phone did not see a name`() {
+        app.storeRecording(bytes = sampleBytes(2_500))
+        app.graph.recordings.update(id) { it.copy(callerName = "Omar Khan", callerSource = "whatsapp_notification") }
+        server.on("POST", "/api/sessions", FakeServer.json(201, answer()))
+        serveUpload()
+
+        assertEquals(ListenableWorker.Result.success(), run())
+
+        val body = ApiJson.parseToJsonElement(server.requestsTo("POST", "/api/sessions").single().bodyText()).jsonObject
+        val caller = body.getValue("caller").jsonObject
+        assertEquals("Omar Khan", caller.getValue("name").jsonPrimitive.content)
+        assertEquals("whatsapp_notification", caller.getValue("source").jsonPrimitive.content)
+        val none = ApiJson.encodeToString(
+            com.echoledger.mobile.data.FinishSessionRequest.serializer(),
+            com.echoledger.mobile.data.FinishSessionRequest("2026-10-27T10:00:00Z", 1_000, null, emptyList())
+        )
+        assertTrue(!none.contains("caller"))
+    }
 }

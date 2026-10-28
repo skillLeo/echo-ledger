@@ -38,7 +38,10 @@ data class LocalRecording(
     /** The transcription language chosen when the recording ended (null = automatic). */
     val language: String? = null,
     /** The language chip changes during the recording (since v1.2). */
-    val languageMarks: List<LanguageMarkDto> = emptyList()
+    val languageMarks: List<LanguageMarkDto> = emptyList(),
+    /** Who the call was with, from WhatsApp's call notification (since v1.2). */
+    val callerName: String? = null,
+    val callerSource: String? = null
 )
 
 /**

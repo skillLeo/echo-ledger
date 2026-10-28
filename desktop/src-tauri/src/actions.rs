@@ -372,6 +372,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             created_at: Utc::now(),
             language: state.recording_language(&client_ref),
             language_marks: take_language_marks(&state, &client_ref),
+            caller: take_caller(&state, &client_ref),
         },
     );
     let id = decision.id.clone();
@@ -514,6 +515,31 @@ pub fn pending_rename(app: &AppHandle, id: &str, title: &str) -> AppResult<pendi
     emit_pending(app);
     refresh_review(app);
     Ok(updated.item(state.settings().decision_timeout))
+}
+
+/// Who a finished recording was with (cleared with it).
+fn take_caller(state: &crate::AppState, client_ref: &str) -> Option<crate::net::models::CallerDto> {
+    let mut caller = state.recording_caller.lock().unwrap_or_else(|p| p.into_inner());
+    match caller.take() {
+        Some((r, c)) if r == client_ref => Some(c),
+        other => {
+            *caller = other;
+            None
+        }
+    }
+}
+
+/// Caller names (since v1.2): the running recording is with [name] (from the meeting app's window title). The first
+/// name seen during a recording is kept; later window titles (another chat opened mid-call) do not replace it.
+pub fn set_recording_caller(app: &AppHandle, name: String) {
+    let state = app.state::<crate::AppState>();
+    if let Some(info) = state.capture.info() {
+        let mut caller = state.recording_caller.lock().unwrap_or_else(|p| p.into_inner());
+        if caller.as_ref().is_some_and(|(r, _)| *r == info.client_ref) {
+            return;
+        }
+        *caller = Some((info.client_ref, crate::net::models::CallerDto { name: Some(name), number: None, source: Some("window_title".into()) }));
+    }
 }
 
 /// The chip changes of a finished recording (cleared, so the next recording starts without marks).

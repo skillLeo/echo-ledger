@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.data.ArtifactDto
+import com.echoledger.mobile.data.CallerDto
 import com.echoledger.mobile.data.CreateSessionRequest
 import com.echoledger.mobile.data.CreateSessionResponse
 import com.echoledger.mobile.data.DeviceTranscript
@@ -137,7 +138,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                         language = rec.language.orEmpty(),
                         markers = rec.markers,
                         pauses = rec.pauses,
-                        languageMarks = rec.languageMarks
+                        languageMarks = rec.languageMarks,
+                        caller = callerOf(rec)
                     )
                 )
             } catch (e: ApiException) {
@@ -161,8 +163,12 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         artifacts = artifacts,
         markers = rec.markers,
         pauses = rec.pauses,
-        languageMarks = rec.languageMarks
+        languageMarks = rec.languageMarks,
+        caller = callerOf(rec)
     )
+
+    /** Caller names (since v1.2): who the call was with, when the phone saw it. */
+    private fun callerOf(rec: LocalRecording) = rec.callerName?.let { CallerDto(name = it, source = rec.callerSource) }
 
     private fun artifactOf(rec: LocalRecording) = ArtifactDto(
         "primary",

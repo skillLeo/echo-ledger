@@ -78,6 +78,8 @@ pub struct AppState {
     pub recording_language: Mutex<Option<(String, Option<String>)>>,
     /// The chip changes of the running recording (its client_ref and the marks), sent with the upload (v1.2).
     pub recording_language_marks: Mutex<Option<(String, Vec<net::models::LanguageMarkDto>)>>,
+    /// Caller names (since v1.2): who the running recording is with (its client reference and the caller).
+    pub recording_caller: Mutex<Option<(String, net::models::CallerDto)>>,
 }
 
 impl AppState {
@@ -122,6 +124,7 @@ impl AppState {
             notified: Mutex::new(None),
             recording_language: Mutex::new(None),
             recording_language_marks: Mutex::new(None),
+            recording_caller: Mutex::new(None),
         }
     }
 

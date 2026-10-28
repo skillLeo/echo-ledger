@@ -4,6 +4,7 @@
 //! they show (window titles on Windows, active-tab URLs on macOS), with a built-in never-record list. The label is
 //! decided once when the recording starts and kept until it stops. Voice notes are never auto-recorded.
 
+pub mod callers;
 pub mod classify;
 pub mod decide;
 pub mod sites;
@@ -95,7 +96,8 @@ pub fn observe(browser_automation: bool) -> Vec<TreeAudio> {
     #[cfg(windows)]
     {
         let _ = browser_automation; // titles need no permission on Windows
-        crate::audio::platform::windows::observe_trees(classify::is_browser_image)
+        // Call apps' titles too, for caller names (since v1.2).
+        crate::audio::platform::windows::observe_trees(|image| classify::is_browser_image(image) || classify::classify_windows(image, None).is_some())
     }
     #[cfg(target_os = "macos")]
     {
@@ -209,6 +211,17 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
     }
 
     *lock(&detect.users) = trees.iter().zip(&verdicts).map(|(t, v)| explain(t, v, rules, recorded.filter(|_| recording))).collect();
+
+    // Caller names (since v1.2): who the recorded call is with, from its app's window titles.
+    if recording
+        && let Some((pid, source)) = recorded
+        && let Some(t) = trees.iter().find(|t| t.root_pid == pid)
+    {
+        let titles: Vec<String> = t.titles.iter().map(|s| strip_browser_suffix(s).to_string()).collect();
+        if let Some(name) = callers::meeting_name(source, &titles) {
+            crate::actions::set_recording_caller(app, name);
+        }
+    }
 
     match event {
         Some(MicUseEvent::Start(source)) => {

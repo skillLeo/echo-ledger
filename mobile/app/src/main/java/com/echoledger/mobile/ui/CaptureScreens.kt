@@ -66,6 +66,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.CaptionStyle
+import com.echoledger.mobile.notify.CallerNameListener
 import com.echoledger.mobile.recording.AutoRecordRules
 import com.echoledger.mobile.recording.CaptureHealth
 import com.echoledger.mobile.recording.Levels
@@ -292,6 +293,7 @@ internal fun permissionIntent(context: Context, key: String): Intent? = when (ke
     "notifications" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
     "overlay" -> Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
     "battery" -> Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+    "caller_names" -> Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
     else -> null
 }?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
@@ -325,7 +327,8 @@ fun CaptureHealthSection(vm: MainViewModel, settings: AppSettings, helperConnect
             notifications = Build.VERSION.SDK_INT < 33 || granted(context, Manifest.permission.POST_NOTIFICATIONS),
             overlay = Settings.canDrawOverlays(context),
             battery = CaptureHealth.ignoresBatteryOptimisation(context),
-            helper = helperConnected
+            helper = helperConnected,
+            callerNames = CallerNameListener.allowed(context)
         )
     }
     SectionCard {

@@ -143,6 +143,23 @@ opened.
 - **Replacements** change one word into another in every new transcript, for example "echo ledger" into
   "EchoLedger".
 
+### Caller names
+
+EchoLedger can tell who a call was with. The recording is then called **Call with Omar Khan**, not "WhatsApp call".
+
+- **On the phone**, EchoLedger reads the name in WhatsApp's call notification. Turn it on in **Settings → Microphone →
+  Permissions → Notification access**, then switch on **EchoLedger caller names**. EchoLedger reads only WhatsApp and
+  WhatsApp Business call notifications. It ignores your messages and every other app. The name is kept on the phone
+  for a few minutes and is sent only with that call's recording.
+- **On Windows**, EchoLedger reads the name in the call window's title, for example "Omar Khan | Microsoft Teams" or
+  "Meet - Weekly sync", and calls the recording **Omar Khan** or **Weekly sync**. Titles such as "Zoom Meeting" or a
+  Meet code give no name. A meeting name is not added to a client's contacts.
+- **Contacts.** Add the people you talk to under **Clients → your client → Contacts**: a name, a phone number and,
+  if you like, their language. A call with a matching name or number is filed under that client. It is transcribed in
+  the contact's language unless you chose a language for that recording.
+- When you move a recording with a caller name to a client, EchoLedger adds the caller to that client's contacts. The
+  next call with them is filed under the client by itself.
+
 ## 12. Languages
 
 Tell EchoLedger which language is spoken and the transcript gets much better. The choices are **Auto**, **English**,

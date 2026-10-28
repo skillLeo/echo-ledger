@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use crate::audio::{FinishedRecording, RecordingMode};
 use crate::error::{AppError, AppResult};
-use crate::net::models::{LanguageMarkDto, MarkerDto, PauseDto, SegmentDto};
+use crate::net::models::{CallerDto, LanguageMarkDto, MarkerDto, PauseDto, SegmentDto};
 use crate::net::sync::paths;
 use crate::net::uploader::{DiscardQueue, PendingUpload, UploadQueue};
 use crate::settings::{AskBeforeSaving, DecisionTimeout};
@@ -112,6 +112,8 @@ pub struct DecisionInput {
     pub language: Option<String>,
     /// The language chip changes during the recording (since v1.2).
     pub language_marks: Vec<LanguageMarkDto>,
+    /// Who the recording was with (since v1.2: a meeting window's title).
+    pub caller: Option<CallerDto>,
 }
 
 /// One entry of `pending.json`. The UI fields are public; the files, the live transcript and the server session
@@ -157,6 +159,8 @@ pub struct PendingDecision {
     language: Option<String>,
     #[serde(default)]
     language_marks: Vec<LanguageMarkDto>,
+    #[serde(default)]
+    caller: Option<CallerDto>,
 }
 
 impl PendingDecision {
@@ -192,6 +196,7 @@ impl PendingDecision {
             pauses: finished.pauses.clone(),
             language: input.language,
             language_marks: input.language_marks,
+            caller: input.caller,
         }
     }
 
@@ -246,6 +251,7 @@ impl PendingDecision {
             pauses: self.pauses.clone(),
             language: self.language.clone(),
             language_marks: self.language_marks.clone(),
+            caller: self.caller.clone(),
             ..PendingUpload::default()
         }
     }

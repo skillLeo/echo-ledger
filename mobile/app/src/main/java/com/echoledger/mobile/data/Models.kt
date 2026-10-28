@@ -148,7 +148,11 @@ data class CreateSessionRequest(
     /** Sent only when the chip changed during the recording (since v1.2). */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    @SerialName("language_marks") val languageMarks: List<LanguageMarkDto> = emptyList()
+    @SerialName("language_marks") val languageMarks: List<LanguageMarkDto> = emptyList(),
+    /** Who the call was with, when the phone saw it (since v1.2). */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val caller: CallerDto? = null
 )
 
 @Serializable
@@ -193,8 +197,16 @@ data class FinishSessionRequest(
     /** Sent only when the chip changed during the recording (since v1.2). */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    @SerialName("language_marks") val languageMarks: List<LanguageMarkDto> = emptyList()
+    @SerialName("language_marks") val languageMarks: List<LanguageMarkDto> = emptyList(),
+    /** Who the call was with, when the phone saw it (since v1.2). */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val caller: CallerDto? = null
 )
+
+/** Caller names (since v1.2): who a recording was with and where the phone saw the name. */
+@Serializable
+data class CallerDto(val name: String? = null, val number: String? = null, val source: String? = null)
 
 /** One streaming period (socket open → close) for `POST /api/usage` (since v1.1). */
 @Serializable

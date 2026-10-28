@@ -521,6 +521,7 @@ fn create_session_request_uses_the_api_field_names() {
         markers: vec![],
         pauses: vec![],
         language_marks: vec![],
+        caller: None,
         client_ref: "3f2b6c1e-8d4a-4d3e-9a51-2c7f0e9b1a22".into(),
         source_app: "whatsapp".into(),
         client_id: None,
