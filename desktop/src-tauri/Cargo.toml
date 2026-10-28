@@ -1,6 +1,6 @@
 [package]
 name = "echoledger-desktop"
-version = "1.2.1"
+version = "1.2.2"
 description = "EchoLedger desktop: live captions, dictation and dual-channel call capture"
 authors = ["EchoLedger"]
 edition = "2024"
