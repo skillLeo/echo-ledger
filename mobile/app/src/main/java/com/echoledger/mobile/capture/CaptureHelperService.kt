@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.Process
 import com.echoledger.mobile.recording.Pcm
+import com.echoledger.mobile.recording.PcmQueue
 import java.io.FileOutputStream
 import kotlin.concurrent.thread
 
@@ -33,6 +34,13 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
     companion object {
         /** About half a second of failed reads in a row ends the capture with a reason. */
         private const val MAX_FAILED_READS = 50
+
+        /** The other side's rate: the highest Android allows a privileged call capture. */
+        private const val FAR_RATE = Pcm.STT_RATE
+
+        /** Said once when Android feeds the microphone silence during another app's call. */
+        private const val MIC_MUTED = "Android muted the microphone during this call, so your side is silent. " +
+            "This Android version lets only system apps record while another app is in a call."
     }
 
     @Volatile private var listener: ICallListener? = null
@@ -81,14 +89,16 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         val frames = rate / 100 // 10 ms
         val problems = mutableListOf<String>()
 
-        val far = FarPartyCapture(context, audioManager, rate)
-        val line = if (phone) openPhoneLine(rate, frames, problems) else null
+        // The other side is captured at 16 kHz: Android refuses a privileged call capture above it ("Privileged audio
+        // capture sample rate 48000 can not be over 16000kHz"). It is raised to the microphone's rate when written.
+        val far = FarPartyCapture(context, audioManager, FAR_RATE)
+        val line = if (phone) openPhoneLine(FAR_RATE, FAR_RATE / 100, problems) else null
         val mic = if (line?.second == true) null else openMic(rate, frames, micSource, problems)
         val farRecord = if (phone) {
             line?.first
         } else {
             runCatching { far.start() }
-                .onFailure { problems += "far side: ${it.message ?: it.javaClass.simpleName}" }
+                .onFailure { problems += "far side: ${reason(it)}" }
                 .getOrNull()
                 ?.takeIf { record -> started(record).also { if (!it) problems += "far side: did not start" } }
         }
@@ -108,18 +118,34 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         captureThread = thread(name = "el-helper-capture") {
             val out = FileOutputStream(sink.fileDescriptor)
             val micBuf = ShortArray(frames)
-            val farBuf = ShortArray(frames)
+            val farChunk = FAR_RATE / 100
+            val farBuf = ShortArray(farChunk * 4)
+            val factor = (rate / FAR_RATE).coerceAtLeast(1)
+            val farQueue = PcmQueue(rate) // at most 1 s of the other side waits for the microphone
+            var farLast: Short = 0
             var failedReads = 0
+            var reads = 0
+            var mutedSaid = false
             try {
                 while (capturing) {
+                    // Android may keep the recorder running but feed it silence while another app is in a call
+                    // (Android 17 lets only system apps record then): say so once instead of saving a silent side.
+                    if (!mutedSaid && mic != null && ++reads % 200 == 0 && silenced(mic)) {
+                        mutedSaid = true
+                        report(MIC_MUTED)
+                    }
                     // The microphone paces the stream; without it the far side does (blocking read).
                     val m = mic?.read(micBuf, 0, frames) ?: 0
                     val f = if (mic != null) {
-                        farRecord?.read(farBuf, 0, frames, AudioRecord.READ_NON_BLOCKING) ?: 0
+                        farRecord?.read(farBuf, 0, farBuf.size, AudioRecord.READ_NON_BLOCKING) ?: 0
                     } else {
-                        farRecord?.read(farBuf, 0, frames) ?: 0
+                        farRecord?.read(farBuf, 0, farChunk) ?: 0
                     }
-                    val n = if (mic != null) m else f
+                    if (f > 0) {
+                        farQueue.push(Pcm.upsample(farBuf, f, factor, farLast))
+                        farLast = farBuf[f - 1]
+                    }
+                    val n = if (mic != null) m else f * factor
                     if (n <= 0) {
                         // A recorder that keeps failing would leave a silent file: stop and say so.
                         if (++failedReads >= MAX_FAILED_READS) {
@@ -131,7 +157,7 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
                     }
                     failedReads = 0
                     val me = if (mic != null && m > 0) micBuf.copyOf(n) else ShortArray(n)
-                    val client = if (f > 0) farBuf.copyOf(n) else ShortArray(n)
+                    val client = farQueue.take(n)
                     out.write(Pcm.toLittleEndianBytes(Pcm.interleave(me, client)))
                 }
             } catch (e: Exception) {
@@ -171,6 +197,7 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             MediaRecorder.AudioSource.MIC,
             MediaRecorder.AudioSource.VOICE_RECOGNITION
         ).distinct()
+        val mine = mutableListOf<String>()
         for (source in sources) {
             for (withContext in listOf(true, false)) {
                 if (withContext && Build.VERSION.SDK_INT < 31) continue
@@ -179,17 +206,16 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
                     if (withContext && Build.VERSION.SDK_INT >= 31) builder.setContext(context)
                     builder.build()
                 }.getOrElse {
-                    problems += "mic source $source: ${it.message ?: it.javaClass.simpleName}"
+                    mine += "mic source $source: ${reason(it)}"
                     null
                 } ?: continue
-                if (started(record)) {
-                    problems.clear() // an earlier attempt failing does not matter once one works
-                    return record
-                }
-                problems += "mic source $source: did not start"
+                // An earlier attempt failing does not matter once one works; the other side's notes are kept.
+                if (started(record)) return record
+                mine += "mic source $source: did not start"
                 record.release()
             }
         }
+        problems += mine
         return null
     }
 
@@ -203,6 +229,13 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build()
         val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
             .coerceAtLeast(frames * 2 * 8)
+        // Android 13+: the call audio interception API (shell holds CALL_AUDIO_INTERCEPTION). Its recorder is a policy
+        // mix, which Android does not mute during the call. System API, reached by reflection.
+        downlinkInterception(format, problems)?.let { record ->
+            if (started(record)) return record to false
+            problems += "phone line interception: did not start"
+            record.release()
+        }
         for (source in listOf(MediaRecorder.AudioSource.VOICE_DOWNLINK, MediaRecorder.AudioSource.VOICE_CALL)) {
             val record = runCatching {
                 AudioRecord.Builder().setAudioSource(source).setAudioFormat(format).setBufferSizeInBytes(minBuffer * 2).build()
@@ -215,6 +248,34 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             record.release()
         }
         return null
+    }
+
+    private fun downlinkInterception(format: AudioFormat, problems: MutableList<String>): AudioRecord? = runCatching {
+        if (Build.VERSION.SDK_INT < 33) return null
+        val type = AudioManager::class.java
+        if (type.getMethod("isPstnCallAudioInterceptable").invoke(audioManager) != true) {
+            problems += "phone line interception: not offered for this call"
+            return null
+        }
+        type.getMethod("getCallDownlinkExtractionAudioRecord", AudioFormat::class.java).invoke(audioManager, format) as AudioRecord
+    }.getOrElse {
+        problems += "phone line interception: ${reason(it)}"
+        null
+    }
+
+    /** Whether Android is feeding [record] silence (another app's call has the microphone). */
+    private fun silenced(record: AudioRecord): Boolean =
+        runCatching { record.activeRecordingConfiguration?.isClientSilenced == true }.getOrDefault(false)
+
+    /** The real error behind a reflective call ("InvocationTargetException" alone says nothing). */
+    private fun reason(e: Throwable): String {
+        var t = e
+        while (true) {
+            val next = (t as? java.lang.reflect.InvocationTargetException)?.targetException ?: t.cause
+            if (next == null || next === t) break
+            t = next
+        }
+        return t.javaClass.simpleName + (t.message?.let { ": $it" } ?: "")
     }
 
     /** Starts [record] and checks it is really recording (Android can refuse silently: state stays stopped). */

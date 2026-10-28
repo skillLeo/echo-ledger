@@ -44,6 +44,22 @@ object Pcm {
         return out
     }
 
+    /**
+     * Raises the rate by a whole [factor] (16 kHz → 48 kHz is 3) by straight lines between samples. [previous] is the
+     * last sample of the chunk before, so chunks join without a click.
+     */
+    fun upsample(input: ShortArray, count: Int, factor: Int, previous: Short = 0): ShortArray {
+        if (factor <= 1) return input.copyOf(count)
+        val out = ShortArray(count * factor)
+        var prev = previous.toInt()
+        for (i in 0 until count) {
+            val cur = input[i].toInt()
+            for (k in 1..factor) out[i * factor + k - 1] = (prev + (cur - prev) * k / factor).toShort()
+            prev = cur
+        }
+        return out
+    }
+
     fun toLittleEndianBytes(samples: ShortArray): ByteArray {
         val bytes = ByteArray(samples.size * 2)
         for (i in samples.indices) {
@@ -72,4 +88,37 @@ object Pcm {
     }
 
     fun durationMs(frames: Long, rate: Int = CAPTURE_RATE): Long = (frames * 1000.0 / rate).roundToInt().toLong()
+}
+
+/**
+ * Samples of the other side waiting for the microphone's next chunk (pure, unit-tested): the two recorders deliver at
+ * their own pace, so the far side is queued and taken in the microphone's chunk sizes, silence when nothing waits.
+ * Holds at most [capacity] samples; the oldest are dropped when the far side runs ahead.
+ */
+class PcmQueue(private val capacity: Int) {
+    private val buf = ShortArray(capacity)
+    private var start = 0
+    var size = 0
+        private set
+
+    fun push(samples: ShortArray) {
+        for (s in samples) {
+            if (size == capacity) {
+                start = (start + 1) % capacity
+                size--
+            }
+            buf[(start + size) % capacity] = s
+            size++
+        }
+    }
+
+    /** The next [n] samples, padded with silence. */
+    fun take(n: Int): ShortArray {
+        val out = ShortArray(n)
+        val got = minOf(n, size)
+        for (i in 0 until got) out[i] = buf[(start + i) % capacity]
+        start = (start + got) % capacity
+        size -= got
+        return out
+    }
 }
