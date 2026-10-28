@@ -15,18 +15,21 @@ pub enum SourceApp {
     GoogleMeet,
     Zoom,
     MicrosoftTeams,
+    /// A SIM call recorded on the phone (since v1.2); the desktop never detects one.
+    PhoneCall,
     VoiceNote,
     Other,
 }
 
 impl SourceApp {
-    pub const ALL: [SourceApp; 8] = [
+    pub const ALL: [SourceApp; 9] = [
         SourceApp::Whatsapp,
         SourceApp::WhatsappBusiness,
         SourceApp::WhatsappWeb,
         SourceApp::GoogleMeet,
         SourceApp::Zoom,
         SourceApp::MicrosoftTeams,
+        SourceApp::PhoneCall,
         SourceApp::VoiceNote,
         SourceApp::Other,
     ];
@@ -40,6 +43,7 @@ impl SourceApp {
             SourceApp::GoogleMeet => "google_meet",
             SourceApp::Zoom => "zoom",
             SourceApp::MicrosoftTeams => "microsoft_teams",
+            SourceApp::PhoneCall => "phone_call",
             SourceApp::VoiceNote => "voice_note",
             SourceApp::Other => "other",
         }
@@ -54,6 +58,7 @@ impl SourceApp {
             SourceApp::GoogleMeet => "Google Meet",
             SourceApp::Zoom => "Zoom",
             SourceApp::MicrosoftTeams => "Microsoft Teams",
+            SourceApp::PhoneCall => "Phone call",
             SourceApp::VoiceNote => "Voice note",
             SourceApp::Other => "Other",
         }

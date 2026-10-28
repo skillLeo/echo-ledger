@@ -22,7 +22,7 @@ fn name_from(source: SourceApp, title: &str) -> Option<String> {
         SourceApp::GoogleMeet => strip_prefixes(title, &["Meet - ", "Meet – ", "Meet: "]),
         SourceApp::Whatsapp | SourceApp::WhatsappBusiness | SourceApp::WhatsappWeb => strip_suffixes(title, &[" - WhatsApp", " | WhatsApp"]),
         SourceApp::Zoom => strip_suffixes(title, &[" - Zoom", " | Zoom"]),
-        SourceApp::VoiceNote | SourceApp::Other => return None,
+        SourceApp::PhoneCall | SourceApp::VoiceNote | SourceApp::Other => return None,
     };
     let name = name.trim().trim_start_matches(['(', '[']).trim_end_matches([')', ']']).trim();
     if name.is_empty() || name.chars().count() > 120 || GENERIC.contains(&name.to_lowercase().as_str()) || is_meet_code(name) || is_count_only(name) {

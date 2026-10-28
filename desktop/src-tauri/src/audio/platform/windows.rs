@@ -366,15 +366,20 @@ pub fn observe_trees(need_titles: impl Fn(&str) -> bool) -> Vec<crate::detect::d
     trees
 }
 
-/// (owning pid, title) of every visible top-level window with a non-empty title. `EnumWindows`, `IsWindowVisible`,
-/// `GetWindowTextLengthW`, `GetWindowTextW`, `GetWindowThreadProcessId` (windows-0.62.2
-/// `Win32/UI/WindowsAndMessaging/mod.rs` lines 652, 1350, 1174, 1179, 1184). One UTF-16 buffer is reused.
+/// (owning pid, title) of every visible top-level window of another process with a non-empty title. `EnumWindows`,
+/// `IsWindowVisible`, `GetWindowThreadProcessId`, `InternalGetWindowText` (windows-0.62.2
+/// `Win32/UI/WindowsAndMessaging/mod.rs`). One UTF-16 buffer is reused.
+///
+/// Never sends a window message: `GetWindowTextW` sends WM_GETTEXT to windows of this process and waits for the UI
+/// thread, so reading titles from the auto-mode thread during a call (since v1.2, for caller names) could freeze the
+/// app. EchoLedger's own windows are skipped and `InternalGetWindowText` reads the stored caption.
 fn visible_window_titles() -> Vec<(u32, String)> {
     use windows::Win32::Foundation::{HWND, LPARAM};
-    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible};
+    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowThreadProcessId, InternalGetWindowText, IsWindowVisible};
     use windows::core::BOOL;
 
     struct Collect {
+        own: u32,
         buf: Vec<u16>,
         out: Vec<(u32, String)>,
     }
@@ -385,30 +390,23 @@ fn visible_window_titles() -> Vec<(u32, String)> {
         if !unsafe { IsWindowVisible(hwnd) }.as_bool() {
             return BOOL::from(true);
         }
-        let len = unsafe { GetWindowTextLengthW(hwnd) };
-        if len <= 0 {
+        let mut pid = 0u32;
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+        if pid == 0 || pid == ctx.own {
             return BOOL::from(true);
         }
-        let need = len as usize + 1;
-        if ctx.buf.len() < need {
-            ctx.buf.resize(need, 0);
-        }
-        let copied = unsafe { GetWindowTextW(hwnd, &mut ctx.buf[..need]) };
+        let copied = unsafe { InternalGetWindowText(hwnd, &mut ctx.buf) };
         if copied <= 0 {
             return BOOL::from(true);
         }
-        let mut pid = 0u32;
-        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
-        if pid != 0 {
-            let title = String::from_utf16_lossy(&ctx.buf[..copied as usize]);
-            if !title.trim().is_empty() {
-                ctx.out.push((pid, title));
-            }
+        let title = String::from_utf16_lossy(&ctx.buf[..copied as usize]);
+        if !title.trim().is_empty() {
+            ctx.out.push((pid, title));
         }
         BOOL::from(true)
     }
 
-    let mut ctx = Collect { buf: vec![0u16; 256], out: Vec::new() };
+    let mut ctx = Collect { own: std::process::id(), buf: vec![0u16; 512], out: Vec::new() };
     let _ = unsafe { EnumWindows(Some(each), LPARAM(&mut ctx as *mut Collect as isize)) };
     ctx.out
 }
