@@ -522,7 +522,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun captureDiagnostics(): String {
         val h = graph.helper.state.value
         val state = if (h.connected) {
-            "connected via ${h.source}, uid ${h.helperUid}${if (h.stale) ", older version" else ""}"
+            val caps = runCatching { graph.helper.helper?.capabilities() }.getOrNull()
+            "connected via ${h.source}, uid ${h.helperUid}${if (h.stale) ", older version" else ""}${caps?.let { " ($it)" } ?: ""}"
         } else {
             "not connected (${h.error ?: "never started"})"
         }

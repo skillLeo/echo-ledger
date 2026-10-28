@@ -21,9 +21,12 @@ import kotlin.concurrent.thread
  * Near end: concurrent mic AudioRecord — not silenced during the call because shell holds CAPTURE_AUDIO_OUTPUT
  * (canBypassConcurrentPolicy). Far end: [FarPartyCapture]. docs/research/android-capture.md §2–§4.
  */
-class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub() {
+class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
     /** Shizuku v13 tries a (Context) constructor first; a no-arg one is kept for older Shizuku. */
     constructor() : this(HelperContext.system())
+
+    /** Always the shell's context: the one Shizuku passes names this app's package, which the audio server refuses for UID 2000. */
+    private val context: Context = HelperContext.shell(base)
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
@@ -52,6 +55,8 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
         append("sdk=").append(Build.VERSION.SDK_INT)
         append(";uid=").append(Process.myUid())
         append(";far_party=").append(Build.VERSION.SDK_INT >= 34)
+        // Which package the recorders are opened as (must be com.android.shell for UID 2000).
+        append(";as=").append(runCatching { context.opPackageName }.getOrNull())
     }
 
     override fun setCallListener(listener: ICallListener?) {

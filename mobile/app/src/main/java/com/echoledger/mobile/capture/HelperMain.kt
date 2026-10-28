@@ -21,7 +21,19 @@ internal object HelperContext {
         val activityThread = Class.forName("android.app.ActivityThread")
         val thread = activityThread.getMethod("systemMain").invoke(null)
         val context = activityThread.getMethod("getSystemContext").invoke(thread) as Context
-        return ShellContext(context)
+        return shell(context)
+    }
+
+    /**
+     * A context that is the shell package (UID 2000) through and through: Shizuku hands the helper a context of this
+     * app's package, and the system context is package "android"; neither belongs to UID 2000, so the audio server
+     * refused every recorder ("Cannot create AudioRecord"). The shell's own package context also makes the system
+     * services (AudioManager for the far-side policy) name the shell.
+     */
+    fun shell(base: Context): Context {
+        if (base is ShellContext) return base
+        val own = runCatching { base.createPackageContext(SHELL, 0) }.getOrNull()
+        return ShellContext(own ?: base)
     }
 
     /**
