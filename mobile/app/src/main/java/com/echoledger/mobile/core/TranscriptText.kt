@@ -1,5 +1,6 @@
 package com.echoledger.mobile.core
 
+import com.echoledger.mobile.data.ProgressDto
 import com.echoledger.mobile.data.SegmentDto
 import java.util.Locale
 
@@ -17,6 +18,12 @@ object TranscriptText {
                 append(s.text)
             }
         }
+    }
+
+    /** "Transcribing… part 3 of 8" while a long recording is transcribed in parts; "Transcribing…" otherwise. */
+    fun transcribing(progress: ProgressDto?): String {
+        if (progress == null || progress.total < 2) return "Transcribing…"
+        return "Transcribing… part ${minOf(progress.total, progress.done + 1)} of ${progress.total}"
     }
 
     /** `m:ss`, or `h:mm:ss` from one hour. Unlike duration formatting, 0 ms renders as `0:00`. */

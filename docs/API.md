@@ -622,7 +622,9 @@ run once more as Urdu. New fields:
   shown under the line and never merged; editing the line removes `uncertain` and `check`.
 - Library items: `transcript.final_error_code` (since v1.1.2; `no_audio` when nothing was heard),
   `alternate_transcript_id`, `alternate_status` and `alternate_language` (the other version: the previous
-  transcript after "Re-transcribe as", or a second engine's run).
+  transcript after "Re-transcribe as", or a second engine's run), and `final_progress`.
+- Transcripts have `progress: {"done": 2, "total": 5}` while a long recording is transcribed in parts (Whisper on
+  Groq), `null` otherwise; library items carry the same as `transcript.final_progress`.
 
 ### `POST /api/sessions/{id}/retranscribe` — `sessions:write` (since v1.2)
 "Re-transcribe as": `{"language": "ur"}` (`null` is automatic; the key is required) →

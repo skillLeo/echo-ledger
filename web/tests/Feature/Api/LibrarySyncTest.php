@@ -532,6 +532,7 @@ describe('item contents', function () {
             'alternate_transcript_id' => null,
             'alternate_status' => null,
             'alternate_language' => null,
+            'final_progress' => null,
         ]);
         expect(mb_strlen($item['transcript']['preview']))->toBeLessThanOrEqual(160)->and($item)->not->toHaveKey('segments');
     });

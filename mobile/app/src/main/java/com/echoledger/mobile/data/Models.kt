@@ -261,8 +261,14 @@ data class TranscriptSummary(
     /** The other version (since v1.2): the previous transcript after "Re-transcribe as", or a second engine's run. */
     @SerialName("alternate_transcript_id") val alternateTranscriptId: String? = null,
     @SerialName("alternate_status") val alternateStatus: String? = null,
-    @SerialName("alternate_language") val alternateLanguage: String? = null
+    @SerialName("alternate_language") val alternateLanguage: String? = null,
+    /** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
+    @SerialName("final_progress") val finalProgress: ProgressDto? = null
 )
+
+/** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
+@Serializable
+data class ProgressDto(val done: Int = 0, val total: Int = 0)
 
 @Serializable
 data class CreateSessionResponse(
@@ -362,7 +368,9 @@ data class TranscriptDto(
     /** Set only when `status` is `failed`: the reason, written for the user. */
     val error: String? = null,
     /** Machine-readable reason of a failure (`no_audio`, `provider_rejected`, `budget_exceeded`, ...). */
-    @SerialName("error_code") val errorCode: String? = null
+    @SerialName("error_code") val errorCode: String? = null,
+    /** Parts done of all parts while it is being made in pieces (since v1.2). */
+    val progress: ProgressDto? = null
 )
 
 /** The part of GET /api/sessions/{id} the app needs: a temporary signed URL to stream the decrypted recording. */

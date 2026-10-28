@@ -41,7 +41,28 @@ final class TranscriptResource extends JsonResource
             'completed_at' => $transcript->completed_at?->toAtomString(),
             // Since v1.1: set while the text differs from the provider's original (docs/API.md "Editing transcripts").
             'edited_at' => $transcript->edited_at?->toAtomString(),
+            // Since v1.2: parts done of all parts while a long recording is transcribed in pieces (Whisper on Groq).
+            'progress' => self::progress($transcript),
         ];
+    }
+
+    /**
+     * `{done, total}` while the transcript is being made in parts; null otherwise.
+     *
+     * @return array{done: int, total: int}|null
+     */
+    public static function progress(?Transcript $transcript): ?array
+    {
+        if ($transcript === null || ! in_array($transcript->status, [TranscriptStatus::Pending, TranscriptStatus::Submitted, TranscriptStatus::Processing], true)) {
+            return null;
+        }
+        $p = $transcript->meta['progress'] ?? null;
+        if (! is_array($p)) {
+            return null;
+        }
+        $total = (int) ($p['chunks_total'] ?? 0);
+
+        return $total > 1 ? ['done' => max(0, min($total, (int) ($p['chunks_done'] ?? 0))), 'total' => $total] : null;
     }
 
     public static function model(Transcript $transcript): ?string

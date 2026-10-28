@@ -606,7 +606,7 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                         when (status) {
                             null -> "No transcript for this recording."
                             "failed" -> "Transcription failed."
-                            else -> "Transcribing…"
+                            else -> TranscriptText.transcribing(item.transcript?.finalProgress)
                         },
                         color = Brand.Muted
                     )
@@ -619,7 +619,9 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                     }
                 }
 
-                t.status in IN_PROGRESS -> item { Text("Transcribing…", color = Brand.Muted) }
+                t.status in IN_PROGRESS -> item {
+                    Text(TranscriptText.transcribing(t.progress ?: item.transcript?.finalProgress), color = Brand.Muted)
+                }
 
                 segments.isEmpty() -> item { Text("The transcript is empty: no speech was detected.", color = Brand.Muted) }
 

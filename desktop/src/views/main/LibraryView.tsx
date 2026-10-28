@@ -13,7 +13,7 @@ import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, smartViewCounts } from "../../lib/organise";
 import { BinPanel, BulkBar, OrganisePanel } from "./LibraryOrganise";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageLabel, scriptWarning } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageLabel, partsText, scriptWarning, transcribingText } from "../../lib/languages";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -572,11 +572,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
                   </div>
                 ) : isTranscribing(transcript.status) ? (
-                  <div className="empty">Transcribing…</div>
+                  <div className="empty">{transcribingText(transcript.progress ?? current.transcript?.final_progress)}</div>
                 ) : (
                   <>
                     <div className="row" style={{ marginTop: 10 }}>
-                      <span className="small muted">{transcript.kind === "final" ? `Final transcript · ${providerName(transcript.provider)}${transcript.model ? ` · ${transcript.model}` : ""}${transcript.edited_at ? " · edited" : ""}` : "Live captions (final transcript pending)"}</span>
+                      <span className="small muted">{transcript.kind === "final" ? `Final transcript · ${providerName(transcript.provider)}${transcript.model ? ` · ${transcript.model}` : ""}${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress) ? ` · ${partsText(current.transcript?.final_progress)}` : ""})`}</span>
                       <span className="spacer" />
                       <button className="btn ghost" onClick={() => copy(false)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy text</button>
                       <button className="btn ghost" onClick={() => copy(true)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy with timestamps</button>
@@ -653,7 +653,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     <button type="button" className="btn compact" onClick={() => setTranscriptAttempt((n) => n + 1)}>Retry</button>
                   </div>
                 ) : (
-                <div className="empty">{isTranscribing(finalStatus) ? "Transcribing…" : finalStatus ? `Transcript ${finalStatus.replace("_", " ")}` : "Transcript not available yet."}</div>
+                <div className="empty">{isTranscribing(finalStatus) ? transcribingText(current.transcript?.final_progress) : finalStatus ? `Transcript ${finalStatus.replace("_", " ")}` : "Transcript not available yet."}</div>
                 )
               )}
             </>

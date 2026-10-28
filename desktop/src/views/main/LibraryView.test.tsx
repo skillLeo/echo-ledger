@@ -1112,3 +1112,13 @@ describe("LibraryView uncertain words", () => {
     expect(detail().querySelector(".uncertain")).toBeNull();
   });
 });
+
+describe("LibraryView transcription progress", () => {
+  it("says which part of a long recording is being transcribed", async () => {
+    const items = [makeItem("p", { title: "Long Urdu call", status: "processing",
+      transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null, final_progress: { done: 2, total: 5 } } })];
+    await renderLibrary(items);
+    await selectItem("Long Urdu call");
+    expect(within(detail()).getByText("Transcribing… part 3 of 5")).toBeInTheDocument();
+  });
+});

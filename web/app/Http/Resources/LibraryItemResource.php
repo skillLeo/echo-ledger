@@ -80,6 +80,8 @@ final class LibraryItemResource extends JsonResource
                 'alternate_transcript_id' => $other?->id,
                 'alternate_status' => $other?->status->value,
                 'alternate_language' => $other?->language,
+                // Since v1.2: parts done of all parts while a long recording is transcribed in pieces.
+                'final_progress' => TranscriptResource::progress($final),
             ],
             'marker_count' => $markers->count(),
             'tags' => $markers->pluck('tag')->filter()->unique()->values()->all(),

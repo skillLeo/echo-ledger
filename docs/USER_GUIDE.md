@@ -155,6 +155,7 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
 - Hindi is not offered. Urdu is never written in Hindi letters: such text is transcribed again as Urdu.
 - Urdu goes to **Whisper large-v3** (the engine TurboScribe uses), each side of the call on its own. Text it
   invents in silences is removed.
+- A long call is transcribed in parts: while it runs, the recording says **Transcribing… part 3 of 8**.
 - Words and lines the engine was not sure of have a **dotted underline** in the desktop app, the phone app and the
   console. Tap or click one to hear it. The text stays exactly as the engine heard it.
 - **Double-check** (console: **Settings → Engine per language**, off by default): a second engine listens again to

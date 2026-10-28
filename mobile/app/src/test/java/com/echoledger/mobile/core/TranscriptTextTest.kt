@@ -1,5 +1,6 @@
 package com.echoledger.mobile.core
 
+import com.echoledger.mobile.data.ProgressDto
 import com.echoledger.mobile.data.SegmentDto
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -37,5 +38,13 @@ class TranscriptTextTest {
     @Test
     fun `empty transcripts render as an empty string`() {
         assertEquals("", TranscriptText.render(emptyList(), withTimestamps = true))
+    }
+
+    @Test
+    fun `names the part of a long recording being transcribed`() {
+        assertEquals("Transcribing… part 3 of 8", TranscriptText.transcribing(ProgressDto(2, 8)))
+        assertEquals("Transcribing… part 8 of 8", TranscriptText.transcribing(ProgressDto(8, 8)))
+        assertEquals("Transcribing…", TranscriptText.transcribing(ProgressDto(0, 1)))
+        assertEquals("Transcribing…", TranscriptText.transcribing(null))
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
+import com.echoledger.mobile.data.ProgressDto
 import com.echoledger.mobile.data.TranscriptSummary
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
@@ -195,6 +196,15 @@ class SessionScreenTest : ScreenTest() {
         showSession(item(finalStatus = "processing"))
 
         awaitText("Transcribing…")
+    }
+
+    @Test
+    fun `a long recording made in parts says which part is being transcribed`() {
+        serve(transcriptStatus = 404, transcriptJson = """{"message":"No query results."}""")
+        val inParts = item(finalStatus = "processing")
+        showSession(inParts.copy(transcript = inParts.transcript?.copy(finalProgress = ProgressDto(done = 2, total = 5))))
+
+        awaitText("Transcribing… part 3 of 5")
     }
 
     @Test

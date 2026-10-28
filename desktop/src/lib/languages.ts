@@ -57,6 +57,18 @@ export function languageLabel(value: string | null | undefined): string {
   return option(value).label;
 }
 
+/** "part 3 of 8" while a long recording is transcribed in parts (the part being worked on); null otherwise. */
+export function partsText(progress: { done: number; total: number } | null | undefined): string | null {
+  if (!progress || progress.total < 2) return null;
+  return `part ${Math.min(progress.total, progress.done + 1)} of ${progress.total}`;
+}
+
+/** "Transcribing… part 3 of 8", or "Transcribing…" when it is not made in parts. */
+export function transcribingText(progress: { done: number; total: number } | null | undefined): string {
+  const parts = partsText(progress);
+  return parts ? `Transcribing… ${parts}` : "Transcribing…";
+}
+
 /** The next main choice when the pill's chip is clicked (it cannot open a menu): Auto, EN, UR, AR, Auto… */
 export function nextLanguage(value: string | null | undefined): LanguageChoice {
   const current = option(value);

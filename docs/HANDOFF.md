@@ -285,7 +285,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 4. **Accuracy Lab** (owner only): reference transcripts, CER/WER per engine (normalised), speed and cost, "Use the winners" → routing; reuse `EngineComparison` trials. USER_GUIDE how-to with 10 recordings.
 5. **Cost per engine in Usage**; a new provider-privacy page in the research folder (retention / no-training per provider with links).
 6. **Per-contact default language** (needs the client contacts from the caller-names scope).
-7. Progress (chunks done / total) in the apps from `meta.progress`.
+7. **Progress:** done. `TranscriptResource::progress` (`progress` on transcripts, `transcript.final_progress` on library items, only while it is being made in two or more parts); desktop and phone show "Transcribing… part 3 of 8".
 - **Queued after Prompt 1, each in its own session:** Prompt 3 (Live Translate, Phase 0 needs the phone and the games), then Prompt 2 (mobile redesign, plus the Live Translate screens). Earlier, not started: caller names on recordings, SIM calls as a source. Signed APK still waits for the keystore.
 
 ## v1.1.2 live (production deploy 2026-10-27 18:44 server time)

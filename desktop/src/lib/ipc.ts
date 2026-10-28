@@ -302,6 +302,8 @@ export interface LibraryItem {
     alternate_transcript_id?: string | null;
     alternate_status?: string | null;
     alternate_language?: string | null;
+    /** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
+    final_progress?: TranscriptProgress | null;
   };
 }
 
@@ -359,6 +361,12 @@ export interface Segment {
   check?: { provider: string; label: string; text: string } | null;
 }
 
+/** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
+export interface TranscriptProgress {
+  done: number;
+  total: number;
+}
+
 export interface TranscriptDetail {
   id: string;
   kind: "live" | "final";
@@ -375,6 +383,8 @@ export interface TranscriptDetail {
   model?: string | null;
   /** Set while the text differs from the engine's original. */
   edited_at?: string | null;
+  /** Parts done of all parts while it is being made in pieces (since v1.2). */
+  progress?: TranscriptProgress | null;
 }
 
 /** A transcript search (`GET /api/search`); empty filters are not sent. */

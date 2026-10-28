@@ -385,6 +385,7 @@ Run these when the change touches the area, or before a release.
 | L-18 | Console: a recording page, **Re-transcribe as…** → Arabic. | "Re-transcribing in Arabic with …" names the engine; when done the Arabic text is the transcript and the old one is the second version. |
 | L-19 | Open a transcript with words the engine was unsure of (names, a noisy line) on the desktop, the phone and in the console. | Those words (or the whole line, for Whisper) have a dotted amber underline; a click or tap plays from that word; the text is unchanged. |
 | L-20 | Turn on **Settings → Engine per language → Double-check**, then record a call with a hard name or a noisy line. | Under the unsure lines that the second engine heard differently: "Groq Whisper large-v3 heard: …" (desktop, phone, console); the transcript text is unchanged; Usage shows a `double-check` row. |
+| L-21 | Record an Urdu call over 20 minutes; open it in the desktop Library and on the phone while it is transcribed. | "Transcribing… part 2 of 3" (the part moves on); then the transcript. |
 | L-2 | During a recording with captions on, tap the pill's language chip twice. | Captions continue in the new language within a few seconds; the timer never stops; the saved file has no gap. |
 | L-3 | Stop a recording, change the chip on the Keep card, then Keep. | The transcript uses the chip's language; with a client of another language you are asked "Use … for … from now on?". |
 | L-4 | Phone: after a call, tap the chip on the popup, then Keep. | The transcript uses the new language. |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageChip, languageLabel, learnPrompt, nextLanguage, normalizeLanguage, scriptWarning } from "./languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageChip, languageLabel, learnPrompt, nextLanguage, normalizeLanguage, partsText, scriptWarning, transcribingText } from "./languages";
 
 describe("languages", () => {
   it("offers Auto, English, Urdu and Arabic first, then the More languages, without Hindi or mixed choices", () => {
@@ -41,5 +41,16 @@ describe("languages", () => {
     expect(engineLine({ final_language: null, final_provider_label: null })).toBeNull();
     expect(scriptWarning("devanagari")).toMatch(/Hindi letters came back/);
     expect(scriptWarning(null)).toBeNull();
+  });
+});
+
+describe("progress", () => {
+  it("names the part being transcribed, and nothing for a single part", () => {
+    expect(transcribingText({ done: 2, total: 8 })).toBe("Transcribing… part 3 of 8");
+    expect(transcribingText({ done: 8, total: 8 })).toBe("Transcribing… part 8 of 8");
+    expect(transcribingText({ done: 0, total: 1 })).toBe("Transcribing…");
+    expect(transcribingText(null)).toBe("Transcribing…");
+    expect(partsText({ done: 0, total: 3 })).toBe("part 1 of 3");
+    expect(partsText(undefined)).toBeNull();
   });
 });
