@@ -388,6 +388,8 @@ Run these when the change touches the area, or before a release.
 | L-21 | Record an Urdu call over 20 minutes; open it in the desktop Library and on the phone while it is transcribed. | "Transcribing… part 2 of 3" (the part moves on); then the transcript. |
 | L-22 | Console, an Urdu recording: **Roman Urdu & English** (with the Anthropic key), wait two minutes, reload. | The player has **Original · Roman Urdu · English**; Roman Urdu reads "aap kaise hain"-style with English words unchanged; English is a faithful translation; the line times are the same. |
 | L-23 | **Export → Word (.docx) in Roman Urdu**, then edit one line and reload. | The file has the Roman Urdu text; after the edit the switch is gone until the views are made again. |
+| L-24 | Mark three Urdu recordings as Accuracy Lab references (corrected text), run **Compare engines** with Groq, Soniox and AssemblyAI on each, open **Accuracy Lab**. | One Urdu table with WER, CER, seconds per audio minute and cost per audio hour per engine; the best one is marked; each recording lists its scores. |
+| L-25 | **Use the winners**, then open **Settings → Engine per language**. | The best Urdu engine is first in the Urdu list; the other engines follow. |
 | L-2 | During a recording with captions on, tap the pill's language chip twice. | Captions continue in the new language within a few seconds; the timer never stops; the saved file has no gap. |
 | L-3 | Stop a recording, change the chip on the Keep card, then Keep. | The transcript uses the chip's language; with a client of another language you are asked "Use … for … from now on?". |
 | L-4 | Phone: after a call, tap the chip on the popup, then Keep. | The transcript uses the new language. |

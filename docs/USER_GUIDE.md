@@ -194,6 +194,20 @@ Arabic in Naskh. The views are
 written by Claude (your administrator adds the Anthropic key) and are labelled as views: the transcript itself never
 changes. If you edit the transcript, make the views again.
 
+### Find the best engine for your calls (Accuracy Lab)
+
+The console's **Accuracy Lab** (owner only, under System) measures which engine writes your calls best. Do this once
+per language with about 10 typical recordings (both speakers, a few noisy ones, names you use):
+
+1. Open a recording, choose **⋯ → Use as Accuracy Lab reference**, correct the text exactly as it was said (one line
+   per turn, no speaker names) and save.
+2. Choose **⋯ → Compare engines** and pick up to three engines for that language.
+3. Repeat for the other recordings, then open **Accuracy Lab**. Each engine shows its word error rate (WER) and
+   character error rate (CER): the share of words or letters it got wrong, left out or added. Lower is better. You
+   also see how long it took and what an hour of audio cost.
+4. Press **Use the winners**: the best engine becomes the first one for each language in **Settings → Engine per
+   language** (the others stay as the fallback).
+
 ### Privacy at the speech providers
 
 EchoLedger deletes its copy at each provider as soon as the transcript is stored. Three switches in the providers'

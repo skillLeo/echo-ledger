@@ -45,6 +45,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $duration_ms
  * @property list<array{at_ms: int, paused_ms: int}>|null $pauses
  * @property list<array{at_ms: int, language: string|null}>|null $language_marks language chip changes during the recording (v1.2)
+ * @property string|null $reference_text the owner's corrected transcript for the Accuracy Lab (v1.2)
+ * @property Carbon|null $reference_set_at
  * @property-read Collection<int, SessionMarker> $markers
  * @property SessionStatus $status
  * @property bool $pinned kept at the top of the library (B15)
@@ -282,6 +284,7 @@ class CaptureSession extends Model
             'duration_ms' => 'integer',
             'pauses' => 'array',
             'language_marks' => 'array',
+            'reference_set_at' => 'datetime',
             'speaker_names' => 'array',
             'pinned' => 'boolean',
             'keep_forever' => 'boolean',

@@ -12,6 +12,8 @@ use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Models\User;
+use App\Services\Accuracy\AccuracyLab;
 use App\Services\EngineComparison;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\Retranscriber;
@@ -28,6 +30,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -103,6 +106,8 @@ class ViewCaptureSession extends ViewRecord
                 $this->compareAction(),
                 $this->compareEnginesAction(),
                 $this->engineResultsAction(),
+                $this->referenceAction(),
+                $this->clearReferenceAction(),
                 DeleteAction::make()->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
             ])->icon(Heroicon::OutlinedEllipsisVertical)->color('gray'),
         ];
@@ -346,6 +351,48 @@ class ViewCaptureSession extends ViewRecord
     }
 
     /** The runs side by side, with cost; pick the winner for the language or use a run as the transcript. */
+    /** Accuracy Lab: the corrected transcript the engines are scored against (owner only). */
+    private function referenceAction(): Action
+    {
+        return Action::make('accuracy_reference')
+            ->label(fn (): string => $this->session()->reference_text !== null ? 'Edit the Accuracy Lab reference' : 'Use as Accuracy Lab reference')
+            ->icon(Heroicon::OutlinedBeaker)
+            ->visible(fn (): bool => self::isOwner() && $this->editableTranscript() !== null)
+            ->modalDescription('The spoken words exactly as said, one line per turn, without speaker names. Correct the transcript below; every "Compare engines" run of this recording is scored against it in the Accuracy Lab.')
+            ->schema([
+                Textarea::make('reference')->label('Reference transcript')->rows(14)->required()
+                    ->default(fn (): string => $this->session()->reference_text ?? AccuracyLab::spokenText($this->editableTranscript())),
+            ])
+            ->action(function (array $data): void {
+                try {
+                    app(AccuracyLab::class)->setReference($this->session(), (string) $data['reference']);
+                } catch (RuntimeException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+                Notification::make()->title('Reference saved. Run "Compare engines" to score the engines on this recording.')->success()->send();
+            });
+    }
+
+    private function clearReferenceAction(): Action
+    {
+        return Action::make('accuracy_reference_clear')->label('Remove the Accuracy Lab reference')->icon(Heroicon::OutlinedXMark)
+            ->visible(fn (): bool => self::isOwner() && $this->session()->reference_text !== null)
+            ->requiresConfirmation()
+            ->action(function (): void {
+                app(AccuracyLab::class)->clearReference($this->session());
+                Notification::make()->title('The recording no longer counts in the Accuracy Lab.')->success()->send();
+            });
+    }
+
+    private static function isOwner(): bool
+    {
+        $user = auth()->user();
+
+        return $user instanceof User && $user->is_super_admin;
+    }
+
     private function engineResultsAction(): Action
     {
         return Action::make('engine_results')
