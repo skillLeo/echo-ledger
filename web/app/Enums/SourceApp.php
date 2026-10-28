@@ -17,6 +17,7 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
     case GoogleMeet = 'google_meet';
     case Zoom = 'zoom';
     case MicrosoftTeams = 'microsoft_teams';
+    case PhoneCall = 'phone_call';
     case VoiceNote = 'voice_note';
     case Other = 'other';
 
@@ -29,6 +30,7 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
             self::GoogleMeet => 'Google Meet',
             self::Zoom => 'Zoom',
             self::MicrosoftTeams => 'Microsoft Teams',
+            self::PhoneCall => 'Phone call',
             self::VoiceNote => 'Voice note',
             self::Other => 'Other',
         };
@@ -42,6 +44,7 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
             self::WhatsAppWeb => Heroicon::OutlinedGlobeAlt,
             self::GoogleMeet, self::Zoom => Heroicon::OutlinedVideoCamera,
             self::MicrosoftTeams => Heroicon::OutlinedUserGroup,
+            self::PhoneCall => Heroicon::OutlinedPhone,
             self::VoiceNote => Heroicon::OutlinedMicrophone,
             self::Other => Heroicon::OutlinedEllipsisHorizontalCircle,
         };
@@ -52,6 +55,7 @@ enum SourceApp: string implements HasColor, HasIcon, HasLabel
         return match ($this) {
             self::WhatsApp, self::WhatsAppBusiness, self::WhatsAppWeb => 'success',
             self::GoogleMeet, self::Zoom, self::MicrosoftTeams => 'info',
+            self::PhoneCall => 'primary',
             self::VoiceNote => 'warning',
             self::Other => 'gray',
         };

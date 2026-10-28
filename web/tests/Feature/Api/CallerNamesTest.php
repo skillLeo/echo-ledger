@@ -67,6 +67,16 @@ it('files the recording under the client whose contact has that number, in the c
         ->and($session->caller_name)->toBe('Omar Khan')->and($session->displayTitle())->toBe('Call with Omar Khan');
 });
 
+it('titles a SIM phone call by the number when the caller is not a contact', function () {
+    $id = $this->createSession($this->bytes, ['source_app' => 'phone_call', 'caller' => ['number' => '+92 345 0001112', 'source' => 'phone']])->assertCreated()->json('session.id');
+    $bare = $this->createSession($this->bytes, ['client_ref' => 'bare', 'source_app' => 'phone_call'])->json('session.id');
+
+    $item = collect($this->getJson('/api/library')->json('data'))->keyBy('id');
+    expect($item[$id]['title'])->toBe('Call with +92 345 0001112')->and($item[$id]['source_app_label'])->toBe('Phone call')
+        ->and($item[$bare]['title'])->toBe('Phone call')
+        ->and(CaptureSession::query()->find($id)->caller_name)->toBeNull();
+});
+
 it('matches a contact or the client itself by name, and never overrides a client or language the device chose', function () {
     $client = acme($this);
     $other = Client::factory()->create(['user_id' => $this->device->user_id, 'workspace_id' => $this->device->workspace_id, 'name' => 'Beta Traders']);

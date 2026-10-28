@@ -23,6 +23,8 @@ class HelperConnectionTest : AppTest() {
 
         override fun startCapture(sink: ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
 
+        override fun startPhoneCapture(sink: ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+
         override fun stopCapture() = Unit
 
         override fun setCallListener(listener: ICallListener?) {
@@ -70,6 +72,7 @@ class HelperConnectionTest : AppTest() {
             override fun uid() = 2000
             override fun capabilities() = ""
             override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+            override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
             override fun stopCapture() = Unit
             override fun setCallListener(listener: ICallListener?) = Unit
             override fun destroy() = Unit

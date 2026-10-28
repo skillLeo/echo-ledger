@@ -9,6 +9,9 @@ object CallTargets {
     const val WHATSAPP_BUSINESS = "com.whatsapp.w4b"
     val PACKAGES: Set<String> = setOf(WHATSAPP, WHATSAPP_BUSINESS)
 
+    /** What the helper reports for a SIM phone call (since v1.2; not a package, never in [PACKAGES]). */
+    const val TELEPHONY = "phone_call"
+
     fun isTarget(packageName: String?): Boolean = packageName in PACKAGES
 
     /** The first target among the packages sharing a uid (a uid can hold several packages). */

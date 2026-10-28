@@ -71,6 +71,8 @@ class SetupScreenTest : ScreenTest() {
 
         override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
 
+        override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+
         override fun stopCapture() = Unit
 
         override fun setCallListener(listener: com.echoledger.mobile.capture.ICallListener?) = Unit

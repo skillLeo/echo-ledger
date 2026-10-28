@@ -8,6 +8,8 @@ import android.media.AudioTrack
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -64,6 +66,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.core.Languages
+import com.echoledger.mobile.core.PhoneCalls
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.CaptionStyle
 import com.echoledger.mobile.notify.CallerNameListener
@@ -224,6 +227,18 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
                 )
             }
         }
+        // SIM phone calls (since v1.2): off by default; the call log and contacts are asked for when it is turned on.
+        val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+        Text("Phone calls", modifier = Modifier.padding(top = 8.dp))
+        Text(
+            "Calls on your SIM, with auto-record on. Tell the other person before you record: in many places the law needs their consent.",
+            color = Brand.Muted,
+            fontSize = 12.sp
+        )
+        Choices("Record phone calls", PhoneCalls.MODES.map { it to PhoneCalls.label(it) }, PhoneCalls.mode(settings.phoneCalls)) { mode ->
+            vm.updateSettings { it.copy(phoneCalls = mode) }
+            if (mode != PhoneCalls.OFF) ask.launch(arrayOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_CONTACTS))
+        }
     }
 }
 
@@ -294,6 +309,7 @@ internal fun permissionIntent(context: Context, key: String): Intent? = when (ke
     "overlay" -> Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:${context.packageName}".toUri())
     "battery" -> Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
     "caller_names" -> Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+    "call_log", "contacts" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
     else -> null
 }?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
@@ -321,14 +337,17 @@ fun CaptureHealthSection(vm: MainViewModel, settings: AppSettings, helperConnect
     var result by remember { mutableStateOf<MicTestResult?>(null) }
     var track by remember { mutableStateOf<AudioTrack?>(null) }
     DisposableEffect(Unit) { onDispose { track?.release() } }
-    val items = remember(refresh, helperConnected) {
+    val phoneCalls = PhoneCalls.mode(settings.phoneCalls) != PhoneCalls.OFF
+    val items = remember(refresh, helperConnected, phoneCalls) {
         CaptureHealth.permissionItems(
             microphone = granted(context, Manifest.permission.RECORD_AUDIO),
             notifications = Build.VERSION.SDK_INT < 33 || granted(context, Manifest.permission.POST_NOTIFICATIONS),
             overlay = Settings.canDrawOverlays(context),
             battery = CaptureHealth.ignoresBatteryOptimisation(context),
             helper = helperConnected,
-            callerNames = CallerNameListener.allowed(context)
+            callerNames = CallerNameListener.allowed(context),
+            callLog = granted(context, Manifest.permission.READ_CALL_LOG).takeIf { phoneCalls },
+            contacts = granted(context, Manifest.permission.READ_CONTACTS).takeIf { phoneCalls }
         )
     }
     SectionCard {

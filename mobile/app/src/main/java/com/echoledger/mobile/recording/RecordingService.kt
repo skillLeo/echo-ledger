@@ -24,13 +24,16 @@ import com.echoledger.mobile.calls.CallEffect
 import com.echoledger.mobile.calls.CallEvent
 import com.echoledger.mobile.calls.CallState
 import com.echoledger.mobile.calls.CallStateMachine
+import com.echoledger.mobile.calls.PhoneCallLog
 import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.capture.ICallListener
 import com.echoledger.mobile.core.CallerNames
 import com.echoledger.mobile.core.Languages
+import com.echoledger.mobile.core.PhoneCalls
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.Speakers
 import com.echoledger.mobile.data.AppSettings
+import com.echoledger.mobile.data.CallerDto
 import com.echoledger.mobile.data.LanguageMarkDto
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.data.OpenSessionRequest
@@ -79,6 +82,9 @@ class RecordingService : LifecycleService() {
         const val ACTION_MARK = "com.echoledger.mobile.MARK"
         const val ACTION_TAG_LAST = "com.echoledger.mobile.TAG_LAST"
         const val ACTION_UNDO_MARK = "com.echoledger.mobile.UNDO_MARK"
+
+        /** "Record" on the "Record this phone call?" notification (Record phone calls: Ask each time, since v1.2). */
+        const val ACTION_RECORD_PHONE_CALL = "com.echoledger.mobile.RECORD_PHONE_CALL"
 
         /** The language chip (bubble, Record tab): [EXTRA_LANGUAGE] is the new code, absent for automatic. */
         const val ACTION_LANGUAGE = "com.echoledger.mobile.LANGUAGE"
@@ -175,6 +181,8 @@ class RecordingService : LifecycleService() {
             } ?: settle()
 
             ACTION_LANGUAGE -> capture?.let { setLanguage(it, Languages.canonical(intent.getStringExtra(EXTRA_LANGUAGE))) } ?: settle()
+
+            ACTION_RECORD_PHONE_CALL -> recordAskedPhoneCall()
 
             else -> settle()
         }
@@ -279,7 +287,9 @@ class RecordingService : LifecycleService() {
                 CaptureLog.add(this@RecordingService, "helper", if (ready) "ready" else "not running")
                 if (capture == null) goForeground(mic = false, title = "", detail = "")
             }
-            val inCall = (getSystemService(AUDIO_SERVICE) as AudioManager).mode == AudioManager.MODE_IN_COMMUNICATION
+            val mode = (getSystemService(AUDIO_SERVICE) as AudioManager).mode
+            val inCall = mode == AudioManager.MODE_IN_COMMUNICATION ||
+                (mode == AudioManager.MODE_IN_CALL && PhoneCalls.mode(settings.phoneCalls) != PhoneCalls.OFF)
             if (inCall && !ready && !warnedThisCall) {
                 warnedThisCall = true
                 CaptureLog.add(this@RecordingService, "call seen without the helper")
@@ -297,9 +307,43 @@ class RecordingService : LifecycleService() {
         }
     }
 
+    /** A phone call is ringing on the "Record this phone call?" notification (Ask each time). */
+    private var phoneCallAsked = false
+
     private fun onCallEvent(event: CallEvent) {
-        // A call in an app whose auto-record switch is off is not recorded (B1); recording by hand still works.
-        if (event is CallEvent.CallStarted && !AutoRecordRules.records(event.app, settings.autoRecordApps)) return
+        if (event is CallEvent.CallStarted && event.app == SourceApp.PHONE_CALL) {
+            // SIM calls follow "Record phone calls" (since v1.2): off, ask each time, or always.
+            when (PhoneCalls.mode(settings.phoneCalls)) {
+                PhoneCalls.OFF -> return
+
+                PhoneCalls.ASK -> {
+                    phoneCallAsked = true
+                    CaptureLog.add(this, "phone call", "asked whether to record")
+                    Notifications.askRecordPhoneCall(this)
+                    return
+                }
+            }
+        } else if (event is CallEvent.CallStarted && !AutoRecordRules.records(event.app, settings.autoRecordApps)) {
+            // A call in an app whose auto-record switch is off is not recorded (B1); recording by hand still works.
+            return
+        }
+        if (event is CallEvent.CallEnded && phoneCallAsked) {
+            phoneCallAsked = false
+            Notifications.cancelAskRecordPhoneCall(this)
+        }
+        reduceCall(event)
+    }
+
+    /** "Record" on the ask notification: the phone call still going on is recorded from now. */
+    private fun recordAskedPhoneCall() {
+        Notifications.cancelAskRecordPhoneCall(this)
+        if (!phoneCallAsked || capture != null) return settle()
+        phoneCallAsked = false
+        CaptureLog.add(this, "phone call", "recording (asked)")
+        reduceCall(CallEvent.CallStarted(SourceApp.PHONE_CALL, UUID.randomUUID().toString(), System.currentTimeMillis()))
+    }
+
+    private fun reduceCall(event: CallEvent) {
         val (next, effects) = CallStateMachine.reduce(callState, event)
         callState = next
         for (effect in effects) {
@@ -331,8 +375,9 @@ class RecordingService : LifecycleService() {
             if (fromCall) settle() else startMicCapture(id)
             return
         }
+        val phone = sourceApp == SourceApp.PHONE_CALL.wire
         val session = Capture(id, sourceApp, channels = 2, fromCall = fromCall, clientId = settings.clientId)
-        session.title = "Recording call"
+        session.title = if (phone) "Recording phone call" else "Recording call"
         session.detail = "Both sides · ${if (fromCall) "auto" else "manual"}"
         capture = session
         if (!goForeground(mic = false, title = session.title, detail = session.detail)) {
@@ -343,7 +388,17 @@ class RecordingService : LifecycleService() {
         }
         val pipe = ParcelFileDescriptor.createPipe()
         val micSource = if (settings.micSource == "mic") MediaRecorder.AudioSource.MIC else MediaRecorder.AudioSource.VOICE_COMMUNICATION
-        val started = runCatching { helper.startCapture(pipe[1], Pcm.CAPTURE_RATE, micSource) }
+        val started = runCatching {
+            if (phone) {
+                helper.startPhoneCapture(
+                    pipe[1],
+                    Pcm.CAPTURE_RATE,
+                    micSource
+                )
+            } else {
+                helper.startCapture(pipe[1], Pcm.CAPTURE_RATE, micSource)
+            }
+        }
             .onFailure { CaptureProblems.record(this, "Call capture could not start: ${it.message ?: it.javaClass.simpleName}") }
             .getOrDefault(false)
         CaptureLog.add(
@@ -599,6 +654,16 @@ class RecordingService : LifecycleService() {
         }
     }
 
+    /**
+     * Who the recording was with (since v1.2): a phone call's number and contact from the call log (READ_CALL_LOG), a
+     * WhatsApp call's name from its call notification. Runs on the finishing thread (the call log may lag a moment).
+     */
+    private fun callerFor(sourceApp: String, startMs: Long, endMs: Long): CallerDto? = if (sourceApp == SourceApp.PHONE_CALL.wire) {
+        PhoneCallLog.find(this, startMs, endMs)
+    } else {
+        CallerNames.forCall(sourceApp, startMs, endMs)?.let { CallerDto(name = it, source = "whatsapp_notification") }
+    }
+
     /** Stops capture, encrypts the file; calls wait for the user's Keep/Discard, manual recordings upload directly. */
     private fun stopCapture(fromCall: Boolean) {
         val session = capture ?: return
@@ -607,10 +672,12 @@ class RecordingService : LifecycleService() {
         main.removeCallbacks(ticker)
         publish(null)
         finalizing++
+        val endedMs = System.currentTimeMillis()
         thread(name = "el-finish") {
             val stored = runCatching {
                 session.finish()
                 val (markers, pauses) = session.notes.finish()
+                val caller = callerFor(session.sourceApp, session.startedAt.toEpochMilli(), endedMs)
                 val meta = LocalRecording(
                     id = session.id,
                     sourceApp = session.sourceApp,
@@ -632,9 +699,11 @@ class RecordingService : LifecycleService() {
                     pauses = pauses,
                     language = session.language,
                     languageMarks = synchronized(session.languageMarks) { session.languageMarks.toList() },
-                    // Caller names: the name WhatsApp's call notification showed during this call, when allowed.
-                    callerName = CallerNames.forCall(session.sourceApp, session.startedAt.toEpochMilli(), System.currentTimeMillis()),
-                    callerSource = "whatsapp_notification"
+                    // Caller names: the call log's number and contact for a phone call, else the name WhatsApp's call
+                    // notification showed during this call, when allowed.
+                    callerName = caller?.name,
+                    callerSource = caller?.source,
+                    callerNumber = caller?.number
                 )
                 graph.recordings.importPlainFile(meta, session.file)
             }.onFailure {

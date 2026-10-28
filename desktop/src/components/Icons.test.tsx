@@ -40,6 +40,10 @@ describe("icons", () => {
     expect(markup(<SourceAppIcon app="whatsapp_web" />)).not.toBe(other);
   });
 
+  it("gives a SIM phone call the phone glyph", () => {
+    expect(markup(<SourceAppIcon app="phone_call" />)).toBe(markup(<SourceDeviceIcon source="phone" />));
+  });
+
   it("falls back to the generic glyph for an unknown or missing app", () => {
     const other = markup(<SourceAppIcon app="other" />);
     expect(markup(<SourceAppIcon app="signal" />)).toBe(other);

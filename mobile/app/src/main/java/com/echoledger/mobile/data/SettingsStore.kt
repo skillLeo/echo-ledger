@@ -41,6 +41,8 @@ data class AppSettings(
     val serverApiVersion: String? = null,
     /** Per call app (`source_app` wire value): false keeps auto-record from recording it. Missing apps are on. */
     val autoRecordApps: Map<String, Boolean> = emptyMap(),
+    /** SIM phone calls (since v1.2): `off` (default), `ask` (a notification offers to record each call) or `always`. */
+    val phoneCalls: String = "off",
     /** How the floating caption bubble looks (B4). */
     val captionStyle: CaptionStyle = CaptionStyle(),
     /** Warn when a call has not heard the other side for 30 seconds (B5). */

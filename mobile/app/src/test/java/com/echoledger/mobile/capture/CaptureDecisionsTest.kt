@@ -117,6 +117,7 @@ class CaptureDecisionsTest {
                 "google_meet" to "Google Meet",
                 "zoom" to "Zoom",
                 "microsoft_teams" to "Microsoft Teams",
+                "phone_call" to "Phone call",
                 "voice_note" to "Voice note",
                 "other" to "Other"
             ),

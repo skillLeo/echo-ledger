@@ -3,6 +3,7 @@ package com.echoledger.mobile.ui
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Language
@@ -199,6 +200,7 @@ fun SourceApp.icon(): ImageVector = when (this) {
     SourceApp.WHATSAPP, SourceApp.WHATSAPP_WEB -> Icons.Outlined.Forum
     SourceApp.WHATSAPP_BUSINESS -> Icons.Outlined.Storefront
     SourceApp.GOOGLE_MEET, SourceApp.ZOOM, SourceApp.MICROSOFT_TEAMS -> Icons.Outlined.Videocam
+    SourceApp.PHONE_CALL -> Icons.Outlined.Call
     SourceApp.VOICE_NOTE -> Icons.Outlined.Mic
     SourceApp.OTHER -> Icons.Outlined.MoreHoriz
 }

@@ -19,6 +19,7 @@ enum class SourceApp(val wire: String, val label: String) {
     GOOGLE_MEET("google_meet", "Google Meet"),
     ZOOM("zoom", "Zoom"),
     MICROSOFT_TEAMS("microsoft_teams", "Microsoft Teams"),
+    PHONE_CALL("phone_call", "Phone call"),
     VOICE_NOTE("voice_note", "Voice note"),
     OTHER("other", "Other")
     ;
@@ -26,10 +27,15 @@ enum class SourceApp(val wire: String, val label: String) {
     companion object {
         fun from(wire: String?): SourceApp = entries.firstOrNull { it.wire == wire } ?: OTHER
 
-        /** Package → app for call detection (WhatsApp and WhatsApp Business). */
+        /** Package → app for call detection (WhatsApp, WhatsApp Business and SIM calls). */
         fun fromPackage(pkg: String?): SourceApp? = when (pkg) {
             CallTargets.WHATSAPP -> WHATSAPP
+
             CallTargets.WHATSAPP_BUSINESS -> WHATSAPP_BUSINESS
+
+            // A SIM call (since v1.2): the helper's name for it, not a package.
+            CallTargets.TELEPHONY -> PHONE_CALL
+
             else -> null
         }
     }

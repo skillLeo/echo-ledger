@@ -116,7 +116,9 @@ object CaptureHealth {
         overlay: Boolean,
         battery: Boolean,
         helper: Boolean,
-        callerNames: Boolean? = null
+        callerNames: Boolean? = null,
+        callLog: Boolean? = null,
+        contacts: Boolean? = null
     ): List<PermissionItem> = listOfNotNull(
         PermissionItem("microphone", "Microphone", microphone, "Needed to record you."),
         PermissionItem("helper", "Call capture helper", helper, "Needed to record the other side of calls."),
@@ -136,7 +138,10 @@ object CaptureHealth {
                 it,
                 "Shows who each WhatsApp call was with. Only WhatsApp call notifications are read."
             )
-        }
+        },
+        // Shown while "Record phone calls" is on (since v1.2).
+        callLog?.let { PermissionItem("call_log", "Call log", it, "Gives each recorded phone call its number.") },
+        contacts?.let { PermissionItem("contacts", "Contacts", it, "Gives each recorded phone call the contact's name.") }
     )
 }
 

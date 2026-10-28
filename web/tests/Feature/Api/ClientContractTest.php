@@ -575,7 +575,7 @@ describe('documentation drift', function () {
         expect($labels)->toBe([
             'whatsapp' => 'WhatsApp', 'whatsapp_business' => 'WhatsApp Business', 'whatsapp_web' => 'WhatsApp Web',
             'google_meet' => 'Google Meet', 'zoom' => 'Zoom', 'microsoft_teams' => 'Microsoft Teams',
-            'voice_note' => 'Voice note', 'other' => 'Other',
+            'phone_call' => 'Phone call', 'voice_note' => 'Voice note', 'other' => 'Other',
         ]);
     });
 });

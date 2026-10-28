@@ -58,20 +58,37 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
         this.listener = listener
     }
 
+    override fun startCapture(sink: ParcelFileDescriptor, sampleRate: Int, micSource: Int): Boolean =
+        begin(sink, sampleRate, micSource, phone = false)
+
+    override fun startPhoneCapture(sink: ParcelFileDescriptor, sampleRate: Int, micSource: Int): Boolean =
+        begin(sink, sampleRate, micSource, phone = true)
+
+    /**
+     * Starts both sides. A WhatsApp call's far side comes from a playback mix ([FarPartyCapture]); a SIM call's from the
+     * phone line ([openPhoneLine]). When the line gives only both voices mixed, the microphone is left out so nothing is
+     * transcribed twice.
+     */
     @SuppressLint("MissingPermission") // shell holds RECORD_AUDIO
-    override fun startCapture(sink: ParcelFileDescriptor, sampleRate: Int, micSource: Int): Boolean {
+    private fun begin(sink: ParcelFileDescriptor, sampleRate: Int, micSource: Int, phone: Boolean): Boolean {
         if (capturing) return true
         val rate = if (sampleRate > 0) sampleRate else Pcm.CAPTURE_RATE
         val frames = rate / 100 // 10 ms
         val problems = mutableListOf<String>()
 
-        val mic = openMic(rate, frames, micSource, problems)
         val far = FarPartyCapture(context, audioManager, rate)
-        val farRecord = runCatching { far.start() }
-            .onFailure { problems += "far side: ${it.message ?: it.javaClass.simpleName}" }
-            .getOrNull()
-            ?.takeIf { record -> started(record).also { if (!it) problems += "far side: did not start" } }
-        if (farRecord == null) far.stop()
+        val line = if (phone) openPhoneLine(rate, frames, problems) else null
+        val mic = if (line?.second == true) null else openMic(rate, frames, micSource, problems)
+        val farRecord = if (phone) {
+            line?.first
+        } else {
+            runCatching { far.start() }
+                .onFailure { problems += "far side: ${it.message ?: it.javaClass.simpleName}" }
+                .getOrNull()
+                ?.takeIf { record -> started(record).also { if (!it) problems += "far side: did not start" } }
+        }
+        if (farRecord == null || phone) far.stop()
+        if (line?.second == true) problems += "the phone line gives both voices on one track"
         farParty = far
 
         // Nothing to record: say why (the app shows it) instead of a recording that stays silent.
@@ -119,6 +136,12 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
                     runCatching { it.stop() }
                     it.release()
                 }
+                if (phone) {
+                    farRecord?.let {
+                        runCatching { it.stop() }
+                        it.release()
+                    }
+                }
                 far.stop()
                 runCatching { out.close() }
                 runCatching { sink.close() }
@@ -165,6 +188,30 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
         return null
     }
 
+    /**
+     * A SIM call's far side (since v1.2): the downlink of the phone line, which needs CAPTURE_AUDIO_OUTPUT (shell holds
+     * it). Some phones only give the whole call (both voices); then the second value is true. Null when neither works.
+     */
+    @SuppressLint("MissingPermission")
+    private fun openPhoneLine(rate: Int, frames: Int, problems: MutableList<String>): Pair<AudioRecord, Boolean>? {
+        val format = AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+            .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build()
+        val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            .coerceAtLeast(frames * 2 * 8)
+        for (source in listOf(MediaRecorder.AudioSource.VOICE_DOWNLINK, MediaRecorder.AudioSource.VOICE_CALL)) {
+            val record = runCatching {
+                AudioRecord.Builder().setAudioSource(source).setAudioFormat(format).setBufferSizeInBytes(minBuffer * 2).build()
+            }.getOrElse {
+                problems += "phone line $source: ${it.message ?: it.javaClass.simpleName}"
+                null
+            } ?: continue
+            if (started(record)) return record to (source == MediaRecorder.AudioSource.VOICE_CALL)
+            problems += "phone line $source: did not start"
+            record.release()
+        }
+        return null
+    }
+
     /** Starts [record] and checks it is really recording (Android can refuse silently: state stays stopped). */
     private fun started(record: AudioRecord): Boolean {
         if (record.state != AudioRecord.STATE_INITIALIZED) return false
@@ -191,19 +238,21 @@ class CaptureHelperService(private val context: Context) : ICaptureHelper.Stub()
 
     /**
      * Call detection: VoIP sets MODE_IN_COMMUNICATION; the helper (holding MODIFY_AUDIO_ROUTING) can see the real UID of
-     * the voice-communication player and confirm it belongs to WhatsApp / WhatsApp Business.
+     * the voice-communication player and confirm it belongs to WhatsApp / WhatsApp Business. A SIM call sets
+     * MODE_IN_CALL (since v1.2 reported as [com.echoledger.mobile.core.CallTargets.TELEPHONY]; the app decides whether
+     * to record it).
      */
     private fun startCallMonitor() {
         thread(name = "el-helper-calls", isDaemon = true) {
             var inCall = false
             while (true) {
                 runCatching {
-                    val communicating = audioManager.mode == AudioManager.MODE_IN_COMMUNICATION
-                    val pkg = if (communicating) whatsappVoicePlayer() else null
+                    val mode = audioManager.mode
+                    val pkg = com.echoledger.mobile.core.PhoneCalls.callApp(mode) { whatsappVoicePlayer() }
                     if (!inCall && pkg != null) {
                         inCall = true
                         listener?.onCallStarted(pkg)
-                    } else if (inCall && !communicating) {
+                    } else if (inCall && !com.echoledger.mobile.core.PhoneCalls.inCall(mode)) {
                         inCall = false
                         listener?.onCallEnded()
                     }

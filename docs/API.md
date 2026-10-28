@@ -83,7 +83,7 @@ Every addition below is marked **(since v1.1)**.
 |---|---|
 | `platform` | `android`, `ios`, `windows`, `macos`, `linux` |
 | `source_device` (derived by server: android/ios→`phone`, windows/macos/linux→`desktop`, admin upload→`web`) | `phone` "Phone" icon `device-phone-mobile` · `desktop` "Desktop" icon `computer-desktop` · `web` "Web" icon `globe-alt` |
-| `source_app` | `whatsapp` "WhatsApp" · `whatsapp_business` "WhatsApp Business" · `whatsapp_web` "WhatsApp Web" (since v1.1) · `google_meet` "Google Meet" · `zoom` "Zoom" · `microsoft_teams` "Microsoft Teams" (since v1.1) · `voice_note` "Voice note" · `other` "Other" |
+| `source_app` | `whatsapp` "WhatsApp" · `whatsapp_business` "WhatsApp Business" · `whatsapp_web` "WhatsApp Web" (since v1.1) · `google_meet` "Google Meet" · `zoom` "Zoom" · `microsoft_teams` "Microsoft Teams" (since v1.1) · `phone_call` "Phone call" (since v1.2, a SIM call recorded on the phone) · `voice_note` "Voice note" · `other` "Other" |
 | session `status` | `recording`, `uploading`, `processing`, `completed`, `failed` |
 | recording `role` | `primary` (stereo or mono file used for playback + multichannel providers), `channel_1` (mono "Me"), `channel_2` (mono "Client") |
 | upload `status` | `pending`, `uploading`, `assembling`, `ready`, `failed` |

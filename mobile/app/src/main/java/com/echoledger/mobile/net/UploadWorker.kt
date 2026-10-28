@@ -168,7 +168,11 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     )
 
     /** Caller names (since v1.2): who the call was with, when the phone saw it. */
-    private fun callerOf(rec: LocalRecording) = rec.callerName?.let { CallerDto(name = it, source = rec.callerSource) }
+    private fun callerOf(rec: LocalRecording) = if (rec.callerName == null && rec.callerNumber == null) {
+        null
+    } else {
+        CallerDto(name = rec.callerName, number = rec.callerNumber, source = rec.callerSource)
+    }
 
     private fun artifactOf(rec: LocalRecording) = ArtifactDto(
         "primary",

@@ -182,6 +182,10 @@ class CaptureSession extends Model
         if ($this->caller_name !== null && $this->caller_name !== '' && $this->source_app !== SourceApp::VoiceNote) {
             return in_array($this->caller_source, ['window_title', 'calendar'], true) ? $this->caller_name : 'Call with '.$this->caller_name;
         }
+        // A phone call from a number that is not a contact: "Call with +92 300 1234567".
+        if ($this->source_app === SourceApp::PhoneCall && $this->caller_number !== null && $this->caller_number !== '') {
+            return 'Call with '.$this->caller_number;
+        }
 
         return self::fallbackTitleFor($this->source_app);
     }
@@ -202,6 +206,7 @@ class CaptureSession extends Model
     {
         return match ($app) {
             SourceApp::VoiceNote => 'Voice note',
+            SourceApp::PhoneCall => 'Phone call',
             SourceApp::Other => 'Recording',
             default => $app->getLabel().' call',
         };

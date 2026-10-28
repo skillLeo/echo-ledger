@@ -99,6 +99,7 @@ export function SourceAppIcon({ app, ...p }: IconProps & { app?: string }) {
     case "google_meet":
     case "zoom":
     case "microsoft_teams": return <VideoIcon {...p} />;
+    case "phone_call": return <PhoneIcon {...p} />;
     case "voice_note": return <MicIcon {...p} />;
     default: return <DotsIcon {...p} />;
   }

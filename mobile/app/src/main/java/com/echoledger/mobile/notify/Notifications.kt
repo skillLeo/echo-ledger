@@ -222,11 +222,42 @@ object Notifications {
     }
 
     private const val NO_AUDIO_ID = 7_431
+    private const val ASK_PHONE_CALL_ID = 7_433
 
-    /** "WhatsApp call · 4:12 · Acme" or "Voice note · 0:42". */
+    /** "Record phone calls: Ask each time" (since v1.2): a phone call started; offer to record it. Gone when the call ends. */
+    fun askRecordPhoneCall(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val text = "Tell the other person before you record."
+        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Record this phone call?")
+            .setContentText(text)
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .addAction(0, "Record", serviceAction(context, RecordingService.ACTION_RECORD_PHONE_CALL, 16))
+        runCatching { NotificationManagerCompat.from(context).notify(ASK_PHONE_CALL_ID, builder.build()) }
+    }
+
+    fun cancelAskRecordPhoneCall(context: Context) {
+        NotificationManagerCompat.from(context).cancel(ASK_PHONE_CALL_ID)
+    }
+
+    /** "WhatsApp call · 4:12 · Acme", "Call with Omar Khan · 2:05" or "Voice note · 0:42". */
     fun decisionText(rec: LocalRecording, clientName: String?): String {
         val app = SourceApp.from(rec.sourceApp)
-        val what = if (app == SourceApp.VOICE_NOTE) app.label else "${app.label} call"
+        val caller = (rec.callerName ?: rec.callerNumber)?.takeIf { it.isNotBlank() && app != SourceApp.VOICE_NOTE }
+        val what = when {
+            caller != null -> "Call with $caller"
+            app == SourceApp.VOICE_NOTE || app == SourceApp.PHONE_CALL -> app.label
+            else -> "${app.label} call"
+        }
         return listOfNotNull(what, formatDuration(rec.durationMs), clientName?.takeIf { it.isNotBlank() }).joinToString(" · ")
     }
 

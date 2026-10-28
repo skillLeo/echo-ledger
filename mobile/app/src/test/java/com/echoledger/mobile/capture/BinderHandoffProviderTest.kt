@@ -32,6 +32,8 @@ class BinderHandoffProviderTest : AppTest() {
 
         override fun startCapture(sink: ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
 
+        override fun startPhoneCapture(sink: ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+
         override fun stopCapture() = Unit
 
         override fun setCallListener(listener: ICallListener?) {

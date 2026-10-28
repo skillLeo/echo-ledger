@@ -12,6 +12,8 @@ interface ICaptureHelper {
     boolean startCapture(in ParcelFileDescriptor sink, int sampleRate, int micSource) = 4;
     void stopCapture() = 5;
     void setCallListener(ICallListener listener) = 6;
+    // A SIM phone call (since v1.2): the far side from the phone line (VOICE_DOWNLINK) instead of a playback mix.
+    boolean startPhoneCapture(in ParcelFileDescriptor sink, int sampleRate, int micSource) = 7;
     // Transaction reserved by Shizuku to destroy a UserService.
     void destroy() = 16777114;
 }

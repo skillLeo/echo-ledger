@@ -46,10 +46,12 @@ object SettingsTransfer {
     )
 
     /**
-     * Kept on this phone: the pairing and everything tied to this server, the lock, consent, the wizard flag and the
-     * look (theme and wallpaper colours follow this phone, like the desktop's theme).
+     * Kept on this phone: the pairing and everything tied to this server, the lock, consent, the wizard flag, the
+     * look (theme and wallpaper colours follow this phone, like the desktop's theme) and recording SIM phone calls
+     * (switched on on the phone itself, with its call-log permission).
      */
     val NOT_PORTABLE: Set<String> = setOf(
+        "phoneCalls",
         "serverUrl",
         "pins",
         "deviceId",

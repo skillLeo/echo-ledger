@@ -9,6 +9,7 @@ export const SOURCE_APP_LABELS: Record<string, string> = {
   google_meet: "Google Meet",
   zoom: "Zoom",
   microsoft_teams: "Microsoft Teams",
+  phone_call: "Phone call",
   voice_note: "Voice note",
   other: "Other",
 };
