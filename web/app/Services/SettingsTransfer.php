@@ -31,6 +31,7 @@ final class SettingsTransfer
         'default_language',
         'languages.auto_more',
         'languages.auto_fallback',
+        'accuracy.double_check',
         'display.timezone',
         'vocabulary.keyterms',
         'vocabulary.replacements',

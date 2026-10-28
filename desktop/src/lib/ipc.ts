@@ -355,6 +355,8 @@ export interface Segment {
   words?: { text: string; start_ms: number; end_ms: number; confidence?: number | null }[];
   /** The engine was not sure of this line (since v1.2); it is kept as heard. */
   uncertain?: boolean;
+  /** Double-check: what a second engine heard on this line when it disagreed (since v1.2); never merged. */
+  check?: { provider: string; label: string; text: string } | null;
 }
 
 export interface TranscriptDetail {

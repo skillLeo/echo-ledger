@@ -157,6 +157,10 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
   invents in silences is removed.
 - Words and lines the engine was not sure of have a **dotted underline** in the desktop app, the phone app and the
   console. Tap or click one to hear it. The text stays exactly as the engine heard it.
+- **Double-check** (console: **Settings → Engine per language**, off by default): a second engine listens again to
+  up to 12 of those lines. Where it heard something different, its words appear in grey under the line, for example
+  "Groq Whisper large-v3 heard: …". You decide; the transcript is not changed. Each checked line costs well under
+  one cent.
 
 - **For a client:** give the client a default language. Every recording with that client uses it.
 - **For everything else:** the default in **Settings → General → Transcription language** (on the phone:

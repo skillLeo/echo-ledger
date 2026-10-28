@@ -129,6 +129,32 @@ final class UsageLedger
     }
 
     /**
+     * The clips Double-check sent to a second engine for one transcript (since v1.2): one row per run,
+     * `check/{transcript id}/{time}`.
+     */
+    public function recordCheck(Transcript $transcript, SttProviderKey $provider, int $billedMs): ?UsageLedgerEntry
+    {
+        $session = CaptureSession::withTrashed()->find($transcript->capture_session_id);
+        if ($session === null || $billedMs <= 0) {
+            return null;
+        }
+
+        return UsageLedgerEntry::query()->firstOrCreate(
+            ['user_id' => $session->user_id, 'report_id' => 'check/'.$transcript->id.'/'.now()->format('YmdHis')],
+            [
+                'workspace_id' => $session->workspace_id,
+                'device_id' => $session->device_id,
+                'capture_session_id' => $session->id,
+                'transcript_id' => $transcript->id,
+                'source' => UsageLedgerEntry::SOURCE_SERVER,
+                ...$this->pricing($provider, FinalTranscriptCoordinator::useCaseFor($session), $billedMs, 1, self::isBillable($provider)),
+                'model' => 'double-check',
+                'occurred_at' => now(),
+            ],
+        );
+    }
+
+    /**
      * `final/{transcript id}/{provider job}` (or `a{attempt}` for providers without job ids). The `/` keeps server rows
      * out of the device report-id alphabet, so a device can never claim one; long job ids are hashed to fit 64 chars.
      */

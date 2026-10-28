@@ -8,7 +8,9 @@ use App\Enums\CompletionMode;
 use App\Enums\SttProviderKey;
 use App\Models\Transcript;
 use App\Services\CredentialVault;
+use App\Services\ProviderCopyEraser;
 use App\Services\SettingsRepository;
+use App\Stt\Contracts\ClipTranscriber;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\NormalizedTranscript;
@@ -29,12 +31,13 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Throwable;
 
 /**
  * ElevenLabs Scribe v2 batch (multichannel + keyterms + signed webhooks) and Scribe v2 realtime single-use tokens.
  * Wire details: docs/research/stt-elevenlabs.md R3–R8.
  */
-final class ElevenLabsDriver implements SttProvider
+final class ElevenLabsDriver implements ClipTranscriber, SttProvider
 {
     public function __construct(
         private readonly CredentialVault $vault,
@@ -159,6 +162,48 @@ final class ElevenLabsDriver implements SttProvider
         }
 
         return SubmitResult::submitted((string) ($data['request_id'] ?? ''), isset($data['transcription_id']) ? (string) $data['transcription_id'] : null);
+    }
+
+    /**
+     * Double-check (since v1.2): one short clip, answered in the same call. Scribe keeps the transcript, so its copy
+     * is deleted right away (stt:reconcile retries when that fails).
+     */
+    public function transcribeClip(string $path, float $seconds, ?string $language): array
+    {
+        $parts = [
+            ['name' => 'model_id', 'contents' => (string) $this->settings->get('elevenlabs.model_id', 'scribe_v2')],
+            ['name' => 'diarize', 'contents' => 'false'],
+            ['name' => 'tag_audio_events', 'contents' => 'false'],
+        ];
+        if (($code = LanguageChoice::primary($language)) !== null) {
+            $parts[] = ['name' => 'language_code', 'contents' => $code];
+        }
+        $stream = fopen($path, 'rb');
+        if ($stream === false) {
+            throw new RuntimeException('Cannot read the clip.');
+        }
+        try {
+            $parts[] = ['name' => 'file', 'contents' => $stream, 'filename' => 'clip.flac', 'headers' => ['Content-Type' => 'audio/flac']];
+            $data = (array) $this->http()->timeout(120)->asMultipart()->post('/v1/speech-to-text', $parts)->throw()->json();
+        } finally {
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }
+        $id = (string) ($data['transcription_id'] ?? '');
+        if ($id !== '') {
+            try {
+                $deleted = $this->http()->connectTimeout(5)->timeout(10)->delete('/v1/speech-to-text/transcripts/'.rawurlencode($id));
+                $gone = $deleted->successful() || $deleted->status() === 404;
+            } catch (Throwable) {
+                $gone = false;
+            }
+            if (! $gone) {
+                app(ProviderCopyEraser::class)->schedule(SttProviderKey::ElevenLabs, $id, $id);
+            }
+        }
+
+        return ['text' => trim((string) ($data['text'] ?? '')), 'billed_ms' => (int) round($seconds * 1000)];
     }
 
     public function verifyWebhook(Request $request): WebhookEnvelope

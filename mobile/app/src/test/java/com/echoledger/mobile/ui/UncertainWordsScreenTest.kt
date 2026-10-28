@@ -17,7 +17,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
-/** The recording page marks what the engine was not sure of (v1.2); the text stays as heard. */
+/** The recording page marks what the engine was not sure of and what a second engine heard (v1.2); the text stays as heard. */
 class UncertainWordsScreenTest : ScreenTest() {
     @Before
     fun pair() {
@@ -39,7 +39,8 @@ class UncertainWordsScreenTest : ScreenTest() {
     private val segments = """[
         {"channel":1,"speaker":"Me","start_ms":0,"end_ms":900,"text":"Hello Farah","words":[
             {"text":"Hello","start_ms":0,"end_ms":400,"confidence":0.98},{"text":"Farah","start_ms":450,"end_ms":900,"confidence":0.31}]},
-        {"channel":2,"speaker":"Client","start_ms":2000,"end_ms":3000,"text":"I will come tomorrow","uncertain":true},
+        {"channel":2,"speaker":"Client","start_ms":2000,"end_ms":3000,"text":"I will come tomorrow","uncertain":true,
+            "check":{"provider":"groq","label":"Groq Whisper large-v3","text":"I will come on Monday"}},
         {"channel":1,"speaker":"Me","start_ms":4000,"end_ms":5000,"text":"Sure, see you","words":[
             {"text":"Sure,","start_ms":4000,"end_ms":4400,"confidence":0.95},{"text":"see","start_ms":4450,"end_ms":4700,"confidence":0.9},
             {"text":"you","start_ms":4750,"end_ms":5000,"confidence":0.97}]}
@@ -64,6 +65,8 @@ class UncertainWordsScreenTest : ScreenTest() {
 
         compose.onNodeWithText("Hello Farah").assert(described("Not sure of 1 word"))
         compose.onNodeWithText("I will come tomorrow").assert(described("Not sure of this line"))
+        // Double-check: what the second engine heard is shown under the line, the line keeps its words.
+        compose.onNodeWithText("Groq Whisper large-v3 heard: I will come on Monday").assertExists()
         val sure = compose.onNodeWithText("Sure, see you").fetchSemanticsNode()
         assertTrue(SemanticsProperties.StateDescription !in sure.config)
     }

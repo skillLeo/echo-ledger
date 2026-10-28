@@ -386,6 +386,7 @@ fn live_segments() -> Vec<SegmentDto> {
         text: text.into(),
         words: vec![],
         uncertain: false,
+        check: None,
     };
     vec![
         segment(1, "Me", 300, 2400, "Hello, can you hear me?"),

@@ -70,6 +70,9 @@ class TranscriptPlayerEntry extends Entry
                 'text' => (string) ($s['text'] ?? ''),
                 'words' => $words,
                 'uncertain' => (bool) ($s['uncertain'] ?? false),
+                // Double-check: what a second engine heard on this line when it disagreed (shown under it, never merged).
+                'check' => is_array($s['check'] ?? null) && isset($s['check']['text'])
+                    ? ['label' => (string) ($s['check']['label'] ?? 'Second engine'), 'text' => (string) $s['check']['text']] : null,
             ];
         }
 

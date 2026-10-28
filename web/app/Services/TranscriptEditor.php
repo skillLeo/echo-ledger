@@ -48,7 +48,8 @@ final class TranscriptEditor
             }
             $segment = $segments[$index];
             $segment['text'] = $clean;
-            unset($segment['words']); // the word timings no longer match the text
+            // The word timings no longer match the text, and the user's words are not unsure.
+            unset($segment['words'], $segment['uncertain'], $segment['check']);
             $segments[$index] = $segment;
         }
 

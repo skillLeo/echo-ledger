@@ -8,6 +8,7 @@ use App\Enums\SessionStatus;
 use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Jobs\DoubleCheckJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\Transcript;
 use App\Models\TranscriptRevision;
@@ -69,6 +70,10 @@ final class TranscriptStore
         // "Re-transcribe as …": the new version becomes the transcript as soon as it is ready (the old one is kept).
         if ($transcript->kind === TranscriptKind::Alternate && ($transcript->meta['promote_when_done'] ?? false) === true) {
             app(Retranscriber::class)->choose($transcript);
+        }
+        // Double-check (when it is on): a second engine hears the unsure lines again, on the queue.
+        if (app(DoubleCheck::class)->wanted($transcript->refresh())) {
+            DoubleCheckJob::dispatch($transcript->id);
         }
 
         return $transcript->refresh();

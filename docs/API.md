@@ -617,7 +617,9 @@ run once more as Urdu. New fields:
 - Transcript segments: `uncertain: true` when the engine was not sure of the whole line (Whisper's average
   log-probability below -0.8, Azure's phrase confidence below 0.5), and `words[].confidence` (0-1; AssemblyAI,
   ElevenLabs, Soniox) below 0.5 marks a word uncertain. The apps and the console underline both with dots and a tap
-  plays from there; the text stays as heard.
+  plays from there; the text stays as heard. With Double-check on (console setting, off by default) a line a second
+  engine heard differently carries `check: {"provider": "groq", "label": "Groq Whisper large-v3", "text": "…"}`,
+  shown under the line and never merged; editing the line removes `uncertain` and `check`.
 - Library items: `transcript.final_error_code` (since v1.1.2; `no_audio` when nothing was heard),
   `alternate_transcript_id`, `alternate_status` and `alternate_language` (the other version: the previous
   transcript after "Re-transcribe as", or a second engine's run).

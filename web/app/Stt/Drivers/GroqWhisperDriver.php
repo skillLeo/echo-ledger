@@ -13,6 +13,7 @@ use App\Services\CredentialVault;
 use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
 use App\Stt\Audio\AudioPrep;
+use App\Stt\Contracts\ClipTranscriber;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\NormalizedTranscript;
@@ -46,7 +47,7 @@ use RuntimeException;
  * Urdu), Hindi letters run again forced as Urdu, Whisper's invented text removed ([WhisperGuards]), low-confidence
  * lines marked uncertain, Urdu letter forms normalised. Synchronous: the job stores the result directly.
  */
-final class GroqWhisperDriver implements SttProvider
+final class GroqWhisperDriver implements ClipTranscriber, SttProvider
 {
     private const ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
 
@@ -349,6 +350,20 @@ final class GroqWhisperDriver implements SttProvider
         $tail = $names === [] ? '' : ' '.implode(', ', $names).'.';
 
         return mb_substr(trim($style.$tail), 0, 600);
+    }
+
+    /** Double-check (since v1.2): one short clip, in the recording's language. Groq keeps no copy. */
+    public function transcribeClip(string $path, float $seconds, ?string $language): array
+    {
+        $language = LanguageChoice::normalize($language);
+        $json = $this->request(['path' => $path, 'url' => null, 'start' => 0.0, 'end' => $seconds], $language, self::stylePrompt($language, []));
+        $kept = WhisperGuards::filter(array_values((array) ($json['segments'] ?? [])))['kept'];
+        $text = trim(implode(' ', array_map(fn (array $s): string => trim((string) ($s['text'] ?? '')), $kept)));
+
+        return [
+            'text' => $language === 'ur' ? UrduText::normaliseUrdu($text) : $text,
+            'billed_ms' => max(self::MIN_BILLED_MS, (int) round($seconds * 1000)),
+        ];
     }
 
     /** "Chunks done of total" for the apps' progress line (`meta.progress`), written as each chunk starts. */

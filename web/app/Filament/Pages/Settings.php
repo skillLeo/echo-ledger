@@ -104,6 +104,7 @@ class Settings extends Page
             'default_language' => LanguageChoice::normalize($all['default_language']) ?? '',
             'languages_auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($all['languages.auto_more'] ?? []))),
             'languages_auto_fallback' => LanguageChoice::fallback(),
+            'double_check' => (bool) ($all['accuracy.double_check'] ?? false),
             'vocabulary_keyterms' => KeytermPolicy::sanitize((array) ($all['vocabulary.keyterms'] ?? [])),
             'vocabulary_replacements' => TextReplacements::rules($all['vocabulary.replacements'] ?? []),
             'display_timezone' => is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC',
@@ -252,7 +253,11 @@ class Settings extends Page
                     ]),
                     $this->section('routing')
                         ->description('Which engine writes each language, in order: the first one with a key on API Credentials is used, the next ones are the fallback. Other covers the More languages; Auto is for recordings whose language is not chosen. Run “Compare engines” on a recording to choose.')
-                        ->collapsible()->columns(4)->schema(self::routingFields()),
+                        ->collapsible()->columns(4)->schema([
+                            ...self::routingFields(),
+                            Toggle::make('double_check')->label('Double-check unsure lines with a second engine')->columnSpanFull()
+                                ->helperText('Whisper on Groq (or ElevenLabs Scribe when Whisper wrote the transcript) listens again to up to 12 lines the first engine was not sure of. When they disagree, both are shown; the transcript is never changed. Each line is billed (Groq: at least 10 seconds).'),
+                        ]),
                     $this->section('bookmarks')
                         ->description('One-tap tags offered while recording a call (on the desktop pill and the phone notification).')
                         ->schema([
@@ -532,6 +537,7 @@ class Settings extends Page
             'default_language' => LanguageChoice::normalize($state['default_language'] ?? null),
             'languages.auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($state['languages_auto_more'] ?? []))),
             'languages.auto_fallback' => LanguageChoice::normalize($state['languages_auto_fallback'] ?? null) ?? 'ur',
+            'accuracy.double_check' => (bool) ($state['double_check'] ?? false),
             'vocabulary.keyterms' => KeytermPolicy::sanitize((array) ($state['vocabulary_keyterms'] ?? [])),
             'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',

@@ -150,6 +150,8 @@
             /* Words and lines the engine was not sure of: kept as heard, underlined, a click plays them. */
             .el-player .el-w[data-u], .el-player .el-line[data-u] > span { text-decoration: underline dotted var(--el-unsure); text-decoration-thickness: 2px; text-underline-offset: 4px; }
             .el-player .el-w[data-u] { cursor: help; }
+            .el-player .el-check { margin: .1rem .35rem .3rem; font-size: .8rem; color: var(--el-muted); unicode-bidi: plaintext; }
+            .el-player .el-check-who { font-weight: 600; }
             .el-player textarea.el-edit { width: 100%; font: inherit; line-height: 1.5; color: var(--el-text); background: var(--el-btn-bg);
                 border: 1px solid var(--el-btn-border); border-radius: .45rem; padding: .3rem .45rem; resize: vertical; unicode-bidi: plaintext; }
             .el-player .el-empty { color: var(--el-muted); font-size: .9rem; padding: .75rem 0; }
@@ -224,6 +226,9 @@
                                     </template>
                                     <template x-if="!d.segments[i].words.length"><span x-text="d.segments[i].text"></span></template>
                                 </button>
+                            </template>
+                            <template x-if="d.segments[i].check && !editing">
+                                <p class="el-check" dir="auto"><span class="el-check-who" x-text="d.segments[i].check.label + ' heard:'"></span> <span x-text="d.segments[i].check.text"></span></p>
                             </template>
                             <template x-if="editing">
                                 <textarea class="el-edit" rows="2" :aria-label="'Line at ' + clock(d.segments[i].start_ms)" :disabled="saving === i"

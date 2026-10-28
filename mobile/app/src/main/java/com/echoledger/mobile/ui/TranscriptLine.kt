@@ -1,6 +1,8 @@
 package com.echoledger.mobile.ui
 
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -43,14 +45,33 @@ internal fun TranscriptLine(segment: SegmentDto, spoken: Int, enabled: Boolean, 
         segment.uncertain && text.isNotEmpty() -> listOf(text.indices)
         else -> unsure.map { ranges[it] }
     }
-    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
-    val colour = Brand.Warning
     val described = when {
         segment.uncertain -> "Not sure of this line"
         unsure.size == 1 -> "Not sure of 1 word"
         unsure.isNotEmpty() -> "Not sure of ${unsure.size} words"
         else -> null
     }
+    Column {
+        LineText(text, ranges, spoken, marked, described, enabled && unsure.isNotEmpty(), segment, onPlay)
+        segment.check?.let { check ->
+            Text("${check.label} heard: ${check.text}", color = Brand.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+    }
+}
+
+@Composable
+private fun LineText(
+    text: String,
+    ranges: List<IntRange>,
+    spoken: Int,
+    marked: List<IntRange>,
+    described: String?,
+    tappable: Boolean,
+    segment: SegmentDto,
+    onPlay: (Long) -> Unit
+) {
+    var layout by remember { mutableStateOf<TextLayoutResult?>(null) }
+    val colour = Brand.Warning
     Text(
         buildAnnotatedString {
             append(text)
@@ -64,7 +85,7 @@ internal fun TranscriptLine(segment: SegmentDto, spoken: Int, enabled: Boolean, 
             .then(if (described != null) Modifier.semantics { stateDescription = described } else Modifier)
             .drawBehind { layout?.let { l -> marked.forEach { dottedUnderline(l, it, colour) } } }
             .then(
-                if (enabled && unsure.isNotEmpty()) {
+                if (tappable) {
                     Modifier.pointerInput(segment) {
                         detectTapGestures { position ->
                             val offset = layout?.getOffsetForPosition(position) ?: return@detectTapGestures

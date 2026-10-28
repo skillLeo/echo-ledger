@@ -617,7 +617,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                           <>
                             <span className="seg-time">{timestamp(s.start_ms)}</span>
                             <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{speakerName(speakerNames, s.speaker)}</span>
-                            <span className={s.uncertain ? "seg-text uncertain" : "seg-text"} dir="auto" title={s.uncertain ? UNSURE_LINE : undefined}>{textCell}</span>
+                            <span className={s.uncertain ? "seg-text uncertain" : "seg-text"} dir="auto" title={s.uncertain ? UNSURE_LINE : undefined}>
+                              {textCell}
+                              {s.check && <span className="seg-check" dir="auto"><b>{s.check.label} heard:</b> {s.check.text}</span>}
+                            </span>
                           </>
                         );
                         const className = `segment ${i === activeSegment ? "active" : ""} ${continuesTurn(transcript.segments, i) ? "cont" : ""}`.replace(/\s+/g, " ").trim();

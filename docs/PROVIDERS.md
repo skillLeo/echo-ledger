@@ -178,6 +178,21 @@ as an `alternate` transcript. **Compare versions** shows the words that differ s
 version** swaps it in (the old one becomes the alternate), and **Remove the second version** deletes it and its
 provider copy. This uses the provider's final-transcript price again.
 
+**Re-transcribe as…** (since v1.2) does the same in another language: the routing for that language picks the
+engine, the current transcript stays until the new one is ready, then the new one becomes the transcript and the old
+one is kept as the second version.
+
+### Double-check (since v1.2, off by default)
+**Settings → Engine per language → Double-check unsure lines with a second engine.** After a final transcript is
+done, up to 12 lines the engine was unsure of (a word below 0.5 confidence, or a line Whisper or Azure marked unsure)
+are cut from that speaker's audio (the line plus 0.3 s each side, at most 30 s) and sent one by one to a second
+engine: Whisper on Groq, or ElevenLabs Scribe when Whisper wrote the transcript. When the two disagree (fewer than 80 %
+of the words match, after folding case, punctuation and Urdu spelling), the second engine's words are stored on the
+line (`check`) and every app shows them under it. Nothing is merged. The clips are one usage row (`check/…`, model
+`double-check`); Groq bills at least 10 s per clip. ElevenLabs keeps a copy of each clip's transcript, which is
+deleted right after (stt:reconcile retries). Nothing is sent once the monthly limit is reached, and without ffmpeg on
+the server or a key for the second engine the check is skipped (`meta.double_check.skipped`).
+
 ## Usage, prices and the monthly limit
 
 Devices report the minutes they streamed and the server records the minutes of every final transcript in the usage

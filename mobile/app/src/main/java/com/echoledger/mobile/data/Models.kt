@@ -292,8 +292,16 @@ data class SegmentDto(
     /** The engine was not sure of this line (since v1.2); kept as heard. Never sent by the phone. */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val uncertain: Boolean = false
+    val uncertain: Boolean = false,
+    /** Double-check: what a second engine heard on this line when it disagreed (since v1.2). Never sent by the phone. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val check: SegmentCheckDto? = null
 )
+
+/** What a second engine heard on a line (Double-check): shown under it, never merged into the transcript. */
+@Serializable
+data class SegmentCheckDto(val provider: String = "", val label: String = "", val text: String = "")
 
 @Serializable
 data class WordDto(

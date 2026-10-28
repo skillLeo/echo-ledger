@@ -36,6 +36,7 @@ final class SettingsRepository
         'elevenlabs.model_id' => 'scribe_v2',
         'elevenlabs.realtime_model_id' => 'scribe_v2_realtime',
         'soniox.async_model' => 'stt-async-v5',          // docs: soniox.com/docs/stt/models (2026-10)
+        'accuracy.double_check' => false,                // a second engine hears the unsure lines again (DoubleCheck)
         'groq.model' => 'whisper-large-v3',              // not turbo (docs: console.groq.com/docs/model/whisper-large-v3)
         'audio.ffmpeg_path' => null,                     // null = FFMPEG_PATH, then ~/bin/ffmpeg, then the system one
         'audio.chunk_seconds' => 600,                    // Whisper chunks are cut at pauses, at most this long

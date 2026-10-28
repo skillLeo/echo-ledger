@@ -189,6 +189,7 @@ fn decision(
         text: "Hello there".into(),
         words: vec![],
         uncertain: false,
+        check: None,
     }];
     PendingDecision::from_recording(
         &finished,

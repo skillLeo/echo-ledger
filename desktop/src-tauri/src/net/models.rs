@@ -373,6 +373,9 @@ pub struct SegmentDto {
     /// The engine was not sure of this line (since v1.2); this app never sends it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub uncertain: bool,
+    /// Double-check: what a second engine heard on this line when it disagreed (since v1.2); never sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Serialize)]

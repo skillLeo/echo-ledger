@@ -366,6 +366,17 @@ it('stores both states of the whisper.cpp VAD toggle', function () {
     expect(app(SettingsRepository::class)->get('whisper.vad'))->toBeFalse();
 });
 
+it('is off by default and stores the Double-check toggle', function () {
+    $this->signInAsAdmin();
+    expect(app(SettingsRepository::class)->get('accuracy.double_check'))->toBeFalse();
+
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['double_check' => true]))->call('save')->assertHasNoFormErrors();
+    expect(app(SettingsRepository::class)->get('accuracy.double_check'))->toBeTrue();
+
+    adminSettingsPage($this)->fillForm(adminChangedSettings(['double_check' => false]))->call('save');
+    expect(app(SettingsRepository::class)->get('accuracy.double_check'))->toBeFalse();
+});
+
 it('falls back to the default AssemblyAI models when the list is emptied', function () {
     $this->signInAsAdmin();
 
