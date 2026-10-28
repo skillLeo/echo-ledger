@@ -55,12 +55,18 @@ EchoLedger can start recording when a call starts.
 - **Ask me when an unknown app uses the microphone** shows a small question instead of recording. It closes
   after 8 seconds.
 - **Phone:** open the **Record** tab and turn on **Auto-record WhatsApp calls**.
+- **On Android 16 and 17** (for example a Galaxy S25 with the latest update), the phone records **only the other
+  person** in WhatsApp calls. During a call, these Android versions give the microphone only to the calling app and
+  to the phone's own system apps. EchoLedger never takes it away from WhatsApp, so the other person always hears
+  you. To record both sides of a WhatsApp call, take the call on the computer: the Windows app records both sides.
 - **Phone calls (SIM):** open **Settings → Auto-record apps → Record phone calls** and choose **Off** (the default),
   **Ask each time** (a notification asks "Record this phone call?" when a call starts; tap **Record**) or **Always**.
   It works while auto-record is on and the call capture helper is running. Allow **Call log** and **Contacts** so each
   recording gets the number and the contact's name ("Call with Omar Khan"), and is filed under that client.
   **Tell the other person before you record a phone call. In many places the law needs their consent.** Some phones
-  give both voices on one track; the transcript then cannot tell who spoke.
+  give both voices on one track; the transcript then cannot tell who spoke. Some phone makers (Samsung among them)
+  keep the phone line for their own Phone app. EchoLedger then says "The phone line gave no sound" and the SIM call
+  cannot be recorded on that phone.
 
 The **Record** screen always explains the last decision, for example "Ignored: dictation".
 

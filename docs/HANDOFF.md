@@ -325,6 +325,22 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 - **Rollback, if ever needed:** `down`, `tar xzf files-before.tar.gz` in public_html, delete the 8 new files (EngineComparison, SonioxDriver, LanguageRouter, RouteDecision, ScriptCheck, UrduText, the migration, engine-results.blade.php) after `migrate:rollback --step=1`, `optimize`, `up`.
 - **Apps:** installer `desktop/src-tauri/target/release/bundle/nsis/EchoLedger_1.1.0_x64-setup.exe` (unsigned) and debug APK `mobile/app/build/outputs/apk/debug/app-debug.apk` (versionCode 5, 1.1.2), both scanned clean. Signed release APK waits for the keystore.
 
+## Phone call capture on Android 17 (S25 Ultra, 2026-10-28, live debugging over wireless ADB)
+- **Measured causes, in order:**
+  1. The Shizuku context names the app's package for uid 2000, so every recorder failed with "Cannot create AudioRecord". Fixed in `19506b3`: `HelperContext.shell()` is a shell package context.
+  2. The far-side mix at 48 kHz threw "Privileged audio capture sample rate 48000 can not be over 16000kHz". Fixed in `5a8b7a0`: 16 kHz, then `Pcm.upsample` and `PcmQueue`.
+  3. `createAudioRecordSink` returned null ("Cannot use AudioPolicy for … uid 10462"), because it ran inside the app's binder call. Fixed: `begin()` runs under `Binder.clearCallingIdentity()`.
+  4. **Two VOICE_COMMUNICATION recorders: the last started wins.** The old helper sometimes silenced WhatsApp, so the other person could not hear the user. Fixed: the helper's mic is never privacy-sensitive (`MIC` during calls, `setPrivacySensitive(false)`), and `mutingAnother()` gives the mic back if another non-virtual recorder is silenced.
+- **Platform limit (not fixable without root or a system install):** Android 16/17 gate the concurrency bypass on `BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION` (`signature|privileged`). So the user's own voice in a WhatsApp call is fed silence; the helper reports it once. The desktop app records both sides of WhatsApp calls.
+- **SIM calls:** near side `VOICE_UPLINK`, far side interception API → `VOICE_DOWNLINK` → `VOICE_CALL`, all at 16 kHz. Samsung is reported to give silence; the helper reports "The phone line gave no sound" after 8 s of zeros. Research with AOSP citations is in `docs/research/android-capture.md` (TL;DR update).
+- **How to debug on the phone:**
+  - `adb pair <ip:port> <code>`, then `adb connect <ip:port>`; adb is at `%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe`, not on PATH.
+  - App log: `adb shell run-as com.echoledger.mobile tail -n 40 files/capture-log.txt`.
+  - Recorder arbitration: `adb shell "dumpsys audio | grep -E 'rec (start|stop|update)'"` (look for `silenced`).
+  - Mode owner: `dumpsys audio | grep setMode`.
+  - Policy errors: `logcat | grep 'Cannot use AudioPolicy'`.
+  - Install a debug APK: `adb push` to `/data/local/tmp`, check `sha256sum`, then `pm install -r -t`. Installing from WhatsApp is blocked by Play Protect, because the notification listener is a "sensitive" permission.
+
 ## Phone call capture: "No audio" on the S25 Ultra (v1.1.2, 2026-10-27)
 - **Where the sound is lost (traced in code, the device itself was not available):** call detection works (the session is created as WhatsApp Business), upload works (the server stored the file and reported `no_audio`); the stage that yields nothing is the **helper's recorder**: 0 PCM bytes reached the app's pipe, so the encoder wrote 0 frames (duration 0).
 - **Defects found that produce exactly that:** (1) the helper's `ShellContext` overrode the package name but not `getAttributionSource()`, which still named package `android` for UID 2000; since Android 12 the audio server checks the attribution source, so recording can be refused or muted; (2) the capture loop did `if (m <= 0) continue`: a recorder that never started (`read` returns an error) looped forever writing nothing, and nothing was reported; (3) `startCapture` always returned true and errors went only to Logcat; (4) the Shizuku daemon is replaced only when `UserServiceArgs.version` changes, and it was `versionCode` = 4 for every build, so **phones kept running the first helper they ever started** — no helper fix could reach them; (5) after Android stopped the app nothing reconnected the helper (Shizuku bound only on the Connect button, the ADB helper handed its binder over once), and auto-record turned itself off silently when the helper was missing.

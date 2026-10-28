@@ -18,6 +18,39 @@
 
 ## TL;DR — feasibility verdict
 
+> **Update 2026-10-28, measured on the S25 Ultra (SM-S938B, Android 17 / SDK 37, CP2A.260605.016) and checked
+> against AOSP `main`.** Point 2 below no longer holds on Android 16/17, and the far-party route has two more
+> requirements:
+>
+> - **Near end during a VoIP call: not possible for the shell.** In `AudioPolicyInterfaceImpl.cpp`
+>   (`getInputForAttr`), `canBypassConcurrentPolicy` is first set from `CAPTURE_AUDIO_OUTPUT` and then
+>   *overwritten* with `BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION` when the aconfig flag
+>   `concurrent_audio_record_bypass_permission` is on. That permission is `signature|privileged` on this
+>   build, so the shell has no bypass. `dumpsys audio` "Recording Activity" confirms it: two privacy-sensitive
+>   `VOICE_COMMUNICATION` recorders (WhatsApp and the helper) never share the mic, and **the one that started
+>   last wins**. When the helper won, WhatsApp was fed silence and the other person could not hear the user.
+>   Because WhatsApp runs through Telecom, the mode owner is uid 1000, so `isPhoneStateOwnerActive` stays false
+>   and nothing protects the call app (AOSP TODO b/339112720).
+> - **What the helper does now:** its microphone is never privacy-sensitive (`MIC` during calls,
+>   `setPrivacySensitive(false)`). A non-sensitive client sits in the other pool (`topActive`). That pool is
+>   dropped when a sensitive winner exists and it lacks the bypass, so WhatsApp keeps the mic and the helper is
+>   fed silence (`AudioPolicyService.cpp`, `updateUidStates_l`). The helper also watches
+>   `getActiveRecordingConfigurations()` and lets go of the mic if any other non-virtual recorder is silenced.
+> - **Far party:** the players mix must be **16 kHz, mono, 16-bit**. At 48 kHz the AudioMix builder throws
+>   "Privileged audio capture sample rate 48000 can not be over 16000kHz". `registerAudioPolicy`,
+>   `createAudioRecordSink` and the sink's start must run under **`Binder.clearCallingIdentity()`**:
+>   `AudioPolicy.policyReadyToUse()` checks `checkCallingOrSelfPermission`. Inside the app's binder call that
+>   check sees the app's uid, logs "Cannot use AudioPolicy for … uid 10462, needs MODIFY_AUDIO_ROUTING", and
+>   `createAudioRecordSink` returns null. The sink is `REMOTE_SUBMIX`, a virtual source that is never silenced
+>   and never silences the call.
+> - **SIM calls:** `VOICE_UPLINK` / `VOICE_DOWNLINK` / `VOICE_CALL` are virtual sources the shell may open
+>   (CALL_AUDIO_INTERCEPTION or CAPTURE_AUDIO_OUTPUT). They bind to `AUDIO_DEVICE_IN_VOICE_CALL`, so they carry
+>   nothing during VoIP. During a SIM call, Samsung's HAL is reported to give other apps silence.
+>   `getCallDownlinkExtractionAudioRecord` needs `isPstnCallAudioInterceptable()`, and Android has no uplink
+>   extraction API. The helper reports "the phone line gave no sound" after 8 s of exact zeros.
+> - **Prior art agrees:** BCR needs root or a system install and skips VoIP. ShizuCallRecorder calls VoIP
+>   "best-effort". scrcpy's maintainer could not capture voice communication during a call.
+
 1. **Far-party WhatsApp VoIP audio (the hard part) is capturable without root, but only on Android
    14+.** WhatsApp renders the remote party with `AudioAttributes.USAGE_VOICE_COMMUNICATION`. The
    public `AudioPlaybackCaptureConfiguration` API *cannot* capture that usage (it is restricted to
