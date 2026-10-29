@@ -61,7 +61,8 @@ class AudioPrep
     public function extractChannel(string $input, ?int $channel, string $out): string
     {
         $filter = $channel === null ? 'aresample=16000' : 'pan=mono|c0=c'.($channel - 1).',aresample=16000';
-        $this->run(['-i', $input, '-af', $filter, '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', '-y', $out]);
+        // The container is named: ffmpeg would otherwise guess it from the temp file's .bin extension (a caption format).
+        $this->run(['-i', $input, '-af', $filter, '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', '-f', 'wav', '-y', $out]);
 
         return $out;
     }
@@ -223,7 +224,7 @@ class AudioPrep
     /** One chunk of [$wav] as FLAC (lossless, small enough for a direct upload of ten minutes of speech). */
     public function cut(string $wav, float $startS, float $endS, string $out): string
     {
-        $this->run(['-ss', sprintf('%.3f', $startS), '-to', sprintf('%.3f', $endS), '-i', $wav, '-c:a', 'flac', '-y', $out]);
+        $this->run(['-ss', sprintf('%.3f', $startS), '-to', sprintf('%.3f', $endS), '-i', $wav, '-c:a', 'flac', '-f', 'flac', '-y', $out]);
 
         return $out;
     }

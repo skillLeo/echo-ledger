@@ -54,3 +54,20 @@ it('drops a line wholly in the overlap, keeps one after the cut, and keeps a lin
         ->and(GroqWhisperDriver::keepFrom($noWords, 600_000))->toBe($noWords)
         ->and(GroqWhisperDriver::keepFrom($before, 0))->toBe($before);
 });
+
+it('names the output container for ffmpeg instead of trusting the temp file extension', function () {
+    $calls = [];
+    $prep = new AudioPrep(app(App\Services\SettingsRepository::class), function (array $args) use (&$calls): array {
+        $calls[] = $args;
+
+        return [0, ''];
+    });
+
+    // Temp files end in .bin, which ffmpeg reads as a caption format with no audio stream ("Output file does not
+    // contain any stream", production 2026-10-29).
+    $prep->extractChannel('in.ogg', 2, 'groq-side-1.bin');
+    $prep->cut('side.bin', 1.0, 2.0, 'chunk.flac');
+
+    expect(array_slice($calls[0], -4))->toBe(['-f', 'wav', '-y', 'groq-side-1.bin'])
+        ->and(array_slice($calls[1], -4))->toBe(['-f', 'flac', '-y', 'chunk.flac']);
+});
