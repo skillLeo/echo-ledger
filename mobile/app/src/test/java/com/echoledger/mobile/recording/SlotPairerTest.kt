@@ -138,31 +138,11 @@ class SilenceWatchTest {
     }
 
     @Test
-    fun `a microphone giving exact zeros for 1,5 s is dead, any noise is alive`() {
-        val w = SilenceWatch(rate)
-        repeat(70) { w.feed(block(20, 0, 50), micOpen = true) }
-        assertTrue(!w.micDead())
-        repeat(10) { w.feed(block(20, 0, 50), micOpen = true) }
-        assertTrue(w.micDead())
-        w.micRetaken()
-        assertTrue(!w.micDead())
-        repeat(100) { w.feed(block(20, 1, 50), micOpen = true) }
-        assertTrue(!w.micDead())
-    }
-
-    @Test
-    fun `a closed microphone is never called dead`() {
-        val w = SilenceWatch(rate)
-        repeat(200) { w.feed(block(20, 0, 50), micOpen = false) }
-        assertTrue(!w.micDead())
-    }
-
-    @Test
     fun `the other side silent while I talk 8 s is reported once`() {
         val w = SilenceWatch(rate)
-        repeat(350) { w.feed(block(20, 2000, 0), micOpen = true) }
+        repeat(350) { w.feed(block(20, 2000, 0)) }
         assertTrue(!w.farSilent())
-        repeat(60) { w.feed(block(20, 2000, 0), micOpen = true) }
+        repeat(60) { w.feed(block(20, 2000, 0)) }
         assertTrue(w.farSilent())
         assertTrue(!w.farSilent())
     }
@@ -170,11 +150,11 @@ class SilenceWatchTest {
     @Test
     fun `an other side that was heard once is never reported, nor is a quiet me`() {
         val heard = SilenceWatch(rate)
-        heard.feed(block(20, 2000, 300), micOpen = true)
-        repeat(500) { heard.feed(block(20, 2000, 0), micOpen = true) }
+        heard.feed(block(20, 2000, 300))
+        repeat(500) { heard.feed(block(20, 2000, 0)) }
         assertTrue(!heard.farSilent())
         val quiet = SilenceWatch(rate)
-        repeat(500) { quiet.feed(block(20, 40, 0), micOpen = true) }
+        repeat(500) { quiet.feed(block(20, 40, 0)) }
         assertTrue(!quiet.farSilent())
     }
 }

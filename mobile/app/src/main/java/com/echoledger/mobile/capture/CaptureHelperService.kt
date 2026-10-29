@@ -18,6 +18,7 @@ import android.os.SystemClock
 import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.PhoneCalls
 import com.echoledger.mobile.core.SourceApp
+import com.echoledger.mobile.recording.MicRetake
 import com.echoledger.mobile.recording.Pcm
 import com.echoledger.mobile.recording.SilenceWatch
 import com.echoledger.mobile.recording.SlotPairer
@@ -29,7 +30,8 @@ import kotlin.concurrent.thread
  * Runs inside a Shizuku UserService or an `app_process` launched over ADB; never inside the app process.
  *
  * An app call (any app in the call-app list): my side is the microphone (MIC, never privacy-sensitive, so it never
- * takes the microphone from the call app; taken again when One UI silences it mid-call), the other side is the
+ * takes the microphone from the call app; replaced when One UI silences it mid-call, never when the call app mutes
+ * it: [MicRetake]), the other side is the
  * voice-call mix armed before the call ([FarPartyCapture]). The two are paired by capture time ([SlotPairer]) and
  * checked for digital silence ([SilenceWatch]): a far side that stays silent is reported with its reason, never left
  * as a quiet one-sided recording. A SIM call: one recorder of the phone line ([openPhoneLine]).
@@ -50,10 +52,6 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
 
         /** How often (in reads of 10 ms) the helper checks that it is not muting anyone and is not muted itself. */
         private const val CHECK_EVERY_READS = 25
-
-        /** The microphone is taken again at most this often and this many times per call when it goes digitally silent. */
-        private const val RETAKE_GAP_MS = 5_000L
-        private const val MAX_RETAKES = 6
 
         /** Since Android 16/17 the permission that lets a recorder keep the microphone beside another app's call. */
         private const val BYPASS_CONCURRENT = "android.permission.BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION"
@@ -184,6 +182,10 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         /** Whether any sound at all has arrived (a blocked phone line gives exact zeros). */
         var heard = false
 
+        /** The last chunk read: when its first frame was captured, and whether every sample was 0. */
+        var at = 0L
+        var zeros = true
+
         /**
          * The monotonic time the first of [frames] frames just read was captured: from the recorder's own timestamp, so
          * both sides line up by when they were heard, not by when the reads returned; the arrival time when there is none.
@@ -248,18 +250,18 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
      * Writes the call as interleaved stereo at [rate] (L = me, R = the other side; a mixed phone line fills L only).
      * The first side paces the loop (blocking reads of 10 ms), the other is read without blocking; both go through the
      * [SlotPairer] by capture time. While the microphone is open it is checked often: if Android starts muting another
-     * app's recorder because of it, it is given back at once; if it goes digitally silent, it is taken again.
+     * app's recorder because of it, it is given back at once; if it goes digitally silent while not muted, a new one is
+     * opened beside it and used only once it gives sound (the working one is never released first).
      */
     private fun pump(sink: ParcelFileDescriptor, rate: Int, first: Side?, far: Side?, phone: Boolean) {
         val out = FileOutputStream(sink.fileDescriptor)
         var pairer = SlotPairer(rate)
         val watch = SilenceWatch(rate)
+        val retake = MicRetake(rate)
         var near = first
+        var candidate: Side? = null
         var failedReads = 0
         var reads = 0
-        var retakes = 0
-        var lastRetake = 0L
-        var mutedSaid = false
         var farSaid = false
         var lineSaid = false
         var suspended = false
@@ -287,6 +289,9 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
                     if (mutingAnother(current.record)) {
                         current.release()
                         near = null
+                        candidate?.release()
+                        candidate = null
+                        retake.candidateFailed()
                         report(MIC_GIVEN_BACK)
                         continue
                     }
@@ -312,26 +317,55 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
                     continue
                 }
                 failedReads = 0
-                val block = pairer.drain()
-                if (block.isEmpty()) continue
-                watch.feed(block, micOpen = near?.mic == true)
-                out.write(Pcm.toLittleEndianBytes(block))
 
-                // One UI can silence the microphone mid-call (exact zeros): take it again, a few times at most.
+                // Digital silence on my microphone: the call app's mute (said, never retaken), or Android silencing
+                // it (One UI does): a new recorder is opened beside it and replaces it only once it gives sound.
                 val mic = near
-                if (mic != null && mic.mic && watch.micDead()) {
-                    val now = SystemClock.elapsedRealtime()
-                    if (retakes < MAX_RETAKES && now - lastRetake >= RETAKE_GAP_MS) {
-                        retakes++
-                        lastRetake = now
-                        mic.release()
-                        near = openMic(rate, MediaRecorder.AudioSource.MIC, mutableListOf())?.let { Side(it, rate, lane = 0, mic = true) }
-                        watch.micRetaken()
-                    } else if (retakes >= MAX_RETAKES && !mutedSaid) {
-                        mutedSaid = true
-                        report(MIC_MUTED)
+                if (mic != null && mic.mic && primary === mic) {
+                    when (retake.mic(n, mic.zeros, SystemClock.elapsedRealtime()) { audioManager.isMicrophoneMute }) {
+                        MicRetake.Step.MUTED -> state("self_muted")
+
+                        MicRetake.Step.UNMUTED -> state("self_unmuted")
+
+                        MicRetake.Step.OPEN_CANDIDATE -> {
+                            candidate =
+                                openMic(rate, MediaRecorder.AudioSource.MIC, mutableListOf())?.let { Side(it, rate, lane = 0, mic = true) }
+                            if (candidate == null) retake.candidateFailed()
+                            state(if (candidate == null) "mic_retake_failed" else "mic_retake_open")
+                        }
+
+                        MicRetake.Step.GIVE_UP -> report(MIC_MUTED)
+
+                        MicRetake.Step.NONE -> Unit
                     }
                 }
+                val next = candidate
+                if (next != null) {
+                    val got = read(next, blocking = false)
+                    when (retake.candidate(got.coerceAtLeast(0), next.zeros, SystemClock.elapsedRealtime())) {
+                        MicRetake.Probe.SWAP -> {
+                            near?.release()
+                            near = next
+                            candidate = null
+                            if (!suspended) push(next, pairer, rate, got)
+                            state("mic_retake_swapped")
+                        }
+
+                        MicRetake.Probe.DROP -> {
+                            next.release()
+                            candidate = null
+                            state("mic_retake_kept")
+                        }
+
+                        MicRetake.Probe.WAIT -> Unit
+                    }
+                }
+
+                val block = pairer.drain()
+                if (block.isEmpty()) continue
+                watch.feed(block)
+                out.write(Pcm.toLittleEndianBytes(block))
+
                 if (far != null && !farSaid && watch.farSilent()) {
                     farSaid = true
                     report(farSilentReason())
@@ -343,6 +377,7 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         } finally {
             runCatching { out.write(Pcm.toLittleEndianBytes(pairer.flush())) }
             near?.release()
+            candidate?.release()
             farMix.closeSink()
             runCatching { out.close() }
             runCatching { sink.close() }
@@ -355,6 +390,13 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
      * its capture time; frames read. [keep] false (suspended) reads and drops, so the recorder stays open and current.
      */
     private fun pull(side: Side, pairer: SlotPairer, rate: Int, blocking: Boolean, keep: Boolean): Int {
+        val frames = read(side, blocking)
+        if (frames > 0 && keep) push(side, pairer, rate, frames)
+        return frames
+    }
+
+    /** Reads one chunk of [side] without handing it on; frames read (an error code when negative). */
+    private fun read(side: Side, blocking: Boolean): Int {
         val got = if (blocking) {
             side.record.read(side.buf, 0, side.chunk * side.channels)
         } else {
@@ -362,9 +404,15 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         }
         if (got <= 0) return got
         val frames = got / side.channels
-        val at = side.startOf(frames)
-        if (!side.heard) side.heard = (0 until got).any { side.buf[it].toInt() != 0 }
-        if (!keep) return frames
+        side.at = side.startOf(frames)
+        side.zeros = (0 until got).all { side.buf[it].toInt() == 0 }
+        if (!side.zeros) side.heard = true
+        return frames
+    }
+
+    /** Hands the chunk just read by [read] to the pairer at its capture time. */
+    private fun push(side: Side, pairer: SlotPairer, rate: Int, frames: Int) {
+        val at = side.at
         val factor = (rate / side.rate).coerceAtLeast(1)
         for (channel in 0 until side.channels) {
             val mono = if (side.channels == 1) side.buf else ShortArray(frames) { side.buf[it * side.channels + channel] }
@@ -372,7 +420,6 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             pairer.push(lane, at, Pcm.upsample(mono, frames, factor, side.last[channel]), frames * factor)
             side.last[channel] = mono[frames - 1]
         }
-        return frames
     }
 
     /** The reason the other side of an app call is not reaching the recording, as plainly as Android lets us tell. */

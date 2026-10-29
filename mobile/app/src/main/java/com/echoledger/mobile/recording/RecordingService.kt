@@ -375,7 +375,8 @@ class RecordingService : LifecycleService() {
 
     /**
      * The helper's capture states (since v1.3): a SIM call holding the app call being recorded (paused until it is
-     * back), and an other side or phone line that gives no sound (its reason is kept for the after-call card).
+     * back), an other side or phone line that gives no sound (its reason is kept for the after-call card), and my own
+     * mute in the call app.
      */
     private fun onHelperState(state: String) {
         val session = capture ?: return
@@ -397,6 +398,11 @@ class RecordingService : LifecycleService() {
                 pillState.value = PillMachine.reduce(pillState.value, PillEvent.Warning(session.warning)).first
                 refresh(session, "Not hearing the other side")
             }
+
+            // The call app's own mute: not a fault, so it is only shown while it lasts.
+            "self_muted" -> refresh(session, "You muted yourself in the call")
+
+            "self_unmuted" -> refresh(session)
         }
     }
 

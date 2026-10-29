@@ -146,17 +146,13 @@ class SlotPairer(private val rate: Int, slotMs: Int = 20, jitterMs: Int = 30, ma
 }
 
 /**
- * Silence checks for call capture (pure, unit-tested), fed the paired stereo blocks:
- * - the microphone digitally silent (every sample 0) for [deadMs] in a row: Android silenced it mid-call (One UI
- *   does), so the helper takes it again ([micDead]);
- * - the other side digitally silent since the call began while I talked for [talkMs]: it is not being captured, so the
- *   helper says why instead of leaving a one-sided recording ([farSilent], true once).
- * A real microphone or a real call never gives exact zeros for long: there is always some noise.
+ * Silence check of the other side for call capture (pure, unit-tested), fed the paired stereo blocks: the other side
+ * digitally silent since the call began while I talked for [talkMs]: it is not being captured, so the helper says why
+ * instead of leaving a one-sided recording ([farSilent], true once). A real call never gives exact zeros for long.
+ * My own microphone is watched on its raw reads ([MicRetake]).
  */
-class SilenceWatch(private val rate: Int, deadMs: Int = 1500, talkMs: Int = 8000, private val talkLevel: Int = 330) {
-    private val deadFrames = rate.toLong() * deadMs / 1000
+class SilenceWatch(private val rate: Int, talkMs: Int = 8000, private val talkLevel: Int = 330) {
     private val talkFrames = rate.toLong() * talkMs / 1000
-    private var micZeroRun = 0L
     private var talked = 0L
     private var farSilentSaid = false
 
@@ -171,7 +167,7 @@ class SilenceWatch(private val rate: Int, deadMs: Int = 1500, talkMs: Int = 8000
     /** How long I have talked in this call, in ms. */
     val talkedMs: Long get() = talked * 1000 / rate
 
-    fun feed(stereo: ShortArray, micOpen: Boolean) {
+    fun feed(stereo: ShortArray) {
         val frames = stereo.size / 2
         if (frames == 0) return
         var block = 0
@@ -186,18 +182,10 @@ class SilenceWatch(private val rate: Int, deadMs: Int = 1500, talkMs: Int = 8000
                 if (!farHeard && kotlin.math.abs(stereo[2 * i + 1].toInt()) > 2) farHeard = true
             }
             val n = end - block
-            if (micOpen && micZero) micZeroRun += n else micZeroRun = 0
             if (!micZero) micHeard = true
             if (kotlin.math.sqrt(energy / n) >= talkLevel) talked += n
             block = end
         }
-    }
-
-    fun micDead(): Boolean = micZeroRun >= deadFrames
-
-    /** After the microphone was taken again. */
-    fun micRetaken() {
-        micZeroRun = 0
     }
 
     /** True once: the other side never gave a sound while I talked for long enough. */
