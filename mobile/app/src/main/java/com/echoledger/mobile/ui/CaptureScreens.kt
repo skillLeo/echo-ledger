@@ -85,7 +85,7 @@ import kotlinx.coroutines.launch
 
 /** Sends an action to the running recording service (pause, resume, mark, tag, undo). */
 internal fun recordingAction(context: Context, action: String, tag: String? = null) {
-    val intent = RecordingService.intent(context, action)
+    val intent = RecordingService.intent(context, action, from = "Live view in the app")
     if (tag != null) intent.putExtra(RecordingService.EXTRA_TAG, tag)
     runCatching { context.startForegroundService(intent) }
 }
@@ -97,11 +97,24 @@ internal fun recordingLanguage(context: Context, language: String?) {
     runCatching { context.startForegroundService(intent) }
 }
 
-/** A row of language chips (Auto, EN, UR, AR and More ▾ with the other languages); the selected one is [selected]. */
+/**
+ * A row of language chips (Auto, EN, UR, AR and More ▾ with the other languages); the selected one is [selected].
+ * The line under them says what the choice does ("Urdu (with English words)", since v1.3).
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun LanguageChips(selected: String?, onPick: (String?) -> Unit) {
     val current = Languages.canonical(selected)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        LanguageChipRow(current, onPick)
+        val meaning = Languages.menu(current)
+        Text(meaning, color = Brand.Muted, fontSize = 12.sp, modifier = Modifier.semantics { contentDescription = "Chosen: $meaning" })
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LanguageChipRow(current: String?, onPick: (String?) -> Unit) {
     var moreOpen by remember { mutableStateOf(false) }
     val moreChosen = Languages.MORE.firstOrNull { it.code == current }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -110,7 +123,7 @@ internal fun LanguageChips(selected: String?, onPick: (String?) -> Unit) {
                 selected = current == option.code,
                 onClick = { onPick(option.code) },
                 label = { Text(option.chip) },
-                modifier = Modifier.semantics { contentDescription = "Language: ${option.label}" }
+                modifier = Modifier.semantics { contentDescription = "Language: ${option.menu}" }
             )
         }
         // The More languages sit behind one chip, so the row stays short.

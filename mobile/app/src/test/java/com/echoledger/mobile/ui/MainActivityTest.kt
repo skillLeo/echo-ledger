@@ -20,6 +20,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.echoledger.mobile.MainActivity
+import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ServerFixtures
@@ -68,6 +69,30 @@ class MainActivityTest : AppTest() {
     }
 
     private fun present(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+
+    @Test
+    fun `opening the app arms auto-record again when it is on but Android never re-armed it`() {
+        runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = true) } }
+        RecordingService.isArmed = false
+        launch()
+        var started: Intent? = null
+        pumpUntil("the arm request") {
+            started =
+                started ?: generateSequence { shadowOf(app).nextStartedService }.firstOrNull { it.action == RecordingService.ACTION_ARM }
+            started != null
+        }
+        assertEquals("app opened", started?.getStringExtra(RecordingService.EXTRA_FROM))
+    }
+
+    @Test
+    fun `opening the app leaves auto-record alone when it is off or already armed`() {
+        RecordingService.isArmed = false
+        launch()
+        repeat(20) { shadowOf(android.os.Looper.getMainLooper()).idle() }
+        Thread.sleep(200)
+        shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue(generateSequence { shadowOf(app).nextStartedService }.none { it.action == RecordingService.ACTION_ARM })
+    }
 
     private fun awaitText(text: String) = pumpUntil("the text \"$text\"") {
         compose.waitForIdle()

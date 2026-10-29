@@ -45,7 +45,7 @@ class RecordTileService : TileService() {
 class TileTrampolineActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        startForegroundService(RecordingService.intent(this, RecordingService.ACTION_TOGGLE))
+        startForegroundService(RecordingService.intent(this, RecordingService.ACTION_TOGGLE, from = "Quick Settings tile"))
         finish()
     }
 }

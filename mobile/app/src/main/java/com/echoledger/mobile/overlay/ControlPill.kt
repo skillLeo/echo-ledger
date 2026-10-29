@@ -299,7 +299,12 @@ class ControlPill(
             }
             MenuRow(if (s.captions) "Hide captions" else "Show captions") { onEvent(PillEvent.ToggleCaptions) }
             MenuRow(if (s.paused) "Resume" else "Pause") { onEvent(PillEvent.TogglePause) }
-            MenuRow("Stop") { onEvent(PillEvent.Stop) }
+            // Two taps: the menu lies over the call app's buttons, so one stray touch never ends the recording.
+            if (s.stopArmed) {
+                MenuRow("Tap again to stop recording", REC) { onEvent(PillEvent.Stop) }
+            } else {
+                MenuRow("Stop") { onEvent(PillEvent.Stop) }
+            }
             MenuRow("Discard now", DarkColors.warning) { onEvent(PillEvent.DiscardNow(System.currentTimeMillis())) }
             MenuRow("Shrink to a dot") { onEvent(PillEvent.ShrinkToDot) }
             MenuRow("Hide controls (keeps recording)") { onEvent(PillEvent.HideControls) }

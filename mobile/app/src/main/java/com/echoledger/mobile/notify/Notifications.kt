@@ -89,7 +89,7 @@ object Notifications {
     fun serviceAction(context: Context, action: String, requestCode: Int): PendingIntent = PendingIntent.getForegroundService(
         context,
         requestCode,
-        Intent(context, RecordingService::class.java).setAction(action),
+        RecordingService.intent(context, action, from = "notification"),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 

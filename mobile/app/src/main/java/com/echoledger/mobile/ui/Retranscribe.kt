@@ -29,6 +29,9 @@ enum class TranscriptVersion { CURRENT, PREVIOUS }
 internal fun previousVersionId(item: LibraryItem): String? =
     item.transcript?.alternateTranscriptId?.takeIf { item.transcript.alternateStatus == "completed" }
 
+internal const val ENGLISH_ONLY_WARNING =
+    "This recording has Urdu in it. English only makes the engine translate the Urdu into English. Choose UR to keep every word, or tap Re-transcribe anyway."
+
 /**
  * Under the player: Current / Previous (when the recording has two versions) and "Re-transcribe as…", which asks
  * for the language. The current transcript stays until the new one is ready (since v1.2).
@@ -56,20 +59,30 @@ internal fun RetranscribeRow(vm: MainViewModel, item: LibraryItem, version: Tran
     }
     if (asking) {
         var chosen by remember(item.id) { mutableStateOf(Languages.canonical(item.language)) }
+        // English only on a recording with Urdu in it is said once (the engine would translate the Urdu).
+        var warned by remember(item.id) { mutableStateOf(false) }
+        val risk = chosen == "en" && Languages.englishOnlyRisk(item.transcript?.finalLanguage, item.transcript?.preview)
         AlertDialog(
             onDismissRequest = { asking = false },
             title = { Text("Re-transcribe as") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     LanguageChips(chosen) { chosen = it }
+                    if (risk && warned) {
+                        Text(ENGLISH_ONLY_WARNING, color = Brand.Warning, fontSize = 13.sp)
+                    }
                     Text("The current transcript stays until the new one is ready.", color = Brand.Muted, fontSize = 13.sp)
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
+                    if (risk && !warned) {
+                        warned = true
+                        return@TextButton
+                    }
                     asking = false
                     scope.launch { vm.retranscribe(item.id, chosen) }
-                }) { Text("Re-transcribe") }
+                }) { Text(if (risk && warned) "Re-transcribe anyway" else "Re-transcribe") }
             },
             dismissButton = { TextButton(onClick = { asking = false }) { Text("Cancel") } }
         )

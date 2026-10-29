@@ -312,7 +312,7 @@ fun SearchResultsSection(results: List<SearchItemDto>, onOpen: (SearchItemDto, L
 }
 
 /** Languages offered for new recordings: Auto, English, Urdu, Arabic, then the More languages (core/Languages). */
-val LANGUAGES: List<Pair<String?, String>> = Languages.OPTIONS.map { it.code to it.label }
+val LANGUAGES: List<Pair<String?, String>> = Languages.OPTIONS.map { it.code to it.menu }
 
 /** Settings → Transcription: the language of new recordings and "Add to vocabulary" (B11, B12). */
 @OptIn(ExperimentalLayoutApi::class)

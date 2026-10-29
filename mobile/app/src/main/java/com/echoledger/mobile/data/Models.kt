@@ -268,6 +268,8 @@ data class TranscriptSummary(
     @SerialName("live_available") val liveAvailable: Boolean = false,
     @SerialName("live_transcript_id") val liveTranscriptId: String? = null,
     val preview: String? = null,
+    /** The language the final transcript came back in (since v1.1.2). */
+    @SerialName("final_language") val finalLanguage: String? = null,
     /** Why the final transcript failed (since v1.1.2); `no_audio`: the recording has no sound. */
     @SerialName("final_error_code") val finalErrorCode: String? = null,
     /** The other version (since v1.2): the previous transcript after "Re-transcribe as", or a second engine's run. */

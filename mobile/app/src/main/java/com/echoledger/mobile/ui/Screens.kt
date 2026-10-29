@@ -802,7 +802,9 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                     )
                         .clickable(role = Role.Button, onClickLabel = if (recording) "Stop recording" else "Start recording") {
                             haptics.performHapticFeedback(if (recording) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn)
-                            context.startForegroundService(RecordingService.intent(context, RecordingService.ACTION_TOGGLE))
+                            context.startForegroundService(
+                                RecordingService.intent(context, RecordingService.ACTION_TOGGLE, from = "Record tab")
+                            )
                         },
                     contentAlignment = Alignment.Center
                 ) { Text(if (recording) "STOP" else "REC", fontWeight = FontWeight.Bold, color = LocalEchoColors.current.onAccent) }

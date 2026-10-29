@@ -6,6 +6,29 @@ import org.junit.Test
 
 class LanguagesTest {
     @Test
+    fun `menus say what each choice does, sentences keep the plain name, no Hindi anywhere`() {
+        assertEquals(
+            listOf("Auto (English / Urdu / Arabic)", "English only", "Urdu (with English words)", "Arabic (with English words)"),
+            Languages.MAIN.map { it.menu }
+        )
+        assertEquals("French", Languages.menu("fr"))
+        assertEquals("Urdu", Languages.label("ur"))
+        assertEquals("Urdu (with English words)", Languages.menu("hi"))
+        assertEquals(false, Languages.OPTIONS.any { it.menu.contains("Hindi", ignoreCase = true) })
+    }
+
+    @Test
+    fun `english only is risky on Urdu or Arabic speech, Urdu letters or Roman Urdu, never on English`() {
+        assertEquals(true, Languages.englishOnlyRisk("ur", null))
+        assertEquals(true, Languages.englishOnlyRisk("hi", null))
+        assertEquals(true, Languages.englishOnlyRisk(null, "آپ کل کی meeting"))
+        assertEquals(true, Languages.englishOnlyRisk("en", "kya kar rahe ho, theek hai"))
+        assertEquals(false, Languages.englishOnlyRisk("en", "Hello, this is Sam."))
+        assertEquals(false, Languages.englishOnlyRisk(null, "Okay, acha."))
+        assertEquals(false, Languages.englishOnlyRisk(null, null))
+    }
+
+    @Test
     fun `old values read as today, Hindi and the mixed choices are Urdu, unknown codes are Auto`() {
         assertEquals("ur", Languages.canonical("ur+en"))
         assertEquals("ur", Languages.canonical("en+ur"))

@@ -87,10 +87,43 @@ class PillMachineTest {
     }
 
     @Test
-    fun `stop asks for the after-call card and hides the pill`() {
-        val (stopped, effects) = run(PillState(mode = PillState.Mode.MENU), PillEvent.Stop)
+    fun `stop takes a second tap, then asks for the after-call card and hides the pill`() {
+        val (armed, first) = run(PillState(mode = PillState.Mode.MENU), PillEvent.Stop)
+        assertTrue(first.isEmpty())
+        assertTrue(armed.stopArmed)
+        assertEquals(PillState.Mode.MENU, armed.mode)
+        val (stopped, effects) = run(armed, PillEvent.Tick(1_000, 1_000), PillEvent.Stop)
         assertEquals(listOf(PillEffect.Stop), effects)
         assertEquals(PillState.Mode.HIDDEN, stopped.mode)
+        assertFalse(stopped.stopArmed)
+    }
+
+    @Test
+    fun `a single stray tap on stop never stops, the second tap must come within 4 s`() {
+        val ticks = Array(PillMachine.STOP_CONFIRM_TICKS) { PillEvent.Tick(it * 1_000L, it * 1_000L) }
+        val (expired, effects) = run(PillState(mode = PillState.Mode.MENU), PillEvent.Stop, *ticks, PillEvent.Stop)
+        assertTrue(effects.isEmpty())
+        // The late tap only arms Stop again.
+        assertTrue(expired.stopArmed)
+        // Closing the menu forgets the first tap.
+        assertFalse(run(PillState(mode = PillState.Mode.MENU), PillEvent.Stop, PillEvent.CloseMenu).first.stopArmed)
+        assertTrue(
+            run(PillState(mode = PillState.Mode.MENU), PillEvent.Stop, PillEvent.CloseMenu, PillEvent.Tap, PillEvent.Stop).second.isEmpty()
+        )
+    }
+
+    @Test
+    fun `an open menu closes by itself after 6 s without a touch, and a touch keeps it open`() {
+        val tick = { n: Int -> Array(n) { PillEvent.Tick(it * 1_000L, it * 1_000L) } }
+        val open = run(PillState(), PillEvent.Tap).first
+        assertEquals(PillState.Mode.MENU, run(open, *tick(PillMachine.MENU_IDLE_TICKS - 1)).first.mode)
+        assertEquals(PillState.Mode.PILL, run(open, *tick(PillMachine.MENU_IDLE_TICKS)).first.mode)
+        val touched = run(open, *tick(4), PillEvent.NextLanguage, *tick(4)).first
+        assertEquals(PillState.Mode.MENU, touched.mode)
+        // A warning arriving is not a touch.
+        assertEquals(PillState.Mode.PILL, run(open, *tick(3), PillEvent.Warning("x"), *tick(3)).first.mode)
+        // The pill itself (not the menu) never closes on its own.
+        assertEquals(PillState.Mode.PILL, run(PillState(), *tick(20)).first.mode)
     }
 
     @Test

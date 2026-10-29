@@ -6,6 +6,10 @@ package com.echoledger.mobile.recording
  *
  * Discard now pauses at once (nothing more is recorded or uploaded) and deletes the recording when the 5-second undo
  * has run out; Undo puts things back as they were. Hiding the controls or closing captions never stops the recording.
+ *
+ * The menu lies over the call app's own buttons, so a stray touch must not end a call recording (since v1.3.1): it
+ * closes by itself after [MENU_IDLE_TICKS] seconds without a touch, and Stop takes a second tap within
+ * [STOP_CONFIRM_TICKS] seconds ("Tap again to stop recording").
  */
 data class PillState(
     val mode: Mode = Mode.PILL,
@@ -20,11 +24,18 @@ data class PillState(
     /** A SIM call is holding this call (nothing is written meanwhile). */
     val held: Boolean = false,
     /** Why the recording may be one-sided, shown in the menu. */
-    val warning: String? = null
+    val warning: String? = null,
+    /** Seconds (ticks) the open menu has gone without a touch. */
+    val menuIdleTicks: Int = 0,
+    /** Set after the first tap on Stop: seconds (ticks) since then; null when Stop is not waiting for its second tap. */
+    val stopArmedTicks: Int? = null
 ) {
     enum class Mode { PILL, DOT, MENU, HIDDEN }
 
     val discarding: Boolean get() = discardAtMs != null
+
+    /** Stop was tapped once and waits for the second tap. */
+    val stopArmed: Boolean get() = stopArmedTicks != null
 
     /** Seconds left to undo a discard, rounded up. */
     fun undoSeconds(nowMs: Long): Int = discardAtMs?.let { ((it - nowMs + 999) / 1000).toInt().coerceAtLeast(0) } ?: 0
@@ -63,14 +74,29 @@ sealed interface PillEffect {
 object PillMachine {
     const val UNDO_MS = 5_000L
 
-    fun reduce(s: PillState, e: PillEvent): Pair<PillState, List<PillEffect>> = when (e) {
+    /** The open menu closes after this many seconds without a touch. */
+    const val MENU_IDLE_TICKS = 6
+
+    /** The second tap on Stop must come within this many seconds. */
+    const val STOP_CONFIRM_TICKS = 4
+
+    fun reduce(s: PillState, e: PillEvent): Pair<PillState, List<PillEffect>> {
+        val (next, effects) = step(s, e)
+        // Any touch in the open menu keeps it open a while longer.
+        val touched = next.mode == PillState.Mode.MENU && e !is PillEvent.Tick && e !is PillEvent.Warning && e !is PillEvent.Language &&
+            e !is PillEvent.Held && e !is PillEvent.Paused
+        return (if (touched) next.copy(menuIdleTicks = 0) else next) to effects
+    }
+
+    private fun step(s: PillState, e: PillEvent): Pair<PillState, List<PillEffect>> = when (e) {
         PillEvent.Tap -> when (s.mode) {
-            PillState.Mode.PILL, PillState.Mode.DOT -> s.copy(mode = PillState.Mode.MENU) to emptyList()
-            PillState.Mode.MENU -> s.copy(mode = PillState.Mode.PILL) to emptyList()
+            PillState.Mode.PILL, PillState.Mode.DOT -> s.copy(mode = PillState.Mode.MENU, stopArmedTicks = null) to emptyList()
+            PillState.Mode.MENU -> s.copy(mode = PillState.Mode.PILL, stopArmedTicks = null) to emptyList()
             PillState.Mode.HIDDEN -> s to emptyList()
         }
 
-        PillEvent.CloseMenu -> (if (s.mode == PillState.Mode.MENU) s.copy(mode = PillState.Mode.PILL) else s) to emptyList()
+        PillEvent.CloseMenu -> (if (s.mode == PillState.Mode.MENU) s.copy(mode = PillState.Mode.PILL, stopArmedTicks = null) else s) to
+            emptyList()
 
         PillEvent.ShrinkToDot -> (if (s.mode == PillState.Mode.HIDDEN) s else s.copy(mode = PillState.Mode.DOT)) to emptyList()
 
@@ -94,7 +120,11 @@ object PillMachine {
 
         PillEvent.NextLanguage -> s to if (s.discarding) emptyList() else listOf(PillEffect.NextLanguage)
 
-        PillEvent.Stop -> if (s.discarding) s to emptyList() else s.copy(mode = PillState.Mode.HIDDEN) to listOf(PillEffect.Stop)
+        PillEvent.Stop -> when {
+            s.discarding -> s to emptyList()
+            s.stopArmed -> s.copy(mode = PillState.Mode.HIDDEN, stopArmedTicks = null) to listOf(PillEffect.Stop)
+            else -> s.copy(stopArmedTicks = 0) to emptyList()
+        }
 
         is PillEvent.DiscardNow -> if (s.discarding) {
             s to emptyList()
@@ -117,9 +147,16 @@ object PillMachine {
         is PillEvent.Tick -> {
             val due = s.discardAtMs?.let { e.nowMs >= it } == true
             if (due) {
-                s.copy(elapsedMs = e.elapsedMs, mode = PillState.Mode.HIDDEN, discardAtMs = null) to listOf(PillEffect.Discard)
+                s.copy(elapsedMs = e.elapsedMs, mode = PillState.Mode.HIDDEN, discardAtMs = null, stopArmedTicks = null) to
+                    listOf(PillEffect.Discard)
             } else {
-                s.copy(elapsedMs = e.elapsedMs) to emptyList()
+                val idle = if (s.mode == PillState.Mode.MENU) s.menuIdleTicks + 1 else 0
+                val armed = s.stopArmedTicks?.plus(1)?.takeIf { it < STOP_CONFIRM_TICKS }
+                if (idle >= MENU_IDLE_TICKS) {
+                    s.copy(elapsedMs = e.elapsedMs, mode = PillState.Mode.PILL, menuIdleTicks = 0, stopArmedTicks = null) to emptyList()
+                } else {
+                    s.copy(elapsedMs = e.elapsedMs, menuIdleTicks = idle, stopArmedTicks = armed) to emptyList()
+                }
             }
         }
 

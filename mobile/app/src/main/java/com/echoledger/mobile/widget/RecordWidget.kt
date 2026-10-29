@@ -191,7 +191,7 @@ private fun LastRecording(state: WidgetState) {
 private fun RecordButton(state: WidgetState, size: Dp) {
     if (!state.paired) return
     val context = LocalContext.current
-    val toggle = Intent(context, RecordingService::class.java).setAction(RecordingService.ACTION_TOGGLE)
+    val toggle = RecordingService.intent(context, RecordingService.ACTION_TOGGLE, from = "home-screen widget")
     CircleIconButton(
         imageProvider = ImageProvider(if (state.recording) R.drawable.ic_widget_stop else R.drawable.ic_stat_rec),
         contentDescription = state.buttonLabel,

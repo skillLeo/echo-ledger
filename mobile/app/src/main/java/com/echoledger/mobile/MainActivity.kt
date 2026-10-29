@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.lifecycleScope
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
+import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.ui.AppLockMachine
 import com.echoledger.mobile.ui.Brand
 import com.echoledger.mobile.ui.EchoLedgerTheme
@@ -113,6 +114,20 @@ class MainActivity : FragmentActivity() {
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
             }
             EchoLedgerTheme(themeMode, dynamicColour = settings?.dynamicColour == true) { Content() }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // Auto-record that is on but not armed (Android did not deliver the update or boot broadcast) comes back as soon
+        // as the app is opened, instead of staying off until the switch is touched.
+        lifecycleScope.launch {
+            val settings = (application as EchoLedgerApp).graph.settings.current()
+            if (settings.autoRecordArmed && !RecordingService.isArmed) {
+                runCatching {
+                    startForegroundService(RecordingService.intent(this@MainActivity, RecordingService.ACTION_ARM, from = "app opened"))
+                }
+            }
         }
     }
 

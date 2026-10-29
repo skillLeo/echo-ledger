@@ -103,6 +103,10 @@ class RecordingService : LifecycleService() {
         @Volatile var isRecording = false
             private set
 
+        /** Auto-record is armed in this process (the app re-arms it on opening when the setting is on but this is not). */
+        @Volatile var isArmed = false
+            internal set
+
         /** What the Record tab shows while recording: pause state, timer, meters, bookmarks and the far-side warning. */
         val live = MutableStateFlow(LiveRecording())
 
@@ -120,7 +124,11 @@ class RecordingService : LifecycleService() {
         const val ACTION_UNDO_DISCARD = "com.echoledger.mobile.UNDO_DISCARD"
         const val ACTION_SHOW_CONTROLS = "com.echoledger.mobile.SHOW_CONTROLS"
 
-        fun intent(context: Context, action: String) = Intent(context, RecordingService::class.java).setAction(action)
+        /** Where a Stop or Record tap came from (notification, widget, tile, app), for the capture log. */
+        const val EXTRA_FROM = "from"
+
+        fun intent(context: Context, action: String, from: String? = null) =
+            Intent(context, RecordingService::class.java).setAction(action).apply { from?.let { putExtra(EXTRA_FROM, it) } }
     }
 
     private val graph get() = (application as EchoLedgerApp).graph
@@ -187,7 +195,7 @@ class RecordingService : LifecycleService() {
             ACTION_DISARM -> disarm()
 
             ACTION_TOGGLE -> if (capture != null) {
-                stopCapture(fromCall = false)
+                stopCapture(fromCall = false, reason = "record button (${intent.getStringExtra(EXTRA_FROM) ?: "unknown"})")
             } else {
                 lifecycleScope.launch {
                     settings = graph.settings.current()
@@ -195,7 +203,11 @@ class RecordingService : LifecycleService() {
                 }
             }
 
-            ACTION_STOP -> if (capture != null) stopCapture(fromCall = false) else settle()
+            ACTION_STOP -> if (capture != null) {
+                stopCapture(fromCall = false, reason = "Stop (${intent.getStringExtra(EXTRA_FROM) ?: "unknown"})")
+            } else {
+                settle()
+            }
 
             ACTION_PAUSE -> capture?.let { pause(it) } ?: settle()
 
@@ -315,6 +327,7 @@ class RecordingService : LifecycleService() {
             return
         }
         CaptureLog.add(this, "auto-record on", if (helperAlive()) "helper ready" else "helper not running")
+        isArmed = true
         persistArmed(true)
         main.removeCallbacks(watchdog)
         main.postDelayed(watchdog, WATCHDOG_MS)
@@ -322,6 +335,7 @@ class RecordingService : LifecycleService() {
 
     private fun disarm() {
         armed = false
+        isArmed = false
         main.removeCallbacks(watchdog)
         graph.helper.setArmed(false)
         graph.helper.setCallListener(null)
@@ -448,7 +462,7 @@ class RecordingService : LifecycleService() {
         for (effect in effects) {
             when (effect) {
                 is CallEffect.StartCapture -> startHelperCapture(effect.app.wire, effect.recordingId, fromCall = true)
-                is CallEffect.StopCaptureAndAsk -> stopCapture(fromCall = true)
+                is CallEffect.StopCaptureAndAsk -> stopCapture(fromCall = true, reason = "call ended")
                 is CallEffect.Discard -> discardCapture(effect.recordingId)
                 is CallEffect.Keep -> UploadWorker.enqueue(this, effect.recordingId)
             }
@@ -648,7 +662,7 @@ class RecordingService : LifecycleService() {
                 PillEffect.ShowCaptions -> showCaptions(session)
                 PillEffect.HideCaptions -> closeCaptionPanel()
                 PillEffect.NextLanguage -> session?.let { setLanguage(it, Languages.next(it.language)) }
-                PillEffect.Stop -> if (session != null) stopCapture(fromCall = false)
+                PillEffect.Stop -> if (session != null) stopCapture(fromCall = false, reason = "Stop on the control pill (tapped twice)")
                 PillEffect.Discard -> session?.let { discardNow(it) }
             }
         }
@@ -869,9 +883,13 @@ class RecordingService : LifecycleService() {
         CallerNames.forCall(sourceApp, startMs, endMs)?.let { CallerDto(name = it, source = "whatsapp_notification") }
     }
 
-    /** Stops capture, encrypts the file; calls wait for the user's Keep/Discard, manual recordings upload directly. */
-    private fun stopCapture(fromCall: Boolean) {
+    /**
+     * Stops capture, encrypts the file; calls wait for the user's Keep/Discard, manual recordings upload directly.
+     * [reason] (what stopped it) goes to the capture log, so a recording that ends before its call says why.
+     */
+    private fun stopCapture(fromCall: Boolean, reason: String) {
         val session = capture ?: return
+        CaptureLog.add(this, "stopped", if (callState is CallState.InCall && !fromCall) "$reason, call still going on" else reason)
         capture = null
         isRecording = false
         main.removeCallbacks(ticker)
@@ -990,7 +1008,8 @@ class RecordingService : LifecycleService() {
 
     override fun onDestroy() {
         armed = false
-        capture?.let { stopCapture(fromCall = false) }
+        isArmed = false
+        capture?.let { stopCapture(fromCall = false, reason = "the recording service was closed") }
         destroyed = true
         graph.helper.setCallListener(null)
         hideControls()
