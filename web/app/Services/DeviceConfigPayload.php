@@ -9,6 +9,7 @@ use App\Models\Device;
 use App\Services\Usage\UsageSummary;
 use App\Stt\LanguageChoice;
 use App\Stt\SttManager;
+use App\Support\UnsureMarkers;
 
 /** Body of GET /api/config (docs/API.md). Never contains secrets. */
 final class DeviceConfigPayload
@@ -57,6 +58,9 @@ final class DeviceConfigPayload
             'providers' => $providers,
             'captions' => ['channels' => $this->settings->captionChannels()],
             'markers' => ['tags' => $this->settings->markerTags()],
+            // Since v1.3 (plan A4): how unsure words appear in copied text ([?word] / word(?) / off), below which
+            // confidence a word is unsure, and whether copies start with the note line ("Copy for AI" always does).
+            'unsure' => UnsureMarkers::settings($this->settings) + ['note_text' => UnsureMarkers::note(UnsureMarkers::settings($this->settings)['style'])],
             // Since v1.1.2: the language choices (value, label, chip) and the console default, so every app offers the
             // same list on its language chip. A null value = automatic.
             // Since v1.2: Auto, English, Urdu, Arabic first, then the "More languages" (`more`: true); `auto` lists the

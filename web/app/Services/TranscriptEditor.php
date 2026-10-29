@@ -9,6 +9,7 @@ use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Models\TranscriptRevision;
+use App\Services\Views\TranscriptViews;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -182,6 +183,8 @@ final class TranscriptEditor
             $transcript->revisions()->create(['source' => $source, 'segments' => $segments, 'text' => $text, 'author' => $author]);
             $this->prune($transcript);
         });
+        // The edit made the views stale: Roman Urdu (or the language's default view) is made again (plan A3).
+        app(TranscriptViews::class)->autoMake($transcript->refresh());
 
         return $transcript->refresh();
     }

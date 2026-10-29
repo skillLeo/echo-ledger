@@ -16,13 +16,13 @@ use App\Services\SettingsRepository;
 use App\Services\SettingsSearch;
 use App\Services\SettingsTransfer;
 use App\Services\TextReplacements;
-use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\KeytermPolicy;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use App\Stt\ProviderEndpoints;
+use App\Support\UnsureMarkers;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
@@ -113,8 +113,13 @@ class Settings extends Page
             'languages_auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($all['languages.auto_more'] ?? []))),
             'languages_auto_fallback' => LanguageChoice::fallback(),
             'double_check' => (bool) ($all['accuracy.double_check'] ?? false),
-            'claude_model' => (string) ($all['claude.model'] ?? 'claude-opus-5-5'),
-            'views_default' => (string) ($all['views.default'] ?? 'original'),
+            'claude_model' => (string) ($all['claude.model'] ?? 'claude-sonnet-5-5'),
+            'views_default_ur' => (string) ($all['views.default_ur'] ?? 'roman'),
+            'views_default_en' => (string) ($all['views.default_en'] ?? 'original'),
+            'views_default_ar' => (string) ($all['views.default_ar'] ?? 'original'),
+            'unsure_style' => (string) ($all['unsure.style'] ?? 'brackets'),
+            'unsure_threshold' => (float) ($all['unsure.threshold'] ?? 0.5),
+            'unsure_note' => (bool) ($all['unsure.note'] ?? true),
             'vocabulary_keyterms' => KeytermPolicy::sanitize((array) ($all['vocabulary.keyterms'] ?? [])),
             'vocabulary_replacements' => TextReplacements::rules($all['vocabulary.replacements'] ?? []),
             'display_timezone' => is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC',
@@ -267,11 +272,22 @@ class Settings extends Page
                             ...self::routingFields(),
                             Toggle::make('double_check')->label('Double-check unsure lines with a second engine')->columnSpanFull()
                                 ->helperText('Whisper on Groq (or ElevenLabs Scribe when Whisper wrote the transcript) listens again to up to 12 lines the first engine was not sure of. When they disagree, both are shown; the transcript is never changed. Each line is billed (Groq: at least 10 seconds).'),
-                            Select::make('claude_model')->label('Show as (Roman Urdu and English views)')->options(self::CLAUDE_MODELS)->required()->columnSpan(2)
-                                ->helperText('The Claude model that writes the views (key on API Credentials → Anthropic). An hour of Urdu call costs about US$1 with Opus, less with Sonnet or Haiku.'),
-                            Select::make('views_default')->label('Open transcripts as')->required()->columnSpan(2)
-                                ->options(['original' => 'Original (as transcribed)', ...TranscriptViews::VIEWS])
-                                ->helperText('The apps and the console open a transcript in this view when it is made for that recording; the original is always one tap away.'),
+                            Select::make('claude_model')->label('Show as (Roman Urdu, اردو and English views)')->options(self::CLAUDE_MODELS)->required()->columnSpan(2)
+                                ->helperText('The Claude model that writes the views (key on API Credentials → Anthropic). An hour of Urdu call costs about US$0.50 with Sonnet, about US$1 with Opus.'),
+                            Select::make('views_default_ur')->label('Open Urdu calls as')->required()
+                                ->options(['original' => 'Original (as transcribed)', 'roman' => 'Roman Urdu', 'urdu' => 'اردو', 'english' => 'English'])
+                                ->helperText('Roman Urdu is made as soon as the transcript is ready; the original is always one tap away.'),
+                            Select::make('views_default_en')->label('Open English calls as')->required()
+                                ->options(['original' => 'Original (as transcribed)', 'urdu' => 'اردو (Urdu translation)']),
+                            Select::make('views_default_ar')->label('Open Arabic calls as')->required()
+                                ->options(['original' => 'Original (as transcribed)', 'english' => 'English', 'urdu' => 'اردو']),
+                            Select::make('unsure_style')->label('Unsure words in copies and exports')->required()
+                                ->options(['brackets' => '[?word]', 'suffix' => 'word(?)', 'off' => 'Off (plain text)'])
+                                ->helperText('On screen they stay underlined. Applies to Copy, Copy for AI, exports and share links, in every view.'),
+                            TextInput::make('unsure_threshold')->label('Unsure below confidence')->numeric()->minValue(0.05)->maxValue(0.95)->step(0.05)->required()
+                                ->helperText('A word the engine scored lower than this is marked (0.5 by default).'),
+                            Toggle::make('unsure_note')->label('Add the note line to copies and exports')
+                                ->helperText('"Note: [?word] = the transcription is unsure about this word; [unclear] = inaudible audio." Copy for AI always adds it.'),
                         ]),
                     $this->section('bookmarks')
                         ->description('One-tap tags offered while recording a call (on the desktop pill and the phone notification).')
@@ -549,8 +565,13 @@ class Settings extends Page
             'languages.auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($state['languages_auto_more'] ?? []))),
             'languages.auto_fallback' => LanguageChoice::normalize($state['languages_auto_fallback'] ?? null) ?? 'ur',
             'accuracy.double_check' => (bool) ($state['double_check'] ?? false),
-            'claude.model' => in_array($state['claude_model'] ?? null, array_keys(self::CLAUDE_MODELS), true) ? $state['claude_model'] : 'claude-opus-5-5',
-            'views.default' => in_array($state['views_default'] ?? null, ['original', ...array_keys(TranscriptViews::VIEWS)], true) ? $state['views_default'] : 'original',
+            'claude.model' => in_array($state['claude_model'] ?? null, array_keys(self::CLAUDE_MODELS), true) ? $state['claude_model'] : 'claude-sonnet-5-5',
+            'views.default_ur' => in_array($state['views_default_ur'] ?? null, ['original', 'roman', 'urdu', 'english'], true) ? $state['views_default_ur'] : 'roman',
+            'views.default_en' => in_array($state['views_default_en'] ?? null, ['original', 'urdu'], true) ? $state['views_default_en'] : 'original',
+            'views.default_ar' => in_array($state['views_default_ar'] ?? null, ['original', 'english', 'urdu'], true) ? $state['views_default_ar'] : 'original',
+            'unsure.style' => in_array($state['unsure_style'] ?? null, UnsureMarkers::STYLES, true) ? $state['unsure_style'] : 'brackets',
+            'unsure.threshold' => is_numeric($state['unsure_threshold'] ?? null) ? max(0.05, min(0.95, (float) $state['unsure_threshold'])) : 0.5,
+            'unsure.note' => (bool) ($state['unsure_note'] ?? true),
             'vocabulary.keyterms' => KeytermPolicy::sanitize((array) ($state['vocabulary_keyterms'] ?? [])),
             'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',

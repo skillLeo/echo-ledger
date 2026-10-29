@@ -12,7 +12,7 @@ use RuntimeException;
 
 /**
  * "Show as" with the Claude API (official PHP SDK): one request per chunk of lines, structured JSON back (one entry per
- * line, same index). The model is the console setting `claude.model` (Claude Opus 5.5 by default); refusals fall back
+ * line, same index). The model is the console setting `claude.model` (Claude Sonnet 5.5 by default, plan A3); refusals fall back
  * server-side on the models that support it.
  */
 class ClaudeTranscriptConverter implements TranscriptConverter
@@ -21,21 +21,28 @@ class ClaudeTranscriptConverter implements TranscriptConverter
     private const FALLBACK_MODELS = ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5'];
 
     private const SYSTEM = <<<'TXT'
-        You convert the lines of a business phone call transcript into reading views. The input is JSON: the call's
-        language, the views wanted ("views_wanted") and a list of lines, each with an index and its text.
+        You make reading views of the lines of a business phone call transcript from Pakistan. The input is JSON: the
+        language the call was transcribed in ("language", its code in "language_code"), the views wanted
+        ("views_wanted") and a list of lines, each with an index and its text. Urdu calls mix in English words all the
+        time; the engine sometimes wrote those English words in Urdu letters.
 
-        For every input line return one entry with the same index and these fields (an empty string for a view that was
-        not wanted):
-        - "roman": Roman Urdu, in the common Pakistani spelling ("aap kaise hain", "kal ki meeting reschedule kar dein").
-          An Urdu line keeps its own words, written in Latin letters, with English words inside it unchanged. An English
-          line is translated into Urdu and written in Roman Urdu.
-        - "english": a faithful English translation of the line. A line already in English is copied unchanged.
-        - "urdu": a faithful Urdu translation in Urdu script, the way a Pakistani business person writes; English
-          names, brands and technical terms may stay in Latin letters. A line already in Urdu is copied unchanged.
+        For every input line return one entry with the same index and the fields "roman", "urdu" and "english" (an
+        empty string for a view that was not wanted):
+        - "roman": Roman Urdu, transliteration only. Write the Urdu words in Latin letters the way Pakistanis type them
+          ("kya kar rahe ho", "kaise ho", "theek hai", "acha", "nahi", "meeting kab hai?"). English words stay in their
+          normal English spelling, also when the engine wrote them in Urdu letters ("میٹنگ" becomes "meeting", "انوائس"
+          becomes "invoice"). Never translate, reword, reorder, fix grammar, add or drop words. A line already in Latin
+          letters is copied unchanged.
+        - "urdu": when language_code is "ur", the same words with the Urdu words in Urdu script and the English words in
+          English letters ("میٹنگ" becomes "meeting"); never translate or reword. For any other language, a faithful Urdu
+          translation in Urdu script, the way a Pakistani business person writes; names, brands and technical terms
+          may stay in English letters.
+        - "english": a faithful English translation. A line already in English is copied unchanged.
 
-        Rules for every view: keep names, numbers, amounts, dates and product names exactly; never add, drop, merge,
-        summarise or explain anything; keep the speaker's tone and any uncertainty; keep markers such as
-        "[unclear: ...]" as they are; never use Hindi (Devanagari) letters. Every input index appears exactly once in
+        Rules for every view: names, numbers, amounts, dates and product names exactly as spoken; never merge, split,
+        summarise or explain lines; markers stay on the same word: "[unclear]" and "[unclear: ...]" are copied as they
+        are, and a word the engine was unsure of, written "[?word]", keeps its brackets around that word's own
+        transliteration or translation; never use Hindi (Devanagari) letters. Every input index appears exactly once in
         the output.
         TXT;
 
@@ -43,20 +50,21 @@ class ClaudeTranscriptConverter implements TranscriptConverter
 
     public function model(): string
     {
-        $model = $this->settings->get('claude.model', 'claude-opus-5-5');
+        $model = $this->settings->get('claude.model', 'claude-sonnet-5-5');
 
-        return is_string($model) && $model !== '' ? $model : 'claude-opus-5-5';
+        return is_string($model) && $model !== '' ? $model : 'claude-sonnet-5-5';
     }
 
     public function convert(array $lines, string $language, array $views): array
     {
         $key = $this->vault->get('anthropic', 'api_key');
         if ($key === null || $key === '') {
-            throw new RuntimeException('Add the Anthropic API key on API Credentials to make the Show as views.');
+            throw new RuntimeException(TranscriptViews::missingKeyMessage());
         }
         $model = $this->model();
         $input = [
             'language' => LanguageChoice::label($language),
+            'language_code' => $language,
             'views_wanted' => $views,
             'lines' => array_map(fn (int $i, string $text): array => ['index' => $i, 'text' => $text], array_keys($lines), array_values($lines)),
         ];

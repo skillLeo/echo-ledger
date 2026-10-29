@@ -46,7 +46,7 @@ final class TranscriptResource extends JsonResource
             'progress' => self::progress($transcript),
             // Since v1.2: the Show as views this transcript can have (roman, english) and whether they are made.
             'views' => ['available' => TranscriptViews::available($transcript), 'status' => app(TranscriptViews::class)->state($transcript)['status'],
-                'default' => TranscriptViews::defaultView(TranscriptViews::available($transcript))],
+                'default' => TranscriptViews::defaultView(TranscriptViews::available($transcript), TranscriptViews::sourceLanguage($transcript))],
         ];
     }
 

@@ -36,8 +36,13 @@ final class SettingsRepository
         'elevenlabs.model_id' => 'scribe_v2',
         'elevenlabs.realtime_model_id' => 'scribe_v2_realtime',
         'soniox.async_model' => 'stt-async-v5',          // docs: soniox.com/docs/stt/models (2026-10)
-        'claude.model' => 'claude-opus-5-5',             // Show as (Roman Urdu / English / Urdu views)
-        'views.default' => 'original',                   // the view the apps open a transcript in
+        'claude.model' => 'claude-sonnet-5-5',           // Show as (Roman Urdu / اردو / English views), plan A3
+        'views.default_ur' => 'roman',                   // the view Urdu and mixed calls open in (plan A3)
+        'views.default_en' => 'original',                // English calls (the Urdu translation is one tap away)
+        'views.default_ar' => 'original',                // Arabic calls
+        'unsure.style' => 'brackets',                   // unsure words in copies and exports: [?word] | word(?) | off (plan A4)
+        'unsure.threshold' => 0.5,                      // a word scored below this is unsure
+        'unsure.note' => true,                          // the "Note: [?word] = …" line on copies and exports
         'accuracy.double_check' => false,                // a second engine hears the unsure lines again (DoubleCheck)
         'groq.model' => 'whisper-large-v3',              // not turbo (docs: console.groq.com/docs/model/whisper-large-v3)
         'audio.ffmpeg_path' => null,                     // null = FFMPEG_PATH, then ~/bin/ffmpeg, then the system one

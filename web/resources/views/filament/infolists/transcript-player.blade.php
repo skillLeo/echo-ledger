@@ -97,6 +97,8 @@
             // Show as: a line in the chosen view (Roman Urdu or English) when it is made, else its own words.
             viewReady(v) { return !!(this.d.views && this.d.views.status === 'ready' && this.d.views[v]); },
             lineText(i) { return this.view !== 'original' && this.viewReady(this.view) ? (this.d.views[this.view][i] ?? this.d.segments[i].text) : this.d.segments[i].text; },
+            // A line whose view failed the checks twice shows the original words, with a note (plan A3).
+            keptLine(i) { return this.view !== 'original' && this.viewReady(this.view) && ((this.d.views.kept || {})[this.view] || []).includes(i); },
             async copy(withTimes) {
                 try { await navigator.clipboard.writeText(this.transcriptText(withTimes)); this.copied = withTimes ? 'times' : 'text'; }
                 catch (e) { this.copied = 'failed'; }
@@ -161,6 +163,7 @@
             .el-player .el-w[data-u], .el-player .el-line[data-u] > span { text-decoration: underline dotted var(--el-unsure); text-decoration-thickness: 2px; text-underline-offset: 4px; }
             .el-player .el-w[data-u] { cursor: help; }
             .el-player .el-check { margin: .1rem .35rem .3rem; font-size: .8rem; color: var(--el-muted); unicode-bidi: plaintext; }
+            .el-player .el-kept { font-size: .75rem; color: var(--el-muted); }
             .el-player .el-check-who { font-weight: 600; }
             .el-player textarea.el-edit { width: 100%; font: inherit; line-height: 1.5; color: var(--el-text); background: var(--el-btn-bg);
                 border: 1px solid var(--el-btn-border); border-radius: .45rem; padding: .3rem .45rem; resize: vertical; unicode-bidi: plaintext; }
@@ -183,7 +186,7 @@
             <span x-show="d.model" x-text="'· ' + d.model"></span>
             <span x-text="'· ' + d.language"></span>
             <span x-show="d.edited">· edited</span>
-            <span x-show="view !== 'original'" x-text="'· ' + ({roman: 'Roman Urdu', english: 'English', urdu: 'Urdu'}[view] || '') + ' view by ' + (d.views ? d.views.model : '')"></span>
+            <span x-show="view !== 'original'" x-text="'· ' + ({roman: 'Roman Urdu', english: 'English', urdu: 'اردو'}[view] || '') + ' view by ' + (d.views ? d.views.model : '')"></span>
             <span class="el-spacer"></span>
             <span x-show="viewReady('roman') || viewReady('english')" role="group" aria-label="Show as" style="display:inline-flex;gap:.25rem">
                 <button type="button" class="el-btn" x-on:click="view = 'original'" :aria-pressed="view === 'original'">Original</button>
@@ -241,7 +244,7 @@
                                             :data-u="w.u ? '' : null" :title="w.u ? 'Not sure of this word. Click to hear it.' : null"
                                             x-on:click="if (w.u) { $event.stopPropagation(); seekTo(w.s); }" x-text="w.t"></span> </span></template></span>
                                     </template>
-                                    <template x-if="!d.segments[i].words.length || view !== 'original'"><span x-text="lineText(i)"></span></template>
+                                    <template x-if="!d.segments[i].words.length || view !== 'original'"><span><span x-text="lineText(i)"></span><span class="el-kept" x-show="keptLine(i)" title="This line could not be written in the view, so it shows the words as transcribed."> · original words</span></span></template>
                                 </button>
                             </template>
                             <template x-if="d.segments[i].check && !editing">

@@ -8,6 +8,7 @@ use App\Models\CaptureSession;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Services\Views\TranscriptViews;
+use App\Support\UnsureMarkers;
 use Illuminate\Support\Str;
 use RuntimeException;
 use ZipArchive;
@@ -31,6 +32,9 @@ final class TranscriptExporter
         'html' => 'text/html; charset=UTF-8',
     ];
 
+    /** The "Note: [?word] = …" line of this export, when the console has it on and the text has markers (plan A4). */
+    private ?string $noteLine = null;
+
     public function __construct(private readonly TranscriptEditor $editor, private readonly SettingsRepository $settings) {}
 
     /**
@@ -46,6 +50,9 @@ final class TranscriptExporter
         $timestamps = $options['timestamps'] ?? true;
         $speakers = $options['speakers'] ?? true;
         $lines = $this->lines($transcript, $session, $options['view'] ?? null);
+        $markers = UnsureMarkers::settings($this->settings);
+        $this->noteLine = $markers['note'] && $markers['style'] !== 'off' && array_filter($lines, fn (array $l): bool => UnsureMarkers::hasMarkers($l['text'])) !== []
+            ? UnsureMarkers::note($markers['style']) : null;
         $body = match ($format) {
             'txt' => $this->txt($lines, $timestamps, $speakers),
             'md' => $this->markdown($session, $lines, $timestamps, $speakers),
@@ -62,20 +69,23 @@ final class TranscriptExporter
     /**
      * The segments with the speaker names applied, in the "Show as" view when one is asked for and ready.
      *
-     * @return list<array{speaker: string, label: string, channel: int, start_ms: int, end_ms: int, text: string}>
+     * @return list<array{index: int, speaker: string, label: string, channel: int, start_ms: int, end_ms: int, text: string}>
      */
     public function lines(Transcript $transcript, CaptureSession $session, ?string $view = null): array
     {
         $names = $this->editor->speakerNames($session);
         $texts = $view !== null ? app(TranscriptViews::class)->textsFor($transcript, $view) : null;
+        // Unsure words are marked in the text ("[?word]", or the console's style), in the original and in every view.
+        $markers = UnsureMarkers::settings($this->settings);
         $lines = [];
         foreach ($transcript->segments ?? [] as $i => $segment) {
             $label = (string) ($segment['speaker'] ?? '');
-            $text = trim((string) ($texts[$i] ?? $segment['text'] ?? ''));
+            $text = trim(UnsureMarkers::restyle((string) ($texts[$i] ?? UnsureMarkers::mark($segment, $markers['threshold'])), $markers['style']));
             if ($text === '') {
                 continue;
             }
             $lines[] = [
+                'index' => (int) $i,
                 'speaker' => $names[$label] ?? $label,
                 'label' => $label,
                 'channel' => (int) ($segment['channel'] ?? 1),
@@ -129,7 +139,7 @@ final class TranscriptExporter
     /** @param list<array<string, mixed>> $lines */
     private function txt(array $lines, bool $timestamps, bool $speakers): string
     {
-        return implode("\n", array_map(fn (array $l): string => trim(
+        return ($this->noteLine !== null ? $this->noteLine."\n\n" : '').implode("\n", array_map(fn (array $l): string => trim(
             ($timestamps ? '['.self::clock($l['start_ms']).'] ' : '').($speakers ? $l['speaker'].': ' : '').$l['text']
         ), $lines))."\n";
     }
@@ -138,6 +148,9 @@ final class TranscriptExporter
     private function markdown(CaptureSession $session, array $lines, bool $timestamps, bool $speakers): string
     {
         $out = '# '.self::mdEscape($session->displayTitle())."\n\n*".implode(' · ', $this->facts($session))."*\n\n";
+        if ($this->noteLine !== null) {
+            $out .= '> '.self::mdEscape($this->noteLine)."\n\n";
+        }
         foreach ($lines as $l) {
             $who = $speakers ? '**'.self::mdEscape($l['speaker']).'**' : '';
             $at = $timestamps ? ' `'.self::clock($l['start_ms']).'`' : '';
@@ -198,7 +211,15 @@ final class TranscriptExporter
                 'provider' => $transcript->provider,
                 'language' => $transcript->language,
                 'edited_at' => $transcript->edited_at?->toAtomString(),
-                'segments' => $lines,
+                // Each line's words with the engine's confidence (0-1), so unsure words can be judged (plan A4).
+                'segments' => array_map(function (array $l, int $i) use ($transcript): array {
+                    $words = $transcript->segments[$l['index'] ?? $i]['words'] ?? [];
+
+                    return [...$l, 'words' => array_values(array_map(fn (array $w): array => [
+                        'text' => (string) ($w['text'] ?? ''), 'start_ms' => (int) ($w['start_ms'] ?? 0), 'end_ms' => (int) ($w['end_ms'] ?? 0),
+                        'confidence' => isset($w['confidence']) && is_numeric($w['confidence']) ? (float) $w['confidence'] : null,
+                    ], is_array($words) ? $words : []))];
+                }, $lines, array_keys($lines)),
             ],
             'speaker_names' => (object) $this->editor->speakerNames($session),
             'markers' => array_map(fn (SessionMarker $m): array => ['at_ms' => $m->at_ms, 'tag' => $m->tag, 'note' => $m->note], $this->markers($session)),
@@ -219,6 +240,9 @@ final class TranscriptExporter
             return '<w:r>'.($props !== '' ? '<w:rPr>'.$props.'</w:rPr>' : '').'<w:t xml:space="preserve">'.htmlspecialchars($text, ENT_XML1 | ENT_QUOTES, 'UTF-8').'</w:t></w:r>';
         };
         $body = $p($r($session->displayTitle(), true), false, 'Title').$p($r(implode(' · ', $this->facts($session)), false, false, '666666'));
+        if ($this->noteLine !== null) {
+            $body .= $p($r($this->noteLine, false, false, '666666'));
+        }
         foreach ($lines as $l) {
             $rtl = self::isRtl($l['text']);
             $runs = ($timestamps ? $r(self::clock($l['start_ms']).'  ', false, false, '888888') : '')
@@ -287,7 +311,7 @@ final class TranscriptExporter
             .'.at{color:#888;font-variant-numeric:tabular-nums;margin-inline-end:10px}.who{font-weight:600;margin-inline-end:6px}'
             .'.spk-1{color:#5b21b6}.spk-2{color:#0e7490}@media print{body{margin:0;max-width:none}.noprint{display:none}}'
             .'</style></head><body><h1 dir="auto">'.$e($session->displayTitle()).'</h1><p class="facts">'.$e(implode(' · ', $this->facts($session))).'</p>'
-            ."\n".$rows.'</body></html>';
+            ."\n".($this->noteLine !== null ? '<p class="facts">'.$e($this->noteLine).'</p>'."\n" : '').$rows.'</body></html>';
     }
 
     /** @return list<string> date, duration, client and app */

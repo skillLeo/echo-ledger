@@ -15,6 +15,7 @@ use App\Jobs\TranscribeFinalJob;
 use App\Models\Transcript;
 use App\Models\TranscriptRevision;
 use App\Services\Usage\UsageLedger;
+use App\Services\Views\TranscriptViews;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
@@ -80,6 +81,10 @@ final class TranscriptStore
         // Double-check (when it is on): a second engine hears the unsure lines again, on the queue.
         if (app(DoubleCheck::class)->wanted($transcript->refresh())) {
             DoubleCheckJob::dispatch($transcript->id);
+        }
+        // Roman Urdu (or the view its language opens in) is made at once, so the transcript opens in it (plan A3).
+        if (in_array($transcript->kind, [TranscriptKind::Final, TranscriptKind::Alternate], true)) {
+            app(TranscriptViews::class)->autoMake($transcript);
         }
 
         return $transcript->refresh();
