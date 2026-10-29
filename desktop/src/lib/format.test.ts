@@ -9,6 +9,10 @@ import {
   sourceAppLabel,
   timestamp,
   transcriptText,
+  copiedTranscript,
+  DEFAULT_UNSURE,
+  markedLine,
+  restyleUnsure,
 } from "./format";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -124,7 +128,8 @@ describe("shared labels", () => {
   it("fall back to the raw id for an app this version does not know", () => {
     expect(sourceAppLabel("microsoft_teams")).toBe("Microsoft Teams");
     expect(sourceAppLabel("whatsapp_web")).toBe("WhatsApp Web");
-    expect(sourceAppLabel("signal")).toBe("signal");
+    expect(sourceAppLabel("signal")).toBe("Signal");
+    expect(sourceAppLabel("zangi")).toBe("zangi");
   });
 });
 
@@ -144,5 +149,36 @@ describe("plain names (C8)", () => {
     expect(processName("C:\\Program Files\\Zoom\\bin\\Zoom.exe")).toBe("Zoom");
     expect(processName("/Applications/Safari.app")).toBe("Safari");
     expect(processName("Softphone.exe")).toBe("Softphone");
+  });
+});
+
+describe("unsure words in copied text (plan A4)", () => {
+  const words = [
+    { text: "Send", confidence: 0.98 },
+    { text: "the", confidence: 0.95 },
+    { text: "invoice", confidence: 0.31 },
+    { text: "[unclear]", confidence: 0.1 },
+  ];
+
+  it("marks the words below the threshold in the chosen style, and leaves an edited line as it is", () => {
+    expect(markedLine({ text: "Send the invoice, [unclear].", words }, null, DEFAULT_UNSURE)).toBe("Send the [?invoice], [unclear].");
+    expect(markedLine({ text: "the cat saw the dog.", words: [{ text: "the", confidence: 0.9 }, { text: "cat", confidence: 0.9 }, { text: "the", confidence: 0.2 }] }, null, DEFAULT_UNSURE)).toBe("the cat saw [?the] dog.");
+    expect(markedLine({ text: "Send the invoice [unclear]", words }, null, { ...DEFAULT_UNSURE, threshold: 0.2 })).toBe("Send the invoice [unclear]");
+    expect(markedLine({ text: "Send the invoice [unclear]", words }, null, { ...DEFAULT_UNSURE, style: "suffix" })).toBe("Send the invoice(?) [unclear]");
+    expect(markedLine({ text: "Edited line" }, null, DEFAULT_UNSURE)).toBe("Edited line");
+    // A view's text already carries the marks.
+    expect(markedLine({ text: "x", words }, "kal [?meeting] hai", { ...DEFAULT_UNSURE, style: "off" })).toBe("kal meeting hai");
+    expect(restyleUnsure("kal [?meeting] hai", "brackets")).toBe("kal [?meeting] hai");
+  });
+
+  it("adds the note line for Copy for AI always, and to Copy when the console has it on and there are marks", () => {
+    const segments = [{ speaker: "Me", start_ms: 0, text: "Send the invoice [unclear]", words }, { speaker: "Client", start_ms: 1000, text: "Fine" }];
+    const note = DEFAULT_UNSURE.note_text;
+    expect(copiedTranscript(segments, () => null, false, DEFAULT_UNSURE)).toBe(`${note}\n\nMe: Send the [?invoice] [unclear]\nClient: Fine`);
+    expect(copiedTranscript(segments, () => null, false, { ...DEFAULT_UNSURE, note: false })).toBe("Me: Send the [?invoice] [unclear]\nClient: Fine");
+    // Marks off: plain text, but Copy for AI still marks and explains.
+    expect(copiedTranscript(segments, () => null, false, { ...DEFAULT_UNSURE, style: "off" })).toBe("Me: Send the invoice [unclear]\nClient: Fine");
+    expect(copiedTranscript(segments, () => null, false, { ...DEFAULT_UNSURE, style: "off" }, true)).toBe(`${note}\n\nMe: Send the [?invoice] [unclear]\nClient: Fine`);
+    expect(copiedTranscript([{ speaker: "Me", start_ms: 0, text: "All good" }], () => null, false, DEFAULT_UNSURE)).toBe("All good");
   });
 });

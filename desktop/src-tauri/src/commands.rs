@@ -1250,6 +1250,17 @@ pub fn marker_tags(state: State<'_, AppState>) -> Vec<String> {
     crate::audio::notes::tag_presets(config.as_ref().and_then(|c| c.markers.as_ref()).map(|m| m.tags.as_slice()))
 }
 
+/// How unsure words appear in copied text (the server's `config.unsure`, defaults before the first config).
+#[tauri::command]
+pub fn unsure_markers(state: State<'_, AppState>) -> crate::net::models::UnsureConfig {
+    let config = state.server_config.lock().unwrap_or_else(|p| p.into_inner());
+    let mut unsure = config.as_ref().and_then(|c| c.unsure.clone()).unwrap_or_default();
+    if unsure.note_text.is_empty() {
+        unsure.note_text = crate::net::models::UnsureConfig::default().note_text;
+    }
+    unsure
+}
+
 #[tauri::command]
 pub async fn resume_recording(app: AppHandle) -> AppResult<AppStatus> {
     crate::actions::resume_recording(&app).await?;

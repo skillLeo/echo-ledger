@@ -794,3 +794,24 @@ fn a_failed_final_transcript_names_its_error_code() {
     assert_eq!((t["status"].as_str(), t["error_code"].as_str()), (Some("failed"), Some("no_audio")));
     assert_eq!(t["error"], "No audio was captured in this recording.");
 }
+
+#[test]
+fn unsure_marker_settings_parse_with_defaults_and_never_break_the_config() {
+    let mut v = fixture("config.json");
+    v["unsure"] = json!({"style": "suffix", "threshold": 0.35, "note": false, "note_text": "Note: word(?) = unsure"});
+    let config: ServerConfig = serde_json::from_value(v.clone()).unwrap();
+    let unsure = config.unsure.expect("unsure block");
+    assert_eq!((unsure.style.as_str(), unsure.threshold, unsure.note), ("suffix", 0.35, false));
+
+    v["unsure"] = json!({"style": "brackets"});
+    let partial: ServerConfig = serde_json::from_value(v.clone()).unwrap();
+    let unsure = partial.unsure.unwrap();
+    assert_eq!((unsure.threshold, unsure.note), (0.5, true));
+
+    // An older server sends none; a malformed block is ignored instead of failing the config.
+    v.as_object_mut().unwrap().remove("unsure");
+    assert!(serde_json::from_value::<ServerConfig>(v.clone()).unwrap().unsure.is_none());
+    v["unsure"] = json!("nonsense");
+    assert!(serde_json::from_value::<ServerConfig>(v).unwrap().unsure.is_none());
+    assert_eq!(UnsureConfig::default().style, "brackets");
+}

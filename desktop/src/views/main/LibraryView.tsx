@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type ClientFolder, type ExportFormat, type LibraryItem, type SearchResult, type TranscriptDetail, type TranscriptionLanguage, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
 import { activeIndex, activeWord, continuesTurn, hasUncertainWords, KEY_SECONDS, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, uncertainWord } from "../../lib/player";
 import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, SpeakersPanel, Timeline, VocabularyHint } from "./TranscriptTools";
-import { formatDuration, formatWhen, providerName, timestamp, transcriptText } from "../../lib/format";
+import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, libraryTags, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
 import { CopyIcon, RefreshIcon, SearchIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
@@ -46,7 +46,17 @@ const playbackUrlOf = (detail: Record<string, unknown>): string | null => (typeo
 const VIEWS_POLL_MS = 5_000;
 /** Show as: the views in the order the switch shows them, and their names. */
 const VIEW_ORDER: TranscriptView[] = ["roman", "english", "urdu"];
-const VIEW_LABELS: Record<TranscriptView, string> = { roman: "Roman Urdu", english: "English", urdu: "Urdu" };
+const VIEW_LABELS: Record<TranscriptView, string> = { roman: "Roman Urdu", english: "English", urdu: "اردو" };
+
+/** A view's line with its "[?word]" marks shown like the original's unsure words: underlined, without brackets (plan A4). */
+function withUnsureMarks(text: string): ReactNode {
+  const parts = text.split(/(\[\?[^\]]+\])/);
+  if (parts.length === 1) return text;
+  return parts.map((part, i) => {
+    const marked = /^\[\?([^\]]+)\]$/.exec(part);
+    return marked ? <span key={i} className="word uncertain" title={UNSURE_WORD}>{marked[1]}</span> : part;
+  });
+}
 
 /** Tooltips of what the engine was not sure of (kept as heard). */
 const UNSURE_WORD = "Not sure of this word. Click to hear it.";
@@ -77,6 +87,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [selected, setSelected] = useState<string | null>(initialSelected);
   useEffect(() => onSelectedChange?.(selected), [selected, onSelectedChange]);
   const [transcript, setTranscript] = useState<TranscriptDetail | null>(null);
+  // How unsure words are marked in copied text (the console's choice, plan A4).
+  const [unsure, setUnsure] = useState<UnsureMarkers>(DEFAULT_UNSURE);
+  useEffect(() => {
+    api.unsureMarkers().then((m) => { if (m) setUnsure({ ...DEFAULT_UNSURE, ...m }); }).catch(() => undefined);
+  }, []);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [activeSegment, setActiveSegment] = useState(-1);
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
@@ -300,16 +315,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
   };
   const viewText = (i: number): string | null => (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] ?? null : null);
-  const named = useMemo(
-    () => (transcript ? transcript.segments.map((s, i) => ({ ...s, text: (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] : null) ?? s.text, speaker: speakerName(speakerNames, s.speaker) })) : []),
-    [transcript, speakerNames, showAs, views],
-  );
-
-  const copy = async (withTimestamps: boolean) => {
+  // Unsure words go into the copy as "[?word]" (or the console's style); Copy for AI starts with the note line.
+  const copy = async (withTimestamps: boolean, forAi = false) => {
     if (!transcript) return;
     try {
-      await navigator.clipboard.writeText(transcriptText(named, withTimestamps));
-      notify(withTimestamps ? "Copied with timestamps" : "Copied");
+      const segments = transcript.segments.map((s) => ({ ...s, speaker: speakerName(speakerNames, s.speaker) }));
+      await navigator.clipboard.writeText(copiedTranscript(segments, viewText, withTimestamps, unsure, forAi));
+      notify(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied");
     } catch {
       notify("Could not access the clipboard", true);
     }
@@ -640,6 +652,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <span className="spacer" />
                       <button className="btn ghost" onClick={() => copy(false)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy text</button>
                       <button className="btn ghost" onClick={() => copy(true)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy with timestamps</button>
+                      <button className="btn ghost" onClick={() => copy(false, true)} disabled={transcript.segments.length === 0}
+                        title="Copies the text with unsure words marked [?word] and a first line that tells an AI what the marks mean"><CopyIcon size={14} />Copy for AI</button>
                     </div>
                     {transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0 && (
                       <div className="row small transcript-tools" role="toolbar" aria-label="Transcript tools">
@@ -678,7 +692,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         // A turn shows its speaker once: following lines of the same speaker keep the label for screen
                         // readers but hide it on screen (.cont), which groups the lines into a speaker block.
                         // Words the engine was not sure of are underlined (a click plays from that word); the text stays as heard.
-                        const textCell = inView !== null ? inView : s.words && s.words.length > 0 && (i === activeSegment || hasUncertainWords(s))
+                        const textCell = inView !== null ? withUnsureMarks(inView) : s.words && s.words.length > 0 && (i === activeSegment || hasUncertainWords(s))
                           ? s.words.map((w, wi) => {
                             const unsure = uncertainWord(w);
                             const className = ["word", i === activeSegment && wi === activeWordIndex ? "on" : "", unsure ? "uncertain" : ""].filter(Boolean).join(" ");
@@ -697,6 +711,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                             <span className={`seg-spk spk-${s.channel === 2 ? 2 : 1}`}>{speakerName(speakerNames, s.speaker)}</span>
                             <span className={s.uncertain && inView === null ? "seg-text uncertain" : "seg-text"} dir="auto" title={s.uncertain && inView === null ? UNSURE_LINE : undefined}>
                               {textCell}
+                              {inView !== null && showAs !== "original" && views?.kept?.[showAs]?.includes(i) && <span className="seg-kept muted" title="This line could not be written in the view, so it shows the words as transcribed."> · original words</span>}
                               {s.check && inView === null && <span className="seg-check" dir="auto"><b>{s.check.label} heard:</b> {s.check.text}</span>}
                             </span>
                           </>

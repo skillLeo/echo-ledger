@@ -69,6 +69,78 @@ export function transcriptText(segments: { speaker: string; start_ms: number; te
     .join("\n");
 }
 
+/** How unsure words appear in copied text (the server's `config.unsure`, plan A4). */
+export interface UnsureMarkers {
+  style: "brackets" | "suffix" | "off" | string;
+  threshold: number;
+  note: boolean;
+  note_text: string;
+}
+
+export const DEFAULT_UNSURE: UnsureMarkers = {
+  style: "brackets",
+  threshold: 0.5,
+  note: true,
+  note_text: "Note: [?word] = the transcription is unsure about this word; [unclear] = inaudible audio.",
+};
+
+const MARKED = /\[\?([^\]]+)\]/g;
+
+/** "[?word]" in the chosen style: kept, "word(?)", or plain. */
+export function restyleUnsure(text: string, style: string): string {
+  if (style === "suffix") return text.replace(MARKED, "$1(?)");
+  if (style === "off") return text.replace(MARKED, "$1");
+  return text;
+}
+
+/**
+ * A line as copied: the view's text when one is shown (it already carries "[?word]"), else the words with the unsure
+ * ones (scored below the threshold) marked; an edited line has no words and is copied as it is.
+ */
+export function markedLine(
+  segment: { text: string; words?: { text: string; confidence?: number | null }[] },
+  inView: string | null,
+  markers: UnsureMarkers,
+  style: string = markers.style,
+): string {
+  if (inView !== null) return restyleUnsure(inView, style);
+  // The line keeps its own text (punctuation, words without timing); each unsure word is found in order and wrapped.
+  const line = segment.text;
+  let out = "";
+  let at = 0;
+  for (const w of segment.words ?? []) {
+    const word = w.text.trim();
+    const pos = word ? line.indexOf(word, at) : -1;
+    if (pos < 0) continue;
+    const unsure = w.confidence != null && w.confidence < markers.threshold && !word.startsWith("[");
+    out += line.slice(at, pos) + (unsure ? `[?${word}]` : word);
+    at = pos + word.length;
+  }
+  return restyleUnsure(out + line.slice(at), style);
+}
+
+/** Whether a copied text has a mark the note line explains. */
+export function hasUnsureMarks(text: string): boolean {
+  return /\[\?[^\]]+\]|\[unclear|\(\?\)/.test(text);
+}
+
+/**
+ * The text Copy puts on the clipboard: the note line first for "Copy for AI" (always, with "[?word]" marks even when
+ * the console turned marks off), or when the console has the note on and the text has marks.
+ */
+export function copiedTranscript(
+  segments: { speaker: string; start_ms: number; text: string; words?: { text: string; confidence?: number | null }[] }[],
+  inView: (i: number) => string | null,
+  withTimestamps: boolean,
+  markers: UnsureMarkers,
+  forAi = false,
+): string {
+  const style = forAi && markers.style === "off" ? "brackets" : markers.style;
+  const body = transcriptText(segments.map((s, i) => ({ ...s, text: markedLine(s, inView(i), markers, style) })), withTimestamps);
+  const note = style === "suffix" ? markers.note_text.replace("[?word]", "word(?)") : markers.note_text;
+  return forAi || (markers.note && style !== "off" && hasUnsureMarks(body)) ? `${note}\n\n${body}` : body;
+}
+
 /** Display form of an accelerator for the current platform. */
 export function prettyShortcut(accelerator: string | undefined, platform: string): string {
   if (!accelerator) return "Not set";

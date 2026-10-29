@@ -56,6 +56,46 @@ pub struct ServerConfig {
     /// Bookmark tag presets (since v1.1).
     #[serde(default, deserialize_with = "lenient")]
     pub markers: Option<MarkersConfig>,
+    /// How unsure words appear in copied text (since v1.3, plan A4).
+    #[serde(default, deserialize_with = "lenient")]
+    pub unsure: Option<UnsureConfig>,
+}
+
+/// `config.unsure` (docs/API.md "GET /api/config"): `[?word]` (brackets), `word(?)` (suffix) or plain (off) in copies,
+/// the confidence below which a word is unsure, and whether copies start with the note line.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UnsureConfig {
+    #[serde(default = "UnsureConfig::default_style")]
+    pub style: String,
+    #[serde(default = "UnsureConfig::default_threshold")]
+    pub threshold: f64,
+    #[serde(default = "UnsureConfig::default_note")]
+    pub note: bool,
+    #[serde(default)]
+    pub note_text: String,
+}
+
+impl UnsureConfig {
+    fn default_style() -> String {
+        "brackets".into()
+    }
+    fn default_threshold() -> f64 {
+        0.5
+    }
+    fn default_note() -> bool {
+        true
+    }
+}
+
+impl Default for UnsureConfig {
+    fn default() -> Self {
+        Self {
+            style: Self::default_style(),
+            threshold: Self::default_threshold(),
+            note: Self::default_note(),
+            note_text: "Note: [?word] = the transcription is unsure about this word; [unclear] = inaudible audio.".into(),
+        }
+    }
 }
 
 /// `config.markers` (docs/API.md "GET /api/config").

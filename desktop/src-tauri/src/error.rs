@@ -28,8 +28,9 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
     retry_after_secs.map(|n| format!(" Try again in {n} s.")).unwrap_or_default()
 }
 
-/// Answers whose `message` is written for people (plan limits and roles, docs/API.md): shown as they are.
-const PLAIN_CODES: [&str; 4] = ["budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed"];
+/// Answers whose `message` is written for people (plan limits and roles, the missing Anthropic key for the views,
+/// docs/API.md): shown as they are.
+const PLAIN_CODES: [&str; 5] = ["budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable"];
 
 fn server_text(status: u16, message: &str, code: Option<&str>, retry_after_secs: &Option<u64>) -> String {
     match code {

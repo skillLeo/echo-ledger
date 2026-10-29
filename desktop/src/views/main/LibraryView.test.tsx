@@ -712,6 +712,14 @@ describe("LibraryView copy", () => {
     await waitFor(() => expect(notify).toHaveBeenCalledWith("Copied with timestamps"));
   });
 
+  it("'Copy for AI' starts with the note on unsure words", async () => {
+    const { notify } = await renderLibrary();
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Copy for AI" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`Note: [?word] = the transcription is unsure about this word; [unclear] = inaudible audio.\n\n${EXPECTED_PLAIN}`));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Copied for AI, with the note on unsure words"));
+  });
+
   it("omits the speaker label for a single-speaker voice note", async () => {
     await renderLibrary();
     await selectItem("Voice note from Sam", "Remember to call back.");
@@ -1219,7 +1227,7 @@ describe("LibraryView Show as", () => {
 
     expect(within(detail()).getByText("میں invoice بھیج دوں گا")).toBeInTheDocument();
     expect(detail().querySelector(".segments")).toHaveAttribute("lang", "ur");
-    expect(within(detail()).getByRole("button", { name: "Urdu" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(detail()).getByRole("button", { name: "اردو" })).toHaveAttribute("aria-pressed", "true");
     expect(within(detail()).queryByRole("button", { name: "English" })).not.toBeInTheDocument();
     fireEvent.click(within(detail()).getByRole("button", { name: "Original" }));
     expect(within(detail()).getByText("I will send the invoice")).toBeInTheDocument();

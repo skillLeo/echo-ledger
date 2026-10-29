@@ -404,6 +404,8 @@ export interface TranscriptViewsState {
   model: string | null;
   made_at: string | null;
   error: string | null;
+  /** Lines shown with their original words in a view because the view failed the checks twice (since v1.3). */
+  kept?: Partial<Record<TranscriptView, number[]>>;
 }
 
 /** A transcript search (`GET /api/search`); empty filters are not sent. */
@@ -647,6 +649,8 @@ export const api = {
   tagLastMark: (tag: string | null, note: string | null = null) => invoke<void>("tag_last_mark", { tag, note }),
   undoMark: () => invoke<void>("undo_mark"),
   markerTags: () => invoke<string[]>("marker_tags"),
+  /** How unsure words appear in copied text (since v1.3). */
+  unsureMarkers: () => invoke<import("./format").UnsureMarkers>("unsure_markers"),
   inputDevices: () => invoke<InputDevice[]>("input_devices"),
   testCapture: (seconds?: number) => invoke<TestResult>("test_capture", { seconds: seconds ?? null }),
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),

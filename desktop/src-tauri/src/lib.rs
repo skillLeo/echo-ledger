@@ -294,6 +294,7 @@ pub fn run() {
             commands::tag_last_mark,
             commands::undo_mark,
             commands::marker_tags,
+            commands::unsure_markers,
             commands::input_devices,
             commands::test_capture,
             commands::permissions_status,
