@@ -269,7 +269,7 @@ describe('invalid values', function () {
         'client_ref too long' => [['client_ref' => str_repeat('r', 65)], 'client_ref'],
         'client_ref number' => [['client_ref' => 12345], 'client_ref'],
         'client_ref array' => [['client_ref' => ['x']], 'client_ref'],
-        'unknown source app' => [['source_app' => 'telegram'], 'source_app'],
+        'unknown source app' => [['source_app' => 'icq'], 'source_app'],
         'source app case' => [['source_app' => 'WhatsApp'], 'source_app'],
         'source app number' => [['source_app' => 3], 'source_app'],
         'client id too short' => [['client_id' => 'abc'], 'client_id'],

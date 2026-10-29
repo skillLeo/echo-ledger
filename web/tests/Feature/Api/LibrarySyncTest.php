@@ -450,7 +450,7 @@ describe('filters', function () {
     it('rejects values outside the enumerations', function (string $query, string $field) {
         $this->getJson('/api/library?'.$query)->assertStatus(422)->assertJsonValidationErrors([$field]);
     })->with([
-        ['source_app=telegram', 'source_app'],
+        ['source_app=icq', 'source_app'],
         ['source_app=Zoom', 'source_app'],
         ['status=done', 'status'],
         ['client_id=short', 'client_id'],
