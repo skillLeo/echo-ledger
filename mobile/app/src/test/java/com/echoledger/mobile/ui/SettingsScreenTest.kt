@@ -320,11 +320,13 @@ class SettingsScreenTest : AppTest() {
         launch(open = "Recording")
         compose.onNodeWithText("Voice communication (echo-cancelled)").assertIsDisplayed()
 
-        compose.onNodeWithText("Change").performClick()
+        // The microphone row's Change (the bitrate row below it has one too).
+        compose.onAllNodesWithText("Change")[0].performClick()
         pumpUntil("raw microphone") { settings().micSource == "mic" }
         compose.onNodeWithText("Raw microphone").assertIsDisplayed()
 
-        compose.onNodeWithText("Change").performClick()
+        // The microphone row's Change (the bitrate row below it has one too).
+        compose.onAllNodesWithText("Change")[0].performClick()
         pumpUntil("voice communication") { settings().micSource == "voice_communication" }
         compose.onNodeWithText("Voice communication (echo-cancelled)").assertIsDisplayed()
     }

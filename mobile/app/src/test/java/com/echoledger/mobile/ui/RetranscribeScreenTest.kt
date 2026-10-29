@@ -85,8 +85,8 @@ class RetranscribeScreenTest : ScreenTest() {
 
         compose.onNodeWithText("Re-transcribe as…").performClick()
         compose.onNodeWithText("The current transcript stays until the new one is ready.").assertExists()
-        compose.onNodeWithContentDescription("Language: Urdu").assertIsSelected()
-        compose.onNodeWithContentDescription("Language: Arabic").performClick()
+        compose.onNodeWithContentDescription("Language: Urdu (with English words)").assertIsSelected()
+        compose.onNodeWithContentDescription("Language: Arabic (with English words)").performClick()
         compose.onNodeWithText("Re-transcribe").performClick()
 
         pumpUntil("the re-transcribe request") { server.requestsTo("POST", retranscribePath).isNotEmpty() }
@@ -97,13 +97,34 @@ class RetranscribeScreenTest : ScreenTest() {
     }
 
     @Test
+    fun `english only on a recording with Urdu is warned about once before it runs`() {
+        serve()
+        val urdu = item().copy(transcript = item().transcript?.copy(finalLanguage = "ur", preview = "kya kar rahe ho"))
+        show { SessionScreen(vm, urdu, onBack = {}) }
+        awaitText("Newest text")
+
+        compose.onNodeWithText("Re-transcribe as…").performClick()
+        compose.onNodeWithContentDescription("Language: English only").performClick()
+        // The line under the chips says what the choice does.
+        compose.onNodeWithText("English only").assertExists()
+        compose.onNodeWithText("Re-transcribe").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(ENGLISH_ONLY_WARNING).assertExists()
+        assertTrue(server.requestsTo("POST", retranscribePath).isEmpty())
+
+        compose.onNodeWithText("Re-transcribe anyway").performClick()
+        pumpUntil("the re-transcribe request") { server.requestsTo("POST", retranscribePath).isNotEmpty() }
+        assertEquals("""{"language":"en"}""", server.requestsTo("POST", retranscribePath).single().bodyText())
+    }
+
+    @Test
     fun `Auto sends no language and a refusal is reported`() {
         serve(retranscribe = 409)
         show { SessionScreen(vm, item(), onBack = {}) }
         awaitText("Newest text")
 
         compose.onNodeWithText("Re-transcribe as…").performClick()
-        compose.onNodeWithContentDescription("Language: Auto").performClick()
+        compose.onNodeWithContentDescription("Language: Auto (English / Urdu / Arabic)").performClick()
         compose.onNodeWithText("Re-transcribe").performClick()
 
         pumpUntil("the message") { vm.message.value != null }
