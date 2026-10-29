@@ -12,6 +12,7 @@ use App\Services\TranscriptStore;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
 use Illuminate\Support\Facades\Queue;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 use Tests\Feature\Api\Support\Fixtures;
@@ -86,6 +87,26 @@ it('runs a failed transcript again in the new language instead', function () {
     expect($session->finalTranscript->fresh()->status)->toBe(TranscriptStatus::Pending)
         ->and($session->finalTranscript->fresh()->language)->toBe('ar')
         ->and($session->transcripts()->where('kind', 'alternate')->count())->toBe(0);
+});
+
+it('warns before English only on a recording with Urdu in it, and not on an English one', function () {
+    Queue::fake();
+    Filament::setCurrentPanel('admin');
+    $admin = $this->signInAsAdmin();
+    $urdu = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'آپ کل کی meeting کب ہے']], ['status' => 'completed', 'language' => 'ur']);
+    $this->readyRecording($urdu);
+    $english = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'Hello, the invoice is ready']], ['status' => 'completed', 'language' => 'en']);
+    $this->readyRecording($english);
+    // Filament keeps the helper text as a Text component below the field.
+    $helper = fn (Select $field): string => collect($field->getChildSchema(Select::BELOW_CONTENT_SCHEMA_KEY)?->getComponents() ?? [])
+        ->map(fn ($c): string => method_exists($c, 'getContent') ? (string) $c->getContent() : '')->implode(' ');
+    $warns = fn (bool $expected) => fn (Select $field): bool => str_contains($helper($field), 'English only makes the engine translate the Urdu into English') === $expected;
+
+    $this->panelComponent(ViewCaptureSession::class, ['record' => $urdu->id])
+        ->mountAction('retranscribe_as')->fillForm(['language' => 'en'])->assertFormFieldExists('language', $warns(true))
+        ->fillForm(['language' => 'ur'])->assertFormFieldExists('language', $warns(false));
+    $this->panelComponent(ViewCaptureSession::class, ['record' => $english->id])
+        ->mountAction('retranscribe_as')->fillForm(['language' => 'en'])->assertFormFieldExists('language', $warns(false));
 });
 
 it('offers Re-transcribe as on the recording page', function () {

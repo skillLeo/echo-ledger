@@ -21,6 +21,7 @@ use App\Services\ShareLinks;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
 use App\Services\Views\TranscriptViews;
+use App\Stt\ChannelLanguage;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use App\Stt\ScriptCheck;
@@ -471,7 +472,14 @@ class ViewCaptureSession extends ViewRecord
             ->modalDescription('The current transcript stays until the new one is ready, then the new one is shown and the old one is kept as the other version.')
             ->fillForm(fn (CaptureSession $record): array => ['language' => LanguageChoice::normalize($record->language) ?? ''])
             ->schema([
-                Select::make('language')->label('Language')->options(LanguageChoice::selectOptions())->selectablePlaceholder(false),
+                Select::make('language')->label('Language')->options(LanguageChoice::selectOptions())->selectablePlaceholder(false)->live()
+                    // English only on a recording with Urdu in it: the engine would translate the Urdu (said before it runs).
+                    ->helperText(fn (?string $state, CaptureSession $record): ?string => $state === 'en' && ChannelLanguage::hasUrdu(
+                        $record->finalTranscript?->language,
+                        (string) ($record->finalTranscript?->text ?: implode(' ', array_column($record->finalTranscript->segments ?? [], 'text')))
+                    )
+                        ? 'This recording has Urdu in it. English only makes the engine translate the Urdu into English. Choose Urdu (with English words) to keep every word.'
+                        : null),
             ])
             ->action(function (array $data, CaptureSession $record): void {
                 try {

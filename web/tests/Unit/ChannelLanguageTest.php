@@ -69,6 +69,15 @@ it('reads Urdu named as Arabic or Persian by its letters, and real Arabic as Ara
         ->and(ChannelLanguage::decide([$arabic, heard('en', 'Okay, perfect.')]))->toBe('ar');
 });
 
+it('tells whether a finished transcript has Urdu in it, for the English only warning', function () {
+    expect(ChannelLanguage::hasUrdu('ur', 'anything'))->toBeTrue()
+        ->and(ChannelLanguage::hasUrdu('hi', ''))->toBeTrue()
+        ->and(ChannelLanguage::hasUrdu(null, 'آپ کل کی meeting کب ہے'))->toBeTrue()
+        ->and(ChannelLanguage::hasUrdu('en', 'kya kar rahe ho, theek hai'))->toBeTrue()
+        ->and(ChannelLanguage::hasUrdu('en', 'Hello, the invoice is ready.'))->toBeFalse()
+        ->and(ChannelLanguage::hasUrdu(null, ''))->toBeFalse();
+});
+
 it('reads Hindi letters as Urdu, and says nothing for a silent side', function () {
     expect(ChannelLanguage::evidence(heard('ur', 'नमस्ते आप कैसे हैं')))->toBe('ur')
         ->and(ChannelLanguage::decide([heard(null, ''), heard('en', '')]))->toBeNull()

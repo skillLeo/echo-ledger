@@ -112,6 +112,19 @@ final class ChannelLanguage
         return preg_match_all('/[\x{0679}\x{0688}\x{0691}\x{06BA}\x{06D2}\x{06C1}\x{06BE}]/u', $text) >= 2;
     }
 
+    /**
+     * Whether a finished transcript has Urdu (or Arabic) in it, so "English only" would make the engine translate it:
+     * its language, or its text (Urdu letters, Roman Urdu words).
+     */
+    public static function hasUrdu(?string $language, string $text): bool
+    {
+        if (in_array(LanguageChoice::fromDetected($language), ['ur', 'ar'], true)) {
+            return true;
+        }
+
+        return self::evidence(['language' => null, 'text' => mb_substr($text, 0, 4000), 'seconds' => 0.0]) !== null;
+    }
+
     /** Distinct Roman Urdu words in [$text]. */
     public static function romanUrduWords(string $text): int
     {
