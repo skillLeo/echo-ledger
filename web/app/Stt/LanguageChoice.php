@@ -18,8 +18,16 @@ use App\Services\SettingsRepository;
  */
 final class LanguageChoice
 {
-    /** The choices every menu shows first. */
+    /** The choices every menu shows first, labelled for the menu (since v1.3: what each choice does). */
     public const MAIN = [
+        '' => 'Auto (English / Urdu / Arabic)',
+        'en' => 'English only',
+        'ur' => 'Urdu (with English words)',
+        'ar' => 'Arabic (with English words)',
+    ];
+
+    /** The main choices' names inside a sentence ("Re-transcribing in Urdu"). */
+    private const NAMES = [
         '' => 'Auto',
         'en' => 'English',
         'ur' => 'Urdu',
@@ -194,9 +202,12 @@ final class LanguageChoice
         return self::normalize(($settings ?? app(SettingsRepository::class))->get('languages.auto_fallback')) ?? 'ur';
     }
 
+    /** The language's name for a sentence or a chip line ("Urdu"); menus use [OFFERED]. */
     public static function label(mixed $value): string
     {
-        return self::OFFERED[self::normalize($value) ?? ''];
+        $code = self::normalize($value) ?? '';
+
+        return self::NAMES[$code] ?? self::OFFERED[$code];
     }
 
     public static function chip(mixed $value): string

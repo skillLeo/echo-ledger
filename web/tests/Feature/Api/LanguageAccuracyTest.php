@@ -16,6 +16,7 @@ use App\Services\SettingsRepository;
 use App\Services\TranscriptStore;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
+use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use App\Stt\ScriptCheck;
 use Illuminate\Http\Client\Request as HttpRequest;
@@ -289,7 +290,10 @@ describe('what the apps learn about languages', function () {
             ->and(collect($languages['options'])->pluck('chip')->all())->toBe(['Auto', 'EN', 'UR', 'AR', 'FR', 'DE', 'ES', 'IT', 'PT', 'NL', 'TR', 'RU'])
             ->and(collect($languages['options'])->where('more', true)->pluck('value')->all())->toBe(['fr', 'de', 'es', 'it', 'pt', 'nl', 'tr', 'ru'])
             ->and($languages['auto'])->toBe(['en', 'ur', 'ar'])
-            ->and($languages['options'][0]['value'])->toBeNull();
+            ->and($languages['options'][0]['value'])->toBeNull()
+            // Menus say what each choice does; sentences keep the plain name.
+            ->and(collect($languages['options'])->take(4)->pluck('label')->all())->toBe(['Auto (English / Urdu / Arabic)', 'English only', 'Urdu (with English words)', 'Arabic (with English words)'])
+            ->and(LanguageChoice::label('ur'))->toBe('Urdu')->and(LanguageChoice::label('fr'))->toBe('French');
     });
 
     it('saves a client\'s language (Use Urdu for Ali from now on) and a recording\'s language', function () {
