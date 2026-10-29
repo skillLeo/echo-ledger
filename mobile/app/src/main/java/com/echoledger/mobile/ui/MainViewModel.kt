@@ -496,6 +496,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _captureTesting = MutableStateFlow(false)
     val captureTesting: StateFlow<Boolean> = _captureTesting.asStateFlow()
 
+    private val _farSideTest = MutableStateFlow<String?>(null)
+
+    /** The helper's far-side self-test: null (not run), "running", "ok …" or "fail: …" (since v1.3). */
+    val farSideTest: StateFlow<String?> = _farSideTest.asStateFlow()
+
+    /** Setup → Call capture → Test the other side: arms the voice-call mix and hears a soft beep back (1-2 s, no call needed). */
+    fun runFarSideTest() = viewModelScope.launch {
+        val helper = graph.helper.helper
+        if (helper == null) {
+            _farSideTest.value = "fail: the helper is not running. Connect it above first."
+            return@launch
+        }
+        _farSideTest.value = "running"
+        _farSideTest.value = withContext(Dispatchers.IO) {
+            runCatching { helper.selfTest() }.getOrElse { "fail: ${it.message ?: "the helper is too old: restart it"}" }
+        }
+        com.echoledger.mobile.recording.CaptureLog.add(getApplication(), "far-side test", _farSideTest.value.orEmpty())
+    }
+
     /** Setup → Call capture → Test call capture (about ten seconds; nothing is kept or uploaded). */
     fun runCaptureTest() = viewModelScope.launch {
         if (_captureTesting.value) return@launch

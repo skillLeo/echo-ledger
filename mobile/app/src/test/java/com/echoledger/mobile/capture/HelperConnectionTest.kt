@@ -25,6 +25,23 @@ class HelperConnectionTest : AppTest() {
 
         override fun startPhoneCapture(sink: ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
 
+        /** Every arm request, in order (true = arm, false = disarm). */
+        val arms = mutableListOf<Boolean>()
+        var callApps: List<String>? = null
+
+        override fun arm(on: Boolean): String {
+            arms += on
+            return if (on) "armed" else "disarmed"
+        }
+
+        override fun setCallApps(packages: Array<out String>?) {
+            callApps = packages?.toList()
+        }
+
+        override fun selfTest(): String = "ok"
+
+        override fun captureChannels(): Int = 2
+
         override fun stopCapture() = Unit
 
         override fun setCallListener(listener: ICallListener?) {
@@ -40,9 +57,61 @@ class HelperConnectionTest : AppTest() {
         override fun onCallEnded() = Unit
 
         override fun onError(message: String?) = Unit
+        override fun onCaptureState(state: String?) = Unit
     }
 
     private fun connection() = HelperConnection(app)
+
+    @Test
+    fun `call capture switched on before the helper connects arms it as soon as it does`() {
+        val connection = connection()
+        connection.setArmed(true)
+        val helper = Helper(2000)
+
+        connection.attach(helper, "shizuku")
+
+        assertEquals(listOf(true), helper.arms)
+        assertEquals("armed", connection.armState.value)
+        assertEquals(com.echoledger.mobile.core.CallTargets.DEFAULT_PACKAGES, helper.callApps?.toSet())
+    }
+
+    @Test
+    fun `a restarted helper is armed again, and switching off disarms it`() {
+        val connection = connection()
+        connection.setArmed(true)
+        val first = Helper(2000)
+        connection.attach(first, "shizuku")
+        val restarted = Helper(2000) // a new process after a reboot or a crash: a new binder
+
+        connection.attach(restarted, "shizuku")
+        connection.setArmed(false)
+
+        assertEquals(listOf(true), first.arms)
+        assertEquals(listOf(true, false), restarted.arms)
+        assertEquals("disarmed", connection.armState.value)
+    }
+
+    @Test
+    fun `with call capture off a connecting helper is never armed`() {
+        val connection = connection()
+        val helper = Helper(2000)
+
+        connection.attach(helper, "adb")
+
+        assertTrue(helper.arms.isEmpty())
+        assertNull(connection.armState.value)
+    }
+
+    @Test
+    fun `an edited call-app list reaches the running helper`() {
+        val connection = connection()
+        val helper = Helper(2000)
+        connection.attach(helper, "adb")
+
+        connection.setCallApps(setOf("com.whatsapp", "com.example.calls"))
+
+        assertEquals(listOf("com.whatsapp", "com.example.calls"), helper.callApps)
+    }
 
     @Test
     fun `a new connection has no helper and no error`() {
@@ -73,6 +142,10 @@ class HelperConnectionTest : AppTest() {
             override fun capabilities() = ""
             override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
             override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+            override fun arm(on: Boolean): String = if (on) "armed" else "disarmed"
+            override fun setCallApps(packages: Array<out String>?) = Unit
+            override fun selfTest(): String = "ok"
+            override fun captureChannels(): Int = 2
             override fun stopCapture() = Unit
             override fun setCallListener(listener: ICallListener?) = Unit
             override fun destroy() = Unit

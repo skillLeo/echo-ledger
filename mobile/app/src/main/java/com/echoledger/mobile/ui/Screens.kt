@@ -72,6 +72,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -650,6 +651,22 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                     SectionCard {
                         Text("Transcription failed", fontWeight = FontWeight.SemiBold, color = Brand.Danger)
                         Text(failureText(t), color = Brand.Muted, fontSize = 13.sp)
+                        // Since v1.3: one tap runs it again (the server starts with the best engine for its language).
+                        if (t.errorCode != "no_audio") {
+                            val retryScope = rememberCoroutineScope()
+                            var retrying by remember { mutableStateOf(false) }
+                            Button(
+                                enabled = !retrying,
+                                onClick = {
+                                    retrying = true
+                                    retryScope.launch {
+                                        vm.retranscribe(item.id, t.language)
+                                        retrying = false
+                                    }
+                                },
+                                modifier = Modifier.padding(top = 8.dp).semantics { contentDescription = "Retry the transcription" }
+                            ) { Text(if (retrying) "Retrying…" else "Retry") }
+                        }
                     }
                 }
 
@@ -1170,6 +1187,19 @@ private fun CaptureTestCard(vm: MainViewModel) {
             TextButton(onClick = {
                 scope.launch { clipboard.setClipEntry(ClipData.newPlainText("diagnostics", vm.captureDiagnostics()).toClipEntry()) }
             }) { Text("Copy diagnostics") }
+        }
+        // Since v1.3: proves the other side's path without a call (a soft beep played as a call and heard back).
+        val farTest by vm.farSideTest.collectAsState()
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(onClick = { vm.runFarSideTest() }, enabled = farTest != "running") { Text("Test the other side") }
+            farTest?.takeIf { it != "running" }?.let {
+                Text(
+                    if (it.startsWith("ok")) "✓ The other side of calls can be recorded." else "✗ ${it.removePrefix("fail: ")}",
+                    color = if (it.startsWith("ok")) Brand.Success else Brand.Danger,
+                    fontSize = 12.sp,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
         if (testing) {
             Text("Speak for a few seconds. For the other side, run the test during a WhatsApp call.", color = Brand.Muted, fontSize = 12.sp)

@@ -1,5 +1,6 @@
 package com.echoledger.mobile.recording
 
+import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.MarkerDto
 import com.echoledger.mobile.data.PauseDto
@@ -95,7 +96,8 @@ class RecordingNotes {
 
 /** Per-app auto-record switches (B1): the apps whose calls the phone detects, and what auto mode does with each. */
 object AutoRecordRules {
-    val APPS = listOf(SourceApp.WHATSAPP, SourceApp.WHATSAPP_BUSINESS)
+    /** One switch per known call app (the call-app list's sources, in its order). */
+    val APPS: List<SourceApp> = CallTargets.KNOWN.values.distinct()
 
     /** Apps without a stored switch are on. */
     fun records(app: SourceApp, switches: Map<String, Boolean>): Boolean = switches[app.wire] != false

@@ -30,6 +30,9 @@ object SettingsTransfer {
         "decisionTimeout",
         "decisionTimeoutChosen",
         "autoRecordApps",
+        "extraCallApps",
+        "captionsDuringCalls",
+        "recordingKbps",
         "captionStyle",
         "farSideWarning",
         "inputDevice",
@@ -52,6 +55,10 @@ object SettingsTransfer {
      */
     val NOT_PORTABLE: Set<String> = setOf(
         "phoneCalls",
+        // Where the control pill sits belongs to this phone's screen.
+        "pillEdge",
+        "pillY",
+        "pillDot",
         "serverUrl",
         "pins",
         "deviceId",

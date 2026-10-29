@@ -171,8 +171,28 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 | ☐ | 80l | Open an old recording that says "No audio". | A grey dot and "No audio" (not red "Failed"), no player and no Share link; **Run capture test** opens Setup and **Delete** removes it in one tap. The console shows the same grey "No audio". | capture |
 | ☐ | 80m | **Setup → Call capture → Copy diagnostics**, paste it into a note. | Phone model, Android version, app and helper builds and the capture log (call started, capture start, sound arriving, recording saved). No names, numbers or transcript text. | capture |
 | ☐ | 81 | Let a WhatsApp call ring out, or reject it. | Nothing is saved and nothing is asked. | A-16 |
-| ☐ | 82 | Take a call with captions on. | The caption bubble shows Me and Client, does not take the focus, and lets touches through. | A-17 |
+| ☐ | 82 | Take a call, tap the pill, **Show captions**. | A caption panel opens (at most a third of the screen) with Me and Client; it scrolls, shows **Jump to latest** when scrolled back, moves by its title bar and closes with its × while the recording carries on. | A-17 |
 | ☐ | 83 | Stay on the Record tab during a Keep that is uploading. | The upload card updates by itself, without leaving the tab. | A6.M12 |
+
+### Calls on Android 16/17 (v1.3 device run, done together over adb)
+
+Run with the phone on USB or Wireless debugging and a second phone to call from. Before the run: `adb shell run-as com.echoledger.mobile touch files/debug-keep-plain` (debug builds keep a plain WAV of each recording in `files/debug-recordings/` for this check; release builds never do). After each call: `adb exec-out run-as com.echoledger.mobile cat files/debug-recordings/<id>.wav > call.wav` and measure each channel (RMS / peak / seconds of speech, L = me, R = the other side); the capture log (`run-as … tail files/capture-log.txt`) has a `levels` line too. "Both sides" means both channels above -45 dBFS RMS during speech and a transcript with Me and Client lines.
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | 84a | Install the build, open the app once, wait 10 s. `adb shell dumpsys audio \| grep registerAudioPolicy \| tail -2` | One `registerAudioPolicy … u/pid:2000/<helper pid>` and **no** `unregisterAudioPolicy` after it: the voice-call mix is armed before any call. | C3-01 |
+| ☐ | 84b | Setup → Call capture → **Test the other side** (or `app_process … HelperMain --self-test`). | "ok sink=shell rate=48000 … peak=1200": the far-side path works without a call. | C3-02 |
+| ☐ | 84c | WhatsApp voice call, 1 minute, both people talk. Hang up, **Keep**. | Nothing while it rings. When it connects: the pill "● 00:01" at the right edge, top third. WAV: both channels with speech; transcript has Me and Client. | C3-03 |
+| ☐ | 84d | Same with **WhatsApp Business**, then a **Google Meet** app call, then a **Zoom** app meeting. | Each is detected and labelled with its app (WhatsApp Business, Google Meet, Zoom) and has both sides. A game with voice chat starts nothing. | C3-04 |
+| ☐ | 84e | During a call: tap the pill → **Pause**, wait 10 s, **Resume**; **Shrink to a dot**; drag the dot to the left edge and let go. | The paused 10 s are not in the file. The dot snaps to the left edge and comes back there on the next call. | C3-05 |
+| ☐ | 84f | Tap the pill → **Discard now**, then **Undo** within 5 s; repeat and let the 5 s run out. | Undo keeps recording as before. After 5 s the pill goes, nothing is uploaded, nothing appears in the Library or on the server. | C3-06 |
+| ☐ | 84g | Tap the pill → **Show captions**, then close them with ×; then **Hide controls**. | Captions open in their own panel and close without stopping the recording; hidden controls come back from the notification's Live view (**Show controls**). | C3-07 |
+| ☐ | 84h | Pull down the notification during a call. | "Recording call with <name>" with a running clock and Pause · Stop · Captions · Discard. A tap opens the Record tab's Live view with the full transcript and the same buttons. | C3-08 |
+| ☐ | 84i | Settings → Record phone calls = Always. Receive a SIM call, then make one. | Both recorded through the helper (phone line), or, when the line gives silence, the notice says so and the Phone app's own recording is imported after the call (needs its **Auto record calls** on). | C3-09 |
+| ☐ | 84j | During a WhatsApp recording, take a SIM call, hang it up, carry on in WhatsApp. | The pill says "On hold" during the SIM call; the WhatsApp recording continues in the same file afterwards. | C3-10 |
+| ☐ | 84k | Record a voice note from the Record tab with captions shown. | The same pill and caption panel; Stop uploads it. | C3-11 |
+| ☐ | 84l | Reboot the phone, start Shizuku, wait 30 s, take a WhatsApp call. | 84a holds again (armed after the reboot) and the call has both sides. | C3-12 |
+| ☐ | 84m | Call with a third app that is not in the list (Settings → Auto-record apps → add its package name), then remove it again. | Recorded as "Other" while listed; nothing after removing it. | C3-13 |
 
 ### Library, transcript, voice notes
 

@@ -237,6 +237,21 @@ private fun MicrophoneEntry(vm: MainViewModel, settings: AppSettings, onSetup: (
                 vm.updateSettings { it.copy(micSource = if (it.micSource == "mic") "voice_communication" else "mic") }
             }) { Text("Change") }
         }
+        Text(
+            "During calls your side always uses the raw microphone (One UI gives the echo-cancelled one silence).",
+            color = Brand.Muted,
+            fontSize = 12.sp
+        )
+        // Since v1.3: Opus bitrate per side. Higher keeps more detail for transcription; files grow with it.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Recording quality")
+                Text("${settings.recordingKbps} kbps per side (Opus, 48 kHz)", color = Brand.Muted, fontSize = 12.sp)
+            }
+            TextButton(onClick = {
+                vm.updateSettings { it.copy(recordingKbps = AppSettings.nextRecordingKbps(it.recordingKbps)) }
+            }) { Text("Change") }
+        }
     }
     CaptureHealthSection(vm, settings, helperConnected = helper.connected, recording = live.active, onSetup = onSetup)
 }

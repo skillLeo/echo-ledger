@@ -6,14 +6,21 @@ import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioPlaybackConfiguration
 import android.media.AudioRecord
+import android.media.AudioTimestamp
 import android.media.MediaRecorder
 import android.os.Binder
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.Process
+import android.os.SystemClock
+import com.echoledger.mobile.core.CallTargets
+import com.echoledger.mobile.core.PhoneCalls
+import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.recording.Pcm
-import com.echoledger.mobile.recording.PcmQueue
+import com.echoledger.mobile.recording.SilenceWatch
+import com.echoledger.mobile.recording.SlotPairer
 import java.io.FileOutputStream
 import kotlin.concurrent.thread
 
@@ -21,8 +28,11 @@ import kotlin.concurrent.thread
  * The privileged helper (shell UID 2000): detects calls and captures both sides.
  * Runs inside a Shizuku UserService or an `app_process` launched over ADB; never inside the app process.
  *
- * Near end: the microphone, but never while it would mute another app's call (see [micSafeNow]). Far end of a WhatsApp
- * call: a playback mix ([FarPartyCapture]). A SIM call: both sides from the phone line ([openPhoneLine], [openUplink]).
+ * An app call (any app in the call-app list): my side is the microphone (MIC, never privacy-sensitive, so it never
+ * takes the microphone from the call app; taken again when One UI silences it mid-call), the other side is the
+ * voice-call mix armed before the call ([FarPartyCapture]). The two are paired by capture time ([SlotPairer]) and
+ * checked for digital silence ([SilenceWatch]): a far side that stays silent is reported with its reason, never left
+ * as a quiet one-sided recording. A SIM call: one recorder of the phone line ([openPhoneLine]).
  * docs/research/android-capture.md §2–§4.
  */
 class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
@@ -41,8 +51,9 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         /** How often (in reads of 10 ms) the helper checks that it is not muting anyone and is not muted itself. */
         private const val CHECK_EVERY_READS = 25
 
-        /** The phone line's and the other side's rate: the highest Android allows a privileged call capture. */
-        private const val LINE_RATE = Pcm.STT_RATE
+        /** The microphone is taken again at most this often and this many times per call when it goes digitally silent. */
+        private const val RETAKE_GAP_MS = 5_000L
+        private const val MAX_RETAKES = 6
 
         /** Since Android 16/17 the permission that lets a recorder keep the microphone beside another app's call. */
         private const val BYPASS_CONCURRENT = "android.permission.BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION"
@@ -55,13 +66,16 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             MediaRecorder.AudioSource.REMOTE_SUBMIX
         )
 
-        /** Said once when Android feeds the microphone silence during another app's call. */
-        private const val MIC_MUTED = "Your own voice is not recorded in this call: during another app's call this Android " +
-            "version gives the microphone only to that app and to system apps. The other side is still recorded."
+        /** AudioFormat.CHANNEL_IN_VOICE_UPLINK | CHANNEL_IN_VOICE_DNLINK (hidden): each direction of the line on its own channel. */
+        private const val CHANNEL_IN_UPLINK_DOWNLINK = 0x4000 or 0x8000
+
+        /** Said once when Android keeps feeding the microphone silence during another app's call. */
+        private const val MIC_MUTED = "Your own voice is not recorded in this call: Android keeps giving EchoLedger's " +
+            "microphone silence during this app's call. The other side is still recorded."
 
         /** Said once when a SIM call's phone line gives only silence (the phone maker keeps it for its own dialer). */
-        private const val LINE_SILENT = "The phone line gave no sound, so this SIM call cannot be recorded on this phone: " +
-            "the phone maker lets only its own Phone app record calls."
+        private const val LINE_SILENT = "The phone line gave no sound, so this SIM call cannot be recorded through the " +
+            "helper on this phone. Turn on the Phone app's call recording and EchoLedger imports its recordings."
 
         /** Reads of 10 ms after which a phone line that gave only zeros is reported as blocked. */
         private const val LINE_SILENT_READS = 800
@@ -69,6 +83,8 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         /** Said when the helper gave the microphone back because it was muting the call. */
         private const val MIC_GIVEN_BACK = "EchoLedger stopped recording your voice because it was muting the call for the other " +
             "person. The other side is still recorded."
+
+        private const val NS_PER_SECOND = 1_000_000_000L
     }
 
     @Volatile private var listener: ICallListener? = null
@@ -76,7 +92,21 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
     @Volatile private var capturing = false
 
     private var captureThread: Thread? = null
-    private var farParty: FarPartyCapture? = null
+
+    /** The other side of app calls, armed before any call (see [FarPartyCapture]); one per helper process. */
+    private val farMix by lazy { FarPartyCapture(audioManager) }
+
+    /** The packages whose voice calls are calls: the app's call-app list (the known apps until it sends one). */
+    @Volatile private var callApps: Set<String> = CallTargets.DEFAULT_PACKAGES
+
+    /** The voice player of the call in progress, to tell whether it was created before the mix was armed. */
+    @Volatile private var callPlayer: AudioPlaybackConfiguration? = null
+
+    /** The package of the app call in progress, for the far-side messages. */
+    @Volatile private var callPackage: String? = null
+
+    /** Channels of the capture last started (see the AIDL). */
+    @Volatile private var channels = 2
 
     init {
         startCallMonitor()
@@ -94,45 +124,85 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         // Which package the recorders are opened as (must be com.android.shell for UID 2000).
         append(";as=").append(runCatching { context.opPackageName }.getOrNull())
         append(";mic_beside_calls=").append(runCatching { bypassesConcurrentCapture() }.getOrNull())
+        append(";armed=").append(farMix.armed)
+        append(";sink=").append(farMix.sinkKind)
+        append(";call_apps=").append(callApps.size)
     }
 
     override fun setCallListener(listener: ICallListener?) {
         this.listener = listener
     }
 
+    override fun arm(on: Boolean): String = asHelper {
+        if (on) {
+            farMix.arm()?.let { "error: $it" } ?: "armed"
+        } else {
+            if (!capturing) farMix.disarm()
+            "disarmed"
+        }
+    }
+
+    override fun setCallApps(packages: Array<out String>?) {
+        callApps = packages?.mapNotNull(CallTargets::clean)?.toSet()?.takeIf { it.isNotEmpty() } ?: CallTargets.DEFAULT_PACKAGES
+    }
+
+    override fun selfTest(): String = asHelper { if (capturing) "busy: a call is being recorded" else farMix.selfTest(context) }
+
+    override fun captureChannels(): Int = channels
+
     override fun startCapture(sink: ParcelFileDescriptor, sampleRate: Int, micSource: Int): Boolean =
-        begin(sink, sampleRate, micSource, phone = false)
+        asHelper { beginAsHelper(sink, sampleRate, micSource, phone = false) }
 
     override fun startPhoneCapture(sink: ParcelFileDescriptor, sampleRate: Int, micSource: Int): Boolean =
-        begin(sink, sampleRate, micSource, phone = true)
+        asHelper { beginAsHelper(sink, sampleRate, micSource, phone = true) }
 
-    /** One side of the call: a started recorder, its rate, and whether it is the microphone (which can mute or be muted). */
-    private class Side(val record: AudioRecord, val rate: Int, val mic: Boolean) {
-        val chunk = rate / 100 // 10 ms
-        val buf = ShortArray(chunk * 4)
-        var last: Short = 0
-
-        /** Whether any sound at all has arrived (a blocked phone line gives exact zeros). */
-        var heard = false
-
-        fun release() {
-            runCatching { record.stop() }
-            runCatching { record.release() }
+    /**
+     * Runs [block] as the helper itself. Called over binder from the app: Android's in-process checks (AudioPolicy looks
+     * at the calling uid) would see the app, which holds none of the audio permissions ("Cannot use AudioPolicy for …
+     * uid 10462, needs MODIFY_AUDIO_ROUTING"), so the app's identity is cleared and the helper's shell uid is checked.
+     */
+    private inline fun <T> asHelper(block: () -> T): T {
+        val identity = Binder.clearCallingIdentity()
+        try {
+            return block()
+        } finally {
+            Binder.restoreCallingIdentity(identity)
         }
     }
 
     /**
-     * Starts both sides. Called over binder from the app: Android's in-process checks (AudioPolicy's policyReadyToUse
-     * looks at the calling uid) would see the app, which holds none of the audio permissions ("Cannot use AudioPolicy
-     * for … uid 10462, needs MODIFY_AUDIO_ROUTING"), so the app's identity is cleared and the helper's own shell uid
-     * is checked.
+     * One recorder feeding the capture: its rate, its channels (2 only for a phone line that gives each direction apart),
+     * which lane of the recording it fills (0 = me, 1 = the other side), and whether it is the microphone.
      */
-    private fun begin(sink: ParcelFileDescriptor, sampleRate: Int, micSource: Int, phone: Boolean): Boolean {
-        val identity = Binder.clearCallingIdentity()
-        try {
-            return beginAsHelper(sink, sampleRate, micSource, phone)
-        } finally {
-            Binder.restoreCallingIdentity(identity)
+    private class Side(val record: AudioRecord, val rate: Int, val lane: Int, val mic: Boolean, val channels: Int = 1) {
+        val chunk = rate / 100 // 10 ms
+        val buf = ShortArray(chunk * channels * 8)
+        val last = ShortArray(2)
+        private val stamp = AudioTimestamp()
+        private var framesRead = 0L
+
+        /** Whether any sound at all has arrived (a blocked phone line gives exact zeros). */
+        var heard = false
+
+        /**
+         * The monotonic time the first of [frames] frames just read was captured: from the recorder's own timestamp, so
+         * both sides line up by when they were heard, not by when the reads returned; the arrival time when there is none.
+         */
+        fun startOf(frames: Int): Long {
+            val first = framesRead
+            framesRead += frames
+            val ok = runCatching { record.getTimestamp(stamp, AudioTimestamp.TIMEBASE_MONOTONIC) == AudioRecord.SUCCESS }
+                .getOrDefault(false)
+            return if (ok && stamp.nanoTime > 0) {
+                stamp.nanoTime + (first - stamp.framePosition) * NS_PER_SECOND / rate
+            } else {
+                System.nanoTime() - frames * NS_PER_SECOND / rate
+            }
+        }
+
+        fun release() {
+            runCatching { record.stop() }
+            runCatching { record.release() }
         }
     }
 
@@ -141,71 +211,75 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         if (capturing) return true
         val rate = if (sampleRate > 0) sampleRate else Pcm.CAPTURE_RATE
         val problems = mutableListOf<String>()
-
-        // The other side is captured at 16 kHz: Android refuses a privileged call capture above it ("Privileged audio
-        // capture sample rate 48000 can not be over 16000kHz"). Each side is raised to the file's rate when written.
-        val far = FarPartyCapture(context, audioManager, LINE_RATE)
         var near: Side? = null
-        val farSide: Side?
+        var far: Side? = null
         if (phone) {
-            // A SIM call: the call's own audio is not an app recorder, and the phone line's sources are never muted.
-            val line = openPhoneLine(problems)
-            farSide = line?.first?.let { Side(it, LINE_RATE, mic = false) }
-            if (line?.second == true) {
-                problems += "the phone line gives both voices on one track"
-            } else {
-                near = openUplink(problems)?.let { Side(it, LINE_RATE, mic = false) }
-                    ?: openMic(rate, MediaRecorder.AudioSource.MIC, problems)?.let { Side(it, rate, mic = true) }
-            }
-            far.stop()
+            // A SIM call: one recorder of the phone line and nothing else. A second voice recorder beside it makes
+            // Android drop one direction without a word, so the microphone is never opened here.
+            near = openPhoneLine(rate, problems)
+            channels = if (near?.channels == 2) 2 else 1
         } else {
             // During another app's call the microphone is an ordinary recorder (MIC, not privacy-sensitive): Android then
-            // keeps the call app's recorder and never mutes it for ours; ours may be fed silence instead (said once).
-            val source = if (inCallNow()) MediaRecorder.AudioSource.MIC else micSource
-            near = openMic(rate, source, problems)?.let { Side(it, rate, mic = true) }
-            farSide = runCatching { far.start() }
-                .onFailure { problems += "far side: ${reason(it)}" }
+            // keeps the call app's recorder and never mutes it for ours. VOICE_COMMUNICATION is fed zeros on One UI.
+            val source = if (inCallNow() || micSource <= 0) MediaRecorder.AudioSource.MIC else micSource
+            near = openMic(rate, source, problems)?.let { Side(it, rate, lane = 0, mic = true) }
+            far = runCatching { farMix.openSink(context) }
+                .onFailure { problems += "other side: ${FarPartyCapture.reason(it)}" }
                 .getOrNull()
-                ?.takeIf { record -> started(record).also { if (!it) problems += "far side: did not start" } }
-                ?.let { Side(it, LINE_RATE, mic = false) }
-            if (farSide == null) far.stop()
+                ?.let { Side(it, farMix.sampleRate, lane = 1, mic = false) }
+            if (far != null) lateArmReason()?.let { problems += it }
+            channels = 2
         }
-        farParty = far
 
         // Nothing to record: say why (the app shows it) instead of a recording that stays silent.
-        if (near == null && farSide == null) {
+        if (near == null && far == null) {
             report("Call capture could not start: ${problems.joinToString("; ").ifEmpty { "no recorder could be opened" }}")
+            farMix.closeSink()
             runCatching { sink.close() }
             return false
         }
         if (problems.isNotEmpty()) report("Call capture is partly working: ${problems.joinToString("; ")}")
         capturing = true
-        captureThread = thread(name = "el-helper-capture") { pump(sink, rate, near, farSide, far, phone) }
+        captureThread = thread(name = "el-helper-capture") { pump(sink, rate, near, far, phone) }
         return true
     }
 
     /**
-     * Writes both sides as interleaved stereo at [rate] (L = me, R = the other side). The near side paces the stream
-     * (blocking reads); without it the far side does. Each side is raised to [rate] and queued, so recorders that deliver
-     * at their own pace line up. While the microphone is open it is checked often: if Android starts muting another
-     * app's recorder because of it, the microphone is given back at once.
+     * Writes the call as interleaved stereo at [rate] (L = me, R = the other side; a mixed phone line fills L only).
+     * The first side paces the loop (blocking reads of 10 ms), the other is read without blocking; both go through the
+     * [SlotPairer] by capture time. While the microphone is open it is checked often: if Android starts muting another
+     * app's recorder because of it, it is given back at once; if it goes digitally silent, it is taken again.
      */
-    private fun pump(sink: ParcelFileDescriptor, rate: Int, first: Side?, farSide: Side?, far: FarPartyCapture, phone: Boolean) {
+    private fun pump(sink: ParcelFileDescriptor, rate: Int, first: Side?, far: Side?, phone: Boolean) {
         val out = FileOutputStream(sink.fileDescriptor)
+        var pairer = SlotPairer(rate)
+        val watch = SilenceWatch(rate)
         var near = first
-        val nearQueue = PcmQueue(rate)
-        val farQueue = PcmQueue(rate) // at most 1 s of the other side waits for the near side
         var failedReads = 0
         var reads = 0
+        var retakes = 0
+        var lastRetake = 0L
         var mutedSaid = false
+        var farSaid = false
         var lineSaid = false
+        var suspended = false
         try {
             while (capturing) {
                 reads++
+                // A SIM call that takes over during an app call holds it: nothing is written until the app call is back.
+                if (!phone && reads % CHECK_EVERY_READS == 0) {
+                    val held = audioManager.mode == AudioManager.MODE_IN_CALL
+                    if (held != suspended) {
+                        suspended = held
+                        if (held) out.write(Pcm.toLittleEndianBytes(pairer.flush())) else pairer = SlotPairer(rate)
+                        state(if (held) "suspended" else "resumed")
+                    }
+                }
                 // A SIM call's phone line that gave nothing but zeros for 8 s is blocked by the phone maker: say so.
-                if (phone && !lineSaid && reads == LINE_SILENT_READS && listOfNotNull(near, farSide).none { !it.mic && it.heard }) {
+                if (phone && !lineSaid && reads == LINE_SILENT_READS && near?.heard != true) {
                     lineSaid = true
                     report(LINE_SILENT)
+                    state("line_silent")
                 }
                 val current = near
                 // The microphone is checked on every read for the first half second, then four times a second.
@@ -216,19 +290,15 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
                         report(MIC_GIVEN_BACK)
                         continue
                     }
-                    if (!mutedSaid && silenced(current.record)) {
-                        mutedSaid = true
-                        report(MIC_MUTED)
-                    }
                 }
-                val primary = near ?: farSide ?: break
-                val n = pull(primary, if (primary === near) nearQueue else farQueue, rate, blocking = true)
-                if (primary === near && farSide != null) pull(farSide, farQueue, rate, blocking = false)
+                val primary = near ?: far ?: break
+                val n = pull(primary, pairer, rate, blocking = true, keep = !suspended)
+                if (primary === near && far != null) pull(far, pairer, rate, blocking = false, keep = !suspended)
                 if (n <= 0) {
                     // A recorder that keeps failing would leave a silent file: stop and say so.
                     if (++failedReads >= MAX_FAILED_READS) {
                         // A microphone that died mid-call (a headset unplugged) leaves the other side running: keep it.
-                        if (primary === near && farSide != null) {
+                        if (primary === near && far != null) {
                             primary.release()
                             near = null
                             failedReads = 0
@@ -242,42 +312,94 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
                     continue
                 }
                 failedReads = 0
-                out.write(Pcm.toLittleEndianBytes(Pcm.interleave(nearQueue.take(n), farQueue.take(n))))
+                val block = pairer.drain()
+                if (block.isEmpty()) continue
+                watch.feed(block, micOpen = near?.mic == true)
+                out.write(Pcm.toLittleEndianBytes(block))
+
+                // One UI can silence the microphone mid-call (exact zeros): take it again, a few times at most.
+                val mic = near
+                if (mic != null && mic.mic && watch.micDead()) {
+                    val now = SystemClock.elapsedRealtime()
+                    if (retakes < MAX_RETAKES && now - lastRetake >= RETAKE_GAP_MS) {
+                        retakes++
+                        lastRetake = now
+                        mic.release()
+                        near = openMic(rate, MediaRecorder.AudioSource.MIC, mutableListOf())?.let { Side(it, rate, lane = 0, mic = true) }
+                        watch.micRetaken()
+                    } else if (retakes >= MAX_RETAKES && !mutedSaid) {
+                        mutedSaid = true
+                        report(MIC_MUTED)
+                    }
+                }
+                if (far != null && !farSaid && watch.farSilent()) {
+                    farSaid = true
+                    report(farSilentReason())
+                    state("far_silent")
+                }
             }
         } catch (e: Exception) {
             report("Capture stopped: ${e.message}")
         } finally {
+            runCatching { out.write(Pcm.toLittleEndianBytes(pairer.flush())) }
             near?.release()
-            if (phone) farSide?.release()
-            far.stop()
+            farMix.closeSink()
             runCatching { out.close() }
             runCatching { sink.close() }
             capturing = false
         }
     }
 
-    /** Reads one chunk of [side] (a blocking 10 ms, or what is waiting), raises it to [rate] and queues it; samples queued. */
-    private fun pull(side: Side, queue: PcmQueue, rate: Int, blocking: Boolean): Int {
+    /**
+     * Reads one chunk of [side] (a blocking 10 ms, or what is waiting), raises it to [rate] and hands it to the pairer at
+     * its capture time; frames read. [keep] false (suspended) reads and drops, so the recorder stays open and current.
+     */
+    private fun pull(side: Side, pairer: SlotPairer, rate: Int, blocking: Boolean, keep: Boolean): Int {
         val got = if (blocking) {
-            side.record.read(side.buf, 0, side.chunk)
+            side.record.read(side.buf, 0, side.chunk * side.channels)
         } else {
             side.record.read(side.buf, 0, side.buf.size, AudioRecord.READ_NON_BLOCKING)
         }
         if (got <= 0) return got
+        val frames = got / side.channels
+        val at = side.startOf(frames)
         if (!side.heard) side.heard = (0 until got).any { side.buf[it].toInt() != 0 }
+        if (!keep) return frames
         val factor = (rate / side.rate).coerceAtLeast(1)
-        queue.push(Pcm.upsample(side.buf, got, factor, side.last))
-        side.last = side.buf[got - 1]
-        return got * factor
+        for (channel in 0 until side.channels) {
+            val mono = if (side.channels == 1) side.buf else ShortArray(frames) { side.buf[it * side.channels + channel] }
+            val lane = if (side.channels == 1) side.lane else channel
+            pairer.push(lane, at, Pcm.upsample(mono, frames, factor, side.last[channel]), frames * factor)
+            side.last[channel] = mono[frames - 1]
+        }
+        return frames
     }
 
-    /**
-     * Two privacy-sensitive recorders (VOICE_COMMUNICATION, CAMCORDER) never share the microphone: the one that started
-     * last gets the sound and the other is muted, so a helper recording VOICE_COMMUNICATION during a WhatsApp call could
-     * mute the user for the other person. The helper's microphone is therefore never privacy-sensitive (see [open]).
-     * Whether Android also feeds it the sound depends on the concurrency bypass, which needs [BYPASS_CONCURRENT] since
-     * Android 16/17 (system apps only); before it CAPTURE_AUDIO_OUTPUT, which the shell holds, was enough.
-     */
+    /** The reason the other side of an app call is not reaching the recording, as plainly as Android lets us tell. */
+    private fun farSilentReason(): String {
+        val app = SourceApp.fromPackage(callPackage)?.label ?: "the call app"
+        val player = callPlayer
+        return when {
+            player != null && farMix.createdBeforeArm(player.playerInterfaceId()) ->
+                "The other side of this call is not being recorded: the $app call started before call capture was ready " +
+                    "(the helper had just started). Calls from now on record both sides."
+
+            player?.audioAttributes?.allowedCapturePolicy == AudioAttributes.ALLOW_CAPTURE_BY_NONE ->
+                "The other side of this call is not being recorded: $app does not let other apps record its call audio."
+
+            else ->
+                "The other side of this call is silent: Android gave EchoLedger no sound from $app while you talked. " +
+                    "Run Settings, Call capture, Test to check the helper."
+        }
+    }
+
+    /** Said at the start when the call's voice player is older than the armed mix (its audio never reaches it). */
+    private fun lateArmReason(): String? {
+        val player = callPlayer ?: return null
+        if (!farMix.createdBeforeArm(player.playerInterfaceId())) return null
+        return "the call started before call capture was ready, so its other side cannot be recorded (the next call will be)"
+    }
+
     private fun inCallNow(): Boolean {
         val mode = audioManager.mode
         return mode == AudioManager.MODE_IN_COMMUNICATION || mode == AudioManager.MODE_IN_CALL
@@ -302,47 +424,53 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
      * (OEM builds differ). Only a recorder that really started recording is used.
      */
     private fun openMic(rate: Int, micSource: Int, problems: MutableList<String>): AudioRecord? {
-        val sources = listOf(
-            if (micSource > 0) micSource else MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-            MediaRecorder.AudioSource.MIC,
-            MediaRecorder.AudioSource.VOICE_RECOGNITION
-        ).distinct()
+        val sources = listOf(micSource, MediaRecorder.AudioSource.MIC, MediaRecorder.AudioSource.VOICE_RECOGNITION).distinct()
         val mine = mutableListOf<String>()
         for (source in sources) {
             // An earlier attempt failing does not matter once one works; the other side's notes are kept.
-            open(source, rate, "mic source $source", mine)?.let { return it }
+            open(source, rate, AudioFormat.CHANNEL_IN_MONO, "mic source $source", mine)?.let { return it }
         }
         problems += mine
         return null
     }
 
-    /** A SIM call's own voice (since v1.2): the uplink of the phone line, which Android never mutes. */
-    private fun openUplink(problems: MutableList<String>): AudioRecord? =
-        open(MediaRecorder.AudioSource.VOICE_UPLINK, LINE_RATE, "phone line uplink", problems)
-
     /**
-     * A SIM call's far side (since v1.2): the call audio interception API first, then the downlink of the phone line
-     * (both need permissions the shell holds). Some phones only give the whole call (both voices); then the second value
-     * is true. Null when nothing works.
+     * A SIM call (since v1.3): one recorder of the whole phone line (VOICE_CALL; the shell holds CAPTURE_AUDIO_OUTPUT).
+     * Each direction on its own channel when the phone offers it (L = my uplink, R = the downlink), else both voices on
+     * one track; 48 kHz first, then the 16 kHz most phone lines run at. Null when nothing works.
      */
-    private fun openPhoneLine(problems: MutableList<String>): Pair<AudioRecord, Boolean>? {
-        downlinkInterception(lineFormat(), problems)?.let { record ->
-            if (started(record)) return record to false
-            problems += "phone line interception: did not start"
-            runCatching { record.release() }
+    private fun openPhoneLine(rate: Int, problems: MutableList<String>): Side? {
+        for (lineRate in listOf(rate, Pcm.STT_RATE).distinct()) {
+            open(MediaRecorder.AudioSource.VOICE_CALL, lineRate, CHANNEL_IN_UPLINK_DOWNLINK, "phone line (both directions)", problems)
+                ?.let { return Side(it, lineRate, lane = 0, mic = false, channels = 2) }
+            open(MediaRecorder.AudioSource.VOICE_CALL, lineRate, AudioFormat.CHANNEL_IN_MONO, "phone line", problems)
+                ?.let { return Side(it, lineRate, lane = 0, mic = false) }
         }
-        open(MediaRecorder.AudioSource.VOICE_DOWNLINK, LINE_RATE, "phone line downlink", problems)?.let { return it to false }
-        open(MediaRecorder.AudioSource.VOICE_CALL, LINE_RATE, "phone line", problems)?.let { return it to true }
         return null
     }
 
     /** Opens and starts [source] at [rate], as the shell first and then with the process's own attribution. */
     @SuppressLint("MissingPermission")
-    private fun open(source: Int, rate: Int, label: String, problems: MutableList<String>): AudioRecord? {
-        val format = AudioFormat.Builder().setSampleRate(rate).setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-            .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build()
-        val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-            .coerceAtLeast(rate / 100 * 2 * 8)
+    private fun open(source: Int, rate: Int, mask: Int, label: String, problems: MutableList<String>): AudioRecord? {
+        val format = runCatching {
+            AudioFormat.Builder().setSampleRate(rate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(mask).build()
+        }.getOrElse {
+            problems += "$label: ${FarPartyCapture.reason(it)}"
+            return null
+        }
+        val count = Integer.bitCount(mask)
+        val minBuffer = AudioRecord.getMinBufferSize(
+            rate,
+            if (count ==
+                2
+            ) {
+                AudioFormat.CHANNEL_IN_STEREO
+            } else {
+                AudioFormat.CHANNEL_IN_MONO
+            },
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+            .coerceAtLeast(rate / 100 * 2 * count * 8)
         for (withContext in listOf(true, false)) {
             if (withContext && Build.VERSION.SDK_INT < 31) continue
             val record = runCatching {
@@ -354,7 +482,7 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
                 if (Build.VERSION.SDK_INT >= 30 && source !in LINE_SOURCES) builder.setPrivacySensitive(false)
                 builder.build()
             }.getOrElse {
-                problems += "$label: ${reason(it)}"
+                problems += "$label: ${FarPartyCapture.reason(it)}"
                 null
             } ?: continue
             if (started(record)) return record
@@ -362,37 +490,6 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             runCatching { record.release() }
         }
         return null
-    }
-
-    private fun lineFormat(): AudioFormat = AudioFormat.Builder().setSampleRate(LINE_RATE).setChannelMask(AudioFormat.CHANNEL_IN_MONO)
-        .setEncoding(AudioFormat.ENCODING_PCM_16BIT).build()
-
-    private fun downlinkInterception(format: AudioFormat, problems: MutableList<String>): AudioRecord? = runCatching {
-        if (Build.VERSION.SDK_INT < 33) return null
-        val type = AudioManager::class.java
-        if (type.getMethod("isPstnCallAudioInterceptable").invoke(audioManager) != true) {
-            problems += "phone line interception: not offered for this call"
-            return null
-        }
-        type.getMethod("getCallDownlinkExtractionAudioRecord", AudioFormat::class.java).invoke(audioManager, format) as AudioRecord
-    }.getOrElse {
-        problems += "phone line interception: ${reason(it)}"
-        null
-    }
-
-    /** Whether Android is feeding [record] silence (another app's call has the microphone). */
-    private fun silenced(record: AudioRecord): Boolean =
-        runCatching { record.activeRecordingConfiguration?.isClientSilenced == true }.getOrDefault(false)
-
-    /** The real error behind a reflective call ("InvocationTargetException" alone says nothing). */
-    private fun reason(e: Throwable): String {
-        var t = e
-        while (true) {
-            val next = (t as? java.lang.reflect.InvocationTargetException)?.targetException ?: t.cause
-            if (next == null || next === t) break
-            t = next
-        }
-        return t.javaClass.simpleName + (t.message?.let { ": $it" } ?: "")
     }
 
     /** Starts [record] and checks it is really recording (Android can refuse silently: state stays stopped). */
@@ -407,23 +504,27 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
     private fun report(message: String) {
         runCatching { listener?.onError(message) }
     }
+
+    private fun state(value: String) {
+        runCatching { listener?.onCaptureState(value) }
+    }
+
     override fun stopCapture() {
         capturing = false
         captureThread?.join(2_000)
         captureThread = null
-        farParty = null
     }
 
     override fun destroy() {
         stopCapture()
+        farMix.disarm()
         System.exit(0)
     }
 
     /**
      * Call detection: VoIP sets MODE_IN_COMMUNICATION; the helper (holding MODIFY_AUDIO_ROUTING) can see the real UID of
-     * the voice-communication player and confirm it belongs to WhatsApp / WhatsApp Business. A SIM call sets
-     * MODE_IN_CALL (since v1.2 reported as [com.echoledger.mobile.core.CallTargets.TELEPHONY]; the app decides whether
-     * to record it).
+     * the voice-communication player and checks it belongs to an app in the call-app list. A SIM call sets
+     * MODE_IN_CALL (reported as [CallTargets.TELEPHONY]; the app decides whether to record it).
      */
     private fun startCallMonitor() {
         thread(name = "el-helper-calls", isDaemon = true) {
@@ -431,12 +532,20 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             while (true) {
                 runCatching {
                     val mode = audioManager.mode
-                    val pkg = com.echoledger.mobile.core.PhoneCalls.callApp(mode) { whatsappVoicePlayer() }
+                    // A SIM call that holds an app call being recorded is not a new call: the capture suspends itself.
+                    val pkg = if (capturing && inCall && mode == AudioManager.MODE_IN_CALL) {
+                        null
+                    } else {
+                        PhoneCalls.callApp(mode) { voiceCallApp() }
+                    }
                     if (!inCall && pkg != null) {
                         inCall = true
+                        callPackage = pkg
                         listener?.onCallStarted(pkg)
-                    } else if (inCall && !com.echoledger.mobile.core.PhoneCalls.inCall(mode)) {
+                    } else if (inCall && !PhoneCalls.inCall(mode)) {
                         inCall = false
+                        callPlayer = null
+                        callPackage = null
                         listener?.onCallEnded()
                     }
                 }
@@ -445,12 +554,15 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         }
     }
 
-    private fun whatsappVoicePlayer(): String? {
+    /** The call-app package playing a voice call (its player is kept for the far-side checks); null for any other app. */
+    private fun voiceCallApp(): String? {
         val pm = context.packageManager
         for (config in audioManager.activePlaybackConfigurations) {
             if (config.audioAttributes.usage != AudioAttributes.USAGE_VOICE_COMMUNICATION) continue
             val uid = runCatching { config.javaClass.getMethod("getClientUid").invoke(config) as Int }.getOrNull() ?: continue
-            com.echoledger.mobile.core.CallTargets.firstTarget(pm.getPackagesForUid(uid))?.let { return it }
+            val pkg = CallTargets.firstTarget(pm.getPackagesForUid(uid), callApps) ?: continue
+            callPlayer = config
+            return pkg
         }
         return null
     }

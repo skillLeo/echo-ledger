@@ -26,8 +26,11 @@ import com.echoledger.mobile.calls.CallState
 import com.echoledger.mobile.calls.CallStateMachine
 import com.echoledger.mobile.calls.PhoneCallLog
 import com.echoledger.mobile.calls.PostCallPrompt
+import com.echoledger.mobile.calls.SamsungCallImport
 import com.echoledger.mobile.capture.ICallListener
+import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.CallerNames
+import com.echoledger.mobile.core.Devanagari
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.PhoneCalls
 import com.echoledger.mobile.core.SourceApp
@@ -46,7 +49,10 @@ import com.echoledger.mobile.net.SttStreamer
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.net.UsageWorker
 import com.echoledger.mobile.notify.Notifications
-import com.echoledger.mobile.overlay.CaptionBubble
+import com.echoledger.mobile.overlay.CaptionFeed
+import com.echoledger.mobile.overlay.CaptionLine
+import com.echoledger.mobile.overlay.CaptionPanel
+import com.echoledger.mobile.overlay.ControlPill
 import com.echoledger.mobile.ui.formatDuration
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.io.File
@@ -100,6 +106,20 @@ class RecordingService : LifecycleService() {
         /** What the Record tab shows while recording: pause state, timer, meters, bookmarks and the far-side warning. */
         val live = MutableStateFlow(LiveRecording())
 
+        /** The control pill (since v1.3): the overlay draws it and the Live view mirrors it. */
+        val pillState = MutableStateFlow(PillState(mode = PillState.Mode.HIDDEN))
+
+        /** Live captions of the recording in progress, for the caption panel and the Live view. */
+        val captionFeed = MutableStateFlow(CaptionFeed())
+
+        /** Caption lines kept for the Live view (the oldest go first). */
+        private const val MAX_CAPTION_LINES = 500
+
+        const val ACTION_CAPTIONS = "com.echoledger.mobile.CAPTIONS"
+        const val ACTION_DISCARD_NOW = "com.echoledger.mobile.DISCARD_NOW"
+        const val ACTION_UNDO_DISCARD = "com.echoledger.mobile.UNDO_DISCARD"
+        const val ACTION_SHOW_CONTROLS = "com.echoledger.mobile.SHOW_CONTROLS"
+
         fun intent(context: Context, action: String) = Intent(context, RecordingService::class.java).setAction(action)
     }
 
@@ -112,14 +132,15 @@ class RecordingService : LifecycleService() {
     private var finalizing = 0
     private var destroyed = false
     private var capture: Capture? = null
-    private var bubble: CaptionBubble? = null
+    private var pill: ControlPill? = null
+    private var panel: CaptionPanel? = null
 
     /** Latest settings, kept warm so nothing reads DataStore synchronously. */
     @Volatile private var settings = AppSettings()
 
     private val callListener = object : ICallListener.Stub() {
         override fun onCallStarted(packageName: String?) {
-            val app = SourceApp.fromPackage(packageName) ?: SourceApp.WHATSAPP
+            val app = SourceApp.fromPackage(packageName) ?: SourceApp.OTHER
             CaptureLog.add(this@RecordingService, "call started", app.label)
             main.post { onCallEvent(CallEvent.CallStarted(app, UUID.randomUUID().toString(), System.currentTimeMillis())) }
         }
@@ -136,11 +157,23 @@ class RecordingService : LifecycleService() {
                 CaptureLog.add(this@RecordingService, "helper", it)
             }
         }
+
+        override fun onCaptureState(state: String?) {
+            state ?: return
+            CaptureLog.add(this@RecordingService, "capture", state)
+            main.post { onHelperState(state) }
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
-        lifecycleScope.launch { graph.settings.settings.collect { settings = it } }
+        lifecycleScope.launch {
+            graph.settings.settings.collect {
+                // The call-app list reaches the helper as soon as it is edited.
+                if (it.extraCallApps != settings.extraCallApps) graph.helper.setCallApps(CallTargets.packages(it.extraCallApps))
+                settings = it
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -184,6 +217,20 @@ class RecordingService : LifecycleService() {
 
             ACTION_RECORD_PHONE_CALL -> recordAskedPhoneCall()
 
+            // The notification mirrors the control pill (since v1.3).
+            ACTION_CAPTIONS -> if (capture != null) onPillEvent(PillEvent.ToggleCaptions) else settle()
+
+            ACTION_DISCARD_NOW -> if (capture != null) onPillEvent(PillEvent.DiscardNow(System.currentTimeMillis())) else settle()
+
+            ACTION_UNDO_DISCARD -> if (capture != null) onPillEvent(PillEvent.Undo) else settle()
+
+            ACTION_SHOW_CONTROLS -> if (capture != null) {
+                showControls()
+                onPillEvent(PillEvent.ShowControls)
+            } else {
+                settle()
+            }
+
             else -> settle()
         }
         return START_NOT_STICKY
@@ -194,7 +241,15 @@ class RecordingService : LifecycleService() {
         val notification = if (!mic && capture == null) {
             Notifications.armed(this, ready = helperAlive())
         } else {
-            Notifications.recording(this, title, detail, paused = capture?.paused == true)
+            Notifications.recording(
+                this,
+                callTitle(title),
+                detail,
+                paused = capture?.paused == true,
+                // The clock shows recorded time (paused stretches left out).
+                startedAtMs = capture?.let { System.currentTimeMillis() - it.recordedMs() },
+                discarding = pillState.value.discarding
+            )
         }
         val type = when {
             mic -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
@@ -214,6 +269,13 @@ class RecordingService : LifecycleService() {
                 throw e
             }
         }
+    }
+
+    /** "Recording call with Omar" once the call app's notification named the caller (since v1.3), else [title]. */
+    private fun callTitle(title: String): String {
+        val session = capture ?: return title
+        val name = CallerNames.forCall(session.sourceApp, session.startedAt.toEpochMilli(), System.currentTimeMillis())
+        return if (name != null && session.channels == 2) "Recording call with $name" else title
     }
 
     /** Leaves the service in the right state once nothing is recording or being saved. */
@@ -242,6 +304,9 @@ class RecordingService : LifecycleService() {
         }
         armed = true
         graph.helper.setCallListener(callListener)
+        // The voice-call mix is armed now (and again whenever the helper restarts), before any call's voice track exists.
+        graph.helper.setCallApps(CallTargets.packages(settings.extraCallApps))
+        graph.helper.setArmed(true)
         if (graph.helper.helper == null) graph.helper.bindShizuku()
         if (capture == null && !goForeground(mic = false, title = "", detail = "")) {
             armed = false
@@ -258,6 +323,7 @@ class RecordingService : LifecycleService() {
     private fun disarm() {
         armed = false
         main.removeCallbacks(watchdog)
+        graph.helper.setArmed(false)
         graph.helper.setCallListener(null)
         persistArmed(false)
         CaptureLog.add(this, "auto-record off")
@@ -304,6 +370,33 @@ class RecordingService : LifecycleService() {
         lifecycleScope.launch {
             graph.settings.update { it.copy(autoRecordArmed = value) }
             WidgetStateStore.refresh(this@RecordingService)
+        }
+    }
+
+    /**
+     * The helper's capture states (since v1.3): a SIM call holding the app call being recorded (paused until it is
+     * back), and an other side or phone line that gives no sound (its reason is kept for the after-call card).
+     */
+    private fun onHelperState(state: String) {
+        val session = capture ?: return
+        when (state) {
+            "suspended" -> {
+                session.held = true
+                pillState.value = PillMachine.reduce(pillState.value, PillEvent.Held(true)).first
+                refresh(session, "Paused while a phone call holds this call")
+            }
+
+            "resumed" -> {
+                session.held = false
+                pillState.value = PillMachine.reduce(pillState.value, PillEvent.Held(false)).first
+                refresh(session)
+            }
+
+            "far_silent", "line_silent" -> {
+                session.warning = CaptureProblems.recent(this) ?: "The other side of this call gave no sound."
+                pillState.value = PillMachine.reduce(pillState.value, PillEvent.Warning(session.warning)).first
+                refresh(session, "Not hearing the other side")
+            }
         }
     }
 
@@ -420,13 +513,26 @@ class RecordingService : LifecycleService() {
             }
             return
         }
+        // A phone line that gives both voices on one track is recorded as one channel (speakers told apart later).
+        if (phone) session.channels = runCatching { helper.captureChannels() }.getOrDefault(2).coerceIn(1, 2)
+        if (session.channels == 1) session.detail = "Both voices on one track · ${if (fromCall) "auto" else "manual"}"
         session.readerThread = thread(name = "el-pipe-reader") {
-            ParcelFileDescriptor.AutoCloseInputStream(pipe[0]).use { input ->
-                val buffer = ByteArray(Pcm.CAPTURE_RATE / 100 * 4 * 4) // 40 ms stereo
+            java.io.DataInputStream(ParcelFileDescriptor.AutoCloseInputStream(pipe[0])).use { input ->
+                // Whole 20 ms stereo frames only, so the two channels never swap when a read ends mid-frame.
+                val block = ByteArray(Pcm.CAPTURE_RATE / 50 * 4)
                 while (session.active) {
-                    val n = input.read(buffer)
+                    val n = runCatching {
+                        input.readFully(block)
+                        block.size
+                    }.getOrElse { 0 }
                     if (n <= 0) break
-                    session.consume(buffer, n)
+                    if (session.channels == 1) {
+                        val left = Pcm.deinterleave(Pcm.fromLittleEndianBytes(block, n)).first
+                        val bytes = Pcm.toLittleEndianBytes(left)
+                        session.consume(bytes, bytes.size)
+                    } else {
+                        session.consume(block, n)
+                    }
                 }
             }
         }
@@ -485,13 +591,105 @@ class RecordingService : LifecycleService() {
 
     private fun afterStart(session: Capture) {
         isRecording = true
+        pillState.value =
+            PillState(mode = if (settings.pillDot) PillState.Mode.DOT else PillState.Mode.PILL, language = Languages.chip(session.language))
+        captionFeed.value = CaptionFeed()
         publish(session)
+        showControls()
         main.removeCallbacks(ticker)
         main.postDelayed(ticker, TICK_MS)
-        lifecycleScope.launch {
-            WidgetStateStore.refresh(this@RecordingService)
-            if (settings.captionsEnabled) startCaptions(session, session.clientId)
+        lifecycleScope.launch { WidgetStateStore.refresh(this@RecordingService) }
+        // Captions are one tap away on the pill; they open by themselves only with "Show captions during calls" on.
+        if (settings.captionsDuringCalls) onPillEvent(PillEvent.ToggleCaptions)
+    }
+
+    /** The control pill (since v1.3; replaces the click-through caption bubble). Needs "Display over other apps". */
+    private fun showControls() {
+        if (!Settings.canDrawOverlays(this)) return
+        val current = pill ?: ControlPill(
+            this,
+            pillState,
+            onEvent = { event -> onPillEvent(event) },
+            onMoved = { edge, y -> lifecycleScope.launch { graph.settings.update { it.copy(pillEdge = edge, pillY = y) } } },
+            edge = settings.pillEdge,
+            yFraction = settings.pillY
+        ).also { pill = it }
+        current.show()
+    }
+
+    private fun hideControls() {
+        pill?.hide()
+        pill = null
+        panel?.hide()
+        panel = null
+        pillState.value = PillState(mode = PillState.Mode.HIDDEN)
+        captionFeed.value = CaptionFeed()
+    }
+
+    /** A tap on the pill, the caption panel, the notification or the Live view; the machine decides, the effects run here. */
+    private fun onPillEvent(event: PillEvent) {
+        val before = pillState.value
+        val (next, effects) = PillMachine.reduce(before, event)
+        pillState.value = next
+        if ((next.mode == PillState.Mode.DOT) != (before.mode == PillState.Mode.DOT) && next.mode != PillState.Mode.HIDDEN) {
+            lifecycleScope.launch { graph.settings.update { it.copy(pillDot = next.mode == PillState.Mode.DOT) } }
         }
+        val session = capture
+        for (effect in effects) {
+            when (effect) {
+                PillEffect.Pause -> session?.let { pause(it) }
+                PillEffect.Resume -> session?.let { resume(it) }
+                PillEffect.ShowCaptions -> showCaptions(session)
+                PillEffect.HideCaptions -> closeCaptionPanel()
+                PillEffect.NextLanguage -> session?.let { setLanguage(it, Languages.next(it.language)) }
+                PillEffect.Stop -> if (session != null) stopCapture(fromCall = false)
+                PillEffect.Discard -> session?.let { discardNow(it) }
+            }
+        }
+        // Not after Stop or Discard: the recording notification must not come back.
+        capture?.let { refresh(it) }
+    }
+
+    /** Opens the caption panel and, the first time, the live caption streams (captions cost money, so only on request). */
+    private fun showCaptions(session: Capture?) {
+        if (Settings.canDrawOverlays(this)) {
+            val current = panel ?: CaptionPanel(
+                this,
+                captionFeed,
+                pillState,
+                settings.captionStyle,
+                onClose = {
+                    onPillEvent(PillEvent.CaptionsClosed)
+                    closeCaptionPanel()
+                },
+                onNextLanguage = { onPillEvent(PillEvent.NextLanguage) },
+                onMoved = { bottom -> pill?.avoid(bottom) }
+            ).also { panel = it }
+            current.show()
+        }
+        session ?: return
+        if (!settings.captionsEnabled) {
+            captionFeed.value = captionFeed.value.copy(notice = "Live captions are off in Settings, Captions. The recording continues.")
+            return
+        }
+        if (session.captionsStarted) return
+        session.captionsStarted = true
+        lifecycleScope.launch { startCaptions(session, session.clientId) }
+    }
+
+    /** Closing captions only closes the panel: the recording, and the captions for the Live view, carry on. */
+    private fun closeCaptionPanel() {
+        panel?.hide()
+        panel = null
+        pill?.avoid(null)
+    }
+
+    /** Discard now, once its 5-second undo has run out: deleted at once, nothing uploaded, the open server session removed. */
+    private fun discardNow(session: Capture) {
+        if (capture !== session) return
+        CaptureLog.add(this, "discarded", "by you during the recording")
+        session.serverSessionId?.let { DiscardWorker.enqueue(this, session.id, it) }
+        discardCapture(session.id)
     }
 
     private suspend fun startCaptions(session: Capture, clientId: String?) {
@@ -507,19 +705,12 @@ class RecordingService : LifecycleService() {
             is CaptionTokens.Outcome.Token -> outcome.token
 
             is CaptionTokens.Outcome.Refused -> {
-                // Captions never stop the recording; the bubble says why they are missing.
-                if (Settings.canDrawOverlays(this)) {
-                    if (bubble == null) bubble = CaptionBubble(this, settings.captionStyle).also { it.show() }
-                    bubble?.notice(outcome.message)
-                }
+                // Captions never stop the recording; the caption panel says why they are missing.
+                main.post { captionFeed.value = captionFeed.value.copy(notice = outcome.message) }
                 return
             }
         }
         if (token.mode != "cloud") return
-        if (Settings.canDrawOverlays(this) && bubble == null) {
-            bubble = CaptionBubble(this, settings.captionStyle).also { it.show() }
-        }
-        bubble?.language(Languages.chip(session.language)) { setLanguageFromBubble(session) }
         session.provider = token.provider
         for (grant in token.grants) {
             if (grant.protocol !in setOf("assemblyai_v3", "elevenlabs_realtime")) continue
@@ -535,11 +726,13 @@ class RecordingService : LifecycleService() {
     /** Paused audio is dropped: not written, not streamed. The notification and the Record tab follow. */
     private fun pause(session: Capture) {
         session.pause()
+        pillState.value = PillMachine.reduce(pillState.value, PillEvent.Paused(true)).first
         refresh(session)
     }
 
     private fun resume(session: Capture) {
         session.resume()
+        pillState.value = PillMachine.reduce(pillState.value, PillEvent.Paused(false)).first
         refresh(session)
     }
 
@@ -556,6 +749,7 @@ class RecordingService : LifecycleService() {
             session.languageMarks += LanguageMarkDto(session.recordedMs(), language)
         }
         session.language = language
+        pillState.value = PillMachine.reduce(pillState.value, PillEvent.Language(Languages.chip(language))).first
         refresh(session, "Language: ${Languages.label(language)}")
         if (session.streamers.isEmpty()) return
         val old = session.streamers.values.toList()
@@ -619,27 +813,25 @@ class RecordingService : LifecycleService() {
             val change = session.farSide.tick(session.silentMs(System.nanoTime()), settings.farSideWarning)
             if (change != null) {
                 session.farSideSeconds = change.seconds.takeIf { change.silent }
-                if (change.silent) bubble?.notice("Not hearing the other side for ${change.seconds} s. Check the call's speaker.")
+                val warning = if (change.silent) "Not hearing the other side for ${change.seconds} s." else session.warning
+                pillState.value = PillMachine.reduce(pillState.value, PillEvent.Warning(warning)).first
                 refresh(session)
             } else {
                 publish(session)
             }
-            main.postDelayed(this, TICK_MS)
-        }
-    }
-
-    private fun setLanguageFromBubble(session: Capture) = main.post {
-        if (capture ===
-            session
-        ) {
-            setLanguage(session, Languages.next(session.language))
+            // The pill's clock, and a discard whose undo time has run out.
+            onPillEvent(PillEvent.Tick(session.recordedMs(), System.currentTimeMillis()))
+            if (capture === session) main.postDelayed(this, TICK_MS)
         }
     }
 
     private fun onCaption(session: Capture, channel: Int, event: SttEvent) {
         val speaker = Speakers.forChannel(channel, session.channels == 2)
         when (event) {
-            is SttEvent.Partial -> main.post { bubble?.partial(speaker, event.text) }
+            // Display only: Hindi letters from an engine that guessed Hindi are shown in Urdu script.
+            is SttEvent.Partial -> main.post {
+                captionFeed.value = captionFeed.value.copy(partial = CaptionLine(speaker, Devanagari.toUrdu(event.text)))
+            }
 
             is SttEvent.Final -> {
                 val offset = session.recordedMs()
@@ -647,7 +839,14 @@ class RecordingService : LifecycleService() {
                     session.segments +=
                         SegmentDto(channel, speaker, event.startMs ?: (offset - 1500).coerceAtLeast(0), event.endMs ?: offset, event.text)
                 }
-                main.post { bubble?.final(speaker, event.text) }
+                main.post {
+                    val feed = captionFeed.value
+                    captionFeed.value =
+                        feed.copy(
+                            lines = (feed.lines + CaptionLine(speaker, Devanagari.toUrdu(event.text))).takeLast(MAX_CAPTION_LINES),
+                            partial = null
+                        )
+                }
             }
 
             else -> Unit
@@ -671,6 +870,8 @@ class RecordingService : LifecycleService() {
         isRecording = false
         main.removeCallbacks(ticker)
         publish(null)
+        // The pill and captions go at once; saving the file takes a moment more.
+        hideControls()
         finalizing++
         val endedMs = System.currentTimeMillis()
         thread(name = "el-finish") {
@@ -703,15 +904,17 @@ class RecordingService : LifecycleService() {
                     // notification showed during this call, when allowed.
                     callerName = caller?.name,
                     callerSource = caller?.source,
-                    callerNumber = caller?.number
+                    callerNumber = caller?.number,
+                    captureWarning = session.warning
                 )
                 graph.recordings.importPlainFile(meta, session.file)
             }.onFailure {
                 Log.e(TAG, "saving recording failed", it)
                 session.file.delete()
             }.getOrNull()
-            // A recording that captured no sound (0 ms) has nothing to keep or transcribe: say why instead of asking.
-            val silent = stored != null && stored.durationMs <= 0
+            // A recording that captured no sound (0 ms, or every side digital silence) has nothing to keep or transcribe:
+            // say why instead of asking, and never upload it (a provider fails it with "no spoken audio").
+            val silent = stored != null && (stored.durationMs <= 0 || session.levels.silent())
             CaptureLog.add(
                 this,
                 "recording saved",
@@ -730,7 +933,18 @@ class RecordingService : LifecycleService() {
             val decisionTimeout = settings.afterCallTimeout
             val themeMode = settings.themeMode
             main.post {
-                if (silent) {
+                if (silent && session.sourceApp == SourceApp.PHONE_CALL.wire) {
+                    // The phone line gave nothing: the Phone app's own recording of this call is imported instead.
+                    SamsungCallImport.schedule(this, session.startedAt.toEpochMilli(), endedMs)
+                    Notifications.noAudio(
+                        this,
+                        if (SamsungCallImport.phoneAppRecords(this)) {
+                            "The phone line gave no sound. EchoLedger will import the Phone app's own recording of this call in a moment."
+                        } else {
+                            "The phone line gave no sound. Turn on Phone, Settings, Record calls, Auto record calls: EchoLedger then imports those recordings."
+                        }
+                    )
+                } else if (silent) {
                     Notifications.noAudio(this, CaptureProblems.recent(this))
                 } else if (stored != null) {
                     if (stored.state == "pending_decision") {
@@ -740,10 +954,6 @@ class RecordingService : LifecycleService() {
                     }
                 }
                 finalizing--
-                if (capture == null) {
-                    bubble?.hide()
-                    bubble = null
-                }
                 if (!destroyed) lifecycleScope.launch { WidgetStateStore.refresh(this@RecordingService) }
                 settle()
             }
@@ -759,8 +969,7 @@ class RecordingService : LifecycleService() {
             main.removeCallbacks(ticker)
             publish(null)
             finalizing++
-            bubble?.hide()
-            bubble = null
+            hideControls()
             thread(name = "el-discard") {
                 session.cancel()
                 main.post {
@@ -778,17 +987,31 @@ class RecordingService : LifecycleService() {
         capture?.let { stopCapture(fromCall = false) }
         destroyed = true
         graph.helper.setCallListener(null)
-        bubble?.hide()
-        bubble = null
+        hideControls()
         super.onDestroy()
     }
 
     /** One active capture: encoder + live caption streams. */
-    private inner class Capture(val id: String, val sourceApp: String, val channels: Int, val fromCall: Boolean, val clientId: String?) {
+    private inner class Capture(val id: String, val sourceApp: String, channels: Int, val fromCall: Boolean, val clientId: String?) {
         val startedAt: Instant = Instant.now()
         private val startNanos = System.nanoTime()
         val file = File(cacheDir, "rec-$id.ogg")
-        val encoder = OpusOggEncoder(file, Pcm.CAPTURE_RATE, channels)
+
+        /**
+         * 2 = me and the other side apart, 1 = one track (the microphone, or a phone line that gives both voices
+         * together). Settled before the first audio arrives; the encoder is made with it.
+         */
+        @Volatile var channels = channels
+        val encoder by lazy { OpusOggEncoder(file, Pcm.CAPTURE_RATE, this.channels, settings.opusBitsPerSide * this.channels) }
+
+        /** Since v1.3: why this recording may be one-sided (the helper's own words), shown after the call. */
+        @Volatile var warning: String? = null
+
+        /** Since v1.3: a SIM call is holding this app call; nothing is written until it is back. */
+        @Volatile var held = false
+
+        /** Since v1.3 the live caption streams start when captions are first shown (they cost money). */
+        var captionsStarted = false
         val streamers = ConcurrentHashMap<Int, SttStreamer>()
         val segments = mutableListOf<SegmentDto>()
 
@@ -855,6 +1078,10 @@ class RecordingService : LifecycleService() {
             paused = false
         }
 
+        /** Each side's level over the whole recording, for the capture log (never audio). */
+        val levels by lazy { CaptureLevels(this.channels) }
+        private val debugWav by lazy { DebugWav.open(this@RecordingService, id, this.channels, Pcm.CAPTURE_RATE) }
+
         fun consume(bytes: ByteArray, length: Int) {
             if (paused) return // not captured, not streamed
             if (!soundLogged && length > 0) {
@@ -862,7 +1089,9 @@ class RecordingService : LifecycleService() {
                 CaptureLog.add(this@RecordingService, "sound arriving", "${(System.nanoTime() - startNanos) / 1_000_000} ms after start")
             }
             encoder.feed(bytes, length)
+            debugWav?.write(bytes, length)
             val samples = Pcm.fromLittleEndianBytes(bytes, length)
+            levels.add(samples)
             if (channels == 2) {
                 val (me, client) = Pcm.deinterleave(samples)
                 meLevel = Levels.rms(me)
@@ -886,6 +1115,8 @@ class RecordingService : LifecycleService() {
             if (streamers.isNotEmpty()) Thread.sleep(1_500) // last caption turns arrive
             reportUsage()
             encoder.finish()
+            debugWav?.close()
+            CaptureLog.add(this@RecordingService, "levels", levels.describe())
         }
 
         /** One usage report per captions run (A5.4); a v1 server has no usage endpoint, so nothing is queued. */
@@ -913,6 +1144,7 @@ class RecordingService : LifecycleService() {
             streamers.values.forEach { it.stop() }
             reportUsage()
             runCatching { encoder.finish() }
+            debugWav?.close()
             file.delete()
         }
     }

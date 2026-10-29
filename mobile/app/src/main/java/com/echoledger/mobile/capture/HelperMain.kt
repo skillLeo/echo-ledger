@@ -65,6 +65,15 @@ object HelperMain {
     @JvmStatic
     fun main(args: Array<String>) {
         val context = HelperContext.system()
+        if (args.firstOrNull() == "--self-test") {
+            // `adb shell "CLASSPATH=… app_process /system/bin com.echoledger.mobile.capture.HelperMain --self-test"`:
+            // proves the far-side path without a call and prints one line per recorder identity.
+            val far = FarPartyCapture(context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager)
+            println("sink as shell: ${far.selfTest(context)}")
+            println("sink as process: ${far.selfTest(null, context)}")
+            far.disarm()
+            System.exit(0)
+        }
         val helper = CaptureHelperService(context)
         val extras = Bundle().apply { putBinder(BinderHandoffProvider.EXTRA_BINDER, helper.asBinder()) }
         val authority = args.firstOrNull() ?: "com.echoledger.mobile.handoff"

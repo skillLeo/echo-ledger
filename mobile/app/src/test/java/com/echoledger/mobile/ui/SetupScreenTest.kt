@@ -72,6 +72,10 @@ class SetupScreenTest : ScreenTest() {
         override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
 
         override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+        override fun arm(on: Boolean): String = if (on) "armed" else "disarmed"
+        override fun setCallApps(packages: Array<out String>?) = Unit
+        override fun selfTest(): String = "ok"
+        override fun captureChannels(): Int = 2
 
         override fun stopCapture() = Unit
 

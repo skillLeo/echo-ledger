@@ -43,7 +43,9 @@ data class LocalRecording(
     val callerName: String? = null,
     val callerSource: String? = null,
     /** A SIM phone call's number from the call log (since v1.2). */
-    val callerNumber: String? = null
+    val callerNumber: String? = null,
+    /** Why the recording may be one-sided, in the helper's words (since v1.3); shown on the after-call card and the recording. */
+    val captureWarning: String? = null
 )
 
 /**

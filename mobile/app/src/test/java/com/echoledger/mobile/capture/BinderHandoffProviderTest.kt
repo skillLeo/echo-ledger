@@ -33,6 +33,10 @@ class BinderHandoffProviderTest : AppTest() {
         override fun startCapture(sink: ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
 
         override fun startPhoneCapture(sink: ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+        override fun arm(on: Boolean): String = if (on) "armed" else "disarmed"
+        override fun setCallApps(packages: Array<out String>?) = Unit
+        override fun selfTest(): String = "ok"
+        override fun captureChannels(): Int = 2
 
         override fun stopCapture() = Unit
 
@@ -127,6 +131,7 @@ class BinderHandoffProviderTest : AppTest() {
             override fun onCallEnded() = Unit
 
             override fun onError(message: String?) = Unit
+            override fun onCaptureState(state: String?) = Unit
         }
         app.graph.helper.setCallListener(listener)
         val helper = FakeHelper()

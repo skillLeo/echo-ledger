@@ -9,6 +9,7 @@ import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.capture.CaptureHelperService
 import com.echoledger.mobile.capture.ICallListener
 import com.echoledger.mobile.capture.ICaptureHelper
+import com.echoledger.mobile.core.CallTargets
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import rikka.shizuku.Shizuku
@@ -35,8 +36,19 @@ class HelperConnection(private val context: Context) {
 
     private var callListener: ICallListener? = null
 
+    /** Whether call capture is on: the helper's voice-call mix is then armed before any call (see FarPartyCapture). */
+    @Volatile private var armWanted = false
+
+    /** The call-app list the helper watches (the known apps plus the person's additions). */
+    @Volatile private var callApps: Set<String> = CallTargets.DEFAULT_PACKAGES
+
+    /** The helper's answer to the last arm request ("armed", "disarmed", "error: …"), for Setup and diagnostics. */
+    private val _armState = MutableStateFlow<String?>(null)
+    val armState: StateFlow<String?> = _armState
+
     private val death = IBinder.DeathRecipient {
         helper = null
+        _armState.value = null
         _state.value = State(error = "Capture helper stopped (reboot or Wireless debugging off). Re-enable it from Setup.")
     }
 
@@ -52,11 +64,34 @@ class HelperConnection(private val context: Context) {
             helperUid = runCatching { binder.uid() }.getOrNull(),
             stale = version != BuildConfig.HELPER_BUILD
         )
+        // A helper that just (re)started has no mix: arm it now, before the next call's voice track exists.
+        pushCallApps(binder)
+        if (armWanted) applyArm(binder, true)
     }
 
     fun setCallListener(listener: ICallListener?) {
         callListener = listener
         helper?.let { runCatching { it.setCallListener(listener) } }
+    }
+
+    /** Call capture switched on or off: arms or removes the helper's voice-call mix now and after every helper restart. */
+    fun setArmed(on: Boolean) {
+        armWanted = on
+        helper?.let { applyArm(it, on) }
+    }
+
+    fun setCallApps(packages: Set<String>) {
+        callApps = packages
+        helper?.let { pushCallApps(it) }
+    }
+
+    private fun pushCallApps(binder: ICaptureHelper) {
+        runCatching { binder.setCallApps(callApps.toTypedArray()) }
+    }
+
+    private fun applyArm(binder: ICaptureHelper, on: Boolean) {
+        // An older helper has no arm(): it answers with an error and is replaced on the next bind (its version differs).
+        _armState.value = runCatching { binder.arm(on) }.getOrElse { "error: ${it.message ?: it.javaClass.simpleName}" }
     }
 
     // ---- Shizuku mode -------------------------------------------------------------------------------------------

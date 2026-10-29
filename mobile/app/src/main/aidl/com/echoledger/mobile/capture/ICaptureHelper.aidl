@@ -12,8 +12,16 @@ interface ICaptureHelper {
     boolean startCapture(in ParcelFileDescriptor sink, int sampleRate, int micSource) = 4;
     void stopCapture() = 5;
     void setCallListener(ICallListener listener) = 6;
-    // A SIM phone call (since v1.2): the far side from the phone line (VOICE_DOWNLINK) instead of a playback mix.
+    // A SIM phone call (since v1.2): the phone line instead of the microphone and the voice-call mix.
     boolean startPhoneCapture(in ParcelFileDescriptor sink, int sampleRate, int micSource) = 7;
+    // Since v1.3: registers (true) or removes (false) the voice-call mix before any call; "armed", "disarmed" or "error: …".
+    String arm(boolean on) = 8;
+    // Since v1.3: the packages whose voice calls are calls (the app's editable call-app list).
+    void setCallApps(in String[] packages) = 9;
+    // Since v1.3: plays a soft voice-call tone and reads it back through the mix: "ok …" or "fail: …".
+    String selfTest() = 10;
+    // Since v1.3: channels of the capture just started: 2 = me and the other side apart, 1 = both voices on one track.
+    int captureChannels() = 11;
     // Transaction reserved by Shizuku to destroy a UserService.
     void destroy() = 16777114;
 }

@@ -12,8 +12,10 @@ class LabelsTest {
     }
 
     @Test
-    fun `an unknown or null package is not a call app`() {
-        assertNull(SourceApp.fromPackage("com.example.other"))
+    fun `a package the person added is recorded as Other, and no package is nothing`() {
+        // The helper only reports packages from the call-app list, so an unknown one was added by the person.
+        assertEquals(SourceApp.OTHER, SourceApp.fromPackage("com.example.other"))
+        assertNull(SourceApp.fromPackage(""))
         assertNull(SourceApp.fromPackage(null))
     }
 

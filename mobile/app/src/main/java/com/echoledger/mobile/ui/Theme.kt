@@ -198,9 +198,17 @@ fun SourceDevice.tint(): Color = Brand.accent(this)
 
 fun SourceApp.icon(): ImageVector = when (this) {
     SourceApp.WHATSAPP, SourceApp.WHATSAPP_WEB -> Icons.Outlined.Forum
+
     SourceApp.WHATSAPP_BUSINESS -> Icons.Outlined.Storefront
-    SourceApp.GOOGLE_MEET, SourceApp.ZOOM, SourceApp.MICROSOFT_TEAMS -> Icons.Outlined.Videocam
+
+    SourceApp.GOOGLE_MEET, SourceApp.ZOOM, SourceApp.MICROSOFT_TEAMS, SourceApp.SKYPE -> Icons.Outlined.Videocam
+
+    SourceApp.TELEGRAM, SourceApp.SIGNAL, SourceApp.MESSENGER, SourceApp.INSTAGRAM, SourceApp.SLACK, SourceApp.DISCORD ->
+        Icons.Outlined.Forum
+
     SourceApp.PHONE_CALL -> Icons.Outlined.Call
+
     SourceApp.VOICE_NOTE -> Icons.Outlined.Mic
+
     SourceApp.OTHER -> Icons.Outlined.MoreHoriz
 }

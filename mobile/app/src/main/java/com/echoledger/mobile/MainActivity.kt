@@ -231,7 +231,8 @@ class MainActivity : FragmentActivity() {
 
         val open by openRequest
         LaunchedEffect(open) {
-            if (open == OPEN_PENDING) {
+            // The recording notification opens the Live view (the Record tab while recording, since v1.3).
+            if (open == OPEN_PENDING || open == OPEN_LIVE) {
                 tab = 1
                 showItem(null)
                 showSetup = false
@@ -327,6 +328,7 @@ class MainActivity : FragmentActivity() {
     companion object {
         /** Intent extra naming the screen to open; see [OPEN_PENDING]. */
         const val EXTRA_OPEN = "open"
+        const val OPEN_LIVE = "live"
 
         /** Opens the Record tab, where recordings waiting for Keep / Discard are listed. */
         const val OPEN_PENDING = "pending"

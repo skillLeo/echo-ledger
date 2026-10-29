@@ -10,6 +10,9 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Record phone calls (since v1.2, off by default): who a SIM call was with, asked only when the user turns it on. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!-- Since v1.3: the Phone app's own call recordings, imported when the phone line gives the helper no sound. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />

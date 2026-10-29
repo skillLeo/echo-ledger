@@ -64,13 +64,21 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
-    fun `a WhatsApp Business call gets the card too and another app does not`() {
+    fun `every call gets the card (since v1_3), a voice note does not`() {
         overlayAllowed(true)
         PostCallPrompt.show(app, pendingCall("biz", "whatsapp_business"), "wait", "dark")
         assertEquals("biz", DecisionPopup.showingFor)
         DecisionPopup.hide()
 
         PostCallPrompt.show(app, pendingCall("zoom-1", "zoom"), "wait", "dark")
+        assertEquals("zoom-1", DecisionPopup.showingFor)
+        DecisionPopup.hide()
+
+        PostCallPrompt.show(app, pendingCall("sim-1", "phone_call"), "wait", "dark")
+        assertEquals("sim-1", DecisionPopup.showingFor)
+        DecisionPopup.hide()
+
+        PostCallPrompt.show(app, pendingCall("note-1", "voice_note"), "wait", "dark")
         assertFalse(DecisionPopup.isShowing)
     }
 

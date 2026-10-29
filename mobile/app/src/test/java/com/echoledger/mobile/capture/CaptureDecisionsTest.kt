@@ -1,5 +1,6 @@
 package com.echoledger.mobile.capture
 
+import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
 import com.echoledger.mobile.core.Speakers
@@ -78,9 +79,11 @@ class CaptureDecisionsTest {
     }
 
     @Test
-    fun `only the exact WhatsApp package names are recognised as call apps`() {
+    fun `only exact call-app package names start the call recorder`() {
         assertEquals(SourceApp.WHATSAPP, SourceApp.fromPackage("com.whatsapp"))
         assertEquals(SourceApp.WHATSAPP_BUSINESS, SourceApp.fromPackage("com.whatsapp.w4b"))
+        assertEquals(SourceApp.GOOGLE_MEET, SourceApp.fromPackage("com.google.android.apps.meetings"))
+        assertEquals(SourceApp.ZOOM, SourceApp.fromPackage("us.zoom.videomeetings"))
         listOf(
             "COM.WHATSAPP",
             " com.whatsapp",
@@ -88,10 +91,11 @@ class CaptureDecisionsTest {
             "com.whatsapp.w4b.beta",
             "com.whatsapp2",
             "",
-            "com.google.android.apps.meetings",
-            "us.zoom.videomeetings"
+            "com.android.chrome",
+            "com.tencent.ig"
         ).forEach {
-            assertNull("[$it]", SourceApp.fromPackage(it))
+            assertFalse("[$it]", CallTargets.isTarget(it))
+            assertNull("[$it]", CallTargets.firstTarget(arrayOf(it)))
         }
     }
 
@@ -117,6 +121,13 @@ class CaptureDecisionsTest {
                 "google_meet" to "Google Meet",
                 "zoom" to "Zoom",
                 "microsoft_teams" to "Microsoft Teams",
+                "telegram" to "Telegram",
+                "signal" to "Signal",
+                "messenger" to "Messenger",
+                "instagram" to "Instagram",
+                "skype" to "Skype",
+                "slack" to "Slack",
+                "discord" to "Discord",
                 "phone_call" to "Phone call",
                 "voice_note" to "Voice note",
                 "other" to "Other"

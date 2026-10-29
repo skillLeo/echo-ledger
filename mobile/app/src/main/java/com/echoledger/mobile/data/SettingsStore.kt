@@ -41,6 +41,17 @@ data class AppSettings(
     val serverApiVersion: String? = null,
     /** Per call app (`source_app` wire value): false keeps auto-record from recording it. Missing apps are on. */
     val autoRecordApps: Map<String, Boolean> = emptyMap(),
+    /** Since v1.3: call apps the person added by package name (the known ones are always in the list). */
+    val extraCallApps: List<String> = emptyList(),
+    /** Since v1.3: open the caption panel when a call recording starts (off: the control pill only, captions one tap away). */
+    val captionsDuringCalls: Boolean = false,
+    /** Since v1.3: where the control pill sits: the edge (`right` / `left`) and the height as a fraction of the screen. */
+    val pillEdge: String = "right",
+    val pillY: Float = 0.22f,
+    /** Since v1.3: the control pill shrunk to a dot. */
+    val pillDot: Boolean = false,
+    /** Since v1.3: Opus bitrate per side in kbps (32, 48 or 64); the recording is encoded once and uploaded as it is. */
+    val recordingKbps: Int = 32,
     /** SIM phone calls (since v1.2): `off` (default), `ask` (a notification offers to record each call) or `always`. */
     val phoneCalls: String = "off",
     /** How the floating caption bubble looks (B4). */
@@ -75,6 +86,15 @@ data class AppSettings(
     val afterCallTimeout: String get() = if (decisionTimeoutChosen) decisionTimeout else "wait"
     val serverIsV1_1: Boolean get() = serverApiVersion != null
     val paired: Boolean get() = serverUrl != null && deviceId != null
+
+    /** The Opus bitrate per side actually used: one of [RECORDING_KBPS], 32 for anything else. */
+    val opusBitsPerSide: Int get() = (recordingKbps.takeIf { it in RECORDING_KBPS } ?: 32) * 1000
+
+    companion object {
+        val RECORDING_KBPS = listOf(32, 48, 64)
+
+        fun nextRecordingKbps(current: Int): Int = RECORDING_KBPS[(RECORDING_KBPS.indexOf(current) + 1).mod(RECORDING_KBPS.size)]
+    }
 }
 
 /**

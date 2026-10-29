@@ -112,7 +112,14 @@ class CaptureControlTest {
         assertTrue(AutoRecordRules.records(SourceApp.WHATSAPP, emptyMap()))
         assertFalse(AutoRecordRules.records(SourceApp.WHATSAPP, mapOf("whatsapp" to false)))
         assertTrue(AutoRecordRules.records(SourceApp.WHATSAPP_BUSINESS, mapOf("whatsapp" to false)))
-        assertEquals(listOf(SourceApp.WHATSAPP, SourceApp.WHATSAPP_BUSINESS), AutoRecordRules.APPS)
+        assertEquals(
+            listOf(
+                SourceApp.WHATSAPP, SourceApp.WHATSAPP_BUSINESS, SourceApp.GOOGLE_MEET, SourceApp.ZOOM, SourceApp.MICROSOFT_TEAMS,
+                SourceApp.TELEGRAM, SourceApp.SIGNAL, SourceApp.MESSENGER, SourceApp.INSTAGRAM, SourceApp.SKYPE, SourceApp.SLACK,
+                SourceApp.DISCORD
+            ),
+            AutoRecordRules.APPS
+        )
     }
 
     @Test

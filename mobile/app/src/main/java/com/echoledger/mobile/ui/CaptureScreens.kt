@@ -36,6 +36,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -43,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -65,6 +67,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.echoledger.mobile.calls.SamsungCallImport
+import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.PhoneCalls
 import com.echoledger.mobile.data.AppSettings
@@ -169,13 +173,43 @@ fun LiveRecordingCard(live: LiveRecording, settings: AppSettings) {
                 Text("${live.markers} bookmark${if (live.markers == 1) "" else "s"}", color = Brand.Muted, fontSize = 12.sp)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // The same controls as the floating pill and the notification (since v1.3).
+        val pill by RecordingService.pillState.collectAsState()
+        val feed by RecordingService.captionFeed.collectAsState()
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedButton(onClick = {
                 recordingAction(context, if (live.paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE)
             }) { Text(if (live.paused) "Resume" else "Pause") }
             Button(onClick = { recordingAction(context, RecordingService.ACTION_MARK) }) { Text("Mark") }
+            OutlinedButton(onClick = { recordingAction(context, RecordingService.ACTION_STOP) }) { Text("Stop") }
+            if (pill.discarding) {
+                Button(onClick = { recordingAction(context, RecordingService.ACTION_UNDO_DISCARD) }) { Text("Undo discard") }
+            } else {
+                OutlinedButton(onClick = { recordingAction(context, RecordingService.ACTION_DISCARD_NOW) }) {
+                    Text("Discard", color = Brand.Danger)
+                }
+            }
+            OutlinedButton(onClick = { recordingAction(context, RecordingService.ACTION_CAPTIONS) }) {
+                Text(if (pill.captions) "Hide captions" else "Captions")
+            }
+            if (pill.mode == com.echoledger.mobile.recording.PillState.Mode.HIDDEN && !pill.discarding) {
+                TextButton(onClick = { recordingAction(context, RecordingService.ACTION_SHOW_CONTROLS) }) { Text("Show controls") }
+            }
         }
-        if (live.paused) Text("Paused time is not recorded or sent for captions.", color = Brand.Muted, fontSize = 12.sp)
+        if (pill.discarding) {
+            Text(
+                "Discarded: nothing is uploaded. Undo within 5 seconds to keep it.",
+                color = Brand.Warning,
+                fontSize = 12.sp
+            )
+        }
+        if (live.paused &&
+            !pill.discarding
+        ) {
+            Text("Paused time is not recorded or sent for captions.", color = Brand.Muted, fontSize = 12.sp)
+        }
+        pill.warning?.let { Text(it, color = Brand.Warning, fontSize = 13.sp) }
+        LiveTranscript(feed, pill.captions)
         live.lastMarker?.let { marker ->
             Text("Last bookmark at ${formatDuration(marker.atMs)}${marker.tag?.let { " · $it" } ?: ""}", fontSize = 13.sp)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -204,6 +238,36 @@ fun LiveRecordingCard(live: LiveRecording, settings: AppSettings) {
     }
 }
 
+/**
+ * The Live view's transcript (since v1.3): every caption line of the recording in progress, newest last, scrolling on
+ * its own; empty with a hint until captions are switched on.
+ */
+@Composable
+private fun LiveTranscript(feed: com.echoledger.mobile.overlay.CaptionFeed, captionsOn: Boolean) {
+    val lines = feed.lines + listOfNotNull(feed.partial)
+    if (lines.isEmpty()) {
+        Text(
+            feed.notice ?: if (captionsOn) "Captions appear here as people speak." else "Tap Captions to see what is said, live.",
+            color = if (feed.notice != null) Brand.Warning else Brand.Muted,
+            fontSize = 13.sp
+        )
+        return
+    }
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    androidx.compose.runtime.LaunchedEffect(lines.size) { list.scrollToItem(lines.size - 1) }
+    androidx.compose.foundation.lazy.LazyColumn(state = list, modifier = Modifier.fillMaxWidth().height(260.dp)) {
+        items(lines.size) { i ->
+            val line = lines[i]
+            Text(
+                "${line.speaker}: ${line.text}",
+                color = if (line.speaker == "Client") Brand.Cyan else Brand.Text,
+                fontSize = 15.sp,
+                modifier = Modifier.padding(vertical = 3.dp)
+            )
+        }
+    }
+}
+
 /** Settings → Auto-record apps (B1): a switch per app whose calls the phone detects, with the explainer line. */
 @Composable
 fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
@@ -227,6 +291,44 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
                 )
             }
         }
+        // Since v1.3 the list is editable: another call app by its package name (recorded as "Other").
+        settings.extraCallApps.forEach { pkg ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(pkg)
+                    Text("Added by you. Its calls are recorded as Other.", color = Brand.Muted, fontSize = 12.sp)
+                }
+                TextButton(
+                    onClick = { vm.updateSettings { it.copy(extraCallApps = it.extraCallApps - pkg) } },
+                    modifier = Modifier.semantics { contentDescription = "Remove $pkg from the call apps" }
+                ) { Text("Remove") }
+            }
+        }
+        var adding by remember { mutableStateOf("") }
+        val cleaned = CallTargets.clean(adding)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = adding,
+                onValueChange = { adding = it.take(120) },
+                label = { Text("Another call app (package name)") },
+                singleLine = true,
+                isError = adding.isNotBlank() && cleaned == null,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                enabled = cleaned != null && cleaned !in CallTargets.DEFAULT_PACKAGES && cleaned !in settings.extraCallApps,
+                onClick = {
+                    val pkg = cleaned ?: return@TextButton
+                    vm.updateSettings { it.copy(extraCallApps = (it.extraCallApps + pkg).distinct().take(20)) }
+                    adding = ""
+                }
+            ) { Text("Add") }
+        }
+        Text(
+            "Only voice calls in these apps start a recording. Games and other apps never do.",
+            color = Brand.Muted,
+            fontSize = 12.sp
+        )
         // SIM phone calls (since v1.2): off by default; the call log and contacts are asked for when it is turned on.
         val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
         Text("Phone calls", modifier = Modifier.padding(top = 8.dp))
@@ -237,7 +339,10 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
         )
         Choices("Record phone calls", PhoneCalls.MODES.map { it to PhoneCalls.label(it) }, PhoneCalls.mode(settings.phoneCalls)) { mode ->
             vm.updateSettings { it.copy(phoneCalls = mode) }
-            if (mode != PhoneCalls.OFF) ask.launch(arrayOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_CONTACTS))
+            if (mode != PhoneCalls.OFF) {
+                // The call log and contacts name the caller; audio files let the Phone app's own recordings be imported.
+                ask.launch(arrayOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_CONTACTS, SamsungCallImport.permission()))
+            }
         }
     }
 }

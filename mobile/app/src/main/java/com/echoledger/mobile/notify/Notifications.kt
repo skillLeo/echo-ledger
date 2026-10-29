@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -92,25 +93,78 @@ object Notifications {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
 
-    /** The ongoing recording: Pause / Resume, Mark (a bookmark at this moment, B3) and Stop. */
-    fun recording(context: Context, title: String, detail: String, paused: Boolean = false): Notification =
-        NotificationCompat.Builder(context, CHANNEL_RECORDING)
+    /**
+     * The recording notification mirrors the control pill (since v1.3): "Recording call with Omar" with a running clock,
+     * and Pause · Stop · Captions · Discard (four buttons, so they sit in a custom row; Android shows three actions).
+     * A tap opens the Live view in the app. [discarding]: the 5-second undo of Discard now is running.
+     */
+    fun recording(
+        context: Context,
+        title: String,
+        detail: String,
+        paused: Boolean = false,
+        startedAtMs: Long? = null,
+        discarding: Boolean = false
+    ): Notification {
+        val buttons = RemoteViews(context.packageName, R.layout.notification_recording_actions).apply {
+            setTextViewText(R.id.rec_title, if (paused) "Paused · $title" else title)
+            setTextViewText(R.id.rec_detail, detail)
+            setTextViewText(R.id.rec_pause, if (paused) "Resume" else "Pause")
+            setOnClickPendingIntent(
+                R.id.rec_pause,
+                serviceAction(context, if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE, 14)
+            )
+            setOnClickPendingIntent(R.id.rec_stop, serviceAction(context, RecordingService.ACTION_STOP, 11))
+            setOnClickPendingIntent(R.id.rec_captions, serviceAction(context, RecordingService.ACTION_CAPTIONS, 16))
+            setTextViewText(R.id.rec_discard, if (discarding) "Undo discard" else "Discard")
+            setOnClickPendingIntent(
+                R.id.rec_discard,
+                serviceAction(context, if (discarding) RecordingService.ACTION_UNDO_DISCARD else RecordingService.ACTION_DISCARD_NOW, 17)
+            )
+        }
+        return NotificationCompat.Builder(context, CHANNEL_RECORDING)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(if (paused) "Paused · $title" else title)
             .setContentText(detail)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+            .setCustomBigContentView(buttons)
+            .setCustomHeadsUpContentView(buttons)
+            .apply {
+                // A running clock while recording (the system ticks it; nothing is re-posted every second).
+                if (startedAtMs != null && !paused) {
+                    setWhen(startedAtMs)
+                    setShowWhen(true)
+                    setUsesChronometer(true)
+                }
+            }
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .setContentIntent(openApp(context))
+            .setContentIntent(openLive(context))
             .addAction(
                 0,
                 if (paused) "Resume" else "Pause",
                 serviceAction(context, if (paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE, 14)
             )
-            .addAction(0, "Mark", serviceAction(context, RecordingService.ACTION_MARK, 15))
             .addAction(0, "Stop", serviceAction(context, RecordingService.ACTION_STOP, 11))
+            .addAction(
+                0,
+                if (discarding) "Undo discard" else "Discard",
+                serviceAction(context, if (discarding) RecordingService.ACTION_UNDO_DISCARD else RecordingService.ACTION_DISCARD_NOW, 17)
+            )
             .build()
+    }
+
+    /** Opens the app on the Live view of the recording in progress (the Record tab). */
+    private fun openLive(context: Context): PendingIntent = PendingIntent.getActivity(
+        context,
+        18,
+        Intent(context, MainActivity::class.java)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_LIVE),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     /** Auto-record on; [ready] false: the capture helper is not running, so calls would not be recorded. */
     fun armed(context: Context, ready: Boolean = true): Notification = NotificationCompat.Builder(context, CHANNEL_RECORDING)
