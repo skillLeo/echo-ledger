@@ -38,6 +38,25 @@ enum TranscriptErrorCode: string
     }
 
     /**
+     * Whether another engine may succeed where this one failed (since v1.3 the next engine in the routing table is
+     * tried): a provider problem, not the recording's (no audio, missing) or the limit's.
+     */
+    public function retryable(): bool
+    {
+        return in_array($this, [self::ProviderRejected, self::ProviderUnreachable, self::ProviderTimeout, self::ProviderNotConfigured, self::Interrupted], true);
+    }
+
+    /**
+     * A provider's refusal that means the recording holds no speech at all ("language_detection cannot be performed on
+     * files with no spoken audio", "no speech detected", "audio file is empty"): that is `no_audio`, not the provider's
+     * fault, and no other engine can do better.
+     */
+    public static function saysNoSpeech(string $reason): bool
+    {
+        return preg_match('/no (spoken )?(audio|speech)\b(?! codec)|no speech (was )?(found|detected)|contains no (audio|speech)|audio (file )?(is|was) (empty|silent)|empty audio|silent audio/i', $reason) === 1;
+    }
+
+    /**
      * `The speech provider could not transcribe this recording: <reason>`, quoting at most 200 characters of the
      * provider's reason with links and key-like strings removed (a reason may echo a request URL or header).
      */

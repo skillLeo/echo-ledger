@@ -276,7 +276,7 @@ describe('AssemblyAI processing', function () {
 
         $transcript->refresh();
         expect($transcript->status)->toBe(TranscriptStatus::Failed)
-            ->and($transcript->error)->toBe('The speech provider could not transcribe this recording: Audio file could not be decoded')
+            ->and($transcript->error)->toStartWith('The speech provider could not transcribe this recording: Audio file could not be decoded')->toContain('(Tried: AssemblyAI.')
             ->and($transcript->captureSession->status)->toBe(SessionStatus::Failed)
             ->and($transcript->provider_deleted_at)->not->toBeNull()
             ->and($this->log)->toBe(['GET /v2/transcript/job_1', 'DELETE /v2/transcript/job_1']);
@@ -500,7 +500,8 @@ describe('ElevenLabs processing', function () {
         $this->postRaw('/api/webhooks/stt/elevenlabs', $body, $headers)->assertOk();
 
         $transcript = $this->transcript->refresh();
-        expect($transcript->status)->toBe(TranscriptStatus::Failed)->and($transcript->error)->toBe('The speech provider could not transcribe this recording: The audio file is silent.')
+        // A provider that heard no speech means a silent recording (since v1.3): No audio, and no other engine is tried.
+        expect($transcript->status)->toBe(TranscriptStatus::Failed)->and($transcript->error)->toBe('No audio was captured in this recording.')->and($transcript->error_code)->toBe('no_audio')
             ->and($transcript->captureSession->status)->toBe(SessionStatus::Failed);
     });
 
@@ -592,7 +593,7 @@ describe('reconciliation', function () {
 
         $this->artisan('stt:reconcile')->assertSuccessful();
 
-        expect($broken->refresh()->status)->toBe(TranscriptStatus::Failed)->and($broken->error)->toBe('The speech provider could not transcribe this recording: unsupported file');
+        expect($broken->refresh()->status)->toBe(TranscriptStatus::Failed)->and($broken->error)->toStartWith('The speech provider could not transcribe this recording: unsupported file')->toContain('(Tried: ');
     });
 
     it('survives a provider outage and tries again on the next run', function () {

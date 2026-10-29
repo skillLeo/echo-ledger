@@ -9,6 +9,7 @@ use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Jobs\DoubleCheckJob;
+use App\Jobs\EngineFallbackJob;
 use App\Jobs\ScoreAccuracyJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\Transcript;
@@ -210,6 +211,11 @@ final class TranscriptStore
     /** Marks the transcript (and, for a final one, its session) failed with a readable reason and its error code. */
     public function fail(Transcript $transcript, string $error, ?TranscriptErrorCode $code = null): void
     {
+        // A provider that found no speech at all: the recording is silent (every engine would say the same).
+        if ($code === TranscriptErrorCode::ProviderRejected && TranscriptErrorCode::saysNoSpeech($error)) {
+            $code = TranscriptErrorCode::NoAudio;
+            $error = $code->message();
+        }
         DB::transaction(function () use ($transcript, $error, $code): void {
             $transcript->update([
                 'status' => TranscriptStatus::Failed,
@@ -220,6 +226,11 @@ final class TranscriptStore
                 $transcript->captureSession->update(['status' => SessionStatus::Failed]);
             }
         });
+        // Since v1.3 a provider failure hands the final transcript to the next engine of the routing table. Queued, so
+        // whatever the caller still does with the failed engine's job (erasing its copy) happens first.
+        if ($code?->retryable() === true && $transcript->kind === TranscriptKind::Final) {
+            EngineFallbackJob::dispatch($transcript->id)->afterCommit();
+        }
     }
 
     /** Fails with the documented message of $code. */

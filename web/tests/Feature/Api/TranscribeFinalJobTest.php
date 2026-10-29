@@ -329,7 +329,7 @@ describe('provider errors and retries', function () {
         $transcript->refresh();
         expect($transcript->status)->toBe(TranscriptStatus::Failed)
             ->and($transcript->error_code)->toBe('provider_unreachable')
-            ->and($transcript->error)->toBe('The speech provider could not be reached. Try again later.')
+            ->and($transcript->error)->toStartWith('The speech provider could not be reached. Try again later.')->toContain('(Tried: AssemblyAI.')
             ->and($this->workFiles())->toBe([]);
     });
 
