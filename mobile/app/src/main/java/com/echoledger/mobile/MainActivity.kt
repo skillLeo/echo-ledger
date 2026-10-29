@@ -76,6 +76,7 @@ import com.echoledger.mobile.ui.SessionScreen
 import com.echoledger.mobile.ui.SettingsScreen
 import com.echoledger.mobile.ui.SettingsState
 import com.echoledger.mobile.ui.SetupScreen
+import com.echoledger.mobile.ui.SharedNotesScreen
 import com.echoledger.mobile.ui.StartupSplash
 import com.echoledger.mobile.ui.UnlockPrompter
 import com.echoledger.mobile.ui.applySecureScreen
@@ -153,6 +154,8 @@ class MainActivity : FragmentActivity() {
         var openAtMs by rememberSaveable { mutableStateOf<Long?>(null) }
         var openSession by remember { mutableStateOf<String?>(null) }
         var showSetup by rememberSaveable { mutableStateOf(false) }
+        // Voice notes just shared from another app (local ids, comma-separated): their page, until Back leaves the app.
+        var sharedNotes by rememberSaveable { mutableStateOf<String?>(null) }
         val libraryItems by vm.library.collectAsState()
         val openItem = libraryItems.firstOrNull { it.id == openItemId && !it.deleted } ?: openItemCache?.takeIf { it.id == openItemId }
         fun showItem(item: LibraryItem?) {
@@ -257,6 +260,11 @@ class MainActivity : FragmentActivity() {
                 showSetup = true
             }
             open?.takeIf { it.startsWith(OPEN_SESSION_PREFIX) }?.let { openSession = it.removePrefix(OPEN_SESSION_PREFIX) }
+            open?.takeIf { it.startsWith(OPEN_SHARED_PREFIX) }?.let {
+                sharedNotes = it.removePrefix(OPEN_SHARED_PREFIX)
+                showItem(null)
+                showSetup = false
+            }
             if (open != null) openRequest.value = null
         }
         LaunchedEffect(openSession, libraryItems) {
@@ -286,7 +294,7 @@ class MainActivity : FragmentActivity() {
                 containerColor = Brand.Background,
                 snackbarHost = { SnackbarHost(snackbar) },
                 bottomBar = {
-                    if (unlocked && settings.onboardingDone && settings.paired && openItem == null && !showSetup) {
+                    if (unlocked && settings.onboardingDone && settings.paired && openItem == null && !showSetup && sharedNotes == null) {
                         BottomNav(tab) { tab = it }
                     }
                 }
@@ -302,6 +310,18 @@ class MainActivity : FragmentActivity() {
                         !settings.onboardingDone -> OnboardingScreen(vm)
 
                         !settings.paired -> PairingScreen(vm)
+
+                        sharedNotes != null -> SharedNotesScreen(
+                            vm,
+                            sharedNotes.orEmpty().split(',').filter {
+                                it.isNotBlank()
+                            },
+                            onLeave = {
+                                sharedNotes = null
+                                // Back to the app the note was shared from (WhatsApp), not to the Library.
+                                moveTaskToBack(true)
+                            }
+                        )
 
                         showSetup -> SetupScreen(vm, caps, onBack = { showSetup = false }, onRecheck = { recheck++ })
 
@@ -353,6 +373,9 @@ class MainActivity : FragmentActivity() {
 
         /** `session:<id>` opens that recording (an activity notification was tapped, B18). */
         const val OPEN_SESSION_PREFIX = "session:"
+
+        /** `shared:<local id>,<local id>`: the voice notes just shared to EchoLedger from another app (since v1.3). */
+        const val OPEN_SHARED_PREFIX = "shared:"
 
         const val NO_SCREEN_LOCK = "App lock is off because this phone has no screen lock."
 

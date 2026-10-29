@@ -64,6 +64,8 @@ data class AppSettings(
     val unsureStyle: String = "brackets",
     val unsureThreshold: Double = 0.5,
     val unsureNote: Boolean = true,
+    /** After sharing a voice note from another app: open it in EchoLedger (`open`, default) or stay there (`stay`). */
+    val afterShare: String = "open",
     /** Microphone kind for recordings made on this phone (`builtin`, `wired`, `bluetooth`, `usb`); null = automatic. */
     val inputDevice: String? = null,
     /** Language of new recordings: null (the client's or the console default, else automatic), `en`, `ur`, `hi` or `en+ur`. */

@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.ArtifactDto
 import com.echoledger.mobile.data.CallerDto
 import com.echoledger.mobile.data.CreateSessionRequest
@@ -81,6 +82,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     private suspend fun upload(api: ApiClient, rec: LocalRecording): Outcome {
         val graph = (applicationContext as EchoLedgerApp).graph
         val created = createOrFinish(api, rec)
+        // A voice note shared from another app: its page follows the server recording once the local copy is gone.
+        SharedNotes.linkSession(applicationContext, rec.id, created.session.id)
         val primary = created.recordings.firstOrNull { it.role == "primary" }
             ?: throw ApiException(422, "The server did not offer an upload for this recording.")
 

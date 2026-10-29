@@ -20,6 +20,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.echoledger.mobile.MainActivity
+import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.FakeServer
@@ -408,6 +409,45 @@ class MainActivityTest : AppTest() {
     // ---- what the launching intent asks for ------------------------------------------------------------------------------------
 
     private fun pendingIntent() = Intent(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_PENDING)
+
+    private fun openShared(vararg localIds: String) {
+        val intent = Intent(app, MainActivity::class.java).putExtra(
+            MainActivity.EXTRA_OPEN,
+            MainActivity.OPEN_SHARED_PREFIX + localIds.joinToString(",")
+        )
+        val controller = buildActivity(MainActivity::class.java, intent).create()
+        controller.get().simulateBiometrics(false)
+        controller.start().postCreate(null).resume().visible()
+    }
+
+    @Test
+    fun `a shared voice note opens straight on its page once transcribed, with Copy for AI and no tabs`() {
+        serve()
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.library.refresh()
+        }
+        SharedNotes.remember(app, listOf("L1"))
+        SharedNotes.linkSession(app, "L1", "01JA")
+
+        openShared("L1")
+
+        awaitText("Copy for AI (marks unsure words)")
+        assertTrue("the tabs are hidden on a shared note", !present("Settings"))
+    }
+
+    @Test
+    fun `a shared voice note still on its way shows its status instead of the library`() {
+        serve()
+        runBlocking { app.pairLocally(server) }
+        SharedNotes.remember(app, listOf("L2"))
+
+        openShared("L2")
+
+        awaitText("Shared voice note")
+        awaitText("Preparing…")
+        assertTrue(!present("Weekly sync"))
+    }
 
     @Test
     fun `opening with open=pending shows the Record tab`() {

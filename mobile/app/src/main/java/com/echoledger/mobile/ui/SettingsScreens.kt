@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ClosedCaption
 import androidx.compose.material.icons.outlined.Devices
@@ -33,6 +35,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -52,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +65,7 @@ import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.core.SettingsCatalogue
 import com.echoledger.mobile.core.SettingsEntry
 import com.echoledger.mobile.core.SettingsGroup
+import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.dictation.DictationHistory
 import com.echoledger.mobile.recording.RecordingService
@@ -69,6 +74,7 @@ import java.time.LocalDate
 private fun SettingsGroup.icon(): ImageVector = when (this) {
     SettingsGroup.General -> Icons.Outlined.Tune
     SettingsGroup.Recording -> Icons.Outlined.FiberManualRecord
+    SettingsGroup.VoiceNotes -> Icons.Outlined.AudioFile
     SettingsGroup.Captions -> Icons.Outlined.ClosedCaption
     SettingsGroup.Dictation -> Icons.Outlined.Mic
     SettingsGroup.Privacy -> Icons.Outlined.Lock
@@ -195,6 +201,8 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
         "after-call" -> DecisionTimeoutSection(vm, settings)
 
         "auto-apps" -> AutoRecordSection(vm, settings)
+
+        "after-share" -> AfterShareSection(vm, settings)
 
         "microphone" -> MicrophoneEntry(vm, settings, onSetup)
 
@@ -400,6 +408,31 @@ fun AppearanceSection(settings: AppSettings, update: ((AppSettings) -> AppSettin
                     onCheckedChange = { v -> update { it.copy(dynamicColour = v) } },
                     modifier = Modifier.semantics { contentDescription = "Wallpaper colours" }
                 )
+            }
+        }
+    }
+}
+
+/** "Voice notes & files": what happens after a voice note is shared to EchoLedger from another app (since v1.3). */
+@Composable
+internal fun AfterShareSection(vm: MainViewModel, settings: AppSettings) {
+    SectionCard {
+        Text("After sharing a voice note", fontWeight = FontWeight.SemiBold)
+        Text("When you share a voice note or audio file to EchoLedger from WhatsApp or another app", color = Brand.Muted, fontSize = 12.sp)
+        listOf(
+            SharedNotes.OPEN to "Open the voice note (default)",
+            SharedNotes.STAY to "Stay in the app I shared from, and notify me quietly when it is ready"
+        ).forEach { (value, label) ->
+            Row(
+                Modifier.fillMaxWidth().selectable(
+                    selected = settings.afterShare == value,
+                    role = Role.RadioButton,
+                    onClick = { vm.updateSettings { it.copy(afterShare = value) } }
+                ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(selected = settings.afterShare == value, onClick = null)
+                Text(label, modifier = Modifier.padding(start = 8.dp))
             }
         }
     }

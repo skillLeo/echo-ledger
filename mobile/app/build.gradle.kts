@@ -146,3 +146,23 @@ dependencies {
     androidTestImplementation(libs.androidx.test.uiautomator)
     androidTestUtil(libs.androidx.test.orchestrator)
 }
+
+// Instrumented tests clear this app's data before every test (clearPackageData above), so they must never run on a
+// phone someone uses: a connected test run stops while a real device is attached, unless -PallowConnectedPhone=true
+// says that phone is free to be wiped. Emulators are always fine.
+tasks.matching { it.name.startsWith("connected") && it.name.endsWith("AndroidTest") }.configureEach {
+    doFirst {
+        if (project.findProperty("allowConnectedPhone") == "true") return@doFirst
+        val adb = androidComponents.sdkComponents.adb.get().asFile
+        val listed = ProcessBuilder(adb.absolutePath, "devices").redirectErrorStream(true).start().inputStream.bufferedReader().readText()
+        val phones = listed.lines().drop(1).map { it.trim() }.filter { it.endsWith("\tdevice") && !it.startsWith("emulator-") }
+        if (phones.isNotEmpty()) {
+            throw GradleException(
+                "Instrumented tests wipe the app's data, so they do not run on a real phone (${phones.joinToString {
+                    it.substringBefore('\t')
+                }}). " +
+                    "Use an emulator, or pass -PallowConnectedPhone=true when that phone is free to be wiped."
+            )
+        }
+    }
+}

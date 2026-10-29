@@ -4,6 +4,7 @@ package com.echoledger.mobile.core
 enum class SettingsGroup(val label: String, val summary: String) {
     General("General", "Appearance, language, client, notifications"),
     Recording("Recording", "After a call, auto-record, microphone"),
+    VoiceNotes("Voice notes & files", "After sharing a voice note"),
     Captions("Captions", "Live captions and how they look"),
     Dictation("Dictation", "Voice keyboard, words and snippets"),
     Privacy("Privacy & security", "App lock"),
@@ -29,6 +30,7 @@ object SettingsCatalogue {
             "keep discard wait decision timeout 60 seconds ask before saving"
         ),
         SettingsEntry("auto-apps", SettingsGroup.Recording, "Auto-record apps", "whatsapp zoom teams meet calls apps"),
+        SettingsEntry("after-share", SettingsGroup.VoiceNotes, "After sharing", "share whatsapp voice note file open stay notification"),
         SettingsEntry(
             "microphone",
             SettingsGroup.Recording,

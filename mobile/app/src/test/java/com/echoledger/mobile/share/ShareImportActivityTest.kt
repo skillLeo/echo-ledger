@@ -10,6 +10,8 @@ import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.echoledger.mobile.MainActivity
+import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.pairLocally
@@ -23,11 +25,13 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Ignore
 import org.junit.Test
 import org.robolectric.Robolectric
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowToast
 
 /** Voice notes arriving through the Android share sheet: parsing, local encryption, queueing and the user's feedback. */
@@ -108,7 +112,7 @@ class ShareImportActivityTest : AppTest() {
         pair()
         val bytes = sampleBytes(50_000)
 
-        share(single(register("42", bytes), "audio/ogg"))
+        val activity = share(single(register("42", bytes), "audio/ogg"))
 
         val stored = app.graph.recordings.all().single()
         assertEquals("voice_note", stored.sourceApp)
@@ -119,7 +123,7 @@ class ShareImportActivityTest : AppTest() {
         assertEquals(bytes.size.toLong(), stored.plainSize)
         assertEquals(sha(bytes), stored.sha256)
         assertEquals(listOf(WorkInfo.State.ENQUEUED), workStates(stored.id))
-        assertEquals("Sent 1 voice note(s) for transcription", ShadowToast.getTextOfLatestToast())
+        assertEquals(MainActivity.OPEN_SHARED_PREFIX + stored.id, opened(activity))
     }
 
     @Test
@@ -176,10 +180,16 @@ class ShareImportActivityTest : AppTest() {
         pair()
         val uris = (1..3).map { register("s$it", sampleBytes(100 * it)) }
 
-        share(multiple(uris))
+        val activity = share(multiple(uris))
 
         assertEquals(setOf(100L, 200L, 300L), app.graph.recordings.all().map { it.plainSize }.toSet())
-        assertEquals("Sent 3 voice note(s) for transcription", ShadowToast.getTextOfLatestToast())
+        // The app opens on a short list of just these notes.
+        assertEquals(
+            app.graph.recordings.all().map {
+                it.id
+            }.toSet(),
+            opened(activity)!!.removePrefix(MainActivity.OPEN_SHARED_PREFIX).split(",").toSet()
+        )
     }
 
     @Test
@@ -188,10 +198,10 @@ class ShareImportActivityTest : AppTest() {
         val good = register("good", sampleBytes(100))
         val bad = Uri.parse("content://test.audio/files/missing")
 
-        share(multiple(listOf(bad, good)))
+        val activity = share(multiple(listOf(bad, good)))
 
         assertEquals(1, app.graph.recordings.all().size)
-        assertEquals("Sent 1 voice note(s) for transcription", ShadowToast.getTextOfLatestToast())
+        assertEquals(MainActivity.OPEN_SHARED_PREFIX + app.graph.recordings.all().single().id, opened(activity))
     }
 
     @Test
@@ -252,5 +262,38 @@ class ShareImportActivityTest : AppTest() {
 
         assertTrue("another app must not be able to make EchoLedger upload its private files", app.graph.recordings.all().isEmpty())
         assertFalse(ShadowToast.getTextOfLatestToast().orEmpty().startsWith("Sent"))
+    }
+
+    /** The screen the share opened: the extra on the MainActivity it started (null when it stayed). */
+    private fun opened(activity: ShareImportActivity): String? = shadowOf(activity).nextStartedActivity?.takeIf {
+        it.component?.className == MainActivity::class.java.name
+    }?.getStringExtra(MainActivity.EXTRA_OPEN)
+
+    @Test
+    fun `with Stay in the app the share opens nothing and a quiet watch follows the note`() {
+        pair()
+        runBlocking { app.graph.settings.update { it.copy(afterShare = SharedNotes.STAY) } }
+
+        val activity = share(single(register("9", sampleBytes(100)), "audio/ogg"))
+
+        val id = app.graph.recordings.all().single().id
+        assertNull(opened(activity))
+        assertEquals("Sent the voice note for transcription. You'll be told when it is ready.", ShadowToast.getTextOfLatestToast())
+        val watch = WorkManager.getInstance(app).getWorkInfosForUniqueWork("shared-notes:$id").get(10, TimeUnit.SECONDS)
+        assertEquals(listOf(WorkInfo.State.ENQUEUED), watch.map { it.state })
+    }
+
+    @Test
+    fun `a shared note is remembered so its page can follow the server recording`() {
+        pair()
+        share(single(register("5", sampleBytes(100)), "audio/ogg"))
+        val id = app.graph.recordings.all().single().id
+
+        assertNull(SharedNotes.sessionFor(app, id))
+        SharedNotes.linkSession(app, id, "01JSESSION")
+        assertEquals("01JSESSION", SharedNotes.sessionFor(app, id))
+        // Recordings that were not shared are never linked.
+        SharedNotes.linkSession(app, "not-shared", "01JOTHER")
+        assertNull(SharedNotes.sessionFor(app, "not-shared"))
     }
 }

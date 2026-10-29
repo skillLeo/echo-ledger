@@ -1,11 +1,14 @@
 package com.echoledger.mobile.share
 
+import android.content.Intent
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.MainActivity
+import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.net.UploadWorker
@@ -20,6 +23,10 @@ import kotlinx.coroutines.withContext
  * Receives voice notes from the Android share sheet, encrypts them locally and queues them for transcription.
  * It never shows recording titles or transcripts (only a count), so it needs no unlock; while the app lock hides
  * content its window is still kept out of Recents and screenshots.
+ *
+ * Then (since v1.3, Settings → Voice notes & files): the app opens on the shared notes (their status, then the
+ * transcript; the app lock asks first, Back returns here), or it stays in the app shared from and a quiet
+ * notification says when each transcript is ready ([SharedNotesWorker]).
  */
 class ShareImportActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,12 +50,12 @@ class ShareImportActivity : ComponentActivity() {
                 finish()
                 return@launch
             }
-            val count = withContext(Dispatchers.IO) {
-                shared.count { audio ->
+            val ids = withContext(Dispatchers.IO) {
+                shared.mapNotNull { audio ->
                     runCatching {
                         val id = UUID.randomUUID().toString()
                         val now = Instant.now().toString()
-                        val input = contentResolver.openInputStream(audio.uri) ?: return@runCatching false
+                        val input = contentResolver.openInputStream(audio.uri) ?: return@runCatching null
                         graph.recordings.importStream(
                             LocalRecording(
                                 id = id,
@@ -67,22 +74,32 @@ class ShareImportActivity : ComponentActivity() {
                             ),
                             input
                         )
+                        // Remembered before the upload starts, so the upload can link it to its server recording.
+                        SharedNotes.remember(this@ShareImportActivity, listOf(id))
                         UploadWorker.enqueue(this@ShareImportActivity, id)
-                        true
-                    }.getOrDefault(false)
+                        id
+                    }.getOrNull()
                 }
             }
-            Toast.makeText(
-                this@ShareImportActivity,
-                if (count >
-                    0
-                ) {
-                    "Sent $count voice note(s) for transcription"
-                } else {
-                    "Could not read the shared audio"
-                },
-                Toast.LENGTH_SHORT
-            ).show()
+            when {
+                ids.isEmpty() -> Toast.makeText(this@ShareImportActivity, "Could not read the shared audio", Toast.LENGTH_SHORT).show()
+
+                settings.afterShare == SharedNotes.STAY -> {
+                    SharedNotesWorker.enqueue(this@ShareImportActivity, ids)
+                    val notes = if (ids.size == 1) "voice note" else "${ids.size} voice notes"
+                    Toast.makeText(
+                        this@ShareImportActivity,
+                        "Sent the $notes for transcription. You'll be told when it is ready.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+
+                // The app opens on the shared notes (after the app lock, when it is on); Back comes back here.
+                else -> startActivity(
+                    Intent(this@ShareImportActivity, MainActivity::class.java)
+                        .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SHARED_PREFIX + ids.joinToString(","))
+                )
+            }
             finish()
         }
     }

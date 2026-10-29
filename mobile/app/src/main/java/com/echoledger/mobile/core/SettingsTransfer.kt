@@ -28,6 +28,7 @@ object SettingsTransfer {
         "captionsEnabled",
         "micSource",
         "decisionTimeout",
+        "afterShare",
         "decisionTimeoutChosen",
         "autoRecordApps",
         "extraCallApps",

@@ -346,7 +346,7 @@ object Notifications {
 
     /** One activity notification; tapping it opens [sessionId] (or the app). Hidden content on the lock screen. */
     @SuppressLint("MissingPermission") // checked by the caller (POST_NOTIFICATIONS)
-    fun activity(context: Context, key: String, title: String, body: String, sessionId: String?) {
+    fun activity(context: Context, key: String, title: String, body: String, sessionId: String?, silent: Boolean = false) {
         val open = PendingIntent.getActivity(
             context,
             key.hashCode(),
@@ -361,6 +361,7 @@ object Notifications {
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setContentIntent(open)
+            .setSilent(silent)
             .setAutoCancel(true)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .build()
