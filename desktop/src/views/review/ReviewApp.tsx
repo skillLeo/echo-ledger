@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type AnimationEvent, type MouseEvent } from "react";
 import { announceReady, api, errorMessage, listenTo, type AskAnswer, type AskPayload, type PendingItem, type ReviewPayload } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, languageChip, languageLabel, learnPrompt, type LanguageChoice } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, type LanguageChoice } from "../../lib/languages";
 import { alwaysIgnoreLabel, askSeconds, askSubject, countdownText, reviewDuration, reviewTitle } from "../../lib/controls";
 import { MicIcon, SourceAppIcon } from "../../components/Icons";
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, MoreIcon, OpenIcon, PencilIcon, UserIcon } from "../../components/ControlIcons";
@@ -91,6 +91,9 @@ function ReviewCard({ review, onItem, onSync }: { review: ReviewPayload; onItem:
   const [learn, setLearn] = useState<{ question: string; clientId: string; language: LanguageChoice } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [entered, setEntered] = useState(false);
+  // The recording whose "English only" was warned about (once per recording).
+  const [englishNote, setEnglishNote] = useState<string | null>(null);
+  const warnedEnglish = useRef<Set<string>>(new Set());
   const busy = useRef(false);
 
   const counting = timeout !== "wait" && item.deadlineAt !== null;
@@ -164,6 +167,10 @@ function ReviewCard({ review, onItem, onSync }: { review: ReviewPayload; onItem:
     try {
       const updated = await api.pendingSetLanguage(item.id, language);
       onItem(updated);
+      if (language === "en" && !warnedEnglish.current.has(item.id) && englishOnlyRisk(null, item.firstLine)) {
+        warnedEnglish.current.add(item.id);
+        setEnglishNote(item.id);
+      }
       if (updated.clientId) {
         const client = (await api.clients().catch(() => null))?.data.find((c) => c.id === updated.clientId);
         const question = client ? learnPrompt(client.name, client.language, language) : null;
@@ -230,6 +237,8 @@ function ReviewCard({ review, onItem, onSync }: { review: ReviewPayload; onItem:
           <button type="button" className="ctl-btn" onClick={() => answerLearn(true)}>Yes</button>
           <button type="button" className="ctl-btn" onClick={() => answerLearn(false)}>No</button>
         </div>
+      ) : englishNote === item.id && item.language === "en" ? (
+        <div className="review-line" role="alert" data-testid="english-only-warning" title={ENGLISH_ONLY_NOTE}>{ENGLISH_ONLY_NOTE}</div>
       ) : (
         <div className={`review-line${item.firstLine ? "" : " none"}`} title={item.firstLine ?? undefined}>{item.firstLine ?? "No captions"}</div>
       )}
@@ -307,6 +316,9 @@ function ClientList({ selected, onPick, onBack }: { selected: string | null; onP
   );
 }
 
+/** Said once when English only is picked for a call whose captions show Urdu (the engine would translate it). */
+const ENGLISH_ONLY_NOTE = "This call has Urdu in it: English only would translate it. Pick Urdu (with English words) to keep every word.";
+
 /** The language list over the card body (More languages behind one row); the final transcript uses the choice at Keep. */
 function LanguageList({ selected, onPick, onBack }: { selected: LanguageChoice; onPick: (language: LanguageChoice) => void; onBack: () => void }) {
   const [more, setMore] = useState(MORE_LANGUAGES.some((o) => o.value === selected));
@@ -321,7 +333,7 @@ function LanguageList({ selected, onPick, onBack }: { selected: LanguageChoice; 
         {shown.map((o) => (
           <button type="button" role="menuitemradio" aria-checked={selected === o.value} className="review-option" key={o.chip}
             onClick={() => onPick(o.value)}>
-            <span className="review-option-name">{o.label}</span>
+            <span className="review-option-name">{menuLabel(o)}</span>
             {selected === o.value && <CheckIcon size={14} />}
           </button>
         ))}

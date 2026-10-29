@@ -160,11 +160,11 @@ describe("review card", () => {
     expect(button("Language: Auto")).toHaveTextContent("Auto");
     fireEvent.click(button("Language: Auto"));
     const list = await screen.findByRole("menu", { name: "Languages" });
-    expect(within(list).getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Auto", "English", "Urdu", "Arabic"]);
+    expect(within(list).getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Auto (English / Urdu / Arabic)", "English only", "Urdu (with English words)", "Arabic (with English words)"]);
     // The More languages are one row away.
     fireEvent.click(within(list).getByRole("menuitem", { name: "More languages…" }));
     expect(within(list).getAllByRole("menuitemradio")).toHaveLength(12);
-    fireEvent.click(within(list).getByRole("menuitemradio", { name: "Urdu" }));
+    fireEvent.click(within(list).getByRole("menuitemradio", { name: "Urdu (with English words)" }));
     await waitFor(() => expect(callsOf("pending_set_language")).toEqual([{ id: "pend-1", language: "ur" }]));
     await flushAsync();
     expect(button("Language: Urdu")).toHaveTextContent("UR");
@@ -181,7 +181,7 @@ describe("review card", () => {
     await renderReview(makeReviewPayload({ item: makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: "en" }) }));
     respond("pending_set_language", makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: "ur" }));
     fireEvent.click(button("Language: English"));
-    fireEvent.click(within(await screen.findByRole("menu", { name: "Languages" })).getByRole("menuitemradio", { name: "Urdu" }));
+    fireEvent.click(within(await screen.findByRole("menu", { name: "Languages" })).getByRole("menuitemradio", { name: "Urdu (with English words)" }));
     await waitFor(() => expect(callsOf("pending_set_language")).toHaveLength(1));
     await flushAsync();
     expect(screen.queryByTestId("review-learn")).not.toBeInTheDocument();

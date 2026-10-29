@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageChip, languageLabel, learnPrompt, nextLanguage, normalizeLanguage, partsText, scriptWarning, transcribingText } from "./languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, partsText, scriptWarning, transcribingText } from "./languages";
 
 describe("languages", () => {
   it("offers Auto, English, Urdu and Arabic first, then the More languages, without Hindi or mixed choices", () => {
@@ -8,6 +8,23 @@ describe("languages", () => {
     expect(["", "en", "ur", "ar", "de", "xx"].map((c) => languageChip(c))).toEqual(["Auto", "EN", "UR", "AR", "DE", "Auto"]);
     expect(languageLabel("ar")).toBe("Arabic");
     expect(languageLabel(null)).toBe("Auto");
+  });
+
+  it("labels menus by what each choice does and keeps the plain name for sentences", () => {
+    expect(MAIN_LANGUAGES.map(menuLabel)).toEqual(["Auto (English / Urdu / Arabic)", "English only", "Urdu (with English words)", "Arabic (with English words)"]);
+    expect(menuLabel(MORE_LANGUAGES[0])).toBe("French");
+    expect(languageLabel("ur")).toBe("Urdu");
+    expect([...MAIN_LANGUAGES, ...MORE_LANGUAGES].some((o) => /hindi/i.test(menuLabel(o)))).toBe(false);
+  });
+
+  it("sees the risk of English only in Urdu or Arabic speech, Urdu letters or Roman Urdu, not in English", () => {
+    expect(englishOnlyRisk("ur", null)).toBe(true);
+    expect(englishOnlyRisk("hi", null)).toBe(true);
+    expect(englishOnlyRisk(null, "آپ کل کی meeting")).toBe(true);
+    expect(englishOnlyRisk(null, "kya kar rahe ho, theek hai")).toBe(true);
+    expect(englishOnlyRisk("en", "Hello, this is Sam.")).toBe(false);
+    expect(englishOnlyRisk(null, "Okay, acha.")).toBe(false);
+    expect(englishOnlyRisk(null, null)).toBe(false);
   });
 
   it("reads v1.1 values as today: the mixed choices and Hindi are Urdu", () => {

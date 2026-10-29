@@ -1005,13 +1005,38 @@ describe("LibraryView Re-transcribe as", () => {
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     const select = screen.getByRole("combobox", { name: "Re-transcribe in" });
     expect([...select.querySelectorAll("option")].map((o) => o.textContent)).toEqual(
-      ["Auto", "English", "Urdu", "Arabic", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Turkish", "Russian"],
+      ["Auto (English / Urdu / Arabic)", "English only", "Urdu (with English words)", "Arabic (with English words)", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Turkish", "Russian"],
     );
 
     fireEvent.change(select, { target: { value: "" } });
     fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
     await flushAsync();
     expect(callsOf("session_retranscribe")).toEqual([{ id: "a", language: null }]);
+  });
+
+  it("warns once before English only on a recording with Urdu in it, and never on an English one", async () => {
+    respond("session_retranscribe", {});
+    TRANSCRIPTS["tr-ur"] = makeTranscript({ id: "tr-ur", language: "ur", segments: line("kya kar rahe ho, meeting kab hai") });
+    await renderLibrary([
+      makeItem("u", { title: "Mixed call", language: null, transcript: { final_status: "completed", final_transcript_id: "tr-ur", live_available: false, preview: "kya kar rahe ho, meeting kab hai", final_language: "ur" } }),
+      ...ITEMS,
+    ]);
+    await selectItem("Mixed call", "kya kar rahe ho, meeting kab hai");
+    fireEvent.change(screen.getByRole("combobox", { name: "Re-transcribe in" }), { target: { value: "en" } });
+    fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
+    await flushAsync();
+    expect(callsOf("session_retranscribe")).toEqual([]);
+    expect(screen.getByTestId("english-only-warning")).toHaveTextContent("English only makes the engine translate the Urdu");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe anyway" }));
+    await flushAsync();
+    expect(callsOf("session_retranscribe")).toEqual([{ id: "u", language: "en" }]);
+
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    fireEvent.change(screen.getByRole("combobox", { name: "Re-transcribe in" }), { target: { value: "en" } });
+    fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
+    await flushAsync();
+    expect(screen.queryByTestId("english-only-warning")).not.toBeInTheDocument();
+    expect(callsOf("session_retranscribe")).toHaveLength(2);
   });
 
   it("reports a refused re-transcribe", async () => {

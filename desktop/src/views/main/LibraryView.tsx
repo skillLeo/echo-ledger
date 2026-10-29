@@ -13,7 +13,7 @@ import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, smartViewCounts } from "../../lib/organise";
 import { BinPanel, BulkBar, OrganisePanel } from "./LibraryOrganise";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, languageLabel, normalizeLanguage, partsText, scriptWarning, transcribingText } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, scriptWarning, transcribingText } from "../../lib/languages";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -157,12 +157,20 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const finalId = version === "alternate" && alternateId ? alternateId : current?.transcript?.final_transcript_id ?? null;
   const liveId = current?.transcript?.live_transcript_id ?? null;
   const [retranscribeLanguage, setRetranscribeLanguage] = useState<string>("");
+  // "English only" on a recording with Urdu in it is said once (the engine would translate the Urdu).
+  const [englishWarned, setEnglishWarned] = useState(false);
   useEffect(() => {
     setVersion("final");
     setRetranscribeLanguage(current?.language ?? "");
+    setEnglishWarned(false);
   }, [current?.id]);
+  const englishRisk = retranscribeLanguage === "en" && englishOnlyRisk(current?.transcript?.final_language, current?.transcript?.preview);
   const retranscribe = async () => {
     if (!current) return;
+    if (englishRisk && !englishWarned) {
+      setEnglishWarned(true);
+      return;
+    }
     try {
       await api.retranscribe(current.id, (retranscribeLanguage || null) as TranscriptionLanguage | null);
       notify(`Re-transcribing in ${languageLabel(retranscribeLanguage || null)}. The current transcript stays until the new one is ready.`);
@@ -574,10 +582,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
                 <div className="row retranscribe-row" style={{ gap: 6, marginTop: 6 }}>
                   <select className="select compact" aria-label="Re-transcribe in" value={retranscribeLanguage} onChange={(e) => setRetranscribeLanguage(e.target.value)}>
-                    {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
-                    <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}</optgroup>
+                    {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
+                    <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}</optgroup>
                   </select>
-                  <button type="button" className="btn ghost compact" onClick={() => void retranscribe()}>Re-transcribe</button>
+                  <button type="button" className="btn ghost compact" onClick={() => void retranscribe()}>
+                    {englishRisk && englishWarned ? "Re-transcribe anyway" : "Re-transcribe"}
+                  </button>
                   {alternateId && (
                     <span className="row" style={{ gap: 2 }} role="group" aria-label="Version">
                       <button type="button" className="btn ghost compact" aria-pressed={version === "final"} onClick={() => setVersion("final")}>Current</button>
@@ -586,6 +596,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       </button>
                     </span>
                   )}
+                </div>
+              )}
+              {englishRisk && englishWarned && (
+                <div className="notice" role="alert" data-testid="english-only-warning" style={{ marginTop: 8 }}>
+                  This recording has Urdu in it. English only makes the engine translate the Urdu into English. Choose Urdu (with English words) to keep every word, or click Re-transcribe anyway.
                 </div>
               )}
               {scriptWarning(current.transcript?.script_warning) && <div className="notice" role="status" style={{ marginTop: 8 }}>{scriptWarning(current.transcript?.script_warning)}</div>}

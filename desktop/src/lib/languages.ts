@@ -7,11 +7,13 @@ export type LanguageChoice = TranscriptionLanguage | null;
  * The choices offered everywhere (docs/API.md "Languages", since v1.2): Auto, English, Urdu and Arabic first, then
  * the More languages (`more`). Urdu and Arabic always allow English words inside; Hindi and the mixed choices are gone.
  */
-export const LANGUAGE_OPTIONS: readonly { value: LanguageChoice; label: string; chip: string; more?: true }[] = [
-  { value: null, label: "Auto", chip: "Auto" },
-  { value: "en", label: "English", chip: "EN" },
-  { value: "ur", label: "Urdu", chip: "UR" },
-  { value: "ar", label: "Arabic", chip: "AR" },
+export const LANGUAGE_OPTIONS: readonly { value: LanguageChoice; label: string; menu?: string; chip: string; more?: true }[] = [
+  // `label` is the name inside a sentence ("Re-transcribing in Urdu"); `menu` says what the choice does (since v1.3,
+  // the same words as the server's language options).
+  { value: null, label: "Auto", menu: "Auto (English / Urdu / Arabic)", chip: "Auto" },
+  { value: "en", label: "English", menu: "English only", chip: "EN" },
+  { value: "ur", label: "Urdu", menu: "Urdu (with English words)", chip: "UR" },
+  { value: "ar", label: "Arabic", menu: "Arabic (with English words)", chip: "AR" },
   { value: "fr", label: "French", chip: "FR", more: true },
   { value: "de", label: "German", chip: "DE", more: true },
   { value: "es", label: "Spanish", chip: "ES", more: true },
@@ -55,6 +57,25 @@ export function languageChip(value: string | null | undefined): string {
 /** "Urdu"; "Auto" for none or an unknown code. */
 export function languageLabel(value: string | null | undefined): string {
   return option(value).label;
+}
+
+/** A language as a menu shows it: "Urdu (with English words)", "English only", "French". */
+export function menuLabel(o: (typeof LANGUAGE_OPTIONS)[number]): string {
+  return o.menu ?? o.label;
+}
+
+/**
+ * "English only" would make the engine translate Urdu speech into English: true when the recording was heard as Urdu
+ * (or Arabic), or its live captions have Urdu letters or Roman Urdu words, so the person is warned once.
+ */
+export function englishOnlyRisk(heard: string | null | undefined, sample: string | null | undefined): boolean {
+  const code = normalizeLanguage(heard);
+  if (code === "ur" || code === "ar") return true;
+  const text = sample ?? "";
+  if (/[؀-ۿऀ-ॿ]/.test(text)) return true;
+  const roman = new Set(["hai", "hain", "nahi", "nahin", "kya", "kyun", "kaise", "theek", "acha", "achha", "haan", "yaar", "abhi", "aap", "mujhe", "raha", "rahe", "karo", "bohat", "bahut", "kuch", "lekin", "matlab"]);
+  const hits = new Set(text.toLowerCase().split(/[^a-z]+/).filter((w) => roman.has(w)));
+  return hits.size >= 2;
 }
 
 /** "part 3 of 8" while a long recording is transcribed in parts (the part being worked on); null otherwise. */

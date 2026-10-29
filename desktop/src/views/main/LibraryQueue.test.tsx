@@ -260,7 +260,7 @@ describe("Waiting for your decision: assign client", () => {
     await renderLibrary([makePendingItem("p1", { clientId: "c1", clientName: "Acme Holdings" })]);
     respondWith("pending_set_language", ({ id, language }) => makePendingItem(id as string, { clientId: "c1", clientName: "Acme Holdings", language: language as "ur" }));
     const select = within(row("p1")).getByRole("combobox", { name: "Language" });
-    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["Auto language", "English", "Urdu", "Arabic", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Turkish", "Russian"]);
+    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["Auto (English / Urdu / Arabic)", "English only", "Urdu (with English words)", "Arabic (with English words)", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Turkish", "Russian"]);
     fireEvent.change(select, { target: { value: "ur" } });
     await waitFor(() => expect(callsOf("pending_set_language")).toEqual([{ id: "p1", language: "ur" }]));
     await waitFor(() => expect(within(row("p1")).getByText("Use Urdu for Acme Holdings from now on?")).toBeInTheDocument());
