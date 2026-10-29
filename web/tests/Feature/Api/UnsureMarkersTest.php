@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Filament\Infolists\TranscriptPlayerEntry;
+use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Services\SettingsRepository;
 use App\Support\UnsureMarkers;
@@ -37,10 +39,12 @@ function unsureTranscript(object $test): Transcript
 }
 
 it('marks the words below the threshold, in the chosen style, and leaves [unclear] and edited lines alone', function () {
-    $segment = ['text' => 'x', 'words' => [['text' => 'kal', 'confidence' => 0.9], ['text' => 'meeting', 'confidence' => 0.2], ['text' => '[unclear]', 'confidence' => 0.1]]];
+    $segment = ['text' => 'kal meeting, [unclear]!', 'words' => [['text' => 'kal', 'confidence' => 0.9], ['text' => 'meeting', 'confidence' => 0.2], ['text' => '[unclear]', 'confidence' => 0.1]]];
 
-    expect(UnsureMarkers::mark($segment, 0.5))->toBe('kal [?meeting] [unclear]')
-        ->and(UnsureMarkers::mark($segment, 0.1))->toBe('kal meeting [unclear]')
+    expect(UnsureMarkers::mark($segment, 0.5))->toBe('kal [?meeting], [unclear]!')
+        ->and(UnsureMarkers::mark($segment, 0.1))->toBe('kal meeting, [unclear]!')
+        // The second "the" is the unsure one; punctuation and words without timing stay.
+        ->and(UnsureMarkers::mark(['text' => 'the cat saw the dog.', 'words' => [['text' => 'the', 'confidence' => 0.9], ['text' => 'cat', 'confidence' => 0.9], ['text' => 'the', 'confidence' => 0.2], ['text' => 'dog', 'confidence' => 0.9]]], 0.5))->toBe('the cat saw [?the] dog.')
         ->and(UnsureMarkers::mark(['text' => ' Edited line ', 'words' => []], 0.5))->toBe('Edited line')
         ->and(UnsureMarkers::restyle('kal [?meeting] hai', 'suffix'))->toBe('kal meeting(?) hai')
         ->and(UnsureMarkers::restyle('kal [?meeting] hai', 'off'))->toBe('kal meeting hai')
@@ -88,4 +92,20 @@ it('tells the apps how to mark unsure words', function () {
     $this->getJson('/api/config')->assertOk()
         ->assertJsonPath('unsure.style', 'suffix')->assertJsonPath('unsure.threshold', 0.5)->assertJsonPath('unsure.note', true)
         ->assertJsonPath('unsure.note_text', UnsureMarkers::note('suffix'));
+});
+
+it('underlines in the console player by the console threshold, and offers Copy for AI with the style and note', function () {
+    $transcript = unsureTranscript($this);
+    $session = CaptureSession::query()->findOrFail($transcript->capture_session_id);
+
+    $player = TranscriptPlayerEntry::payload($session);
+    expect(array_keys(array_filter(array_column($player['segments'][0]['words'], 'u', 't'))))->toBe(['invoice', 'Omar'])
+        ->and($player['unsure'])->toMatchArray(['style' => 'brackets', 'note' => true, 'note_text' => UnsureMarkers::note('brackets')]);
+
+    app(SettingsRepository::class)->set('unsure.threshold', 0.35);
+    $player = TranscriptPlayerEntry::payload($session);
+    expect(array_keys(array_filter(array_column($player['segments'][0]['words'], 'u', 't'))))->toBe(['invoice']);
+
+    $html = (string) file_get_contents(resource_path('views/filament/infolists/transcript-player.blade.php'));
+    expect($html)->toContain('copy(false, true)')->toContain('Copy for AI')->toContain('lineParts(i)');
 });

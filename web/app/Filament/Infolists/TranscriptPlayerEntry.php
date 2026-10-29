@@ -12,8 +12,8 @@ use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Services\TranscriptEditor;
 use App\Services\Views\TranscriptViews;
-use App\Stt\Data\Word;
 use App\Stt\LanguageChoice;
+use App\Support\UnsureMarkers;
 use Filament\Infolists\Components\Entry;
 
 /**
@@ -53,6 +53,8 @@ class TranscriptPlayerEntry extends Entry
         $live = $record->transcripts()->where('kind', TranscriptKind::Live->value)->first();
         /** @var Transcript|null $shown */
         $shown = ($final !== null && $final->segments) ? $final : ($live ?? $final);
+        // How unsure words are marked: the console's threshold for the underline, its style and note for copies (plan A4).
+        $unsure = UnsureMarkers::settings();
         $segments = [];
         foreach ($shown->segments ?? [] as $s) {
             $words = [];
@@ -60,7 +62,7 @@ class TranscriptPlayerEntry extends Entry
                 if (is_array($w) && isset($w['start_ms'], $w['text'])) {
                     // `u`: the engine was not sure of the word (underlined; a click plays it).
                     $words[] = ['s' => (int) $w['start_ms'], 'e' => (int) ($w['end_ms'] ?? $w['start_ms']), 't' => (string) $w['text'],
-                        ...(Word::isUncertain($w['confidence'] ?? null) ? ['u' => true] : [])];
+                        ...(is_numeric($w['confidence'] ?? null) && (float) $w['confidence'] < $unsure['threshold'] ? ['u' => true] : [])];
                 }
             }
             $segments[] = [
@@ -89,6 +91,7 @@ class TranscriptPlayerEntry extends Entry
             'language' => LanguageChoice::label($final->language ?? $record->language),
             // The code too (ur, ar…): Urdu lines are set in Nastaliq, Arabic in Naskh.
             'language_code' => LanguageChoice::normalize($final->language ?? $record->language),
+            'unsure' => $unsure + ['note_text' => UnsureMarkers::note($unsure['style'])],
             'markers' => $record->markers()->get(['at_ms', 'tag', 'note'])
                 ->map(fn (SessionMarker $m): array => ['at_ms' => $m->at_ms, 'tag' => $m->tag, 'note' => $m->note])->values()->all(),
             'pauses' => $record->pauses ?? [],

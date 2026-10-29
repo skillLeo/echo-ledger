@@ -417,7 +417,8 @@ it('keeps hostile text inside the data, never in the markup', function () {
             ->and($result['d']['segments'][0]['speaker'])->toBe('<i>Mallory</i>');
     }
     // Lines (and their Show as views) are rendered with x-text, which never parses HTML.
-    expect($html)->toContain('x-text="lineText(i)"')->toContain('x-text="w.t"')->not->toContain('x-html');
+    // Lines (and their Show as views, split into parts for the unsure-word marks) use x-text, which never parses HTML.
+    expect($html)->toContain('x-text="p.t"')->toContain('x-text="w.t"')->not->toContain('x-html');
 });
 
 it('styles the player for light and dark themes with a visible focus ring', function () {

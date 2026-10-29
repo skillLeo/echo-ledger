@@ -90,17 +90,49 @@
                 this.saving = null;
             },
             // Same text format as the desktop and Android apps: '[m:ss] Speaker: text', speaker omitted when there is only one.
-            transcriptText(withTimes) {
+            // Copies mark unsure words as [?word] (or the console style); Copy for AI starts with the note line (plan A4).
+            markedLine(i, style) {
+                const s = this.d.segments[i];
+                let raw = s.text;
+                if (this.view !== 'original' && this.viewReady(this.view)) {
+                    raw = this.lineText(i);
+                } else if (s.words.length) {
+                    // The line keeps its own text; each unsure word is found in order and wrapped where it stands.
+                    let out = '', at = 0;
+                    for (const w of s.words) {
+                        const pos = w.t ? s.text.indexOf(w.t, at) : -1;
+                        if (pos < 0) continue;
+                        out += s.text.slice(at, pos) + (w.u && !w.t.startsWith('[') ? '[?' + w.t + ']' : w.t);
+                        at = pos + w.t.length;
+                    }
+                    raw = out + s.text.slice(at);
+                }
+                return style === 'suffix' ? raw.replace(/\[\?([^\]]+)\]/g, '$1(?)') : (style === 'off' ? raw.replace(/\[\?([^\]]+)\]/g, '$1') : raw);
+            },
+            transcriptText(withTimes, forAi = false) {
+                const u = this.d.unsure || { style: 'brackets', note: true, note_text: '' };
+                const style = forAi && u.style === 'off' ? 'brackets' : u.style;
                 const single = new Set(this.d.segments.map(s => s.speaker)).size <= 1;
-                return this.d.segments.map((s, i) => (withTimes ? '[' + this.clock(s.start_ms) + '] ' : '') + (single ? '' : this.name(s) + ': ') + this.lineText(i)).join('\n');
+                const body = this.d.segments.map((s, i) => (withTimes ? '[' + this.clock(s.start_ms) + '] ' : '') + (single ? '' : this.name(s) + ': ') + this.markedLine(i, style)).join('\n');
+                const note = (u.note_text || 'Note: [?word] = the transcription is unsure about this word; [unclear] = inaudible audio.').replace('[?word]', style === 'suffix' ? 'word(?)' : '[?word]');
+                const marked = /\[\?[^\]]+\]|\[unclear|\(\?\)/.test(body);
+                return forAi || (u.note && style !== 'off' && marked) ? note + '\n\n' + body : body;
+            },
+            // A line of a view on screen as text parts: its [?word] marks become underlined parts (rendered with x-text,
+            // never as HTML), like unsure words of the original. No double quotes in here: it sits inside x-data.
+            lineParts(i) {
+                return this.lineText(i).split(/(\[\?[^\]]+\])/).filter(p => p !== '').map(p => {
+                    const m = /^\[\?([^\]]+)\]$/.exec(p);
+                    return m ? { t: m[1], u: true } : { t: p, u: false };
+                });
             },
             // Show as: a line in the chosen view (Roman Urdu or English) when it is made, else its own words.
             viewReady(v) { return !!(this.d.views && this.d.views.status === 'ready' && this.d.views[v]); },
             lineText(i) { return this.view !== 'original' && this.viewReady(this.view) ? (this.d.views[this.view][i] ?? this.d.segments[i].text) : this.d.segments[i].text; },
             // A line whose view failed the checks twice shows the original words, with a note (plan A3).
             keptLine(i) { return this.view !== 'original' && this.viewReady(this.view) && ((this.d.views.kept || {})[this.view] || []).includes(i); },
-            async copy(withTimes) {
-                try { await navigator.clipboard.writeText(this.transcriptText(withTimes)); this.copied = withTimes ? 'times' : 'text'; }
+            async copy(withTimes, forAi = false) {
+                try { await navigator.clipboard.writeText(this.transcriptText(withTimes, forAi)); this.copied = forAi ? 'ai' : (withTimes ? 'times' : 'text'); }
                 catch (e) { this.copied = 'failed'; }
                 setTimeout(() => this.copied = null, 2000);
             },
@@ -206,6 +238,7 @@
             <button type="button" class="el-btn" x-show="d.editable && view === 'original'" x-on:click="editing = !editing" :aria-pressed="editing" x-text="editing ? 'Done editing' : 'Edit text'"></button>
             <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(false)" x-text="copied === 'text' ? 'Copied' : 'Copy text'"></button>
             <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(true)" x-text="copied === 'times' ? 'Copied' : (copied === 'failed' ? 'Copy failed' : 'Copy with timestamps')"></button>
+            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(false, true)" title="Unsure words marked [?word], with a first line that tells an AI what the marks mean" x-text="copied === 'ai' ? 'Copied' : 'Copy for AI'"></button>
             <span class="el-sr" role="status" aria-live="polite" x-text="copied === 'failed' ? 'Copy failed' : (copied ? 'Copied to the clipboard' : (saving !== null ? 'Saving' : ''))"></span>
         </div>
 
@@ -244,7 +277,7 @@
                                             :data-u="w.u ? '' : null" :title="w.u ? 'Not sure of this word. Click to hear it.' : null"
                                             x-on:click="if (w.u) { $event.stopPropagation(); seekTo(w.s); }" x-text="w.t"></span> </span></template></span>
                                     </template>
-                                    <template x-if="!d.segments[i].words.length || view !== 'original'"><span><span x-text="lineText(i)"></span><span class="el-kept" x-show="keptLine(i)" title="This line could not be written in the view, so it shows the words as transcribed."> · original words</span></span></template>
+                                    <template x-if="!d.segments[i].words.length || view !== 'original'"><span><template x-for="(p, pi) in lineParts(i)" :key="pi"><span :class="p.u ? 'el-w' : null" :data-u="p.u ? '' : null" x-text="p.t"></span></template><span class="el-kept" x-show="keptLine(i)" title="This line could not be written in the view, so it shows the words as transcribed."> · original words</span></span></template>
                                 </button>
                             </template>
                             <template x-if="d.segments[i].check && !editing">

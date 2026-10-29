@@ -43,21 +43,25 @@ final class UnsureMarkers
      */
     public static function mark(array $segment, float $threshold): string
     {
+        $line = trim((string) ($segment['text'] ?? ''));
         $words = is_array($segment['words'] ?? null) ? $segment['words'] : [];
-        if ($words === []) {
-            return trim((string) ($segment['text'] ?? ''));
-        }
-        $out = [];
+        // The line's own text is kept exactly (punctuation, words the engine gave no timing for); each unsure word is
+        // found in order from where the previous word ended and wrapped there.
+        $out = '';
+        $at = 0;
         foreach ($words as $word) {
             $text = trim((string) ($word['text'] ?? $word['word'] ?? ''));
-            if ($text === '') {
+            $pos = $text === '' ? false : mb_strpos($line, $text, $at);
+            if ($pos === false) {
                 continue;
             }
             $confidence = $word['confidence'] ?? null;
-            $out[] = is_numeric($confidence) && (float) $confidence < $threshold && ! str_starts_with($text, '[') ? "[?{$text}]" : $text;
+            $unsure = is_numeric($confidence) && (float) $confidence < $threshold && ! str_starts_with($text, '[');
+            $out .= mb_substr($line, $at, $pos - $at).($unsure ? '[?'.$text.']' : $text);
+            $at = $pos + mb_strlen($text);
         }
 
-        return implode(' ', $out);
+        return $out.mb_substr($line, $at);
     }
 
     /** "[?word]" in the chosen style: kept, "word(?)", or plain. */
