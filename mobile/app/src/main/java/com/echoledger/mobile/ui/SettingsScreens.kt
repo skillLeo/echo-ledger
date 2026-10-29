@@ -401,7 +401,7 @@ fun AppearanceSection(settings: AppSettings, update: ((AppSettings) -> AppSettin
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Wallpaper colours")
-                    Text("Use the colours of your wallpaper instead of EchoLedger purple.", color = Brand.Muted, fontSize = 12.sp)
+                    Text("Use the colours of your wallpaper instead of EchoLedger blue.", color = Brand.Muted, fontSize = 12.sp)
                 }
                 Switch(
                     checked = settings.dynamicColour,
@@ -409,6 +409,21 @@ fun AppearanceSection(settings: AppSettings, update: ((AppSettings) -> AppSettin
                     modifier = Modifier.semantics { contentDescription = "Wallpaper colours" }
                 )
             }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Use phone font")
+                Text(
+                    "Show text in your phone's font instead of Inter. Text size always follows your phone.",
+                    color = Brand.Muted,
+                    fontSize = 12.sp
+                )
+            }
+            Switch(
+                checked = settings.phoneFont,
+                onCheckedChange = { v -> update { it.copy(phoneFont = v) } },
+                modifier = Modifier.semantics { contentDescription = "Use phone font" }
+            )
         }
     }
 }

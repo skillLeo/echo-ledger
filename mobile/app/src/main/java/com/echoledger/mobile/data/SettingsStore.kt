@@ -86,7 +86,9 @@ data class AppSettings(
     /** App theme (C4): `system`, `light` or `dark`. */
     val themeMode: String = "system",
     /** Use the wallpaper's colours (Material You, Android 12 and later) instead of the EchoLedger accent. */
-    val dynamicColour: Boolean = false
+    val dynamicColour: Boolean = false,
+    /** Show text in the phone's own font instead of the bundled Inter (since v1.3; sizes always follow the phone). */
+    val phoneFont: Boolean = false
 ) {
     /** What happens to an undecided recording: "keep", "discard" or "wait" (the default; nothing is uploaded or paid for). */
     val afterCallTimeout: String get() = if (decisionTimeoutChosen) decisionTimeout else "wait"

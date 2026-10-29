@@ -53,6 +53,15 @@ class AppearanceTest : ScreenTest() {
     }
 
     @Test
+    fun `the bundled font is used until the phone font is turned on`() {
+        showAppearance()
+        assertFalse(settings.phoneFont)
+        compose.onNodeWithContentDescription("Use phone font").performClick()
+        assertTrue(settings.phoneFont)
+        assertEquals("appearance", SettingsCatalogue.search("font").single().id)
+    }
+
+    @Test
     fun `appearance is the first General setting and search finds it`() {
         assertEquals("appearance", SettingsCatalogue.inGroup(SettingsGroup.General).first().id)
         assertEquals("appearance", SettingsCatalogue.search("dark theme").single().id)
@@ -63,5 +72,6 @@ class AppearanceTest : ScreenTest() {
         val old = com.echoledger.mobile.data.ApiJson.decodeFromString(AppSettings.serializer(), """{"serverUrl":null}""")
         assertEquals("system", old.themeMode)
         assertFalse(old.dynamicColour)
+        assertFalse(old.phoneFont)
     }
 }

@@ -22,6 +22,8 @@ import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
+import com.echoledger.mobile.ui.design.DesignGallery
+import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertTrue
@@ -30,13 +32,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Renders the key screens to PNG files (build/screenshots, or the `screenshots.dir` system property) for design
- * review, and checks that each one actually drew something.
+ * Renders the key screens and the Design gallery for design review (Roborazzi: docs/design/screens, see
+ * docs/DESIGN_SYSTEM.md), and checks that each one actually drew something.
  */
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w393dp-h852dp-hdpi")
 class ScreenshotsTest : ScreenTest() {
-    private val outDir = File(System.getProperty("screenshots.dir") ?: "build/screenshots").apply { mkdirs() }
+    private val outDir = File(System.getProperty("screenshots.dir") ?: "build/screenshots")
 
     private var themeMode by mutableStateOf("dark")
 
@@ -59,7 +61,8 @@ class ScreenshotsTest : ScreenTest() {
     private fun captureOne(name: String) {
         compose.waitForIdle()
         val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-        File(outDir, "phone-$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // Written (or compared) only by the Roborazzi tasks; a plain test run just checks that the screen drew.
+        compose.onRoot().captureRoboImage(File(outDir, "phone-$name.png"))
         assertTrue("$name drew nothing", bitmap.width > 0 && distinctColours(bitmap) > 2)
     }
 
@@ -216,5 +219,14 @@ class ScreenshotsTest : ScreenTest() {
     fun lock() {
         shoot { LockScreen(onUnlock = {}) }
         capture("lock")
+    }
+
+    @Test
+    fun `design gallery`() {
+        var part by mutableStateOf(0)
+        shoot { DesignGallery(part = part) }
+        capture("gallery-1")
+        part = 1
+        capture("gallery-2")
     }
 }

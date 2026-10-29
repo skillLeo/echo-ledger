@@ -114,7 +114,9 @@ class MainActivity : FragmentActivity() {
                 val style = if (dark) SystemBarStyle.dark(transparent) else SystemBarStyle.light(transparent, transparent)
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
             }
-            EchoLedgerTheme(themeMode, dynamicColour = settings?.dynamicColour == true) { Content() }
+            EchoLedgerTheme(themeMode, dynamicColour = settings?.dynamicColour == true, phoneFont = settings?.phoneFont == true) {
+                Content()
+            }
         }
     }
 

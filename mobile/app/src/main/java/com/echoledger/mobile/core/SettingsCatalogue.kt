@@ -18,7 +18,7 @@ data class SettingsEntry(val id: String, val group: SettingsGroup, val title: St
 
 object SettingsCatalogue {
     val entries: List<SettingsEntry> = listOf(
-        SettingsEntry("appearance", SettingsGroup.General, "Appearance", "theme dark light system colours wallpaper dynamic"),
+        SettingsEntry("appearance", SettingsGroup.General, "Appearance", "theme dark light system colours wallpaper dynamic font typeface"),
         SettingsEntry("transcription", SettingsGroup.General, "Transcription", "language english urdu hindi vocabulary terms"),
         SettingsEntry("client", SettingsGroup.General, "Client keyterms", "client names jargon accuracy"),
         SettingsEntry("notifications", SettingsGroup.General, "Notifications", "quiet hours bell activity alerts"),

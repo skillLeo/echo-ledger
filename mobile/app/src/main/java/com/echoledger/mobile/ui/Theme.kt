@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Computer
@@ -14,7 +15,7 @@ import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Typography
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -22,6 +23,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
+import com.echoledger.mobile.ui.design.EchoType
 
 /** The colour tokens of the current theme (Tokens.kt); read them through [Brand] or `MaterialTheme.colorScheme`. */
 val LocalEchoColors = staticCompositionLocalOf { DarkColors }
@@ -107,16 +110,17 @@ object Brand {
     }
 }
 
-private val EchoTypography = Typography(
-    headlineLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 28.sp, lineHeight = 34.sp),
-    headlineSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 24.sp, lineHeight = 30.sp),
-    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
-    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp),
-    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp),
-    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp),
-    labelLarge = TextStyle(fontWeight = FontWeight.Medium, fontSize = 14.sp, lineHeight = 20.sp),
-    labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp)
+/** Corner radii by size class: tags 6, chips 10, cards 14, sheets and dialogs 20. */
+private val EchoShapes = Shapes(
+    extraSmall = RoundedCornerShape(Radius.tag),
+    small = RoundedCornerShape(Radius.sm),
+    medium = RoundedCornerShape(Radius.md),
+    large = RoundedCornerShape(Radius.lg),
+    extraLarge = RoundedCornerShape(Radius.lg)
 )
+
+/** The type scale of the current theme (bundled Inter, or the phone's font when Appearance says so). */
+val LocalEchoType = staticCompositionLocalOf { EchoType.Bundled }
 
 /** `system`, `light` or `dark` (the General setting) resolved against the phone's dark theme. */
 @Composable
@@ -171,7 +175,12 @@ fun EchoColors.toScheme(): ColorScheme {
 }
 
 @Composable
-fun EchoLedgerTheme(themeMode: String = "system", dynamicColour: Boolean = false, content: @Composable () -> Unit) {
+fun EchoLedgerTheme(
+    themeMode: String = "system",
+    dynamicColour: Boolean = false,
+    phoneFont: Boolean = false,
+    content: @Composable () -> Unit
+) {
     val dark = isDarkTheme(themeMode)
     val base = if (dark) DarkColors else LightColors
     val context = LocalContext.current
@@ -181,8 +190,14 @@ fun EchoLedgerTheme(themeMode: String = "system", dynamicColour: Boolean = false
         null
     }
     val colors = dynamicScheme?.let { base.withScheme(it) } ?: base
-    CompositionLocalProvider(LocalEchoColors provides colors) {
-        MaterialTheme(colorScheme = dynamicScheme ?: colors.toScheme(), typography = EchoTypography, content = content)
+    val type = if (phoneFont) EchoType.Phone else EchoType.Bundled
+    CompositionLocalProvider(LocalEchoColors provides colors, LocalEchoType provides type) {
+        MaterialTheme(
+            colorScheme = dynamicScheme ?: colors.toScheme(),
+            typography = type.material(),
+            shapes = EchoShapes,
+            content = content
+        )
     }
 }
 
@@ -211,4 +226,14 @@ fun SourceApp.icon(): ImageVector = when (this) {
     SourceApp.VOICE_NOTE -> Icons.Outlined.Mic
 
     SourceApp.OTHER -> Icons.Outlined.MoreHoriz
+}
+
+/** "Remove animations" is on in the phone's accessibility settings: motion is skipped, states change at once. */
+@Composable
+fun reduceMotion(): Boolean {
+    val context = LocalContext.current
+    return remember(context) {
+        android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) ==
+            0f
+    }
 }

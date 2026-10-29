@@ -77,7 +77,8 @@ object SettingsTransfer {
         "settingsVersion",
         "onboardingDone",
         "themeMode",
-        "dynamicColour"
+        "dynamicColour",
+        "phoneFont"
     )
 
     sealed interface Result {

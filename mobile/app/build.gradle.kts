@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ktlint)
+    alias(libs.plugins.roborazzi)
 }
 
 // Release signing (mobile/RELEASE.md): mobile/keystore.properties, or ECHOLEDGER_* environment variables in CI.
@@ -136,6 +137,8 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.ext.junit)
     testImplementation(libs.glance.appwidget.testing)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
@@ -165,4 +168,15 @@ tasks.matching { it.name.startsWith("connected") && it.name.endsWith("AndroidTes
             )
         }
     }
+}
+
+// Design screenshots (docs/DESIGN_SYSTEM.md), rendered on the laptop by Robolectric: `recordRoborazziDebug` writes them
+// to docs/design/screens, `verifyRoborazziDebug` fails when a screen changed, `compareRoborazziDebug` writes the
+// differences. A plain test run renders them too but writes nothing.
+val designScreens = rootProject.file("../docs/design/screens")
+roborazzi {
+    outputDir.set(designScreens)
+}
+tasks.withType<Test>().configureEach {
+    systemProperty("screenshots.dir", designScreens.absolutePath)
 }
