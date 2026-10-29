@@ -486,8 +486,7 @@ class Settings extends Page
         foreach (self::ROUTED as $language => $slug) {
             foreach ([1 => '1st', 2 => '2nd', 3 => '3rd', 4 => '4th'] as $n => $order) {
                 $field = Select::make("route_{$slug}_{$n}")->label(LanguageRouter::routeLabel($language).' · '.$order)->options($engines)->placeholder('—');
-                // Auto may stay empty: it then keeps the engine chosen for the use case above.
-                $fields[] = $n === 1 && $language !== LanguageRouter::AUTO ? $field->required() : $field;
+                $fields[] = $n === 1 ? $field->required() : $field;
             }
         }
 
@@ -522,9 +521,6 @@ class Settings extends Page
                 if (is_string($value) && SttProviderKey::tryFrom($value) !== null && ! in_array($value, $list, true)) {
                     $list[] = $value;
                 }
-            }
-            if ($list === [] && $language === LanguageRouter::AUTO) {
-                continue;
             }
             $routes[$language] = $list !== [] ? $list : LanguageRouter::defaultsFor($language);
         }

@@ -15,7 +15,7 @@ use App\Stt\Drivers\AssemblyAiDriver;
 /**
  * Which engine transcribes which language. The console keeps an ordered list per language (Settings → Recording →
  * "Engine per language"); the first engine on the list that has its key and supports the language is used, and when
- * it is not the first one the decision says so ("fallback"). Automatic keeps the per-use-case provider.
+ * it is not the first one the decision says so ("fallback"). When none has its key, the per-use-case provider is used.
  *
  * Lists are kept for English, Urdu, Arabic, `other` (the More languages) and `auto` (no language chosen).
  *
@@ -54,6 +54,9 @@ final class LanguageRouter
         'ur' => ['groq', 'soniox', 'elevenlabs', 'assemblyai'],
         'ar' => ['elevenlabs', 'soniox', 'groq', 'assemblyai'],
         self::OTHER => ['elevenlabs', 'soniox', 'groq', 'assemblyai'],
+        // Auto (since v1.3): most Auto recordings are mixed Urdu/English calls, which AssemblyAI can only give to
+        // Universal-2; Whisper decides each side's language over the whole side (App\Stt\ChannelLanguage).
+        self::AUTO => ['groq', 'assemblyai', 'soniox', 'elevenlabs'],
     ];
 
     /** The routing key of a language: its own list for English, Urdu and Arabic, `other` for the rest, `auto`. */
@@ -76,7 +79,7 @@ final class LanguageRouter
         };
     }
 
-    /** @return list<string> the default list of a routing key (Auto: the console's engine, then the others) */
+    /** @return list<string> the default list of a routing key */
     public static function defaultsFor(string $key): array
     {
         return self::DEFAULT_FINAL_ROUTES[$key] ?? self::DEFAULT_FINAL_ROUTES[self::OTHER];
@@ -111,10 +114,8 @@ final class LanguageRouter
         $language = LanguageChoice::normalize($language);
         $default = $this->settings->providerFor($useCase);
         $routes = $this->routes('routing.final', self::DEFAULT_FINAL_ROUTES);
-        // Auto: the admin's Auto list, else the engine chosen for the use case (Auto checks the language afterwards).
-        if ($language === null && ! isset($routes[self::AUTO])) {
-            return new RouteDecision($default, $default, null, false);
-        }
+        // Auto has its own list like every language (Auto checks the language afterwards); the engine chosen for the
+        // use case is the last resort when no engine on the list has its key.
         $list = $routes[self::routeKey($language)] ?? [$default->value];
         $wanted = SttProviderKey::tryFrom($list[0] ?? '') ?? $default;
         foreach ($list as $engine) {

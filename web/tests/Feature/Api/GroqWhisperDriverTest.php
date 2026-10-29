@@ -198,6 +198,37 @@ it('sends each side of the call in chunks cut at pauses, with the exact offsets,
     expect($entry->duration_ms)->toBe(2 * (596000 + 404250 + 290250))->and($entry->channels)->toBe(1);
 });
 
+it('on Auto gives each side one language: Urdu anywhere runs that side\'s other chunks again as Urdu, never forcing English', function () {
+    fakePrep();
+    $bodies = [];
+    // Side 1: Urdu, then Roman Urdu heard as English, then a long pure English stretch; side 2 all English.
+    $answers = [
+        groqAnswer('urdu', [seg(1.0, 3.0, 'السلام علیکم، آپ کیسے ہیں؟')]),
+        groqAnswer('english', [seg(1.0, 3.0, 'kya kar rahe ho, meeting kab hai?')]),
+        groqAnswer('english', [seg(1.0, 3.0, 'The invoice is ready and the payment is due on Friday.')]),
+        groqAnswer('urdu', [seg(1.0, 3.0, 'کیا کر رہے ہو، meeting کب ہے؟')]),
+        groqAnswer('english', [seg(1.0, 3.0, 'Hello, all good here.')]),
+        groqAnswer('english', [seg(1.0, 3.0, 'Yes, I will send it.')]),
+        groqAnswer('english', [seg(1.0, 3.0, 'Thank you, bye.')]),
+    ];
+    Http::fake(['api.groq.com/*' => function (HttpRequest $r) use (&$bodies, &$answers) {
+        $bodies[] = $r->body();
+
+        return Http::response(array_shift($answers), 200);
+    }]);
+
+    $transcript = runGroq($this, null);
+
+    expect($bodies)->toHaveCount(7)
+        ->and($bodies[3])->toMatch('/name="language"\s+ur\s/')
+        ->and(collect($bodies)->filter(fn (string $b): bool => preg_match('/name="language"\s+en\s/', $b) === 1))->toBeEmpty();
+    $side1 = collect($transcript->segments)->where('channel', 1)->sortBy('start_ms')->pluck('text')->values()->all();
+    expect($side1)->toBe(['السلام علیکم، آپ کیسے ہیں؟', 'کیا کر رہے ہو، meeting کب ہے؟', 'The invoice is ready and the payment is due on Friday.'])
+        ->and($transcript->meta['channel_languages'])->toBe([1 => 'ur', 2 => 'en'])
+        ->and($transcript->meta['rerun_chunks'])->toBe(1)
+        ->and($transcript->language)->toBe('ur');
+});
+
 it('plans chunks at pauses, leaves long silences out and never cuts more than the limit', function () {
     expect(AudioPrep::plan(1300, [[595, 597], [1000, 1010]], 600))->toBe([[0.0, 596.0], [596.0, 1000.25], [1009.75, 1300.0]])
         ->and(AudioPrep::plan(1500, [], 600))->toBe([[0.0, 600.0], [600.0, 1200.0], [1200.0, 1500.0]])

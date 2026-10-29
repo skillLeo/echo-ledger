@@ -13,6 +13,7 @@ use App\Services\CredentialVault;
 use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
 use App\Stt\Audio\AudioPrep;
+use App\Stt\ChannelLanguage;
 use App\Stt\Contracts\ClipTranscriber;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
@@ -44,7 +45,9 @@ use RuntimeException;
  * Each side of the call is transcribed on its own as 16 kHz mono, cut at pauses into chunks of ten minutes at most
  * (App\Stt\Audio\AudioPrep, ffmpeg on the server); silent stretches are not sent. Per chunk: the recording's language
  * (or Auto, then only the languages Auto may pick: anything else is run again in the fallback language, Hindi is
- * Urdu), Hindi letters run again forced as Urdu, Whisper's invented text removed ([WhisperGuards]), low-confidence
+ * Urdu), Hindi letters run again forced as Urdu. On Auto each side then gets one language ([ChannelLanguage]): Urdu
+ * anywhere on it makes it Urdu and its chunks heard otherwise run again as Urdu (a long, pure English stretch stays
+ * English; nothing is ever forced to English). Whisper's invented text removed ([WhisperGuards]), low-confidence
  * lines marked uncertain, Urdu letter forms normalised. Synchronous: the job stores the result directly.
  */
 final class GroqWhisperDriver implements ClipTranscriber, SttProvider
@@ -102,6 +105,9 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
         $chunks = 0;
         $detected = [];
         $forced = 0;
+        $rerun = 0;
+        /** @var array<int, string|null> $sideLanguages channel => the language decided for it on Auto */
+        $sideLanguages = [];
         $temps = [];
         try {
             // Plan every side first, so the apps can show "chunks done of total" while the requests run.
@@ -111,13 +117,35 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
             }
             $total = array_sum(array_map(count(...), $planned));
             foreach ($planned as $channel => $list) {
-                foreach ($list as $chunk) {
+                $heard = [];
+                foreach ($list as $i => $chunk) {
                     $this->progress($request->transcript, $chunks, $total);
                     $chunks++;
                     $chunkLanguage = $this->marks === [] ? $language
                         // Where the piece's own part begins (an overlapped piece starts 1 s before the chip changed).
                         : LanguageChoice::normalize(SessionMarkers::languageAt($this->marks, (int) round($chunk['keep_from'] * 1000), $language));
-                    $result = $this->transcribeChunk($chunk, $chunkLanguage, $chunkLanguage === $language ? $prompt : self::stylePrompt($chunkLanguage, $request->keyterms));
+                    $heard[$i] = [$chunkLanguage, $this->transcribeChunk($chunk, $chunkLanguage, $chunkLanguage === $language ? $prompt : self::stylePrompt($chunkLanguage, $request->keyterms))];
+                }
+                // Auto: one language for the whole side; the chunks Whisper heard otherwise run again in it.
+                $auto = array_keys(array_filter($heard, fn (array $h): bool => $h[0] === null));
+                if ($auto !== []) {
+                    $summary = fn (int $i): array => ['language' => $heard[$i][1]['language'], 'text' => self::textOf($heard[$i][1]['segments']), 'seconds' => $list[$i]['end'] - $list[$i]['start']];
+                    $side = ChannelLanguage::decide(array_map($summary, $auto));
+                    $sideLanguages[$channel] = $side;
+                    foreach ($auto as $i) {
+                        $as = ChannelLanguage::rerunAs($side, $summary($i));
+                        if ($as === null) {
+                            continue;
+                        }
+                        $again = $this->transcribeChunk($list[$i], $as, self::stylePrompt($as, $request->keyterms));
+                        $again['requests'] += $heard[$i][1]['requests'];
+                        $again['forced'] += $heard[$i][1]['forced'] + 1;
+                        $heard[$i][1] = $again;
+                        $rerun++;
+                    }
+                }
+                foreach ($heard as $i => [, $result]) {
+                    $chunk = $list[$i];
                     $forced += $result['forced'];
                     $billedMs += max(self::MIN_BILLED_MS, (int) round(($chunk['end'] - $chunk['start']) * 1000)) * $result['requests'];
                     if ($result['language'] !== null) {
@@ -144,17 +172,22 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
             $segments = TranscriptNormalizer::dedupeBleed($segments);
         }
         arsort($detected);
+        // On Auto a side that is Urdu (or Arabic) makes the recording so: Urdu with English words.
+        $decided = array_values(array_filter($sideLanguages));
+        $recordingLanguage = $language ?? (in_array('ur', $decided, true) ? 'ur' : (in_array('ar', $decided, true) ? 'ar' : (array_key_first($detected) ?: null)));
 
         return SubmitResult::completed(new NormalizedTranscript(
             TranscriptNormalizer::plainText($segments),
             $segments,
-            $language ?? (array_key_first($detected) ?: null),
+            $recordingLanguage,
             array_filter([
                 'model' => $this->model(),
                 'audio_channels' => count($sides),
                 'billed_audio_ms' => $billedMs,
                 'chunks' => $chunks,
                 'chunk_languages' => $detected,
+                'channel_languages' => $sideLanguages,
+                'rerun_chunks' => $rerun,
                 'forced_chunks' => $forced,
                 'removed_segments' => array_slice($removed, 0, 50),
                 'removed_count' => count($removed),
@@ -280,6 +313,12 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
             'forced' => $forced,
             'requests' => $requests,
         ];
+    }
+
+    /** @param  list<array<string, mixed>>  $segments  Whisper's segments of one chunk */
+    private static function textOf(array $segments): string
+    {
+        return trim(implode(' ', array_map(fn ($s): string => trim((string) ($s['text'] ?? '')), $segments)));
     }
 
     /**

@@ -111,6 +111,22 @@ describe('routing each language to an engine', function () {
         expect(app(LanguageRouter::class)->final(null, SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::ElevenLabs);
     });
 
+    it('sends Auto and Urdu to Whisper on Groq once its key is there, English stays on AssemblyAI', function () {
+        keys('assemblyai');
+        $router = app(LanguageRouter::class);
+        // Without a Groq key Auto keeps working on AssemblyAI, and says it is not the engine it wanted.
+        $before = $router->final(null, SttUseCase::FinalTranscript);
+        expect($before->provider)->toBe(SttProviderKey::AssemblyAi)->and($before->wanted)->toBe(SttProviderKey::Groq)->and($before->fallback)->toBeTrue();
+
+        keys('groq');
+        $router = app(LanguageRouter::class);
+        expect($router->final(null, SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::Groq)
+            ->and($router->final(null, SttUseCase::VoiceNote)->provider)->toBe(SttProviderKey::Groq)
+            ->and($router->final('ur', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::Groq)
+            ->and($router->final('en', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::AssemblyAi)
+            ->and($router->final(null, SttUseCase::FinalTranscript)->fallback)->toBeFalse();
+    });
+
     it('folds the v1.1 routing keys into today and lets a list kept under today\'s key win', function () {
         $routes = LanguageRouter::merge(['hi' => ['assemblyai'], 'en+ur' => ['soniox'], 'ur' => ['elevenlabs'], 'fr' => ['soniox'], 'auto' => ['soniox']], LanguageRouter::DEFAULT_FINAL_ROUTES);
 
