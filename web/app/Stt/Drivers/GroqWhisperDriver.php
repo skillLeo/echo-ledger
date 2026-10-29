@@ -115,7 +115,8 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
                     $this->progress($request->transcript, $chunks, $total);
                     $chunks++;
                     $chunkLanguage = $this->marks === [] ? $language
-                        : LanguageChoice::normalize(SessionMarkers::languageAt($this->marks, (int) round($chunk['start'] * 1000), $language));
+                        // Where the piece's own part begins (an overlapped piece starts 1 s before the chip changed).
+                        : LanguageChoice::normalize(SessionMarkers::languageAt($this->marks, (int) round($chunk['keep_from'] * 1000), $language));
                     $result = $this->transcribeChunk($chunk, $chunkLanguage, $chunkLanguage === $language ? $prompt : self::stylePrompt($chunkLanguage, $request->keyterms));
                     $forced += $result['forced'];
                     $billedMs += max(self::MIN_BILLED_MS, (int) round(($chunk['end'] - $chunk['start']) * 1000)) * $result['requests'];
@@ -126,7 +127,10 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
                     foreach ($guarded['removed'] as $r) {
                         $removed[] = ['channel' => $channel, 'at_ms' => (int) round(($chunk['start'] + $r['start']) * 1000), 'reason' => $r['reason'], 'text' => $r['text']];
                     }
-                    array_push($segments, ...$this->toSegments($guarded['kept'], $result['words'], $chunk['start'], $channel, count($sides), $result['language'] ?? $language));
+                    $pieceSegments = $this->toSegments($guarded['kept'], $result['words'], $chunk['start'], $channel, count($sides), $result['language'] ?? $language);
+                    // The overlap of a cut inside speech was heard by the chunk before: keep each word once.
+                    $keepFromMs = (int) round($chunk['keep_from'] * 1000);
+                    array_push($segments, ...array_values(array_filter(array_map(fn (Segment $s): ?Segment => self::keepFrom($s, $keepFromMs), $pieceSegments))));
                 }
             }
         } finally {
@@ -180,32 +184,60 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     }
 
     /**
+     * [$segment] from [$keepFromMs] on (since v1.3, for the 1 s overlap after a cut inside speech): a line wholly in the
+     * overlap is dropped, one wholly after it is kept, and one across it keeps only its words from the cut on (all of it
+     * when the engine gave no word times: a word twice is better than a word lost). Pure; unit-tested.
+     */
+    public static function keepFrom(Segment $segment, int $keepFromMs): ?Segment
+    {
+        $tolerance = 250;
+        if ($segment->startMs >= $keepFromMs - $tolerance) {
+            return $segment;
+        }
+        if ($segment->endMs <= $keepFromMs + $tolerance) {
+            return null;
+        }
+        if ($segment->words === []) {
+            return $segment;
+        }
+        $words = array_values(array_filter($segment->words, fn (Word $w): bool => $w->startMs >= $keepFromMs - 100));
+        if ($words === []) {
+            return null;
+        }
+
+        return new Segment($segment->channel, $segment->speaker, $words[0]->startMs, $segment->endMs,
+            trim(implode(' ', array_map(fn (Word $w): string => trim($w->text), $words))), $words, $segment->uncertain);
+    }
+
+    /**
      * The pieces of one side to send: with ffmpeg, speech-only chunks of at most ten minutes (exact offsets); without
      * it, the whole file (a signed link when it is too big to upload).
      *
      * @param  list<string>  $temps
-     * @return list<array{path: ?string, url: ?string, start: float, end: float}>
+     * @return list<array{path: ?string, url: ?string, start: float, end: float, keep_from: float}>
      */
     private function chunks(string $path, ?Recording $recording, int $channel, int $sides, array &$temps): array
     {
         if (! $this->prep->available()) {
             $size = (int) @filesize($path);
             if ($size > self::MAX_UPLOAD_BYTES && $recording !== null) {
-                return [['path' => null, 'url' => URL::temporarySignedRoute('api.recordings.audio', now()->addMinutes(30), ['recording' => $recording->id]), 'start' => 0.0, 'end' => ($recording->duration_ms ?? 0) / 1000]];
+                return [['path' => null, 'url' => URL::temporarySignedRoute('api.recordings.audio', now()->addMinutes(30), ['recording' => $recording->id]), 'start' => 0.0, 'end' => ($recording->duration_ms ?? 0) / 1000, 'keep_from' => 0.0]];
             }
 
-            return [['path' => $path, 'url' => null, 'start' => 0.0, 'end' => ($recording->duration_ms ?? 0) / 1000]];
+            return [['path' => $path, 'url' => null, 'start' => 0.0, 'end' => ($recording->duration_ms ?? 0) / 1000, 'keep_from' => 0.0]];
         }
         $wav = $temps[] = $this->uploads->tempPath('groq-side');
         // A two-sided file split here takes one channel; a per-channel file or a mono file is taken as it is.
         $this->prep->extractChannel($path, $sides === 2 && $recording === null ? $channel : null, $wav);
         $duration = $this->prep->durationSeconds($wav);
         $cuts = array_map(fn (array $m): float => $m['at_ms'] / 1000, $this->marks);
-        $plan = AudioPrep::plan($duration, $this->prep->silences($wav), (float) $this->settings->get('audio.chunk_seconds', 600), 3.0, $cuts);
+        $silences = $this->prep->silences($wav);
+        $plan = AudioPrep::plan($duration, $silences, (float) $this->settings->get('audio.chunk_seconds', 600), 3.0, $cuts);
         $out = [];
-        foreach ($plan as $i => [$start, $end]) {
+        // Cuts inside speech overlap by 1 s; the join keeps each word once (see toSegments).
+        foreach (AudioPrep::overlapHardCuts($plan, $silences) as $i => $piece) {
             $file = $temps[] = $this->uploads->tempPath('groq-chunk-'.$i).'.flac';
-            $out[] = ['path' => $this->prep->cut($wav, $start, $end, $file), 'url' => null, 'start' => $start, 'end' => $end];
+            $out[] = ['path' => $this->prep->cut($wav, $piece['start'], $piece['end'], $file), 'url' => null, 'start' => $piece['start'], 'end' => $piece['end'], 'keep_from' => $piece['keep_from']];
         }
 
         return $out;
@@ -215,7 +247,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
      * One chunk, with the language rules: a forced language is sent as is; Auto takes what Whisper detects when it
      * is one Auto may pick (Hindi is Urdu), else runs again in the fallback; Hindi letters run again as Urdu.
      *
-     * @param  array{path: ?string, url: ?string, start: float, end: float}  $chunk
+     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float}  $chunk
      * @return array{segments: list<array<string, mixed>>, words: list<array<string, mixed>>, language: ?string, forced: int, requests: int}
      */
     private function transcribeChunk(array $chunk, ?string $language, string $prompt): array
@@ -251,7 +283,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     }
 
     /**
-     * @param  array{path: ?string, url: ?string, start: float, end: float}  $chunk
+     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float}  $chunk
      * @return array<string, mixed>
      */
     private function request(array $chunk, ?string $language, string $prompt): array
@@ -356,7 +388,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     public function transcribeClip(string $path, float $seconds, ?string $language): array
     {
         $language = LanguageChoice::normalize($language);
-        $json = $this->request(['path' => $path, 'url' => null, 'start' => 0.0, 'end' => $seconds], $language, self::stylePrompt($language, []));
+        $json = $this->request(['path' => $path, 'url' => null, 'start' => 0.0, 'end' => $seconds, 'keep_from' => 0.0], $language, self::stylePrompt($language, []));
         $kept = WhisperGuards::filter(array_values((array) ($json['segments'] ?? [])))['kept'];
         $text = trim(implode(' ', array_map(fn (array $s): string => trim((string) ($s['text'] ?? '')), $kept)));
 

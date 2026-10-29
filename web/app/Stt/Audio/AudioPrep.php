@@ -104,6 +104,35 @@ class AudioPrep
     }
 
     /**
+     * Since v1.3: a chunk that starts where the one before was cut inside speech (no pause long enough there) starts
+     * [$overlapS] earlier, so no word is lost in the cut; `keep_from` is where its own part begins, and anything the
+     * engine places before it is left out when the chunks are joined (no word twice). Cuts made in a pause need no
+     * overlap. Pure; unit-tested.
+     *
+     * @param  list<array{0: float, 1: float}>  $plan  from [plan]
+     * @param  list<array{0: float, 1: float}>  $silences
+     * @return list<array{start: float, end: float, keep_from: float}>
+     */
+    public static function overlapHardCuts(array $plan, array $silences, float $overlapS = 1.0): array
+    {
+        $out = [];
+        foreach ($plan as $i => [$start, $end]) {
+            $previousEnd = $i > 0 ? $plan[$i - 1][1] : null;
+            $inPause = false;
+            foreach ($silences as [$s, $e]) {
+                if ($start >= $s - 0.01 && $start <= $e + 0.01) {
+                    $inPause = true;
+                    break;
+                }
+            }
+            $hardCut = $previousEnd !== null && abs($previousEnd - $start) < 0.001 && ! $inPause;
+            $out[] = ['start' => $hardCut ? max(0.0, round($start - $overlapS, 3)) : $start, 'end' => $end, 'keep_from' => $start];
+        }
+
+        return $out;
+    }
+
+    /**
      * Where to cut [$durationS] seconds of audio with [$silences]: pieces of speech of at most [$maxS] seconds, cut
      * in the middle of a pause near the limit (never mid-word when a pause exists), with long silences left out.
      * Pure; unit-tested.
