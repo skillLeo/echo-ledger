@@ -9,7 +9,9 @@ class SettingsCatalogueTest {
     fun `the groups are named and ordered like the desktop app and the console`() {
         assertEquals(
             // "Voice notes & files" (since v1.3, after sharing a voice note) comes first on the phone; plan B5 adds it elsewhere.
-            listOf("General", "Recording", "Voice notes & files", "Captions", "Dictation", "Privacy & security", "Devices", "Storage", "About"),
+            listOf(
+                "General", "Recording", "Voice notes & files", "Captions", "Dictation", "Privacy & security", "Devices", "Storage", "About"
+            ),
             SettingsGroup.entries.map { it.label }
         )
     }

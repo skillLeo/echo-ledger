@@ -1,5 +1,6 @@
 package com.echoledger.mobile.capture
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -153,6 +154,7 @@ class FarPartyCapture(private val audioManager: AudioManager, val sampleRate: In
     }
 
     /** The recorder createAudioRecordSink would make (remote submix at the mix's address), under [context]'s identity. */
+    @SuppressLint("MissingPermission") // runs in the helper as the shell user, which holds RECORD_AUDIO and CAPTURE_AUDIO_OUTPUT
     private fun shellSink(context: Context?): AudioRecord {
         val registration = mixClass!!.getMethod("getRegistration").invoke(mix) as String?
         check(!registration.isNullOrEmpty()) { "the call mix has no address" }
