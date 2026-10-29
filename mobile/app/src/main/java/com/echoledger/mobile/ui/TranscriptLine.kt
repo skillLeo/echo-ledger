@@ -19,11 +19,13 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.intl.LocaleList
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.Languages
@@ -44,11 +46,14 @@ internal fun TranscriptLine(
     enabled: Boolean,
     override: String? = null,
     language: String? = null,
+    keptOriginal: Boolean = false,
     onPlay: (Long) -> Unit
 ) {
-    // Show as: the Roman Urdu or English view of the line (labelled above the transcript), without marks.
+    // Show as: the Roman Urdu or English view of the line (labelled above the transcript), without marks. A line the view
+    // could not be written for shows its original words with a small note (since v1.3).
     if (override != null) {
-        Text(override, fontSize = 14.sp, style = scriptStyle(language))
+        Text(withUnsureMarks(override), fontSize = 14.sp, style = scriptStyle(language))
+        if (keptOriginal) Text("Original words: this line could not be written in the view.", fontSize = 11.sp, color = Brand.Muted)
         return
     }
     val unsure = remember(segment) { segment.words.indices.filter { Uncertain.word(segment.words[it]) } }
@@ -142,5 +147,22 @@ private fun DrawScope.dottedUnderline(layout: TextLayoutResult, range: IntRange,
             cap = StrokeCap.Round,
             pathEffect = dots
         )
+    }
+}
+
+/** A view's line with its "[?word]" marks shown like the original's unsure words: underlined, without brackets (plan A4). */
+internal fun withUnsureMarks(text: String): AnnotatedString {
+    val marked = Regex("""\[\?([^\]]+)]""")
+    if (!marked.containsMatchIn(text)) return AnnotatedString(text)
+    return buildAnnotatedString {
+        var at = 0
+        for (m in marked.findAll(text)) {
+            append(text.substring(at, m.range.first))
+            pushStyle(SpanStyle(textDecoration = TextDecoration.Underline))
+            append(m.groupValues[1])
+            pop()
+            at = m.range.last + 1
+        }
+        append(text.substring(at))
     }
 }

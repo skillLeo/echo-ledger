@@ -147,7 +147,7 @@ class ShowAsScreenTest : ScreenTest() {
         show { SessionScreen(vm, item, onBack = {}) }
 
         awaitText("میں invoice بھیج دوں گا")
-        compose.onNodeWithText("Urdu view by claude-opus-5-5. The transcript itself is unchanged.").assertExists()
+        compose.onNodeWithText("اردو view by claude-opus-5-5. The transcript itself is unchanged.").assertExists()
         assertTrue(compose.onAllNodesWithText("English").fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Original").performClick()
         awaitText("I will send the invoice")

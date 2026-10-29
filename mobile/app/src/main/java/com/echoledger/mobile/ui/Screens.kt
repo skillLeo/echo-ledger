@@ -517,15 +517,28 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
         if (summary.status == "ready" && default != ShowAs.ORIGINAL && default.key in summary.available) chooseView(default)
     }
     val shown = ShowAs.lines(segments, showAs, views)
-    fun copy(withTimestamps: Boolean) {
+    val appSettings by vm.settings.collectAsState()
+
+    // Unsure words go into the copy as "[?word]" (or the console's style); Copy for AI starts with the note (plan A4).
+    fun copy(withTimestamps: Boolean, forAi: Boolean = false) {
         scope.launch {
-            clipboard.setClipEntry(
-                ClipData.newPlainText(
-                    "EchoLedger transcript",
-                    TranscriptText.render(segments.mapIndexed { i, s -> s.copy(text = shown?.getOrNull(i) ?: s.text) }, withTimestamps)
-                ).toClipEntry()
+            val text = TranscriptText.copied(
+                segments,
+                { i -> shown?.getOrNull(i) },
+                withTimestamps,
+                appSettings.unsureStyle,
+                appSettings.unsureThreshold,
+                appSettings.unsureNote,
+                forAi
             )
-            vm.showMessage(if (withTimestamps) "Copied with timestamps" else "Copied")
+            clipboard.setClipEntry(ClipData.newPlainText("EchoLedger transcript", text).toClipEntry())
+            vm.showMessage(
+                when {
+                    forAi -> "Copied for AI, with the note on unsure words"
+                    withTimestamps -> "Copied with timestamps"
+                    else -> "Copied"
+                }
+            )
         }
     }
 
@@ -704,6 +717,9 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                                 Text("Copy with timestamps")
                             }
                         }
+                        TextButton(onClick = { copy(withTimestamps = false, forAi = true) }) {
+                            Text("Copy for AI (marks unsure words)")
+                        }
                         val available = t.views?.available.orEmpty()
                         if (t.kind == "final" && t.status == "completed" && available.isNotEmpty()) {
                             ShowAsRow(available, showAs, views) { chooseView(it) }
@@ -736,7 +752,14 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                                 ShowAs.URDU -> "ur"
                                 else -> "en"
                             }
-                            TranscriptLine(s, spoken, enabled = player.ready, override = shown?.getOrNull(index), language = lineLanguage) {
+                            TranscriptLine(
+                                s,
+                                spoken,
+                                enabled = player.ready,
+                                override = shown?.getOrNull(index),
+                                language = lineLanguage,
+                                keptOriginal = shown != null && index in views?.kept?.get(showAs.key).orEmpty()
+                            ) {
                                 player.seekTo(it)
                             }
                         }

@@ -48,8 +48,13 @@ data class ServerConfig(
     @SerialName("api_version") val apiVersion: String? = null,
     val usage: UsageDto? = null,
     /** Bookmark tag presets from the console (since v1.1). */
-    val markers: MarkersConfig? = null
+    val markers: MarkersConfig? = null,
+    /** How unsure words appear in copied text (since v1.3, plan A4). */
+    val unsure: UnsureConfig? = null
 )
+
+@Serializable
+data class UnsureConfig(val style: String = "brackets", val threshold: Double = 0.5, val note: Boolean = true)
 
 @Serializable
 data class MarkersConfig(val tags: List<String> = emptyList())
@@ -405,7 +410,9 @@ data class TranscriptViewsDto(
     val english: List<String?>? = null,
     val urdu: List<String?>? = null,
     val model: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    /** Lines shown with their original words in a view because the view failed the checks twice (since v1.3). */
+    val kept: Map<String, List<Int>> = emptyMap()
 )
 
 /** The part of GET /api/sessions/{id} the app needs: a temporary signed URL to stream the decrypted recording. */

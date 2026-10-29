@@ -132,7 +132,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     deviceId = response.device.id,
                     deviceName = response.device.name,
                     serverApiVersion = response.config.apiVersion,
-                    markerTags = response.config.markers?.tags.orEmpty()
+                    markerTags = response.config.markers?.tags.orEmpty(),
+                    unsureStyle = response.config.unsure?.style ?: "brackets",
+                    unsureThreshold = response.config.unsure?.threshold ?: 0.5,
+                    unsureNote = response.config.unsure?.note ?: true
                 )
             }
             graph.invalidateApi()
@@ -172,7 +175,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 // The server's contract version decides the v1 or v1.1 flows (open sessions, usage reports).
                 try {
                     graph.api()?.config()?.let { config ->
-                        graph.settings.update { it.copy(serverApiVersion = config.apiVersion, markerTags = config.markers?.tags.orEmpty()) }
+                        graph.settings.update {
+                            it.copy(
+                                serverApiVersion = config.apiVersion,
+                                markerTags = config.markers?.tags.orEmpty(),
+                                unsureStyle = config.unsure?.style ?: "brackets",
+                                unsureThreshold = config.unsure?.threshold ?: 0.5,
+                                unsureNote = config.unsure?.note ?: true
+                            )
+                        }
                     }
                 } catch (e: ApiException) {
                     // No config answer is no reason to skip the library: keep the last known contract version.

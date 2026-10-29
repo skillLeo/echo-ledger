@@ -23,7 +23,7 @@ enum class ShowAs(val key: String, val label: String) {
     ORIGINAL("original", "Original"),
     ROMAN("roman", "Roman Urdu"),
     ENGLISH("english", "English"),
-    URDU("urdu", "Urdu");
+    URDU("urdu", "اردو");
 
     companion object {
         fun of(key: String?): ShowAs = entries.firstOrNull { it.key == key } ?: ORIGINAL

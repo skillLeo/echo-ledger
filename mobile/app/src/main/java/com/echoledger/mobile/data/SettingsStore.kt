@@ -60,6 +60,10 @@ data class AppSettings(
     val farSideWarning: Boolean = true,
     /** Bookmark tag presets from the last server config; empty = the defaults. */
     val markerTags: List<String> = emptyList(),
+    /** How unsure words appear in copied text, from the console (since v1.3, plan A4). */
+    val unsureStyle: String = "brackets",
+    val unsureThreshold: Double = 0.5,
+    val unsureNote: Boolean = true,
     /** Microphone kind for recordings made on this phone (`builtin`, `wired`, `bluetooth`, `usb`); null = automatic. */
     val inputDevice: String? = null,
     /** Language of new recordings: null (the client's or the console default, else automatic), `en`, `ur`, `hi` or `en+ur`. */
