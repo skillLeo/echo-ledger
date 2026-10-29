@@ -48,6 +48,7 @@ abstract class AppTest {
         Locale.setDefault(Locale.US)
         forgetCachedViewModelFactory()
         app = ApplicationProvider.getApplicationContext()
+        app.cancelStartCheck()
         bindSettingsDataStore(app)
         app.useTestCiphers()
         WorkManagerTestInitHelper.initializeTestWorkManager(app)

@@ -10,7 +10,8 @@ import kotlinx.coroutines.launch
 
 /**
  * After a restart or an app update, auto-record comes back on by itself when it was on: the service reconnects the
- * capture helper (Shizuku) or shows "Call capture isn't ready — tap to fix" until it can.
+ * capture helper (Shizuku) or shows "Call capture isn't ready — tap to fix" until it can. One of several ways back
+ * ([AutoRecordKeeper]): Android does not always deliver the update broadcast.
  */
 class RearmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -19,20 +20,8 @@ class RearmReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                if (app.graph.settings.current().autoRecordArmed) {
-                    CaptureLog.add(
-                        context,
-                        "auto-record back on",
-                        if (intent.action ==
-                            Intent.ACTION_BOOT_COMPLETED
-                        ) {
-                            "after restart"
-                        } else {
-                            "after update"
-                        }
-                    )
-                    runCatching { context.startForegroundService(RecordingService.intent(context, RecordingService.ACTION_ARM)) }
-                }
+                val why = if (intent.action == Intent.ACTION_BOOT_COMPLETED) "after restart" else "after update"
+                AutoRecordKeeper.ensure(context, app.graph.settings.current(), why)
             } finally {
                 pending.finish()
             }

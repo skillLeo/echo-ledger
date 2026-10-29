@@ -323,6 +323,34 @@ object Notifications {
     }
 
     private const val NOT_READY_ID = 7_432
+    private const val AUTO_RECORD_OFF_ID = 7_434
+
+    /**
+     * Auto-record is on in Settings but Android would not let it start by itself (after an update or a restart): a
+     * quiet notification whose tap turns it back on. The tap starts the service, never a screen.
+     */
+    fun autoRecordOff(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val text = "Android stopped auto-record, so calls are not being recorded. Tap to turn it back on."
+        val builder = NotificationCompat.Builder(context, CHANNEL_ACTIVITY)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Auto-record is off — tap to turn it on")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .setContentIntent(serviceAction(context, RecordingService.ACTION_ARM, 30))
+        runCatching { NotificationManagerCompat.from(context).notify(AUTO_RECORD_OFF_ID, builder.build()) }
+    }
+
+    fun cancelAutoRecordOff(context: Context) {
+        NotificationManagerCompat.from(context).cancel(AUTO_RECORD_OFF_ID)
+    }
 
     /** Opens Setup (call capture). */
     private fun openSetup(context: Context): PendingIntent = PendingIntent.getActivity(

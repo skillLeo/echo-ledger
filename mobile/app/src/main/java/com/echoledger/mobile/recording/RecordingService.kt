@@ -321,13 +321,20 @@ class RecordingService : LifecycleService() {
         graph.helper.setArmed(true)
         if (graph.helper.helper == null) graph.helper.bindShizuku()
         if (capture == null && !goForeground(mic = false, title = "", detail = "")) {
+            // Android refused a start from the background: the setting stays on (the next check tries again) and a
+            // quiet notification offers to turn it back on, instead of auto-record going off without a word.
             armed = false
-            persistArmed(false)
+            graph.helper.setArmed(false)
+            graph.helper.setCallListener(null)
+            CaptureLog.add(this, "auto-record could not start", "Android did not allow it from the background")
+            Notifications.autoRecordOff(this)
             settle()
             return
         }
+        Notifications.cancelAutoRecordOff(this)
         CaptureLog.add(this, "auto-record on", if (helperAlive()) "helper ready" else "helper not running")
         isArmed = true
+        AutoRecordKeeper.keepChecking(this)
         persistArmed(true)
         main.removeCallbacks(watchdog)
         main.postDelayed(watchdog, WATCHDOG_MS)
@@ -340,6 +347,7 @@ class RecordingService : LifecycleService() {
         graph.helper.setArmed(false)
         graph.helper.setCallListener(null)
         persistArmed(false)
+        AutoRecordKeeper.stopChecking(this)
         CaptureLog.add(this, "auto-record off")
         settle()
     }

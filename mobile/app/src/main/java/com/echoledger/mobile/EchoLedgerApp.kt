@@ -12,6 +12,7 @@ import com.echoledger.mobile.data.TinkSecretCipher
 import com.echoledger.mobile.net.ApiClient
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.privilege.HelperConnection
+import com.echoledger.mobile.recording.AutoRecordKeeper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,7 +26,13 @@ class EchoLedgerApp : Application() {
         graph = AppGraph(this)
         Notifications.createChannels(this)
         graph.helper.autoConnect()
+        // Auto-record comes back on by itself after an update or a restart, without the app being opened.
+        cancelStartCheck = AutoRecordKeeper.onAppStart(this)
     }
+
+    /** Calls off the auto-record check of this process start (tests set up their own state). */
+    var cancelStartCheck: () -> Unit = {}
+        private set
 }
 
 /** Minimal service locator (no DI framework: fewer dependencies, smaller APK). */
