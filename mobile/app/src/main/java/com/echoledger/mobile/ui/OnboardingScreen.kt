@@ -105,19 +105,26 @@ private fun ColumnScope.StepLayout(
     primaryEnabled: Boolean = true,
     content: @Composable () -> Unit = {}
 ) {
+    // Since v1.3: the display title (onboarding only), one paragraph, then the step, and the primary action at the
+    // bottom within thumb reach, with Skip as a quiet text button beside it.
+    val type = LocalEchoType.current
     Column(Modifier.weight(1f)) {
         Column(
             Modifier.weight(1f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(Space.s3)
         ) {
-            Text(title, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            Text(body, color = Brand.Muted)
+            Text(title, style = type.display, color = Brand.Text, modifier = Modifier.padding(top = Space.s4))
+            Text(body, style = type.bodyM, color = Brand.Muted)
             content()
         }
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (onSkip != null) TextButton(onClick = onSkip) { Text("Skip setup") }
+        Row(Modifier.fillMaxWidth().padding(top = Space.s2), verticalAlignment = Alignment.CenterVertically) {
+            if (onSkip !=
+                null
+            ) {
+                com.echoledger.mobile.ui.design.EchoButton("Skip setup", onSkip, kind = com.echoledger.mobile.ui.design.ButtonKind.Text)
+            }
             Spacer(Modifier.weight(1f))
-            Button(onClick = onPrimary, enabled = primaryEnabled) { Text(primary) }
+            com.echoledger.mobile.ui.design.EchoButton(primary, onPrimary, enabled = primaryEnabled)
         }
     }
 }
@@ -132,8 +139,8 @@ private fun ColumnScope.WelcomeStep(onNext: () -> Unit, onSkip: () -> Unit) {
         onPrimary = onNext,
         onSkip = onSkip
     ) {
-        Spacer(Modifier.height(8.dp))
-        Box(Modifier.size(56.dp).clip(CircleShape).background(Brand.Gradient))
+        Spacer(Modifier.height(Space.s2))
+        AppMark(64.dp)
     }
 }
 
