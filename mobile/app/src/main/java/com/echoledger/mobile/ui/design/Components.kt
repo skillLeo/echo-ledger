@@ -61,6 +61,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -301,6 +302,7 @@ fun RecordingRow(
     metaColor: Color = Brand.Muted,
     status: (@Composable () -> Unit)? = null,
     badge: (@Composable () -> Unit)? = null,
+    stateLabel: String? = null,
     divider: Boolean = true
 ) {
     val c = LocalEchoColors.current
@@ -318,7 +320,10 @@ fun RecordingRow(
                         onLongClick()
                     }
                 )
-                .semantics { this.selected = selected }
+                .semantics {
+                    this.selected = selected
+                    stateLabel?.let { stateDescription = it }
+                }
                 .padding(horizontal = Space.screen, vertical = Space.s3),
             verticalAlignment = Alignment.CenterVertically
         ) {

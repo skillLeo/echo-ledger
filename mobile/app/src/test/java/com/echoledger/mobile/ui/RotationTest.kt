@@ -108,7 +108,7 @@ class RotationTest : AppTest() {
     @Test
     @Config(sdk = [34], qualifiers = "w891dp-h411dp-land-mdpi")
     fun `A6 M11 in landscape the first recording is reachable under the header`() {
-        launch(waitFor = "Search transcripts and titles")
+        launch(waitFor = "Search recordings and transcripts")
 
         // The whole page scrolls, so the list is one scroll away and then fully on screen.
         compose.onNode(hasScrollToIndexAction()).performScrollToNode(hasText("Weekly sync"))

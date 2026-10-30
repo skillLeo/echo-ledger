@@ -176,36 +176,41 @@ class LibraryOrganiseTest : ScreenTest() {
     // ---- screens ----------------------------------------------------------------------------------------------------
 
     @Test
-    fun `the filter menu ticks views and devices with counts and clears them`() {
+    fun `a filter chip opens its choices, applies them and shows how many are on`() {
         var filters = com.echoledger.mobile.core.LibraryFilters()
         show {
             var state by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(filters) }
-            LibraryToolbar(
-                shown = 4,
-                picked = 0,
+            FilterChips(
                 filters = state,
                 onFilters = {
                     state = it
                     filters = it
                 },
-                sort = com.echoledger.mobile.core.LibrarySort.NEWEST,
-                onSort = {},
-                counts = mapOf(SmartView.PINNED to 3, SmartView.FAILED to 0),
+                items = emptyList(),
                 folders = emptyList(),
                 labels = emptyList(),
                 tags = emptyList(),
-                onToggleAll = {}
+                counts = mapOf(SmartView.PINNED to 3, SmartView.FAILED to 0)
             )
         }
-        compose.onNodeWithText("4 recordings").assertExists()
-        compose.onNodeWithContentDescription("Filters").performClick()
+        compose.onNodeWithText("Labels").assertDoesNotExist()
+        compose.onNodeWithText("Status").performClick()
         compose.onNodeWithText("Pinned (3)").performClick()
-        compose.onNodeWithText("Phone").performClick()
-        compose.onNodeWithText("Failed").assertExists()
+        compose.onNodeWithText("Failed (0)").assertExists()
+        compose.onNodeWithText("Apply").performClick()
         assertEquals(setOf(SmartView.PINNED), filters.views)
+        compose.onNodeWithText("Status · 1").assertExists()
+
+        compose.onNodeWithText("Source").performClick()
+        compose.onNodeWithText("Phone").performClick()
+        compose.onNodeWithText("Apply").performClick()
         assertEquals(setOf(com.echoledger.mobile.core.SourceDevice.PHONE), filters.devices)
-        compose.onNodeWithText("Clear all").performClick()
-        assertEquals(0, filters.count)
+
+        compose.onNodeWithText("Status · 1").performClick()
+        compose.onNodeWithText("Clear").performClick()
+        compose.onNodeWithText("Apply").performClick()
+        assertEquals(emptySet<SmartView>(), filters.views)
+        assertEquals(1, filters.count)
     }
 
     @Test
@@ -241,24 +246,27 @@ class LibraryOrganiseTest : ScreenTest() {
     }
 
     @Test
-    fun `the bulk bar fits one line and runs each action, asking before deleting`() {
+    fun `the selection bar runs each action and asks before deleting`() {
         val events = mutableListOf<String>()
         show {
-            CompactBulkBar(
-                count = 2,
-                folders = listOf(ClientDto("c1", "Acme Holdings")),
-                labels = listOf("Q4"),
-                onMove = { events += "move $it" },
-                onCreateClient = { events += "create $it" },
-                onLabel = { l, add -> events += "label $l $add" },
-                onPin = { events += "pin $it" },
-                onKeep = { events += "keep $it" },
-                onExport = { events += "export $it" },
-                onDelete = { events += "delete" },
-                onDone = { events += "done" }
-            )
+            com.echoledger.mobile.ui.design.SelectionBar(2, onClose = { events += "done" }) {
+                SelectionActions(
+                    count = 2,
+                    folders = listOf(ClientDto("c1", "Acme Holdings")),
+                    labels = listOf("Q4"),
+                    onMove = { events += "move $it" },
+                    onCreateClient = { events += "create $it" },
+                    onLabel = { l, add -> events += "label $l $add" },
+                    onPin = { events += "pin $it" },
+                    onKeep = { events += "keep $it" },
+                    onExport = { events += "export $it" },
+                    onDelete = { events += "delete" },
+                    onSelectAll = { events += "all" }
+                )
+            }
         }
-        compose.onNodeWithText("2").assertExists()
+        compose.onNodeWithText("2 selected").assertExists()
+        compose.onNodeWithContentDescription("Select all").performClick()
         compose.onNodeWithContentDescription("Move to").performClick()
         compose.onNodeWithText("AH · Acme Holdings").performClick()
         compose.onNodeWithContentDescription("Label").performClick()
@@ -267,12 +275,11 @@ class LibraryOrganiseTest : ScreenTest() {
         compose.onNodeWithText("Unpin").performClick()
         compose.onNodeWithContentDescription("More actions").performClick()
         compose.onNodeWithText("Export as Text").performClick()
-        compose.onNodeWithContentDescription("More actions").performClick()
-        compose.onNodeWithText("Delete").performClick()
+        compose.onNodeWithContentDescription("Delete").performClick()
         assertFalse(events.contains("delete"))
         compose.onNodeWithText("Delete 2 (restorable for 48 hours)").performClick()
-        compose.onNodeWithContentDescription("Done").performClick()
+        compose.onNodeWithContentDescription("Leave selection").performClick()
 
-        assertEquals(listOf("move c1", "label Q4 true", "pin false", "export txt", "delete", "done"), events)
+        assertEquals(listOf("all", "move c1", "label Q4 true", "pin false", "export txt", "delete", "done"), events)
     }
 }

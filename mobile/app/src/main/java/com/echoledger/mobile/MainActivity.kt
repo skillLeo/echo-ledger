@@ -166,6 +166,8 @@ class MainActivity : FragmentActivity() {
         var tab by rememberSaveable { mutableStateOf(TAB_LIBRARY) }
         // Re-tapping the current tab scrolls it to the top (a counter each screen watches).
         var reselected by remember { mutableIntStateOf(0) }
+        // The bottom bar hides while recordings are selected in the Library.
+        var librarySelecting by remember { mutableStateOf(false) }
         var activityUnread by rememberSaveable { mutableIntStateOf(0) }
         val live by RecordingService.live.collectAsState()
         val pending by vm.pending.collectAsState()
@@ -318,7 +320,10 @@ class MainActivity : FragmentActivity() {
                 containerColor = Brand.Background,
                 snackbarHost = { SnackbarHost(snackbar) },
                 bottomBar = {
-                    if (unlocked && settings.onboardingDone && settings.paired && openItem == null && !showSetup && sharedNotes == null) {
+                    val selectingNow = librarySelecting && tab == TAB_LIBRARY
+                    if (unlocked && settings.onboardingDone && settings.paired && openItem == null && !showSetup && sharedNotes == null &&
+                        !selectingNow
+                    ) {
                         Column {
                             if (live.active && tab != TAB_RECORD) {
                                 RecordingStrip(
@@ -411,7 +416,11 @@ class MainActivity : FragmentActivity() {
                                     onOpenAt = { item, ms ->
                                         openAtMs = ms
                                         showItem(item)
-                                    }
+                                    },
+                                    waiting = pending.filter { it.state == "pending_decision" },
+                                    onOpenWaiting = { tab = TAB_RECORD },
+                                    onSelecting = { librarySelecting = it },
+                                    scrollToTop = reselected
                                 ) { showItem(it) }
                             }
                         }

@@ -205,9 +205,9 @@ class MainActivityTest : AppTest() {
     @Test
     fun `the call setup guide opens from the library banner and closes with its back arrow`() {
         launch(preload = true)
-        awaitText("WhatsApp calls are not being recorded")
+        awaitText("Set up")
 
-        compose.onNodeWithText("WhatsApp calls are not being recorded").performClick()
+        compose.onNodeWithText("Set up").performClick()
         awaitText("1 · Permissions")
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
 
@@ -366,7 +366,7 @@ class MainActivityTest : AppTest() {
 
         pumpUntil("the library", timeoutMs = 10_000) {
             compose.waitForIdle()
-            present("Search transcripts and titles")
+            present("Search recordings and transcripts")
         }
     }
 
@@ -388,7 +388,10 @@ class MainActivityTest : AppTest() {
         compose.onNodeWithTag("startup-splash").assertExists()
         compose.onAllNodesWithContentDescription("Library").assertCountEquals(0)
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
-        assertTrue("no library, pairing form or cover yet", !present("Search transcripts and titles") && !present("EchoLedger is locked"))
+        assertTrue(
+            "no library, pairing form or cover yet",
+            !present("Search recordings and transcripts") && !present("EchoLedger is locked")
+        )
         assertTrue("nothing is synced before the settings are known", server.requestsTo("GET", "/api/library").isEmpty())
     }
 

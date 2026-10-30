@@ -41,16 +41,19 @@ data class LibraryFilters(
     val folders: Set<String> = emptySet(),
     val labels: Set<String> = emptySet(),
     /** Bookmark tags; [Bookmarks.ANY] = any bookmark. */
-    val tags: Set<String> = emptySet()
+    val tags: Set<String> = emptySet(),
+    /** Language chips as the server shows them ("Urdu", "English"); empty = any. */
+    val languages: Set<String> = emptySet()
 ) {
-    val count: Int get() = views.size + devices.size + folders.size + labels.size + tags.size
+    val count: Int get() = views.size + devices.size + folders.size + labels.size + tags.size + languages.size
 
     fun matches(item: LibraryItem, now: ZonedDateTime = ZonedDateTime.now()): Boolean = !item.deleted &&
         (views.isEmpty() || views.any { Organise.inView(item, it, now) }) &&
         (devices.isEmpty() || SourceDevice.from(item.sourceDevice) in devices) &&
         (folders.isEmpty() || folders.any { Organise.inFolder(item, it) }) &&
         (labels.isEmpty() || labels.any { Organise.hasLabel(item, it) }) &&
-        (tags.isEmpty() || tags.any { Bookmarks.matches(item, it) })
+        (tags.isEmpty() || tags.any { Bookmarks.matches(item, it) }) &&
+        (languages.isEmpty() || item.languageChip in languages)
 
     companion object {
         fun <T> Set<T>.toggle(value: T): Set<T> = if (value in this) this - value else this + value

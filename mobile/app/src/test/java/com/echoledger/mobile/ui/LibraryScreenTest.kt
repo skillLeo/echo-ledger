@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
@@ -45,14 +47,28 @@ class LibraryScreenTest : ScreenTest() {
         show { LibraryScreen(vm, showCallSetup = showCallSetup, onSetup = { setupTaps++ }, onOpen = { opened = it }) }
 
     private fun search(text: String) {
+        if (compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty()) {
+            compose.onNodeWithText("Search recordings and transcripts").performClick()
+        }
         compose.onNode(hasSetTextAction()).performTextInput(text)
     }
 
-    /** Ticks [label] in the Filters menu (it stays open, like a list of checkboxes). */
-    private fun chip(label: String): androidx.compose.ui.test.SemanticsNodeInteraction {
-        compose.onNodeWithContentDescription("Filters").performClick()
-        return compose.onNode(hasText(label) and hasClickAction())
+    /** Opens the [facet] chip (its label may carry a count), ticks [choices] and applies them. */
+    private fun filter(facet: String, vararg choices: String) {
+        compose.onNode(hasText(facet, substring = true) and hasClickAction()).performClick()
+        choices.forEach { compose.onNode(hasText(it) and hasClickAction()).performClick() }
+        compose.onNodeWithText("Apply").performClick()
     }
+
+    /** Opens the [facet] chip and clears it. */
+    private fun clearFilter(facet: String) {
+        compose.onNode(hasText(facet, substring = true) and hasClickAction()).performClick()
+        compose.onNodeWithText("Clear").performClick()
+        compose.onNodeWithText("Apply").performClick()
+    }
+
+    /** A row whose state (what TalkBack reads after the title) is [label]. */
+    private fun state(label: String) = SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, label)
 
     private fun item(
         id: String,
@@ -112,28 +128,37 @@ class LibraryScreenTest : ScreenTest() {
     // ---- rows -------------------------------------------------------------------------------------------------------------
 
     @Test
-    fun `a recording row shows title time duration client preview and source badges`() {
-        seed(item("a", title = "Call with Acme", client = "Acme Holdings", preview = "Thanks for calling about the invoice"))
+    fun `a recording row shows title time duration client and its app, and long-press selects it`() {
+        seed(
+            item("a", title = "Call with Acme", client = "Acme Holdings", preview = "Thanks for calling about the invoice"),
+            item("d", title = "Desktop call", sourceDevice = "desktop", startedAt = "2026-10-20T09:00:00+00:00")
+        )
 
         showLibrary()
 
         compose.onNodeWithText("Call with Acme").assertIsDisplayed()
-        compose.onNodeWithText("Oct 20 · 10:00 AM · 42:10 · Acme Holdings").assertIsDisplayed()
-        // Compact rows: no preview text and no badges, the device is an icon and the state a dot.
+        compose.onNodeWithText("42:10 · Acme Holdings").assertIsDisplayed()
+        compose.onAllNodesWithText("Oct 20").assertCountEquals(2)
+        // No preview text; the app is the row's icon, and only computer and web recordings carry a device badge.
         compose.onNodeWithText("Thanks for calling about the invoice").assertDoesNotExist()
-        compose.onAllNodesWithContentDescription("Phone", substring = true).assertCountEquals(1)
-        compose.onNodeWithContentDescription("Select Call with Acme").assertIsDisplayed()
+        compose.onAllNodesWithContentDescription("WhatsApp").assertCountEquals(2)
+        compose.onAllNodesWithContentDescription("Desktop").assertCountEquals(1)
         compose.onNodeWithText("No recordings yet").assertDoesNotExist()
+
+        compose.onNodeWithText("Call with Acme").performTouchInput { longClick() }
+        compose.onNodeWithText("1 selected").assertIsDisplayed()
+        compose.onNodeWithText("Call with Acme").performClick()
+        compose.onNodeWithText("Library").assertIsDisplayed()
     }
 
     @Test
-    fun `a recording without a title is shown as Untitled and one without a client omits it`() {
+    fun `a recording without a title is named after its app and one without a client omits it`() {
         seed(item("a", title = null, client = null))
 
         showLibrary()
 
-        compose.onNodeWithText("Untitled").assertIsDisplayed()
-        compose.onNodeWithText("Oct 20 · 10:00 AM · 42:10").assertIsDisplayed()
+        compose.onNodeWithText("WhatsApp call").assertIsDisplayed()
+        compose.onNodeWithText("42:10").assertIsDisplayed()
     }
 
     @Test
@@ -173,7 +198,7 @@ class LibraryScreenTest : ScreenTest() {
     // ---- status dots ------------------------------------------------------------------------------------------------------
 
     @Test
-    fun `status dots tell ready processing and failed recordings apart`() {
+    fun `each row tells ready processing and failed recordings apart`() {
         seed(
             item("ready", title = "Ready call", status = "completed", finalStatus = "completed"),
             item("busy", title = "Busy call", status = "processing", finalStatus = "processing"),
@@ -184,9 +209,9 @@ class LibraryScreenTest : ScreenTest() {
 
         showLibrary()
 
-        compose.onAllNodesWithContentDescription("Ready").assertCountEquals(1)
-        compose.onAllNodesWithContentDescription("Processing").assertCountEquals(2)
-        compose.onAllNodesWithContentDescription("Failed").assertCountEquals(2)
+        compose.onAllNodes(state("Ready")).assertCountEquals(1)
+        compose.onAllNodes(state("Processing")).assertCountEquals(2)
+        compose.onAllNodes(state("Failed")).assertCountEquals(2)
     }
 
     @Test
@@ -195,7 +220,7 @@ class LibraryScreenTest : ScreenTest() {
 
         showLibrary()
 
-        compose.onAllNodesWithContentDescription("Ready").assertCountEquals(1)
+        compose.onAllNodes(state("Ready")).assertCountEquals(1)
     }
 
     // ---- search ------------------------------------------------------------------------------------------------------------
@@ -274,6 +299,7 @@ class LibraryScreenTest : ScreenTest() {
         compose.onAllNodesWithText("Budget review").assertCountEquals(0)
 
         compose.onNode(hasSetTextAction()).performTextClearance()
+        compose.onNodeWithContentDescription("Leave search").performClick()
 
         compose.onNodeWithText("Budget review").assertIsDisplayed()
         compose.onNodeWithText("Voice note 14").assertIsDisplayed()
@@ -311,22 +337,22 @@ class LibraryScreenTest : ScreenTest() {
     )
 
     @Test
-    fun `the device boxes in the Filters menu add up and Clear all shows everything again`() {
+    fun `the Source choices add up and clearing them shows everything again`() {
         seedMixedDevices()
         showLibrary()
 
-        chip("Desktop").performClick()
+        filter("Source", "Desktop")
         compose.onNodeWithText("Desktop meeting").assertIsDisplayed()
         compose.onAllNodesWithText("Phone call").assertCountEquals(0)
         compose.onAllNodesWithText("Web upload").assertCountEquals(0)
 
-        // Ticked boxes in one group add up.
-        chip("Web").performClick()
+        // Choices in one chip add up.
+        filter("Source", "Web")
         compose.onNodeWithText("Web upload").assertIsDisplayed()
         compose.onNodeWithText("Desktop meeting").assertIsDisplayed()
         compose.onAllNodesWithText("Phone call").assertCountEquals(0)
 
-        chip("Clear all").performClick()
+        clearFilter("Source")
         compose.onNodeWithText("Phone call").assertIsDisplayed()
         compose.onNodeWithText("Desktop meeting").assertIsDisplayed()
         compose.onNodeWithText("Web upload").assertIsDisplayed()
@@ -337,7 +363,7 @@ class LibraryScreenTest : ScreenTest() {
         seed(item("p", title = "Phone call", sourceDevice = "phone"))
         showLibrary()
 
-        chip("Desktop").performClick()
+        filter("Source", "Desktop")
 
         compose.onNodeWithText("Nothing matches").assertIsDisplayed()
     }
@@ -347,7 +373,7 @@ class LibraryScreenTest : ScreenTest() {
         seedMixedDevices()
         showLibrary()
 
-        chip("Desktop").performClick()
+        filter("Source", "Desktop")
         search("phone")
 
         compose.onNodeWithText("Nothing matches").assertIsDisplayed()
@@ -363,9 +389,9 @@ class LibraryScreenTest : ScreenTest() {
         seed(item("a"))
         showLibrary(showCallSetup = true)
 
-        compose.onNodeWithText("WhatsApp calls are not being recorded").assertIsDisplayed()
-        compose.onNodeWithText("Set up call recording →").assertIsDisplayed()
-        compose.onNodeWithText("WhatsApp calls are not being recorded").performClick()
+        compose.onNodeWithText("WhatsApp calls are not being recorded", substring = true).assertIsDisplayed()
+
+        compose.onNodeWithText("Set up").performClick()
 
         assertEquals(1, setupTaps)
     }
@@ -374,18 +400,19 @@ class LibraryScreenTest : ScreenTest() {
     fun `no banner appears when call capture is already set up`() {
         showLibrary(showCallSetup = false)
 
-        compose.onAllNodesWithText("WhatsApp calls are not being recorded").assertCountEquals(0)
+        compose.onAllNodesWithText("WhatsApp calls are not being recorded", substring = true).assertCountEquals(0)
         assertEquals(0, setupTaps)
     }
 
     @Test
-    fun `the sync button asks the server for new recordings`() {
+    fun `Sync now in the menu asks the server for new recordings`() {
         runBlocking { app.pairLocally(server) }
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(listOf(item("a", title = "Fresh call")))))
         server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
         showLibrary()
 
-        compose.onNodeWithContentDescription("Sync").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Sync now").performClick()
         pumpUntil("the library and the clients to sync") {
             server.requestsTo("GET", "/api/library").isNotEmpty() &&
                 server.requestsTo("GET", "/api/clients").isNotEmpty() &&

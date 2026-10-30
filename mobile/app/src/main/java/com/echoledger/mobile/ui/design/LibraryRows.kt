@@ -192,7 +192,7 @@ fun LibraryItemRow(
         ItemStatus.READY -> rowMeta(item)
     }
     RecordingRow(
-        title = item.title?.takeIf { it.isNotBlank() } ?: app.label,
+        title = item.title?.takeIf { it.isNotBlank() } ?: untitled(app),
         time = rowTime(item.startedAt, today),
         meta = meta,
         tile = { SourceAppTile(app) },
@@ -210,6 +210,14 @@ fun LibraryItemRow(
             ItemStatus.READY -> null
         },
         badge = { DeviceBadge(SourceDevice.from(item.sourceDevice)) },
+        stateLabel = status.label,
         divider = divider
     )
+}
+
+/** A recording without a title: "WhatsApp call", "Voice note", "Phone call". */
+fun untitled(app: SourceApp): String = when (app) {
+    SourceApp.VOICE_NOTE, SourceApp.PHONE_CALL -> app.label
+    SourceApp.OTHER -> "Recording"
+    else -> "${app.label} call"
 }
