@@ -355,6 +355,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
     // ---- Activity centre (B18) -------------------------------------------------------------------------------------
 
+    /** Opening a recording (since v1.3): the dot goes away here at once, and the server is told. */
+    fun markOpened(item: LibraryItem) {
+        if (item.opened != false) return
+        viewModelScope.launch(Dispatchers.IO) {
+            graph.library.markOpenedLocally(item.id)
+            runCatching { graph.api()?.markOpened(item.id) }
+        }
+    }
+
     /** The activity list; null when offline. */
     suspend fun activity(): com.echoledger.mobile.data.ActivityResponse? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.activity(30) }.getOrNull()

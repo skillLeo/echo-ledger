@@ -335,6 +335,11 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("sessions/$id/restore").post(ByteArray(0).toRequestBody(jsonType)).build(), null as KSerializer<Unit>?)
     }
 
+    /** `POST /api/sessions/{id}/opened` (since v1.3): this user has opened the recording (the dot goes away everywhere). */
+    suspend fun markOpened(id: String) {
+        call(request("sessions/$id/opened").post(ByteArray(0).toRequestBody(jsonType)).build(), null as KSerializer<Unit>?)
+    }
+
     /** `DELETE /api/bin/{id}` (since v1.1): erase now instead of after 48 hours. */
     suspend fun eraseFromBin(id: String) {
         call(request("bin/$id").delete().build(), null as KSerializer<Unit>?)

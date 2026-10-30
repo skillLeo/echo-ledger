@@ -17,6 +17,7 @@ import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
+import com.echoledger.mobile.testsupport.pumpUntil
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlinx.coroutines.runBlocking
@@ -140,6 +141,32 @@ class LibraryOrganiseTest : ScreenTest() {
         val body = server.requestsTo("POST", "/api/sessions/bulk").single().bodyText()
         assertEquals("""{"ids":["a","b"],"action":"label","client_id":null,"label":"Q4"}""", body)
         assertEquals("2 recordings updated", vm.message.value)
+    }
+
+    @Test
+    fun `opening an unopened recording takes its dot away at once and tells the server`() {
+        runBlocking { app.pairLocally(server) }
+        server.on(
+            "GET",
+            "/api/library",
+            FakeServer.json(
+                200,
+                """{"data":[${ServerFixtures.libraryItem("s1", "Call", "2026-10-20T10:00:00+00:00", "2026-10-20T10:05:00+00:00", "phone", "whatsapp", "completed", "completed", null, null).dropLast(
+                    1
+                )},"opened":false}],"next_cursor":null,"server_time":"2026-10-30T10:00:00+00:00"}"""
+            )
+        )
+        server.on("POST", "/api/sessions/s1/opened", FakeServer.json(204, ""))
+        runBlocking { app.graph.library.refresh() }
+        val unopened = vm.library.value.single()
+        assertEquals(false, unopened.opened)
+
+        vm.markOpened(unopened)
+        pumpUntil("the server to hear of it") { server.requestsTo("POST", "/api/sessions/s1/opened").isNotEmpty() }
+        assertEquals(true, vm.library.value.single().opened)
+
+        vm.markOpened(vm.library.value.single())
+        assertEquals("opened once, not again", 1, server.requestsTo("POST", "/api/sessions/s1/opened").size)
     }
 
     @Test

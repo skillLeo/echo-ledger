@@ -202,6 +202,7 @@ fun LibraryItemRow(
         selecting = selecting,
         selected = selected,
         pinned = item.pinned,
+        unopened = item.opened == false,
         metaColor = if (status == ItemStatus.FAILED) c.danger else c.textMuted,
         status = when (status) {
             ItemStatus.PROCESSING -> ({ Spinner(14.dp) })

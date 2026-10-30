@@ -283,6 +283,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
     var version by remember(item.id) { mutableStateOf(TranscriptVersion.CURRENT) }
     // The recording's details are read once per load; switching the version reads only the other transcript.
     var detailFor by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    // Opening the page counts as opening the recording (the unopened dot goes away here and on the server).
+    LaunchedEffect(item.id) { vm.markOpened(item) }
     LaunchedEffect(item.id, attempt, version) {
         val previous = previousVersionId(item).takeIf { version == TranscriptVersion.PREVIOUS }
         val id = previous ?: item.transcript?.finalTranscriptId ?: item.transcript?.liveTranscriptId

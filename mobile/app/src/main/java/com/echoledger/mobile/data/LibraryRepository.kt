@@ -52,6 +52,15 @@ class LibraryRepository(
         changed
     }
 
+    /** Marks [id] opened here at once (the dot goes away before the server hears of it). */
+    suspend fun markOpenedLocally(id: String) = lock.withLock {
+        val current = _items.value
+        if (current.none { it.id == id && it.opened == false }) return@withLock
+        val updated = current.map { if (it.id == id) it.copy(opened = true) else it }
+        _items.value = updated
+        save(Cache(since, updated))
+    }
+
     /** True once a sync has completed (the server time of the last sync is known). */
     fun hasSynced(): Boolean = since != null
 

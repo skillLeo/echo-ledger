@@ -262,7 +262,9 @@ data class LibraryItem(
     /** The recording's language chip, "UR+EN" (since v1.1.2). */
     @SerialName("language_chip") val languageChip: String? = null,
     /** The language chosen for the recording (since v1.1.2); null = automatic. */
-    val language: String? = null
+    val language: String? = null,
+    /** Whether this user has opened it (since v1.3); false shows the unopened dot, null (an older server) does not. */
+    val opened: Boolean? = null
 )
 
 @Serializable
