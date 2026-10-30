@@ -275,7 +275,7 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
     if let Some(Some(language)) = &patch.transcription_language
         && crate::settings::language_or_none(Some(language)).is_none()
     {
-        return Err(AppError::msg("Choose Automatic, English, Urdu, Hindi or English + Urdu."));
+        return Err(AppError::msg("That language is not in the list. Choose Auto, English only, Urdu, Arabic or one of the other languages."));
     }
     if let Some(problem) = patch.caption_style.as_ref().and_then(|s| s.problem()) {
         return Err(AppError::msg(problem));
