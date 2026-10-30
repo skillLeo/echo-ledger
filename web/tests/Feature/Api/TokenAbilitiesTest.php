@@ -25,6 +25,7 @@ function abilityRoutes(): array
         'config' => ['GET', '/api/config', 'config:read'],
         'clients' => ['GET', '/api/clients', 'library:read'],
         'stt token' => ['POST', '/api/stt/token', 'stt:token'],
+        'live translate token' => ['POST', '/api/live-translate/token', 'stt:token'],
         'usage report' => ['POST', '/api/usage', 'stt:token'],
         'create session' => ['POST', '/api/sessions', 'sessions:write'],
         'finish session' => ['POST', "/api/sessions/{$id}/finish", 'sessions:write'],

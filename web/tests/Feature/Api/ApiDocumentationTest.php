@@ -84,7 +84,7 @@ it('states the documented throttles the limiters really apply', function () {
             $documented[$endpoint['uri']] = [(int) $m[1], $m[2]];
         }
     }
-    $limiterFor = ['/api/devices/register' => 'pairing', '/api/stt/token' => 'stt-token', '/api/search' => 'search'];
+    $limiterFor = ['/api/devices/register' => 'pairing', '/api/stt/token' => 'stt-token', '/api/live-translate/token' => 'stt-token', '/api/search' => 'search'];
 
     expect($documented)->not->toBeEmpty();
     foreach ($documented as $uri => [$perMinute, $by]) {

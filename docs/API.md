@@ -198,6 +198,16 @@ are since v1.1; client folders are created and changed with `POST /api/clients` 
 
 ## Live captions & dictation
 
+### `POST /api/live-translate/token` — `stt:token`, throttled (30/min/device) (since v1.3)
+Live Translate on the phone (Phase B: game voice chat and videos). Body `{"mode": "game"|"watch", "target_language":
+"en", "language_hints": ["ar"]}` (two-letter codes). The server asks Soniox for a temporary key
+(`transcribe_websocket`, 10 minutes) and answers `200 {"provider": "soniox", "api_key": "temp:…", "expires_at": "…",
+"websocket_url": "wss://stt-rt.soniox.com/transcribe-websocket", "model": "stt-rt-v5", "translation": {"type":
+"one_way", "target_language": "en"}, "language_hints": ["ar"]}` (`Cache-Control: no-store`). The phone streams to
+Soniox directly and asks again before `expires_at`; no audio passes through the server and the account key never
+leaves it. Errors: `403 budget_exceeded`, `503 provider_not_configured` (no Soniox key), `502 provider_error`
+(Soniox refused: the message says whether the key, the credit or Soniox itself is the problem).
+
 ### `POST /api/stt/token` — `stt:token`, throttled (30/min/device)
 ```json
 // request

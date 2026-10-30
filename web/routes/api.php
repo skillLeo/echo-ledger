@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\LibraryController;
+use App\Http\Controllers\Api\LiveTranslateTokenController;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Http\Controllers\Api\RecordingController;
 use App\Http\Controllers\Api\SearchController;
@@ -47,6 +48,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
         Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
 
         Route::post('stt/token', SttTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token'])->name('api.stt.token');
+        Route::post('live-translate/token', LiveTranslateTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token'])->name('api.live-translate.token');
         Route::post('usage', [UsageController::class, 'store'])->middleware('abilities:stt:token')->name('api.usage.store');
 
         Route::middleware('abilities:sessions:write')->group(function (): void {
