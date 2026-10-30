@@ -51,12 +51,23 @@ object SharedNotes {
         val transcript = item?.transcript
         return when {
             item != null && transcript?.finalErrorCode == "no_audio" -> Status(Stage.NO_AUDIO, "No audio in this voice note", item.id)
+
             item != null && transcript?.finalStatus == "completed" -> Status(Stage.READY, "Transcript ready", item.id)
+
             item != null && transcript?.finalStatus == "failed" -> Status(Stage.FAILED, "Transcription failed. Open it to retry.", item.id)
+
             item != null -> Status(Stage.TRANSCRIBING, TranscriptText.transcribing(transcript?.finalProgress), item.id)
-            local?.state == "failed" -> Status(Stage.FAILED, "Upload failed: ${local.lastError ?: "try again"}", sessionId)
+
+            local?.state == "failed" -> Status(
+                Stage.FAILED,
+                local.lastError ?: "The upload failed. Open EchoLedger's Record tab and tap Retry.",
+                sessionId
+            )
+
             local != null -> Status(Stage.UPLOADING, if (local.state == "uploading") "Uploading…" else "Waiting to upload…", sessionId)
+
             sessionId != null -> Status(Stage.TRANSCRIBING, "Transcribing…", sessionId)
+
             else -> Status(Stage.WAITING, "Preparing…")
         }
     }

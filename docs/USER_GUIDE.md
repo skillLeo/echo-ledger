@@ -268,6 +268,35 @@ on **Zero Data Retention** at Groq. Your administrator has the details per provi
 - Your administrator sets a **monthly limit** in the console **Settings → Storage**. At 80% you get a message. At 100% new
   captions and new transcripts stop, but your recording carries on and is kept on your device.
 
+## 16. Live Translate: games and videos
+
+Live Translate shows what is said in another app, translated, while you use it. It is for you, not for clients:
+nothing is recorded or kept unless you switch saving on.
+
+- **Game translate** (phone): teammates in PUBG Mobile, Call of Duty: Mobile or another game speak Arabic (or any
+  language); English text appears in a small box over the game. Open the centre button → **Game translate**, choose
+  your games and press **Start**, or switch on **Start with the game** so it starts when voice chat plays. The box
+  never takes a touch: every tap goes to the game. Tap the small dot beside it to move or resize it (it locks again
+  after 5 seconds); hold the dot for Pause, Hide, text size, opacity, the original line, the language and Stop.
+- **Watch translate** (phone): films and videos get subtitles in Urdu (or English, Arabic…). Apps that protect their
+  videos, such as Netflix, do not allow it and say so.
+- **Test translate** on each page plays a short sentence with the phone's own voice and shows the result, so you can
+  set the box up without opening a game.
+- **On the computer** (Windows): the **Record** page → **Live Translate**: choose an app that is playing sound, Game or
+  Watch, the language, then **Start**. The overlay never takes the mouse; **Ctrl+Shift+T** lets you move it,
+  **Ctrl+Shift+H** hides it. It works over borderless or windowed games, not exclusive full screen. A browser is heard
+  with all its tabs.
+- **Quick Settings tiles** "Game translate" and "Watch translate", and the app icon's long-press menu, switch it on and
+  off (also from Samsung Routines).
+- **Cost and privacy:** about $0.18 an hour, only while someone speaks (the connection closes when it is quiet). The
+  sound goes from your phone or computer straight to Soniox, which does not store it or train on it. Live Translate
+  has its own monthly budget (default $10, Game translate → Privacy and budget): a warning at 80%, a pause at 100%,
+  and **Continue this month anyway** if you want more. It never stops your call transcripts.
+- **Saving:** off by default. **Save session text** (Game) and **Save subtitles (.srt)** (Watch) write the translated
+  text to Downloads/EchoLedger on the phone.
+- It needs the capture helper (Shizuku) to hear game voice chat. Without it the phone asks to share the sound each
+  time, and voice chat may be missing.
+
 ---
 
 ## Something is wrong?

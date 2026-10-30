@@ -1,10 +1,11 @@
 package com.echoledger.mobile.ui
 
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.TranscriptSummary
 import com.echoledger.mobile.testsupport.FakeServer
@@ -87,7 +88,10 @@ class SessionPlaybackTest : ScreenTest() {
 
         awaitText("This recording could not be played.")
 
-        compose.onNodeWithText("Hi, thanks for calling.").assertIsNotEnabled()
+        // The line still offers Copy and Share on a long-press, but nothing to play.
+        compose.onNodeWithText("Hi, thanks for calling.").performTouchInput { longClick() }
+        compose.onNodeWithText("Copy line").assertExists()
+        compose.onAllNodesWithText("Play from here").assertCountEquals(0)
         assertTrue(server.requestsTo("GET", "/api/recordings/.+/audio").isNotEmpty())
     }
 

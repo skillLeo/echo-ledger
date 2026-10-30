@@ -11,7 +11,7 @@ import com.echoledger.mobile.translate.WatchPrefs
  * desktop app use the same names.
  */
 enum class SettingsGroup(val label: String, val summary: String) {
-    General("General", "This phone, look, lock, privacy, notifications, help"),
+    General("General", "This phone, look, lock, privacy, help"),
     VoiceNotes("Voice notes & files", "Sharing voice notes, the voice keyboard"),
     Calls("Calls & meetings", "Call apps, after a call, captions, microphone"),
     Game("Game translate", "Games, languages, the box, monthly budget"),

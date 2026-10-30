@@ -80,7 +80,11 @@ object PermissionHealth {
                 "Never sleeping app",
                 awake,
                 if (awake) null else "Allow",
-                note = if (awake) null else "Keeps it running during long games."
+                note = when {
+                    awake -> null
+                    forGame -> "Keeps it running during long games."
+                    else -> "Keeps it running during long films."
+                }
             )
         )
     }
@@ -170,9 +174,14 @@ fun LiveTranslatePage(vm: MainViewModel, mode: TranslateMode, onSetup: () -> Uni
                 }
                 Text(
                     when {
-                        mode == TranslateMode.GAME && helper.connected -> "Hears the game through the capture helper, voice chat included. Touches always reach the game."
-                        mode == TranslateMode.GAME -> "Without the capture helper Android asks to share the sound each time, and voice chat may be missing."
+                        mode == TranslateMode.GAME && helper.connected ->
+                            "Hears the game through the capture helper, voice chat included. Touches always reach the game."
+
+                        mode == TranslateMode.GAME ->
+                            "Without the capture helper Android asks to share the sound each time, and voice chat may be missing."
+
                         helper.connected -> "Subtitles appear over the video. Apps that don't allow captions say so."
+
                         else -> "Android asks to share the sound each time. Apps that don't allow captions stay silent."
                     },
                     style = type.labelM,

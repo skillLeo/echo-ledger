@@ -37,6 +37,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.toClipEntry
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -115,7 +117,11 @@ fun PlayerOptions(player: RecordingPlayerState) {
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Skip silence", modifier = Modifier.weight(1f), fontSize = 14.sp)
-            Switch(checked = player.skipSilence, onCheckedChange = { player.changeSkipSilence(it) })
+            Switch(
+                checked = player.skipSilence,
+                onCheckedChange = { player.changeSkipSilence(it) },
+                modifier = Modifier.semantics { contentDescription = "Skip silence" }
+            )
         }
     }
 }
@@ -218,7 +224,14 @@ fun ShareLinkContent(vm: MainViewModel, sessionId: String, hasAudio: Boolean) {
         if (hasAudio) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Include the recording", modifier = Modifier.weight(1f))
-                Switch(checked = audio, onCheckedChange = { audio = it })
+                Switch(
+                    checked = audio,
+                    onCheckedChange = { audio = it },
+                    modifier = Modifier.semantics {
+                        contentDescription =
+                            "Include the recording"
+                    }
+                )
             }
         }
         Button(enabled = password.isEmpty() || password.length >= 6, onClick = {

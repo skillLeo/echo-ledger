@@ -92,9 +92,9 @@ class SetupScreenTest : ScreenTest() {
     fun `granted permissions are ticked and missing ones offer Allow`() {
         showSetup(caps(mic = true, notif = false, overlay = false))
 
-        compose.onNodeWithText("✓  Microphone").assertIsDisplayed()
-        compose.onNodeWithText("•  Notifications (Stop / Keep / Discard actions)").assertIsDisplayed()
-        compose.onNodeWithText("•  Caption bubble (optional)").assertIsDisplayed()
+        compose.onNodeWithText("Microphone").assertIsDisplayed()
+        compose.onNodeWithText("Notifications (Stop / Keep / Discard actions)").assertIsDisplayed()
+        compose.onNodeWithText("Caption bubble (optional)").assertIsDisplayed()
         compose.onAllNodesWithText("Allow").assertCountEquals(2)
     }
 

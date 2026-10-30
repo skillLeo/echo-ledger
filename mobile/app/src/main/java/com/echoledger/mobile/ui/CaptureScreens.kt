@@ -267,13 +267,21 @@ private fun LiveTranscript(feed: com.echoledger.mobile.overlay.CaptionFeed, capt
 fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
     SectionCard {
         Text("Auto-record apps", fontWeight = FontWeight.SemiBold)
+        // Said once for the list (since v1.3) instead of under every app.
+        if (!settings.autoRecordArmed) {
+            Text("Auto-record is off: these apps are recorded only when you start a recording.", color = Brand.Muted, fontSize = 12.sp)
+        }
         AutoRecordRules.APPS.forEach { app ->
             val on = AutoRecordRules.records(app, settings.autoRecordApps)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(app.label)
                     Text(
-                        AutoRecordRules.explain(app, settings.autoRecordApps, settings.autoRecordArmed),
+                        when {
+                            !on -> "Not recorded"
+                            settings.autoRecordArmed -> "Recorded automatically"
+                            else -> "Recorded when auto-record is on"
+                        },
                         color = Brand.Muted,
                         fontSize = 12.sp
                     )
@@ -385,7 +393,11 @@ fun CaptionStyleSection(vm: MainViewModel, settings: AppSettings) {
                 Text("Compact captions")
                 Text("Speakers are shown by colour instead of the Me / Client labels.", color = Brand.Muted, fontSize = 12.sp)
             }
-            Switch(checked = style.compact, onCheckedChange = { save(style.copy(compact = it)) })
+            Switch(
+                checked = style.compact,
+                onCheckedChange = { save(style.copy(compact = it)) },
+                modifier = Modifier.semantics { contentDescription = "Compact captions" }
+            )
         }
         Choices("Colour for Me", COLOUR_PRESETS.map { it to (it ?: "Default") }, style.meColor) { save(style.copy(meColor = it)) }
         Choices(
@@ -501,7 +513,11 @@ fun CaptureHealthSection(vm: MainViewModel, settings: AppSettings, helperConnect
                 Text("Warn me when the other side is silent")
                 Text("If a call has not heard the other side for 30 seconds.", color = Brand.Muted, fontSize = 12.sp)
             }
-            Switch(checked = settings.farSideWarning, onCheckedChange = { v -> vm.updateSettings { it.copy(farSideWarning = v) } })
+            Switch(
+                checked = settings.farSideWarning,
+                onCheckedChange = { v -> vm.updateSettings { it.copy(farSideWarning = v) } },
+                modifier = Modifier.semantics { contentDescription = "Warn me when the other side is silent" }
+            )
         }
     }
     SectionCard {

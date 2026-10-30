@@ -218,8 +218,54 @@ class ScreenshotsTest : ScreenTest() {
     fun settingsGroup() {
         runBlocking { app.pairLocally(server) }
         shoot { SettingsScreen(vm, onSetup = {}) }
-        compose.onNodeWithText("Recording").performClick()
-        capture("settings-recording")
+        compose.onNodeWithText("Calls & meetings").performClick()
+        capture("settings-calls")
+    }
+
+    @Test
+    fun settingsGeneral() {
+        runBlocking { app.pairLocally(server) }
+        shoot { SettingsScreen(vm, onSetup = {}) }
+        compose.onNodeWithText("General").performClick()
+        capture("settings-general")
+    }
+
+    @Test
+    fun gameTranslate() {
+        runBlocking { app.pairLocally(server) }
+        shoot { LiveTranslatePage(vm, com.echoledger.mobile.translate.TranslateMode.GAME, onSetup = {}) }
+        capture("game")
+    }
+
+    @Test
+    fun watchTranslate() {
+        runBlocking { app.pairLocally(server) }
+        shoot { LiveTranslatePage(vm, com.echoledger.mobile.translate.TranslateMode.WATCH, onSetup = {}) }
+        capture("watch")
+    }
+
+    /** Twice the phone's text size (C10): nothing overlaps or is cut off. */
+    @Test
+    fun libraryLargeText() {
+        seedLibrary()
+        shoot { LargeText { LibraryScreen(vm, showCallSetup = false, onSetup = {}, onOpen = {}) } }
+        capture("library-font200")
+    }
+
+    @Test
+    fun settingsLargeText() {
+        runBlocking { app.pairLocally(server) }
+        shoot { LargeText { SettingsScreen(vm, onSetup = {}) } }
+        capture("settings-font200")
+    }
+
+    @Composable
+    private fun LargeText(content: @Composable () -> Unit) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        androidx.compose.runtime.CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale = 2f),
+            content = content
+        )
     }
 
     @Test

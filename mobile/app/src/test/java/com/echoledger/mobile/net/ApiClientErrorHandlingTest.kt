@@ -6,7 +6,6 @@ import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ServerFixtures
 import java.io.IOException
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.SerializationException
 import mockwebserver3.MockResponse
 import mockwebserver3.SocketEffect
 import org.junit.After
@@ -199,7 +198,7 @@ class ApiClientErrorHandlingTest {
     fun `a 200 with malformed JSON is an error and never a half-parsed object`() {
         server.onAny(FakeServer.json(200, """{"device": {"id": "d", """))
         val error = failure { it.config() }
-        assertTrue(error.toString(), error is SerializationException || error is IllegalArgumentException)
+        assertTrue(error.toString(), error is IOException && error.message == UNREADABLE_ANSWER)
     }
 
     @Test
@@ -210,19 +209,19 @@ class ApiClientErrorHandlingTest {
             ).addHeader("Content-Type", "text/html").body("<html><body>Sign in to Wi-Fi</body></html>").build()
         )
         val error = failure { it.library(null, null) }
-        assertTrue(error.toString(), error is SerializationException || error is IllegalArgumentException)
+        assertTrue(error.toString(), error is IOException && error.message == UNREADABLE_ANSWER)
     }
 
     @Test
     fun `a 200 whose required fields have the wrong type is an error`() {
         server.onAny(FakeServer.json(200, """{"data":"not a list","server_time":5}"""))
-        assertTrue(failure { it.library(null, null) } is SerializationException)
+        assertEquals(UNREADABLE_ANSWER, (failure { it.library(null, null) } as IOException).message)
     }
 
     @Test
     fun `a 200 that is missing required fields is an error`() {
         server.onAny(FakeServer.json(200, """{"data":[]}"""))
-        assertTrue(failure { it.library(null, null) } is SerializationException)
+        assertEquals(UNREADABLE_ANSWER, (failure { it.library(null, null) } as IOException).message)
     }
 
     @Test
@@ -257,7 +256,8 @@ class ApiClientErrorHandlingTest {
         endpoints.filter {
             it.first in setOf("config", "clients", "library", "transcript", "sessionDetail", "createSession")
         }.forEach { (name, call) ->
-            assertTrue("$name should fail on an empty body", runCatching { runBlocking { call(client()) } }.isFailure)
+            val error = runCatching { runBlocking { call(client()) } }.exceptionOrNull()
+            assertEquals("$name should fail on an empty body", EMPTY_ANSWER, (error as? IOException)?.message)
         }
     }
 
@@ -295,7 +295,7 @@ class ApiClientErrorHandlingTest {
 
         val error = runCatching { runBlocking { client().recordingStatus("r1") } }.exceptionOrNull()
 
-        assertTrue(error.toString(), error is SerializationException)
+        assertTrue(error.toString(), error is IOException && error.message == UNREADABLE_ANSWER)
     }
 
     @Test

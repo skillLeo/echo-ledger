@@ -12,6 +12,7 @@ laptop tests.
 | H2 | Phone window 2 (~45 min) | Final install and call checks | Say "phone free"; make the calls listed under "Phone window 2" when asked. |
 | H3 | TurboScribe reference texts | A5 needs the corrected text of 3 recordings (English, mixed Urdu + English, Arabic) | Paste each text in chat (or in the console: recording → ⋯ → Use as Accuracy Lab reference). |
 | H4 | Signed APK | The phone runs a debug build; a release build needs the keystore | In chat: keystore path (`C:\echoledger-keys\…`), alias, both passwords. Switching the phone to the signed build needs one uninstall (data is wiped): OK only after nothing waits to upload. |
+| H5 | Soniox credit | Live Translate text and Soniox async in the Accuracy Lab: Soniox answers 402 organization_balance_exhausted | soniox.com → Billing → add funds (or enable autopay). Nothing else to change: the key works. |
 
 ## Phase C — design
 
@@ -22,14 +23,14 @@ laptop tests.
 - [x] C7 You — General (a list of its own pages) + Voice notes & files + Calls & meetings + Game translate + Watch translate panels, each with "Reset this panel"; settings search; sign out at the bottom; Clients list with count/last call; Activity Needs action / Today / Earlier + Mark all as read. *Accept:* `SettingsPanelsTest`; screenshots.
 - [x] C8 lock, onboarding, splash, app icon, notification channels (`df8781a`, `617e720`).
 - [x] C8 permissions health card (`PermissionHealthCard` on the Game and Watch pages) with one-tap fixes (display over apps, helper armed, notifications, never-sleeping apps). *Accept:* unit test of the card's checks; shown on You and in Game setup.
-- [ ] C9 copy pass — sentence case, consistent verbs, no emoji, every error says what happened and what to do. *Accept:* `CopyRulesTest` scans strings/UI text for title case on buttons, emoji, "Error:"-only messages.
-- [ ] C10 quality — TalkBack labels on every icon button, 48 dp targets, 200 % font renders, 1,000-row Library smooth (stable keys, contentType), Baseline Profile, screenshot review of every screen light/dark. *Accept:* `AccessibilityTest` (unlabelled icons = 0), `ScreenshotsTest` at 2.0 font scale, baseline-prof.txt in the APK. Cold start < 1 s **(phone)**.
+- [x] C9 copy pass (upload errors and the shared-note failure say what to do; ✓ ✗ ★ ☆ glyphs replaced by icons; `CopyRulesTest` keeps it so) — sentence case, consistent verbs, no emoji, every error says what happened and what to do. *Accept:* `CopyRulesTest` scans strings/UI text for title case on buttons, emoji, "Error:"-only messages.
+- [x] C10 quality (laptop part: `AccessibilityTest` — every tappable element named, unnamed switches fixed; 200 % text renders `phone-*-font200-*`; Library rows keyed with contentType; hand-written Baseline Profile `baseline-prof.txt`; renders reviewed — Watch health note and General summary fixed. Cold start and gfxinfo need the phone: window 2) — TalkBack labels on every icon button, 48 dp targets, 200 % font renders, 1,000-row Library smooth (stable keys, contentType), Baseline Profile, screenshot review of every screen light/dark. *Accept:* `AccessibilityTest` (unlabelled icons = 0), `ScreenshotsTest` at 2.0 font scale, baseline-prof.txt in the APK. Cold start < 1 s **(phone)**.
 - [x] C12 row → recording shared transition (`3dadb5f`; skipped when animations are off). *Accept:* `MainActivityTest` opens a row with the transition; no crash with animations off.
 - [x] C12 server "opened" + dot (`d2f397a`, `ea6e4f3`), recent searches kept, Activity swipe-to-dismiss (`0b584c2`).
 
 ## Phase A — remainder
 
-- [ ] A5 Accuracy Lab ready to run — categories English / Urdu + English / Arabic, Groq, Soniox async and AssemblyAI selectable in Compare engines, before/after report. *Accept:* `AccuracyLabTest` green with 3 fixtures. Running it needs H3.
+- [x] A5 Accuracy Lab ready to run (`AccuracyLabTest` 5/5; running it needs H3, and Soniox async needs the credit) — categories English / Urdu + English / Arabic, Groq, Soniox async and AssemblyAI selectable in Compare engines, before/after report. *Accept:* `AccuracyLabTest` green with 3 fixtures. Running it needs H3.
 - [ ] A6 on-phone checks — Roman Urdu default, Copy for AI **(phone, window 2)**.
 
 ## Phase B — Live Translate
@@ -39,17 +40,17 @@ laptop tests.
 - [x] B2 floating box (`3dadb5f`) — one overlay window, View-based, ≤ 10 updates/s, Locked / Edit / Hidden / Paused / Stopped, grip dot + toolbar, notification, QS tiles, app shortcuts, styles, fade, thermal guard, per-app/orientation memory. *Accept:* `TranslateBoxMachineTest`, `BoxPlacementTest`. Touch pass-through + FPS **(phone, window 1)**.
 - [x] B3 Game mode (`3dadb5f`; "Save session text" writes Downloads/EchoLedger: a text-only Library item needs a server session type that has no recording — left for later) — setup screen (games, permissions, Test translate with TTS over a sample frame), auto-start/stop by game playback, per-game profile, profanity mask, Save session text. *Accept:* `GameModeTest`.
 - [x] B4 Watch mode (`3dadb5f`; .srt to Downloads/EchoLedger) — source app or "whatever is playing", Urdu default, subtitle style, pause with playback, stop after 2 min silence, opt-out apps say "This app doesn't allow live captions", Save .srt. *Accept:* `WatchModeTest`, `SrtWriterTest`.
-- [~] B5 four modes (phone + server done `3dadb5f`, `e987f4f`; the phone applying the console defaults is next) on the Record sheet + settings panels + migration + web console mirror (Settings → Live Translate defaults, budget). *Accept:* `SettingsMigrationTest`; Pest `LiveTranslateSettingsTest`.
-- [ ] B6 desktop — Game/Watch through per-app loopback → Soniox → caption overlay, click-through when locked, Ctrl+Shift+T / Ctrl+Shift+H, "borderless or windowed only" note. *Accept:* vitest + cargo tests for the session and overlay state.
+- [x] B5 four modes (`3dadb5f`, `e987f4f`, `4ea46df`: the phone follows the console defaults until the person changes a panel) on the Record sheet + settings panels + migration + web console mirror (Settings → Live Translate defaults, budget). *Accept:* `SettingsMigrationTest`; Pest `LiveTranslateSettingsTest`.
+- [x] B6 desktop (`4ea46df`; Windows; macOS later) — Game/Watch through per-app loopback → Soniox → caption overlay, click-through when locked, Ctrl+Shift+T / Ctrl+Shift+H, "borderless or windowed only" note. *Accept:* vitest + cargo tests for the session and overlay state.
 - [x] B7 privacy and cost (`docs/research/soniox-live-translate.md`; estimate on the Game/Watch pages and panels; USER_GUIDE section at release) — `docs/research/soniox-live-translate.md` (retention with sources, silence billing), cost and data per hour in each panel, USER_GUIDE section. *Accept:* doc present, panels show the estimate.
-- [ ] B8 tests — all unit tests above green; device tests added to MANUAL_QA.md.
+- [x] B8 tests (unit tests green; device tests L1-L12 in MANUAL_QA) — all unit tests above green; device tests added to MANUAL_QA.md.
 
 ## Bug sweep
 
-- [ ] Open items from HANDOFF/MANUAL_QA (desktop English-only review-card note has no test; auto-record after update needs the phone).
-- [ ] Production logs, last 7 days (errors, failed transcriptions, failed jobs).
-- [ ] Phone crash/ANR risks (main-thread I/O, unchecked `!!`, receivers).
-- [ ] Desktop errors (Rust `unwrap` on user paths, unhandled promise rejections).
+- [x] Open items from HANDOFF/MANUAL_QA: the desktop English-only review-card note now has two tests; "auto-record back on after an update" is checked in phone window 2.
+- [x] Production logs, last 7 days: 0 failed jobs; 5 failed transcripts 27-28 Oct, all silent calls of the old helper (fixed 29 Oct); log errors known or from diagnostic one-liners. `af890d9` (AssemblyAI 400 while processing) ships with this deploy.
+- [x] Phone crash risks: a 200 with an empty or unreadable body crashed callers (null into `!!`, SerializationException); now an IOException with words for people (`ApiClientErrorHandlingTest`). No runBlocking in app code; receivers are light.
+- [x] Desktop errors: no log files on this machine; `unwrap()` only on mutex locks and in tests; new IPC calls all catch.
 
 ## Release
 
@@ -61,11 +62,29 @@ laptop tests.
 
 ## Phone window 1 (after Phase B is built)
 
+Steps (about 30 minutes; I install over adb keeping app data, nothing is uninstalled or cleared):
+1. I install the new debug build (`pm install -r`) and restart the capture helper (its version changed).
+2. You open EchoLedger → You → General → Help & diagnostics → **Audio probe**.
+3. Start PUBG Mobile, join a squad with voice chat on, come back to the probe: **Capture 5 s** on PUBG's voice-chat
+   row and on its game-sound row, then **Play**. Same for CODM, then YouTube (any video), then Netflix.
+4. **Copy findings** and paste them in chat (I read the capture log too).
+5. Game translate → choose PUBG, **Start**; play one match: tap through the box, hold the dot, move and resize it.
+   I read FPS from SurfaceFlinger before and after (read-only).
+6. With Soniox credit: Watch translate → YouTube → **Start**, a minute of an English video.
+
 - [ ] B0 probe: PUBG Mobile / CODM voice chat, YouTube, Netflix (usage, separable voice, MMAP bypass, arm timing, blocked apps).
 - [ ] Game box over a real game: touches pass through, move/resize, FPS before/after.
 - [ ] Watch subtitles on YouTube.
 
 ## Phone window 2 (final)
+
+Steps (about 45 minutes): I install the release build keeping app data (or, only with your OK, the one-time switch to
+the signed build: uninstall + re-pair), then **you do not open the app**: I check from the capture log that auto-record
+came back by itself. Then, one at a time, with the other phone: share a WhatsApp voice note to EchoLedger; a 4-minute
+WhatsApp call; a 40-second WhatsApp call muting yourself for 10 seconds in the middle; a WhatsApp Business call; a
+normal SIM call; a Google Meet or Zoom app call. After each I check the log, the WAV levels (both sides) and the
+transcript. Last: open an Urdu call → Roman Urdu view → Copy for AI → paste into a note; then screenshots of each main
+screen in light and dark (I take them with `screencap`).
 
 - [ ] Install keeping app data (or the one-time signed switch with OK).
 - [ ] Share a WhatsApp voice note → opens in EchoLedger.

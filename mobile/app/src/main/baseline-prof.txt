@@ -1,0 +1,20 @@
+# Baseline Profile (v1.3, C10): code compiled ahead of time when the app is installed, so the first launch and the
+# first scroll of the Library do not wait for the JIT. Compose and AndroidX ship their own profiles; these rules
+# cover EchoLedger's start-up path and main screens. Installed by ProfileInstaller (a Compose dependency) also when
+# the APK is installed outside the Play Store.
+HSPLcom/echoledger/mobile/EchoLedgerApp;->**(**)**
+HSPLcom/echoledger/mobile/AppGraph;->**(**)**
+HSPLcom/echoledger/mobile/MainActivity;->**(**)**
+HSPLcom/echoledger/mobile/MainActivity$**;->**(**)**
+HSPLcom/echoledger/mobile/ui/MainViewModel;->**(**)**
+HSPLcom/echoledger/mobile/ui/MainViewModel$**;->**(**)**
+HSPLcom/echoledger/mobile/ui/LibraryScreenKt**;->**(**)**
+HSPLcom/echoledger/mobile/ui/LibraryListKt**;->**(**)**
+HSPLcom/echoledger/mobile/ui/ThemeKt**;->**(**)**
+HSPLcom/echoledger/mobile/ui/design/**;->**(**)**
+HSPLcom/echoledger/mobile/data/**;->**(**)**
+HSPLcom/echoledger/mobile/core/LibraryQuery**;->**(**)**
+HSPLcom/echoledger/mobile/core/Organise**;->**(**)**
+HSPLcom/echoledger/mobile/recording/AutoRecordKeeper**;->**(**)**
+Lcom/echoledger/mobile/ui/**;
+Lcom/echoledger/mobile/data/**;

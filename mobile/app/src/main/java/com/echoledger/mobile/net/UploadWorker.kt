@@ -66,12 +66,12 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         } catch (e: ApiException) {
             onApiError(id, e)
         } catch (e: IOException) {
-            graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
+            graph.recordings.update(id) { it.copy(state = "queued", lastError = friendly(e)) }
             if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
         } catch (e: Throwable) {
             // Anything unexpected (an HTML page instead of JSON, a broken answer): never leave it "uploading" (A6.M1).
             graph.recordings.update(id) {
-                it.copy(state = "failed", lastError = "The upload failed: ${e.message ?: e.javaClass.simpleName}")
+                it.copy(state = "failed", lastError = friendly(e))
             }
             Result.failure()
         }
@@ -239,6 +239,25 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         private const val KEY_ID = "recording_id"
         private const val MAX_ATTEMPTS = 12
         const val MISSING_FILE = "The recording file is missing on this phone, so it cannot be uploaded."
+        const val NO_CONNECTION = "No connection to your server. It uploads by itself when the phone is back online."
+
+        /**
+         * What a failed upload says (since v1.3, copy pass): what happened and what to do, never a raw exception
+         * ("Unable to resolve host …"). Certificate problems point to the server address; anything else to Retry.
+         */
+        fun friendly(e: Throwable): String = when (e) {
+            is javax.net.ssl.SSLException ->
+                "Your server's certificate could not be checked. Check the server address in You → General → This phone, then tap Retry."
+
+            is java.net.UnknownHostException, is java.net.ConnectException, is java.net.SocketTimeoutException,
+            is java.net.NoRouteToHostException -> NO_CONNECTION
+
+            is IOException ->
+                "The upload was interrupted (${e.message ?: e.javaClass.simpleName}). It tries again by itself; tap Retry to try now."
+
+            else ->
+                "The upload failed (${e.javaClass.simpleName}). Tap Retry; if it keeps failing, copy diagnostics in You → General → Help."
+        }
 
         /** A `Retry-After` up to this long is left to WorkManager's back-off; longer waits are scheduled exactly. */
         const val SHORT_RETRY_SECONDS = 30L

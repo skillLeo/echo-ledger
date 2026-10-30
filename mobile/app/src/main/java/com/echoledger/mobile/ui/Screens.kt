@@ -53,8 +53,12 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.rounded.Cancel
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
+import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -880,9 +884,15 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("I understand", modifier = Modifier.weight(1f))
-                Switch(checked = settings.consentAcknowledged, onCheckedChange = { v ->
-                    vm.updateSettings { it.copy(consentAcknowledged = v) }
-                })
+                Switch(
+                    checked = settings.consentAcknowledged,
+                    modifier = Modifier.semantics {
+                        contentDescription = "I understand"
+                    },
+                    onCheckedChange = { v ->
+                        vm.updateSettings { it.copy(consentAcknowledged = v) }
+                    }
+                )
             }
         }
     }
@@ -891,10 +901,17 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
 @Composable
 private fun StepRow(title: String, done: Boolean, onFix: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+            contentDescription = null,
+            tint = if (done) Brand.Success else Brand.Muted,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(8.dp))
         Text(
-            (if (done) "✓  " else "•  ") + title,
+            title,
             color = if (done) Brand.Success else Brand.Text,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).semantics { stateDescription = if (done) "Done" else "Needed" },
             fontSize = 14.sp
         )
         if (!done) TextButton(onClick = onFix) { Text("Allow") }
@@ -1001,7 +1018,11 @@ internal fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
                     Text("Hide content in Recents and screenshots")
                     Text("Off by default: screenshots are always allowed unless you turn this on.", color = Brand.Muted, fontSize = 12.sp)
                 }
-                Switch(checked = settings.secureScreen, onCheckedChange = { v -> vm.updateSettings { it.copy(secureScreen = v) } })
+                Switch(
+                    checked = settings.secureScreen,
+                    onCheckedChange = { v -> vm.updateSettings { it.copy(secureScreen = v) } },
+                    modifier = Modifier.semantics { contentDescription = "Hide content in Recents and screenshots" }
+                )
             }
         }
     }
@@ -1065,7 +1086,14 @@ private fun CaptureTestCard(vm: MainViewModel) {
             OutlinedButton(onClick = { vm.runFarSideTest() }, enabled = farTest != "running") { Text("Test the other side") }
             farTest?.takeIf { it != "running" }?.let {
                 Text(
-                    if (it.startsWith("ok")) "✓ The other side of calls can be recorded." else "✗ ${it.removePrefix("fail: ")}",
+                    if (it.startsWith(
+                            "ok"
+                        )
+                    ) {
+                        "Works: the other side of calls can be recorded."
+                    } else {
+                        "Did not work: ${it.removePrefix("fail: ")}"
+                    },
                     color = if (it.startsWith("ok")) Brand.Success else Brand.Danger,
                     fontSize = 12.sp,
                     modifier = Modifier.weight(1f)
@@ -1083,19 +1111,24 @@ private fun CaptureTestCard(vm: MainViewModel) {
             }
             Text(r.headline, color = colour, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
             r.stages.forEach { stage ->
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
                         when (stage.ok) {
-                            true -> "✓"
-                            false -> "✗"
-                            null -> "–"
+                            true -> Icons.Rounded.CheckCircle
+                            false -> Icons.Rounded.Cancel
+                            null -> Icons.Rounded.RemoveCircleOutline
                         },
-                        color = when (stage.ok) {
+                        contentDescription = when (stage.ok) {
+                            true -> "Works"
+                            false -> "Does not work"
+                            null -> "Not checked"
+                        },
+                        tint = when (stage.ok) {
                             true -> Brand.Success
                             false -> Brand.Danger
                             null -> Brand.Muted
                         },
-                        fontWeight = FontWeight.Bold
+                        modifier = Modifier.size(16.dp)
                     )
                     Text("${stage.title}: ${stage.detail}", fontSize = 13.sp)
                 }

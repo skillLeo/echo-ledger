@@ -49,6 +49,9 @@ class TranslateTextView(context: Context, private val subtitles: Boolean) : View
     private val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         color = Color.WHITE
+        // Made once: nothing is allocated while a frame is drawn over a game.
+        strokeWidth = 1.5f * density
+        pathEffect = DashPathEffect(floatArrayOf(6 * density, 4 * density), 0f)
     }
     private val rect = RectF()
 
@@ -190,8 +193,6 @@ class TranslateTextView(context: Context, private val subtitles: Boolean) : View
             canvas.drawRoundRect(rect, radius, radius, panel)
         }
         if (editing) {
-            outline.strokeWidth = 1.5f * density
-            outline.pathEffect = DashPathEffect(floatArrayOf(6 * density, 4 * density), 0f)
             rect.set(outline.strokeWidth, outline.strokeWidth, w - outline.strokeWidth, h - outline.strokeWidth)
             canvas.drawRoundRect(rect, radius, radius, outline)
         }

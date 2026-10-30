@@ -25,6 +25,8 @@ object SettingsTransfer {
 
     val PORTABLE: Set<String> = setOf(
         "autoRecordArmed",
+        // Game and Watch translate (since v1.3): the choices travel; box spots are fractions of the screen.
+        "liveTranslate",
         "captionsEnabled",
         "micSource",
         "decisionTimeout",

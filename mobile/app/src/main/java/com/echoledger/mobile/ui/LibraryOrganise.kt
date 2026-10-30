@@ -5,10 +5,15 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -98,7 +103,14 @@ fun OrganiseSection(
                         if (item.pinned) "Unpin" else "Pin"
                 }
             ) {
-                Text(if (item.pinned) "★ Pinned" else "☆ Pin", color = if (item.pinned) Brand.Warning else Brand.Muted)
+                Icon(
+                    androidx.compose.material.icons.Icons.Rounded.PushPin,
+                    contentDescription = null,
+                    tint = if (item.pinned) Brand.Warning else Brand.Muted,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(if (item.pinned) "Pinned" else "Pin", color = if (item.pinned) Brand.Warning else Brand.Muted)
             }
         }
         FolderChooser("Folder", folders, item.client?.id, onMove, onCreateClient)

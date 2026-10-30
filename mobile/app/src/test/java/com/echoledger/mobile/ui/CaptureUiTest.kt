@@ -94,9 +94,9 @@ class CaptureUiTest : ScreenTest() {
     // ---- settings page --------------------------------------------------------------------------------------------
 
     @Test
-    fun `Settings opens the recording group and back returns`() {
+    fun `Settings opens the calls group and back returns`() {
         show { SettingsScreen(vm, onSetup = {}) }
-        compose.onNodeWithText("Recording").performClick()
+        compose.onNodeWithText("Calls & meetings").performClick()
         compose.onNodeWithText("Auto-record apps").assertExists()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Auto-record apps").assertDoesNotExist()

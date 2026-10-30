@@ -176,6 +176,27 @@ describe("review card", () => {
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "pend-1" }]));
   });
 
+  it("warns once when English only is picked for a call whose captions show Urdu", async () => {
+    await renderReview(makeReviewPayload({ item: makePendingItem("pend-1", { firstLine: "Acha yaar, meeting kab hai?", language: null }) }));
+    respond("pending_set_language", makePendingItem("pend-1", { firstLine: "Acha yaar, meeting kab hai?", language: "en" }));
+    fireEvent.click(button("Language: Auto"));
+    fireEvent.click(within(await screen.findByRole("menu", { name: "Languages" })).getByRole("menuitemradio", { name: "English only" }));
+
+    expect(await screen.findByTestId("english-only-warning")).toHaveTextContent("This call has Urdu in it: English only would translate it.");
+    await waitFor(() => expect(callsOf("pending_set_language")).toEqual([{ id: "pend-1", language: "en" }]));
+  });
+
+  it("does not warn about English only when the call is in English", async () => {
+    await renderReview(makeReviewPayload({ item: makePendingItem("pend-1", { firstLine: "Thanks for joining, shall we start?", language: null }) }));
+    respond("pending_set_language", makePendingItem("pend-1", { language: "en" }));
+    fireEvent.click(button("Language: Auto"));
+    fireEvent.click(within(await screen.findByRole("menu", { name: "Languages" })).getByRole("menuitemradio", { name: "English only" }));
+
+    await waitFor(() => expect(callsOf("pending_set_language")).toHaveLength(1));
+    await flushAsync();
+    expect(screen.queryByTestId("english-only-warning")).not.toBeInTheDocument();
+  });
+
   it("does not ask to remember a language the client already uses, or for a recording without a client", async () => {
     respond("list_clients", { data: [{ id: "cl-1", name: "Acme Ltd", language: "ur" }] });
     await renderReview(makeReviewPayload({ item: makePendingItem("pend-1", { clientId: "cl-1", clientName: "Acme Ltd", language: "en" }) }));

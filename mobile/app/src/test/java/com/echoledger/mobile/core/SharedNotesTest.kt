@@ -38,7 +38,11 @@ class SharedNotesTest {
     @Test
     fun `failures and silent notes end the watch and say why`() {
         assertEquals(Stage.FAILED, SharedNotes.status(local("failed", "No network"), null, null).stage)
-        assertEquals("Upload failed: No network", SharedNotes.status(local("failed", "No network"), null, null).text)
+        assertEquals("No network", SharedNotes.status(local("failed", "No network"), null, null).text)
+        assertEquals(
+            "The upload failed. Open EchoLedger's Record tab and tap Retry.",
+            SharedNotes.status(local("failed", null), null, null).text
+        )
         assertEquals(Stage.FAILED, SharedNotes.status(null, "S1", item("failed")).stage)
         assertEquals(Stage.NO_AUDIO, SharedNotes.status(null, "S1", item("failed", "no_audio")).stage)
         assertTrue(SharedNotes.done(Stage.READY) && SharedNotes.done(Stage.FAILED) && SharedNotes.done(Stage.NO_AUDIO))

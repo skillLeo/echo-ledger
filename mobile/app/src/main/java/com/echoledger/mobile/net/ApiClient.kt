@@ -51,6 +51,10 @@ import okhttp3.Response
 
 class NotPairedException : IOException("This phone is not paired with an EchoLedger server.")
 
+const val EMPTY_ANSWER = "Your server sent an empty answer. Try again in a minute."
+const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. Check the server address in You → General → This phone, " +
+    "or update EchoLedger."
+
 /** A server answer other than 2xx/401: `code` is the machine-readable reason, `retryAfterSeconds` the `Retry-After` delay. */
 class ApiException(val status: Int, message: String, val code: String? = null, val retryAfterSeconds: Long? = null) : IOException(message)
 
@@ -79,14 +83,29 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return builder
     }
 
-    private suspend fun <T> call(req: Request, serializer: KSerializer<T>?): T? = withContext(Dispatchers.IO) {
-        http.newCall(req).execute().use { resp -> parse(resp, serializer) }
+    private suspend fun <T> call(req: Request, serializer: KSerializer<T>?, allowEmpty: Boolean = false): T? = withContext(Dispatchers.IO) {
+        http.newCall(req).execute().use { resp -> parse(resp, serializer, allowEmpty) }
     }
 
-    private fun <T> parse(resp: Response, serializer: KSerializer<T>?): T? {
+    /**
+     * A success with an empty or unreadable body (a proxy page, a cut connection) is an [IOException] with words for
+     * people, never a null or a parser exception that callers do not expect (since v1.3: those crashed the app).
+     */
+    private fun <T> parse(resp: Response, serializer: KSerializer<T>?, allowEmpty: Boolean = false): T? {
         val body = resp.body.string()
         if (resp.isSuccessful) {
-            return if (serializer == null || body.isBlank()) null else ApiJson.decodeFromString(serializer, body)
+            if (serializer == null) return null
+            if (body.isBlank()) {
+                if (allowEmpty) return null
+                throw IOException(EMPTY_ANSWER)
+            }
+            return try {
+                ApiJson.decodeFromString(serializer, body)
+            } catch (e: kotlinx.serialization.SerializationException) {
+                throw IOException(UNREADABLE_ANSWER, e)
+            } catch (e: IllegalArgumentException) {
+                throw IOException(UNREADABLE_ANSWER, e)
+            }
         }
         if (resp.code == 401) throw NotPairedException()
         val json = runCatching { ApiJson.parseToJsonElement(body).jsonObject }.getOrNull()
@@ -167,7 +186,8 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     /** Returns the upload status after `complete`: `ready`, or `assembling` while the server is still verifying. */
     suspend fun complete(recordingId: String): String = call(
         request("recordings/$recordingId/complete").post(ByteArray(0).toRequestBody(null)).build(),
-        CompleteAnswer.serializer()
+        CompleteAnswer.serializer(),
+        allowEmpty = true // a v1 server answers 202 without a body
     )?.status ?: "assembling"
 
     /** Opens a session for live captions (status `recording`, no artifacts; since v1.1). */

@@ -194,6 +194,40 @@ Run with the phone on USB or Wireless debugging and a second phone to call from.
 | ☐ | 84l | Reboot the phone, start Shizuku, wait 30 s, take a WhatsApp call. | 84a holds again (armed after the reboot) and the call has both sides. | C3-12 |
 | ☐ | 84m | Call with a third app that is not in the list (Settings → Auto-record apps → add its package name), then remove it again. | Recorded as "Other" while listed; nothing after removing it. | C3-13 |
 
+### Live Translate (v1.3, Phase B; needs Soniox credit for text)
+
+Before: Shizuku running (helper connected), Display over other apps allowed, Soniox credit on the account. Capture
+checks (L1-L3) work without credit; the box then shows "Soniox has no credit left…".
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | L1 | You → General → Help & diagnostics → **Audio probe**, with PUBG Mobile (squad voice chat on), then CODM, YouTube, Chrome, VLC and Netflix playing in turn. **Capture 5 s** on each, **Play**, then **Copy findings**. | Each app with its usage (Voice chat / Game / Media), content and capture policy. Voice chat captured with speech; Netflix "This app doesn't allow live captions". Paste the findings table in the report (B0). | B0-1 |
+| ☐ | L2 | Game translate → choose PUBG Mobile, **Start with the game** on. Close PUBG, wait 10 s, open it, join squad voice. | Game translate starts by itself when voice chat plays (`translate` lines in the capture log); no call recording, no Keep/Discard. Closing the game stops it within a minute. | B3-1 |
+| ☐ | L3 | In a match with the box showing: tap, swipe and shoot through the box area for a minute. | Every touch reaches the game; the box never takes focus, no sound, no vibration. | B2-1 |
+| ☐ | L4 | Tap the grip dot → drag the box to the left edge and resize it from the corner → leave it 5 s. Rotate the phone. | Edit shows a dashed outline; it snaps to the edge and locks itself after 5 s. Each orientation keeps its own spot. | B2-2 |
+| ☐ | L5 | Long-press the grip: Pause, Hide, Text − / +, Opacity − / +, Original, Language, Stop. | Each acts at once; Hide brings the box back after 5 minutes or from the notification. | B2-3 |
+| ☐ | L6 | FPS: Game Booster's monitor (or `adb shell dumpsys SurfaceFlinger --timestats`) 2 minutes without and 2 minutes with the box. | No measurable drop at 120 Hz. | B8-1 |
+| ☐ | L7 | Arabic teammates speak (or the page's **Test translate**). | English text within about 1.5 s after a sentence on Fastest; words still changing are lighter. | B1-1 |
+| ☐ | L8 | Watch translate → YouTube, English video, Subtitles in Urdu. Pause the video for 10 s, play again. | Urdu subtitles in Nastaliq at the bottom, white with an outline; they fade while the video is paused. | B4-1 |
+| ☐ | L9 | Netflix with Watch translate. | "This app doesn't allow live captions." in the notification; nothing is captured. | B4-2 |
+| ☐ | L10 | During Game translate switch Wi-Fi off and on. | "No connection — retrying" once, then text again by itself. | B1-2 |
+| ☐ | L11 | 30-minute session. | The phone stays usable; battery and heat noted; usage appears in the console Usage page under Live Translate. | B8-2 |
+| ☐ | L12 | Stop the helper (Shizuku off), then Start Game translate. | Android's own "share sound" dialog; the page says voice chat may be missing. | B0-4 |
+
+### Feature parity after the redesign (C10)
+
+Every action of the old screens is still reachable: record a voice note (centre button, long-press) · import a file ·
+calls auto-record on/off · Keep / Discard (card, notification, Calls view) · pause, captions, discard on the pill ·
+library search, filters, select, move, label, delete, restore (⋮ → Recently deleted) · pin · keep forever ·
+open a recording, play, ±10 s, speed, skip silences · copy, copy with timestamps, Copy for AI, export, share link ·
+re-transcribe as · views (Roman Urdu, اردو, English, Original) · rename speakers (console) · clients and keyterms ·
+app lock · appearance and phone font · dictation keyboard settings · storage and retention · devices and unpair ·
+export / import settings · capture test, test the other side, copy diagnostics.
+
+| ☐ | # | Do this | You should see | Ref |
+|---|---|---|---|---|
+| ☐ | P1 | Walk the list above on the phone, one by one. | Each is reachable in at most three taps from its tab. | C10-1 |
+
 ### Library, transcript, voice notes
 
 | ☐ | # | Do this | You should see | Ref |
