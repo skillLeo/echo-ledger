@@ -136,6 +136,10 @@ function isoApiCases(array $b): array
             fn (TestResponse $r): bool => $r->status() === 409 && $r->json('code') === 'nothing_to_export'],
         'api.search' => ['GET', '/api/search?q=BOBSECRETTRANSCRIPT', [], 'list'],
         'api.sessions.show' => ['GET', "/api/sessions/{$s}", [], 404],
+        'api.sessions.opened' => ['POST', "/api/sessions/{$s}/opened", [], 404],
+        // Live Translate holds no workspace data; without a Soniox key it says so and leaks nothing of the other one.
+        'api.live-translate.token' => ['POST', '/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en'],
+            fn (TestResponse $r): bool => $r->status() === 503 && $r->json('code') === 'provider_not_configured'],
         'api.transcripts.show' => ['GET', "/api/transcripts/{$t}", [], 404],
         'api.transcripts.revisions' => ['GET', "/api/transcripts/{$t}/revisions", [], 404],
         'api.transcripts.export' => ['GET', "/api/transcripts/{$t}/export?format=txt", [], 404],
