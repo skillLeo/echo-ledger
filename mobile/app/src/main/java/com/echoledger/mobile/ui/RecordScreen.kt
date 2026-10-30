@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Call
@@ -33,6 +34,8 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material.icons.rounded.Undo
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -43,7 +46,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +56,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -63,6 +69,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.SourceApp
+import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.LiveRecording
@@ -71,12 +78,14 @@ import com.echoledger.mobile.share.ShareImportActivity
 import com.echoledger.mobile.ui.design.BannerKind
 import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
+import com.echoledger.mobile.ui.design.EchoFilterChip
 import com.echoledger.mobile.ui.design.EchoTopBar
 import com.echoledger.mobile.ui.design.InlineBanner
 import com.echoledger.mobile.ui.design.SectionHeader
 import com.echoledger.mobile.ui.design.SettingsRow
 import com.echoledger.mobile.ui.design.SourceAppTile
 import com.echoledger.mobile.ui.design.tabular
+import kotlinx.coroutines.delay
 
 /** What the Record screen shows: a voice note (record, import) or calls and meetings (auto-record, Keep/Discard). */
 enum class RecordMode { VOICE, CALLS }
@@ -144,6 +153,7 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
     val settings by vm.settings.collectAsState()
     val pending by vm.pending.collectAsState()
     val learn by vm.learn.collectAsState()
+    val clients by vm.clients.collectAsState()
     val live by RecordingService.live.collectAsState()
     LaunchedEffect(Unit) { vm.reloadLocal() }
     val haptics = LocalHapticFeedback.current
@@ -225,16 +235,21 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                     app = SourceApp.from(rec.sourceApp),
                     language = rec.language,
                     onLanguage = { vm.setPendingLanguage(rec.id, it) },
-                    onKeep = {
+                    onKeep = { title ->
                         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                        vm.decide(rec.id, keep = true)
+                        vm.decide(rec.id, keep = true, title = title)
                     },
                     onDiscard = {
                         haptics.performHapticFeedback(HapticFeedbackType.Reject)
                         vm.decide(rec.id, keep = false)
                     },
                     question = learn?.takeIf { it.recordingId == rec.id }?.question,
-                    onAnswer = { vm.answerLearn(it) }
+                    onAnswer = { vm.answerLearn(it) },
+                    typedTitle = rec.title,
+                    onTitle = { vm.setPendingTitle(rec.id, it) },
+                    clients = clients,
+                    clientId = rec.clientId,
+                    onClient = { vm.setPendingClient(rec.id, it) }
                 )
             }
         }
@@ -385,8 +400,9 @@ private fun Waveform(levels: List<Float>, running: Boolean, modifier: Modifier) 
 }
 
 /**
- * Keep or discard a finished call (since v1.3 look): the call, its language, then Keep (primary) and Discard; an
- * optional learning question underneath. The floating card after a call (DecisionPopup) uses the same words.
+ * Keep or discard a finished call (since v1.3 look): the call's title (typed here, or "WhatsApp call · 2:05" left to the
+ * server), when it was, the client and the language, then Keep (primary) and Discard; an optional learning question
+ * underneath. The floating card after a call (DecisionPopup) uses the same words.
  */
 @Composable
 fun KeepDiscardCard(
@@ -395,12 +411,26 @@ fun KeepDiscardCard(
     app: SourceApp,
     language: String?,
     onLanguage: (String?) -> Unit,
-    onKeep: () -> Unit,
+    onKeep: (title: String?) -> Unit,
     onDiscard: () -> Unit,
     question: String? = null,
-    onAnswer: (Boolean) -> Unit = {}
+    onAnswer: (Boolean) -> Unit = {},
+    typedTitle: String? = null,
+    onTitle: (String) -> Unit = {},
+    clients: List<ClientDto> = emptyList(),
+    clientId: String? = null,
+    onClient: (String?) -> Unit = {}
 ) {
     val c = LocalEchoColors.current
+    val type = LocalEchoType.current
+    var text by remember { mutableStateOf(typedTitle.orEmpty()) }
+    // Kept when leaving without a decision; Keep itself always carries the words typed so far.
+    LaunchedEffect(text) {
+        if (text != typedTitle.orEmpty()) {
+            delay(600)
+            onTitle(text)
+        }
+    }
     Column(
         Modifier.fillMaxWidth().padding(
             horizontal = Space.screen,
@@ -412,20 +442,58 @@ fun KeepDiscardCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             SourceAppTile(app, size = 40.dp)
             Column(Modifier.padding(start = Space.s3).weight(1f)) {
-                Text(title, style = LocalEchoType.current.bodyL, color = c.text)
-                whenText?.let { Text(it, style = LocalEchoType.current.labelM, color = c.textMuted) }
+                Box {
+                    if (text.isEmpty()) Text(title, style = type.bodyL, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    BasicTextField(
+                        value = text,
+                        onValueChange = { text = it.take(200) },
+                        singleLine = true,
+                        textStyle = type.bodyL.copy(color = c.text),
+                        cursorBrush = SolidColor(c.accentText),
+                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Title" }
+                    )
+                }
+                whenText?.let { Text(it, style = type.labelM, color = c.textMuted) }
             }
         }
+        if (clients.isNotEmpty()) ClientChip(clients, clientId, onClient)
         LanguageChips(language, onLanguage)
         Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
             EchoButton("Discard", onDiscard, Modifier.weight(1f), kind = ButtonKind.Secondary)
-            EchoButton("Keep", onKeep, Modifier.weight(1f))
+            EchoButton("Keep", { onKeep(text.takeIf { it != typedTitle.orEmpty() }) }, Modifier.weight(1f))
         }
         question?.let { q ->
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(q, style = LocalEchoType.current.labelM, color = c.textMuted, modifier = Modifier.weight(1f))
+                Text(q, style = type.labelM, color = c.textMuted, modifier = Modifier.weight(1f))
                 EchoButton("No", { onAnswer(false) }, kind = ButtonKind.Text)
                 EchoButton("Yes", { onAnswer(true) }, kind = ButtonKind.Text)
+            }
+        }
+    }
+}
+
+/** "Client ▾" (or the client's name): picks the client a waiting call is filed under. */
+@Composable
+private fun ClientChip(clients: List<ClientDto>, clientId: String?, onClient: (String?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val chosen = clients.firstOrNull { it.id == clientId }
+    Box {
+        EchoFilterChip(
+            "${chosen?.name ?: "Client"} ▾",
+            active = chosen != null,
+            onClick = { open = true },
+            modifier = Modifier.semantics { contentDescription = "Client: ${chosen?.name ?: "none"}" }
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("No client") }, onClick = {
+                open = false
+                onClient(null)
+            })
+            clients.sortedBy { it.name.lowercase() }.forEach { client ->
+                DropdownMenuItem(text = { Text(client.name) }, onClick = {
+                    open = false
+                    onClient(client.id)
+                })
             }
         }
     }

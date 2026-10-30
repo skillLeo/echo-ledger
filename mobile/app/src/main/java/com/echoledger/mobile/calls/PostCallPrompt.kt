@@ -17,7 +17,7 @@ import com.echoledger.mobile.overlay.DecisionPopup
 object PostCallPrompt {
     fun show(context: Context, rec: LocalRecording, afterCallTimeout: String, themeMode: String) {
         if (isCall(rec) && Settings.canDrawOverlays(context)) {
-            DecisionPopup.show(context, rec, themeMode)
+            DecisionPopup.show(context, rec, themeMode, afterCallTimeout)
         }
         Notifications.showSaveDecision(context, rec, clientName = null, decisionTimeout = afterCallTimeout)
         DecisionTimeoutWorker.schedule(context, rec.id)

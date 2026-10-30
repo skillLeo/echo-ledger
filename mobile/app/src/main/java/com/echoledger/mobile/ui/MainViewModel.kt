@@ -426,6 +426,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _learn = MutableStateFlow<LearnLanguage?>(null)
     val learn: StateFlow<LearnLanguage?> = _learn.asStateFlow()
 
+    /** The title typed on a waiting call's card (blank = let the server name it; the server allows 200 characters). */
+    fun setPendingTitle(id: String, title: String) = viewModelScope.launch(Dispatchers.IO) {
+        graph.recordings.update(id) { it.copy(title = title.trim().take(200).ifBlank { null }) } ?: return@launch
+        reloadLocal()
+    }
+
+    /** The client chosen on a waiting call's card (null = no client). */
+    fun setPendingClient(id: String, clientId: String?) = viewModelScope.launch(Dispatchers.IO) {
+        graph.recordings.update(id) { it.copy(clientId = clientId) } ?: return@launch
+        reloadLocal()
+    }
+
     /** The language chip of a waiting recording: Keep transcribes in it. */
     fun setPendingLanguage(id: String, language: String?) = viewModelScope.launch(Dispatchers.IO) {
         val updated = graph.recordings.update(id) { it.copy(language = Languages.canonical(language)) } ?: return@launch
@@ -444,7 +456,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _message.value = it.message ?: "The client could not be updated." }
     }
 
-    fun decide(id: String, keep: Boolean) = viewModelScope.launch(Dispatchers.IO) {
+    /** Keep or Discard; a [title] typed on the card is stored first, in the same step, so the upload always carries it. */
+    fun decide(id: String, keep: Boolean, title: String? = null) = viewModelScope.launch(Dispatchers.IO) {
+        if (keep && title != null) graph.recordings.update(id) { it.copy(title = title.trim().take(200).ifBlank { null }) }
         Decisions.apply(getApplication(), id, keep)
         reloadLocal()
     }

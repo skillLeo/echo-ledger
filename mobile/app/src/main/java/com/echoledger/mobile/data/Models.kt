@@ -190,6 +190,8 @@ data class FinishSessionRequest(
     @SerialName("duration_ms") val durationMs: Long?,
     @SerialName("client_id") val clientId: String? = null,
     val artifacts: List<ArtifactDto>,
+    /** A title typed before Keep (since v1.3); null is left out, so a title set elsewhere is never cleared. */
+    val title: String? = null,
     /** The Keep card's language (since v1.1.2): a code, or "" for automatic, so the choice always reaches the server. */
     val language: String = "",
     /** Sent only when there are some, so a v1 server never sees the keys. */

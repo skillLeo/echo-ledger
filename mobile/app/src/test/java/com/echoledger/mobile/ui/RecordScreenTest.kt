@@ -7,13 +7,19 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.RecordingService
+import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
+import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.peekRecording
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
@@ -162,6 +168,34 @@ class RecordScreenTest : ScreenTest() {
 
         assertEquals(listOf(WorkInfo.State.ENQUEUED), workStates("call-1"))
         assertEquals("pending_decision", app.graph.recordings.get("call-2")!!.state)
+    }
+
+    @Test
+    fun `a waiting call can get a title and a client before Keep`() {
+        runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        vm.refresh()
+        pumpUntil("the clients to load") { vm.clients.value.isNotEmpty() }
+        app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 60_000)
+        showRecord()
+        awaitText("Save these recordings?")
+
+        val client = vm.clients.value.first()
+        compose.onNodeWithContentDescription("Client: none").assertExists()
+        vm.setPendingClient("call-1", client.id)
+        pumpUntil("the card to show the client") {
+            compose.mainClock.advanceTimeByFrame()
+            runCatching { compose.onNodeWithContentDescription("Client: ${client.name}").assertExists() }.isSuccess
+        }
+
+        // Keep at once after typing: the title goes with the decision, not after it.
+        compose.onNodeWithContentDescription("Title").performScrollTo().performTextInput("Invoice follow-up")
+        compose.onNodeWithText("Keep").performScrollTo().click()
+        pumpUntil("the recording to be queued with its title") {
+            app.graph.recordings.get("call-1")?.let { it.state == "queued" && it.title == "Invoice follow-up" } == true
+        }
+        assertEquals(client.id, app.graph.recordings.get("call-1")?.clientId)
     }
 
     @Test

@@ -98,6 +98,28 @@ class MarkersUploadTest : AppTest() {
     }
 
     @Test
+    fun `a title typed before Keep goes with the create and the finish, and no title sends no key`() {
+        app.storeRecording(bytes = sampleBytes(2_500))
+        app.graph.recordings.update(id) { it.copy(title = "Invoice follow-up") }
+        server.on("POST", "/api/sessions", FakeServer.json(201, answer()))
+        serveUpload()
+        assertEquals(ListenableWorker.Result.success(), run())
+        val created = ApiJson.parseToJsonElement(server.requestsTo("POST", "/api/sessions").single().bodyText()).jsonObject
+        assertEquals("Invoice follow-up", created.getValue("title").jsonPrimitive.content)
+
+        val finish = ApiJson.encodeToString(
+            com.echoledger.mobile.data.FinishSessionRequest.serializer(),
+            com.echoledger.mobile.data.FinishSessionRequest("2026-10-27T10:00:00Z", 1_000, null, emptyList(), title = "Standup")
+        )
+        assertTrue(finish.contains("\"title\":\"Standup\""))
+        val untitled = ApiJson.encodeToString(
+            com.echoledger.mobile.data.FinishSessionRequest.serializer(),
+            com.echoledger.mobile.data.FinishSessionRequest("2026-10-27T10:00:00Z", 1_000, null, emptyList())
+        )
+        assertFalse("a missing title must not clear one set elsewhere", untitled.contains("\"title\""))
+    }
+
+    @Test
     fun `finishing sends the language chosen on the Keep card, and an empty one for automatic`() {
         app.storeRecording(bytes = sampleBytes(2_500))
         app.graph.recordings.update(id) { it.copy(serverSessionId = openSession, language = "ur") }

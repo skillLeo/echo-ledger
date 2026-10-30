@@ -65,7 +65,6 @@ data class CaptionLine(val speaker: String, val text: String)
 data class CaptionFeed(val lines: List<CaptionLine> = emptyList(), val partial: CaptionLine? = null, val notice: String? = null)
 
 private val GLASS = Color(0xFF1E1F23)
-private val REC = Color(0xFFE5484D)
 
 /** A touchable overlay window that never takes the keyboard: the base of the pill and the caption panel. */
 private abstract class OverlayWindow(protected val context: Context) {
@@ -211,118 +210,11 @@ class ControlPill(
                 }
             when (s.mode) {
                 PillState.Mode.HIDDEN -> Unit
-
-                PillState.Mode.DOT -> Box(
-                    drag
-                        .size(28.dp)
-                        .background(if (s.paused) DarkColors.textMuted else REC, CircleShape)
-                        .border(2.dp, GLASS, CircleShape)
-                        .semantics { contentDescription = "Recording. Tap for the controls." }
-                )
-
-                PillState.Mode.PILL -> Pill(s, drag)
-
-                PillState.Mode.MENU -> Menu(s, drag)
+                PillState.Mode.DOT -> PillDot(s, drag)
+                PillState.Mode.PILL -> PillView(s, drag, onEvent)
+                PillState.Mode.MENU -> PillToolbar(s, header = drag, onEvent = onEvent)
             }
         }
-    }
-
-    @Composable
-    private fun Pill(s: PillState, drag: Modifier) {
-        val now = System.currentTimeMillis()
-        Row(
-            drag
-                .background(GLASS.copy(alpha = 0.94f), RoundedCornerShape(18.dp))
-                .border(1.dp, DarkColors.border, RoundedCornerShape(18.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp)
-                .semantics { contentDescription = "Recording ${PillMachine.clock(s.elapsedMs)}. Tap for the controls." },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (s.discarding) {
-                Text("Discarded", color = DarkColors.text, fontSize = 13.sp)
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    "Undo ${s.undoSeconds(now)}",
-                    color = DarkColors.warning,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Undo the discard") { onEvent(PillEvent.Undo) }
-                )
-            } else {
-                Box(Modifier.size(9.dp).background(if (s.paused || s.held) DarkColors.textMuted else REC, CircleShape))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (s.held) "On hold" else PillMachine.clock(s.elapsedMs),
-                    color = DarkColors.text,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 14.sp
-                )
-                if (s.warning != null) {
-                    Spacer(Modifier.width(6.dp))
-                    Text("!", color = DarkColors.warning, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
-            }
-        }
-    }
-
-    @Composable
-    private fun Menu(s: PillState, drag: Modifier) {
-        Column(
-            Modifier
-                .width(248.dp)
-                .background(GLASS.copy(alpha = 0.97f), RoundedCornerShape(Radius.lg))
-                .border(1.dp, DarkColors.border, RoundedCornerShape(Radius.lg))
-                .padding(vertical = 6.dp)
-        ) {
-            Row(drag.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(9.dp).background(if (s.paused) DarkColors.textMuted else REC, CircleShape))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    if (s.paused) "Paused · ${PillMachine.clock(s.elapsedMs)}" else PillMachine.clock(s.elapsedMs),
-                    color = DarkColors.text,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    s.language,
-                    color = DarkColors.text,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier
-                        .border(1.dp, DarkColors.border, RoundedCornerShape(12.dp))
-                        .clickable(role = Role.Button, onClickLabel = "Change the language") { onEvent(PillEvent.NextLanguage) }
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                )
-            }
-            s.warning?.let {
-                Text(it, color = DarkColors.warning, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
-            }
-            MenuRow(if (s.captions) "Hide captions" else "Show captions") { onEvent(PillEvent.ToggleCaptions) }
-            MenuRow(if (s.paused) "Resume" else "Pause") { onEvent(PillEvent.TogglePause) }
-            // Two taps: the menu lies over the call app's buttons, so one stray touch never ends the recording.
-            if (s.stopArmed) {
-                MenuRow("Tap again to stop recording", REC) { onEvent(PillEvent.Stop) }
-            } else {
-                MenuRow("Stop") { onEvent(PillEvent.Stop) }
-            }
-            MenuRow("Discard now", DarkColors.warning) { onEvent(PillEvent.DiscardNow(System.currentTimeMillis())) }
-            MenuRow("Shrink to a dot") { onEvent(PillEvent.ShrinkToDot) }
-            MenuRow("Hide controls (keeps recording)") { onEvent(PillEvent.HideControls) }
-        }
-    }
-
-    @Composable
-    private fun MenuRow(label: String, colour: Color = DarkColors.text, onTap: () -> Unit) {
-        Text(
-            label,
-            color = colour,
-            fontSize = 15.sp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 44.dp)
-                .clickable(role = Role.Button) { onTap() }
-                .padding(horizontal = 14.dp, vertical = 12.dp)
-        )
     }
 }
 

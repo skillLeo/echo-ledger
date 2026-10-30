@@ -45,7 +45,9 @@ data class LocalRecording(
     /** A SIM phone call's number from the call log (since v1.2). */
     val callerNumber: String? = null,
     /** Why the recording may be one-sided, in the helper's words (since v1.3); shown on the after-call card and the recording. */
-    val captureWarning: String? = null
+    val captureWarning: String? = null,
+    /** A title typed before Keep (since v1.3); sent with the recording, else the server names it. */
+    val title: String? = null
 )
 
 /**

@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -14,13 +15,19 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ActivityResponse
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
+import com.echoledger.mobile.overlay.DecisionCard
+import com.echoledger.mobile.overlay.PillDot
+import com.echoledger.mobile.overlay.PillToolbar
+import com.echoledger.mobile.overlay.PillView
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.LiveRecording
+import com.echoledger.mobile.recording.PillState
 import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
@@ -316,5 +323,23 @@ class ScreenshotsTest : ScreenTest() {
         }
         pumpUntil("the waiting call") { runCatching { compose.onNodeWithText("Keep").assertExists() }.isSuccess }
         capture("record-calls")
+    }
+
+    @Test
+    fun pill() {
+        shoot {
+            androidx.compose.foundation.layout.Column(
+                Modifier.padding(16.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+            ) {
+                PillView(PillState(elapsedMs = 134_000))
+                PillView(PillState(elapsedMs = 134_000, paused = true, warning = "Not hearing the other side"))
+                PillDot(PillState(mode = PillState.Mode.DOT))
+                PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, language = "UR"))
+                PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, stopArmedTicks = 2))
+                DecisionCard("whatsapp", 272_000, onKeep = {}, onDiscard = {}, language = "ur", onLanguage = {}, autoDecision = "keep")
+            }
+        }
+        capture("pill")
     }
 }

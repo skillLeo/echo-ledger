@@ -76,11 +76,11 @@ private fun Chip(text: String, color: Color, filled: Boolean, icon: @Composable 
 fun SectionCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(Radius.lg),
+        shape = RoundedCornerShape(Radius.md),
         color = Brand.Surface,
         border = BorderStroke(1.dp, Brand.Border)
     ) {
-        Column(Modifier.padding(PaddingValues(Space.s4)), verticalArrangement = Arrangement.spacedBy(Space.s2 + 2.dp), content = content)
+        Column(Modifier.padding(PaddingValues(Space.s4)), verticalArrangement = Arrangement.spacedBy(Space.s3), content = content)
     }
 }
 

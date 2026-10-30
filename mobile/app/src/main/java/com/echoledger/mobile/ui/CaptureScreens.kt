@@ -81,6 +81,9 @@ import com.echoledger.mobile.recording.LiveRecording
 import com.echoledger.mobile.recording.MicTestResult
 import com.echoledger.mobile.recording.RecordingNotes
 import com.echoledger.mobile.recording.RecordingService
+import com.echoledger.mobile.ui.design.ButtonKind
+import com.echoledger.mobile.ui.design.EchoButton
+import com.echoledger.mobile.ui.design.EchoFilterChip
 import kotlinx.coroutines.launch
 
 /** Sends an action to the running recording service (pause, resume, mark, tag, undo). */
@@ -117,21 +120,23 @@ internal fun LanguageChips(selected: String?, onPick: (String?) -> Unit) {
 private fun LanguageChipRow(current: String?, onPick: (String?) -> Unit) {
     var moreOpen by remember { mutableStateOf(false) }
     val moreChosen = Languages.MORE.firstOrNull { it.code == current }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Languages.MAIN.forEach { option ->
-            FilterChip(
-                selected = current == option.code,
+            EchoFilterChip(
+                option.chip,
+                active = current == option.code,
                 onClick = { onPick(option.code) },
-                label = { Text(option.chip) },
+
                 modifier = Modifier.semantics { contentDescription = "Language: ${option.menu}" }
             )
         }
         // The More languages sit behind one chip, so the row stays short.
         Box {
-            FilterChip(
-                selected = moreChosen != null,
+            EchoFilterChip(
+                moreChosen?.chip ?: "More ▾",
+                active = moreChosen != null,
                 onClick = { moreOpen = true },
-                label = { Text(moreChosen?.chip ?: "More ▾") },
+
                 modifier = Modifier.semantics { contentDescription = "More languages" }
             )
             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
@@ -177,12 +182,12 @@ fun LiveRecordingCard(live: LiveRecording, settings: AppSettings) {
         val feed by RecordingService.captionFeed.collectAsState()
         if (live.markers > 0) Text("${live.markers} bookmark${if (live.markers == 1) "" else "s"}", color = Brand.Muted, fontSize = 12.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Button(onClick = { recordingAction(context, RecordingService.ACTION_MARK) }) { Text("Mark") }
-            OutlinedButton(onClick = { recordingAction(context, RecordingService.ACTION_CAPTIONS) }) {
-                Text(if (pill.captions) "Hide captions" else "Captions")
-            }
+            EchoButton("Mark", { recordingAction(context, RecordingService.ACTION_MARK) }, kind = ButtonKind.Secondary)
+            EchoButton(if (pill.captions) "Hide captions" else "Captions", {
+                recordingAction(context, RecordingService.ACTION_CAPTIONS)
+            }, kind = ButtonKind.Secondary)
             if (pill.mode == com.echoledger.mobile.recording.PillState.Mode.HIDDEN && !pill.discarding) {
-                TextButton(onClick = { recordingAction(context, RecordingService.ACTION_SHOW_CONTROLS) }) { Text("Show controls") }
+                EchoButton("Show controls", { recordingAction(context, RecordingService.ACTION_SHOW_CONTROLS) }, kind = ButtonKind.Text)
             }
         }
         if (pill.discarding) {
@@ -209,7 +214,7 @@ fun LiveRecordingCard(live: LiveRecording, settings: AppSettings) {
                         label = { Text(tag) }
                     )
                 }
-                TextButton(onClick = { recordingAction(context, RecordingService.ACTION_UNDO_MARK) }) { Text("Undo") }
+                EchoButton("Undo", { recordingAction(context, RecordingService.ACTION_UNDO_MARK) }, kind = ButtonKind.Text)
             }
         }
         Text("Language", color = Brand.Muted, fontSize = 12.sp)

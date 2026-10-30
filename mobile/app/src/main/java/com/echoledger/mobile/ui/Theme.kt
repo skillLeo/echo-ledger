@@ -155,6 +155,10 @@ fun EchoColors.toScheme(): ColorScheme {
         primary = accentStrong,
         onPrimary = onAccent,
         primaryContainer = accentSoft,
+        // Material picks secondaryContainer for selected chips and segments: ours, not its default lavender.
+        secondaryContainer = accentSoft,
+        onSecondaryContainer = accentText,
+        surfaceTint = bg,
         onPrimaryContainer = accentText,
         secondary = client,
         background = bg,
