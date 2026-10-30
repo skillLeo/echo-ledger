@@ -72,6 +72,8 @@ class RotationTest : AppTest() {
     fun `A6 M9 the Record tab is still open after a rotation`() {
         val controller = launch()
         compose.onNodeWithContentDescription("Record").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Voice notes & files").performClick()
         pumpUntil("the Record tab") {
             compose.waitForIdle()
             compose.onAllNodesWithText("Not recording").fetchSemanticsNodes().isNotEmpty()

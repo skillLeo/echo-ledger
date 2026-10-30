@@ -135,6 +135,9 @@ class MainActivityTest : AppTest() {
         awaitText("Weekly sync")
 
         compose.onNodeWithContentDescription("Record").performClick()
+        awaitText("Voice notes & files")
+        compose.onNodeWithText("Calls: set up first", substring = true).assertExists()
+        compose.onNodeWithText("Voice notes & files").performClick()
         awaitText("Not recording")
         pumpUntil("the library to leave") {
             compose.waitForIdle()
@@ -469,7 +472,7 @@ class MainActivityTest : AppTest() {
         controller.get().simulateBiometrics(false)
         controller.start().postCreate(null).resume().visible()
 
-        awaitText("Not recording")
+        awaitText("Auto-record WhatsApp calls")
         assertTrue(!present("Weekly sync"))
     }
 
@@ -480,6 +483,6 @@ class MainActivityTest : AppTest() {
 
         controller.newIntent(pendingIntent())
 
-        awaitText("Not recording")
+        awaitText("Auto-record WhatsApp calls")
     }
 }

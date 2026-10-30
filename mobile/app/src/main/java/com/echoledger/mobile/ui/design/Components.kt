@@ -388,8 +388,8 @@ fun RecordingRow(
 }
 
 /**
- * A settings row: 32 dp tinted icon tile, title, a one-line summary and a trailing switch, chevron or value; the whole
- * row is the touch target.
+ * A settings row: 32 dp tinted icon tile, title, a short summary (two lines at most) and a trailing switch, chevron or
+ * value; the whole row is the touch target.
  */
 @Composable
 fun SettingsRow(
@@ -414,14 +414,12 @@ fun SettingsRow(
         Spacer(Modifier.width(Space.s3))
         Column(Modifier.weight(1f)) {
             Text(title, style = type.bodyL, color = Brand.Text)
-            if (summary !=
-                null
-            ) {
+            if (summary != null) {
                 Text(
                     summary,
                     style = type.labelM.copy(fontWeight = FontWeight.Normal),
                     color = Brand.Muted,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }

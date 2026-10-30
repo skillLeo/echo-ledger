@@ -20,6 +20,8 @@ import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
 import com.echoledger.mobile.privilege.Capabilities
+import com.echoledger.mobile.recording.LiveRecording
+import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
@@ -272,5 +274,47 @@ class ScreenshotsTest : ScreenTest() {
         shoot { ActivityScreen(load = { ActivityResponse(items, 2) }, markRead = { 0 }, onOpen = {}, onUnread = {}, waiting = waiting) }
         pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Needs action").assertExists() }.isSuccess }
         capture("activity")
+    }
+
+    @Test
+    fun recordLive() {
+        runBlocking { app.pairLocally(server) }
+        RecordingService.live.value = LiveRecording(active = true, elapsedMs = 134_000, meLevel = 0.6f, clientLevel = 0.3f, markers = 1)
+        try {
+            shoot {
+                RecordScreen(
+                    vm,
+                    Capabilities(
+                        34,
+                        true,
+                        micPermission = true,
+                        notificationPermission = true,
+                        overlayPermission = true
+                    ),
+                    onSetup = {
+                    }
+                )
+            }
+            compose.mainClock.advanceTimeBy(1_500)
+            capture("record-live")
+        } finally {
+            RecordingService.live.value = LiveRecording()
+        }
+    }
+
+    @Test
+    fun recordCalls() {
+        runBlocking { app.pairLocally(server) }
+        app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 125_000)
+        shoot {
+            RecordScreen(
+                vm,
+                Capabilities(34, true, micPermission = true, notificationPermission = true, overlayPermission = true),
+                onSetup = {},
+                mode = RecordMode.CALLS
+            )
+        }
+        pumpUntil("the waiting call") { runCatching { compose.onNodeWithText("Keep").assertExists() }.isSuccess }
+        capture("record-calls")
     }
 }

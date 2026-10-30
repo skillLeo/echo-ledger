@@ -80,7 +80,9 @@ import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.Method
 import com.echoledger.mobile.ui.OnboardingScreen
 import com.echoledger.mobile.ui.PairingScreen
+import com.echoledger.mobile.ui.RecordMode
 import com.echoledger.mobile.ui.RecordScreen
+import com.echoledger.mobile.ui.RecordSheet
 import com.echoledger.mobile.ui.SessionScreen
 import com.echoledger.mobile.ui.SettingsScreen
 import com.echoledger.mobile.ui.SettingsState
@@ -168,6 +170,9 @@ class MainActivity : FragmentActivity() {
         var reselected by remember { mutableIntStateOf(0) }
         // The bottom bar hides while recordings are selected in the Library.
         var librarySelecting by remember { mutableStateOf(false) }
+        // The centre button opens the Record sheet; its choice decides what the Record screen shows.
+        var recordMode by rememberSaveable { mutableStateOf(RecordMode.VOICE) }
+        var recordSheet by remember { mutableStateOf(false) }
         var activityUnread by rememberSaveable { mutableIntStateOf(0) }
         val live by RecordingService.live.collectAsState()
         val pending by vm.pending.collectAsState()
@@ -274,6 +279,7 @@ class MainActivity : FragmentActivity() {
             // The recording notification opens the Live view (the Record tab while recording, since v1.3).
             if (open == OPEN_PENDING || open == OPEN_LIVE) {
                 tab = TAB_RECORD
+                recordMode = if (open == OPEN_PENDING) RecordMode.CALLS else RecordMode.VOICE
                 showItem(null)
                 showSetup = false
             }
@@ -316,6 +322,13 @@ class MainActivity : FragmentActivity() {
         }
 
         CompositionLocalProvider(LocalUnlockPrompter provides prompter) {
+            if (recordSheet) {
+                RecordSheet(caps, settings.autoRecordArmed, onPick = {
+                    recordMode = it
+                    tab = TAB_RECORD
+                    recordSheet = false
+                }, onDismiss = { recordSheet = false })
+            }
             Scaffold(
                 containerColor = Brand.Background,
                 snackbarHost = { SnackbarHost(snackbar) },
@@ -328,7 +341,10 @@ class MainActivity : FragmentActivity() {
                             if (live.active && tab != TAB_RECORD) {
                                 RecordingStrip(
                                     formatDuration(live.elapsedMs).ifEmpty { "0:00" },
-                                    onOpen = { tab = TAB_RECORD },
+                                    onOpen = {
+                                        recordMode = RecordMode.VOICE
+                                        tab = TAB_RECORD
+                                    },
                                     onStop = { toggleRecording("recording strip") }
                                 )
                             }
@@ -346,8 +362,20 @@ class MainActivity : FragmentActivity() {
                                 onSelect = { tab = it },
                                 onReselect = { reselected++ },
                                 recording = live.active,
-                                onRecord = { if (!live.active || !toggleRecording("record button")) tab = TAB_RECORD },
-                                onRecordLongPress = { if (live.active || !toggleRecording("record button (hold)")) tab = TAB_RECORD }
+                                onRecord = {
+                                    if (!live.active) {
+                                        recordSheet = true
+                                    } else if (!toggleRecording("record button")) {
+                                        tab =
+                                            TAB_RECORD
+                                    }
+                                },
+                                onRecordLongPress = {
+                                    if (live.active || !toggleRecording("record button (hold)")) {
+                                        recordMode = RecordMode.VOICE
+                                        tab = TAB_RECORD
+                                    }
+                                }
                             )
                         }
                     }
@@ -395,7 +423,7 @@ class MainActivity : FragmentActivity() {
                             when (current) {
                                 TAB_CLIENTS -> ClientsScreen(vm, onOpenItem = { showItem(it) }, scrollToTop = reselected)
 
-                                TAB_RECORD -> RecordScreen(vm, caps, onSetup = { showSetup = true })
+                                TAB_RECORD -> RecordScreen(vm, caps, onSetup = { showSetup = true }, mode = recordMode)
 
                                 TAB_ACTIVITY -> ActivityScreen(
                                     load = { vm.activity() },
@@ -403,7 +431,10 @@ class MainActivity : FragmentActivity() {
                                     onOpen = { id -> openSession = id },
                                     onUnread = { activityUnread = it },
                                     waiting = pending.filter { it.state == "pending_decision" },
-                                    onOpenWaiting = { tab = TAB_RECORD },
+                                    onOpenWaiting = {
+                                        recordMode = RecordMode.CALLS
+                                        tab = TAB_RECORD
+                                    },
                                     scrollToTop = reselected
                                 )
 
@@ -418,7 +449,10 @@ class MainActivity : FragmentActivity() {
                                         showItem(item)
                                     },
                                     waiting = pending.filter { it.state == "pending_decision" },
-                                    onOpenWaiting = { tab = TAB_RECORD },
+                                    onOpenWaiting = {
+                                        recordMode = RecordMode.CALLS
+                                        tab = TAB_RECORD
+                                    },
                                     onSelecting = { librarySelecting = it },
                                     scrollToTop = reselected
                                 ) { showItem(it) }

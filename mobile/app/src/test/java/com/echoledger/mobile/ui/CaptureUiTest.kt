@@ -24,6 +24,15 @@ import org.robolectric.Shadows.shadowOf
 class CaptureUiTest : ScreenTest() {
     private fun settings() = runBlocking { app.graph.settings.current() }
 
+    /** The Record screen's stage (timer, Pause, Stop, Discard) with the live card under it. */
+    @androidx.compose.runtime.Composable
+    private fun LiveControls(live: LiveRecording) {
+        androidx.compose.foundation.layout.Column {
+            RecordStage(live)
+            LiveRecordingCard(live, settings())
+        }
+    }
+
     @After
     fun resetLive() {
         RecordingService.live.value = LiveRecording()
@@ -39,7 +48,7 @@ class CaptureUiTest : ScreenTest() {
 
     @Test
     fun `Pause and Mark go to the recording service`() {
-        show { LiveRecordingCard(LiveRecording(active = true, elapsedMs = 65_000), settings()) }
+        show { LiveControls(LiveRecording(active = true, elapsedMs = 65_000)) }
         compose.onNodeWithText("1:05").assertExists()
 
         compose.onNodeWithText("Pause").performClick()
@@ -50,7 +59,7 @@ class CaptureUiTest : ScreenTest() {
 
     @Test
     fun `a paused recording offers Resume and says paused time is not recorded`() {
-        show { LiveRecordingCard(LiveRecording(active = true, paused = true), settings()) }
+        show { LiveControls(LiveRecording(active = true, paused = true)) }
         compose.onNodeWithText("Paused").assertExists()
         compose.onNodeWithText("Paused time is not recorded or sent for captions.").assertExists()
         compose.onNodeWithText("Resume").performClick()

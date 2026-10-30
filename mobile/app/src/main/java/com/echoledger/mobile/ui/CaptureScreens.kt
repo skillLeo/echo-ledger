@@ -172,36 +172,12 @@ fun LiveRecordingCard(live: LiveRecording, settings: AppSettings) {
     val context = LocalContext.current
     val tags = RecordingNotes.presets(settings.markerTags)
     SectionCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                if (live.paused) "Paused" else "Recording",
-                fontWeight = FontWeight.SemiBold,
-                color = if (live.paused) Brand.Warning else Brand.Danger
-            )
-            Text(formatDuration(live.elapsedMs), fontWeight = FontWeight.SemiBold)
-            Box(Modifier.weight(1f))
-            if (live.markers >
-                0
-            ) {
-                Text("${live.markers} bookmark${if (live.markers == 1) "" else "s"}", color = Brand.Muted, fontSize = 12.sp)
-            }
-        }
         // The same controls as the floating pill and the notification (since v1.3).
         val pill by RecordingService.pillState.collectAsState()
         val feed by RecordingService.captionFeed.collectAsState()
+        if (live.markers > 0) Text("${live.markers} bookmark${if (live.markers == 1) "" else "s"}", color = Brand.Muted, fontSize = 12.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            OutlinedButton(onClick = {
-                recordingAction(context, if (live.paused) RecordingService.ACTION_RESUME else RecordingService.ACTION_PAUSE)
-            }) { Text(if (live.paused) "Resume" else "Pause") }
             Button(onClick = { recordingAction(context, RecordingService.ACTION_MARK) }) { Text("Mark") }
-            OutlinedButton(onClick = { recordingAction(context, RecordingService.ACTION_STOP) }) { Text("Stop") }
-            if (pill.discarding) {
-                Button(onClick = { recordingAction(context, RecordingService.ACTION_UNDO_DISCARD) }) { Text("Undo discard") }
-            } else {
-                OutlinedButton(onClick = { recordingAction(context, RecordingService.ACTION_DISCARD_NOW) }) {
-                    Text("Discard", color = Brand.Danger)
-                }
-            }
             OutlinedButton(onClick = { recordingAction(context, RecordingService.ACTION_CAPTIONS) }) {
                 Text(if (pill.captions) "Hide captions" else "Captions")
             }

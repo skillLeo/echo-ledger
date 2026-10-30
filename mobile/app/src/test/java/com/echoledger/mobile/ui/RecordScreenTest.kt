@@ -43,9 +43,9 @@ class RecordScreenTest : ScreenTest() {
     private fun caps(sdk: Int = 34, helper: Boolean = true) =
         Capabilities(sdk, helper, micPermission = true, notificationPermission = true, overlayPermission = true)
 
-    private fun showRecord(capabilities: Capabilities = caps()) {
-        show { RecordScreen(vm, capabilities, onSetup = { setupTaps++ }) }
-        awaitText("Voice notes are never recorded automatically")
+    private fun showRecord(capabilities: Capabilities = caps(), mode: RecordMode = RecordMode.VOICE) {
+        show { RecordScreen(vm, capabilities, onSetup = { setupTaps++ }, mode = mode) }
+        awaitText(if (mode == RecordMode.VOICE) "Voice notes are never recorded automatically" else "Auto-record WhatsApp calls")
     }
 
     private fun awaitUi(what: String, condition: () -> Boolean) = pumpUntil(what) {
@@ -71,11 +71,11 @@ class RecordScreenTest : ScreenTest() {
     // ---- recorder ---------------------------------------------------------------------------------------------------------
 
     @Test
-    fun `an idle recorder offers REC and says it is not recording`() {
+    fun `an idle recorder offers Record and says it is not recording`() {
         showRecord(caps(helper = false))
 
         compose.onNodeWithText("Record").assertIsDisplayed()
-        compose.onNodeWithText("REC").assertIsDisplayed()
+        compose.onNodeWithText("Record").assertIsDisplayed()
         compose.onNodeWithText("Not recording").assertIsDisplayed()
         compose.onNodeWithText("Microphone only — enable call capture in Setup").assertIsDisplayed()
         assertFalse(RecordingService.isRecording)
@@ -92,7 +92,7 @@ class RecordScreenTest : ScreenTest() {
     fun `tapping REC asks the recording service to start or stop`() {
         showRecord()
 
-        compose.onNodeWithText("REC").click()
+        compose.onNodeWithText("Record").click()
 
         val started = shadowOf(app).nextStartedService
         assertNotNull("the recording service should be started", started)
@@ -104,7 +104,7 @@ class RecordScreenTest : ScreenTest() {
 
     @Test
     fun `auto record is unavailable before Android 14`() {
-        showRecord(caps(sdk = 33, helper = false))
+        showRecord(caps(sdk = 33, helper = false), RecordMode.CALLS)
 
         compose.onNodeWithText("Requires Android 14 or later").assertIsDisplayed()
         compose.onNode(isToggleable()).assertIsNotEnabled()
@@ -112,7 +112,7 @@ class RecordScreenTest : ScreenTest() {
 
     @Test
     fun `auto record needs the capture helper and offers a shortcut to setup`() {
-        showRecord(caps(sdk = 34, helper = false))
+        showRecord(caps(sdk = 34, helper = false), RecordMode.CALLS)
 
         compose.onNodeWithText("Enable call capture in Setup first").assertIsDisplayed()
         compose.onNode(isToggleable()).assertIsNotEnabled()
@@ -122,7 +122,7 @@ class RecordScreenTest : ScreenTest() {
 
     @Test
     fun `with the helper running auto record can be armed and disarmed`() {
-        showRecord(caps(sdk = 34, helper = true))
+        showRecord(caps(sdk = 34, helper = true), RecordMode.CALLS)
         compose.onNodeWithText("You'll be asked after each call whether to keep it").assertIsDisplayed()
         assertFalse(present("Open setup"))
 
@@ -135,7 +135,7 @@ class RecordScreenTest : ScreenTest() {
     @Test
     fun `an armed recorder shows the switch on and turning it off disarms`() {
         runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = true) } }
-        showRecord(caps(sdk = 34, helper = true))
+        showRecord(caps(sdk = 34, helper = true), RecordMode.CALLS)
         awaitUi("the armed switch") { runCatching { compose.onNode(isToggleable()).assertIsOn() }.isSuccess }
 
         compose.onNode(isToggleable()).click()
@@ -152,8 +152,8 @@ class RecordScreenTest : ScreenTest() {
         showRecord()
         awaitText("Save these recordings?")
 
-        compose.onNodeWithText("WhatsApp · 1:00").assertIsDisplayed()
-        compose.onNodeWithText("WhatsApp · 2:05").assertIsDisplayed()
+        compose.onNodeWithText("WhatsApp call · 1:00").assertIsDisplayed()
+        compose.onNodeWithText("WhatsApp call · 2:05").assertIsDisplayed()
         compose.onNodeWithText("Oct 23 · 6:30 PM").assertIsDisplayed()
         compose.onAllNodesWithText("Keep")[0].click()
         awaitUi("the first call to be queued") { app.peekRecording("call-1")?.state == "queued" }
@@ -188,7 +188,7 @@ class RecordScreenTest : ScreenTest() {
         showRecord()
         awaitText("Uploading 2 recording(s)")
 
-        compose.onNodeWithText("Will retry: Server Error").assertIsDisplayed()
+        compose.onNodeWithText("Will retry: Server Error", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Retry now").click()
         awaitUi("the retry") { workStates("q1").isNotEmpty() }
 
