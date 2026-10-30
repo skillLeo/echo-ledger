@@ -124,7 +124,13 @@ fun LibraryScreen(
     var selecting by remember { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
-    var recent by rememberSaveable { mutableStateOf(listOf<String>()) }
+    // The last five searches, kept on this phone across restarts (never in a settings export).
+    val recent = vm.settings.collectAsState().value.recentSearches
+    fun keepSearch(words: String) {
+        vm.updateSettings { s ->
+            s.copy(recentSearches = (listOf(words) + s.recentSearches.filterNot { it.equals(words, ignoreCase = true) }).take(5))
+        }
+    }
     var deleted by remember { mutableStateOf<LibraryItem?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -155,7 +161,7 @@ fun LibraryScreen(
         picked = if (item.id in picked) picked - item.id else picked + item.id
     }
     fun leaveSearch() {
-        if (q.isNotEmpty()) recent = (listOf(query.trim()) + recent.filterNot { it.equals(query.trim(), ignoreCase = true) }).take(5)
+        if (q.isNotEmpty()) keepSearch(query.trim())
         query = ""
         searching = false
         focus.clearFocus(force = true)
@@ -219,8 +225,7 @@ fun LibraryScreen(
                     onLeave = { leaveSearch() },
                     onSubmit = {
                         if (q.isNotEmpty()) {
-                            recent =
-                                (listOf(query.trim()) + recent.filterNot { r -> r.equals(query.trim(), true) }).take(5)
+                            keepSearch(query.trim())
                         }
                     },
                     trailing = {

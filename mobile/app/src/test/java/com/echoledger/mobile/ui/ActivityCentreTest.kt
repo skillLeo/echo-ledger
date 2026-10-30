@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import com.echoledger.mobile.core.Activity
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ActivityResponse
@@ -104,6 +106,28 @@ class ActivityCentreTest : ScreenTest() {
         assertEquals(listOf(listOf("n2")), marked)
         assertEquals(0, unread)
         compose.onNodeWithText("Mark all as read").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a swipe dismisses an item, marks it read and takes it off the list`() {
+        val marked = mutableListOf<List<String>?>()
+        show {
+            ActivityScreen(
+                load = { ActivityResponse(listOf(item("n2"), item("n1", read = true)), 1) },
+                markRead = {
+                    marked += it
+                    0
+                },
+                onOpen = {},
+                onUnread = {}
+            )
+        }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Call n2").assertExists() }.isSuccess }
+
+        compose.onNodeWithText("Call n2").performTouchInput { swipeLeft() }
+        pumpUntil("the item to leave") { runCatching { compose.onNodeWithText("Call n2").assertDoesNotExist() }.isSuccess }
+        assertEquals(listOf(listOf("n2")), marked)
+        compose.onNodeWithText("Call n1").assertExists()
     }
 
     @Test

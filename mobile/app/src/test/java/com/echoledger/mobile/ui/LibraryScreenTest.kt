@@ -277,6 +277,21 @@ class LibraryScreenTest : ScreenTest() {
     }
 
     @Test
+    fun `recent searches are kept on the phone and offered when search opens again`() {
+        seedSearchLibrary()
+        showLibrary()
+
+        search("budget")
+        compose.onNodeWithContentDescription("Leave search").performClick()
+        pumpUntil("the search to be kept") { runBlocking { app.graph.settings.current() }.recentSearches == listOf("budget") }
+
+        compose.onNodeWithText("Search recordings and transcripts").performClick()
+        compose.onNodeWithText("Recent searches").assertIsDisplayed()
+        compose.onNodeWithText("budget").performClick()
+        compose.onNodeWithText("Budget review").assertIsDisplayed()
+    }
+
+    @Test
     fun `search ignores case and surrounding spaces`() {
         seedSearchLibrary()
         showLibrary()

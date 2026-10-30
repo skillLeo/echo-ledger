@@ -1,7 +1,9 @@
 package com.echoledger.mobile.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -107,7 +109,20 @@ fun ActivityScreen(
             item.sessionId?.let(onOpen)
         }
     }
-    val loaded = items.orEmpty()
+    // A swipe either way dismisses an item: it is marked read and leaves the list (the server keeps it).
+    var dismissed by remember { mutableStateOf(setOf<String>()) }
+    fun dismiss(item: ActivityItemDto) {
+        dismissed = dismissed + item.id
+        if (!item.read) {
+            scope.launch {
+                markRead(listOf(item.id))?.let {
+                    unread = it
+                    onUnread(it)
+                }
+            }
+        }
+    }
+    val loaded = items.orEmpty().filterNot { it.id in dismissed }
     val needsAction = loaded.filter { !it.read && it.isProblem() }
     val rest = loaded - needsAction.toSet()
     LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = ListPadding) {
@@ -165,22 +180,42 @@ fun ActivityScreen(
                 )
             }
             itemsIndexed(needsAction, key = { _, it -> "a-${it.id}" }) { i, row ->
-                ActivityRow(
-                    row,
-                    today,
-                    divider =
-                        i < needsAction.lastIndex
-                ) { open(row) }
+                DismissibleRow(onDismiss = { dismiss(row) }) {
+                    ActivityRow(row, today, divider = i < needsAction.lastIndex) { open(row) }
+                }
             }
         }
         rest.groupBy { if (dateGroup(it.at, today) == "Today") "Today" else "Earlier" }.toSortedMap(compareBy { it != "Today" })
             .forEach { (group, rows) ->
                 item(key = "h-$group") { SectionHeader(group) }
-                itemsIndexed(rows, key = { _, it ->
-                    "a-${it.id}"
-                }) { i, row -> ActivityRow(row, today, divider = i < rows.lastIndex) { open(row) } }
+                itemsIndexed(rows, key = { _, it -> "a-${it.id}" }) { i, row ->
+                    DismissibleRow(onDismiss = { dismiss(row) }) {
+                        ActivityRow(row, today, divider = i < rows.lastIndex) { open(row) }
+                    }
+                }
             }
     }
+}
+
+/** A row that a swipe either way dismisses ("Dismiss" on a neutral background behind it). */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun DismissibleRow(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+    val state = androidx.compose.material3.rememberSwipeToDismissBoxState()
+    LaunchedEffect(state.currentValue) {
+        if (state.currentValue != androidx.compose.material3.SwipeToDismissBoxValue.Settled) onDismiss()
+    }
+    androidx.compose.material3.SwipeToDismissBox(
+        state = state,
+        backgroundContent = {
+            Box(
+                Modifier.fillMaxSize().background(LocalEchoColors.current.surface2).padding(horizontal = Space.s5),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Text("Dismiss", style = LocalEchoType.current.labelL, color = LocalEchoColors.current.textMuted)
+            }
+        }
+    ) { Box(Modifier.background(Brand.Background)) { content() } }
 }
 
 private fun ActivityItemDto.isProblem(): Boolean = kind.orEmpty().let {
