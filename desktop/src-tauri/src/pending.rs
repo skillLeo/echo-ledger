@@ -25,6 +25,8 @@ pub const TITLE_TOO_LONG: &str = "Use 200 characters or fewer.";
 pub const DECISION_WINDOW_SECS: i64 = 60;
 const MAX_TITLE_CHARS: usize = 200;
 const MAX_FIRST_LINE_CHARS: usize = 140;
+/// The title of a recording recovered after a restart (since v1.3).
+pub const RECOVERED_TITLE: &str = "Recovered recording";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Decision {
@@ -197,6 +199,52 @@ impl PendingDecision {
             language: input.language,
             language_marks: input.language_marks,
             caller: input.caller,
+        }
+    }
+
+    /**
+     * A recording found cut short after a restart (since v1.3, see `recovery`): its two WAVs were encoded again, it
+     * waits for Keep or Discard like any other, titled so it is recognised. The app it came from is not known.
+     */
+    #[allow(clippy::too_many_arguments)]
+    pub fn recovered(
+        dir: PathBuf,
+        primary: PathBuf,
+        mic_wav: PathBuf,
+        system_wav: PathBuf,
+        duration_ms: u64,
+        started_at: DateTime<Utc>,
+        ended_at: DateTime<Utc>,
+        created_at: DateTime<Utc>,
+    ) -> Self {
+        let id = dir.file_name().and_then(|n| n.to_str()).unwrap_or_default().to_string();
+        Self {
+            id,
+            client_ref: uuid::Uuid::new_v4().to_string(),
+            source_app: "other".into(),
+            auto: false,
+            mode: RecordingMode::Call,
+            title: Some(RECOVERED_TITLE.into()),
+            client_id: None,
+            client_name: None,
+            started_at: started_at.to_rfc3339(),
+            ended_at: ended_at.to_rfc3339(),
+            duration_ms,
+            first_line: None,
+            created_at,
+            dir,
+            primary,
+            primary_channels: 2,
+            mic_wav: Some(mic_wav),
+            system_wav: Some(system_wav),
+            live_segments: Vec::new(),
+            live_provider: None,
+            server_session_id: None,
+            markers: Vec::new(),
+            pauses: Vec::new(),
+            language: None,
+            language_marks: Vec::new(),
+            caller: None,
         }
     }
 

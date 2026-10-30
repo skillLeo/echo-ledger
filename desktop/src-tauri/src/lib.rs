@@ -13,6 +13,7 @@ pub mod material;
 pub mod net;
 pub mod overlay;
 pub mod pending;
+pub mod recovery;
 pub mod settings;
 pub mod shortcuts;
 pub mod stt;
@@ -220,6 +221,15 @@ pub fn run() {
             detect::spawn_auto_mode(handle.clone());
             actions::spawn_upload_worker(handle.clone());
             actions::restore_pending(&handle);
+            // Recordings cut short by a crash or a forced quit come back as "Recovered recording" (since v1.3);
+            // encoding takes a moment, so it runs beside the start-up.
+            let recovering = handle.clone();
+            std::thread::spawn(move || {
+                let data_dir = recovering.state::<AppState>().data_dir.clone();
+                if !recovery::recover(&data_dir, chrono::Utc::now()).recovered.is_empty() {
+                    actions::emit_pending(&recovering);
+                }
+            });
             commands::spawn_idle_lock(handle.clone());
             actions::spawn_activity_poll(handle.clone());
 
