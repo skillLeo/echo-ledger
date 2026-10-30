@@ -46,7 +46,8 @@ describe("icons", () => {
 
   it("falls back to the generic glyph for an unknown or missing app", () => {
     const other = markup(<SourceAppIcon app="other" />);
-    expect(markup(<SourceAppIcon app="signal" />)).toBe(other);
+    expect(markup(<SourceAppIcon app="facetime" />)).toBe(other);
+    expect(markup(<SourceAppIcon app="signal" />)).toBe(markup(<SourceAppIcon app="whatsapp" />));
     expect(markup(<SourceAppIcon />)).toBe(other);
   });
 });

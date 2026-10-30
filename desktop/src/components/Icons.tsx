@@ -93,11 +93,18 @@ export function SourceDeviceIcon({ source, ...p }: IconProps & { source?: string
 
 export function SourceAppIcon({ app, ...p }: IconProps & { app?: string }) {
   switch (app) {
-    case "whatsapp": return <ChatIcon {...p} />;
+    case "whatsapp":
+    case "telegram":
+    case "signal":
+    case "messenger":
+    case "instagram":
+    case "slack":
+    case "discord": return <ChatIcon {...p} />;
     case "whatsapp_business": return <StoreIcon {...p} />;
     case "whatsapp_web": return <GlobeIcon {...p} />;
     case "google_meet":
     case "zoom":
+    case "skype":
     case "microsoft_teams": return <VideoIcon {...p} />;
     case "phone_call": return <PhoneIcon {...p} />;
     case "voice_note": return <MicIcon {...p} />;

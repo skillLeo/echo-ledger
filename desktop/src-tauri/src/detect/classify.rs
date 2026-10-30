@@ -15,6 +15,14 @@ pub enum SourceApp {
     GoogleMeet,
     Zoom,
     MicrosoftTeams,
+    /// Call apps the phone records (since v1.2); the desktop shows their recordings but never detects them itself.
+    Telegram,
+    Signal,
+    Messenger,
+    Instagram,
+    Skype,
+    Slack,
+    Discord,
     /// A SIM call recorded on the phone (since v1.2); the desktop never detects one.
     PhoneCall,
     VoiceNote,
@@ -22,13 +30,20 @@ pub enum SourceApp {
 }
 
 impl SourceApp {
-    pub const ALL: [SourceApp; 9] = [
+    pub const ALL: [SourceApp; 16] = [
         SourceApp::Whatsapp,
         SourceApp::WhatsappBusiness,
         SourceApp::WhatsappWeb,
         SourceApp::GoogleMeet,
         SourceApp::Zoom,
         SourceApp::MicrosoftTeams,
+        SourceApp::Telegram,
+        SourceApp::Signal,
+        SourceApp::Messenger,
+        SourceApp::Instagram,
+        SourceApp::Skype,
+        SourceApp::Slack,
+        SourceApp::Discord,
         SourceApp::PhoneCall,
         SourceApp::VoiceNote,
         SourceApp::Other,
@@ -43,6 +58,13 @@ impl SourceApp {
             SourceApp::GoogleMeet => "google_meet",
             SourceApp::Zoom => "zoom",
             SourceApp::MicrosoftTeams => "microsoft_teams",
+            SourceApp::Telegram => "telegram",
+            SourceApp::Signal => "signal",
+            SourceApp::Messenger => "messenger",
+            SourceApp::Instagram => "instagram",
+            SourceApp::Skype => "skype",
+            SourceApp::Slack => "slack",
+            SourceApp::Discord => "discord",
             SourceApp::PhoneCall => "phone_call",
             SourceApp::VoiceNote => "voice_note",
             SourceApp::Other => "other",
@@ -58,10 +80,33 @@ impl SourceApp {
             SourceApp::GoogleMeet => "Google Meet",
             SourceApp::Zoom => "Zoom",
             SourceApp::MicrosoftTeams => "Microsoft Teams",
+            SourceApp::Telegram => "Telegram",
+            SourceApp::Signal => "Signal",
+            SourceApp::Messenger => "Messenger",
+            SourceApp::Instagram => "Instagram",
+            SourceApp::Skype => "Skype",
+            SourceApp::Slack => "Slack",
+            SourceApp::Discord => "Discord",
             SourceApp::PhoneCall => "Phone call",
             SourceApp::VoiceNote => "Voice note",
             SourceApp::Other => "Other",
         }
+    }
+
+    /// Everything but the phone-only call apps: what desktop settings and site rules may name (as before v1.3).
+    pub fn desktop_knows(self) -> bool {
+        !matches!(
+            self,
+            SourceApp::Telegram | SourceApp::Signal | SourceApp::Messenger | SourceApp::Instagram | SourceApp::Skype | SourceApp::Slack | SourceApp::Discord
+        )
+    }
+
+    /// The apps this desktop app notices by itself (and so can record automatically).
+    pub fn desktop_detects(self) -> bool {
+        matches!(
+            self,
+            SourceApp::Whatsapp | SourceApp::WhatsappBusiness | SourceApp::WhatsappWeb | SourceApp::GoogleMeet | SourceApp::Zoom | SourceApp::MicrosoftTeams
+        )
     }
 
     /// Parses a wire value; `None` for anything this version does not know.

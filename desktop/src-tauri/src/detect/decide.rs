@@ -88,7 +88,7 @@ pub fn is_browser_tree(t: &TreeAudio) -> bool {
 pub fn identify(t: &TreeAudio, user_rules: &[SiteRule]) -> (Option<SourceApp>, Option<String>, bool) {
     if is_browser_tree(t) {
         return match match_site(&t.titles, &t.urls, user_rules) {
-            SiteVerdict::App { app, rule_id } => (SourceApp::from_wire(&app), Some(site_of(&rule_id, user_rules)), false),
+            SiteVerdict::App { app, rule_id } => (SourceApp::from_wire(&app).filter(|a| a.desktop_knows()), Some(site_of(&rule_id, user_rules)), false),
             SiteVerdict::Never { rule_id } => (None, Some(site_of(&rule_id, user_rules)), true),
             SiteVerdict::Unknown => (None, None, false),
         };

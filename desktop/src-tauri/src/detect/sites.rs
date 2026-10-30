@@ -133,7 +133,7 @@ pub fn effective_rules(user: &[SiteRule]) -> Vec<SiteRule> {
 }
 
 fn usable(rule: &SiteRule) -> bool {
-    rule.enabled && (rule.app == NEVER || SourceApp::from_wire(&rule.app).is_some())
+    rule.enabled && (rule.app == NEVER || SourceApp::from_wire(&rule.app).is_some_and(|a| a.desktop_knows()))
 }
 
 fn rule_matches(rule: &SiteRule, titles: &[String], urls: &[String]) -> bool {

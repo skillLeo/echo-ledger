@@ -1228,12 +1228,23 @@ const FAST: UploadTiming = UploadTiming {
     poll_for: Duration::from_millis(300),
 };
 
+/// For cases that wait for `ready`: polls as often, but the window is long enough for a slow (busy) machine, so only
+/// the server's answers decide the number of checks.
+const PATIENT: UploadTiming = UploadTiming {
+    poll_every: Duration::from_millis(40),
+    poll_for: Duration::from_secs(10),
+};
+
 fn config_of(flow_config: &Value) -> ServerConfig {
     serde_json::from_value(flow_config.clone()).unwrap()
 }
 
 /// Every state the item was persisted in, in order.
 type Persisted = Arc<Mutex<Vec<PendingUpload>>>;
+
+async fn attempt_with(server: &MockServer, config: &ServerConfig, item: &mut PendingUpload, timing: UploadTiming) -> Result<UploadOutcome, AppError> {
+    upload_with(&api(server), config, item, timing, &|_: &PendingUpload| {}).await
+}
 
 async fn attempt(
     server: &MockServer,
@@ -1356,7 +1367,7 @@ async fn an_assembling_file_is_polled_until_ready_and_only_then_is_the_audio_del
     let (server, _) = flow.start();
     let mut item = recorded_call(&recording, 1_200);
 
-    let (result, _) = attempt(&server, &config, &mut item).await;
+    let result = attempt_with(&server, &config, &mut item, PATIENT).await;
     assert_eq!(server.requests_to("GET", "/api/recordings/REC-primary").len(), 3);
     assert_eq!(after_attempt(&mut item, false, &result), AfterAttempt::Remove);
     assert!(recording.exists(), "nothing is deleted before the queue applies the outcome");

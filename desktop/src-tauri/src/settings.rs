@@ -195,7 +195,7 @@ fn known_shortcuts(value: Value) -> Value {
 fn known_app_switches(value: Value) -> Value {
     let Value::Object(map) = value else { return Value::Object(serde_json::Map::new()) };
     map.into_iter()
-        .filter(|(app, on)| on.is_boolean() && crate::detect::classify::SourceApp::from_wire(app).is_some())
+        .filter(|(app, on)| on.is_boolean() && crate::detect::classify::SourceApp::from_wire(app).is_some_and(|a| a.desktop_knows()))
         .collect::<serde_json::Map<_, _>>()
         .into()
 }

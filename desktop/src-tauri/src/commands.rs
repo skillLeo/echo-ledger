@@ -281,7 +281,7 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         return Err(AppError::msg(problem));
     }
     if let Some(apps) = &patch.auto_record_apps
-        && apps.keys().any(|app| crate::detect::classify::SourceApp::from_wire(app).is_none())
+        && apps.keys().any(|app| !crate::detect::classify::SourceApp::from_wire(app).is_some_and(|a| a.desktop_detects()))
     {
         return Err(AppError::msg("That app cannot be recorded automatically."));
     }

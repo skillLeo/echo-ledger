@@ -314,13 +314,20 @@ fn macos_helpers_group_with_their_app_and_scriptable_browsers_are_known() {
 
 // ---- Vocabulary shared with the server -------------------------------------------------------------------------
 
-const ALL: [SourceApp; 9] = [
+const ALL: [SourceApp; 16] = [
     SourceApp::Whatsapp,
     SourceApp::WhatsappBusiness,
     SourceApp::WhatsappWeb,
     SourceApp::GoogleMeet,
     SourceApp::Zoom,
     SourceApp::MicrosoftTeams,
+    SourceApp::Telegram,
+    SourceApp::Signal,
+    SourceApp::Messenger,
+    SourceApp::Instagram,
+    SourceApp::Skype,
+    SourceApp::Slack,
+    SourceApp::Discord,
     SourceApp::PhoneCall,
     SourceApp::VoiceNote,
     SourceApp::Other,
@@ -339,6 +346,13 @@ fn source_app_wire_names_match_the_api_vocabulary() {
             "google_meet",
             "zoom",
             "microsoft_teams",
+            "telegram",
+            "signal",
+            "messenger",
+            "instagram",
+            "skype",
+            "slack",
+            "discord",
             "phone_call",
             "voice_note",
             "other"
@@ -347,13 +361,33 @@ fn source_app_wire_names_match_the_api_vocabulary() {
     let labels: Vec<&str> = ALL.iter().map(|a| a.label()).collect();
     assert_eq!(
         labels,
-        ["WhatsApp", "WhatsApp Business", "WhatsApp Web", "Google Meet", "Zoom", "Microsoft Teams", "Phone call", "Voice note", "Other"]
+        [
+            "WhatsApp",
+            "WhatsApp Business",
+            "WhatsApp Web",
+            "Google Meet",
+            "Zoom",
+            "Microsoft Teams",
+            "Telegram",
+            "Signal",
+            "Messenger",
+            "Instagram",
+            "Skype",
+            "Slack",
+            "Discord",
+            "Phone call",
+            "Voice note",
+            "Other"
+        ]
     );
     for app in ALL {
         assert_eq!(SourceApp::from_wire(app.as_str()), Some(app));
     }
-    assert_eq!(SourceApp::from_wire("skype"), None);
+    assert_eq!(SourceApp::from_wire("facetime"), None);
     assert_eq!(SourceApp::from_wire("Zoom"), None, "wire values are lower case");
+    // The phone's call apps are shown but never detected (or recorded automatically) on the desktop.
+    let detected: Vec<&str> = ALL.iter().filter(|a| a.desktop_detects()).map(|a| a.as_str()).collect();
+    assert_eq!(detected, ["whatsapp", "whatsapp_business", "whatsapp_web", "google_meet", "zoom", "microsoft_teams"]);
     for app in ALL {
         assert_eq!(
             serde_json::to_value(app).unwrap(),
