@@ -72,6 +72,7 @@ impl OverlaySetup {
 fn title(label: &str) -> &'static str {
     match label {
         OVERLAY => "EchoLedger captions",
+        crate::translate::WINDOW => "EchoLedger Live Translate",
         DICTATION => "EchoLedger dictation",
         PILL => "EchoLedger recording controls",
         REVIEW => "EchoLedger review",
@@ -155,6 +156,26 @@ fn dock_on_primary<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
     let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else { return };
     let (x, y) = dock(work_area(&monitor), (size.width, size.height), corner, margin_px(&monitor, MARGIN_LOGICAL));
     let _ = window.set_position(PhysicalPosition::new(x, y));
+}
+
+/// The Live Translate window (v1.3): top-centre for a game's voice chat, bottom-centre for a video's subtitles, on
+/// the primary monitor's work area; click-through until the person unlocks it (Ctrl+Shift+T). Never focused.
+pub fn create_translate_window<R: Runtime>(app: &AppHandle<R>, subtitles: bool) -> tauri::Result<()> {
+    if app.get_webview_window(crate::translate::WINDOW).is_some() {
+        return Ok(());
+    }
+    let size = if subtitles { (900.0, 140.0) } else { (560.0, 132.0) };
+    let window = build(app, crate::translate::WINDOW, size, false)?;
+    let _ = window.set_ignore_cursor_events(true);
+    let monitor = window.primary_monitor().ok().flatten().or_else(|| window.current_monitor().ok().flatten());
+    if let (Some(monitor), Ok(outer)) = (monitor, window.outer_size()) {
+        let area = work_area(&monitor);
+        let margin = margin_px(&monitor, if subtitles { 96.0 } else { 16.0 });
+        let x = area.x + (area.w as i32 - outer.width as i32) / 2;
+        let y = if subtitles { area.y + area.h as i32 - outer.height as i32 - margin } else { area.y + margin };
+        let _ = window.set_position(PhysicalPosition::new(x, y));
+    }
+    Ok(())
 }
 
 /// Puts the pill at its saved position when that is on a connected monitor, else top-centre of the primary work

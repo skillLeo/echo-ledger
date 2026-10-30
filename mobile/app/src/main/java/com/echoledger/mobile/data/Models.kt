@@ -50,8 +50,20 @@ data class ServerConfig(
     /** Bookmark tag presets from the console (since v1.1). */
     val markers: MarkersConfig? = null,
     /** How unsure words appear in copied text (since v1.3, plan A4). */
-    val unsure: UnsureConfig? = null
+    val unsure: UnsureConfig? = null,
+    /** The console's Live Translate defaults and this month's spending (since v1.3, Phase B). */
+    @SerialName("live_translate") val liveTranslate: LiveTranslateConfig? = null
 )
+
+@Serializable
+data class LiveTranslateConfig(
+    @SerialName("monthly_usd") val monthlyUsd: Double? = null,
+    val game: LiveTranslateModeConfig? = null,
+    val watch: LiveTranslateModeConfig? = null
+)
+
+@Serializable
+data class LiveTranslateModeConfig(val target: String? = null, val spoken: List<String>? = null, val speed: String? = null)
 
 @Serializable
 data class UnsureConfig(val style: String = "brackets", val threshold: Double = 0.5, val note: Boolean = true)

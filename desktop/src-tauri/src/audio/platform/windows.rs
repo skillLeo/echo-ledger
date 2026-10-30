@@ -237,6 +237,49 @@ pub fn active_capture_processes() -> Vec<(u32, String, Option<String>)> {
         .collect()
 }
 
+/// Apps playing sound now (Live Translate, v1.3): (pid, image file name) of every active render session.
+pub fn active_playback_processes() -> Vec<(u32, String)> {
+    active_session_pids(Direction::Render).into_iter().map(|pid| (pid, process_identity(pid).0)).filter(|(_, image)| !image.is_empty()).collect()
+}
+
+/// One app's sound for Live Translate (v1.3): process loopback that INCLUDES `pid` and its child processes (a
+/// browser with all its tabs), 16 kHz mono f32 (WASAPI converts), handed to `on_samples` until `stop` is set. Needs
+/// Windows build 20348 or later; no injection into the app, only the audio engine's own copy of its sound.
+pub fn app_loopback(pid: u32, stop: &AtomicBool, mut on_samples: impl FnMut(Vec<f32>)) -> Result<(), String> {
+    if !os_build().is_some_and(supports_process_loopback) {
+        return Err("Live Translate needs Windows 10 21H2 (build 20348) or later to hear one app.".into());
+    }
+    let _ = initialize_mta();
+    let format = WaveFormat::new(32, 32, &SampleType::Float, 16_000, 1, None);
+    let mode = StreamMode::EventsShared { autoconvert: true, buffer_duration_hns: 0 };
+    // `true` = PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE: only this app (and its children).
+    let mut client = AudioClient::new_application_loopback_client(pid, true).map_err(|e| e.to_string())?;
+    client.initialize_client(&format, &Direction::Capture, &mode).map_err(|e| e.to_string())?;
+    let event = client.set_get_eventhandle().map_err(|e| e.to_string())?;
+    let capture = client.get_audiocaptureclient().map_err(|e| e.to_string())?;
+    client.start_stream().map_err(|e| e.to_string())?;
+    let mut queue: VecDeque<u8> = VecDeque::new();
+    let result = (|| -> Result<(), String> {
+        while !stop.load(Ordering::SeqCst) {
+            if event.wait_for_event(200).is_err() {
+                continue;
+            }
+            while capture.get_next_packet_size().map_err(|e| e.to_string())?.unwrap_or(0) > 0 {
+                let start = queue.len();
+                let info = capture.read_from_device_to_deque(&mut queue).map_err(|e| e.to_string())?;
+                if info.flags.silent {
+                    queue.range_mut(start..).for_each(|b| *b = 0);
+                }
+                let bytes: Vec<u8> = queue.drain(..).collect();
+                on_samples(bytes.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect());
+            }
+        }
+        Ok(())
+    })();
+    let _ = client.stop_stream();
+    result
+}
+
 /// Is `identity` a call app or a browser (the processes a tree is anchored on)?
 fn recognised(identity: &(String, Option<String>)) -> bool {
     crate::detect::classify::classify_windows(&identity.0, identity.1.as_deref()).is_some() || crate::detect::classify::is_browser_image(&identity.0)

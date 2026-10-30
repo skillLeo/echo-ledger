@@ -194,4 +194,30 @@ class TranslateBoxTest {
         file.delete()
         assertEquals(emptyList<ShortArray>(), TestTranslate.frames(File("missing.wav")))
     }
+
+    // ---- console defaults --------------------------------------------------------------------------------------------
+
+    @Test
+    fun `the console's defaults apply until the person changes the panel on the phone`() {
+        val console = com.echoledger.mobile.data.LiveTranslateConfig(
+            monthlyUsd = 25.0,
+            game = com.echoledger.mobile.data.LiveTranslateModeConfig("ur", listOf("ar"), "accurate"),
+            watch = com.echoledger.mobile.data.LiveTranslateModeConfig("en", null, "fastest")
+        )
+        val first = ConsoleDefaults.apply(LiveTranslatePrefs(), console)
+        assertEquals("ur", first.game.target)
+        assertEquals(SpeedPreset.ACCURATE.name, first.game.speed)
+        assertEquals(25.0, first.monthlyBudgetUsd, 0.0)
+        assertEquals("en", first.watch.target)
+
+        val changedInConsole = ConsoleDefaults.apply(
+            first,
+            console.copy(game = com.echoledger.mobile.data.LiveTranslateModeConfig("ar", listOf("en"), "fastest"))
+        )
+        assertEquals("a later console change is followed", "ar", changedInConsole.game.target)
+
+        val mine = changedInConsole.copy(game = changedInConsole.game.copy(target = "en", speed = SpeedPreset.BALANCED.name))
+        assertEquals("the phone's own choice stays", "en", ConsoleDefaults.apply(mine, console).game.target)
+        assertEquals(mine, ConsoleDefaults.apply(mine, null))
+    }
 }

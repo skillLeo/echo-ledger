@@ -17,6 +17,7 @@ pub mod recovery;
 pub mod settings;
 pub mod shortcuts;
 pub mod stt;
+pub mod translate;
 pub mod tray;
 
 use std::path::PathBuf;
@@ -267,6 +268,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_status,
+            commands::translate_apps,
+            commands::translate_status,
+            commands::translate_start,
+            commands::translate_stop,
+            commands::translate_toggle_lock,
             commands::window_appearance,
             commands::set_window_theme,
             commands::pair_device,

@@ -140,5 +140,53 @@ data class LiveTranslatePrefs(
     /** Latency, data rate and reconnects shown in the box (off by default). */
     val debugHud: Boolean = false,
     /** Box positions per app and orientation ("<package>|land" / "<package>|port"). */
-    val placements: Map<String, BoxPlacement> = emptyMap()
+    val placements: Map<String, BoxPlacement> = emptyMap(),
+    /** The console defaults last applied ([ConsoleDefaults]); a panel still equal to them follows the console. */
+    val fromConsole: ConsoleSnapshot? = null
 )
+
+/** What the console said last time (target, spoken, speed per mode, budget). */
+@Serializable
+data class ConsoleSnapshot(
+    val gameTarget: String,
+    val gameSpoken: List<String>,
+    val gameSpeed: String,
+    val watchTarget: String,
+    val watchSpeed: String,
+    val budget: Double
+)
+
+/**
+ * The console's Live Translate defaults (Settings → Game / Watch translate, `GET /api/config`) apply to a panel the
+ * person has not changed on the phone: one still at the app's own defaults or at what the console said last time.
+ */
+object ConsoleDefaults {
+    fun apply(prefs: LiveTranslatePrefs, config: com.echoledger.mobile.data.LiveTranslateConfig?): LiveTranslatePrefs {
+        if (config == null) return prefs
+        val base = LiveTranslatePrefs()
+        val last = prefs.fromConsole
+        val snapshot = ConsoleSnapshot(
+            gameTarget = config.game?.target?.takeIf(::isCode) ?: base.game.target,
+            gameSpoken = config.game?.spoken?.filter(::isCode)?.take(4) ?: base.game.spoken,
+            gameSpeed = config.game?.speed?.let { SpeedPreset.of(it).name } ?: base.game.speed,
+            watchTarget = config.watch?.target?.takeIf(::isCode) ?: base.watch.target,
+            watchSpeed = config.watch?.speed?.let { SpeedPreset.of(it).name } ?: base.watch.speed,
+            budget = config.monthlyUsd?.takeIf { it > 0 } ?: base.monthlyBudgetUsd
+        )
+        val g = prefs.game
+        val gameUntouched = (g.target == base.game.target && g.spoken == base.game.spoken && g.speed == base.game.speed) ||
+            (last != null && g.target == last.gameTarget && g.spoken == last.gameSpoken && g.speed == last.gameSpeed)
+        val w = prefs.watch
+        val watchUntouched = (w.target == base.watch.target && w.speed == base.watch.speed) ||
+            (last != null && w.target == last.watchTarget && w.speed == last.watchSpeed)
+        val budgetUntouched = prefs.monthlyBudgetUsd == base.monthlyBudgetUsd || prefs.monthlyBudgetUsd == last?.budget
+        return prefs.copy(
+            game = if (gameUntouched) g.copy(target = snapshot.gameTarget, spoken = snapshot.gameSpoken, speed = snapshot.gameSpeed) else g,
+            watch = if (watchUntouched) w.copy(target = snapshot.watchTarget, speed = snapshot.watchSpeed) else w,
+            monthlyBudgetUsd = if (budgetUntouched) snapshot.budget else prefs.monthlyBudgetUsd,
+            fromConsole = snapshot
+        )
+    }
+
+    private fun isCode(value: String) = Regex("[a-z]{2}").matches(value)
+}

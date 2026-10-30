@@ -182,7 +182,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 markerTags = config.markers?.tags.orEmpty(),
                                 unsureStyle = config.unsure?.style ?: "brackets",
                                 unsureThreshold = config.unsure?.threshold ?: 0.5,
-                                unsureNote = config.unsure?.note ?: true
+                                unsureNote = config.unsure?.note ?: true,
+                                liveTranslate = com.echoledger.mobile.translate.ConsoleDefaults.apply(
+                                    it.liveTranslate,
+                                    config.liveTranslate
+                                )
                             )
                         }
                     }

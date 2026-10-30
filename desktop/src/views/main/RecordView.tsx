@@ -5,6 +5,7 @@ import { explainMicUser, micTone } from "../../lib/explainer";
 import { DISCARD_CONFIRM } from "../../lib/pending";
 import { useWindowShown } from "../../lib/visibility";
 import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
+import { LiveTranslateCard } from "./LiveTranslateCard";
 
 /**
  * Live view of which apps hold the microphone and what the core decided for each (A1.8), so a call that was not
@@ -129,6 +130,7 @@ export function RecordView({ status, run }: { status: AppStatus; run: <T>(fn: ()
           </div>
         </div>
       </div>
+      <LiveTranslateCard run={run} />
       <div className="card dropzone" style={{ marginTop: 14 }}>Drop voice notes here to transcribe them (OPUS, OGG, M4A, MP3 or WAV).</div>
       {status.uploadErrors.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>

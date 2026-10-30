@@ -116,6 +116,13 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `POST /api/live-translate/token` (since v1.3): a 10-minute Soniox key for Live Translate.
+    pub async fn live_translate_token(&self, mode: &str, target_language: &str, language_hints: &[String]) -> AppResult<crate::translate::protocol::LiveTranslateToken> {
+        let body = json!({ "mode": mode, "target_language": target_language, "language_hints": language_hints });
+        let resp = self.authed(self.http.post(self.url("live-translate/token")))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
     /// One-shot create (with artifacts) of docs/API.md "POST /api/sessions".
     pub async fn create_session(&self, req: &CreateSessionRequest) -> AppResult<CreateSessionResponse> {
         let resp = self.authed(self.http.post(self.url("sessions")))?.json(req).send().await?;

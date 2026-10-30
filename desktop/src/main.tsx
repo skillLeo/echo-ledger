@@ -12,6 +12,7 @@ const OverlayApp = lazy(() => import("./views/overlay/OverlayApp"));
 const DictationApp = lazy(() => import("./views/dictation/DictationApp"));
 const PillApp = lazy(() => import("./views/pill/PillApp"));
 const ReviewApp = lazy(() => import("./views/review/ReviewApp"));
+const TranslateOverlayApp = lazy(() => import("./views/translate/TranslateOverlayApp"));
 
 /** Views of the overlay windows the core builds on demand (lifecycle.rs); any other label is the main window. */
 const WINDOW_VIEWS = new Map([
@@ -19,6 +20,7 @@ const WINDOW_VIEWS = new Map([
   ["dictation", DictationApp],
   ["pill", PillApp],
   ["review", ReviewApp],
+  ["translate", TranslateOverlayApp],
 ]);
 
 function currentLabel(): string {

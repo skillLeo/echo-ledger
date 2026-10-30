@@ -18,6 +18,10 @@ pub enum Action {
     VoiceNote,
     /// Bookmark the current recording (B3).
     Mark,
+    /// Live Translate (v1.3): Edit / Lock the overlay and hide it. Registered only while Live Translate runs (never
+    /// in [`Action::ALL`]): a global Ctrl+Shift+T would otherwise take "reopen closed tab" from every browser.
+    TranslateLock,
+    TranslateHide,
 }
 
 impl Action {
@@ -34,6 +38,8 @@ impl Action {
             Action::Dictation => Some("CommandOrControl+Shift+D"),
             Action::VoiceNote => None,
             Action::Mark => Some("CommandOrControl+Shift+B"),
+            Action::TranslateLock => Some("CommandOrControl+Shift+T"),
+            Action::TranslateHide => Some("CommandOrControl+Shift+H"),
         }
     }
 }

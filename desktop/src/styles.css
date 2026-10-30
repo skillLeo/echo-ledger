@@ -125,9 +125,9 @@
 html, body, #root { margin: 0; height: 100%; }
 body { background: var(--bg); overflow: hidden; }
 html[data-window="overlay"] body, html[data-window="dictation"] body,
-html[data-window="pill"] body, html[data-window="review"] body,
+html[data-window="pill"] body, html[data-window="review"] body, html[data-window="translate"] body,
 html[data-window="overlay"], html[data-window="dictation"],
-html[data-window="pill"], html[data-window="review"] { background: transparent; }
+html[data-window="pill"], html[data-window="review"], html[data-window="translate"] { background: transparent; }
 /* Window material (C2): the OS paints Mica / vibrancy behind a transparent page. */
 html[data-material] body, html[data-material] { background: transparent; }
 button { font: inherit; color: inherit; }
@@ -565,3 +565,19 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .filter-option input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
 .filter-option .filter-label { display: inline-flex; align-items: center; gap: 6px; flex: 1; }
 .filter-option .count { color: var(--text-muted); font-size: 12px; }
+
+/* ---- Live Translate overlay (v1.3, plan B6) ------------------------------------------------------------------- */
+.translate-overlay { box-sizing: border-box; width: 100vw; height: 100vh; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; padding: 10px 12px; font-family: Inter, "Segoe UI Variable", system-ui, sans-serif; user-select: none; }
+.translate-overlay.box { background: rgba(0, 0, 0, 0.72); border-radius: 14px; color: #fff; }
+.translate-overlay.subtitles { align-items: center; text-align: center; color: #fff; padding: 4px 8px; }
+.translate-overlay.subtitles .translate-text { text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 3px rgba(0, 0, 0, 0.8); font-size: 22px; }
+.translate-overlay.editing { outline: 1.5px dashed rgba(255, 255, 255, 0.85); outline-offset: -3px; cursor: move; }
+.translate-text { font-size: 17px; font-weight: 500; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.translate-original { font-size: 12px; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.translate-partial { opacity: 0.6; }
+.translate-dots { letter-spacing: 2px; animation: translate-pulse 1.2s ease-in-out infinite; }
+.translate-done { position: absolute; top: 6px; right: 8px; font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.9); color: #1c2024; cursor: pointer; }
+@keyframes translate-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .translate-dots { animation: none; } }
+.translate-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 8px 0; }
+.translate-form label { display: grid; gap: 4px; }

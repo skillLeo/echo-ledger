@@ -1338,3 +1338,43 @@ pub async fn pending_open(app: AppHandle, id: String, rename: bool) -> AppResult
 pub fn review_state(app: AppHandle) -> Option<ReviewPayload> {
     crate::actions::review_payload(&app)
 }
+
+// ---- Live Translate (v1.3, plan B6) ---------------------------------------------------------------------------------
+
+/// The apps playing sound now, to pick one for Live Translate.
+#[tauri::command]
+pub fn translate_apps() -> Vec<crate::translate::TranslateApp> {
+    crate::translate::apps()
+}
+
+/// What Live Translate shows now (null when it is off).
+#[tauri::command]
+pub fn translate_status() -> Option<crate::translate::Feed> {
+    crate::translate::current_feed()
+}
+
+/// Starts Game or Watch translate for one app: a 10-minute Soniox key from the server, the app's own sound, and the
+/// click-through overlay. Returns the hotkeys another app already holds (empty when both are ours).
+#[tauri::command]
+pub async fn translate_start(app: AppHandle, state: State<'_, AppState>, request: crate::translate::StartRequest) -> AppResult<Vec<String>> {
+    let crate::translate::StartRequest { pid, name, mode, target, hints, speed } = request;
+    let api = state.api()?;
+    let fetch = move || {
+        let (api, target, hints) = (api.clone(), target.clone(), hints.clone());
+        async move { api.live_translate_token(mode.key(), &target, &hints).await.map_err(|e| e.to_string()) }
+    };
+    crate::overlay::create_translate_window(&app, mode == crate::translate::Mode::Watch).map_err(|e| AppError::Message(e.to_string()))?;
+    crate::translate::start(app.clone(), pid, name, mode, speed, fetch).map_err(AppError::Message)?;
+    Ok(crate::translate::register_hotkeys(&app))
+}
+
+#[tauri::command]
+pub fn translate_stop(app: AppHandle) {
+    crate::translate::stop(&app);
+}
+
+/// Edit (move the overlay with the mouse) or lock it again (click-through), like Ctrl+Shift+T.
+#[tauri::command]
+pub fn translate_toggle_lock(app: AppHandle) {
+    crate::translate::toggle_lock(&app);
+}

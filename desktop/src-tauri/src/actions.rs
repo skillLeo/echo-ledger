@@ -30,6 +30,14 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
         (Action::CopyLast2Min, true) => copy_last_minutes(&app, 2).map(|_| ()),
         (Action::VoiceNote, true) => toggle_voice_note(&app).await,
         (Action::Mark, true) => mark_moment(&app, None, None).map(|_| ()),
+        (Action::TranslateLock, true) => {
+            crate::translate::toggle_lock(&app);
+            Ok(())
+        }
+        (Action::TranslateHide, true) => {
+            crate::translate::toggle_hidden(&app);
+            Ok(())
+        }
         (Action::Dictation, true) => {
             let push_to_talk = app.state::<crate::AppState>().settings().dictation_mode == "push_to_talk";
             if crate::dictation::is_active(&app) && !push_to_talk {
