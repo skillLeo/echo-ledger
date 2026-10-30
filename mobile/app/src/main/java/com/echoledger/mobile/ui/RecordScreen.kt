@@ -88,11 +88,11 @@ import com.echoledger.mobile.ui.design.tabular
 import kotlinx.coroutines.delay
 
 /** What the Record screen shows: a voice note (record, import) or calls and meetings (auto-record, Keep/Discard). */
-enum class RecordMode { VOICE, CALLS }
+enum class RecordMode { VOICE, CALLS, GAME, WATCH }
 
 /**
  * The Record sheet (since v1.3), from the centre button: four modes in a 2×2 grid, each with a one-line status.
- * Game and Watch translate arrive with Live Translate (Phase B) and say so.
+ * Game and Watch translate (Phase B) say whether they are on.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,8 +112,19 @@ fun RecordSheet(capabilities: Capabilities, autoRecordOn: Boolean, onPick: (Reco
             }
             Spacer(Modifier.height(Space.s3))
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
-                ModeTile(Icons.Rounded.SportsEsports, "Game translate", "Coming soon", Modifier.weight(1f), enabled = false) {}
-                ModeTile(Icons.Rounded.Tv, "Watch translate", "Coming soon", Modifier.weight(1f), enabled = false) {}
+                val translating by com.echoledger.mobile.translate.LiveTranslateService.state.collectAsState()
+                ModeTile(
+                    Icons.Rounded.SportsEsports,
+                    "Game translate",
+                    if (translating == com.echoledger.mobile.translate.TranslateMode.GAME) "Game: on" else "Game: off",
+                    Modifier.weight(1f)
+                ) { onPick(RecordMode.GAME) }
+                ModeTile(
+                    Icons.Rounded.Tv,
+                    "Watch translate",
+                    if (translating == com.echoledger.mobile.translate.TranslateMode.WATCH) "Watch: on" else "Watch: off",
+                    Modifier.weight(1f)
+                ) { onPick(RecordMode.WATCH) }
             }
         }
     }
@@ -149,6 +160,21 @@ private fun ModeTile(icon: ImageVector, name: String, status: String, modifier: 
  */
 @Composable
 fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> Unit, mode: RecordMode = RecordMode.VOICE) {
+    // Game and Watch translate have their own pages (Phase B).
+    if (mode == RecordMode.GAME || mode == RecordMode.WATCH) {
+        LiveTranslatePage(
+            vm,
+            if (mode ==
+                RecordMode.GAME
+            ) {
+                com.echoledger.mobile.translate.TranslateMode.GAME
+            } else {
+                com.echoledger.mobile.translate.TranslateMode.WATCH
+            },
+            onSetup
+        )
+        return
+    }
     val context = LocalContext.current
     val settings by vm.settings.collectAsState()
     val pending by vm.pending.collectAsState()

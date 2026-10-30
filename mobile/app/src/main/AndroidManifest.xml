@@ -7,6 +7,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Record phone calls (since v1.2, off by default): who a SIM call was with, asked only when the user turns it on. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
@@ -42,6 +43,11 @@
         <package android:name="com.skype.raider" />
         <package android:name="com.Slack" />
         <package android:name="com.discord" />
+        <!-- Live Translate: the person picks games and video apps from the apps on the home screen. -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
     </queries>
 
     <application
@@ -67,7 +73,18 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Game / Watch translate on and off from the launcher, Samsung Routines or a back tap. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+
+        <activity
+            android:name=".translate.TranslateToggleActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/Theme.EchoLedger.Translucent" />
 
         <!-- Voice notes arrive only through the share sheet (never auto-recorded). -->
         <activity
@@ -132,8 +149,38 @@
                 android:name="android.view.im"
                 android:resource="@xml/method" />
         </service>
+        <!-- Live Translate (game voice chat, films): the helper's per-app mix or Android's screen-audio capture. -->
         <service
-            android:name=".tile.RecordTileService"            android:exported="true"
+            android:name=".translate.LiveTranslateService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse|mediaProjection">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Shows live translated subtitles of another app's audio (game voice chat, videos) in a floating window while that app is in use." />
+        </service>
+        <service
+            android:name=".translate.GameTranslateTile"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_rec"
+            android:label="@string/tile_game_translate"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".translate.WatchTranslateTile"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_rec"
+            android:label="@string/tile_watch_translate"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".tile.RecordTileService"
+            android:exported="true"
             android:icon="@drawable/ic_stat_rec"
             android:label="@string/tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">

@@ -24,15 +24,25 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AudioFile
+import androidx.compose.material.icons.outlined.Badge
+import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ClosedCaption
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.FiberManualRecord
+import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.PrivacyTip
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Subtitles
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -80,14 +90,10 @@ import java.time.LocalDate
 
 private fun SettingsGroup.icon(): ImageVector = when (this) {
     SettingsGroup.General -> Icons.Outlined.Tune
-    SettingsGroup.Recording -> Icons.Outlined.FiberManualRecord
     SettingsGroup.VoiceNotes -> Icons.Outlined.AudioFile
-    SettingsGroup.Captions -> Icons.Outlined.ClosedCaption
-    SettingsGroup.Dictation -> Icons.Outlined.Mic
-    SettingsGroup.Privacy -> Icons.Outlined.Lock
-    SettingsGroup.Devices -> Icons.Outlined.Devices
-    SettingsGroup.Storage -> Icons.Outlined.Storage
-    SettingsGroup.About -> Icons.Outlined.Info
+    SettingsGroup.Calls -> Icons.Outlined.Call
+    SettingsGroup.Game -> Icons.Outlined.SportsEsports
+    SettingsGroup.Watch -> Icons.Outlined.Subtitles
 }
 
 /**
@@ -102,12 +108,21 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     val open = group?.let { name -> SettingsGroup.entries.firstOrNull { it.name == name } }
     if (open != null) {
+        // General is a list of its own pages; Back from one of them returns to that list.
         val close = {
-            group = null
-            focus = null
+            if (open == SettingsGroup.General && focus != null) {
+                focus = null
+            } else {
+                group = null
+                focus = null
+            }
         }
         BackHandler(onBack = close)
-        SettingsGroupScreen(vm, open, focus, onSetup, onBack = close)
+        if (open == SettingsGroup.General) {
+            GeneralScreen(vm, focus, onSetup, onOpen = { focus = it }, onBack = close)
+        } else {
+            SettingsGroupScreen(vm, open, focus, onSetup, onBack = close)
+        }
         return
     }
     // You (since v1.3): this phone and its server on top, then the settings as a flat list, and Unpair at the bottom.
@@ -143,8 +158,8 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
                     com.echoledger.mobile.ui.design.EchoButton(
                         "Unpair this phone…",
                         {
-                            group = SettingsGroup.Devices.name
-                            focus = null
+                            group = SettingsGroup.General.name
+                            focus = "this-phone"
                         },
                         kind = com.echoledger.mobile.ui.design.ButtonKind.Text
                     )
@@ -211,6 +226,85 @@ private fun SettingsRow(icon: ImageVector, title: String, summary: String, click
     )
 }
 
+private fun generalIcon(id: String): ImageVector = when (id) {
+    "appearance" -> Icons.Outlined.Palette
+    "this-phone" -> Icons.Outlined.PhoneAndroid
+    "transcription" -> Icons.Outlined.Translate
+    "client" -> Icons.Outlined.Badge
+    "notifications" -> Icons.Outlined.Notifications
+    "app-lock" -> Icons.Outlined.Lock
+    "consent" -> Icons.Outlined.PrivacyTip
+    "devices" -> Icons.Outlined.Devices
+    "storage" -> Icons.Outlined.Storage
+    "help" -> Icons.Outlined.HelpOutline
+    else -> Icons.Outlined.Info
+}
+
+/**
+ * General (since v1.3): one row per setting page (Appearance, This phone, App lock…); [page] opens that page alone,
+ * Back returns to the list. "Reset this panel" sits under the list.
+ */
+@Composable
+private fun GeneralScreen(vm: MainViewModel, page: String?, onSetup: () -> Unit, onOpen: (String) -> Unit, onBack: () -> Unit) {
+    val settings by vm.settings.collectAsState()
+    val entry = page?.let { id -> SettingsCatalogue.entries.firstOrNull { it.id == id && it.group == SettingsGroup.General } }
+    Column(Modifier.fillMaxSize()) {
+        com.echoledger.mobile.ui.design.EchoTopBar(
+            entry?.title ?: SettingsGroup.General.label,
+            large = false,
+            navigation = {
+                com.echoledger.mobile.ui.design.BarIcon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", onBack, tint = Brand.Text)
+            }
+        )
+        if (entry != null) {
+            Column(
+                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(bottom = Space.s4),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) { SettingsEntryContent(entry, vm, settings, onSetup) }
+            return@Column
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = Space.s4)) {
+            SettingsCatalogue.inGroup(SettingsGroup.General).forEach { e ->
+                SettingsRow(generalIcon(e.id), e.title, generalSummary(e.id), "Open ${e.title}") { onOpen(e.id) }
+            }
+            var confirmReset by remember { mutableStateOf(false) }
+            Box(Modifier.padding(horizontal = Space.s2, vertical = Space.s2)) {
+                com.echoledger.mobile.ui.design.EchoButton(
+                    "Reset this panel",
+                    { confirmReset = true },
+                    kind = com.echoledger.mobile.ui.design.ButtonKind.Text
+                )
+            }
+            if (confirmReset) {
+                ConfirmDialog(
+                    text = "Put the General settings back to their defaults? Your pairing stays.",
+                    confirmLabel = "Reset",
+                    onConfirm = {
+                        confirmReset = false
+                        vm.updateSettings { com.echoledger.mobile.core.SettingsReset.reset(SettingsGroup.General, it) }
+                        vm.showMessage("General settings reset")
+                    },
+                    onDismiss = { confirmReset = false }
+                )
+            }
+        }
+    }
+}
+
+private fun generalSummary(id: String): String = when (id) {
+    "appearance" -> "Theme and font"
+    "this-phone" -> "Server, name, unpair"
+    "transcription" -> "Language of new recordings"
+    "client" -> "Names and words for a client"
+    "notifications" -> "Activity and quiet hours"
+    "app-lock" -> "Fingerprint or screen lock"
+    "consent" -> "Telling people you record"
+    "devices" -> "Paired phones and computers"
+    "storage" -> "Space used and how long things are kept"
+    "help" -> "Audio probe, capture test, diagnostics"
+    else -> "Version, export and import settings"
+}
+
 /** One group of settings; [focus] is the entry a search result pointed at, scrolled into view once. */
 @Composable
 private fun SettingsGroupScreen(vm: MainViewModel, group: SettingsGroup, focus: String?, onSetup: () -> Unit, onBack: () -> Unit) {
@@ -238,6 +332,26 @@ private fun SettingsGroupScreen(vm: MainViewModel, group: SettingsGroup, focus: 
                 Column(Modifier.bringIntoViewRequester(requester), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SettingsEntryContent(entry, vm, settings, onSetup)
                 }
+            }
+            // Every panel can go back to its defaults (plan B5); what the person made or picked stays.
+            var confirmReset by remember { mutableStateOf(false) }
+            com.echoledger.mobile.ui.design.EchoButton(
+                "Reset this panel",
+                { confirmReset = true },
+                kind = com.echoledger.mobile.ui.design.ButtonKind.Text
+            )
+            if (confirmReset) {
+                ConfirmDialog(
+                    text = "Put the ${group.label} settings back to their defaults? Your pairing, picked apps, " +
+                        "replacements and snippets stay.",
+                    confirmLabel = "Reset",
+                    onConfirm = {
+                        confirmReset = false
+                        vm.updateSettings { com.echoledger.mobile.core.SettingsReset.reset(group, it) }
+                        vm.showMessage("${group.label} settings reset")
+                    },
+                    onDismiss = { confirmReset = false }
+                )
             }
         }
     }
@@ -282,6 +396,18 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
         "storage" -> StorageSection(load = { vm.storage() })
 
         "about" -> AboutSection(vm, settings)
+
+        "help" -> HelpSection(vm, settings, onSetup)
+
+        "game" -> GameSettingsSection(vm, settings)
+
+        "game-box" -> GameBoxSection(vm, settings)
+
+        "game-more" -> GameMoreSection(vm, settings)
+
+        "watch" -> WatchSettingsSection(vm, settings)
+
+        "watch-style" -> WatchStyleSection(vm, settings)
     }
 }
 
@@ -330,7 +456,11 @@ private fun LiveCaptionsCard(vm: MainViewModel, settings: AppSettings) {
                 Text("Live captions while recording")
                 Text("Floating bubble; needs the overlay permission", color = Brand.Muted, fontSize = 12.sp)
             }
-            Switch(checked = settings.captionsEnabled, onCheckedChange = { v -> vm.updateSettings { it.copy(captionsEnabled = v) } })
+            Switch(
+                checked = settings.captionsEnabled,
+                onCheckedChange = { v -> vm.updateSettings { it.copy(captionsEnabled = v) } },
+                modifier = Modifier.semantics { contentDescription = "Live captions while recording" }
+            )
         }
     }
 }

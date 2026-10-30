@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -74,6 +76,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -127,6 +130,7 @@ import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoTopBar
 import com.echoledger.mobile.ui.design.InlineBanner
+import com.echoledger.mobile.ui.design.sharedElement
 import com.echoledger.mobile.ui.design.tabular
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -381,12 +385,31 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
     val library by vm.library.collectAsState()
     val live = library.firstOrNull { it.id == item.id } ?: item
     val canCopy = t != null && t.status !in IN_PROGRESS && t.status != "failed" && segments.isNotEmpty()
+    val listState = rememberLazyListState()
+    // Find in transcript (since v1.3): matches in the view on screen; the current one is tinted and scrolled to.
+    var finding by remember(item.id) { mutableStateOf(false) }
+    var findQuery by remember(item.id) { mutableStateOf("") }
+    var findAt by remember(item.id) { mutableStateOf(0) }
+    val findHits = remember(findQuery, shown, segments) {
+        TranscriptFind.matches(segments.mapIndexed { i, s -> shown?.getOrNull(i) ?: s.text }, findQuery)
+    }
+    val findLine = findHits.getOrNull(findAt.coerceIn(0, (findHits.size - 1).coerceAtLeast(0)))
+    LaunchedEffect(findLine) {
+        // The transcript lines come after the page head and the transcript head.
+        if (findLine != null) listState.animateScrollToItem(findLine + 2)
+    }
+    var lineMenu by remember(item.id) { mutableStateOf<Int?>(null) }
+    val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
+    // The title moves into the bar once the page head has scrolled away (a collapsing header).
+    val scrolled by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     Column(Modifier.fillMaxSize()) {
         EchoTopBar(
-            "",
+            if (scrolled) item.title ?: "Untitled" else "",
             large = false,
             navigation = { BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = c.text) },
             actions = {
+                if (canCopy && !finding) BarIcon(Icons.Rounded.Search, "Find in transcript", { finding = true })
                 if (canCopy) BarIcon(Icons.Rounded.ContentCopy, "Copy", { copy(withTimestamps = false) })
                 Box {
                     BarIcon(Icons.Rounded.MoreVert, "More", { menuOpen = true })
@@ -430,14 +453,35 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                 onDismiss = { confirmDelete = false }
             )
         }
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = Space.s5)) {
+        if (finding && canCopy) {
+            FindBar(
+                findQuery,
+                {
+                    findQuery = it
+                    findAt = 0
+                },
+                current = findAt,
+                total = findHits.size,
+                onStep = { step -> if (findHits.isNotEmpty()) findAt = Math.floorMod(findAt + step, findHits.size) },
+                onClose = {
+                    finding = false
+                    findQuery = ""
+                }
+            )
+        }
+        LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = Space.s5)) {
             item(key = "head") {
                 Column(Modifier.padding(horizontal = Space.screen)) {
-                    Text(item.title ?: "Untitled", style = type.titleL, color = c.text)
+                    Text(
+                        item.title ?: "Untitled",
+                        style = type.titleL,
+                        color = c.text,
+                        modifier = Modifier.sharedElement("title-${item.id}")
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Space.s2)) {
                         val app = SourceApp.from(item.sourceApp)
                         val device = SourceDevice.from(item.sourceDevice)
-                        com.echoledger.mobile.ui.design.SourceAppTile(app, size = 20.dp)
+                        Box(Modifier.sharedElement("tile-${item.id}")) { com.echoledger.mobile.ui.design.SourceAppTile(app, size = 20.dp) }
                         Spacer(Modifier.width(Space.s2))
                         Text(item.sourceAppLabel ?: app.label, style = type.labelM, color = c.textMuted)
                         Text("  ·  ", style = type.labelM, color = c.textFaint)
@@ -530,28 +574,31 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                     )
                 }
 
+                // One compact row with the action (since v1.3): the server starts again with the best engine.
                 t.status == "failed" -> item(key = "failed") {
-                    SectionCard(Modifier.padding(horizontal = Space.screen)) {
-                        Text("Transcription failed", style = type.bodyL, color = c.danger)
-                        Text(failureText(t), style = type.bodyM, color = c.textMuted)
-                        // Since v1.3: one tap runs it again (the server starts with the best engine for its language).
-                        if (t.errorCode != "no_audio") {
-                            val retryScope = rememberCoroutineScope()
-                            var retrying by remember { mutableStateOf(false) }
-                            EchoButton(
-                                if (retrying) "Retrying…" else "Retry",
-                                {
-                                    retrying = true
-                                    retryScope.launch {
-                                        vm.retranscribe(item.id, t.language)
-                                        retrying = false
-                                    }
-                                },
-                                Modifier.semantics { contentDescription = "Retry the transcription" },
-                                loading = retrying
-                            )
+                    val retryScope = rememberCoroutineScope()
+                    var retrying by remember { mutableStateOf(false) }
+                    InlineBanner(
+                        "Transcription failed. ${failureText(t)}",
+                        Modifier.padding(horizontal = Space.screen),
+                        kind = BannerKind.Error,
+                        action = if (t.errorCode == "no_audio") {
+                            null
+                        } else if (retrying) {
+                            "Retrying…"
+                        } else {
+                            "Retry"
+                        },
+                        onAction = {
+                            if (!retrying) {
+                                retrying = true
+                                retryScope.launch {
+                                    vm.retranscribe(item.id, t.language)
+                                    retrying = false
+                                }
+                            }
                         }
-                    }
+                    )
                 }
 
                 t.status in IN_PROGRESS -> item(key = "progress") {
@@ -608,15 +655,52 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                         val active = index == activeIndex
                         val newTurn = !continuesTurn(speakerList, index)
                         val name = speakerName(speakerNames, s.speaker).let { if (it == "Me") "You" else it }
+                        val lineText = shown?.getOrNull(index) ?: s.text
                         Column(
                             Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = Space.s2)
                                 .clip(RoundedCornerShape(Radius.field))
-                                .background(if (active) c.accentSoft else androidx.compose.ui.graphics.Color.Transparent)
-                                .clickable(enabled = player.ready) { player.seekTo(s.startMs) }
+                                .background(
+                                    when {
+                                        finding && index == findLine -> c.warningFill.copy(alpha = if (c.isDark) 0.18f else 0.24f)
+                                        active -> c.accentSoft
+                                        else -> androidx.compose.ui.graphics.Color.Transparent
+                                    }
+                                )
+                                .combinedClickable(
+                                    onClick = { if (player.ready) player.seekTo(s.startMs) },
+                                    onLongClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        lineMenu = index
+                                    },
+                                    onLongClickLabel = "Line actions"
+                                )
                                 .padding(horizontal = Space.s2, vertical = Space.s1)
                         ) {
+                            // Long-press a line (since v1.3): copy it, share it, or play from it.
+                            DropdownMenu(expanded = lineMenu == index, onDismissRequest = { lineMenu = null }) {
+                                DropdownMenuItem(text = { Text("Copy line") }, onClick = {
+                                    lineMenu = null
+                                    scope.launch {
+                                        clipboard.setClipEntry(ClipData.newPlainText("EchoLedger line", "$name: $lineText").toClipEntry())
+                                        vm.showMessage("Line copied")
+                                    }
+                                })
+                                DropdownMenuItem(text = { Text("Share line") }, onClick = {
+                                    lineMenu = null
+                                    val send = Intent(
+                                        Intent.ACTION_SEND
+                                    ).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "$name: $lineText")
+                                    context.startActivity(Intent.createChooser(send, "Share line"))
+                                })
+                                if (player.ready) {
+                                    DropdownMenuItem(text = { Text("Play from here") }, onClick = {
+                                        lineMenu = null
+                                        player.seekTo(s.startMs)
+                                    })
+                                }
+                            }
                             if (newTurn) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,

@@ -524,3 +524,18 @@ data class SecurityEventDto(
 
 @Serializable
 data class ClientsResponse(val data: List<ClientDto>)
+
+/** `POST /api/live-translate/token` (since v1.3, Phase B): a temporary Soniox key and how to open its WebSocket. */
+@Serializable
+data class LiveTranslateToken(
+    val provider: String,
+    @SerialName("api_key") val apiKey: String,
+    @SerialName("expires_at") val expiresAt: String,
+    @SerialName("websocket_url") val websocketUrl: String,
+    val model: String,
+    val translation: LiveTranslation,
+    @SerialName("language_hints") val languageHints: List<String> = emptyList()
+)
+
+@Serializable
+data class LiveTranslation(val type: String, @SerialName("target_language") val targetLanguage: String)

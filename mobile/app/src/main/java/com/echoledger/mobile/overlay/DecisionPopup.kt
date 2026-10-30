@@ -106,6 +106,21 @@ object DecisionPopup {
                         onDiscard = { decide(app, rec.id, keep = false) },
                         language = language.value,
                         autoDecision = afterCallTimeout.takeIf { it == "keep" || it == "discard" },
+                        // The card is never focusable (a call or a game may be on screen), so the title and the client
+                        // are typed on the app's own card; only this tap opens it.
+                        onDetails = {
+                            hide()
+                            app.startActivity(
+                                android.content.Intent(app, com.echoledger.mobile.MainActivity::class.java)
+                                    .addFlags(
+                                        android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                    )
+                                    .putExtra(
+                                        com.echoledger.mobile.MainActivity.EXTRA_OPEN,
+                                        com.echoledger.mobile.MainActivity.OPEN_PENDING
+                                    )
+                            )
+                        },
                         onLanguage = {
                             // The tap is a sign the user is deciding: the card stays its full time again.
                             language.value = Languages.next(language.value)
@@ -179,7 +194,8 @@ fun DecisionCard(
     language: String? = null,
     onLanguage: (() -> Unit)? = null,
     autoDecision: String? = null,
-    visibleMs: Long = DecisionPopup.AUTO_HIDE_MS
+    visibleMs: Long = DecisionPopup.AUTO_HIDE_MS,
+    onDetails: (() -> Unit)? = null
 ) {
     val app = SourceApp.from(sourceApp)
     val c = LocalEchoColors.current
@@ -230,6 +246,7 @@ fun DecisionCard(
                 EchoButton("Discard", onDiscard, Modifier.weight(1f), kind = ButtonKind.Secondary)
                 EchoButton("Keep", onKeep, Modifier.weight(1f))
             }
+            if (onDetails != null) EchoButton("Add title or client", onDetails, kind = ButtonKind.Text)
         }
         Box(Modifier.fillMaxWidth().height(2.dp).background(c.surface2)) {
             Box(Modifier.fillMaxWidth(left.value).height(2.dp).background(c.accentStrong))

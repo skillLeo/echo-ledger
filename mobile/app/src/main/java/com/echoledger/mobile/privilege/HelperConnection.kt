@@ -67,6 +67,7 @@ class HelperConnection(private val context: Context) {
         // A helper that just (re)started has no mix: arm it now, before the next call's voice track exists.
         pushCallApps(binder)
         if (armWanted) applyArm(binder, true)
+        if (games.isNotEmpty()) armGames(binder)
     }
 
     fun setCallListener(listener: ICallListener?) {
@@ -85,8 +86,33 @@ class HelperConnection(private val context: Context) {
         helper?.let { pushCallApps(it) }
     }
 
+    /** Picked games (Live Translate): never treated as call apps, and their mixes are armed before they play. */
+    @Volatile private var games: Set<String> = emptySet()
+
+    /** The helper's answer to the last game arm ("armed", "error: …"), for the Audio probe and Game setup. */
+    private val _gameArmState = MutableStateFlow<String?>(null)
+    val gameArmState: StateFlow<String?> = _gameArmState
+
+    /** Game translate on with these games (empty = off): a mix per game is registered now and after every helper restart. */
+    fun setGames(packages: Set<String>) {
+        if (packages == games && (packages.isEmpty() || _gameArmState.value == "armed")) return
+        games = packages
+        helper?.let {
+            pushCallApps(it)
+            armGames(it)
+        }
+    }
+
+    private fun armGames(binder: ICaptureHelper) {
+        val pm = context.packageManager
+        val uids = games.mapNotNull { pkg -> runCatching { pm.getApplicationInfo(pkg, 0).uid }.getOrNull() }.toIntArray()
+        if (uids.isEmpty() && _gameArmState.value == null) return
+        _gameArmState.value = runCatching { binder.armApps(uids, true) }.getOrElse { "error: ${it.message ?: it.javaClass.simpleName}" }
+    }
+
     private fun pushCallApps(binder: ICaptureHelper) {
-        runCatching { binder.setCallApps(callApps.toTypedArray()) }
+        // A game's voice chat is never a call: it must not start the call recorder or Keep/Discard.
+        runCatching { binder.setCallApps((callApps - games).toTypedArray()) }
     }
 
     private fun applyArm(binder: ICaptureHelper, on: Boolean) {

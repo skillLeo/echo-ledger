@@ -145,7 +145,7 @@ class MainActivityTest : AppTest() {
         }
 
         compose.onNodeWithContentDescription("You").performClick()
-        awaitText("Privacy & security")
+        awaitText("Game translate")
 
         compose.onNodeWithContentDescription("Clients").performClick()
         awaitText("Clients")
@@ -162,14 +162,14 @@ class MainActivityTest : AppTest() {
         val controller = launch(preload = true)
         awaitText("Weekly sync")
         compose.onNodeWithContentDescription("You").performClick()
-        awaitText("Privacy & security")
+        awaitText("Game translate")
 
-        compose.onNodeWithText("Storage").performClick()
-        awaitText("Storage and retention")
+        compose.onNodeWithText("Watch translate").performClick()
+        awaitText("Subtitle style")
         compose.onAllNodesWithText("Search settings").assertCountEquals(0)
 
         controller.get().onBackPressedDispatcher.onBackPressed()
-        awaitText("Privacy & security")
+        awaitText("Game translate")
         compose.onNodeWithContentDescription("You").assertIsDisplayed()
     }
 
@@ -251,8 +251,9 @@ class MainActivityTest : AppTest() {
         launch(preload = true)
         awaitText("Weekly sync")
         compose.onNodeWithContentDescription("You").performClick()
-        awaitText("Devices")
-        compose.onNodeWithText("Devices").performClick()
+        awaitText("General")
+        compose.onNodeWithText("General").performClick()
+        compose.onNodeWithText("This phone").performClick()
         awaitText("Unpair")
 
         compose.onNodeWithText("Unpair").performScrollTo().performClick()

@@ -22,8 +22,11 @@ import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModelProvider
 import com.echoledger.mobile.MainActivity
@@ -55,7 +58,7 @@ class SettingsScreenTest : AppTest() {
 
     private lateinit var vm: MainViewModel
     private var setupTaps = 0
-    private val privacyGroup = "Privacy & security"
+    private val privacyGroup = "General/App lock"
 
     @Before
     fun createViewModel() {
@@ -83,7 +86,8 @@ class SettingsScreenTest : AppTest() {
                 }
             }
         }
-        if (open != null) compose.onNodeWithText(open).performClick()
+        // A path of rows to tap: "General/App lock" opens General, then its App lock page.
+        open?.split("/")?.forEach { compose.onNodeWithText(it).performClick() }
         return activity
     }
 
@@ -115,7 +119,7 @@ class SettingsScreenTest : AppTest() {
     fun `the app lock row is offered when the phone can authenticate`() {
         launch(open = privacyGroup, biometricsAvailable = true)
 
-        compose.onNodeWithText("App lock").assertIsDisplayed()
+        compose.onAllNodesWithText("App lock").onLast().assertIsDisplayed()
         compose.onNodeWithText("Ask for your fingerprint, face or screen lock when EchoLedger opens.").assertIsDisplayed()
         appLockSwitch().assertIsEnabled()
         compose.onAllNodesWithText("Open security settings").assertCountEquals(0)
@@ -125,7 +129,7 @@ class SettingsScreenTest : AppTest() {
     fun `without a screen lock the app lock row stays visible, disabled, with the reason and a way to fix it`() {
         val activity = launch(open = privacyGroup, biometricsAvailable = false, screenLock = false)
 
-        compose.onNodeWithText("App lock").assertIsDisplayed()
+        compose.onAllNodesWithText("App lock").onLast().assertIsDisplayed()
         compose.onNodeWithText("Set a screen lock on this phone to use App lock.").assertIsDisplayed()
         appLockSwitch().assertIsNotEnabled().assertIsOff()
 
@@ -156,7 +160,7 @@ class SettingsScreenTest : AppTest() {
     fun `outside a fragment activity the row is shown but cannot be switched on`() {
         launch(open = privacyGroup, biometricsAvailable = true, host = ComponentActivity::class.java)
 
-        compose.onNodeWithText("App lock").assertIsDisplayed()
+        compose.onAllNodesWithText("App lock").onLast().assertIsDisplayed()
         appLockSwitch().assertIsNotEnabled()
     }
 
@@ -304,31 +308,32 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `live captions can be turned off and on again`() {
-        launch(open = "Captions")
-        compose.onAllNodes(isToggleable())[0].assertIsOn()
+        launch(open = "Calls & meetings")
+        val captions = { compose.onNodeWithContentDescription("Live captions while recording").performScrollTo() }
+        captions().assertIsOn()
 
-        compose.onAllNodes(isToggleable())[0].performClick()
+        captions().performClick()
         pumpUntil("captions off") { !settings().captionsEnabled }
-        compose.onAllNodes(isToggleable())[0].assertIsOff()
+        captions().assertIsOff()
 
-        compose.onAllNodes(isToggleable())[0].performClick()
+        captions().performClick()
         pumpUntil("captions on") { settings().captionsEnabled }
     }
 
     @Test
     fun `the microphone source toggles between echo-cancelled and raw`() {
-        launch(open = "Recording")
-        compose.onNodeWithText("Voice communication (echo-cancelled)").assertIsDisplayed()
+        launch(open = "Calls & meetings")
+        compose.onNodeWithText("Voice communication (echo-cancelled)").performScrollTo().assertIsDisplayed()
 
         // The microphone row's Change (the bitrate row below it has one too).
-        compose.onAllNodesWithText("Change")[0].performClick()
+        compose.onAllNodesWithText("Change")[0].performScrollTo().performClick()
         pumpUntil("raw microphone") { settings().micSource == "mic" }
-        compose.onNodeWithText("Raw microphone").assertIsDisplayed()
+        compose.onNodeWithText("Raw microphone").performScrollTo().assertIsDisplayed()
 
         // The microphone row's Change (the bitrate row below it has one too).
-        compose.onAllNodesWithText("Change")[0].performClick()
+        compose.onAllNodesWithText("Change")[0].performScrollTo().performClick()
         pumpUntil("voice communication") { settings().micSource == "voice_communication" }
-        compose.onNodeWithText("Voice communication (echo-cancelled)").assertIsDisplayed()
+        compose.onNodeWithText("Voice communication (echo-cancelled)").performScrollTo().assertIsDisplayed()
     }
 
     @Test
@@ -338,7 +343,7 @@ class SettingsScreenTest : AppTest() {
         server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
         val refresh = vm.refresh()
         pumpUntil("clients") { refresh.isCompleted && vm.clients.value.size == 2 }
-        launch(open = "General")
+        launch(open = "General/Client keyterms")
 
         compose.onNodeWithText("Acme Holdings").performClick()
         pumpUntil("client saved") { settings().clientId == "01JCLIENT0000000000000000A" }
@@ -353,7 +358,7 @@ class SettingsScreenTest : AppTest() {
     @Test
     fun `the device card shows the phone name server address and pin status`() {
         pairAndSettle()
-        launch(open = "Devices")
+        launch(open = "General/This phone")
 
         compose.onNodeWithText("Sam's Pixel · ${server.baseUrl}").assertIsDisplayed()
         compose.onNodeWithText("Server certificate pinned (2 pins)").assertIsDisplayed()
@@ -363,14 +368,14 @@ class SettingsScreenTest : AppTest() {
     fun `a server without pins is flagged as not pinned`() {
         runBlocking { app.pairLocally(server, pins = emptyList()) }
         pumpUntil("settings") { vm.settings.value.paired }
-        launch(open = "Devices")
+        launch(open = "General/This phone")
 
         compose.onNodeWithText("Certificate pinning not configured on the server").assertIsDisplayed()
     }
 
     @Test
     fun `Setup guide opens the setup screen`() {
-        launch(open = "Devices")
+        launch(open = "General/This phone")
 
         compose.onNodeWithText("Setup guide").performClick()
 
@@ -381,7 +386,7 @@ class SettingsScreenTest : AppTest() {
     fun `Unpair forgets the pairing but keeps the preferences`() {
         pairAndSettle()
         runBlocking { app.graph.settings.update { it.copy(captionsEnabled = false) } }
-        launch(open = "Devices")
+        launch(open = "General/This phone")
 
         compose.onNodeWithText("Unpair").performClick()
         assertTrue("nothing changes before the user confirms", settings().paired)

@@ -13,6 +13,7 @@ import com.echoledger.mobile.data.CreateSessionResponse
 import com.echoledger.mobile.data.DeviceTranscript
 import com.echoledger.mobile.data.FinishSessionRequest
 import com.echoledger.mobile.data.LibraryResponse
+import com.echoledger.mobile.data.LiveTranslateToken
 import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.RecordingUpload
 import com.echoledger.mobile.data.RegisterResponse
@@ -129,6 +130,22 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
             put("sample_rate", 16_000)
         }.toString().toRequestBody(jsonType)
         return call(request("stt/token").post(body).build(), SttTokenResponse.serializer())!!
+    }
+
+    /** `POST /api/live-translate/token` (since v1.3, Phase B): a short-lived Soniox key for Live Translate. */
+    suspend fun liveTranslateToken(
+        mode: String,
+        targetLanguage: String,
+        languageHints: List<String>,
+        continueOverBudget: Boolean = false
+    ): LiveTranslateToken {
+        val body = buildJsonObject {
+            put("mode", mode)
+            if (continueOverBudget) put("continue_over_budget", true)
+            put("target_language", targetLanguage)
+            put("language_hints", buildJsonArray { languageHints.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+        }.toString().toRequestBody(jsonType)
+        return call(request("live-translate/token").post(body).build(), LiveTranslateToken.serializer())!!
     }
 
     suspend fun createSession(req: CreateSessionRequest): CreateSessionResponse {

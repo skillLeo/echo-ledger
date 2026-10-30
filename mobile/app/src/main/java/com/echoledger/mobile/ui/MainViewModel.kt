@@ -31,6 +31,7 @@ import com.echoledger.mobile.privilege.HelperConnection
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -593,6 +594,111 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun adbCommand(): String = graph.helper.adbCommand()
+
+    // ---- Test translate (since v1.3, plan B3) ---------------------------------------------------------------------
+
+    private val _testFeed = MutableStateFlow<com.echoledger.mobile.translate.TranslateFeed?>(null)
+
+    /** The box text of the running test (null when none ran), for the preview on the Game and Watch pages. */
+    val testFeed: StateFlow<com.echoledger.mobile.translate.TranslateFeed?> = _testFeed.asStateFlow()
+
+    private var testJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Speaks the mode's test sentence with the phone's text-to-speech and plays it through Live Translate (Soniox,
+     * the phone's real settings) at its real pace, so the preview shows what the box would show.
+     */
+    fun testTranslate(mode: com.echoledger.mobile.translate.TranslateMode) {
+        testJob?.cancel()
+        testJob = viewModelScope.launch(Dispatchers.IO) {
+            _testFeed.value = com.echoledger.mobile.translate.TranslateFeed(
+                status = com.echoledger.mobile.translate.TranslateFeed.Status.CONNECTING,
+                notice = "Preparing the test voice…"
+            )
+            val (locale, text) = com.echoledger.mobile.translate.TestTranslate.sentence(mode)
+            val wav = com.echoledger.mobile.translate.TestTranslate.synthesize(getApplication(), locale, text)
+            val frames = wav?.let { com.echoledger.mobile.translate.TestTranslate.frames(it) }.orEmpty()
+            if (frames.isEmpty()) {
+                _testFeed.value = com.echoledger.mobile.translate.TranslateFeed(
+                    status = com.echoledger.mobile.translate.TranslateFeed.Status.STOPPED,
+                    notice = "This phone has no ${locale.displayLanguage} voice for the test. Add it in Settings → Text-to-speech."
+                )
+                return@launch
+            }
+            val prefs = graph.settings.current().liveTranslate
+            val (target, hints, speed) = if (mode == com.echoledger.mobile.translate.TranslateMode.GAME) {
+                Triple(prefs.game.target, prefs.game.spoken, prefs.game.speed)
+            } else {
+                Triple(prefs.watch.target, prefs.watch.spoken, prefs.watch.speed)
+            }
+            val usage = com.echoledger.mobile.translate.TranslateUsage(getApplication())
+            val session = com.echoledger.mobile.translate.LiveTranslateSession(
+                okhttp3.OkHttpClient(),
+                this,
+                com.echoledger.mobile.translate.SpeedPreset.of(speed),
+                fetchToken = {
+                    val api =
+                        graph.api() ?: throw com.echoledger.mobile.translate.TokenUnavailable("Pair this phone first.", permanent = true)
+                    try {
+                        api.liveTranslateToken(mode.key, target, hints, continueOverBudget = prefs.budgetOverrideMonth == usage.month())
+                    } catch (e: com.echoledger.mobile.net.ApiException) {
+                        throw com.echoledger.mobile.translate.TokenUnavailable(e.message, permanent = true)
+                    }
+                },
+                onOpenMs = { usage.add(mode, it) }
+            )
+            val watcher = launch { session.feed.collect { _testFeed.value = it } }
+            frames.forEach { frame ->
+                session.send(listOf(frame))
+                delay(100)
+            }
+            session.speechEnded()
+            delay(4_000)
+            session.stop()
+            watcher.cancel()
+        }
+    }
+
+    fun clearTestTranslate() {
+        testJob?.cancel()
+        _testFeed.value = null
+    }
+
+    // ---- Audio probe (since v1.3, plan B0) ------------------------------------------------------------------------
+
+    /** The players the helper sees right now; empty without a helper. */
+    suspend fun probePlayers(): List<com.echoledger.mobile.translate.ProbePlayer> = withContext(Dispatchers.IO) {
+        val h = graph.helper.helper ?: return@withContext emptyList()
+        com.echoledger.mobile.translate.AudioProbe.parse(runCatching { h.players() }.getOrNull())
+    }
+
+    /**
+     * Arms a mix for [player]'s app (beside the picked games), then captures [seconds] of its sound: the 16 kHz PCM
+     * and why nothing came, if so. [onLevel] gets the level (0-1) of each 100 ms.
+     */
+    suspend fun probeCapture(
+        player: com.echoledger.mobile.translate.ProbePlayer,
+        seconds: Int,
+        onLevel: (Float) -> Unit
+    ): Pair<ShortArray, String?> = withContext(Dispatchers.IO) {
+        val h = graph.helper.helper ?: return@withContext ShortArray(0) to "The capture helper is not running."
+        val source = com.echoledger.mobile.translate.HelperAppSource(
+            h,
+            player.uid,
+            if (player.voiceChat) player.usage else 0,
+            voiceChat = player.voiceChat
+        )
+        val frames = java.util.Collections.synchronizedList(mutableListOf<ShortArray>())
+        val problem = source.start({ frame ->
+            frames += frame
+            onLevel((com.echoledger.mobile.translate.SpeechGate.rms(frame) / 8_000.0).toFloat().coerceIn(0f, 1f))
+        }, {})
+        if (problem != null) return@withContext ShortArray(0) to problem
+        delay(seconds * 1_000L)
+        source.stop()
+        val all = synchronized(frames) { frames.flatMap { it.asList() }.toShortArray() }
+        all to null
+    }
 
     companion object {
         const val NOT_A_PAIRING_QR = "That isn't an EchoLedger pairing code. In your admin open Devices → Pair a device."

@@ -41,6 +41,10 @@ class HelperConnectionTest : AppTest() {
         override fun selfTest(): String = "ok"
 
         override fun captureChannels(): Int = 2
+        override fun players(): String = "[]"
+        override fun armApps(uids: IntArray?, voiceChat: Boolean): String = "armed"
+        override fun startAppCapture(sink: android.os.ParcelFileDescriptor?, uid: Int, usage: Int, voiceChat: Boolean): Boolean = false
+        override fun stopAppCapture() = Unit
 
         override fun stopCapture() = Unit
 
@@ -146,6 +150,10 @@ class HelperConnectionTest : AppTest() {
             override fun setCallApps(packages: Array<out String>?) = Unit
             override fun selfTest(): String = "ok"
             override fun captureChannels(): Int = 2
+            override fun players(): String = "[]"
+            override fun armApps(uids: IntArray?, voiceChat: Boolean): String = "armed"
+            override fun startAppCapture(sink: android.os.ParcelFileDescriptor?, uid: Int, usage: Int, voiceChat: Boolean): Boolean = false
+            override fun stopAppCapture() = Unit
             override fun stopCapture() = Unit
             override fun setCallListener(listener: ICallListener?) = Unit
             override fun destroy() = Unit

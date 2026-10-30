@@ -11,6 +11,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -78,6 +81,7 @@ import com.echoledger.mobile.ui.LockScreen
 import com.echoledger.mobile.ui.LockState
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.Method
+import com.echoledger.mobile.ui.Motion
 import com.echoledger.mobile.ui.OnboardingScreen
 import com.echoledger.mobile.ui.PairingScreen
 import com.echoledger.mobile.ui.RecordMode
@@ -93,6 +97,7 @@ import com.echoledger.mobile.ui.UnlockPrompter
 import com.echoledger.mobile.ui.applySecureScreen
 import com.echoledger.mobile.ui.capabilities
 import com.echoledger.mobile.ui.design.EchoBottomBar
+import com.echoledger.mobile.ui.design.LocalSharedScopes
 import com.echoledger.mobile.ui.design.NavTab
 import com.echoledger.mobile.ui.design.RecordingStrip
 import com.echoledger.mobile.ui.formatDuration
@@ -155,6 +160,7 @@ class MainActivity : FragmentActivity() {
         intent.getStringExtra(EXTRA_OPEN)?.let { openRequest.value = it }
     }
 
+    @OptIn(ExperimentalSharedTransitionApi::class)
     @Composable
     private fun Content() {
         val settingsState by vm.settingsState.collectAsState()
@@ -407,55 +413,70 @@ class MainActivity : FragmentActivity() {
 
                         showSetup -> SetupScreen(vm, caps, onBack = { showSetup = false }, onRecheck = { recheck++ })
 
-                        openItem != null -> SessionScreen(vm, openItem, onBack = {
-                            showItem(null)
-                            openAtMs = null
-                        }, startAtMs = openAtMs, onCaptureTest = {
-                            showItem(null)
-                            showSetup = true
-                        })
+                        // A row opens its recording with a shared transition (since v1.3): the app tile and the title
+                        // move into place; the rest fades.
+                        else -> SharedTransitionLayout {
+                            AnimatedContent(
+                                targetState = openItem,
+                                contentKey = { it?.id },
+                                transitionSpec = { fadeIn(tween(Motion.SLOW)) togetherWith fadeOut(tween(Motion.FAST)) },
+                                label = "recording"
+                            ) { open ->
+                                CompositionLocalProvider(LocalSharedScopes provides (this@SharedTransitionLayout to this@AnimatedContent)) {
+                                    if (open != null) {
+                                        SessionScreen(vm, open, onBack = {
+                                            showItem(null)
+                                            openAtMs = null
+                                        }, startAtMs = openAtMs, onCaptureTest = {
+                                            showItem(null)
+                                            showSetup = true
+                                        })
+                                    } else {
+                                        AnimatedContent(
+                                            targetState = tab,
+                                            transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                            label = "tab"
+                                        ) { current ->
+                                            when (current) {
+                                                TAB_CLIENTS -> ClientsScreen(vm, onOpenItem = { showItem(it) }, scrollToTop = reselected)
 
-                        else -> AnimatedContent(
-                            targetState = tab,
-                            transitionSpec = { fadeIn() togetherWith fadeOut() },
-                            label = "tab"
-                        ) { current ->
-                            when (current) {
-                                TAB_CLIENTS -> ClientsScreen(vm, onOpenItem = { showItem(it) }, scrollToTop = reselected)
+                                                TAB_RECORD -> RecordScreen(vm, caps, onSetup = { showSetup = true }, mode = recordMode)
 
-                                TAB_RECORD -> RecordScreen(vm, caps, onSetup = { showSetup = true }, mode = recordMode)
+                                                TAB_ACTIVITY -> ActivityScreen(
+                                                    load = { vm.activity() },
+                                                    markRead = { vm.markActivityRead(it) },
+                                                    onOpen = { id -> openSession = id },
+                                                    onUnread = { activityUnread = it },
+                                                    waiting = pending.filter { it.state == "pending_decision" },
+                                                    onOpenWaiting = {
+                                                        recordMode = RecordMode.CALLS
+                                                        tab = TAB_RECORD
+                                                    },
+                                                    scrollToTop = reselected
+                                                )
 
-                                TAB_ACTIVITY -> ActivityScreen(
-                                    load = { vm.activity() },
-                                    markRead = { vm.markActivityRead(it) },
-                                    onOpen = { id -> openSession = id },
-                                    onUnread = { activityUnread = it },
-                                    waiting = pending.filter { it.state == "pending_decision" },
-                                    onOpenWaiting = {
-                                        recordMode = RecordMode.CALLS
-                                        tab = TAB_RECORD
-                                    },
-                                    scrollToTop = reselected
-                                )
+                                                TAB_YOU -> SettingsScreen(vm, onSetup = { showSetup = true })
 
-                                TAB_YOU -> SettingsScreen(vm, onSetup = { showSetup = true })
-
-                                else -> LibraryScreen(
-                                    vm,
-                                    showCallSetup = caps.callCaptureSupportedByOs && !caps.helperConnected,
-                                    onSetup = { showSetup = true },
-                                    onOpenAt = { item, ms ->
-                                        openAtMs = ms
-                                        showItem(item)
-                                    },
-                                    waiting = pending.filter { it.state == "pending_decision" },
-                                    onOpenWaiting = {
-                                        recordMode = RecordMode.CALLS
-                                        tab = TAB_RECORD
-                                    },
-                                    onSelecting = { librarySelecting = it },
-                                    scrollToTop = reselected
-                                ) { showItem(it) }
+                                                else -> LibraryScreen(
+                                                    vm,
+                                                    showCallSetup = caps.callCaptureSupportedByOs && !caps.helperConnected,
+                                                    onSetup = { showSetup = true },
+                                                    onOpenAt = { item, ms ->
+                                                        openAtMs = ms
+                                                        showItem(item)
+                                                    },
+                                                    waiting = pending.filter { it.state == "pending_decision" },
+                                                    onOpenWaiting = {
+                                                        recordMode = RecordMode.CALLS
+                                                        tab = TAB_RECORD
+                                                    },
+                                                    onSelecting = { librarySelecting = it },
+                                                    scrollToTop = reselected
+                                                ) { showItem(it) }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

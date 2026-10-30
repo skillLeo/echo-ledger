@@ -190,6 +190,22 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
+    fun `Add title or client on the card asks for the app's own card and decides nothing`() {
+        var details = 0
+        var decided = 0
+        compose.setContent {
+            EchoLedgerTheme("light") {
+                DecisionCard("whatsapp", 272_000, onKeep = { decided++ }, onDiscard = { decided++ }, onDetails = { details++ })
+            }
+        }
+
+        compose.onNodeWithText("Add title or client").performClick()
+
+        assertEquals(1, details)
+        assertEquals(0, decided)
+    }
+
+    @Test
     fun `a recording that captured no sound says so in a notification`() {
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
 

@@ -49,6 +49,20 @@ class FarPartyCapture(private val audioManager: AudioManager, val sampleRate: In
 
     val armed: Boolean get() = policy != null
 
+    /** UIDs the call mix leaves alone (picked games); see [exclude]. */
+    @Volatile private var excludedUids: Set<Int> = emptySet()
+
+    /** Leaves these UIDs to their own mix; re-registers now unless a call is being recorded (then at the next arm). */
+    @Synchronized
+    fun exclude(uids: Set<Int>) {
+        if (uids == excludedUids) return
+        excludedUids = uids
+        if (policy != null && record == null) {
+            disarm()
+            arm()
+        }
+    }
+
     init {
         runCatching { HiddenApiBypass.addHiddenApiExemptions("L") }
     }
@@ -76,6 +90,16 @@ class FarPartyCapture(private val audioManager: AudioManager, val sampleRate: In
         } else {
             ruleBuilderClass.getMethod("addRule", AudioAttributes::class.java, Int::class.javaPrimitiveType)
                 .invoke(ruleBuilder, usage, RULE_MATCH_ATTRIBUTE_USAGE)
+        }
+        // Picked games (Live Translate) are left to their own mix: Android gives a player to one mix only.
+        excludedUids.forEach { uid ->
+            runCatching {
+                ruleBuilderClass.getMethod(
+                    "excludeMixRule",
+                    Int::class.javaPrimitiveType,
+                    Any::class.java
+                ).invoke(ruleBuilder, AppAudioMix.RULE_MATCH_UID, uid)
+            }
         }
         // Voice-communication capture only. Never allowPrivilegedPlaybackCapture: it limits the mix to 16 kHz mono.
         runCatching {

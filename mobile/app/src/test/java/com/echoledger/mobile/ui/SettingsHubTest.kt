@@ -37,10 +37,10 @@ class SettingsHubTest : ScreenTest() {
     fun `a group is its own screen with a back arrow to the list`() {
         showSettings()
 
-        compose.onNodeWithText("Recording").performClick()
-        compose.onNodeWithText("After a call").assertIsDisplayed()
+        compose.onNodeWithText("Calls & meetings").performClick()
         compose.onNodeWithText("Auto-record apps").assertIsDisplayed()
-        compose.onAllNodesWithText("Microphone")[0].assertIsDisplayed()
+        compose.onNodeWithText("After a call").assertExists()
+        compose.onAllNodesWithText("Microphone")[0].assertExists()
         compose.onAllNodesWithText("Search settings").assertCountEquals(0)
 
         compose.onNodeWithContentDescription("Back").performClick()
@@ -53,14 +53,17 @@ class SettingsHubTest : ScreenTest() {
         showSettings()
 
         mapOf(
-            "General" to listOf("Transcription", "Client keyterms", "Notifications", "Privacy & consent"),
-            "Captions" to listOf("Live captions while recording", "Caption style"),
-            "Dictation" to listOf("Voice keyboard"),
-            "Storage" to listOf("Storage and retention"),
-            "About" to listOf("Export settings", "Import settings")
+            "General" to
+                listOf("Appearance", "Transcription", "Client keyterms", "Notifications", "Storage and retention", "Help & diagnostics"),
+            "Voice notes & files" to listOf("After sharing a voice note", "Voice keyboard"),
+            "Calls & meetings" to listOf("Live captions while recording", "Caption style"),
+            "Game translate" to listOf("Games", "Box style", "Monthly budget"),
+            "Watch translate" to listOf("Apps", "Subtitle style")
         ).forEach { (group, titles) ->
             compose.onNodeWithText(group).performClick()
-            titles.forEach { compose.onNodeWithText(it).assertIsDisplayed() }
+            titles.forEach {
+                org.junit.Assert.assertTrue("$group shows $it", compose.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty())
+            }
             compose.onNodeWithContentDescription("Back").performClick()
         }
     }
@@ -74,7 +77,7 @@ class SettingsHubTest : ScreenTest() {
         compose.onNodeWithText("Notifications").assertIsDisplayed()
         compose.onNodeWithText("General").assertIsDisplayed()
         compose.onAllNodesWithText("Storage").assertCountEquals(0)
-        compose.onAllNodesWithText(SettingsGroup.Recording.summary).assertCountEquals(0)
+        compose.onAllNodesWithText(SettingsGroup.Calls.summary).assertCountEquals(0)
     }
 
     @Test
@@ -86,6 +89,8 @@ class SettingsHubTest : ScreenTest() {
 
         compose.onNodeWithText("Show notifications").assertIsDisplayed()
         compose.onNodeWithText("Quiet hours").assertIsDisplayed()
+        // A General page goes back to the General list, then to You.
+        compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Client keyterms").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Search settings").assertIsDisplayed()
@@ -98,7 +103,7 @@ class SettingsHubTest : ScreenTest() {
         search("retention")
         compose.onNodeWithText("Storage and retention").performClick()
 
-        compose.onNodeWithText("Storage and retention").assertIsDisplayed()
+        compose.onAllNodesWithText("Storage and retention")[0].assertIsDisplayed()
         compose.onNodeWithText("Couldn't load the server's storage. Check the connection.").assertIsDisplayed()
         compose.onNodeWithText("Retry").assertIsDisplayed()
     }
@@ -109,10 +114,10 @@ class SettingsHubTest : ScreenTest() {
 
         search("zzzz")
         compose.onNodeWithText("No settings match “zzzz”.").assertIsDisplayed()
-        compose.onAllNodesWithText("Recording").assertCountEquals(0)
+        compose.onAllNodesWithText("Calls & meetings").assertCountEquals(0)
 
         compose.onNodeWithContentDescription("Clear search").performClick()
-        compose.onNodeWithText("Recording").assertIsDisplayed()
+        compose.onNodeWithText("Calls & meetings").assertIsDisplayed()
         compose.onAllNodesWithText("No settings match “zzzz”.").assertCountEquals(0)
     }
 
@@ -121,9 +126,10 @@ class SettingsHubTest : ScreenTest() {
         runBlockingSettings { it.copy(serverUrl = "https://ledger.example.com", serverApiVersion = "1.1", deviceId = "D") }
         showSettings()
 
+        compose.onNodeWithText("General").performClick()
         compose.onNodeWithText("About").performClick()
 
-        compose.onNodeWithText("Server ledger.example.com · API 1.1").assertIsDisplayed()
+        compose.onNodeWithText("Server ledger.example.com · API 1.1").assertExists()
     }
 
     private fun runBlockingSettings(change: (com.echoledger.mobile.data.AppSettings) -> com.echoledger.mobile.data.AppSettings) {

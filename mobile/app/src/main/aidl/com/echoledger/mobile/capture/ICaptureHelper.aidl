@@ -22,6 +22,13 @@ interface ICaptureHelper {
     String selfTest() = 10;
     // Since v1.3: channels of the capture just started: 2 = me and the other side apart, 1 = both voices on one track.
     int captureChannels() = 11;
+    // Since v1.3 (Live Translate): the players the helper sees, as JSON (uid, packages, usage, content type, capture policy).
+    String players() = 12;
+    // Since v1.3: registers one mix per app before it plays ("armed" or "error: …"); an empty list removes them.
+    String armApps(in int[] uids, boolean voiceChat) = 13;
+    // Since v1.3: one app's sound as 16 kHz mono 16-bit PCM into the pipe until stopAppCapture(); usage 0 = all of it.
+    boolean startAppCapture(in ParcelFileDescriptor sink, int uid, int usage, boolean voiceChat) = 14;
+    void stopAppCapture() = 15;
     // Transaction reserved by Shizuku to destroy a UserService.
     void destroy() = 16777114;
 }

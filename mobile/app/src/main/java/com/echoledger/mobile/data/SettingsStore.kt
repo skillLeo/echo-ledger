@@ -90,7 +90,9 @@ data class AppSettings(
     /** Show text in the phone's own font instead of the bundled Inter (since v1.3; sizes always follow the phone). */
     val phoneFont: Boolean = false,
     /** The last five Library searches (since v1.3), newest first; this phone only. */
-    val recentSearches: List<String> = emptyList()
+    val recentSearches: List<String> = emptyList(),
+    /** Game and Watch translate (since v1.3, Phase B). */
+    val liveTranslate: com.echoledger.mobile.translate.LiveTranslatePrefs = com.echoledger.mobile.translate.LiveTranslatePrefs()
 ) {
     /** What happens to an undecided recording: "keep", "discard" or "wait" (the default; nothing is uploaded or paid for). */
     val afterCallTimeout: String get() = if (decisionTimeoutChosen) decisionTimeout else "wait"

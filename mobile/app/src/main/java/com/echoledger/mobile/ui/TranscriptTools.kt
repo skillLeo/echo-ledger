@@ -132,7 +132,9 @@ fun shareFile(context: Context, file: File) {
 }
 
 /** Prints the export's print page with the system print dialog ("Save as PDF" keeps Urdu and Hindi shaping right). */
-fun printHtml(context: Context, file: File) {
+suspend fun printHtml(context: Context, file: File) {
+    // A long call's page can be hundreds of KB: read it off the main thread, then hand it to the WebView there.
+    val html = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { file.readText() }
     val webView = WebView(context)
     webView.webViewClient = object : WebViewClient() {
         override fun onPageFinished(view: WebView, url: String?) {
@@ -141,7 +143,7 @@ fun printHtml(context: Context, file: File) {
             manager.print(name, view.createPrintDocumentAdapter(name), PrintAttributes.Builder().build())
         }
     }
-    webView.loadDataWithBaseURL(null, file.readText(), "text/html", "UTF-8", null)
+    webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
 }
 
 /** Export and share buttons of a finished transcript. */

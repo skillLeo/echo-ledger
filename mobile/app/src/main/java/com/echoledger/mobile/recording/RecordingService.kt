@@ -179,9 +179,85 @@ class RecordingService : LifecycleService() {
             graph.settings.settings.collect {
                 // The call-app list reaches the helper as soon as it is edited.
                 if (it.extraCallApps != settings.extraCallApps) graph.helper.setCallApps(CallTargets.packages(it.extraCallApps))
+                // Picked games: their mixes are armed before the game plays, and they are never call apps.
+                graph.helper.setGames(it.liveTranslate.game.games.toSet())
                 settings = it
             }
         }
+        // Game translate starts with a picked game's voice chat and stops a minute after the game has gone (plan B3).
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val watch = com.echoledger.mobile.translate.GameWatch()
+            var startedByUs = false
+            while (true) {
+                kotlinx.coroutines.delay(com.echoledger.mobile.translate.GameWatch.POLL_MS)
+                val game = settings.liveTranslate.game
+                val helper = graph.helper.helper ?: continue
+                if (game.games.isEmpty()) continue
+                val running =
+                    com.echoledger.mobile.translate.LiveTranslateService.running.value == com.echoledger.mobile.translate.TranslateMode.GAME
+                if (!running) startedByUs = false
+                val players = com.echoledger.mobile.translate.AudioProbe.parse(runCatching { helper.players() }.getOrNull())
+                when (
+                    val action = watch.decide(
+                        players,
+                        game.games,
+                        game.autoStart,
+                        running,
+                        startedByUs,
+                        android.os.SystemClock.elapsedRealtime()
+                    )
+                ) {
+                    is com.echoledger.mobile.translate.GameWatch.Action.Start -> {
+                        startedByUs = startTranslate(action.packageName)
+                    }
+
+                    com.echoledger.mobile.translate.GameWatch.Action.Stop -> {
+                        com.echoledger.mobile.translate.LiveTranslateService.stop(this@RecordingService)
+                        startedByUs = false
+                    }
+
+                    com.echoledger.mobile.translate.GameWatch.Action.None -> Unit
+                }
+            }
+        }
+    }
+
+    /**
+     * Starts Game translate for [pkg] from this (foreground) service. If Android refuses a start from here, a quiet
+     * notification offers it in one tap instead; nothing ever opens over the game.
+     */
+    private fun startTranslate(pkg: String): Boolean = runCatching {
+        startForegroundService(
+            com.echoledger.mobile.translate.LiveTranslateService.startIntent(this, com.echoledger.mobile.translate.TranslateMode.GAME, pkg)
+        )
+        CaptureLog.add(this, "translate", "game translate started for $pkg")
+        true
+    }.getOrElse {
+        CaptureLog.add(this, "translate", "game translate could not start by itself: ${it.javaClass.simpleName}")
+        com.echoledger.mobile.translate.LiveTranslateService.createChannel(this)
+        val tap = android.app.PendingIntent.getActivity(
+            this,
+            41,
+            com.echoledger.mobile.translate.TranslateToggleActivity.intent(
+                this,
+                com.echoledger.mobile.translate.TranslateMode.GAME,
+                pkg,
+                startOnly = true
+            ),
+            android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        getSystemService(android.app.NotificationManager::class.java).notify(
+            com.echoledger.mobile.translate.LiveTranslateService.NOTIFICATION_PROBLEM_ID,
+            androidx.core.app.NotificationCompat.Builder(this, com.echoledger.mobile.translate.LiveTranslateService.CHANNEL)
+                .setSmallIcon(com.echoledger.mobile.R.drawable.ic_stat_rec)
+                .setContentTitle("Game translate")
+                .setContentText("Your game's voice chat started. Tap to translate it.")
+                .setContentIntent(tap)
+                .setAutoCancel(true)
+                .setSilent(true)
+                .build()
+        )
+        false
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

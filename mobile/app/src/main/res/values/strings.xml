@@ -11,6 +11,9 @@
     <string name="channel_decisions_desc">Asks after a call whether to keep it, and says when a call could not be recorded</string>
     <string name="channel_activity">Transcripts ready</string>
     <string name="channel_activity_desc">Finished transcripts, failed uploads, new devices and the monthly limit</string>
+    <string name="channel_live_translate">Live Translate</string>
+    <string name="tile_game_translate">Game translate</string>
+    <string name="tile_watch_translate">Watch translate</string>
     <string name="voice_keyboard_label">EchoLedger voice keyboard</string>
     <string name="caller_names_label">EchoLedger caller names</string>
     <string name="voice_keyboard_subtype">Dictation</string>

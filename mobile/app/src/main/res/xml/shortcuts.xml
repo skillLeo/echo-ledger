@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live Translate on and off (plan B2): long-press the app icon, or use them from Samsung Routines or a back tap. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="game_translate"
+        android:shortcutShortLabel="@string/tile_game_translate">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.echoledger.mobile.translate.TranslateToggleActivity"
+            android:targetPackage="com.echoledger.mobile">
+            <extra android:name="mode" android:value="game" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="watch_translate"
+        android:shortcutShortLabel="@string/tile_watch_translate">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.echoledger.mobile.translate.TranslateToggleActivity"
+            android:targetPackage="com.echoledger.mobile">
+            <extra android:name="mode" android:value="watch" />
+        </intent>
+    </shortcut>
+</shortcuts>

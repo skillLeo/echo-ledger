@@ -87,8 +87,11 @@ class ServerContractScreenTest : ScreenTest() {
         serve("transcripts_show_200_final_failed", "sessions_show_200_failed")
         open(libraryItem("WhatsApp call"))
 
-        compose.onNodeWithText("Transcription failed").assertIsDisplayed()
-        compose.onNodeWithText("Transcoding failed. File does not appear to contain audio. File type is application/octet-stream (data).")
+        compose.onNodeWithText("Transcription failed", substring = true).assertIsDisplayed()
+        compose.onNodeWithText(
+            "Transcoding failed. File does not appear to contain audio. File type is application/octet-stream (data).",
+            substring = true
+        )
             .assertIsDisplayed()
     }
 

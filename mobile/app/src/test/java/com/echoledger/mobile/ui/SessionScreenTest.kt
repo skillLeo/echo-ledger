@@ -3,11 +3,14 @@ package com.echoledger.mobile.ui
 import android.content.ClipboardManager
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.ProgressDto
@@ -154,7 +157,11 @@ class SessionScreenTest : ScreenTest() {
         showSession()
         awaitText("Hello there.")
 
-        compose.onNodeWithText("Hi, thanks for calling.").assertIsNotEnabled()
+        // A line still offers Copy and Share on a long-press, but nothing to play.
+        compose.onNodeWithText("Hi, thanks for calling.").performClick()
+        compose.onNodeWithText("Hi, thanks for calling.").performTouchInput { longClick() }
+        compose.onNodeWithText("Copy line").assertExists()
+        compose.onAllNodesWithText("Play from here").assertCountEquals(0)
     }
 
     @Test
@@ -236,7 +243,7 @@ class SessionScreenTest : ScreenTest() {
         showSession(item(finalStatus = "failed"))
         awaitText("Transcription failed")
 
-        compose.onNodeWithText("The speech provider could not decode this file.").assertIsDisplayed()
+        compose.onNodeWithText("The speech provider could not decode this file.", substring = true).assertIsDisplayed()
         compose.onAllNodesWithText("Copy text").assertCountEquals(0)
     }
 
@@ -299,6 +306,48 @@ class SessionScreenTest : ScreenTest() {
 
         assertEquals("[0:00] Me: Hello there.\n[0:12] Client: Hi, thanks for calling.", clipboardText())
         assertNotNull(app.getSystemService(ClipboardManager::class.java).primaryClipDescription)
+    }
+
+    // ---- find and line actions ------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `Find in transcript counts the matching lines and steps through them`() {
+        serve()
+        showSession()
+        awaitText("Hello there.")
+
+        compose.onNodeWithContentDescription("Find in transcript").performClick()
+        compose.onNodeWithContentDescription("Find in transcript").performTextInput("THANKS")
+        awaitText("1 of 1")
+        compose.onNodeWithContentDescription("Find in transcript").performTextClearance()
+        compose.onNodeWithContentDescription("Find in transcript").performTextInput("zebra")
+        awaitText("No matches")
+
+        compose.onNodeWithContentDescription("Close find").performClick()
+        compose.onAllNodesWithText("No matches").assertCountEquals(0)
+    }
+
+    @Test
+    fun `long-pressing a line offers to copy it with the speaker`() {
+        serve()
+        showSession()
+        awaitText("Hello there.")
+
+        compose.onNodeWithText("Hi, thanks for calling.").performTouchInput { longClick() }
+        compose.onNodeWithText("Copy line").performClick()
+
+        compose.waitForIdle()
+        assertEquals("Client: Hi, thanks for calling.", clipboardText())
+        compose.onNodeWithText("Share line").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the matcher ignores case and accents and skips blank queries`() {
+        val lines = listOf("Meeting kab hai?", "Café at noon", "nothing")
+        assertEquals(listOf(0), TranscriptFind.matches(lines, "MEETING"))
+        assertEquals(listOf(1), TranscriptFind.matches(lines, "cafe"))
+        assertEquals(emptyList<Int>(), TranscriptFind.matches(lines, "   "))
+        assertEquals("2 of 3", TranscriptFind.counter(1, 3))
     }
 
     // ---- navigation and deletion ----------------------------------------------------------------------------------------------

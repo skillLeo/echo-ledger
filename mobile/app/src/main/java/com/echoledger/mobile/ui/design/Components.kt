@@ -303,6 +303,7 @@ fun RecordingRow(
     status: (@Composable () -> Unit)? = null,
     badge: (@Composable () -> Unit)? = null,
     stateLabel: String? = null,
+    sharedKey: String? = null,
     divider: Boolean = true
 ) {
     val c = LocalEchoColors.current
@@ -327,7 +328,17 @@ fun RecordingRow(
                 .padding(horizontal = Space.screen, vertical = Space.s3),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(Modifier.size(44.dp).combinedClickable(onClick = onTileClick, role = Role.Checkbox)) {
+            Box(
+                Modifier.size(44.dp).then(
+                    if (sharedKey !=
+                        null
+                    ) {
+                        Modifier.sharedElement("tile-$sharedKey")
+                    } else {
+                        Modifier
+                    }
+                ).combinedClickable(onClick = onTileClick, role = Role.Checkbox)
+            ) {
                 AnimatedContent(
                     targetState = selecting && selected,
                     transitionSpec = { fadeIn(tween(Motion.BASE)) togetherWith fadeOut(tween(Motion.BASE)) },
@@ -357,7 +368,15 @@ fun RecordingRow(
                             color = c.text,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
+                            modifier = Modifier.weight(1f, fill = false).then(
+                                if (sharedKey !=
+                                    null
+                                ) {
+                                    Modifier.sharedElement("title-$sharedKey")
+                                } else {
+                                    Modifier
+                                }
+                            )
                         )
                         if (pinned) {
                             Spacer(Modifier.width(Space.s1))

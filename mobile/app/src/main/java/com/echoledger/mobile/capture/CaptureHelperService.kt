@@ -562,8 +562,78 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         captureThread = null
     }
 
+    // ---- Live Translate (since v1.3, plan B0/B1): one app's sound, never a call -------------------------------------
+
+    /** Mixes registered ahead of time, per UID (Android routes a player when it is created). */
+    private val appMixes = java.util.concurrent.ConcurrentHashMap<Int, AppAudioMix>()
+
+    @Volatile private var appCapturing = false
+    private var appThread: Thread? = null
+    private var appMix: AppAudioMix? = null
+
+    override fun players(): String = asHelper {
+        AppAudioMix.players(audioManager) { uid -> context.packageManager.getPackagesForUid(uid)?.toList().orEmpty() }
+    }
+
+    override fun armApps(uids: IntArray?, voiceChat: Boolean): String = asHelper {
+        val wanted = uids?.filter { it > 0 }?.toSet().orEmpty()
+        farMix.exclude(wanted)
+        appMixes.keys.filter { it !in wanted && appMix?.uid != it }.forEach { appMixes.remove(it)?.disarm() }
+        val problems = wanted.mapNotNull { uid ->
+            appMixes.getOrPut(uid) { AppAudioMix(audioManager, uid, usage = 0, voiceChat = voiceChat) }.arm()?.let { "$uid: $it" }
+        }
+        if (problems.isEmpty()) "armed" else "error: ${problems.joinToString("; ")}"
+    }
+
+    override fun startAppCapture(sink: ParcelFileDescriptor, uid: Int, usage: Int, voiceChat: Boolean): Boolean = asHelper {
+        stopAppCapture()
+        // A mix armed before the app started is the one that hears it; a new one only hears players made from now on.
+        val mix = appMixes[uid]?.takeIf { usage == 0 } ?: AppAudioMix(audioManager, uid, usage, voiceChat)
+        val record = runCatching { mix.open(context) }.getOrElse {
+            report("Live Translate could not hear the app: ${FarPartyCapture.reason(it)}")
+            if (appMixes[uid] !== mix) mix.disarm()
+            runCatching { sink.close() }
+            return@asHelper false
+        }
+        appMix = mix
+        appCapturing = true
+        appThread = thread(name = "el-helper-translate") {
+            val out = FileOutputStream(sink.fileDescriptor)
+            val buf = ShortArray(AppAudioMix.RATE / 10)
+            val bytes = ByteArray(buf.size * 2)
+            try {
+                while (appCapturing) {
+                    val n = record.read(buf, 0, buf.size)
+                    if (n < 0) break
+                    for (i in 0 until n) {
+                        bytes[2 * i] = (buf[i].toInt() and 0xff).toByte()
+                        bytes[2 * i + 1] = (buf[i].toInt() shr 8 and 0xff).toByte()
+                    }
+                    out.write(bytes, 0, n * 2)
+                }
+            } catch (_: java.io.IOException) {
+                // The app closed its end: Live Translate stopped.
+            } finally {
+                runCatching { out.close() }
+                runCatching { sink.close() }
+                if (appMixes[mix.uid] === mix) mix.close() else mix.disarm()
+                appCapturing = false
+            }
+        }
+        true
+    }
+
+    override fun stopAppCapture() {
+        appCapturing = false
+        appThread?.join(1_000)
+        appThread = null
+        appMix = null
+    }
+
     override fun destroy() {
         stopCapture()
+        stopAppCapture()
+        appMixes.values.forEach { it.disarm() }
         farMix.disarm()
         System.exit(0)
     }
