@@ -36,6 +36,14 @@ final class SettingsRepository
         'elevenlabs.model_id' => 'scribe_v2',
         'elevenlabs.realtime_model_id' => 'scribe_v2_realtime',
         'soniox.async_model' => 'stt-async-v5',          // docs: soniox.com/docs/stt/models (2026-10)
+        // Live Translate (plan B): the phone streams to Soniox with a temporary key; nothing passes through here.
+        'live_translate.model' => 'stt-rt-v5',
+        'live_translate.monthly_usd' => 10.0,           // Live Translate's own monthly cap (warn at 80 %, pause at 100 %)
+        'live_translate.game_target' => 'en',
+        'live_translate.game_spoken' => ['ar', 'en'],
+        'live_translate.game_speed' => 'fastest',       // fastest | balanced | accurate
+        'live_translate.watch_target' => 'ur',
+        'live_translate.watch_speed' => 'balanced',
         'claude.model' => 'claude-sonnet-5-5',           // Show as (Roman Urdu / اردو / English views), plan A3
         'views.default_ur' => 'roman',                   // the view Urdu and mixed calls open in (plan A3)
         'views.default_en' => 'original',                // English calls (the Urdu translation is one tap away)
@@ -72,7 +80,7 @@ final class SettingsRepository
             'assemblyai' => ['live_captions' => 0.45, 'dictation' => 0.45, 'final_transcript' => 0.26, 'voice_note' => 0.26],
             'elevenlabs' => ['live_captions' => 0.47, 'dictation' => 0.47, 'final_transcript' => 0.27, 'voice_note' => 0.27],
             'azure_mai' => ['final_transcript' => 0.10, 'voice_note' => 0.10],
-            'soniox' => ['final_transcript' => 0.10, 'voice_note' => 0.10],
+            'soniox' => ['final_transcript' => 0.10, 'voice_note' => 0.10, 'game_translate' => 0.18, 'watch_translate' => 0.18],
             'groq' => ['final_transcript' => 0.111, 'voice_note' => 0.111],
         ],
     ];

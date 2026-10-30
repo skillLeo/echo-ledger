@@ -59,6 +59,12 @@ final class SettingsTransfer
         'budget.monthly_usd',
         'budget.warn_percent',
         'budget.prices',
+        'live_translate.game_target',
+        'live_translate.game_spoken',
+        'live_translate.game_speed',
+        'live_translate.monthly_usd',
+        'live_translate.watch_target',
+        'live_translate.watch_speed',
     ];
 
     public function __construct(private readonly SettingsRepository $settings) {}

@@ -19,6 +19,8 @@ final class SettingsSearch
         'privacy' => 'Privacy & security',
         'devices' => 'Devices',
         'storage' => 'Storage',
+        'game' => 'Game translate',
+        'watch' => 'Watch translate',
         'about' => 'About',
     ];
 
@@ -41,6 +43,8 @@ final class SettingsSearch
         'retention' => ['storage', 'Storage and retention', 'delete days undo bin recordings transcripts erase 48 hours'],
         'limit' => ['storage', 'Monthly limit', 'budget minutes dollars usd warn percent prices cost usage'],
         'plan' => ['storage', 'Plan limits', 'plan workspace minutes gigabytes pairings quota raise'],
+        'game' => ['game', 'Game translate', 'live translate pubg codm voice chat arabic english speed budget soniox cost dollars'],
+        'watch' => ['watch', 'Watch translate', 'live translate subtitles films videos youtube urdu speed soniox'],
         'about' => ['about', 'About', 'version export import backup settings file json'],
     ];
 

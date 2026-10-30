@@ -78,6 +78,14 @@ class Settings extends Page
         return $user instanceof User && $user->is_super_admin;
     }
 
+    /** Languages Live Translate hears and writes (the phone offers the same list). */
+    private const LIVE_TRANSLATE_LANGUAGES = [
+        'en' => 'English', 'ur' => 'Urdu', 'ar' => 'Arabic', 'hi' => 'Hindi', 'fa' => 'Persian', 'tr' => 'Turkish',
+        'ru' => 'Russian', 'es' => 'Spanish', 'fr' => 'French', 'de' => 'German', 'pt' => 'Portuguese', 'id' => 'Indonesian',
+    ];
+
+    private const LIVE_TRANSLATE_SPEEDS = ['fastest' => 'Fastest', 'balanced' => 'Balanced', 'accurate' => 'Accurate'];
+
     /** The Claude models offered for Show as. */
     private const CLAUDE_MODELS = [
         'claude-opus-5-5' => 'Claude Opus 5.5 (best)',
@@ -114,6 +122,12 @@ class Settings extends Page
             'languages_auto_fallback' => LanguageChoice::fallback(),
             'double_check' => (bool) ($all['accuracy.double_check'] ?? false),
             'claude_model' => (string) ($all['claude.model'] ?? 'claude-sonnet-5-5'),
+            'live_translate_game_target' => (string) ($all['live_translate.game_target'] ?? 'en'),
+            'live_translate_game_spoken' => array_values(array_intersect(array_keys(self::LIVE_TRANSLATE_LANGUAGES), (array) ($all['live_translate.game_spoken'] ?? ['ar', 'en']))),
+            'live_translate_game_speed' => (string) ($all['live_translate.game_speed'] ?? 'fastest'),
+            'live_translate_monthly_usd' => $all['live_translate.monthly_usd'] ?? 10.0,
+            'live_translate_watch_target' => (string) ($all['live_translate.watch_target'] ?? 'ur'),
+            'live_translate_watch_speed' => (string) ($all['live_translate.watch_speed'] ?? 'balanced'),
             'views_default_ur' => (string) ($all['views.default_ur'] ?? 'roman'),
             'views_default_en' => (string) ($all['views.default_en'] ?? 'original'),
             'views_default_ar' => (string) ($all['views.default_ar'] ?? 'original'),
@@ -148,7 +162,7 @@ class Settings extends Page
     public static function priceFields(): array
     {
         $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI', 'soniox' => 'Soniox', 'groq' => 'Groq Whisper'];
-        $useCases = ['live_captions' => 'Live captions', 'dictation' => 'Dictation', 'final_transcript' => 'Final transcript', 'voice_note' => 'Voice notes'];
+        $useCases = ['live_captions' => 'Live captions', 'dictation' => 'Dictation', 'final_transcript' => 'Final transcript', 'voice_note' => 'Voice notes', 'game_translate' => 'Game translate', 'watch_translate' => 'Watch translate'];
         $fields = [];
         foreach (SettingsRepository::DEFAULTS['budget.prices'] as $provider => $pairs) {
             foreach (array_keys($pairs) as $useCase) {
@@ -403,6 +417,28 @@ class Settings extends Page
                                 ->helperText('New pairings stop at the limit.'),
                         ]),
                 ]),
+                // Since v1.3 (Phase B): the phone's Game and Watch translate panels start from these; the phone
+                // streams to Soniox itself with a 10-minute key, so no audio reaches this server.
+                'game' => $this->tab('game', [
+                    $this->section('game')->columns(2)->schema([
+                        Select::make('live_translate_game_target')->label('Translate game voice chat to')
+                            ->options(self::LIVE_TRANSLATE_LANGUAGES)->required(),
+                        CheckboxList::make('live_translate_game_spoken')->label('Teammates speak')
+                            ->options(self::LIVE_TRANSLATE_LANGUAGES)->columns(3)
+                            ->helperText('None ticked: any language.'),
+                        Select::make('live_translate_game_speed')->label('Speed')->options(self::LIVE_TRANSLATE_SPEEDS)->required()
+                            ->helperText('Fastest shows words soonest; Accurate waits a little longer for whole sentences.'),
+                        TextInput::make('live_translate_monthly_usd')->label('Monthly Live Translate budget (US$)')->numeric()->minValue(0)->step(1)
+                            ->helperText('Game and Watch translate together, about $0.18 an hour. The phone warns at 80 % and pauses at 100 %. Empty: no budget.'),
+                    ]),
+                ]),
+                'watch' => $this->tab('watch', [
+                    $this->section('watch')->columns(2)->schema([
+                        Select::make('live_translate_watch_target')->label('Subtitles in')
+                            ->options(self::LIVE_TRANSLATE_LANGUAGES)->required(),
+                        Select::make('live_translate_watch_speed')->label('Speed')->options(self::LIVE_TRANSLATE_SPEEDS)->required(),
+                    ]),
+                ]),
                 'about' => $this->tab('about', [
                     $this->section('about')
                         ->description('Export these settings to a file, or load them from one with Import settings at the top of the page. The file never holds API keys, webhook secrets or passwords.')
@@ -592,6 +628,12 @@ class Settings extends Page
             'budget.warn_percent' => filled($state['warn_percent'] ?? null) ? (int) $state['warn_percent'] : 80,
             'budget.prices' => self::pricesFromState($state),
             'markers.tags' => SessionMarkers::presets($state['marker_tags'] ?? []),
+            'live_translate.game_target' => array_key_exists($state['live_translate_game_target'] ?? '', self::LIVE_TRANSLATE_LANGUAGES) ? $state['live_translate_game_target'] : 'en',
+            'live_translate.game_spoken' => array_values(array_intersect(array_keys(self::LIVE_TRANSLATE_LANGUAGES), (array) ($state['live_translate_game_spoken'] ?? []))),
+            'live_translate.game_speed' => array_key_exists($state['live_translate_game_speed'] ?? '', self::LIVE_TRANSLATE_SPEEDS) ? $state['live_translate_game_speed'] : 'fastest',
+            'live_translate.monthly_usd' => filled($state['live_translate_monthly_usd'] ?? null) ? max(0.0, round((float) $state['live_translate_monthly_usd'], 2)) : null,
+            'live_translate.watch_target' => array_key_exists($state['live_translate_watch_target'] ?? '', self::LIVE_TRANSLATE_LANGUAGES) ? $state['live_translate_watch_target'] : 'ur',
+            'live_translate.watch_speed' => array_key_exists($state['live_translate_watch_speed'] ?? '', self::LIVE_TRANSLATE_SPEEDS) ? $state['live_translate_watch_speed'] : 'balanced',
             'routing.final' => self::routingFromState($state),
         ]);
         // Plan limits live on the plan of the current workspace, not in settings (never exported).

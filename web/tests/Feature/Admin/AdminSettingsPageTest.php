@@ -498,7 +498,7 @@ it('shows no monthly limit, an 80 % warning and the default price table when not
         'price__azure_mai__final_transcript' => 0.10,
     ]);
     expect(array_column(Settings::priceFields(), 2))->toContain('AssemblyAI · Live captions', 'ElevenLabs · Final transcript', 'Azure MAI · Voice notes')
-        ->and(Settings::priceFields())->toHaveCount(14);
+        ->and(Settings::priceFields())->toHaveCount(16);
 });
 
 it('renders the monthly limit section with its labels and help text', function () {
@@ -579,4 +579,27 @@ it('shows the defaults again when stored limit values are not usable', function 
     $settings->set('budget.prices', ['assemblyai' => ['live_captions' => 'free']]);
 
     adminAssertFormShows(adminSettingsPage($this), ['monthly_minutes' => null, 'warn_percent' => 80, 'price__assemblyai__live_captions' => 0.45]);
+});
+
+it('saves the Live Translate defaults and hands them to the phone', function () {
+    $admin = $this->signInAsAdmin();
+    adminSettingsPage($this)->fillForm(adminChangedSettings([
+        'provider_final_transcript' => 'assemblyai',
+        'provider_live_captions' => 'assemblyai',
+        'live_translate_game_target' => 'ur',
+        'live_translate_game_spoken' => ['ar'],
+        'live_translate_game_speed' => 'accurate',
+        'live_translate_monthly_usd' => 25,
+        'live_translate_watch_target' => 'en',
+        'live_translate_watch_speed' => 'fastest',
+    ]))->call('save')->assertHasNoFormErrors();
+    $token = Device::factory()->create(['user_id' => $admin->id])->createToken('device', Device::ABILITIES)->plainTextToken;
+    $this->app['auth']->forgetGuards();
+
+    $config = $this->withToken($token)->getJson('/api/config')->assertOk();
+
+    expect($config->json('live_translate.game'))->toBe(['target' => 'ur', 'spoken' => ['ar'], 'speed' => 'accurate'])
+        ->and($config->json('live_translate.watch'))->toBe(['target' => 'en', 'speed' => 'fastest'])
+        ->and($config->json('live_translate.monthly_usd'))->toEqual(25)
+        ->and($config->json('live_translate.budget.reached'))->toBeFalse();
 });

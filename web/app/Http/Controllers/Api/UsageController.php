@@ -8,6 +8,7 @@ use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
+use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\Usage\UsageLedger;
 use App\Services\Usage\UsageSummary;
 use Illuminate\Http\JsonResponse;
@@ -26,8 +27,12 @@ final class UsageController extends Controller
         $device = $request->user();
         $data = $request->validate([
             'report_id' => ['required', 'string', 'regex:/^[A-Za-z0-9._:-]{8,64}$/'],
-            'use_case' => ['required', 'string', Rule::in([SttUseCase::LiveCaptions->value, SttUseCase::Dictation->value])],
-            'provider' => ['required', 'string', Rule::enum(SttProviderKey::class)],
+            'use_case' => ['required', 'string', Rule::in([
+                SttUseCase::LiveCaptions->value, SttUseCase::Dictation->value, SttUseCase::GameTranslate->value, SttUseCase::WatchTranslate->value,
+            ])],
+            // Live Translate is always Soniox (POST /api/live-translate/token).
+            'provider' => ['required', 'string', Rule::enum(SttProviderKey::class),
+                Rule::when(in_array($request->input('use_case'), LiveTranslateBudget::useCases(), true), [Rule::in([SttProviderKey::Soniox->value])])],
             'session_id' => ['nullable', 'string', 'size:26'],
             'streamed_ms' => ['required', 'integer', 'min:0', 'max:86400000'],
             'channels' => ['required', 'integer', 'min:1', 'max:2'],
@@ -51,6 +56,8 @@ final class UsageController extends Controller
                 'duplicate' => $duplicate,
             ],
             'usage' => $usage->toArray($device->workspace_id),
+            // Since v1.3: Live Translate's own budget, so the phone can warn at 80 % and pause at 100 %.
+            'live_translate' => app(LiveTranslateBudget::class)->state($device->workspace_id),
         ], $duplicate ? 200 : 201);
     }
 }

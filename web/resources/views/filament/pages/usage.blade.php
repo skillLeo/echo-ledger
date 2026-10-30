@@ -109,5 +109,17 @@
                 </table>
             @endif
         </x-filament::section>
+
+        @if ($report['live_translate'] !== [])
+            <x-filament::section heading="Live Translate" description="Game and Watch translate on the phone (Soniox real-time). Counted against Live Translate's own budget, not the limit above.">
+                <table style="width:100%;font-size:.85rem;border-collapse:collapse">
+                    <tbody>
+                        @foreach ($report['live_translate'] as $row)
+                            <tr><td style="{{ $cell }}">{{ $row['mode'] }}</td><td style="{{ $num }}">{{ $min($row['minutes']) }} min</td><td style="{{ $num }}">{{ $usd($row['cost_usd']) }}</td></tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </x-filament::section>
+        @endif
     </div>
 </div>

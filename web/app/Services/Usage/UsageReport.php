@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace App\Services\Usage;
 
 use App\Enums\SttProviderKey;
+use App\Enums\SttUseCase;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\UsageLedgerEntry;
+use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Carbon;
 
@@ -41,6 +43,7 @@ final class UsageReport
      *     providers: list<array{provider: string, label: string, streaming_minutes: float, final_minutes: float, cost_usd: float, recordings: int, per_hour_usd: float|null, check_usd: float}>,
      *     devices: list<array{name: string, minutes: float, cost_usd: float}>,
      *     clients: list<array{name: string, minutes: float, cost_usd: float}>,
+     *     live_translate: list<array{mode: string, minutes: float, cost_usd: float}>,
      *     daily: array{labels: list<string>, minutes: list<float>}}
      */
     public function forMonth(int $workspaceId, string $month): array
@@ -55,6 +58,7 @@ final class UsageReport
         $providers = [];
         $devices = [];
         $sessions = [];
+        $modes = [];
         $days = [];
         for ($day = $start->copy(); $day->lt($end); $day->addDay()) {
             $days[$day->format('Y-m-d')] = 0.0;
@@ -62,11 +66,14 @@ final class UsageReport
 
         $rows = UsageLedgerEntry::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)
             ->where('occurred_at', '>=', $start->copy()->utc())->where('occurred_at', '<', $end->copy()->utc())
-            ->toBase()->select(['provider', 'source', 'duration_ms', 'billed_ms', 'cost_usd', 'billable', 'device_id', 'capture_session_id', 'model', 'occurred_at'])
+            ->toBase()->select(['provider', 'use_case', 'source', 'duration_ms', 'billed_ms', 'cost_usd', 'billable', 'device_id', 'capture_session_id', 'model', 'occurred_at'])
             ->orderBy('occurred_at')->cursor();
         foreach ($rows as $row) {
             $minutes = (int) $row->billed_ms / 60000;
             $cost = (float) $row->cost_usd;
+            if (in_array($row->use_case, LiveTranslateBudget::useCases(), true)) {
+                $modes[$row->use_case] = [($modes[$row->use_case][0] ?? 0.0) + $minutes, ($modes[$row->use_case][1] ?? 0.0) + $cost];
+            }
             $kind = $row->source === UsageLedgerEntry::SOURCE_DEVICE ? 'streaming_minutes' : 'final_minutes';
             $providers[$row->provider] ??= ['streaming_minutes' => 0.0, 'final_minutes' => 0.0, 'cost_usd' => 0.0, 'check_usd' => 0.0, 'final_usd' => 0.0, 'audio_ms' => 0, 'sessions' => []];
             $providers[$row->provider][$kind] += $minutes;
@@ -107,6 +114,12 @@ final class UsageReport
             'providers' => $this->providerRows($providers),
             'devices' => $this->deviceRows($workspaceId, $devices),
             'clients' => $this->clientRows($workspaceId, $sessions),
+            // Since v1.3: Game and Watch translate per mode (they have their own budget).
+            'live_translate' => array_map(
+                fn (string $key, array $v): array => ['mode' => SttUseCase::from($key)->getLabel(), 'minutes' => round($v[0], 1), 'cost_usd' => round($v[1], 2)],
+                array_keys($modes),
+                array_values($modes),
+            ),
             'daily' => [
                 'labels' => array_map(fn (string $d): string => Carbon::parse($d)->format('j'), array_keys($days)),
                 'minutes' => array_map(fn (float $m): float => round($m, 1), array_values($days)),

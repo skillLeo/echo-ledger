@@ -89,7 +89,7 @@ Every addition below is marked **(since v1.1)**.
 | upload `status` | `pending`, `uploading`, `assembling`, `ready`, `failed` |
 | transcript `kind` / `status` | `live`, `final`, `alternate` (since v1.1), `trial` (since v1.1.2: a Compare engines run, never in the library or search) / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
 | provider | `assemblyai`, `elevenlabs`, `azure_mai`, `whispercpp_local`, `parakeet_local`, `soniox` (since v1.1.2, final transcripts only), `groq` (since v1.2: Whisper large-v3, final transcripts only) |
-| use case | `live_captions`, `dictation`, `final_transcript`, `voice_note` |
+| use case | `live_captions`, `dictation`, `final_transcript`, `voice_note`, `game_translate`, `watch_translate` |
 | transcript `error_code` (since v1.1, set when `status` is `failed`) | `no_audio`, `budget_exceeded`, `provider_unreachable`, `provider_rejected`, `provider_not_configured`, `provider_timeout`, `interrupted`, `recording_missing` |
 
 **Segment** (shared transcript shape; channel 1 = "Me" mic/left, channel 2 = "Client" system/right; mono = channel 1 "Speaker"):
@@ -167,8 +167,14 @@ abilities of the token that asked for it, never more **(since v1.1)**.
            "period_start": "2026-09-30T19:00:00+00:00", "period_end": "2026-10-31T19:00:00+00:00",
            "minutes": 812.5, "cost_usd": 6.42,
            "limit_minutes": 3000, "limit_usd": null,
-           "warn_at_percent": 80, "warn": false, "limit_reached": false}}
+           "warn_at_percent": 80, "warn": false, "limit_reached": false},
+ "live_translate": {"model": "stt-rt-v5", "monthly_usd": 10.0,
+                    "game": {"target": "en", "spoken": ["ar", "en"], "speed": "fastest"},
+                    "watch": {"target": "ur", "speed": "balanced"},
+                    "budget": {"used_usd": 0.9, "limit_usd": 10.0, "warn": false, "reached": false}}}
 ```
+- `live_translate` **(since v1.3)**: the console's Live Translate defaults (Settings → Game translate / Watch
+  translate) and this month's Live Translate spending against its own budget.
 - `api_version` **(since v1.1)**: `"1.1"`. Absent on v1 servers.
 - Live `mode`: `cloud` | `on_device`. Final `mode`: `async_webhook` | `sync` | `device`.
 - `required_artifacts` is `["primary","channel_1","channel_2"]` when the final provider needs per-channel mono
@@ -205,8 +211,12 @@ Live Translate on the phone (Phase B: game voice chat and videos). Body `{"mode"
 "websocket_url": "wss://stt-rt.soniox.com/transcribe-websocket", "model": "stt-rt-v5", "translation": {"type":
 "one_way", "target_language": "en"}, "language_hints": ["ar"]}` (`Cache-Control: no-store`). The phone streams to
 Soniox directly and asks again before `expires_at`; no audio passes through the server and the account key never
-leaves it. Errors: `403 budget_exceeded`, `503 provider_not_configured` (no Soniox key), `502 provider_error`
-(Soniox refused: the message says whether the key, the credit or Soniox itself is the problem).
+leaves it. The answer also carries `budget`: `{"used_usd": 0.9, "limit_usd": 10.0, "warn": false, "reached": false}`,
+Live Translate's own monthly budget (`live_translate.monthly_usd`, default $10; Game and Watch translate together,
+not counted in the transcription limit). Errors: `403 budget_exceeded` (Live Translate's budget is used up; send
+`"continue_over_budget": true` once the person chose to continue this month), `503 provider_not_configured` (no
+Soniox key), `502 provider_error` (Soniox refused: the message says whether the key, the credit or Soniox itself is
+the problem).
 
 ### `POST /api/stt/token` — `stt:token`, throttled (30/min/device)
 ```json
@@ -266,7 +276,10 @@ server answers 200/201; a `422` report is dropped.
  "usage": { …same as GET /api/config usage… }}
 ```
 - `report_id`: client-generated, 8–64 chars of `A-Z a-z 0-9 . _ : -` (a UUID v4); unique per owner.
-- `use_case` ∈ `live_captions` | `dictation` (final transcripts are recorded by the server, never reported).
+- `use_case` ∈ `live_captions` | `dictation` | `game_translate` | `watch_translate` (final transcripts are recorded by
+  the server, never reported). Live Translate reports (since v1.3) use provider `soniox` only, with `streamed_ms` = the
+  time the Soniox stream was open; they count against Live Translate's own budget, not the monthly limit, and the
+  answer carries `live_translate` (same shape as the token answer's `budget`).
 - `provider` ∈ the provider enumeration (the `provider` of the token answer).
 - `session_id` optional: the open session the captions belonged to. A deleted session is still linked; an unknown
   id is stored as `null` (usage is never refused for that reason).

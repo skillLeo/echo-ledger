@@ -6,6 +6,7 @@ namespace App\Services\Usage;
 
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\UsageLedgerEntry;
+use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\PlanLimits;
 use Illuminate\Support\Carbon;
@@ -69,6 +70,8 @@ final class UsageSummary
         $totals = UsageLedgerEntry::query()->withoutGlobalScope(WorkspaceScope::class)
             ->when($workspaceId !== null, fn ($q) => $q->where('workspace_id', $workspaceId))
             ->where('billable', true)
+            // Live Translate has its own monthly budget (LiveTranslateBudget): a game night never stops call transcripts.
+            ->whereNotIn('use_case', LiveTranslateBudget::useCases())
             ->where('occurred_at', '>=', $period['start'])
             ->where('occurred_at', '<', $period['end'])
             ->toBase()

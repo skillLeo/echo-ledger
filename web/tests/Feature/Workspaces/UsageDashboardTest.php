@@ -6,8 +6,10 @@ use App\Filament\Pages\Usage;
 use App\Filament\Widgets\Usage\DailyUsageChart;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
+use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\SettingsRepository;
 use App\Services\Usage\UsageReport;
+use App\Services\Usage\UsageSummary;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -132,4 +134,21 @@ it('charts billable minutes per day of the chosen month for the signed-in worksp
 
 it('never puts the usage chart on the dashboard', function () {
     expect(Filament::getPanel('admin')->getWidgets())->not->toContain(DailyUsageChart::class);
+});
+
+it('shows Game and Watch translate per mode, and keeps them out of the transcription limit', function () {
+    $owner = Fx::user();
+    $phone = Fx::device($owner, ['name' => 'Pixel']);
+    usageReportRow($owner, ['device_id' => $phone->id, 'source' => 'device', 'use_case' => 'game_translate', 'provider' => 'soniox', 'report_id' => 'lt-'.Str::random(10), 'billed_ms' => 3_600_000, 'cost_usd' => 0.18]);
+    usageReportRow($owner, ['device_id' => $phone->id, 'source' => 'device', 'use_case' => 'watch_translate', 'provider' => 'soniox', 'report_id' => 'lt-'.Str::random(10), 'billed_ms' => 1_800_000, 'cost_usd' => 0.09]);
+    app(SettingsRepository::class)->set('budget.monthly_usd', 0.1);
+
+    $report = app(UsageReport::class)->forMonth($owner->current_workspace_id, '2026-10');
+
+    expect($report['live_translate'])->toBe([
+        ['mode' => 'Game translate', 'minutes' => 60.0, 'cost_usd' => 0.18],
+        ['mode' => 'Watch translate', 'minutes' => 30.0, 'cost_usd' => 0.09],
+    ])
+        ->and(app(UsageSummary::class)->toArray($owner->current_workspace_id)['limit_reached'])->toBeFalse()
+        ->and(app(LiveTranslateBudget::class)->spentUsd($owner->current_workspace_id))->toEqualWithDelta(0.27, 1e-9);
 });

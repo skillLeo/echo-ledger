@@ -6,9 +6,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
+use App\Models\Device;
 use App\Services\CredentialVault;
+use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\SettingsRepository;
-use App\Services\Usage\BudgetGuard;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -21,6 +22,9 @@ use Illuminate\Validation\Rule;
  * voice chat and videos, translated as they are heard). The phone opens Soniox's real-time WebSocket itself with it;
  * no audio passes through this server and the account key never leaves it. The phone asks again before the key
  * expires.
+ *
+ * Live Translate has its own monthly budget (LiveTranslateBudget, apart from the transcription limit): at 100 % no key
+ * is given unless the person chose "Continue this month anyway" on the phone (`continue_over_budget`).
  */
 final class LiveTranslateTokenController extends Controller
 {
@@ -30,16 +34,23 @@ final class LiveTranslateTokenController extends Controller
 
     private const TEMPORARY_KEY_URL = 'https://api.soniox.com/v1/auth/temporary-api-key';
 
-    public function __invoke(Request $request, CredentialVault $vault, SettingsRepository $settings, BudgetGuard $budget): JsonResponse
+    public function __invoke(Request $request, CredentialVault $vault, SettingsRepository $settings, LiveTranslateBudget $budget): JsonResponse
     {
+        /** @var Device $device */
+        $device = $request->user();
         $data = $request->validate([
             'mode' => ['required', Rule::in(['game', 'watch'])],
             'target_language' => ['required', 'string', 'regex:/^[a-z]{2}$/'],
             'language_hints' => ['nullable', 'array', 'max:4'],
             'language_hints.*' => ['string', 'regex:/^[a-z]{2}$/'],
+            'continue_over_budget' => ['sometimes', 'boolean'],
         ]);
-        if ($budget->limitReached()) {
-            throw new ApiError(403, 'budget_exceeded', 'The monthly speech budget is used up. Raise it in Settings → Usage, or wait for next month.');
+        $spending = $budget->state($device->workspace_id);
+        if ($spending['reached'] && ! $request->boolean('continue_over_budget')) {
+            throw new ApiError(403, 'budget_exceeded', sprintf(
+                "Live Translate's budget of $%.2f for this month is used up. Raise it in Settings → Game translate, or continue this month anyway.",
+                (float) $spending['limit_usd'],
+            ));
         }
         $key = $vault->get('soniox', 'api_key');
         if ($key === null || $key === '') {
@@ -57,7 +68,7 @@ final class LiveTranslateTokenController extends Controller
                 default => 'Soniox could not start Live Translate right now. Try again in a minute.',
             });
         } catch (ConnectionException) {
-            throw new ApiError(502, 'provider_error', 'Soniox could not be reached. Check the server\'s internet connection, then try again.');
+            throw new ApiError(502, 'provider_error', "Soniox could not be reached. Check the server's internet connection, then try again.");
         }
         $temporary = is_array($answer) ? ($answer['api_key'] ?? null) : null;
         if (! is_string($temporary) || $temporary === '') {
@@ -72,6 +83,7 @@ final class LiveTranslateTokenController extends Controller
             'model' => (string) $settings->get('live_translate.model', 'stt-rt-v5'),
             'translation' => ['type' => 'one_way', 'target_language' => $data['target_language']],
             'language_hints' => array_values(array_unique($data['language_hints'] ?? [])),
+            'budget' => $spending,
         ])->header('Cache-Control', 'no-store');
     }
 }

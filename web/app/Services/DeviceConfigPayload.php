@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Enums\SttUseCase;
 use App\Models\Device;
+use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\Usage\UsageSummary;
 use App\Stt\LanguageChoice;
 use App\Stt\SttManager;
@@ -27,6 +28,9 @@ final class DeviceConfigPayload
     {
         $providers = [];
         foreach (SttUseCase::cases() as $useCase) {
+            if ($useCase->isLiveTranslate()) {
+                continue; // always Soniox, with a key from POST /api/live-translate/token
+            }
             $key = $this->settings->providerFor($useCase);
             $caps = $this->stt->driver($key)->capabilities();
             $entry = ['provider' => $key->value];
@@ -77,6 +81,8 @@ final class DeviceConfigPayload
             ],
             'pins' => $this->settings->pins(),
             'usage' => app(UsageSummary::class)->toArray($device->workspace_id),
+            // Since v1.3 (Phase B): the console's Live Translate defaults and this month's Live Translate spending.
+            'live_translate' => app(LiveTranslateBudget::class)->defaults() + ['budget' => app(LiveTranslateBudget::class)->state($device->workspace_id)],
         ];
     }
 }
