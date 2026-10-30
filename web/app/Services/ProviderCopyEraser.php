@@ -9,6 +9,8 @@ use App\Models\CaptureSession;
 use App\Models\ProviderDeletion;
 use App\Models\Transcript;
 use App\Stt\SttManager;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
@@ -50,11 +52,25 @@ final class ProviderCopyEraser
 
             return true;
         } catch (Throwable $e) {
-            report($e);
+            self::noteFailure($e, $provider->value);
             $this->schedule($provider, $jobId, $transcript->provider_transcript_id, $e->getMessage());
 
             return false;
         }
+    }
+
+    /**
+     * A failed delete of a provider copy: one that is still being processed cannot be deleted yet (AssemblyAI answers
+     * 400, others 409), which is not an error, the retry deletes it once the provider lets go; anything else is reported.
+     */
+    public static function noteFailure(Throwable $e, string $provider): void
+    {
+        if ($e instanceof RequestException && in_array($e->response->status(), [400, 409], true)) {
+            Log::info('Provider copy not deletable yet; it is retried later.', ['provider' => $provider, 'status' => $e->response->status()]);
+
+            return;
+        }
+        report($e);
     }
 
     /** Queues (or re-queues) a provider copy for deletion by stt:reconcile. */

@@ -13,6 +13,8 @@ use App\Models\WebhookEvent;
 use App\Services\CredentialVault;
 use App\Stt\Drivers\AssemblyAiDriver;
 use App\Stt\Drivers\ElevenLabsSignature;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -350,6 +352,32 @@ describe('AssemblyAI processing', function () {
 
         $this->postJson(aaiUrl($transcript), ['transcript_id' => 'job_1', 'status' => 'completed'], aaiHeaders($transcript))->assertOk();
         expect($transcript->refresh()->status)->toBe(TranscriptStatus::Completed)->and($transcript->provider_deleted_at)->toBeNull();
+
+        $this->artisan('stt:reconcile')->assertSuccessful();
+
+        expect($transcript->refresh()->provider_deleted_at)->not->toBeNull()->and($deletes)->toBe(2);
+    });
+
+    it('treats a copy the provider is still processing (400) as not yet deletable, not as an error', function () {
+        $transcript = submittedTranscript();
+        $deletes = 0;
+        Http::fake(function ($request) use (&$deletes) {
+            if ($request->method() === 'DELETE') {
+                $deletes++;
+
+                return Http::response(['error' => 'Transcript cannot be deleted while it is processing.'], $deletes < 2 ? 400 : 200);
+            }
+
+            return Http::response(Fixtures::assemblyAiResult('job_1'), 200);
+        });
+        $reported = [];
+        app(ExceptionHandler::class)->reportable(function (Throwable $e) use (&$reported) {
+            $reported[] = $e;
+        });
+
+        $this->postJson(aaiUrl($transcript), ['transcript_id' => 'job_1', 'status' => 'completed'], aaiHeaders($transcript))->assertOk();
+        expect($transcript->refresh()->provider_deleted_at)->toBeNull()
+            ->and(collect($reported)->filter(fn ($e) => $e instanceof RequestException))->toBeEmpty();
 
         $this->artisan('stt:reconcile')->assertSuccessful();
 

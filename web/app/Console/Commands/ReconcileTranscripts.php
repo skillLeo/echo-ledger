@@ -87,7 +87,7 @@ final class ReconcileTranscripts extends Command
                     $stt->driver(SttProviderKey::from($transcript->provider))->deleteRemote($transcript);
                     $transcript->update(['provider_deleted_at' => now()]);
                 } catch (Throwable $e) {
-                    report($e);
+                    ProviderCopyEraser::noteFailure($e, (string) $transcript->provider);
                 }
             });
 

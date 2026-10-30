@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Enums\SttProviderKey;
 use App\Enums\TranscriptErrorCode;
 use App\Models\WebhookEvent;
+use App\Services\ProviderCopyEraser;
 use App\Services\TranscriptStore;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\SttManager;
@@ -83,7 +84,7 @@ final class ProcessSttWebhookJob implements ShouldQueue
             $stt->driver(SttProviderKey::from($event->provider))->deleteRemote($transcript);
             $transcript->update(['provider_deleted_at' => now()]);
         } catch (Throwable $e) {
-            report($e); // retried by stt:reconcile (provider_deleted_at stays null)
+            ProviderCopyEraser::noteFailure($e, $event->provider); // retried by stt:reconcile (provider_deleted_at stays null)
         }
     }
 
