@@ -29,6 +29,19 @@
     <queries>
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
+        <!-- The other call apps: only to show their own icon next to their recordings. -->
+        <package android:name="com.google.android.apps.tachyon" />
+        <package android:name="com.google.android.apps.meetings" />
+        <package android:name="us.zoom.videomeetings" />
+        <package android:name="com.microsoft.teams" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="org.telegram.messenger.web" />
+        <package android:name="org.thoughtcrime.securesms" />
+        <package android:name="com.facebook.orca" />
+        <package android:name="com.instagram.android" />
+        <package android:name="com.skype.raider" />
+        <package android:name="com.Slack" />
+        <package android:name="com.discord" />
     </queries>
 
     <application

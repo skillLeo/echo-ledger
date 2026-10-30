@@ -1,6 +1,8 @@
 package com.echoledger.mobile
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.SystemBarStyle
@@ -25,9 +27,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
-import androidx.compose.material.icons.outlined.FiberManualRecord
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.VideoLibrary
+import androidx.compose.material.icons.rounded.AccountCircle
+import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -59,8 +66,10 @@ import androidx.lifecycle.lifecycleScope
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.recording.RecordingService
+import com.echoledger.mobile.ui.ActivityScreen
 import com.echoledger.mobile.ui.AppLockMachine
 import com.echoledger.mobile.ui.Brand
+import com.echoledger.mobile.ui.ClientsScreen
 import com.echoledger.mobile.ui.EchoLedgerTheme
 import com.echoledger.mobile.ui.LibraryScreen
 import com.echoledger.mobile.ui.LocalUnlockPrompter
@@ -81,6 +90,10 @@ import com.echoledger.mobile.ui.StartupSplash
 import com.echoledger.mobile.ui.UnlockPrompter
 import com.echoledger.mobile.ui.applySecureScreen
 import com.echoledger.mobile.ui.capabilities
+import com.echoledger.mobile.ui.design.EchoBottomBar
+import com.echoledger.mobile.ui.design.NavTab
+import com.echoledger.mobile.ui.design.RecordingStrip
+import com.echoledger.mobile.ui.formatDuration
 import com.echoledger.mobile.ui.isDarkTheme
 import com.echoledger.mobile.ui.lockAvailability
 import com.echoledger.mobile.ui.promptUnlock
@@ -150,7 +163,12 @@ class MainActivity : FragmentActivity() {
         val message by vm.message.collectAsState()
         val snackbar = remember { SnackbarHostState() }
         // Where the user is survives a rotation (A6.M9): the tab, the open recording (by id) and the setup page.
-        var tab by rememberSaveable { mutableIntStateOf(0) }
+        var tab by rememberSaveable { mutableStateOf(TAB_LIBRARY) }
+        // Re-tapping the current tab scrolls it to the top (a counter each screen watches).
+        var reselected by remember { mutableIntStateOf(0) }
+        var activityUnread by rememberSaveable { mutableIntStateOf(0) }
+        val live by RecordingService.live.collectAsState()
+        val pending by vm.pending.collectAsState()
         var openItemId by rememberSaveable { mutableStateOf<String?>(null) }
         var openItemCache by remember { mutableStateOf<LibraryItem?>(null) }
         var openAtMs by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -253,7 +271,7 @@ class MainActivity : FragmentActivity() {
         LaunchedEffect(open) {
             // The recording notification opens the Live view (the Record tab while recording, since v1.3).
             if (open == OPEN_PENDING || open == OPEN_LIVE) {
-                tab = 1
+                tab = TAB_RECORD
                 showItem(null)
                 showSetup = false
             }
@@ -272,7 +290,7 @@ class MainActivity : FragmentActivity() {
         LaunchedEffect(openSession, libraryItems) {
             val id = openSession ?: return@LaunchedEffect
             libraryItems.firstOrNull { it.id == id && !it.deleted }?.let {
-                tab = 0
+                tab = TAB_LIBRARY
                 showSetup = false
                 openAtMs = null
                 showItem(it)
@@ -286,6 +304,10 @@ class MainActivity : FragmentActivity() {
             }
         }
         val unlocked = loaded && lockState == LockState.Unlocked
+        // The Activity badge: unread items (once the app is unlocked and paired) plus calls waiting for Keep or Discard.
+        LaunchedEffect(unlocked, settings.paired) {
+            if (unlocked && settings.paired) vm.activity()?.let { activityUnread = it.unreadCount }
+        }
         BackHandler(enabled = unlocked && (openItem != null || showSetup)) {
             showItem(null)
             showSetup = false
@@ -297,7 +319,32 @@ class MainActivity : FragmentActivity() {
                 snackbarHost = { SnackbarHost(snackbar) },
                 bottomBar = {
                     if (unlocked && settings.onboardingDone && settings.paired && openItem == null && !showSetup && sharedNotes == null) {
-                        BottomNav(tab) { tab = it }
+                        Column {
+                            if (live.active && tab != TAB_RECORD) {
+                                RecordingStrip(
+                                    formatDuration(live.elapsedMs).ifEmpty { "0:00" },
+                                    onOpen = { tab = TAB_RECORD },
+                                    onStop = { toggleRecording("recording strip") }
+                                )
+                            }
+                            EchoBottomBar(
+                                tabs = MAIN_TABS.map {
+                                    if (it.key ==
+                                        TAB_ACTIVITY
+                                    ) {
+                                        it.copy(badge = activityUnread + pending.count { p -> p.state == "pending_decision" })
+                                    } else {
+                                        it
+                                    }
+                                },
+                                current = tab,
+                                onSelect = { tab = it },
+                                onReselect = { reselected++ },
+                                recording = live.active,
+                                onRecord = { if (!live.active || !toggleRecording("record button")) tab = TAB_RECORD },
+                                onRecordLongPress = { if (live.active || !toggleRecording("record button (hold)")) tab = TAB_RECORD }
+                            )
+                        }
                     }
                 }
             ) { padding ->
@@ -341,7 +388,23 @@ class MainActivity : FragmentActivity() {
                             label = "tab"
                         ) { current ->
                             when (current) {
-                                0 -> LibraryScreen(
+                                TAB_CLIENTS -> ClientsScreen(vm, onOpenItem = { showItem(it) }, scrollToTop = reselected)
+
+                                TAB_RECORD -> RecordScreen(vm, caps, onSetup = { showSetup = true })
+
+                                TAB_ACTIVITY -> ActivityScreen(
+                                    load = { vm.activity() },
+                                    markRead = { vm.markActivityRead(it) },
+                                    onOpen = { id -> openSession = id },
+                                    onUnread = { activityUnread = it },
+                                    waiting = pending.filter { it.state == "pending_decision" },
+                                    onOpenWaiting = { tab = TAB_RECORD },
+                                    scrollToTop = reselected
+                                )
+
+                                TAB_YOU -> SettingsScreen(vm, onSetup = { showSetup = true })
+
+                                else -> LibraryScreen(
                                     vm,
                                     showCallSetup = caps.callCaptureSupportedByOs && !caps.helperConnected,
                                     onSetup = { showSetup = true },
@@ -350,16 +413,22 @@ class MainActivity : FragmentActivity() {
                                         showItem(item)
                                     }
                                 ) { showItem(it) }
-
-                                1 -> RecordScreen(vm, caps, onSetup = { showSetup = true })
-
-                                else -> SettingsScreen(vm, onSetup = { showSetup = true })
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Starts or stops a recording from the record button ([from] goes to the capture log). Without the microphone
+     * permission it returns false, and the caller opens the Record screen, which asks for it.
+     */
+    private fun toggleRecording(from: String): Boolean {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return false
+        runCatching { startForegroundService(RecordingService.intent(this, RecordingService.ACTION_TOGGLE, from = from)) }
+        return true
     }
 
     companion object {
@@ -402,45 +471,16 @@ class MainActivity : FragmentActivity() {
     }
 }
 
-@Composable
-private fun BottomNav(selected: Int, onSelect: (Int) -> Unit) {
-    val items = listOf(
-        Triple("Library", Icons.AutoMirrored.Outlined.LibraryBooks, 0),
-        Triple("Record", Icons.Outlined.FiberManualRecord, 1),
-        Triple("Settings", Icons.Outlined.Settings, 2)
-    )
-    Surface(color = Brand.Surface, tonalElevation = 0.dp) {
-        Row(
-            Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            items.forEach { (label, icon, index) ->
-                val active = selected == index
-                Column(
-                    Modifier.weight(1f)
-                        .selectable(selected = active, onClick = { onSelect(index) })
-                        .background(
-                            if (active) Brand.Violet.copy(alpha = 0.14f) else androidx.compose.ui.graphics.Color.Transparent,
-                            RoundedCornerShape(14.dp)
-                        )
-                        .padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Icon(
-                        icon,
-                        contentDescription = label,
-                        tint = if (active) Brand.Violet else Brand.Faint,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Text(
-                        label,
-                        color = if (active) Brand.Text else Brand.Faint,
-                        fontSize = 11.sp,
-                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal
-                    )
-                }
-            }
-        }
-    }
-}
+private const val TAB_LIBRARY = "library"
+private const val TAB_CLIENTS = "clients"
+private const val TAB_RECORD = "record"
+private const val TAB_ACTIVITY = "activity"
+private const val TAB_YOU = "you"
+
+/** Library · Clients · [record] · Activity · You (since v1.3). */
+private val MAIN_TABS = listOf(
+    NavTab(TAB_LIBRARY, "Library", Icons.Outlined.VideoLibrary, Icons.Rounded.VideoLibrary),
+    NavTab(TAB_CLIENTS, "Clients", Icons.Outlined.Group, Icons.Rounded.Group),
+    NavTab(TAB_ACTIVITY, "Activity", Icons.Outlined.Notifications, Icons.Rounded.Notifications),
+    NavTab(TAB_YOU, "You", Icons.Outlined.AccountCircle, Icons.Rounded.AccountCircle)
+)

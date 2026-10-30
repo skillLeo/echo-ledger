@@ -1,6 +1,10 @@
 package com.echoledger.mobile.ui
 
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -15,6 +19,7 @@ import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.testsupport.storeRecording
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -81,23 +86,53 @@ class ActivityCentreTest : ScreenTest() {
         val marked = mutableListOf<List<String>?>()
         var unread = -1
         show {
-            ActivityPanel(
+            ActivityScreen(
                 load = { ActivityResponse(listOf(item("n2"), item("n1", read = true, session = null)), 1) },
                 markRead = {
                     marked += it
                     0
                 },
                 onOpen = { opened += it },
-                onUnread = { unread = it },
-                onClose = {}
+                onUnread = { unread = it }
             )
         }
         pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Call n2").assertExists() }.isSuccess }
         assertEquals(1, unread)
+        compose.onNodeWithText("Mark all as read").assertExists()
         compose.onNodeWithText("Call n2").performClick()
         pumpUntil("the recording to open") { opened == listOf("s-n2") }
         assertEquals(listOf(listOf("n2")), marked)
         assertEquals(0, unread)
+        compose.onNodeWithText("Mark all as read").assertDoesNotExist()
+    }
+
+    @Test
+    fun `calls waiting for Keep or Discard and problems come first, and an empty list says all is done`() {
+        var answer by mutableStateOf(
+            ActivityResponse(
+                listOf(item("ok"), ActivityItemDto("bad", "transcription_failed", "Transcription failed", "Call bad", "s-bad")),
+                1
+            )
+        )
+        var waiting by mutableStateOf(listOf(app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 65_000)))
+        var openedWaiting = 0
+        var round by mutableStateOf(0)
+        show {
+            key(round) {
+                ActivityScreen(load = {
+                    answer
+                }, markRead = { 0 }, onOpen = {}, onUnread = {}, waiting = waiting, onOpenWaiting = { openedWaiting++ })
+            }
+        }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Needs action").assertExists() }.isSuccess }
+        compose.onNodeWithText("Keep or discard?").performClick()
+        assertEquals(1, openedWaiting)
+        compose.onNodeWithText("Call bad").assertExists()
+
+        answer = ActivityResponse(emptyList(), 0)
+        waiting = emptyList()
+        round++
+        pumpUntil("the empty state") { runCatching { compose.onNodeWithText("You're all caught up").assertExists() }.isSuccess }
     }
 
     @Test

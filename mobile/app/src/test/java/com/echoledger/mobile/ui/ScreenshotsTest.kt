@@ -14,6 +14,8 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import com.echoledger.mobile.data.ActivityItemDto
+import com.echoledger.mobile.data.ActivityResponse
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
@@ -22,6 +24,8 @@ import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
+import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.ui.design.DesignGallery
 import com.github.takahirom.roborazzi.captureRoboImage
 import java.io.File
@@ -228,5 +232,45 @@ class ScreenshotsTest : ScreenTest() {
         capture("gallery-1")
         part = 1
         capture("gallery-2")
+    }
+
+    @Test
+    fun clients() {
+        seedLibrary()
+        vm.refresh()
+        pumpUntil("the clients to load") { vm.clients.value.isNotEmpty() }
+        shoot { ClientsScreen(vm, onOpenItem = {}) }
+        capture("clients")
+    }
+
+    @Test
+    fun activity() {
+        val today = java.time.LocalDate.now().toString()
+        val items = listOf(
+            ActivityItemDto(
+                "a1",
+                "transcription_failed",
+                "Transcription failed",
+                "Call with +92 300 1234567 · Tap to retry",
+                "s1",
+                false,
+                "${today}T06:02:00+00:00"
+            ),
+            ActivityItemDto(
+                "a2",
+                "transcript_ready",
+                "Transcript ready",
+                "Weekly sync with Northwind",
+                "s2",
+                false,
+                "${today}T09:40:00+00:00"
+            ),
+            ActivityItemDto("a3", "transcript_ready", "Transcript ready", "Invoice questions", "s3", true, "2026-10-24T07:30:00+00:00"),
+            ActivityItemDto("a4", "device_paired", "New device", "Pixel 9 was paired", null, true, "2026-10-22T10:00:00+00:00")
+        )
+        val waiting = listOf(app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 125_000))
+        shoot { ActivityScreen(load = { ActivityResponse(items, 2) }, markRead = { 0 }, onOpen = {}, onUnread = {}, waiting = waiting) }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Needs action").assertExists() }.isSuccess }
+        capture("activity")
     }
 }

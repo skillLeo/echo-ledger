@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Intent
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
@@ -119,18 +120,17 @@ class MainActivityTest : AppTest() {
     }
 
     @Test
-    fun `a paired phone opens on the library with the three tabs`() {
+    fun `a paired phone opens on the library with four tabs and the record button`() {
         launch(preload = true)
 
         awaitText("Weekly sync")
 
-        compose.onNodeWithContentDescription("Library").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Record").assertIsDisplayed()
-        compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
+        listOf("Library", "Clients", "Record", "Activity", "You").forEach { compose.onNodeWithContentDescription(it).assertIsDisplayed() }
+        compose.onNodeWithContentDescription("Library").assertIsSelected()
     }
 
     @Test
-    fun `the tabs switch between library record and settings`() {
+    fun `the tabs switch between library clients activity you and the record button`() {
         launch(preload = true)
         awaitText("Weekly sync")
 
@@ -141,8 +141,14 @@ class MainActivityTest : AppTest() {
             !present("Weekly sync")
         }
 
-        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithContentDescription("You").performClick()
         awaitText("Privacy & security")
+
+        compose.onNodeWithContentDescription("Clients").performClick()
+        awaitText("Clients")
+
+        compose.onNodeWithContentDescription("Activity").performClick()
+        compose.onNodeWithContentDescription("Activity").assertIsSelected()
 
         compose.onNodeWithContentDescription("Library").performClick()
         awaitText("Weekly sync")
@@ -152,7 +158,7 @@ class MainActivityTest : AppTest() {
     fun `a settings group closes with the system back button and the tab stays on the list`() {
         val controller = launch(preload = true)
         awaitText("Weekly sync")
-        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithContentDescription("You").performClick()
         awaitText("Privacy & security")
 
         compose.onNodeWithText("Storage").performClick()
@@ -161,7 +167,7 @@ class MainActivityTest : AppTest() {
 
         controller.get().onBackPressedDispatcher.onBackPressed()
         awaitText("Privacy & security")
-        compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
+        compose.onNodeWithContentDescription("You").assertIsDisplayed()
     }
 
     @Test
@@ -241,7 +247,7 @@ class MainActivityTest : AppTest() {
     fun `unpairing from settings returns to the pairing screen`() {
         launch(preload = true)
         awaitText("Weekly sync")
-        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithContentDescription("You").performClick()
         awaitText("Devices")
         compose.onNodeWithText("Devices").performClick()
         awaitText("Unpair")

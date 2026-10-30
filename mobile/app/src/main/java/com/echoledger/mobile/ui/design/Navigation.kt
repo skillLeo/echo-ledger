@@ -42,9 +42,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.ui.LocalEchoColors
 import com.echoledger.mobile.ui.LocalEchoType
@@ -98,7 +101,12 @@ private fun androidx.compose.foundation.layout.RowScope.TabSlot(
             .weight(1f)
             .height(64.dp)
             .combinedClickable(role = Role.Tab, onClick = { if (active) onReselect(tab.key) else onSelect(tab.key) })
-            .semantics { selected = active },
+            .clearAndSetSemantics {
+                contentDescription = tab.label
+                if (tab.badge > 0) stateDescription = "${tab.badge} new"
+                selected = active
+                role = Role.Tab
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
     ) {

@@ -280,9 +280,6 @@ fun LibraryScreen(
     var filters by remember { mutableStateOf(LibraryFilters()) }
     var sort by remember { mutableStateOf(LibrarySort.NEWEST) }
     var binOpen by remember { mutableStateOf(false) }
-    var activityOpen by remember { mutableStateOf(false) }
-    var unread by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { unread = vm.activity()?.unreadCount ?: 0 }
     var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     val clients by vm.clients.collectAsState()
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -310,17 +307,6 @@ fun LibraryScreen(
         Spacer(Modifier.height(8.dp))
         ScreenHeader("Library", "Recordings from your phone, computer and the web") {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = { activityOpen = !activityOpen },
-                    modifier = Modifier.semantics {
-                        contentDescription =
-                            if (unread > 0) "Activity, $unread unread" else "Activity"
-                    }
-                ) {
-                    BadgedBox(badge = { if (unread > 0) Badge { Text(if (unread > 99) "99+" else "$unread") } }) {
-                        Icon(Icons.Outlined.Notifications, contentDescription = null, tint = Brand.Muted)
-                    }
-                }
                 IconButton(onClick = { binOpen = !binOpen }) {
                     Icon(
                         Icons.Outlined.DeleteOutline,
@@ -348,13 +334,6 @@ fun LibraryScreen(
         if (showCallSetup) {
             Spacer(Modifier.height(12.dp))
             CallSetupBanner(onSetup)
-        }
-        if (activityOpen) {
-            ActivityPanel(load = { vm.activity() }, markRead = { vm.markActivityRead(it) }, onOpen = { id ->
-                activityOpen = false
-                items.firstOrNull { it.id == id && !it.deleted }?.let(onOpen)
-            }, onUnread = { unread = it }, onClose = { activityOpen = false })
-            Spacer(Modifier.height(8.dp))
         }
         if (binOpen) {
             BinSection(load = { vm.bin() }, restore = { vm.restore(it) }, erase = { vm.eraseNow(it) }, onClose = { binOpen = false })
