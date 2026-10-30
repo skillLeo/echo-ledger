@@ -115,7 +115,7 @@ class MainActivityTest : AppTest() {
         awaitText("Pair this phone")
 
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
-        compose.onAllNodesWithContentDescription("Settings").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("You").assertCountEquals(0)
         assertTrue(server.requests.isEmpty())
     }
 
