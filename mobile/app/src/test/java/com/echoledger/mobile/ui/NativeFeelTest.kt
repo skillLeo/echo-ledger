@@ -45,7 +45,7 @@ class NativeFeelTest : ScreenTest() {
             }
         }
         compose.mainClock.advanceTimeBy(1_500)
-        compose.onNodeWithText("REC").performClick()
+        compose.onNodeWithText("Record").performClick()
         compose.mainClock.advanceTimeBy(100)
         assertEquals(listOf(HapticFeedbackType.ToggleOn), felt)
     }
