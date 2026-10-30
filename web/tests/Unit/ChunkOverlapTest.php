@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Services\SettingsRepository;
 use App\Stt\Audio\AudioPrep;
 use App\Stt\Data\Segment;
 use App\Stt\Data\Word;
@@ -57,7 +58,7 @@ it('drops a line wholly in the overlap, keeps one after the cut, and keeps a lin
 
 it('names the output container for ffmpeg instead of trusting the temp file extension', function () {
     $calls = [];
-    $prep = new AudioPrep(app(App\Services\SettingsRepository::class), function (array $args) use (&$calls): array {
+    $prep = new AudioPrep(app(SettingsRepository::class), function (array $args) use (&$calls): array {
         $calls[] = $args;
 
         return [0, ''];
