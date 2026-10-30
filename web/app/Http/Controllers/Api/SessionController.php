@@ -20,6 +20,7 @@ use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Recording;
 use App\Models\SessionMarker;
+use App\Models\SessionOpen;
 use App\Models\Transcript;
 use App\Services\Callers\CallerMatcher;
 use App\Services\ChunkedUploadService;
@@ -235,6 +236,19 @@ final class SessionController extends Controller
     }
 
     /** GET /api/sessions/{id} */
+    /**
+     * POST /api/sessions/{id}/opened (since v1.3): the device's user has opened this recording, so the apps stop
+     * showing it as new. Idempotent; does not touch the recording itself (no sync, no reordering).
+     */
+    public function opened(Request $request, string $id): Response
+    {
+        /** @var Device $device */
+        $device = $request->user();
+        SessionOpen::mark($this->findSession($request, $id)->id, $device->user_id);
+
+        return response()->noContent();
+    }
+
     public function show(Request $request, string $id): JsonResponse
     {
         $session = $this->findSession($request, $id)->load(['device', 'client', 'transcripts', 'recordings', 'markers']);

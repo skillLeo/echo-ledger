@@ -11,6 +11,7 @@ use App\Exceptions\ApiError;
 use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\CaptureSession;
+use App\Models\SessionOpen;
 use App\Models\Transcript;
 use App\Models\User;
 use App\Services\Accuracy\AccuracyLab;
@@ -43,6 +44,16 @@ use RuntimeException;
 class ViewCaptureSession extends ViewRecord
 {
     protected static string $resource = CaptureSessionResource::class;
+
+    /** Opening the page counts as opening the recording (the apps stop showing it as new for this user). */
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+        $user = auth()->user();
+        if ($user !== null) {
+            SessionOpen::mark((string) $this->getRecord()->getKey(), (int) $user->getAuthIdentifier());
+        }
+    }
 
     public function getTitle(): string
     {

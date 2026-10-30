@@ -429,7 +429,7 @@ when `status=recording` is given).
     "title": "Zoom call", "started_at": "…", "ended_at": "…", "duration_ms": 2530000, "status": "completed",
     "transcript": {"final_status": "completed", "final_transcript_id": "01JB…", "live_available": true,
                    "live_transcript_id": "01JB…", "preview": "first 160 characters…"},
-    "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"],
+    "marker_count": 2, "tags": ["Budget"], "pinned": false, "keep": false, "labels": ["Invoice"], "opened": false,
     "updated_at": "…"},
    {"id": "01JC…", "client_ref": "9a1d…", "deleted": true, "updated_at": "…"}
  ],
@@ -575,6 +575,12 @@ and revoked links all answer `404` with the same page; password attempts are lim
 
 ShareLink: `{"id","session_id","has_password","include_audio","expires_at","revoked_at","active","view_count",
 "last_viewed_at","created_by","created_at"}`.
+
+### `POST /api/sessions/{id}/opened` — `library:read` (since v1.3)
+The device's user has opened this recording: `204`. Idempotent (opening again only moves the time); it never changes
+the recording, so it does not reorder or re-sync the library. Library items carry `"opened"` for the asking user
+(`false` until then), which the apps show as a dot; the console counts viewing a recording's page as opening it.
+Another workspace's id → `404`.
 
 ### `GET /api/sessions/{id}/shares` — `library:read` (since v1.1)
 `200 {"data": [ShareLink]}`, newest first. The URL is not shown again.

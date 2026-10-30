@@ -91,6 +91,8 @@ final class LibraryItemResource extends JsonResource
             'pinned' => (bool) $session->pinned,
             'keep' => (bool) $session->keep_forever,
             'labels' => $session->labelList(),
+            // Since v1.3: whether the asking user has opened it (the apps show a dot until then); left out where unknown.
+            'opened' => $this->when($session->relationLoaded('opens'), fn (): bool => $session->opens->isNotEmpty()),
             'updated_at' => $session->updated_at->toAtomString(),
         ];
     }

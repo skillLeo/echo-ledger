@@ -114,6 +114,16 @@ class CaptureSession extends Model
         return $this->hasMany(SessionLabel::class)->orderBy('label');
     }
 
+    /**
+     * Who has opened this recording (since v1.3).
+     *
+     * @return HasMany<SessionOpen, $this>
+     */
+    public function opens(): HasMany
+    {
+        return $this->hasMany(SessionOpen::class);
+    }
+
     /** @return list<string> */
     public function labelList(): array
     {

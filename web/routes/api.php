@@ -86,6 +86,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/export', [OrganiseController::class, 'export'])->name('api.sessions.export');
             Route::get('search', [SearchController::class, 'index'])->middleware('throttle:search')->name('api.search');
             Route::get('sessions/{id}', [SessionController::class, 'show'])->name('api.sessions.show');
+            Route::post('sessions/{id}/opened', [SessionController::class, 'opened'])->name('api.sessions.opened');
             Route::get('transcripts/{id}', [LibraryController::class, 'transcript'])->name('api.transcripts.show');
             Route::get('transcripts/{id}/revisions', [TranscriptEditController::class, 'revisions'])->name('api.transcripts.revisions');
             Route::get('transcripts/{id}/export', [ExportController::class, 'show'])->name('api.transcripts.export');
