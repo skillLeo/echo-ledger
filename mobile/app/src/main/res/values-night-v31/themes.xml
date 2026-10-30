@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ splash in the dark theme (see values-v31). -->
+    <style name="Theme.EchoLedger" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/el_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:colorAccent">@color/el_brand</item>
+        <item name="android:windowSplashScreenBackground">@color/el_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/el_brand</item>
+    </style>
+</resources>

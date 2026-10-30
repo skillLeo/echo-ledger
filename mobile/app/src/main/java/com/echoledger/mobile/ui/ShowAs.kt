@@ -55,15 +55,16 @@ enum class ShowAs(val key: String, val label: String) {
     }
 }
 
-/** Original · Roman Urdu · English, and the status of the chosen view. */
+/** Roman Urdu · اردو · English · Original as one segmented control (only the views made for this language), and the status. */
 @Composable
 internal fun ShowAsRow(available: List<String>, selected: ShowAs, views: TranscriptViewsDto?, onPick: (ShowAs) -> Unit) {
-    Column {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ShowAs.entries.filter { it == ShowAs.ORIGINAL || it.key in available }.forEach { view ->
-                FilterChip(selected = selected == view, onClick = { onPick(view) }, label = { Text(view.label) })
-            }
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(Space.s1)) {
+        val options = ShowAs.entries.filter { it != ShowAs.ORIGINAL && it.key in available } + ShowAs.ORIGINAL
+        com.echoledger.mobile.ui.design.SegmentedControl(
+            options.map { it.label },
+            options.indexOf(selected).coerceAtLeast(0),
+            { onPick(options[it]) }
+        )
         ShowAs.status(selected, views)?.let {
             Text(
                 it,

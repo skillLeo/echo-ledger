@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="el_background">#FFF5F6F8</color>
-    <color name="el_violet">#FF7C3AED</color>
-    <color name="el_cyan">#FF22D3EE</color>
+    <!-- Light window colours: the same tokens as ui/Tokens.kt (LightColors). -->
+    <color name="el_background">#FFF9F9FB</color>
+    <color name="el_brand">#FF3E63DD</color>
 
     <style name="Theme.EchoLedger" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/el_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:colorAccent">@color/el_violet</item>
+        <item name="android:colorAccent">@color/el_brand</item>
     </style>
 
     <style name="Theme.EchoLedger.Translucent" parent="android:Theme.Translucent.NoTitleBar">

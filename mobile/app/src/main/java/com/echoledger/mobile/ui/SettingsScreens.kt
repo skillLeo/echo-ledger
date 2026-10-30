@@ -3,8 +3,11 @@ package com.echoledger.mobile.ui
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,9 +18,11 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ClosedCaption
@@ -53,10 +58,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -103,8 +110,11 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
         SettingsGroupScreen(vm, open, focus, onSetup, onBack = close)
         return
     }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+    // You (since v1.3): this phone and its server on top, then the settings as a flat list, and Unpair at the bottom.
+    val settings by vm.settings.collectAsState()
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 96.dp)) {
+        com.echoledger.mobile.ui.design.EchoTopBar("You")
+        ProfileCard(settings)
         OutlinedTextField(
             value = query,
             onValueChange = { query = it.take(60) },
@@ -116,59 +126,107 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
                 }
             },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            shape = androidx.compose.foundation.shape.CircleShape,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s2)
         )
         val results = SettingsCatalogue.search(query)
         when {
-            query.isBlank() -> SectionCard {
+            query.isBlank() -> {
+                com.echoledger.mobile.ui.design.SectionHeader("Settings")
                 SettingsGroup.entries.forEach { g ->
                     SettingsRow(g.icon(), g.label, g.summary, "Open ${g.label} settings") {
                         group = g.name
                         focus = null
                     }
                 }
+                Box(Modifier.padding(horizontal = Space.s2, vertical = Space.s4)) {
+                    com.echoledger.mobile.ui.design.EchoButton(
+                        "Unpair this phone…",
+                        {
+                            group = SettingsGroup.Devices.name
+                            focus = null
+                        },
+                        kind = com.echoledger.mobile.ui.design.ButtonKind.Text
+                    )
+                }
             }
 
-            results.isEmpty() -> Text("No settings match “${query.trim()}”.", color = Brand.Muted)
+            results.isEmpty() -> Text(
+                "No settings match “${query.trim()}”.",
+                color = Brand.Muted,
+                modifier = Modifier.padding(horizontal = Space.screen, vertical = Space.s4)
+            )
 
-            else -> SectionCard {
-                results.forEach { e ->
-                    SettingsRow(e.group.icon(), e.title, e.group.label, "Open ${e.title}") {
-                        group = e.group.name
-                        focus = e.id
-                    }
+            else -> results.forEach { e ->
+                SettingsRow(e.group.icon(), e.title, e.group.label, "Open ${e.title}") {
+                    group = e.group.name
+                    focus = e.id
                 }
             }
         }
     }
 }
 
+/** This phone (its name and initials), the server it is paired with, and since when the app knows it. */
+@Composable
+private fun ProfileCard(settings: AppSettings) {
+    val type = LocalEchoType.current
+    val name = settings.deviceName?.takeIf { it.isNotBlank() } ?: "This phone"
+    val server = settings.serverUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() ?: it }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s2).clip(RoundedCornerShape(Radius.md))
+            .background(Brand.Surface).border(1.dp, Brand.Border, RoundedCornerShape(Radius.md)).padding(Space.s4),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        com.echoledger.mobile.ui.design.Avatar(name, size = 48.dp)
+        Column(Modifier.padding(start = Space.s3).weight(1f)) {
+            Text(name, style = type.titleS, color = Brand.Text)
+            Text(server?.let { "Paired with $it" } ?: "Not paired", style = type.labelM, color = Brand.Muted)
+        }
+    }
+}
+
+/** A settings group or search result: the design system's row (tinted icon tile, title, summary) with a chevron. */
 @Composable
 private fun SettingsRow(icon: ImageVector, title: String, summary: String, clickLabel: String, onClick: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable(onClickLabel = clickLabel, onClick = onClick).padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Icon(icon, contentDescription = null, tint = Brand.Violet, modifier = Modifier.size(22.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, fontWeight = FontWeight.SemiBold)
-            Text(summary, color = Brand.Muted, fontSize = 12.sp)
+    com.echoledger.mobile.ui.design.SettingsRow(
+        icon,
+        title,
+        Modifier.semantics {
+            onClick(label = clickLabel) {
+                onClick()
+                true
+            }
+        },
+        summary = summary,
+        onClick = onClick,
+        trailing = {
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = Brand.Faint,
+                modifier = Modifier.size(20.dp)
+            )
         }
-        Text("›", color = Brand.Muted, fontSize = 22.sp)
-    }
+    )
 }
 
 /** One group of settings; [focus] is the entry a search result pointed at, scrolled into view once. */
 @Composable
 private fun SettingsGroupScreen(vm: MainViewModel, group: SettingsGroup, focus: String?, onSetup: () -> Unit, onBack: () -> Unit) {
     val settings by vm.settings.collectAsState()
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
-            Text(group.label, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize()) {
+        com.echoledger.mobile.ui.design.EchoTopBar(
+            group.label,
+            large = false,
+            navigation = {
+                com.echoledger.mobile.ui.design.BarIcon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", onBack, tint = Brand.Text)
+            }
+        )
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(bottom = Space.s4),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             SettingsCatalogue.inGroup(group).forEach { entry ->
                 val requester = remember { BringIntoViewRequester() }
                 LaunchedEffect(focus) {

@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.Uncertain
 import com.echoledger.mobile.data.SegmentDto
+import com.echoledger.mobile.ui.design.EchoType
 import kotlin.math.max
 import kotlin.math.min
 
@@ -52,7 +53,7 @@ internal fun TranscriptLine(
     // Show as: the Roman Urdu or English view of the line (labelled above the transcript), without marks. A line the view
     // could not be written for shows its original words with a small note (since v1.3).
     if (override != null) {
-        Text(withUnsureMarks(override), fontSize = 14.sp, style = scriptStyle(language))
+        Text(withUnsureMarks(override), style = scriptStyle(language), color = Brand.Text)
         if (keptOriginal) Text("Original words: this line could not be written in the view.", fontSize = 11.sp, color = Brand.Muted)
         return
     }
@@ -100,7 +101,6 @@ private fun LineText(
                 addStyle(SpanStyle(background = Brand.Warning.copy(alpha = 0.35f)), ranges[spoken].first, ranges[spoken].last + 1)
             }
         },
-        fontSize = 14.sp,
         // Urdu and Arabic get their own letter forms (Android's Nastaliq and Naskh fonts follow the text's locale).
         style = scriptStyle(language),
         onTextLayout = { layout = it },
@@ -122,11 +122,14 @@ private fun LineText(
     )
 }
 
-/** Urdu text in the Urdu locale (Nastaliq, taller lines), Arabic in the Arabic locale (Naskh); others as they are. */
+/**
+ * Transcript text (since v1.3): Urdu in the bundled Noto Nastaliq Urdu (19/38, right to left), Arabic in Noto Naskh
+ * Arabic (18/30), everything else in Inter 17/28. The locale stays set so line breaking follows the language.
+ */
 internal fun scriptStyle(language: String?): TextStyle = when (Languages.canonical(language)) {
-    "ur" -> TextStyle(localeList = LocaleList("ur"), lineHeight = 28.sp)
-    "ar" -> TextStyle(localeList = LocaleList("ar"), lineHeight = 24.sp)
-    else -> TextStyle.Default
+    "ur" -> EchoType.Bundled.transcriptUrdu.copy(localeList = LocaleList("ur"))
+    "ar" -> EchoType.Bundled.transcriptArabic.copy(localeList = LocaleList("ar"))
+    else -> EchoType.Bundled.transcript
 }
 
 /** A dotted line under [range] of the laid-out text, on every line it spans (right to left text too). */

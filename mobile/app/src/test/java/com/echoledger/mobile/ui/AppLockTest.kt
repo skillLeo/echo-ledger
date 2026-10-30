@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.fragment.app.FragmentActivity
@@ -113,7 +114,7 @@ class AppLockTest : AppTest() {
 
         compose.onNodeWithText("EchoLedger is locked").assertIsDisplayed()
         compose.onNodeWithText("Unlock with your fingerprint, face or device PIN.").assertIsDisplayed()
-        compose.onNodeWithText("Unlock").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Unlock").assertIsDisplayed()
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
         compose.onAllNodesWithContentDescription("You").assertCountEquals(0)
     }

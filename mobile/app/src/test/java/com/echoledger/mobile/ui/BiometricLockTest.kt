@@ -4,6 +4,7 @@ import android.app.Activity
 import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.fragment.app.FragmentActivity
@@ -104,8 +105,8 @@ class BiometricLockTest : AppTest() {
 
         compose.onNodeWithText("EchoLedger is locked").assertIsDisplayed()
         compose.onNodeWithText("Unlock with your fingerprint, face or device PIN.").assertIsDisplayed()
-        compose.onNodeWithText("Unlock").performClick()
-        compose.onNodeWithText("Unlock").performClick()
+        compose.onNodeWithContentDescription("Unlock").performClick()
+        compose.onNodeWithContentDescription("Unlock").performClick()
 
         assertEquals(2, taps)
     }

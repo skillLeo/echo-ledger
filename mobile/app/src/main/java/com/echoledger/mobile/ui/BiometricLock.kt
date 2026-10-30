@@ -14,6 +14,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -36,6 +38,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -195,28 +199,56 @@ fun StartupSplash() {
 /** Full-screen lock cover shown until the user authenticates. Nothing else is composed while it is shown. */
 @Composable
 fun LockScreen(onUnlock: () -> Unit) {
+    // Since v1.3: the app mark, one line, a 64 dp fingerprint button and "Use PIN" (the same prompt offers the PIN).
+    val type = LocalEchoType.current
     Column(
-        Modifier.fillMaxSize().background(Brand.Background).padding(32.dp),
+        Modifier.fillMaxSize().background(Brand.Background).padding(Space.s6),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Box(Modifier.size(84.dp).clip(CircleShape).background(Brand.GradientSoft), contentAlignment = Alignment.Center) {
-            Icon(Icons.Outlined.Lock, contentDescription = null, tint = Brand.Violet, modifier = Modifier.size(40.dp))
-        }
-        Text(
-            "EchoLedger is locked",
-            color = Brand.Text,
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            modifier = Modifier.padding(top = 18.dp)
-        )
+        AppMark(56.dp)
+        Text("EchoLedger is locked", style = type.titleM, color = Brand.Text, modifier = Modifier.padding(top = Space.s5))
         Text(
             "Unlock with your fingerprint, face or device PIN.",
+            style = type.bodyM,
             color = Brand.Muted,
-            fontSize = 13.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = 6.dp)
+            modifier = Modifier.padding(top = Space.s2)
         )
-        OutlinedButton(onClick = onUnlock, modifier = Modifier.padding(top = 24.dp)) { Text("Unlock") }
+        Box(
+            Modifier.padding(top = Space.s6).size(64.dp).clip(CircleShape).background(LocalEchoColors.current.accentStrong)
+                .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Unlock", onClick = onUnlock)
+                .semantics { contentDescription = "Unlock" },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Rounded.Fingerprint,
+                contentDescription = null,
+                tint = LocalEchoColors.current.onAccent,
+                modifier = Modifier.size(32.dp)
+            )
+        }
+        com.echoledger.mobile.ui.design.EchoButton(
+            "Use PIN",
+            onUnlock,
+            Modifier.padding(top = Space.s3),
+            kind = com.echoledger.mobile.ui.design.ButtonKind.Text
+        )
+    }
+}
+
+/** The app's mark: a sound wave on brand indigo (the same drawing as the launcher icon). */
+@Composable
+fun AppMark(size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+    Box(
+        modifier.size(size).clip(RoundedCornerShape(size * 0.28f)).background(LocalEchoColors.current.accentStrong),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            androidx.compose.ui.res.painterResource(com.echoledger.mobile.R.drawable.ic_mark),
+            contentDescription = null,
+            tint = LocalEchoColors.current.onAccent,
+            modifier = Modifier.size(size * 0.6f)
+        )
     }
 }

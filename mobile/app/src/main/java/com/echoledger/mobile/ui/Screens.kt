@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -40,6 +41,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.LibraryBooks
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -50,12 +52,16 @@ import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -115,6 +121,13 @@ import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.data.TranscriptViewsDto
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.RecordingService
+import com.echoledger.mobile.ui.design.BannerKind
+import com.echoledger.mobile.ui.design.BarIcon
+import com.echoledger.mobile.ui.design.ButtonKind
+import com.echoledger.mobile.ui.design.EchoButton
+import com.echoledger.mobile.ui.design.EchoTopBar
+import com.echoledger.mobile.ui.design.InlineBanner
+import com.echoledger.mobile.ui.design.tabular
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -356,96 +369,123 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
-            Spacer(Modifier.weight(1f))
-            var confirmDelete by remember { mutableStateOf(false) }
-            IconButton(onClick = {
-                confirmDelete = true
-            }) { Icon(Icons.Outlined.Delete, contentDescription = "Delete", tint = Brand.Danger) }
-            if (confirmDelete) {
-                ConfirmDialog(
-                    text = "Delete this recording on every device? You can restore it from Recently deleted for 48 hours.",
-                    confirmLabel = "Delete",
-                    onConfirm = {
-                        confirmDelete = false
-                        scope.launch {
-                            vm.delete(item)
-                            onBack()
+    // The page (since v1.3): top bar (back, Copy, more), the title with its source, the transcript as the hero with
+    // speaker blocks, the tools, and the player docked at the bottom.
+    val c = LocalEchoColors.current
+    val type = LocalEchoType.current
+    var confirmDelete by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    val clientList by vm.clients.collectAsState()
+    val library by vm.library.collectAsState()
+    val live = library.firstOrNull { it.id == item.id } ?: item
+    val canCopy = t != null && t.status !in IN_PROGRESS && t.status != "failed" && segments.isNotEmpty()
+    Column(Modifier.fillMaxSize()) {
+        EchoTopBar(
+            "",
+            large = false,
+            navigation = { BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = c.text) },
+            actions = {
+                if (canCopy) BarIcon(Icons.Rounded.ContentCopy, "Copy", { copy(withTimestamps = false) })
+                Box {
+                    BarIcon(Icons.Rounded.MoreVert, "More", { menuOpen = true })
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        fun pick(action: () -> Unit) {
+                            menuOpen = false
+                            action()
                         }
-                    },
-                    onDismiss = { confirmDelete = false }
-                )
-            }
-        }
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxSize()) {
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SourceDeviceBadge(SourceDevice.from(item.sourceDevice), item.sourceDeviceLabel)
-                    SourceAppBadge(SourceApp.from(item.sourceApp), item.sourceAppLabel)
+                        if (canCopy) {
+                            DropdownMenuItem(text = {
+                                Text("Copy for AI")
+                            }, onClick = { pick { copy(withTimestamps = false, forAi = true) } })
+                        }
+                        DropdownMenuItem(text = { Text(if (live.pinned) "Unpin" else "Pin") }, onClick = {
+                            pick { scope.launch { vm.organise(item.id, pinned = !live.pinned) } }
+                        })
+                        DropdownMenuItem(text = { Text(if (live.keep) "Stop keeping" else "Keep forever") }, onClick = {
+                            pick { scope.launch { vm.organise(item.id, keep = !live.keep) } }
+                        })
+                        if (playbackUrl != null && !noAudio) {
+                            DropdownMenuItem(text = { Text(if (player.skipSilence) "Play silences" else "Skip silences") }, onClick = {
+                                pick { player.changeSkipSilence(!player.skipSilence) }
+                            })
+                        }
+                        DropdownMenuItem(text = { Text("Delete", color = c.danger) }, onClick = { pick { confirmDelete = true } })
+                    }
                 }
-                Text(item.title ?: "Untitled", fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 10.dp))
-                Text(
-                    listOf(formatWhen(item.startedAt), formatDuration(item.durationMs), item.client?.name).filter {
-                        !it.isNullOrBlank()
-                    }.joinToString(" · "),
-                    color = Brand.Muted,
-                    fontSize = 13.sp
-                )
-                Spacer(Modifier.height(12.dp))
+            }
+        )
+        if (confirmDelete) {
+            ConfirmDialog(
+                text = "Delete this recording on every device? You can restore it from Recently deleted for 48 hours.",
+                confirmLabel = "Delete",
+                onConfirm = {
+                    confirmDelete = false
+                    scope.launch {
+                        vm.delete(item)
+                        onBack()
+                    }
+                },
+                onDismiss = { confirmDelete = false }
+            )
+        }
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = Space.s5)) {
+            item(key = "head") {
+                Column(Modifier.padding(horizontal = Space.screen)) {
+                    Text(item.title ?: "Untitled", style = type.titleL, color = c.text)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Space.s2)) {
+                        val app = SourceApp.from(item.sourceApp)
+                        val device = SourceDevice.from(item.sourceDevice)
+                        com.echoledger.mobile.ui.design.SourceAppTile(app, size = 20.dp)
+                        Spacer(Modifier.width(Space.s2))
+                        Text(item.sourceAppLabel ?: app.label, style = type.labelM, color = c.textMuted)
+                        Text("  ·  ", style = type.labelM, color = c.textFaint)
+                        Icon(device.icon(), contentDescription = null, tint = c.textMuted, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(Space.s1))
+                        Text(item.sourceDeviceLabel ?: device.label, style = type.labelM, color = c.textMuted)
+                    }
+                    Text(
+                        listOf(formatWhen(item.startedAt), formatDuration(item.durationMs), item.client?.name)
+                            .filter { !it.isNullOrBlank() }
+                            .joinToString(" · "),
+                        style = type.labelM.tabular(),
+                        color = c.textMuted,
+                        modifier = Modifier.padding(top = Space.s1)
+                    )
+                    if (bookmarks.isNotEmpty()) {
+                        Row(
+                            Modifier.padding(top = Space.s3).horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(Space.s2)
+                        ) {
+                            bookmarks.forEach { b ->
+                                com.echoledger.mobile.ui.design.EchoFilterChip(
+                                    listOfNotNull(formatDuration(b.atMs), b.tag).joinToString(" "),
+                                    active = false,
+                                    onClick = { if (player.ready) player.seekTo(b.atMs) }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(Space.s4))
+                }
             }
             if (noAudio) {
-                item {
-                    SectionCard {
-                        Text("No audio", fontWeight = FontWeight.SemiBold, color = Brand.Muted)
+                item(key = "no-audio") {
+                    SectionCard(Modifier.padding(horizontal = Space.screen)) {
+                        Text("No audio", style = type.bodyL, color = c.textMuted)
                         Text(
-                            "Nothing was heard in this recording, so there is nothing to play or transcribe. Run the capture test to find out why, then delete it.",
-                            color = Brand.Muted,
-                            fontSize = 13.sp
+                            "Nothing was heard in this recording, so there is nothing to play or transcribe. " +
+                                "Run the capture test to find out why, then delete it.",
+                            style = type.bodyM,
+                            color = c.textMuted
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = onCaptureTest) { Text("Run capture test") }
-                            OutlinedButton(onClick = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                            EchoButton("Run capture test", onCaptureTest)
+                            EchoButton("Delete", {
                                 scope.launch {
                                     vm.delete(item)
                                     onBack()
                                 }
-                            }) { Text("Delete", color = Brand.Danger) }
-                        }
-                    }
-                }
-            }
-            if (playbackUrl != null && !noAudio) {
-                item { RecordingPlayer(player) }
-                item { PlayerOptions(player) }
-                item { Spacer(Modifier.height(4.dp)) }
-            }
-            if (!noAudio) {
-                item {
-                    ExportShareRow(
-                        vm,
-                        item.id,
-                        t?.id?.takeIf { t.status == "completed" && t.kind == "final" },
-                        hasAudio =
-                            playbackUrl != null,
-                        view = showAs.key.takeIf { shown != null }
-                    )
-                }
-                if (item.transcript?.finalStatus != null) {
-                    item { RetranscribeRow(vm, item, version) { version = it } }
-                }
-            }
-            if (bookmarks.isNotEmpty()) {
-                item {
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        bookmarks.forEach { b ->
-                            FilterChip(
-                                selected = false,
-                                enabled = player.ready,
-                                onClick = { player.seekTo(b.atMs) },
-                                label = { Text(listOfNotNull(formatDuration(b.atMs), b.tag).joinToString(" ")) }
-                            )
+                            }, kind = ButtonKind.Secondary)
                         }
                     }
                 }
@@ -453,16 +493,28 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
             when {
                 noAudio -> Unit
 
-                !loaded -> item { Text("Loading transcript…", color = Brand.Muted) }
-
-                t == null && loadFailed -> item {
-                    RetryBanner("Couldn't load the transcript.", retrying = false, onRetry = {
-                        loaded = false
-                        attempt++
-                    })
+                !loaded -> item(key = "loading") {
+                    Row(Modifier.padding(horizontal = Space.screen), verticalAlignment = Alignment.CenterVertically) {
+                        com.echoledger.mobile.ui.design.Spinner(16.dp)
+                        Spacer(Modifier.width(Space.s2))
+                        Text("Loading transcript…", style = type.bodyM, color = c.textMuted)
+                    }
                 }
 
-                t == null -> item {
+                t == null && loadFailed -> item(key = "load-failed") {
+                    InlineBanner(
+                        "Couldn't load the transcript. Check the connection and try again.",
+                        Modifier.padding(horizontal = Space.screen),
+                        kind = BannerKind.Error,
+                        action = "Retry",
+                        onAction = {
+                            loaded = false
+                            attempt++
+                        }
+                    )
+                }
+
+                t == null -> item(key = "no-transcript") {
                     val status = item.transcript?.finalStatus
                     Text(
                         when (status) {
@@ -470,42 +522,73 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                             "failed" -> "Transcription failed."
                             else -> TranscriptText.transcribing(item.transcript?.finalProgress)
                         },
-                        color = Brand.Muted
+                        style = type.bodyM,
+                        color = c.textMuted,
+                        modifier = Modifier.padding(horizontal = Space.screen)
                     )
                 }
 
-                t.status == "failed" -> item {
-                    SectionCard {
-                        Text("Transcription failed", fontWeight = FontWeight.SemiBold, color = Brand.Danger)
-                        Text(failureText(t), color = Brand.Muted, fontSize = 13.sp)
+                t.status == "failed" -> item(key = "failed") {
+                    SectionCard(Modifier.padding(horizontal = Space.screen)) {
+                        Text("Transcription failed", style = type.bodyL, color = c.danger)
+                        Text(failureText(t), style = type.bodyM, color = c.textMuted)
                         // Since v1.3: one tap runs it again (the server starts with the best engine for its language).
                         if (t.errorCode != "no_audio") {
                             val retryScope = rememberCoroutineScope()
                             var retrying by remember { mutableStateOf(false) }
-                            Button(
-                                enabled = !retrying,
-                                onClick = {
+                            EchoButton(
+                                if (retrying) "Retrying…" else "Retry",
+                                {
                                     retrying = true
                                     retryScope.launch {
                                         vm.retranscribe(item.id, t.language)
                                         retrying = false
                                     }
                                 },
-                                modifier = Modifier.padding(top = 8.dp).semantics { contentDescription = "Retry the transcription" }
-                            ) { Text(if (retrying) "Retrying…" else "Retry") }
+                                Modifier.semantics { contentDescription = "Retry the transcription" },
+                                loading = retrying
+                            )
                         }
                     }
                 }
 
-                t.status in IN_PROGRESS -> item {
-                    Text(TranscriptText.transcribing(t.progress ?: item.transcript?.finalProgress), color = Brand.Muted)
+                t.status in IN_PROGRESS -> item(key = "progress") {
+                    Row(Modifier.padding(horizontal = Space.screen), verticalAlignment = Alignment.CenterVertically) {
+                        com.echoledger.mobile.ui.design.Spinner(16.dp)
+                        Spacer(Modifier.width(Space.s2))
+                        Text(
+                            TranscriptText.transcribing(t.progress ?: item.transcript?.finalProgress),
+                            style = type.bodyM,
+                            color = c.textMuted
+                        )
+                    }
                 }
 
-                segments.isEmpty() -> item { Text("The transcript is empty: no speech was detected.", color = Brand.Muted) }
+                segments.isEmpty() -> item(key = "empty") {
+                    Text(
+                        "The transcript is empty: no speech was detected.",
+                        style = type.bodyM,
+                        color = c.textMuted,
+                        modifier = Modifier.padding(horizontal = Space.screen)
+                    )
+                }
 
                 else -> {
-                    item {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item(key = "transcript-head") {
+                        Column(Modifier.padding(horizontal = Space.screen), verticalArrangement = Arrangement.spacedBy(Space.s3)) {
+                            val available = t.views?.available.orEmpty()
+                            if (t.kind == "final" && t.status == "completed" && available.isNotEmpty()) {
+                                ShowAsRow(available, showAs, views) { chooseView(it) }
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                                EchoButton("Copy text", {
+                                    copy(withTimestamps = false)
+                                }, kind = ButtonKind.Secondary, icon = Icons.Rounded.ContentCopy)
+                                EchoButton("Copy with timestamps", { copy(withTimestamps = true) }, kind = ButtonKind.Secondary)
+                            }
+                            EchoButton("Copy for AI (marks unsure words)", {
+                                copy(withTimestamps = false, forAi = true)
+                            }, kind = ButtonKind.Text)
                             Text(
                                 if (t.kind ==
                                     "final"
@@ -514,92 +597,102 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                                 } else {
                                     "Live captions (final pending)"
                                 },
-                                color = Brand.Muted,
-                                fontSize = 12.sp,
-                                modifier = Modifier.weight(1f)
+                                style = type.labelM,
+                                color = c.textMuted
                             )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 6.dp)) {
-                            OutlinedButton(onClick = { copy(withTimestamps = false) }) {
-                                Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Copy text")
-                            }
-                            OutlinedButton(onClick = { copy(withTimestamps = true) }) {
-                                Icon(Icons.Outlined.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Copy with timestamps")
-                            }
-                        }
-                        TextButton(onClick = { copy(withTimestamps = false, forAi = true) }) {
-                            Text("Copy for AI (marks unsure words)")
-                        }
-                        val available = t.views?.available.orEmpty()
-                        if (t.kind == "final" && t.status == "completed" && available.isNotEmpty()) {
-                            ShowAsRow(available, showAs, views) { chooseView(it) }
                         }
                     }
-                    itemsIndexed(segments) { index, s ->
+                    itemsIndexed(segments, key = { i, _ -> "s-$i" }, contentType = { _, _ -> "line" }) { index, s ->
                         val active = index == activeIndex
-                        Row(
+                        val newTurn = !continuesTurn(speakerList, index)
+                        val name = speakerName(speakerNames, s.speaker).let { if (it == "Me") "You" else it }
+                        Column(
                             Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(
-                                    if (active) Brand.Violet.copy(alpha = 0.18f) else androidx.compose.ui.graphics.Color.Transparent
-                                )
+                                .padding(horizontal = Space.s2)
+                                .clip(RoundedCornerShape(Radius.field))
+                                .background(if (active) c.accentSoft else androidx.compose.ui.graphics.Color.Transparent)
                                 .clickable(enabled = player.ready) { player.seekTo(s.startMs) }
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .padding(horizontal = Space.s2, vertical = Space.s1)
                         ) {
-                            Text(TranscriptText.stamp(s.startMs), color = Brand.Muted, fontSize = 12.sp, modifier = Modifier.width(52.dp))
-                            // A turn shows its speaker once; following lines of the same speaker leave the label blank.
-                            Text(
-                                if (continuesTurn(speakerList, index)) "" else speakerName(speakerNames, s.speaker),
-                                color = if (s.channel == 2) LocalEchoColors.current.client else LocalEchoColors.current.me,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 12.sp,
-                                modifier = Modifier.width(60.dp)
-                            )
+                            if (newTurn) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(top = Space.s3, bottom = Space.s1)
+                                ) {
+                                    com.echoledger.mobile.ui.design.Avatar(name, size = 28.dp)
+                                    Spacer(Modifier.width(Space.s2))
+                                    Text(
+                                        name,
+                                        style = type.labelM.copy(fontWeight = FontWeight.SemiBold),
+                                        color = if (s.channel ==
+                                            2
+                                        ) {
+                                            c.client
+                                        } else {
+                                            c.me
+                                        }
+                                    )
+                                    Spacer(Modifier.width(Space.s2))
+                                    Text(TranscriptText.stamp(s.startMs), style = type.caption.tabular(), color = c.textFaint)
+                                }
+                            }
                             val spoken = if (active && s.words.isNotEmpty()) s.words.indexOfLast { it.startMs <= player.positionMs } else -1
                             val lineLanguage = when (showAs) {
                                 ShowAs.ORIGINAL -> t.language
                                 ShowAs.URDU -> "ur"
                                 else -> "en"
                             }
-                            TranscriptLine(
-                                s,
-                                spoken,
-                                enabled = player.ready,
-                                override = shown?.getOrNull(index),
-                                language = lineLanguage,
-                                keptOriginal = shown != null && index in views?.kept?.get(showAs.key).orEmpty()
-                            ) {
-                                player.seekTo(it)
+                            Box(Modifier.padding(start = 36.dp)) {
+                                TranscriptLine(
+                                    s,
+                                    spoken,
+                                    enabled = player.ready,
+                                    override = shown?.getOrNull(index),
+                                    language = lineLanguage,
+                                    keptOriginal = shown != null && index in views?.kept?.get(showAs.key).orEmpty()
+                                ) {
+                                    player.seekTo(it)
+                                }
                             }
                         }
                     }
                 }
             }
-            // Organising comes after the transcript: reading it is the main job of this page.
-            item {
-                Spacer(Modifier.height(8.dp))
-                val clientList by vm.clients.collectAsState()
-                val library by vm.library.collectAsState()
-                val live = library.firstOrNull { it.id == item.id } ?: item
-                OrganiseSection(
-                    live,
-                    Organise.folders(library, clientList),
-                    Organise.labels(library),
-                    onPin = { scope.launch { vm.organise(item.id, pinned = it) } },
-                    onMove = { id -> scope.launch { vm.organise(item.id, clientId = id, clearClient = id == null) } },
-                    onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { vm.organise(item.id, clientId = it.id) } } },
-                    onLabels = { scope.launch { vm.organise(item.id, labels = it) } },
-                    onKeep = { scope.launch { vm.organise(item.id, keep = it) } }
-                )
-                Spacer(Modifier.height(8.dp))
+            // The tools come after the transcript: reading it is the main job of this page.
+            if (!noAudio) {
+                item(key = "tools") {
+                    Column(
+                        Modifier.padding(horizontal = Space.screen).padding(top = Space.s5),
+                        verticalArrangement = Arrangement.spacedBy(Space.s3)
+                    ) {
+                        ExportShareRow(
+                            vm,
+                            item.id,
+                            t?.id?.takeIf { t.status == "completed" && t.kind == "final" },
+                            hasAudio = playbackUrl != null,
+                            view = showAs.key.takeIf { shown != null }
+                        )
+                        if (item.transcript?.finalStatus != null) RetranscribeRow(vm, item, version) { version = it }
+                    }
+                }
             }
-            item { Spacer(Modifier.height(24.dp)) }
+            item(key = "organise") {
+                Box(Modifier.padding(horizontal = Space.screen).padding(top = Space.s3)) {
+                    OrganiseSection(
+                        live,
+                        Organise.folders(library, clientList),
+                        Organise.labels(library),
+                        onPin = { scope.launch { vm.organise(item.id, pinned = it) } },
+                        onMove = { id -> scope.launch { vm.organise(item.id, clientId = id, clearClient = id == null) } },
+                        onCreateClient = { name -> scope.launch { vm.createClient(name)?.let { vm.organise(item.id, clientId = it.id) } } },
+                        onLabels = { scope.launch { vm.organise(item.id, labels = it) } },
+                        onKeep = { scope.launch { vm.organise(item.id, keep = it) } }
+                    )
+                }
+            }
         }
+        if (playbackUrl != null && !noAudio) RecordingPlayer(player)
     }
 }
 

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ splash: the mark on brand indigo over the window colour, shown only while the app starts. -->
+    <style name="Theme.EchoLedger" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/el_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:colorAccent">@color/el_brand</item>
+        <item name="android:windowSplashScreenBackground">@color/el_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/el_brand</item>
+    </style>
+</resources>

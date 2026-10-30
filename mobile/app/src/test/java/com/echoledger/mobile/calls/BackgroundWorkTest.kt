@@ -85,7 +85,7 @@ class BackgroundWorkTest : AppTest() {
 
         assertEquals(NotificationManager.IMPORTANCE_LOW, manager.getNotificationChannel(Notifications.CHANNEL_RECORDING).importance)
         assertEquals(NotificationManager.IMPORTANCE_HIGH, manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS).importance)
-        assertEquals(NotificationManager.IMPORTANCE_MIN, manager.getNotificationChannel(Notifications.CHANNEL_STATUS).importance)
+        assertNull("the empty Status channel is gone", manager.getNotificationChannel(Notifications.OLD_CHANNEL_STATUS))
         assertNull("no sound for the post-call question", manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS).sound)
         assertFalse(manager.getNotificationChannel(Notifications.CHANNEL_DECISIONS).shouldVibrate())
         assertFalse(manager.getNotificationChannel(Notifications.CHANNEL_RECORDING).canShowBadge())

@@ -121,7 +121,7 @@ class SessionScreenTest : ScreenTest() {
         compose.onNodeWithText("Final transcript · AssemblyAI").assertIsDisplayed()
         compose.onNodeWithText("Hello there.").assertIsDisplayed()
         compose.onNodeWithText("Hi, thanks for calling.").assertIsDisplayed()
-        compose.onAllNodesWithText("Me", substring = false).assertCountEquals(1)
+        compose.onAllNodesWithText("You", substring = false).assertCountEquals(1)
         compose.onAllNodesWithText("Client", substring = false).assertCountEquals(1)
         compose.onAllNodesWithText("0:00", substring = false).assertCountEquals(1)
         compose.onAllNodesWithText("0:12", substring = false).assertCountEquals(1)
@@ -318,7 +318,8 @@ class SessionScreenTest : ScreenTest() {
         serve()
         showSession()
 
-        compose.onNodeWithContentDescription("Delete").performClick()
+        compose.onNodeWithContentDescription("More").performClick()
+        compose.onNodeWithText("Delete").performClick()
         assertEquals(
             "nothing is deleted before the user confirms",
             0,

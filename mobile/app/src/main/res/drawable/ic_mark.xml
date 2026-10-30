@@ -1,0 +1,12 @@
+<!-- The app mark for in-app use (lock screen, onboarding): the launcher's sound-wave "E", centred in 24 dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="56"
+    android:viewportHeight="56">
+    <group android:translateX="-34.5" android:translateY="-26.5">
+        <path android:fillColor="#FFFFFFFF" android:pathData="M38,36h32v7H45v8h22v7H45v8h25v7H38z" />
+        <path android:fillColor="#B3FFFFFF" android:pathData="M76,44h4v20h-4z" />
+        <path android:fillColor="#80FFFFFF" android:pathData="M83,48h4v12h-4z" />
+    </group>
+</vector>

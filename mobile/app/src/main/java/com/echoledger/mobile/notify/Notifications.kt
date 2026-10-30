@@ -34,15 +34,19 @@ object Notifications {
     /** Heads-up channel for the post-call question. Replaces the old "decisions" channel, whose importance could not be raised. */
     const val CHANNEL_DECISIONS = "decisions_headsup"
     private const val OLD_CHANNEL_DECISIONS = "decisions"
-    const val CHANNEL_STATUS = "status"
+
+    /** An empty "Status" channel of earlier versions: nothing was ever posted to it (removed in v1.3). */
+    const val OLD_CHANNEL_STATUS = "status"
 
     /** Activity centre (B18): transcript ready, upload failed, new device, monthly limit. */
     const val CHANNEL_ACTIVITY = "activity"
     const val ID_FOREGROUND = 1001
 
+    /** Recording · Calls and problems · Transcripts ready: the three channels people see in the phone's settings. */
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.deleteNotificationChannel(OLD_CHANNEL_DECISIONS)
+        manager.deleteNotificationChannel(OLD_CHANNEL_STATUS)
         manager.createNotificationChannels(
             listOf(
                 NotificationChannel(
@@ -62,9 +66,6 @@ object Notifications {
                     setSound(null, null)
                     enableVibration(false)
                     lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-                },
-                NotificationChannel(CHANNEL_STATUS, context.getString(R.string.channel_status), NotificationManager.IMPORTANCE_MIN).apply {
-                    description = context.getString(R.string.channel_status_desc)
                 },
                 NotificationChannel(
                     CHANNEL_ACTIVITY,

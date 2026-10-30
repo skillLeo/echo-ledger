@@ -69,7 +69,7 @@ class ServerContractScreenTest : ScreenTest() {
         compose.onNodeWithText("Final transcript · AssemblyAI").assertIsDisplayed()
         compose.onNodeWithText("This is a test of the EchoLedger transcription system.").assertIsDisplayed()
         compose.onNodeWithText("Loud and clear. Go ahead.").assertIsDisplayed()
-        assertEquals(2, count("Me", substring = false))
+        assertEquals(2, count("You", substring = false)) // "Me" reads as "You" on the page
         assertEquals(2, count("Client", substring = false))
     }
 
