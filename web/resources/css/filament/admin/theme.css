@@ -296,16 +296,21 @@ time,
     font-weight: 600;
 }
 
-/* Inputs and row tiles: 12 px; quiet fill instead of a hard outline. */
+/* Inputs and row tiles: 12 px, a 1 px border (Filament's ring is a shadow; the phone draws a border). */
 .fi-input-wrp {
+    border: 1px solid var(--border-strong);
     border-radius: var(--radius-field);
     box-shadow: none;
-    --tw-ring-color: var(--border-strong);
     background-color: var(--surface);
 }
 
 .fi-input-wrp:not(.fi-disabled):focus-within {
-    --tw-ring-color: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.fi-input-wrp.fi-invalid {
+    border-color: var(--danger);
 }
 
 .fi-input,
@@ -413,10 +418,14 @@ time,
 .fi-ta-ctn,
 .fi-wi-stats-overview-stat,
 .fi-wi-chart > .fi-section {
+    border: 1px solid var(--border);
     border-radius: var(--radius-md);
     background-color: var(--surface);
     box-shadow: none;
-    --tw-ring-color: var(--border);
+}
+
+.el-list .fi-ta-ctn {
+    border: 0;
 }
 
 .fi-section-header-heading {
@@ -453,10 +462,10 @@ time,
 }
 
 .fi-dropdown-panel {
+    border: 1px solid var(--border);
     border-radius: var(--radius-md);
     background-color: var(--surface);
     box-shadow: var(--shadow-float);
-    --tw-ring-color: var(--border);
 }
 
 .dark .fi-dropdown-panel {
@@ -507,14 +516,14 @@ time,
 /* The search field is the phone's search pill. */
 .fi-ta-search-field .fi-input-wrp,
 .fi-global-search-field .fi-input-wrp {
+    border-color: transparent;
     border-radius: var(--radius-full);
     background-color: var(--surface-2);
-    --tw-ring-color: transparent;
 }
 
 .fi-ta-search-field .fi-input-wrp:focus-within,
 .fi-global-search-field .fi-input-wrp:focus-within {
-    --tw-ring-color: var(--accent);
+    border-color: var(--accent);
     background-color: var(--surface);
 }
 
@@ -579,14 +588,17 @@ time,
 }
 
 .el-list .fi-ta-header-toolbar > :last-child {
+    position: relative;
     display: flex;
     flex: 1;
+    min-width: 0;
     align-items: center;
     gap: 0;
 }
 
 .el-list .fi-ta-search-field {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     max-width: none;
 }
 
@@ -595,11 +607,13 @@ time,
     padding-inline-end: 52px;
 }
 
-.el-list .fi-ta-search-field + .fi-ta-filters-dropdown,
 .el-list .fi-ta-search-field ~ .fi-ta-filters-dropdown {
-    position: relative;
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 14px;
     z-index: 1;
-    margin-inline: -48px 8px;
+    display: flex;
+    align-items: center;
 }
 
 .el-list .fi-ta-filters-dropdown .fi-icon-btn {
@@ -1119,6 +1133,12 @@ time,
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     background-color: var(--surface);
+}
+
+@media (max-width: 639.98px) {
+    .el-card {
+        padding: var(--space-4);
+    }
 }
 
 .el-card-title {
