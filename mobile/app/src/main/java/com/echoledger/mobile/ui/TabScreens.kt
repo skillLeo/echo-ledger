@@ -255,7 +255,13 @@ private fun ActivityRow(item: ActivityItemDto, today: LocalDate, divider: Boolea
  * lists its recordings with the same rows as the Library. "+" adds a client.
  */
 @Composable
-fun ClientsScreen(vm: MainViewModel, onOpenItem: (LibraryItem) -> Unit, scrollToTop: Int = 0, today: LocalDate = LocalDate.now()) {
+fun ClientsScreen(
+    vm: MainViewModel,
+    onOpenItem: (LibraryItem) -> Unit,
+    scrollToTop: Int = 0,
+    today: LocalDate = LocalDate.now(),
+    onOpenAt: (String, Long) -> Unit = { _, _ -> }
+) {
     val clients by vm.clients.collectAsState()
     val library by vm.library.collectAsState()
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -271,50 +277,9 @@ fun ClientsScreen(vm: MainViewModel, onOpenItem: (LibraryItem) -> Unit, scrollTo
     val live = library.filter { !it.deleted }
     val open = clients.firstOrNull { it.id == openId }
     if (open != null) {
-        BackHandler { openId = null }
+        // The client's workspace (since 1.4): Overview · Recordings · Files · Ask.
         val recordings = live.filter { it.client?.id == open.id }.sortedByDescending { it.startedAt }
-        LazyColumn(Modifier.fillMaxSize(), contentPadding = ListPadding) {
-            item(key = "top") {
-                EchoTopBar(open.name, large = false, navigation = {
-                    BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", { openId = null }, tint = Brand.Text)
-                })
-            }
-            item(key = "head") {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s2),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Avatar(open.name, size = 56.dp)
-                    Column(Modifier.padding(start = Space.s4)) {
-                        Text(open.name, style = LocalEchoType.current.titleM, color = Brand.Text)
-                        Text(
-                            listOfNotNull(
-                                countLabel(recordings.size),
-                                open.language?.let {
-                                    "Default language: ${languageName(it)}"
-                                }
-                            ).joinToString(" · "),
-                            style = LocalEchoType.current.labelM,
-                            color = Brand.Muted
-                        )
-                    }
-                }
-            }
-            if (recordings.isEmpty()) {
-                item(key = "empty") {
-                    EchoEmptyState(
-                        Icons.Rounded.Group,
-                        "No recordings yet",
-                        body = "Calls and notes you move to ${open.name} show up here."
-                    )
-                }
-            } else {
-                item(key = "h") { SectionHeader("Recordings") }
-                items(recordings, key = {
-                    it.id
-                }) { item -> LibraryItemRow(item, today, onOpen = { onOpenItem(item) }, onToggle = { onOpenItem(item) }) }
-            }
-        }
+        ClientWorkspaceScreen(vm, open, recordings, today, onOpenItem, onOpenAt, onBack = { openId = null })
         return
     }
     LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = ListPadding) {
@@ -358,7 +323,7 @@ fun ClientsScreen(vm: MainViewModel, onOpenItem: (LibraryItem) -> Unit, scrollTo
     }
 }
 
-private fun countLabel(n: Int) = when (n) {
+internal fun countLabel(n: Int) = when (n) {
     0 -> "No recordings yet"
     1 -> "1 recording"
     else -> "$n recordings"

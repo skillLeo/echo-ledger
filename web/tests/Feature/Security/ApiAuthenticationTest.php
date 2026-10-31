@@ -23,6 +23,18 @@ function secDeviceGuardedRoutes(): array
         'POST devices/rotate-token' => ['POST', '/api/devices/rotate-token', null],
         'GET config' => ['GET', '/api/config', 'config:read'],
         'GET clients' => ['GET', '/api/clients', 'library:read'],
+        'GET clients/{id}/workspace' => ['GET', '/api/clients/'.Fx::MISSING_ID.'/workspace', 'library:read'],
+        'GET clients/{id}/bundle' => ['GET', '/api/clients/'.Fx::MISSING_ID.'/bundle', 'library:read'],
+        'PUT clients/{id}/brief' => ['PUT', '/api/clients/'.Fx::MISSING_ID.'/brief', 'sessions:write'],
+        'POST clients/{id}/brief/refresh' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/brief/refresh', 'sessions:write'],
+        'POST clients/{id}/memory' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/memory', 'sessions:write'],
+        'PATCH clients/{id}/memory/{item}' => ['PATCH', '/api/clients/'.Fx::MISSING_ID.'/memory/'.Fx::MISSING_ID, 'sessions:write'],
+        'DELETE clients/{id}/memory/{item}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID.'/memory/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST clients/{id}/files' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/files', 'sessions:write'],
+        'DELETE clients/{id}/files/{file}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID.'/files/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST clients/{id}/ask' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/ask', 'sessions:write'],
+        'GET sessions/{id}/notes' => ['GET', '/api/sessions/'.Fx::MISSING_ID.'/notes', 'library:read'],
+        'POST sessions/{id}/notes' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/notes', 'sessions:write'],
         'POST stt/token' => ['POST', '/api/stt/token', 'stt:token'],
         'POST usage' => ['POST', '/api/usage', 'stt:token'],
         'POST live-translate/token' => ['POST', '/api/live-translate/token', 'stt:token'],
@@ -107,7 +119,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(50);
+    expect($guarded)->toBe(62);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

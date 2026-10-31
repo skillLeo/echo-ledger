@@ -364,6 +364,67 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _message.value = it.message ?: "The client could not be created." }.getOrNull()
             ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
     }
+    // ---- Client workspaces (since 1.4) -----------------------------------------------------------------------------
+
+    /** Runs one workspace request; null (and the server's words as the message) when it failed. */
+    private suspend fun <T> workspaceCall(failed: String, block: suspend (com.echoledger.mobile.net.ApiClient) -> T): T? =
+        withContext(Dispatchers.IO) {
+            runCatching { block(graph.api() ?: error("Pair this phone first.")) }
+                .onFailure { _message.value = it.message ?: failed }.getOrNull()
+        }
+
+    suspend fun workspace(clientId: String) = workspaceCall("The client's workspace could not be loaded.") { it.workspace(clientId) }
+
+    suspend fun setAiNotes(clientId: String, on: Boolean) = workspaceCall("The setting could not be saved.") {
+        it.setClientAiNotes(clientId, on)
+    }
+
+    suspend fun saveBrief(clientId: String, sections: com.echoledger.mobile.data.BriefSections) =
+        workspaceCall("The brief could not be saved.") { it.updateBrief(clientId, sections) }
+
+    suspend fun refreshBrief(clientId: String) = workspaceCall("The brief could not be made again.") { it.refreshBrief(clientId) }
+
+    suspend fun addMemory(clientId: String, kind: String, text: String) =
+        workspaceCall("The line could not be added.") { it.addMemory(clientId, kind, text) }
+
+    suspend fun updateMemory(clientId: String, item: String, text: String? = null, pinned: Boolean? = null) =
+        workspaceCall("The line could not be saved.") { it.updateMemory(clientId, item, text, pinned) }
+
+    suspend fun deleteMemory(clientId: String, item: String) = workspaceCall("The line could not be removed.") {
+        it.deleteMemory(clientId, item)
+    }
+
+    /** Uploads picked files to a client's workspace; how many went up. */
+    suspend fun addClientFiles(clientId: String, uris: List<android.net.Uri>): Int = workspaceCall("The files could not be added.") { api ->
+        val context = getApplication<android.app.Application>()
+        uris.count { uri ->
+            val picked = com.echoledger.mobile.share.FileImport.describe(context, uri)
+            val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@count false
+            runCatching { api.uploadClientFile(clientId, picked.name, ClientFiles.mime(picked.mime, picked.name), bytes) }
+                .onFailure { _message.value = it.message }.isSuccess
+        }
+    } ?: 0
+
+    suspend fun addInstructions(clientId: String, name: String, text: String) =
+        workspaceCall("The instructions could not be saved.") { it.addInstructions(clientId, name, text) }
+
+    suspend fun deleteClientFile(clientId: String, file: String) = workspaceCall("The file could not be removed.") {
+        it.deleteClientFile(clientId, file)
+    }
+
+    suspend fun ask(clientId: String, question: String, language: String) =
+        workspaceCall("Claude could not answer right now. Try again in a minute.") { it.ask(clientId, question, language) }
+
+    suspend fun bundle(clientId: String) = workspaceCall("The text could not be made.") { it.bundle(clientId) }
+
+    suspend fun sessionNotes(sessionId: String) = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.sessionNotes(sessionId) }.getOrNull()
+    }
+
+    suspend fun makeNotes(sessionId: String, language: String) = workspaceCall("The notes could not be started.") {
+        it.makeNotes(sessionId, language)
+    }
+
     // ---- Activity centre (B18) -------------------------------------------------------------------------------------
 
     /** Opening a recording (since v1.3): the dot goes away here at once, and the server is told. */

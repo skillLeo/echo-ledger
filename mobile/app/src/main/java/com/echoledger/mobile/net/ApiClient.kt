@@ -347,6 +347,99 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("clients/$id").patch(body).build(), null as KSerializer<Unit>?)
     }
 
+    // ---- Client workspaces (since 1.4) -------------------------------------------------------------------------
+
+    /** `GET /api/clients/{id}/workspace`: brief, memory, call notes, files and the AI budget. */
+    suspend fun workspace(id: String): com.echoledger.mobile.data.WorkspaceDto =
+        call(request("clients/$id/workspace").get().build(), com.echoledger.mobile.data.WorkspaceResponse.serializer())!!.data
+
+    /** `PATCH /api/clients/{id}` with `ai_notes`: call notes and memory after each call for this client. */
+    suspend fun setClientAiNotes(id: String, on: Boolean) {
+        val body = buildJsonObject { put("ai_notes", on) }.toString().toRequestBody(jsonType)
+        call(request("clients/$id").patch(body).build(), null as KSerializer<Unit>?)
+    }
+
+    /** `PUT /api/clients/{id}/brief`: a person's edit (never rewritten by itself afterwards). */
+    suspend fun updateBrief(id: String, sections: com.echoledger.mobile.data.BriefSections): com.echoledger.mobile.data.BriefDto {
+        val payload = buildJsonObject {
+            put("sections", ApiJson.encodeToJsonElement(com.echoledger.mobile.data.BriefSections.serializer(), sections))
+        }
+        val body = payload.toString().toRequestBody(jsonType)
+        return call(request("clients/$id/brief").put(body).build(), com.echoledger.mobile.data.BriefResponse.serializer())!!.data
+    }
+
+    /** `POST /api/clients/{id}/brief/refresh`: write the brief again from the files (or calls), on the server's queue. */
+    suspend fun refreshBrief(id: String) {
+        call(request("clients/$id/brief/refresh").post("{}".toRequestBody(jsonType)).build(), null as KSerializer<Unit>?, allowEmpty = true)
+    }
+
+    suspend fun addMemory(id: String, kind: String, text: String): com.echoledger.mobile.data.MemoryItemDto {
+        val body = buildJsonObject {
+            put("kind", kind)
+            put("text", text)
+        }.toString().toRequestBody(jsonType)
+        return call(request("clients/$id/memory").post(body).build(), com.echoledger.mobile.data.MemoryItemResponse.serializer())!!.data
+    }
+
+    suspend fun updateMemory(id: String, item: String, text: String? = null, pinned: Boolean? = null) {
+        val body = buildJsonObject {
+            text?.let { put("text", it) }
+            pinned?.let { put("pinned", it) }
+        }.toString().toRequestBody(jsonType)
+        call(request("clients/$id/memory/$item").patch(body).build(), null as KSerializer<Unit>?)
+    }
+
+    suspend fun deleteMemory(id: String, item: String) {
+        call(request("clients/$id/memory/$item").delete().build(), null as KSerializer<Unit>?, allowEmpty = true)
+    }
+
+    /** `POST /api/clients/{id}/files` (multipart): a PDF, Word, text or Markdown file for the brief and Ask. */
+    suspend fun uploadClientFile(id: String, name: String, mime: String, bytes: ByteArray): com.echoledger.mobile.data.ClientFileDto {
+        val body = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("file", name, bytes.toRequestBody(mime.toMediaType()))
+            .build()
+        return call(request("clients/$id/files").post(body).build(), com.echoledger.mobile.data.ClientFileResponse.serializer())!!.data
+    }
+
+    /** `POST /api/clients/{id}/files` with pasted instructions. */
+    suspend fun addInstructions(id: String, name: String, text: String): com.echoledger.mobile.data.ClientFileDto {
+        val body = buildJsonObject {
+            put("name", name)
+            put("text", text)
+        }.toString().toRequestBody(jsonType)
+        return call(request("clients/$id/files").post(body).build(), com.echoledger.mobile.data.ClientFileResponse.serializer())!!.data
+    }
+
+    suspend fun deleteClientFile(id: String, file: String) {
+        call(request("clients/$id/files/$file").delete().build(), null as KSerializer<Unit>?, allowEmpty = true)
+    }
+
+    /** `POST /api/clients/{id}/ask`: a short answer with citations ("en" or "roman_urdu"). */
+    suspend fun ask(id: String, question: String, language: String): com.echoledger.mobile.data.AskAnswerDto {
+        val body = buildJsonObject {
+            put("question", question)
+            put("language", language)
+        }.toString().toRequestBody(jsonType)
+        return call(request("clients/$id/ask").post(body).build(), com.echoledger.mobile.data.AskResponse.serializer())!!.data
+    }
+
+    /** `GET /api/clients/{id}/bundle`: "Copy for AI" text. */
+    suspend fun bundle(id: String, notes: Int = 5): String =
+        call(request("clients/$id/bundle?notes=$notes").get().build(), com.echoledger.mobile.data.BundleResponse.serializer())!!.data.text
+
+    /** `GET /api/sessions/{id}/notes`, or null when the recording has no notes yet. */
+    suspend fun sessionNotes(id: String): com.echoledger.mobile.data.CallNotesDto? = try {
+        call(request("sessions/$id/notes").get().build(), com.echoledger.mobile.data.CallNotesResponse.serializer())!!.data
+    } catch (e: ApiException) {
+        if (e.code == "notes_not_found") null else throw e
+    }
+
+    /** `POST /api/sessions/{id}/notes`: write the notes (again) on the server's queue. */
+    suspend fun makeNotes(id: String, language: String): com.echoledger.mobile.data.CallNotesDto {
+        val body = buildJsonObject { put("language", language) }.toString().toRequestBody(jsonType)
+        return call(request("sessions/$id/notes").post(body).build(), com.echoledger.mobile.data.CallNotesResponse.serializer())!!.data
+    }
+
     /** `GET /api/activity` (since v1.1): the activity centre, newest first. */
     suspend fun activity(limit: Int = 30): ActivityResponse {
         val target = url("activity").toHttpUrl().newBuilder().addQueryParameter("limit", limit.toString()).build()

@@ -759,6 +759,14 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                     }
                 }
             }
+            // Call notes (since 1.4): for a recording filed under a client, written after its transcript.
+            if (item.client != null && t?.status == "completed") {
+                item(key = "call-notes") {
+                    Box(Modifier.padding(horizontal = Space.screen).padding(top = Space.s5)) {
+                        CallNotesSection(vm, item.id, onSeek = { pendingSeek = it })
+                    }
+                }
+            }
             // The tools come after the transcript: reading it is the main job of this page.
             if (!noAudio) {
                 item(key = "tools") {

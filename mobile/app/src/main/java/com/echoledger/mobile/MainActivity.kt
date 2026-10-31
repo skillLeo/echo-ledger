@@ -462,7 +462,18 @@ class MainActivity : FragmentActivity() {
                                             label = "tab"
                                         ) { current ->
                                             when (current) {
-                                                TAB_CLIENTS -> ClientsScreen(vm, onOpenItem = { showItem(it) }, scrollToTop = reselected)
+                                                TAB_CLIENTS -> ClientsScreen(vm, onOpenItem = {
+                                                    showItem(it)
+                                                }, scrollToTop = reselected, onOpenAt = { id, ms ->
+                                                    // A call note or an answer's source: the recording opens at that moment.
+                                                    val item = libraryItems.firstOrNull { it.id == id && !it.deleted }
+                                                    if (item != null) {
+                                                        openAtMs = ms
+                                                        showItem(item)
+                                                    } else {
+                                                        openSession = id
+                                                    }
+                                                })
 
                                                 TAB_RECORD -> RecordScreen(
                                                     vm,
