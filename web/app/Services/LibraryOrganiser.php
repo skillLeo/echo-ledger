@@ -115,7 +115,7 @@ final class LibraryOrganiser
         $oldest = Carbon::parse((string) $stats->oldest, (string) config('app.timezone'))->setTimezone($zone)->format('M j');
         // An open session has no length until its device finishes it: the total is left out while none is known.
         $totalMs = (int) ($stats->total_ms ?? 0);
-        $total = $totalMs > 0 ? " · ".TranscriptExporter::clock($totalMs)." total" : "";
+        $total = $totalMs > 0 ? ' · '.TranscriptExporter::clock($totalMs).' total' : '';
 
         return $count === 1
             ? "1 call waiting · {$oldest}{$total}"

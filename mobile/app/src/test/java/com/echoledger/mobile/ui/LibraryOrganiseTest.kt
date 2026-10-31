@@ -125,10 +125,14 @@ class LibraryOrganiseTest : ScreenTest() {
 
         assertTrue(runBlocking { vm.organise(id, pinned = true, labels = listOf("Invoice")) })
         assertTrue(runBlocking { vm.organise(id, clearClient = true) })
+        assertTrue(runBlocking { vm.organise(id, title = "Invoice call") })
+        assertTrue(runBlocking { vm.organise(id, title = "") })
 
         val bodies = server.requestsTo("PATCH", "/api/sessions/$id").map { it.bodyText() }
         assertEquals("""{"pinned":true,"labels":["Invoice"]}""", bodies[0])
         assertEquals("""{"client_id":null}""", bodies[1])
+        assertEquals("""{"title":"Invoice call"}""", bodies[2])
+        assertEquals("""{"title":""}""", bodies[3])
     }
 
     @Test
@@ -308,5 +312,36 @@ class LibraryOrganiseTest : ScreenTest() {
         compose.onNodeWithContentDescription("Leave selection").performClick()
 
         assertEquals(listOf("all", "move c1", "label Q4 true", "pin false", "export txt", "delete", "done"), events)
+    }
+
+    @Test
+    fun `one selected recording can be renamed from the menu, several cannot`() {
+        var count by androidx.compose.runtime.mutableIntStateOf(1)
+        val events = mutableListOf<String>()
+        show {
+            com.echoledger.mobile.ui.design.SelectionBar(count, onClose = {}) {
+                SelectionActions(
+                    count = count,
+                    folders = emptyList(),
+                    labels = emptyList(),
+                    onMove = {},
+                    onCreateClient = {},
+                    onLabel = { _, _ -> },
+                    onPin = {},
+                    onKeep = {},
+                    onExport = {},
+                    onDelete = {},
+                    onSelectAll = {},
+                    onRename = { events += "rename" }
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Rename").performClick()
+        assertEquals(listOf("rename"), events)
+
+        count = 2
+        compose.onNodeWithContentDescription("More actions").performClick()
+        compose.onNodeWithText("Rename").assertDoesNotExist()
     }
 }

@@ -285,6 +285,14 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
     var speakerNames by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var pendingSeek by remember { mutableStateOf(startAtMs) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var shownTitle by remember(item.id) { mutableStateOf(item.title) }
+    var renamingTitle by remember { mutableStateOf(false) }
+    if (renamingTitle) {
+        RenameDialog(shownTitle.orEmpty(), onRename = { title ->
+            renamingTitle = false
+            scope.launch { if (vm.organise(item.id, title = title)) shownTitle = title.ifEmpty { null } }
+        }, onDismiss = { renamingTitle = false })
+    }
     val clipboard = LocalClipboard.current
     val player = rememberRecordingPlayer(playbackUrl)
     // The newest version is shown first; the previous one (after Re-transcribe as) is one tap away.
@@ -476,11 +484,13 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
         LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(bottom = Space.s5)) {
             item(key = "head") {
                 Column(Modifier.padding(horizontal = Space.screen)) {
+                    // Tap the title to rename the recording (since 1.4); the new name shows at once.
                     Text(
-                        item.title ?: "Untitled",
+                        shownTitle ?: "Untitled",
                         style = type.titleL,
                         color = c.text,
                         modifier = Modifier.sharedElement("title-${item.id}")
+                            .clickable(onClickLabel = "Rename") { renamingTitle = true }
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Space.s2)) {
                         val app = SourceApp.from(item.sourceApp)

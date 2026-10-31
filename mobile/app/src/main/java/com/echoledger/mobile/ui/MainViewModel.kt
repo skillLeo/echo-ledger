@@ -311,10 +311,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         clientId: String? = null,
         clearClient: Boolean = false,
         labels: List<String>? = null,
-        keep: Boolean? = null
+        keep: Boolean? = null,
+        title: String? = null
     ): Boolean {
         val ok = withContext(Dispatchers.IO) {
-            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep) ?: error("Not paired") }
+            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title) ?: error("Not paired") }
                 .onFailure { _message.value = it.message ?: "The change could not be saved." }.isSuccess
         }
         if (ok) refresh()

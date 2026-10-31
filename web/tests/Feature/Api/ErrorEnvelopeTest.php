@@ -120,6 +120,10 @@ function produceError(object $test, string $code): TestResponse
             return $test->deleteJson('/api/devices/'.ENVELOPE_MISSING_ID);
         case 'current_device':
             return $test->deleteJson('/api/devices/'.$test->device->id);
+        case 'duplicate_recording':
+            $test->createSession($test->bytes)->assertCreated();
+
+            return $test->createSession($test->bytes, ['skip_duplicate' => true]);
         case 'nothing_to_export':
             return $test->postJson('/api/sessions/export', ['ids' => [ENVELOPE_MISSING_ID], 'format' => 'txt']);
         case 'views_unavailable':
@@ -187,13 +191,13 @@ it('produces each documented code with its status, a message and nothing interna
 
     $response->assertStatus($status)->assertJsonPath('code', $code);
     expect($response->json('message'))->toBeString()->not->toBe('');
-    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks']))->toBe([]);
+    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id']))->toBe([]);
     expectNoInternals($response);
 })->with(array_diff_key(documentedErrorCodes(), array_flip(ENVELOPE_PENDING_CODES)));
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(32);
+        ->and(count(documentedErrorCodes()))->toBe(33);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

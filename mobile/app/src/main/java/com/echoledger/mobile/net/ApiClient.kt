@@ -293,9 +293,11 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         clientId: String? = null,
         clearClient: Boolean = false,
         labels: List<String>? = null,
-        keep: Boolean? = null
+        keep: Boolean? = null,
+        title: String? = null
     ) {
         val body = buildJsonObject {
+            title?.let { put("title", it) }
             pinned?.let { put("pinned", it) }
             keep?.let { put("keep", it) }
             if (clearClient) put("client_id", kotlinx.serialization.json.JsonNull) else clientId?.let { put("client_id", it) }

@@ -213,7 +213,8 @@ fun RowScope.SelectionActions(
     onPin: (Boolean) -> Unit,
     onKeep: (Boolean) -> Unit,
     onExport: (String) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRename: (() -> Unit)? = null
 ) {
     var moveOpen by remember { mutableStateOf(false) }
     var labelOpen by remember { mutableStateOf(false) }
@@ -297,6 +298,7 @@ fun RowScope.SelectionActions(
                 moreOpen = false
                 action()
             }
+            if (count == 1 && onRename != null) DropdownMenuItem(text = { Text("Rename") }, onClick = { pick(onRename) })
             DropdownMenuItem(text = { Text("Pin") }, onClick = { pick { onPin(true) } })
             DropdownMenuItem(text = { Text("Unpin") }, onClick = { pick { onPin(false) } })
             DropdownMenuItem(text = { Text("Keep forever") }, onClick = { pick { onKeep(true) } })

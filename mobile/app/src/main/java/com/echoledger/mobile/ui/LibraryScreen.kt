@@ -186,6 +186,18 @@ fun LibraryScreen(
     fun run(ids: List<String>, action: String, clientId: String? = null, label: String? = null) = scope.launch {
         if (vm.bulk(ids, action, clientId, label) != null && action == "delete") picked = emptySet()
     }
+    var renaming by remember { mutableStateOf<LibraryItem?>(null) }
+    renaming?.let { item ->
+        RenameDialog(item.title.orEmpty(), onRename = { title ->
+            renaming = null
+            scope.launch {
+                if (vm.organise(item.id, title = title)) {
+                    picked = emptySet()
+                    vm.showMessage("Renamed")
+                }
+            }
+        }, onDismiss = { renaming = null })
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -203,7 +215,8 @@ fun LibraryScreen(
                         onPin = { run(ids, if (it) "pin" else "unpin") },
                         onKeep = { run(ids, if (it) "keep" else "unkeep") },
                         onExport = { format -> scope.launch { vm.exportSelected(ids, format)?.let { shareFile(context, it) } } },
-                        onDelete = { run(ids, "delete") }
+                        onDelete = { run(ids, "delete") },
+                        onRename = { renaming = items.firstOrNull { it.id == ids.singleOrNull() } }
                     )
                 }
             } else if (!searching) {
