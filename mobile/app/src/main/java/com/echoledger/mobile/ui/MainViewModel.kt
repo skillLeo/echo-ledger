@@ -426,6 +426,38 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _message.value = it.message }
     }
 
+    /** Names, types and sizes of picked files (read off the main thread). */
+    suspend fun describeFiles(uris: List<android.net.Uri>): List<com.echoledger.mobile.share.FileImport.Picked> =
+        withContext(Dispatchers.IO) { uris.map { com.echoledger.mobile.share.FileImport.describe(getApplication(), it) } }
+
+    /** Imports picked files with the batch's client and language (since 1.4); says what happened when done. */
+    suspend fun importFiles(
+        files: List<com.echoledger.mobile.share.FileImport.Picked>,
+        clientId: String?,
+        language: String?
+    ): com.echoledger.mobile.share.FileImport.Summary = withContext(Dispatchers.IO) {
+        com.echoledger.mobile.share.FileImport.import(getApplication(), graph, files, clientId, language).also {
+            reloadLocal()
+            _message.value = it.message()
+        }
+    }
+
+    /** Cancels an upload that has not started (or removes a failed one): nothing of it reaches the server. */
+    fun cancelUpload(id: String) = viewModelScope.launch(Dispatchers.IO) {
+        val rec = graph.recordings.get(id) ?: return@launch
+        if (rec.state == "uploading") return@launch
+        com.echoledger.mobile.net.UploadWorker.cancel(getApplication(), id)
+        graph.recordings.delete(id)
+        reloadLocal()
+        _message.value = if (rec.state == "failed") "Removed" else "Upload cancelled"
+    }
+
+    /** Removes a row that only reported something (an import the Library already had). */
+    fun dismissLocal(id: String) = viewModelScope.launch(Dispatchers.IO) {
+        graph.recordings.delete(id)
+        reloadLocal()
+    }
+
     /** Retries one recording the server refused (e.g. after fixing the cause). */
     fun retryUpload(id: String) = viewModelScope.launch(Dispatchers.IO) {
         graph.recordings.update(id) { it.copy(state = "queued", lastError = null) }

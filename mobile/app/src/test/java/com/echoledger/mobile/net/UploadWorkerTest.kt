@@ -400,6 +400,34 @@ class UploadWorkerTest : AppTest() {
     }
 
     @Test
+    fun `an import the Library already has is skipped, says so and keeps no audio`() {
+        app.storeRecording(bytes = payload)
+        app.graph.recordings.update(id) { it.copy(skipDuplicate = true) }
+        server.on(
+            "POST",
+            "/api/sessions",
+            FakeServer.json(409, """{"message":"This file is already in your Library.","code":"duplicate_recording","session_id":"x"}""")
+        )
+
+        assertEquals(ListenableWorker.Result.success(), run())
+
+        assertTrue(server.requestsTo("POST", "/api/sessions").single().bodyText().contains("\"skip_duplicate\":true"))
+        assertEquals("duplicate", recording()?.state)
+        assertEquals(UploadWorker.ALREADY_THERE, recording()?.lastError)
+        assertFalse(app.graph.recordings.encryptedFile(id).exists())
+        assertTrue(chunks().isEmpty())
+    }
+
+    @Test
+    fun `a recording that is not an import never asks to skip duplicates`() {
+        app.storeRecording(bytes = payload)
+        server.on("POST", "/api/sessions", FakeServer.json(422, """{"message":"x"}"""))
+        run()
+
+        assertFalse(server.requestsTo("POST", "/api/sessions").single().bodyText().contains("skip_duplicate"))
+    }
+
+    @Test
     fun `a validation error is final and shows the server reason`() =
         assertPermanent(422, "The artifacts.0.sha256 field format is invalid.")
 

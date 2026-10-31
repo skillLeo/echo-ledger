@@ -118,7 +118,7 @@ fun LibraryScreen(
     val uploading = pendingLocal.filter { it.state in UPLOADING_STATES }
     // Live status (since 1.3.2): while something is uploading or being transcribed, the list asks again every 5 s,
     // and stops by itself once all is done.
-    val busy = uploading.isNotEmpty() || items.any { ItemStatus.of(it) == ItemStatus.PROCESSING }
+    val busy = uploading.any { it.state in MOVING_STATES } || items.any { ItemStatus.of(it) == ItemStatus.PROCESSING }
     LaunchedEffect(busy) {
         while (busy) {
             kotlinx.coroutines.delay(LIVE_REFRESH_MS)
@@ -346,15 +346,22 @@ fun LibraryScreen(
                                 item(key = "h-uploading") { SectionHeader("Uploading") }
                                 itemsIndexed(uploading, key = { _, it -> "u-${it.id}" }) { i, rec ->
                                     val failed = rec.state == "failed"
+                                    val moving = rec.state == "uploading"
                                     RecordingRow(
                                         title = rec.title ?: Notifications.decisionText(rec, null).substringBefore(" · "),
                                         time = rowTime(rec.startedAt, today),
-                                        meta = if (failed) "Upload failed · Tap to retry" else "Uploading…",
+                                        meta = UploadRow.meta(rec.state),
                                         tile = { SourceAppTile(SourceApp.from(rec.sourceApp)) },
-                                        onClick = { if (failed) vm.retryUpload(rec.id) },
-                                        onLongClick = { if (failed) vm.retryUpload(rec.id) },
+                                        onClick = {
+                                            when (rec.state) {
+                                                "failed" -> vm.retryUpload(rec.id)
+                                                "duplicate" -> vm.dismissLocal(rec.id)
+                                            }
+                                        },
+                                        // Hold: cancel an upload that has not started, or remove a failed one.
+                                        onLongClick = { if (!moving) vm.cancelUpload(rec.id) },
                                         metaColor = if (failed) LocalEchoColors.current.danger else LocalEchoColors.current.textMuted,
-                                        status = if (failed) null else ({ Spinner(14.dp) }),
+                                        status = if (moving || rec.state == "queued") ({ Spinner(14.dp) }) else null,
                                         divider = i < uploading.lastIndex
                                     )
                                 }
@@ -546,7 +553,18 @@ private fun SwipeRow(item: LibraryItem, enabled: Boolean, onPin: () -> Unit, onD
 }
 
 /** Local recordings on their way to the server, shown in the Library until the server has them. */
-private val UPLOADING_STATES = setOf("queued", "uploading", "failed")
+private val UPLOADING_STATES = setOf("queued", "uploading", "failed", "duplicate")
+private val MOVING_STATES = setOf("queued", "uploading")
+
+/** The line under a recording on its way to the server. */
+object UploadRow {
+    fun meta(state: String): String = when (state) {
+        "failed" -> "Upload failed · Tap to retry, hold to remove"
+        "duplicate" -> "Already in your Library · Tap to dismiss"
+        "queued" -> "Waiting to upload · Hold to cancel"
+        else -> "Uploading…"
+    }
+}
 
 /** How often the Library asks again while something is uploading or being transcribed. */
 private const val LIVE_REFRESH_MS = 5_000L

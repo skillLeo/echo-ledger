@@ -1,6 +1,5 @@
 package com.echoledger.mobile.ui
 
-import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
@@ -49,6 +48,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,7 +77,6 @@ import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.LiveRecording
 import com.echoledger.mobile.recording.RecordingService
-import com.echoledger.mobile.share.ShareImportActivity
 import com.echoledger.mobile.ui.design.BannerKind
 import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.CompactBarIcon
@@ -90,6 +89,7 @@ import com.echoledger.mobile.ui.design.SettingsRow
 import com.echoledger.mobile.ui.design.SourceAppTile
 import com.echoledger.mobile.ui.design.tabular
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** What the Record screen shows: a voice note (record, import) or calls and meetings (auto-record, Keep/Discard). */
 enum class RecordMode { VOICE, CALLS, GAME, WATCH }
@@ -208,17 +208,13 @@ fun RecordScreen(
     val haptics = LocalHapticFeedback.current
     val type = LocalEchoType.current
     val waiting = pending.filter { it.state == "pending_decision" }
-    val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            context.startActivity(
-                Intent(context, ShareImportActivity::class.java)
-                    .setAction(Intent.ACTION_SEND)
-                    .setType(context.contentResolver.getType(uri) ?: "audio/*")
-                    .putExtra(Intent.EXTRA_STREAM, uri)
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            )
-        }
+    // Import (since 1.4): pick one file or many, then one client and language for all of them in the sheet.
+    var picked by remember { mutableStateOf<List<com.echoledger.mobile.share.FileImport.Picked>>(emptyList()) }
+    val scope = rememberCoroutineScope()
+    val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) scope.launch { picked = vm.describeFiles(uris) }
     }
+    if (picked.isNotEmpty()) ImportSheet(vm, picked, onDone = { picked = emptyList() })
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 96.dp)) {
         EchoTopBar(if (mode == RecordMode.CALLS && !live.active) "Calls & meetings" else "Voice note")
         if (mode == RecordMode.VOICE || live.active) {
@@ -235,7 +231,7 @@ fun RecordScreen(
                 Box(Modifier.padding(horizontal = Space.screen)) { LiveRecordingCard(live, settings) }
             } else {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    EchoButton("Import file", {
+                    EchoButton("Import files", {
                         import.launch(arrayOf("audio/*", "video/*"))
                     }, kind = ButtonKind.Text, icon = Icons.Rounded.FileUpload)
                 }
@@ -497,7 +493,7 @@ fun KeepDiscardCard(
 
 /** "Client ▾" (or the client's name): picks the client a waiting call is filed under. */
 @Composable
-private fun ClientChip(clients: List<ClientDto>, clientId: String?, onClient: (String?) -> Unit) {
+internal fun ClientChip(clients: List<ClientDto>, clientId: String?, onClient: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val chosen = clients.firstOrNull { it.id == clientId }
     Box {

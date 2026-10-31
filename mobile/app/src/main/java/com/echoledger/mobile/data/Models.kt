@@ -169,7 +169,11 @@ data class CreateSessionRequest(
     /** Who the call was with, when the phone saw it (since v1.2). */
     @OptIn(ExperimentalSerializationApi::class)
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val caller: CallerDto? = null
+    val caller: CallerDto? = null,
+    /** Imports (since 1.4): skip a file the Library already has (`409 duplicate_recording`). Left out when false. */
+    @OptIn(ExperimentalSerializationApi::class)
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("skip_duplicate") val skipDuplicate: Boolean = false
 )
 
 @Serializable

@@ -47,7 +47,9 @@ data class LocalRecording(
     /** Why the recording may be one-sided, in the helper's words (since v1.3); shown on the after-call card and the recording. */
     val captureWarning: String? = null,
     /** A title typed before Keep (since v1.3); sent with the recording, else the server names it. */
-    val title: String? = null
+    val title: String? = null,
+    /** An imported file (since 1.4): the server skips it when the same file is already in the Library. */
+    val skipDuplicate: Boolean = false
 )
 
 /**

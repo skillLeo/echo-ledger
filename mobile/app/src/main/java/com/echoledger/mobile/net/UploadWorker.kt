@@ -168,7 +168,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         markers = rec.markers,
         pauses = rec.pauses,
         languageMarks = rec.languageMarks,
-        caller = callerOf(rec)
+        caller = callerOf(rec),
+        skipDuplicate = rec.skipDuplicate
     )
 
     /** Caller names (since v1.2): who the call was with, when the phone saw it. */
@@ -217,6 +218,12 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
     private fun onApiError(id: String, e: ApiException): Result {
         val graph = (applicationContext as EchoLedgerApp).graph
+        if (e.code == DUPLICATE) {
+            // An imported file the Library already has: nothing is sent; the row says so until it is dismissed.
+            graph.recordings.encryptedFile(id).delete()
+            graph.recordings.update(id) { it.copy(state = "duplicate", lastError = ALREADY_THERE) }
+            return Result.success()
+        }
         if (e.status == 429) {
             graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
             val wait = e.retryAfterSeconds ?: 0
@@ -239,6 +246,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         private const val KEY_ID = "recording_id"
         private const val MAX_ATTEMPTS = 12
         const val MISSING_FILE = "The recording file is missing on this phone, so it cannot be uploaded."
+        const val DUPLICATE = "duplicate_recording"
+        const val ALREADY_THERE = "Already in your Library"
         const val NO_CONNECTION = "No connection to your server. It uploads by itself when the phone is back online."
 
         /**
@@ -282,6 +291,11 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         /** Restarts the upload immediately, replacing any run that is waiting out a retry back-off. */
         fun retryNow(context: Context, recordingId: String) {
             WorkManager.getInstance(context).enqueueUniqueWork("upload-$recordingId", ExistingWorkPolicy.REPLACE, request(recordingId))
+        }
+
+        /** Calls off the upload of [recordingId] (an import cancelled before it started). */
+        fun cancel(context: Context, recordingId: String) {
+            WorkManager.getInstance(context).cancelUniqueWork("upload-$recordingId")
         }
 
         fun enqueue(context: Context, recordingId: String) {
