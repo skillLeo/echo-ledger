@@ -87,7 +87,7 @@ it('lists the console pages in the navigation for a super admin', function () {
 
     $labels = collect(Filament::getNavigation())->flatMap(fn ($group) => $group->getItems())->map(fn ($item) => $item->getLabel())->all();
 
-    expect($labels)->toContain('Sessions', 'Clients', 'Devices', 'API Credentials', 'Settings');
+    expect($labels)->toContain('Library', 'Clients', 'Activity', 'Upload', 'Devices', 'API Credentials', 'Settings');
 });
 
 it('registers only the B20 role policies: recordings and devices; scoping rests on workspace-scoped queries', function () {

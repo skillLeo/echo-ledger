@@ -79,7 +79,7 @@ it('lists the navigation groups and pages in the sidebar', function () {
 
     $html = $this->get('/admin')->assertOk()->getContent();
 
-    foreach (['Library', 'System', 'Sessions', 'Clients', 'Devices', 'API Credentials', 'Settings'] as $label) {
+    foreach (['Library', 'More', 'System', 'Clients', 'Activity', 'Upload', 'Devices', 'API Credentials', 'Settings'] as $label) {
         expect($html)->toContain($label);
     }
     expect($html)->toContain('fi-global-search'); // the command palette (Ctrl / Cmd + K)
