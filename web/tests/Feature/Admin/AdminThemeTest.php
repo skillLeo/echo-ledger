@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Filament\Support\CommandPalette;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
+use App\Filament\Support\Palette;
 use Filament\Enums\ThemeMode;
 use Filament\Facades\Filament;
 use Filament\Support\Colors\Color;
@@ -50,14 +51,27 @@ it('applies the stored theme before first paint to avoid a flash of the wrong th
         ->and(strpos($html, 'filament:theme:mode'))->toBeLessThan(strpos($html, '<body'));
 });
 
-it('uses violet as the accent, cyan for info and neutral zinc greys like the apps', function () {
+it('uses the phone\'s indigo as the accent and its slate greys, with its red, amber, green and teal', function () {
     $colors = $this->panel->getColors();
 
-    expect($colors)->toHaveKeys(['primary', 'info', 'gray']);
+    expect($colors)->toHaveKeys(['primary', 'gray', 'danger', 'warning', 'success', 'info']);
     $html = $this->get('/admin/login')->assertOk()->getContent();
-    foreach (['primary' => Color::Violet, 'info' => Color::Cyan, 'gray' => Color::Zinc] as $name => $palette) {
-        expect($html)->toContain("--{$name}-500:{$palette[500]};");
+    $palettes = ['primary' => Palette::INDIGO, 'gray' => Palette::SLATE, 'danger' => Palette::RED, 'warning' => Palette::AMBER, 'success' => Palette::GREEN, 'info' => Palette::TEAL];
+    foreach ($palettes as $name => $palette) {
+        expect($html)->toContain("--{$name}-500:".Color::convertToOklch($palette[500]).';');
     }
+    // The design system's brand, background and text colours (docs/DESIGN_SYSTEM.md).
+    expect(Palette::INDIGO[600])->toBe('#3E63DD')
+        ->and(Palette::SLATE[50])->toBe('#F9F9FB')
+        ->and(Palette::SLATE[950])->toBe('#111113');
+});
+
+it('declares the phone\'s colour tokens for both themes in the console theme', function () {
+    $css = (string) file_get_contents(resource_path('css/filament/admin/theme.css'));
+
+    expect($css)->toContain('--bg: #f9f9fb;')->toContain('--accent: #3e63dd;')->toContain('--text: #1c2024;')
+        ->toContain('--bg: #111113;')->toContain('--accent-text: #9eb1ff;')
+        ->toContain("'Inter'")->not->toContain('#7c3aed');
 });
 
 it('uses the Inter font', function () {

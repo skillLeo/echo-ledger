@@ -42,7 +42,8 @@ class SessionsChart extends ChartWidget
             $dayIndex[$day->format('Y-m-d')] = $i;
         }
 
-        $colors = [SourceDevice::Phone->value => '#10B981', SourceDevice::Desktop->value => '#22D3EE', SourceDevice::Web->value => '#8B5CF6'];
+        // The phone's palette: green for phones, indigo for computers, slate for web uploads.
+        $colors = [SourceDevice::Phone->value => '#30A46C', SourceDevice::Desktop->value => '#3E63DD', SourceDevice::Web->value => '#8B8D98'];
         $datasets = [];
         foreach (SourceDevice::cases() as $device) {
             $series = array_fill(0, 14, 0);

@@ -41,7 +41,8 @@ final class InitialsAvatarProvider implements AvatarProvider
     public static function dataUri(string $name): string
     {
         $initials = htmlspecialchars(self::initials($name), ENT_XML1 | ENT_QUOTES, 'UTF-8');
-        $background = Color::convertToHex(FilamentColor::getColor('gray')[950] ?? Color::Slate[950]);
+        // The brand indigo, as the phone's avatars: white initials keep 5:1 on it in both themes.
+        $background = Color::convertToHex(FilamentColor::getColor('primary')[600] ?? Color::Indigo[600]);
         $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">'
             .'<rect width="64" height="64" fill="'.$background.'"/>'
             .'<text x="50%" y="50%" dy=".35em" text-anchor="middle" fill="#ffffff" '

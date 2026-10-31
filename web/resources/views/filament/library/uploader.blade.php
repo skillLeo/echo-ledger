@@ -1,10 +1,11 @@
 {{--
     Library → Upload: drop sound or video files anywhere on the page, or tap to choose several (phones too). Each file
     is checked (SHA-256) in the browser, skipped when it is already in the Library, sent in chunks that resume after a
-    dropped connection, and becomes its own recording titled from its file name.
+    dropped connection, and becomes its own recording titled from its file name. Compact (the Library): the drop zone
+    only shows while files are dragged over the page, and Upload opens the picker.
 --}}
 @include('filament.library.uploader-script')
-<div wire:ignore class="el-uploader" data-uploader
+<div wire:ignore @class(['el-uploader', 'el-uploader-compact' => $compact ?? false]) data-uploader
     x-data="elUploader(@js(\Illuminate\Support\Arr::except($config, ['clients', 'languages'])))"
     x-on:el-upload-pick.window="pick()"
     x-on:dragenter.window="dragEnter($event)"

@@ -8,16 +8,17 @@ use App\Filament\Auth\AppAuthentication;
 use App\Filament\Support\CommandPalette;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
+use App\Filament\Support\Palette;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationGroup;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
-use Filament\Support\Colors\Color;
 use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Contracts\View\View;
@@ -52,13 +53,18 @@ class AdminPanelProvider extends PanelProvider
             ], isRequired: false)
             ->revealablePasswords(true)
             ->defaultThemeMode(ThemeMode::System)
-            // C3: our theme (design tokens shared with the apps, density, sticky table headers), built by Vite.
+            // The phone's design (docs/DESIGN_SYSTEM.md): slate and indigo, Inter, its radii and spacing; built by Vite.
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->colors([
-                'primary' => Color::Violet,
-                'info' => Color::Cyan,
-                'gray' => Color::Zinc,
+                'primary' => Palette::INDIGO,
+                'gray' => Palette::SLATE,
+                'danger' => Palette::RED,
+                'warning' => Palette::AMBER,
+                'success' => Palette::GREEN,
+                'info' => Palette::TEAL,
             ])
+            // Narrow screens get the phone's bottom bar; the sidebar stays one tap away behind the menu button.
+            ->renderHook(PanelsRenderHook::BODY_END, fn (): View => view('filament.bottom-nav'))
             // Self-hosted font and initials avatars: the console asks no third-party host for anything.
             ->font('Inter', provider: LocalInterFontProvider::class)
             ->defaultAvatarProvider(InitialsAvatarProvider::class)
@@ -68,6 +74,11 @@ class AdminPanelProvider extends PanelProvider
             ->globalSearchFieldSuffix(fn (): string => 'Ctrl K')
             ->sidebarCollapsibleOnDesktop()
             ->sidebarWidth('16rem')
+            // The everyday pages sit ungrouped at the top, like the phone's tabs; the rest below.
+            ->navigationGroups([
+                NavigationGroup::make('More'),
+                NavigationGroup::make('System'),
+            ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([

@@ -30,7 +30,7 @@ class RecentlyDeleted extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTrash;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Library';
+    protected static string|UnitEnum|null $navigationGroup = 'More';
 
     protected static ?int $navigationSort = 5;
 

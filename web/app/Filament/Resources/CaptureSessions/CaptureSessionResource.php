@@ -27,13 +27,17 @@ class CaptureSessionResource extends Resource
 
     protected static ?string $slug = 'sessions';
 
-    protected static ?string $modelLabel = 'session';
+    protected static ?string $modelLabel = 'recording';
 
-    protected static ?string $navigationLabel = 'Sessions';
+    protected static ?string $navigationLabel = 'Library';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
+    protected static ?string $breadcrumb = 'Library';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Library';
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::RectangleStack;
+
+    protected static string|UnitEnum|null $navigationGroup = null;
 
     protected static ?int $navigationSort = 1;
 

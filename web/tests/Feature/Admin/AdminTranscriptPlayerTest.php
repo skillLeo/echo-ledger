@@ -445,10 +445,10 @@ it('gives the light-theme text colours at least 4.5:1 contrast on the player bac
     preg_match_all('/--el-(text|muted|me|client): (#[0-9A-F]{6})/', $light[1] ?? '', $colours, PREG_SET_ORDER);
 
     expect($colours)->toHaveCount(4);
-    // Worst case background: the active-line tint (violet at 14 %) over white, about #EEE8FD.
+    // Worst case background: the active line, in the phone's brand tint (#EDF2FE).
     foreach ($colours as [, $name, $hex]) {
         expect($ratio($hex, '#FFFFFF'))->toBeGreaterThanOrEqual(4.5, "{$name} on white")
-            ->and($ratio($hex, '#EEE8FD'))->toBeGreaterThanOrEqual(4.5, "{$name} on the active line");
+            ->and($ratio($hex, '#EDF2FE'))->toBeGreaterThanOrEqual(4.5, "{$name} on the active line");
     }
 });
 
