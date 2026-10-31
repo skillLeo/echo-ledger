@@ -9,6 +9,7 @@ use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Filament\Resources\CaptureSessions\RelationManagers\ShareLinksRelationManager;
 use App\Filament\Resources\CaptureSessions\Schemas\CaptureSessionInfolist;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
+use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Models\CaptureSession;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
@@ -63,6 +64,11 @@ class CaptureSessionResource extends Resource
     public static function getRelations(): array
     {
         return [ShareLinksRelationManager::class];
+    }
+
+    public static function getWidgets(): array
+    {
+        return [WaitingDecisionsWidget::class];
     }
 
     public static function getPages(): array
