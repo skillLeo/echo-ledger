@@ -474,7 +474,9 @@ describe("MainApp main:navigate", () => {
     fireEvent.click(nav("Record"));
     await emitEvent("main:navigate", makeNavigate({ view: "library", pendingId: "pend-2", rename: true }));
     expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
+    // The waiting list opens by itself (it starts as one collapsed summary card).
     const row = await screen.findByTestId("pending-pend-2");
+    expect(screen.getByRole("button", { name: "Hide" })).toHaveAttribute("aria-expanded", "true");
     await waitFor(() => expect(row).toHaveClass("highlight"));
     expect(screen.getByTestId("pending-pend-1")).not.toHaveClass("highlight");
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
@@ -488,7 +490,13 @@ describe("MainApp main:navigate", () => {
     await waitFor(() => expect(screen.getByTestId("pending-pend-1")).toHaveClass("highlight"));
     fireEvent.click(nav("Record"));
     fireEvent.click(nav("Library"));
-    const row = await screen.findByTestId("pending-pend-1");
+    // Back on the Library the waiting list is the collapsed card again; the old request does not reopen it.
+    const review = await screen.findByRole("button", { name: "Review" });
+    await flushAsync();
+    expect(review).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("pending-pend-1")).not.toBeInTheDocument();
+    fireEvent.click(review);
+    const row = screen.getByTestId("pending-pend-1");
     await flushAsync();
     expect(row).not.toHaveClass("highlight");
     expect(within(row).queryByRole("textbox")).not.toBeInTheDocument();

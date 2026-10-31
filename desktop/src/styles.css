@@ -311,6 +311,13 @@ button.segment { width: 100%; border: 0; background: transparent; color: inherit
 .queue-learn { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 6px 8px; border-radius: 8px; background: var(--accent-soft, var(--surface-2)); }
 .queue-learn > span { flex: 1 1 auto; min-width: 0; }
 .queue-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--text-muted); flex: none; }
+/* The waiting recordings sit behind one summary card (as on the phone); Review opens the list below it. */
+.queue-card { display: flex; align-items: center; gap: var(--space-3); min-width: 0; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-md); padding: var(--space-3); box-shadow: var(--shadow-1); }
+.queue-card-main { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.queue-card .queue-head { padding: 0; }
+.queue-card > .btn { flex: none; }
+.queue-list { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.queue-bulk { justify-content: flex-end; }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .notice-hint { margin-top: 6px; }

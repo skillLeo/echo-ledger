@@ -32,11 +32,18 @@ function mockBackend(pending: PendingItem[] = [], uploads: UploadItem[] = []) {
   respond("upload_discard", undefined);
 }
 
-async function renderLibrary(pending: PendingItem[] = [], uploads: UploadItem[] = [], focus: PendingFocus | null = null) {
+const reviewButton = () => screen.getByRole("button", { name: /^(Review|Hide)$/ });
+
+/**
+ * Renders the Library and, unless `open: false`, opens the waiting list with Review (a focus request may already
+ * have opened it), so the tests below can reach each row.
+ */
+async function renderLibrary(pending: PendingItem[] = [], uploads: UploadItem[] = [], focus: PendingFocus | null = null, { open = true } = {}) {
   mockBackend(pending, uploads);
   const notify = vi.fn();
   const view = render(<LibraryView notify={notify} focus={focus} />);
   await flushAsync();
+  if (open && pending.length > 0 && reviewButton().getAttribute("aria-expanded") === "false") fireEvent.click(reviewButton());
   return { notify, ...view };
 }
 
@@ -155,6 +162,110 @@ describe("Waiting for your decision", () => {
     render(<LibraryView notify={vi.fn()} />);
     expect(await screen.findByText("Zoom with Acme")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Waiting for your decision: summary card", () => {
+  const items = () => [
+    makePendingItem("p1", { startedAt: local(9, 30), durationMs: 36_000 }),
+    makePendingItem("p2", { startedAt: local(8), durationMs: 102_000 }),
+  ];
+
+  it("shows one summary card, collapsed, with no rows", async () => {
+    await renderLibrary(items(), [], null, { open: false });
+    expect(screen.getByTestId("waiting-summary")).toHaveTextContent("2 calls waiting · oldest Oct 24 · 2:18 total");
+    expect(screen.getByRole("heading", { name: "Waiting for your decision" }).closest(".queue-head")).toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pending-p2")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Keep all" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Discard all" })).not.toBeInTheDocument();
+  });
+
+  it("opens the list with Review and closes it with Hide", async () => {
+    await renderLibrary(items(), [], null, { open: false });
+    fireEvent.click(screen.getByRole("button", { name: "Review" }));
+    const hide = screen.getByRole("button", { name: "Hide" });
+    expect(hide).toHaveAttribute("aria-expanded", "true");
+    expect(row("p1")).toBeInTheDocument();
+    expect(row("p2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep all" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Discard all" })).toBeInTheDocument();
+    fireEvent.click(hide);
+    expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument();
+    expect(screen.getByTestId("waiting-summary")).toBeInTheDocument();
+  });
+
+  it("follows the list in the summary and says recordings once a voice note waits", async () => {
+    await renderLibrary(items(), [], null, { open: false });
+    await emitEvent("pending:changed", [...items(), makePendingItem("p3", { mode: "mic_note", sourceApp: "voice_note", startedAt: local(7), durationMs: 0 })]);
+    expect(screen.getByTestId("waiting-summary")).toHaveTextContent("3 recordings waiting · oldest Oct 24 · 2:18 total");
+  });
+
+  it("keeps every recording with Keep all", async () => {
+    const { notify } = await renderLibrary(items());
+    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument());
+    expect(notify).toHaveBeenCalledWith("Kept 2 recordings");
+    expect(callsOf("pending_discard")).toHaveLength(0);
+  });
+
+  it("reports a recording Keep all could not keep and still keeps the rest", async () => {
+    const { notify } = await renderLibrary(items());
+    respondWith("pending_keep", ({ id }) => (id === "p1" ? Promise.reject("This recording is no longer waiting.") : undefined));
+    respond("pending_list", [makePendingItem("p2")]);
+    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Kept 1 recording"));
+    expect(notify).toHaveBeenCalledWith("This recording is no longer waiting.", true);
+  });
+
+  it("asks once before Discard all and discards every recording", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { notify } = await renderLibrary(items());
+    fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm).toHaveBeenCalledWith("Discard all 2 recordings? It can't be undone.");
+    await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p1" }, { id: "p2" }]));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument());
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith("Discarded 2 recordings");
+    expect(callsOf("pending_keep")).toHaveLength(0);
+  });
+
+  it("discards nothing when Discard all is cancelled", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const { notify } = await renderLibrary(items());
+    fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    await flushAsync();
+    expect(callsOf("pending_discard")).toHaveLength(0);
+    expect(row("p1")).toBeInTheDocument();
+    expect(row("p2")).toBeInTheDocument();
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("disables Keep all, Discard all and the rows while Keep all runs", async () => {
+    let release: (v: unknown) => void = () => undefined;
+    await renderLibrary(items());
+    respondWith("pending_keep", () => new Promise((resolve) => (release = resolve)));
+    fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Discard all" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Keep all" })).toBeDisabled();
+    expect(within(row("p2")).getByRole("button", { name: "Keep" })).toBeDisabled();
+    await act(async () => release(undefined));
+    await act(async () => release(undefined));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument());
+  });
+
+  it("starts collapsed again once the list empties and a new recording arrives", async () => {
+    await renderLibrary(items());
+    await emitEvent("pending:changed", []);
+    await emitEvent("pending:changed", [makePendingItem("p9")]);
+    expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("pending-p9")).not.toBeInTheDocument();
   });
 });
 
