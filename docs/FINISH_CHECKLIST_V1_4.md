@@ -33,10 +33,10 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## P1 — Import, rename, save, live status
 
-- [ ] Import single/bulk (.opus/.ogg/mp3/m4a/aac/wav, audio from mp4/webm): desktop (Import button + drop), web (Upload + drop zone, chunked resumable), phone (multi-select picker); batch client + language; per-file progress, cancel, retry; duplicates by hash skipped; titled from the file name. *Accept:* tests per app.
-- [ ] Rename everywhere (row menu, recording title, Keep card), synced. *Accept:* tests.
-- [ ] Save/export: audio + TXT/DOCX/PDF/SRT/JSON in the chosen view with unsure markers; bulk ZIP; desktop save dialog; phone share sheet. *Accept:* tests.
-- [ ] Live status: ~5 s refresh only while something is pending; rows and recording page update by themselves; web polls pending items only. *Accept:* tests.
+- [x] Import single/bulk (.opus/.ogg/mp3/m4a/aac/wav, audio from mp4/webm): desktop (Import button + drop), web (Upload + drop zone, chunked resumable), phone (multi-select picker); batch client + language; per-file progress, cancel, retry; duplicates by hash skipped; titled from the file name. *Accept:* tests per app.
+- [x] Rename everywhere (row menu, recording title, Keep card), synced. *Accept:* tests.
+- [x] Save/export: audio + TXT/DOCX/PDF/SRT/JSON in the chosen view with unsure markers; bulk ZIP; desktop save dialog; phone share sheet. *Accept:* tests.
+- [x] Live status: ~5 s refresh only while something is pending; rows and recording page update by themselves; web polls pending items only. *Accept:* tests.
 
 ## P2 — One design for desktop and web
 
@@ -66,11 +66,11 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## P5 — Accuracy boosters
 
-- [ ] Client vocabulary to every engine (Whisper prompt, AssemblyAI keyterms, Soniox context).
-- [ ] "Always write X as Y for this client?" after an edit.
-- [ ] Speaker names: You + the contact's name.
-- [ ] Suggested fixes (flag only, Accept to apply).
-- [ ] Double-check on by default for recordings with a client.
+- [x] Client vocabulary to every engine (Whisper prompt, AssemblyAI keyterms, Soniox context).
+- [x] "Always write X as Y for this client?" after an edit (server + desktop/web UI in P2).
+- [x] Speaker names: You + the contact's name.
+- [x] Suggested fixes (flag only, Accept to apply): server + phone; desktop/web in P2.
+- [x] Double-check on by default for recordings with a client.
 - [ ] Accuracy Lab run (N6).
 
 ## P6 — Release
