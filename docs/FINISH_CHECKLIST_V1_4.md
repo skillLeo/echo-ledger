@@ -40,13 +40,13 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## P2 — One design for desktop and web
 
-- [ ] Tokens (Inter, slate + indigo, radii, spacing, icons, light/dark) on desktop and web; old palette removed.
-- [ ] Structure Library · Clients · Record · Activity · You; collapsible sidebar; bottom nav on narrow web.
-- [ ] Components and screens: search pill + chips, rows, Waiting card, list + detail, recording page (chips, view switch, speaker blocks, docked player, find, Copy / Copy for AI), Keep card, Clients, Activity, settings panels, empty/loading/error.
+- [x] Tokens (Inter, slate + indigo, radii, spacing, icons, light/dark) on desktop and web; old palette removed.
+- [x] Structure Library · Clients · Record · Activity · You; collapsible sidebar; bottom nav on narrow web.
+- [x] Components and screens: search pill + chips, rows, Waiting card, list + detail, recording page (chips, view switch, speaker blocks, docked player, find, Copy / Copy for AI), Keep card, Clients, Activity, settings panels, empty/loading/error.
 - [x] Desktop extras: Ctrl/⌘+K, N, Space, J/L; tray menu; pill and captions restyled; native notifications (desktop `599e3c3`).
-- [ ] Web: Filament theme on every page; user pages as custom Livewire pages; admin pages themed; responsive.
-- [ ] Playwright screenshots (web 1440 + 390 px, desktop; light/dark) compared with the phone; before/after saved.
-- [ ] P2 suites: phone, desktop, web.
+- [x] Web: Filament theme on every page; user pages as custom Livewire pages; admin pages themed; responsive.
+- [x] Playwright screenshots (web 1440 + 390 px, desktop; light/dark) compared with the phone; before/after saved.
+- [x] P2 suites: phone 1085/1085 + ktlint + lint + APK; desktop vitest 1217/1217 + cargo test + clippy; web 3614/3614 + PHPStan + Pint + build; shared design-token and repo-policy checks pass.
 
 ## P3 — Mac app
 

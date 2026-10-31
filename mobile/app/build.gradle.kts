@@ -25,8 +25,8 @@ android {
         applicationId = "com.echoledger.mobile"
         minSdk = 29
         targetSdk = 37
-        versionCode = 11
-        versionName = "1.3.2"
+        versionCode = 12
+        versionName = "1.4.0"
         // The capture helper runs as a Shizuku daemon that is only replaced when this number changes, so every build
         // gets its own (minutes since 2026-01-01): an updated app never keeps talking to an old helper.
         buildConfigField("int", "HELPER_BUILD", ((System.currentTimeMillis() / 60_000L) - 29_446_560L).toString())
