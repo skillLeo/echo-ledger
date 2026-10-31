@@ -2,16 +2,14 @@
 
 declare(strict_types=1);
 
-use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Models\Recording;
 use App\Stt\Support\WavFile;
 use Filament\Auth\Pages\EditProfile;
 use Filament\Facades\Filament;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
-use League\MimeTypeDetection\FinfoMimeTypeDetector;
+use Illuminate\Testing\TestResponse;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -39,39 +37,43 @@ function secFiles(string $disk): array
 }
 
 /**
- * A fake upload that declares the type the server would detect from its bytes. While tests run, Livewire reports the
- * declared type of an upload instead of sniffing its content, so the declaration mirrors what
- * TemporaryUploadedFile::detectMimeTypeFromContents() returns outside tests.
+ * Sends a file through Library → Upload (the console's chunked upload routes) as the browser does: start, every chunk,
+ * complete. Stops at the first refusal; returns that answer, or the complete answer.
  */
-function secUploadAsSniffed(string $name, string $content): UploadedFile
+function secConsoleUpload(object $test, string $name, string $content): TestResponse
 {
-    $sniffed = $content === '' ? null : (new FinfoMimeTypeDetector)->detectMimeTypeFromBuffer($content);
+    $start = $test->postJson(route('admin.uploads.store'), ['name' => $name, 'size' => strlen($content), 'sha256' => hash('sha256', $content)]);
+    if ($start->status() !== 201) {
+        return $start;
+    }
+    for ($i = 0; $i < $start->json('total_chunks'); $i++) {
+        $chunk = substr($content, $i * $start->json('chunk_size'), $start->json('chunk_size'));
+        $sent = $test->call('POST', route('admin.uploads.chunk', [$start->json('recording_id'), $i]), [], [], [],
+            ['CONTENT_TYPE' => 'application/octet-stream', 'HTTP_ACCEPT' => 'application/json', 'HTTP_UPLOAD_CHUNK_SHA256' => hash('sha256', $chunk)], $chunk);
+        if ($sent->status() !== 200) {
+            return $sent;
+        }
+    }
 
-    return UploadedFile::fake()->createWithContent($name, $content)->mimeType($sniffed ?: 'application/octet-stream');
+    return $test->postJson(route('admin.uploads.complete', $start->json('recording_id')));
 }
 
-it('turns a valid audio upload into an encrypted recording and removes the plaintext upload', function () {
-    $file = UploadedFile::fake()->createWithContent('call.wav', secWav());
-
-    Livewire::test(ListCaptureSessions::class)->callAction('uploadVoiceNote', ['audio' => $file, 'title' => 'Memo'])->assertHasNoActionErrors();
+it('turns a valid audio upload into an encrypted recording and leaves no plaintext behind', function () {
+    secConsoleUpload($this, 'call.wav', secWav())->assertStatus(202);
 
     $recording = Recording::query()->firstOrFail();
     expect($recording->mime)->toBeIn(['audio/wav', 'audio/x-wav', 'audio/wave'])
         ->and($recording->isReady())->toBeTrue()
         ->and($recording->stored_path)->toEndWith('.elr');
-    expect(array_filter(secFiles('local'), fn (string $path) => str_starts_with($path, 'tmp-uploads/')))->toBe([]);
+    // The plaintext chunks are gone once the file is assembled and encrypted.
+    expect(secFiles('recordings'))->toBe([$recording->stored_path]);
     expect(Storage::disk('recordings')->get($recording->stored_path))->not->toContain('RIFF');
 });
 
 it('refuses files that are not audio, whatever their extension claims', function (string $name, string $content) {
-    $file = secUploadAsSniffed($name, $content);
+    $answer = secConsoleUpload($this, $name, $content);
 
-    try {
-        Livewire::test(ListCaptureSessions::class)->callAction('uploadVoiceNote', ['audio' => $file]);
-    } catch (Throwable) {
-        // a loud refusal is fine; what matters is what ended up stored
-    }
-
+    expect($answer->status())->toBe(422);
     expect(Recording::query()->count())->toBe(0);
     expect(secFiles('recordings'))->toBe([]);
 })->with([
@@ -83,25 +85,18 @@ it('refuses files that are not audio, whatever their extension claims', function
     'empty file' => ['empty.wav', ''],
 ]);
 
-it('refuses an upload above the size cap', function () {
-    $file = UploadedFile::fake()->createWithContent('big.wav', secWav(13 * 1024 * 1024));
+it('refuses an upload above the size cap before any of it is sent', function () {
+    config(['echoledger.max_recording_bytes' => 4096]);
 
-    try {
-        Livewire::test(ListCaptureSessions::class)->callAction('uploadVoiceNote', ['audio' => $file]);
-    } catch (Throwable) {
-    }
+    secConsoleUpload($this, 'big.wav', secWav(8192))->assertStatus(422)->assertJsonValidationErrors('size');
 
     expect(Recording::query()->count())->toBe(0);
 });
 
 it('never lets the uploaded file name reach a stored path', function () {
-    $file = UploadedFile::fake()->createWithContent('../../../../etc/cron.d/pwn.wav', secWav());
+    secConsoleUpload($this, '../../../../etc/cron.d/pwn.wav', secWav())->assertStatus(202);
 
-    try {
-        Livewire::test(ListCaptureSessions::class)->callAction('uploadVoiceNote', ['audio' => $file]);
-    } catch (Throwable) {
-    }
-
+    expect(secFiles('recordings'))->not->toBeEmpty();
     foreach (secFiles('recordings') as $path) {
         expect($path)->toMatch('~^files/\d{4}/\d{2}/[0-9a-z]{26}\.elr$~i');
     }
@@ -136,7 +131,7 @@ it('accepts a long profile password', function () {
 });
 
 it('never serves a console upload back with an active document type such as text/html or image/svg+xml', function (string $name, string $content) {
-    Livewire::test(ListCaptureSessions::class)->callAction('uploadVoiceNote', ['audio' => secUploadAsSniffed($name, $content)]);
+    secConsoleUpload($this, $name, $content);
     $recording = Recording::query()->first();
 
     $type = $recording === null ? 'audio/none' : (string) $this->get('/admin-media/recordings/'.$recording->id)->headers->get('Content-Type');

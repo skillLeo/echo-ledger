@@ -103,15 +103,14 @@ it('escapes a client name in the clients list, the edit page and every place a s
     adminAssertEscaped($this->get('/admin/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the session page client entry');
 });
 
-it('escapes a client name offered in the voice-note upload dialog', function () {
+it('escapes a client name offered for an upload batch', function () {
     $admin = $this->signInAsAdmin();
     Client::factory()->create(['user_id' => $admin->id, 'name' => ADMIN_XSS_SCRIPT]);
 
-    $list = $this->panelComponent(ListCaptureSessions::class)->mountAction('uploadVoiceNote');
+    $list = $this->panelComponent(ListCaptureSessions::class)->html();
 
-    $modal = $this->modalHtml($list);
     foreach (adminRawMarkers() as $marker) {
-        expect($modal)->not->toContain($marker);
+        expect($list)->not->toContain($marker);
     }
 });
 

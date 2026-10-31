@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
+use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
 use App\Http\Middleware\EnsureWorkspaceMember;
@@ -20,6 +21,16 @@ Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
 Route::get('/admin-export/transcripts/{transcript}/{format}', AdminExportController::class)
     ->middleware(['auth:web', EnsureWorkspaceMember::class])
     ->name('admin.transcripts.export');
+
+// Library → Upload: the browser's chunked, resumable uploads (the devices' chunk path, behind the console session).
+Route::middleware(['auth:web', EnsureWorkspaceMember::class, 'throttle:uploads'])
+    ->prefix('/admin-upload/recordings')->name('admin.uploads.')->group(function (): void {
+        Route::post('/', [ConsoleUploadController::class, 'store'])->name('store');
+        Route::get('/{recording}', [ConsoleUploadController::class, 'show'])->name('show');
+        Route::post('/{recording}/chunks/{index}', [ConsoleUploadController::class, 'chunk'])->whereNumber('index')->name('chunk');
+        Route::post('/{recording}/complete', [ConsoleUploadController::class, 'complete'])->name('complete');
+        Route::delete('/{recording}', [ConsoleUploadController::class, 'destroy'])->name('destroy');
+    });
 
 // Share links (view-only): the token is the only key, so every route is throttled per IP.
 Route::middleware('throttle:share')->group(function (): void {

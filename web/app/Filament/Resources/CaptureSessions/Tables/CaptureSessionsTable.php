@@ -7,12 +7,14 @@ namespace App\Filament\Resources\CaptureSessions\Tables;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
+use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
+use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
@@ -39,6 +41,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class CaptureSessionsTable
 {
+    /** How often the list and a recording page refresh while something is uploading or being transcribed. */
+    public const LIVE_POLL = '5s';
+
+    /** An upload or transcript untouched for this long is not live any more: an abandoned upload must not poll for ever. */
+    public const LIVE_HOURS = 6;
+
     public static function configure(Table $table): Table
     {
         return $table
@@ -91,8 +99,12 @@ final class CaptureSessionsTable
             // visible number (WCAG 2.5.3), so the label carries it too.
             ->filtersTriggerAction(fn (Action $action, Table $table): Action => $action
                 ->label(fn (): string => 'Filters ('.$table->getActiveFiltersCount().' active)'))
+            // Live status: the list refreshes every few seconds while it shows a recording that is uploading or being
+            // transcribed, and stops by itself once none is.
+            ->poll(fn (HasTable $livewire): ?string => self::showsPending($livewire->getTableRecords()) ? self::LIVE_POLL : null)
             ->recordActions([
                 ViewAction::make(),
+                self::renameAction(),
                 DeleteAction::make()->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for 48 hours.'),
             ])
             ->toolbarActions([BulkActionGroup::make([...self::bulkActions(), DeleteBulkAction::make()->authorizeIndividualRecords('delete')])])
@@ -161,11 +173,17 @@ final class CaptureSessionsTable
             BulkAction::make('unkeep')->label('Stop keeping')->icon(Heroicon::OutlinedLockOpen)
                 ->action(fn (Collection $records) => $run($records, 'unkeep'))->deselectRecordsAfterCompletion(),
             BulkAction::make('export')->label('Export transcripts')->icon(Heroicon::OutlinedArrowDownTray)
-                ->schema([Select::make('format')->label('Format')->required()->default('docx')->selectablePlaceholder(false)
-                    ->options(['docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Web subtitles (.vtt)', 'json' => 'JSON'])])
+                ->schema([
+                    Select::make('format')->label('Format')->required()->default('docx')->selectablePlaceholder(false)
+                        ->options(['docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Web subtitles (.vtt)', 'json' => 'JSON']),
+                    Select::make('view')->label('Show as')->placeholder('Original words')
+                        ->options(TranscriptViews::VIEWS)
+                        ->helperText('A recording whose view is not made yet keeps its original words.'),
+                ])
                 ->action(function (Collection $records, array $data): ?StreamedResponse {
+                    $view = is_string($data['view'] ?? null) && array_key_exists($data['view'], TranscriptViews::VIEWS) ? $data['view'] : null;
                     try {
-                        $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), (string) $data['format']);
+                        $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), (string) $data['format'], $view);
                     } catch (ApiError $e) {
                         Notification::make()->title($e->getMessage())->warning()->send();
 
@@ -177,6 +195,66 @@ final class CaptureSessionsTable
                     }, $file['filename'], ['Content-Type' => 'application/zip']);
                 }),
         ];
+    }
+
+    /**
+     * "Rename" in the list and on the recording page: the same `title` devices change with PATCH /api/sessions/{id};
+     * empty clears it, so the automatic title shows again.
+     */
+    public static function renameAction(): Action
+    {
+        return Action::make('rename')
+            ->label('Rename')
+            ->icon(Heroicon::OutlinedPencilSquare)
+            ->color('gray')
+            ->modalHeading('Rename recording')
+            ->modalWidth('lg')
+            ->fillForm(fn (CaptureSession $record): array => ['title' => $record->title])
+            ->schema([
+                TextInput::make('title')->label('Title')->maxLength(200)->autofocus()
+                    ->placeholder(fn (CaptureSession $record): string => self::automaticTitle($record))
+                    ->helperText('Leave it empty to use the automatic title.'),
+            ])
+            ->modalSubmitActionLabel('Save')
+            ->action(function (CaptureSession $record, array $data): void {
+                app(LibraryOrganiser::class)->update($record, ['title' => $data['title'] ?? null]);
+                Notification::make()->title('Renamed to “'.$record->displayTitle().'”')->success()->send();
+            });
+    }
+
+    /** The title the recording shows without one of its own ("WhatsApp call", "Call with Omar Khan"). */
+    public static function automaticTitle(CaptureSession $record): string
+    {
+        $untitled = clone $record;
+        $untitled->title = null;
+
+        return $untitled->displayTitle();
+    }
+
+    /** Uploading, assembling or being transcribed, and touched recently enough to still be moving. */
+    public static function isPending(CaptureSession $session): bool
+    {
+        if ($session->updated_at->lt(now()->subHours(self::LIVE_HOURS))) {
+            return false;
+        }
+        if (in_array($session->status, [SessionStatus::Uploading, SessionStatus::Processing], true)) {
+            return true;
+        }
+        $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
+
+        return $final !== null && in_array($final->status, [TranscriptStatus::Pending, TranscriptStatus::Submitted, TranscriptStatus::Processing], true);
+    }
+
+    /** @param  iterable<mixed>|null  $records  the rows the list shows now */
+    public static function showsPending(?iterable $records): bool
+    {
+        foreach ($records ?? [] as $record) {
+            if ($record instanceof CaptureSession && self::isPending($record)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
