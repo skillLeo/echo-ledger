@@ -30,6 +30,9 @@ class ShareLinksRelationManager extends RelationManager
 
     protected static ?string $title = 'Share links';
 
+    /** Rendered with the page: a card that fills in after the transcript has loaded would jump. */
+    protected static bool $isLazy = false;
+
     public function table(Table $table): Table
     {
         $tz = app(SettingsRepository::class)->displayTimezone();

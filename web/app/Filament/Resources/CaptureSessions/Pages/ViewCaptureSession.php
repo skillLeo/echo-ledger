@@ -12,16 +12,24 @@ use App\Exceptions\ApiError;
 use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
+use App\Filament\Support\RecordingRow;
 use App\Http\Controllers\AdminMediaController;
+use App\Jobs\MakeCallNotesJob;
+use App\Models\CallNote;
 use App\Models\CaptureSession;
+use App\Models\Client;
 use App\Models\SessionOpen;
 use App\Models\Transcript;
 use App\Models\User;
 use App\Services\Accuracy\AccuracyLab;
+use App\Services\ClientAi\ClientWorkspace;
 use App\Services\EngineComparison;
 use App\Services\FinalTranscriptCoordinator;
+use App\Services\LibraryOrganiser;
 use App\Services\Retranscriber;
+use App\Services\SettingsRepository;
 use App\Services\ShareLinks;
+use App\Services\TextReplacements;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
 use App\Services\Views\TranscriptViews;
@@ -36,6 +44,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -64,6 +73,9 @@ class ViewCaptureSession extends ViewRecord
         'vtt' => 'Web subtitles (.vtt)',
     ];
 
+    /** The Show as views are being made on the queue: the page polls until they are, then hands them to the player. */
+    public bool $viewsMaking = false;
+
     /** Opening the page counts as opening the recording (the apps stop showing it as new for this user). */
     public function mount(int|string $record): void
     {
@@ -72,6 +84,8 @@ class ViewCaptureSession extends ViewRecord
         if ($user !== null) {
             SessionOpen::mark((string) $this->getRecord()->getKey(), (int) $user->getAuthIdentifier());
         }
+        $transcript = $this->editableTranscript();
+        $this->viewsMaking = $transcript !== null && app(TranscriptViews::class)->state($transcript)['status'] === 'making';
     }
 
     public function getTitle(): string
@@ -85,7 +99,22 @@ class ViewCaptureSession extends ViewRecord
         return new HtmlString(view('filament.library.editable-title', ['title' => $this->session()->displayTitle()])->render());
     }
 
-    /** Live status above the details, only while the recording is uploading or being transcribed. */
+    /** Under the title, as on the phone: the app and device, then the day, time, length and client. */
+    public function getSubheading(): Htmlable
+    {
+        $session = $this->session();
+        $at = $session->started_at->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone());
+
+        return new HtmlString(view('filament.recording.subheading', [
+            'row' => RecordingRow::for($session),
+            'when' => implode(' · ', array_filter([$at->format('M j'), $at->format('g:i A'), CaptureSessionsTable::duration($session->duration_ms), $session->client?->name])),
+        ])->render());
+    }
+
+    /**
+     * Live status above the transcript, only while the recording is uploading or being transcribed; a quiet poll
+     * while call notes are written or Show as views made.
+     */
     public function content(Schema $schema): Schema
     {
         if ($this->hasCombinedRelationManagerTabsWithContent()) {
@@ -96,6 +125,9 @@ class ViewCaptureSession extends ViewRecord
             ViewComponent::make('filament.library.live-status')
                 ->visible(fn (): bool => CaptureSessionsTable::isPending($this->session()))
                 ->viewData(fn (): array => ['interval' => CaptureSessionsTable::LIVE_POLL, 'message' => $this->liveMessage()]),
+            ViewComponent::make('filament.recording.work-poll')
+                ->visible(fn (): bool => ! CaptureSessionsTable::isPending($this->session()) && $this->hasWorkInProgress())
+                ->viewData(['interval' => CaptureSessionsTable::LIVE_POLL]),
             $this->getInfolistContentComponent(),
             $this->getRelationManagersContentComponent(),
         ]);
@@ -138,13 +170,190 @@ class ViewCaptureSession extends ViewRecord
         if ($final === null) {
             return ['error' => 'Only a finished transcript can be edited.'];
         }
+        $before = [$index => (string) (($final->segments ?? [])[$index]['text'] ?? '')];
         try {
             app(TranscriptEditor::class)->edit($final, [$index => $text], $this->author());
         } catch (ApiError $e) {
             return ['error' => $e->getMessage()];
         }
+        // For a client's recording, the words changed are offered as a rule for that client (as the apps do).
+        $client = $this->session()->client;
+        $learn = $client === null ? [] : array_map(
+            fn (array $rule): array => $rule + ['client_name' => $client->name],
+            TranscriptEditor::learnable($before, [$index => TranscriptEditor::cleanText($text)], TextReplacements::rules($client->replacements)),
+        );
+
+        return TranscriptPlayerEntry::payload($this->session()->refresh()) + ['learn' => $learn];
+    }
+
+    /**
+     * "Always write X as Y for {client}?" → Yes: the rule goes first in the client's corrections, like
+     * POST /api/vocabulary/replacements with a client.
+     *
+     * @return array{ok?: bool, error?: string}
+     */
+    public function learnRule(string $from, string $to): array
+    {
+        $client = $this->session()->client;
+        if ($client === null) {
+            return ['error' => 'File this recording under a client first.'];
+        }
+        $rule = TextReplacements::rules([['from' => $from, 'to' => $to, 'match_case' => false, 'whole_word' => true]]);
+        if ($rule === []) {
+            return ['error' => 'Type the words to replace and what to write instead.'];
+        }
+        $client->update(['replacements' => TextReplacements::rules([...$rule, ...TextReplacements::rules($client->replacements)])]);
+        Notification::make()->title('“'.$rule[0]['from'].'” is now written “'.$rule[0]['to'].'” for '.$client->name)->success()->send();
+
+        return ['ok' => true];
+    }
+
+    /**
+     * Accept (the words change in that line, as an edit) or dismiss a suggested fix; returns the player's new state.
+     *
+     * @return array<string, mixed>
+     */
+    public function decideFix(int $suggestion, bool $accept): array
+    {
+        $final = $this->editableTranscript();
+        if ($final === null) {
+            return ['error' => 'Only a finished transcript can be changed.'];
+        }
+        try {
+            app(ClientWorkspace::class)->decideFix($final, $suggestion, $accept, $this->author());
+        } catch (ApiError $e) {
+            return ['error' => $e->getMessage()];
+        }
 
         return TranscriptPlayerEntry::payload($this->session()->refresh());
+    }
+
+    /**
+     * Show as: makes the views (on the queue) when one is chosen that is not made yet; the page then polls until it is.
+     *
+     * @return array<string, mixed>|null the views' new state for the player
+     */
+    public function makeViews(): ?array
+    {
+        $transcript = $this->editableTranscript();
+        if ($transcript === null) {
+            return null;
+        }
+        try {
+            $state = app(TranscriptViews::class)->request($transcript);
+        } catch (RuntimeException $e) {
+            Notification::make()->title($e->getMessage())->danger()->send();
+            $state = app(TranscriptViews::class)->state($transcript);
+        }
+        $this->viewsMaking = $state['status'] === 'making';
+
+        return $state;
+    }
+
+    /** The poll while views are being made or call notes written: hands the player the views once they are ready. */
+    public function refreshWork(): void
+    {
+        $transcript = $this->editableTranscript()?->refresh();
+        if ($this->viewsMaking && ($transcript === null || app(TranscriptViews::class)->state($transcript)['status'] !== 'making')) {
+            $this->viewsMaking = false;
+            $this->pushPlayer();
+        }
+    }
+
+    /** "Write notes" in English or Roman Urdu: like POST /api/sessions/{id}/notes, done on the queue. */
+    public function writeNotes(string $language = 'en'): void
+    {
+        $session = $this->session();
+        if ($session->client_id === null) {
+            Notification::make()->title('File this recording under a client first.')->warning()->send();
+
+            return;
+        }
+        try {
+            app(ClientWorkspace::class)->assertCanSpend($session->workspace_id);
+        } catch (ApiError $e) {
+            Notification::make()->title($e->getMessage())->warning()->send();
+
+            return;
+        }
+        CallNote::query()->updateOrCreate(['capture_session_id' => $session->id], [
+            'workspace_id' => $session->workspace_id,
+            'client_id' => $session->client_id,
+            'status' => 'pending',
+            'error' => null,
+            'language' => in_array($language, ['en', 'roman_urdu'], true) ? $language : 'en',
+        ]);
+        MakeCallNotesJob::dispatch($session->id);
+    }
+
+    public function callNote(): ?CallNote
+    {
+        $note = CallNote::query()->where('capture_session_id', $this->session()->id)->first();
+
+        return $note instanceof CallNote ? $note : null;
+    }
+
+    /** Something on the page is still being made: the call notes, or the Show as views. */
+    public function hasWorkInProgress(): bool
+    {
+        return $this->viewsMaking || $this->callNote()?->status === 'pending';
+    }
+
+    public function togglePin(): void
+    {
+        $session = app(LibraryOrganiser::class)->update($this->session(), ['pinned' => ! $this->session()->pinned]);
+        Notification::make()->title($session->pinned ? 'Pinned to the top of the Library' : 'Unpinned')->success()->send();
+    }
+
+    public function toggleKeep(): void
+    {
+        $session = app(LibraryOrganiser::class)->update($this->session(), ['keep' => ! $this->session()->keep_forever]);
+        Notification::make()->title($session->keep_forever ? 'Kept: never deleted automatically' : 'Deleted after the usual time again')->success()->send();
+    }
+
+    /** The Client chip: file the recording under a client (or none), as the apps' Organise does. */
+    public function fileUnderAction(): Action
+    {
+        return Action::make('fileUnder')
+            ->label('Client')
+            ->modalHeading('File under a client')
+            ->modalWidth('md')
+            ->fillForm(fn (): array => ['client_id' => $this->session()->client_id])
+            ->schema([
+                Select::make('client_id')->label('Client')->placeholder('No client')
+                    ->options(fn (): array => Client::query()->where('workspace_id', $this->session()->workspace_id)->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all()),
+            ])
+            ->modalSubmitActionLabel('Save')
+            ->action(function (array $data): void {
+                $session = app(LibraryOrganiser::class)->update($this->session(), ['client_id' => $data['client_id'] ?? null]);
+                Notification::make()->title($session->client !== null ? 'Filed under '.$session->client->name : 'No client')->success()->send();
+            });
+    }
+
+    /** The Labels chip: the recording's labels, like the apps' Organise. */
+    public function labelsAction(): Action
+    {
+        return Action::make('labels')
+            ->label('Labels')
+            ->modalHeading('Labels')
+            ->modalWidth('md')
+            ->fillForm(fn (): array => ['labels' => $this->session()->labelList()])
+            ->schema([
+                TagsInput::make('labels')->label('Labels')->placeholder('Add a label')
+                    ->suggestions(fn (): array => array_column(app(LibraryOrganiser::class)->labels($this->session()->workspace_id), 'label'))
+                    ->helperText('Press Enter after each label.'),
+            ])
+            ->modalSubmitActionLabel('Save')
+            ->action(function (array $data): void {
+                try {
+                    app(LibraryOrganiser::class)->update($this->session(), ['labels' => array_values((array) ($data['labels'] ?? []))]);
+                } catch (ApiError $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+                Notification::make()->title('Labels saved')->success()->send();
+            });
     }
 
     protected function getHeaderActions(): array
@@ -154,7 +363,7 @@ class ViewCaptureSession extends ViewRecord
                 $this->speakersAction(),
                 $this->replaceAction(),
                 $this->historyAction(),
-            ])->label('Edit')->icon(Heroicon::OutlinedPencilSquare)->button()->color('gray')
+            ])->label('Edit')->icon(Heroicon::OutlinedPencilSquare)->button()->labeledFrom('sm')->color('gray')
                 ->visible(fn (): bool => $this->editableTranscript() !== null),
             $this->downloadAction(),
             $this->wrongScriptAction(),
@@ -179,7 +388,7 @@ class ViewCaptureSession extends ViewRecord
     private function downloadAction(): Action
     {
         return Action::make('download')
-            ->label('Download')
+            ->label('Download')->labeledFrom('sm')
             ->icon(Heroicon::OutlinedArrowDownTray)
             ->button()
             ->color('gray')
@@ -239,7 +448,7 @@ class ViewCaptureSession extends ViewRecord
     /** "Show as…": makes the Roman Urdu and English views with Claude (on the queue); the player then offers them. */
     private function showAsAction(): Action
     {
-        return Action::make('show_as')->label('Show as…')->icon(Heroicon::OutlinedLanguage)->color('gray')
+        return Action::make('show_as')->label('Show as…')->labeledFrom('sm')->icon(Heroicon::OutlinedLanguage)->color('gray')
             ->visible(function (): bool {
                 $transcript = $this->editableTranscript();
 
@@ -341,7 +550,7 @@ class ViewCaptureSession extends ViewRecord
     private function shareAction(): Action
     {
         return Action::make('share')
-            ->label('Share')
+            ->label('Share')->labeledFrom('sm')
             ->visible(fn (): bool => ! $this->session()->hasNoAudio())
             ->icon(Heroicon::OutlinedLink)
             ->color('gray')

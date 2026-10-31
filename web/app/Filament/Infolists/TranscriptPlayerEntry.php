@@ -39,13 +39,15 @@ class TranscriptPlayerEntry extends Entry
      *
      * @return array{audio_url: string|null, segments: list<array<string, mixed>>, speaker_names: array<string, string>, kind: string|null,
      *     status: string|null, editable: bool, edited: bool, model: string|null, language: string, language_code: string|null, markers: list<array{at_ms: int, tag: string|null, note: string|null}>,
-     *     pauses: list<array{at_ms: int, paused_ms: int}>, views: array<string, mixed>|null, duration_ms: int}
+     *     pauses: list<array{at_ms: int, paused_ms: int}>, views: array<string, mixed>|null, duration_ms: int, audio_bytes: int|null,
+     *     suggestions: list<array{id: int, line: int, from: string, to: string, reason: string}>, client: string|null}
      */
     public static function payload(?CaptureSession $record): array
     {
         if ($record === null) {
             return ['audio_url' => null, 'segments' => [], 'speaker_names' => [], 'kind' => null, 'status' => null, 'editable' => false,
-                'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'language_code' => null, 'markers' => [], 'pauses' => [], 'views' => null, 'duration_ms' => 1];
+                'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'language_code' => null, 'markers' => [], 'pauses' => [], 'views' => null, 'duration_ms' => 1,
+                'audio_bytes' => null, 'suggestions' => [], 'client' => null];
         }
         $record->loadMissing(['primaryRecording', 'client']);
         $primary = $record->primaryRecording;
@@ -98,6 +100,29 @@ class TranscriptPlayerEntry extends Entry
             // Show as: the Roman Urdu and English views of the final transcript, when they are made (labelled as views).
             'views' => $final !== null && $shown === $final && $final->status === TranscriptStatus::Completed ? app(TranscriptViews::class)->state($final) : null,
             'duration_ms' => max(1, (int) ($record->duration_ms ?? 0), ...array_map(fn (array $s): int => $s['end_ms'], $segments ?: [['end_ms' => 0]])),
+            // The waveform is drawn from the audio itself only when the file is small enough to fetch twice.
+            'audio_bytes' => $primary?->isReady() ? (int) ($primary->stored_size_bytes ?? $primary->declared_size_bytes) : null,
+            // Suggested fixes (P5) still open on the shown final transcript: marked on their words, never applied alone.
+            'suggestions' => $shown !== null && $shown === $final ? self::openSuggestions($final) : [],
+            'client' => $record->client?->name,
         ];
+    }
+
+    /**
+     * The suggestions a person can still accept or dismiss, with their index in the transcript's list (the id
+     * `ClientWorkspace::decideFix` takes).
+     *
+     * @return list<array{id: int, line: int, from: string, to: string, reason: string}>
+     */
+    public static function openSuggestions(Transcript $transcript): array
+    {
+        $out = [];
+        foreach (is_array($transcript->meta['suggestions'] ?? null) ? $transcript->meta['suggestions'] : [] as $id => $fix) {
+            if (is_array($fix) && ($fix['status'] ?? 'open') === 'open' && isset($fix['line'], $fix['from'], $fix['to'])) {
+                $out[] = ['id' => (int) $id, 'line' => (int) $fix['line'], 'from' => (string) $fix['from'], 'to' => (string) $fix['to'], 'reason' => (string) ($fix['reason'] ?? '')];
+            }
+        }
+
+        return $out;
     }
 }
