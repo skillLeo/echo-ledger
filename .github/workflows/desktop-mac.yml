@@ -1,0 +1,81 @@
+# The Mac app (.dmg) cannot be built on Windows: this builds it on GitHub's macOS runners for Apple Silicon and
+# Intel, on every v* tag, on demand, and whenever the desktop app changes. Unsigned: the first open is
+# right-click → Open (docs/USER_GUIDE.md). The .dmg files are the run's artifacts.
+name: Desktop (macOS)
+
+on:
+  push:
+    # Branch pushes run only when the desktop app or this file changed (paths are not checked for tags).
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-mac.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-mac-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            label: Apple Silicon
+            artifact: EchoLedger-mac-apple-silicon
+            checks: true
+          - target: x86_64-apple-darwin
+            label: Intel
+            artifact: EchoLedger-mac-intel
+            checks: false
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          key: ${{ matrix.target }}
+
+      - run: npm ci
+
+      # The macOS-only code (Core Audio tap, Touch ID, bundle-id detection) is compiled and checked only here.
+      - name: Rust tests and clippy (macOS code)
+        if: matrix.checks
+        working-directory: desktop/src-tauri
+        run: |
+          cargo test --target ${{ matrix.target }}
+          cargo clippy --all-targets --target ${{ matrix.target }} -- -D warnings
+
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: desktop
+          args: --target ${{ matrix.target }} --bundles dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+          retention-days: 30
