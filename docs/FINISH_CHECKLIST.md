@@ -86,12 +86,12 @@ normal SIM call; a Google Meet or Zoom app call. After each I check the log, the
 transcript. Last: open an Urdu call → Roman Urdu view → Copy for AI → paste into a note; then screenshots of each main
 screen in light and dark (I take them with `screencap`).
 
-- [ ] Install keeping app data (or the one-time signed switch with OK).
+- [x] Install keeping app data (2026-10-31 05:37:17 PKT, `pm install -r`, debug 1.3.0 / versionCode 9): settings, pairing, capture log and the 4 WhatsApp recordings waiting for Keep or Discard all kept.
 - [ ] Share a WhatsApp voice note → opens in EchoLedger.
 - [ ] 4-minute WhatsApp call recorded whole (`stopped: call ended`).
 - [ ] 40 s call with a 10 s mute (`self_muted` / `self_unmuted`).
 - [ ] WhatsApp Business call, SIM call, Meet or Zoom app call: both sides.
 - [ ] Roman Urdu view + Copy for AI.
-- [ ] Auto-record back on after the update without opening the app.
+- [x] Auto-record back on after the update without opening the app: 05:37:18 "auto-record back on: after update" (update broadcast, new process), 05:37:19 call mix registered by the new helper (`com.echoledger.mobile:capture`, shell), 05:37:23 "helper: ready". No activity start after the install.
 - [ ] Screenshots of every main screen, light and dark.
 - [ ] The app never opens by itself; no data wiped.
