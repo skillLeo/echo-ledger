@@ -103,7 +103,7 @@ private fun androidx.compose.foundation.layout.RowScope.TabSlot(
             .combinedClickable(role = Role.Tab, onClick = { if (active) onReselect(tab.key) else onSelect(tab.key) })
             .clearAndSetSemantics {
                 contentDescription = tab.label
-                if (tab.badge > 0) stateDescription = "${tab.badge} new"
+                if (tab.badge > 0) stateDescription = "${tab.badge} need you"
                 selected = active
                 role = Role.Tab
             },
@@ -119,13 +119,7 @@ private fun androidx.compose.foundation.layout.RowScope.TabSlot(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        if (tab.badge >
-                            99
-                        ) {
-                            "99+"
-                        } else {
-                            tab.badge.toString()
-                        },
+                        if (tab.badge > 9) "9+" else tab.badge.toString(),
                         style = LocalEchoType.current.micro.tabular(),
                         color = Color.White
                     )

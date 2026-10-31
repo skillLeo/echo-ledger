@@ -69,6 +69,7 @@ import androidx.lifecycle.lifecycleScope
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.recording.RecordingService
+import com.echoledger.mobile.ui.ActivityBadge
 import com.echoledger.mobile.ui.ActivityScreen
 import com.echoledger.mobile.ui.AppLockMachine
 import com.echoledger.mobile.ui.Brand
@@ -94,6 +95,7 @@ import com.echoledger.mobile.ui.SetupScreen
 import com.echoledger.mobile.ui.SharedNotesScreen
 import com.echoledger.mobile.ui.StartupSplash
 import com.echoledger.mobile.ui.UnlockPrompter
+import com.echoledger.mobile.ui.WaitingScreen
 import com.echoledger.mobile.ui.applySecureScreen
 import com.echoledger.mobile.ui.capabilities
 import com.echoledger.mobile.ui.design.EchoBottomBar
@@ -187,6 +189,8 @@ class MainActivity : FragmentActivity() {
         var openAtMs by rememberSaveable { mutableStateOf<Long?>(null) }
         var openSession by remember { mutableStateOf<String?>(null) }
         var showSetup by rememberSaveable { mutableStateOf(false) }
+        // Waiting for you (since 1.3.2): every call waiting for Keep or Discard on one screen.
+        var showWaiting by rememberSaveable { mutableStateOf(false) }
         // Voice notes just shared from another app (local ids, comma-separated): their page, until Back leaves the app.
         var sharedNotes by rememberSaveable { mutableStateOf<String?>(null) }
         val libraryItems by vm.library.collectAsState()
@@ -283,11 +287,17 @@ class MainActivity : FragmentActivity() {
         val open by openRequest
         LaunchedEffect(open) {
             // The recording notification opens the Live view (the Record tab while recording, since v1.3).
-            if (open == OPEN_PENDING || open == OPEN_LIVE) {
-                tab = TAB_RECORD
-                recordMode = if (open == OPEN_PENDING) RecordMode.CALLS else RecordMode.VOICE
+            if (open == OPEN_PENDING) {
                 showItem(null)
                 showSetup = false
+                showWaiting = true
+            }
+            if (open == OPEN_LIVE) {
+                tab = TAB_RECORD
+                recordMode = RecordMode.VOICE
+                showItem(null)
+                showSetup = false
+                showWaiting = false
             }
             if (open == OPEN_SETUP) {
                 showItem(null)
@@ -318,9 +328,9 @@ class MainActivity : FragmentActivity() {
             }
         }
         val unlocked = loaded && lockState == LockState.Unlocked
-        // The Activity badge: unread items (once the app is unlocked and paired) plus calls waiting for Keep or Discard.
+        // The Activity badge: only what needs me, unread problems (once unlocked and paired) plus calls waiting for a decision.
         LaunchedEffect(unlocked, settings.paired) {
-            if (unlocked && settings.paired) vm.activity()?.let { activityUnread = it.unreadCount }
+            if (unlocked && settings.paired) vm.activity()?.let { activityUnread = ActivityBadge.needs(it.data) }
         }
         BackHandler(enabled = unlocked && (openItem != null || showSetup)) {
             showItem(null)
@@ -365,8 +375,20 @@ class MainActivity : FragmentActivity() {
                                     }
                                 },
                                 current = tab,
-                                onSelect = { tab = it },
-                                onReselect = { reselected++ },
+                                // A tab always opens on its main screen; tapped again it closes what is open on it, then scrolls up.
+                                onSelect = {
+                                    tab = it
+                                    showSetup = false
+                                    showWaiting = false
+                                    showItem(null)
+                                    recordMode = RecordMode.VOICE
+                                },
+                                onReselect = {
+                                    showSetup = false
+                                    showWaiting = false
+                                    showItem(null)
+                                    reselected++
+                                },
                                 recording = live.active,
                                 onRecord = {
                                     if (!live.active) {
@@ -413,6 +435,8 @@ class MainActivity : FragmentActivity() {
 
                         showSetup -> SetupScreen(vm, caps, onBack = { showSetup = false }, onRecheck = { recheck++ })
 
+                        showWaiting -> WaitingScreen(vm, onBack = { showWaiting = false })
+
                         // A row opens its recording with a shared transition (since v1.3): the app tile and the title
                         // move into place; the rest fades.
                         else -> SharedTransitionLayout {
@@ -440,7 +464,13 @@ class MainActivity : FragmentActivity() {
                                             when (current) {
                                                 TAB_CLIENTS -> ClientsScreen(vm, onOpenItem = { showItem(it) }, scrollToTop = reselected)
 
-                                                TAB_RECORD -> RecordScreen(vm, caps, onSetup = { showSetup = true }, mode = recordMode)
+                                                TAB_RECORD -> RecordScreen(
+                                                    vm,
+                                                    caps,
+                                                    onSetup = { showSetup = true },
+                                                    mode = recordMode,
+                                                    onReviewWaiting = { showWaiting = true }
+                                                )
 
                                                 TAB_ACTIVITY -> ActivityScreen(
                                                     load = { vm.activity() },
@@ -448,14 +478,11 @@ class MainActivity : FragmentActivity() {
                                                     onOpen = { id -> openSession = id },
                                                     onUnread = { activityUnread = it },
                                                     waiting = pending.filter { it.state == "pending_decision" },
-                                                    onOpenWaiting = {
-                                                        recordMode = RecordMode.CALLS
-                                                        tab = TAB_RECORD
-                                                    },
+                                                    onOpenWaiting = { showWaiting = true },
                                                     scrollToTop = reselected
                                                 )
 
-                                                TAB_YOU -> SettingsScreen(vm, onSetup = { showSetup = true })
+                                                TAB_YOU -> SettingsScreen(vm, onSetup = { showSetup = true }, home = reselected)
 
                                                 else -> LibraryScreen(
                                                     vm,
@@ -466,10 +493,7 @@ class MainActivity : FragmentActivity() {
                                                         showItem(item)
                                                     },
                                                     waiting = pending.filter { it.state == "pending_decision" },
-                                                    onOpenWaiting = {
-                                                        recordMode = RecordMode.CALLS
-                                                        tab = TAB_RECORD
-                                                    },
+                                                    onOpenWaiting = { showWaiting = true },
                                                     onSelecting = { librarySelecting = it },
                                                     scrollToTop = reselected
                                                 ) { showItem(it) }

@@ -63,6 +63,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.core.Bookmarks
+import com.echoledger.mobile.core.ItemStatus
 import com.echoledger.mobile.core.LibraryFilters
 import com.echoledger.mobile.core.LibraryQuery
 import com.echoledger.mobile.core.LibrarySort
@@ -85,6 +86,7 @@ import com.echoledger.mobile.ui.design.SectionHeader
 import com.echoledger.mobile.ui.design.SelectionBar
 import com.echoledger.mobile.ui.design.SkeletonRow
 import com.echoledger.mobile.ui.design.SourceAppTile
+import com.echoledger.mobile.ui.design.Spinner
 import com.echoledger.mobile.ui.design.UndoSnackbar
 import com.echoledger.mobile.ui.design.dateGroup
 import com.echoledger.mobile.ui.design.rowTime
@@ -112,6 +114,18 @@ fun LibraryScreen(
     onOpen: (LibraryItem) -> Unit
 ) {
     val items by vm.library.collectAsState()
+    val pendingLocal by vm.pending.collectAsState()
+    val uploading = pendingLocal.filter { it.state in UPLOADING_STATES }
+    // Live status (since 1.3.2): while something is uploading or being transcribed, the list asks again every 5 s,
+    // and stops by itself once all is done.
+    val busy = uploading.isNotEmpty() || items.any { ItemStatus.of(it) == ItemStatus.PROCESSING }
+    LaunchedEffect(busy) {
+        while (busy) {
+            kotlinx.coroutines.delay(LIVE_REFRESH_MS)
+            vm.reloadLocal()
+            vm.refreshQuietly()
+        }
+    }
     val syncing by vm.syncing.collectAsState()
     val offline by vm.offline.collectAsState()
     val clients by vm.clients.collectAsState()
@@ -149,10 +163,11 @@ fun LibraryScreen(
         }
     }
     LaunchedEffect(deleted) { if (deleted != null) delay(5_000).also { deleted = null } }
-    val folders = Organise.folders(items, clients)
-    val labels = Organise.labels(items)
-    val visible = LibraryQuery.apply(items, filters, query, sort)
-    val ticked = picked.filter { id -> visible.any { it.id == id } }.toSet()
+    // Worked out again only when what they depend on changes, not on every recomposition (since 1.3.2: less lag).
+    val folders = remember(items, clients) { Organise.folders(items, clients) }
+    val labels = remember(items) { Organise.labels(items) }
+    val visible = remember(items, filters, query, sort) { LibraryQuery.apply(items, filters, query, sort) }
+    val ticked = remember(picked, visible) { visible.mapTo(HashSet()) { it.id }.let { ids -> picked.filter { it in ids }.toSet() } }
     val inSelection = selecting && ticked.isNotEmpty()
     LaunchedEffect(inSelection) { onSelecting(inSelection) }
     LaunchedEffect(ticked.isEmpty()) { if (ticked.isEmpty()) selecting = false }
@@ -247,7 +262,15 @@ fun LibraryScreen(
                 )
                 if (!searching && items.any { !it.deleted }) {
                     Spacer(Modifier.height(Space.s3))
-                    FilterChips(filters, { filters = it }, items, folders, labels, Bookmarks.tags(items), Organise.counts(items))
+                    FilterChips(
+                        filters,
+                        { filters = it },
+                        items,
+                        folders,
+                        labels,
+                        remember(items) { Bookmarks.tags(items) },
+                        remember(items) { Organise.counts(items) }
+                    )
                     Spacer(Modifier.height(Space.s1))
                 }
             }
@@ -314,18 +337,25 @@ fun LibraryScreen(
                         }
 
                         else -> {
+                            // One card for every call waiting for a decision (since 1.3.2), then what is on its way
+                            // to the server: a new voice note shows here at once, before the server has it.
                             if (waiting.isNotEmpty() && filters.count == 0) {
-                                item(key = "h-waiting") { SectionHeader("Waiting for you") }
-                                itemsIndexed(waiting, key = { _, it -> "w-${it.id}" }) { i, rec ->
+                                item(key = "waiting") { WaitingSummaryCard(waiting, onReview = onOpenWaiting) }
+                            }
+                            if (uploading.isNotEmpty() && filters.count == 0) {
+                                item(key = "h-uploading") { SectionHeader("Uploading") }
+                                itemsIndexed(uploading, key = { _, it -> "u-${it.id}" }) { i, rec ->
+                                    val failed = rec.state == "failed"
                                     RecordingRow(
-                                        title = Notifications.decisionText(rec, null),
+                                        title = rec.title ?: Notifications.decisionText(rec, null).substringBefore(" · "),
                                         time = rowTime(rec.startedAt, today),
-                                        meta = "Keep or discard?",
+                                        meta = if (failed) "Upload failed · Tap to retry" else "Uploading…",
                                         tile = { SourceAppTile(SourceApp.from(rec.sourceApp)) },
-                                        onClick = onOpenWaiting,
-                                        onLongClick = onOpenWaiting,
-                                        unopened = true,
-                                        divider = i < waiting.lastIndex
+                                        onClick = { if (failed) vm.retryUpload(rec.id) },
+                                        onLongClick = { if (failed) vm.retryUpload(rec.id) },
+                                        metaColor = if (failed) LocalEchoColors.current.danger else LocalEchoColors.current.textMuted,
+                                        status = if (failed) null else ({ Spinner(14.dp) }),
+                                        divider = i < uploading.lastIndex
                                     )
                                 }
                             }
@@ -514,3 +544,9 @@ private fun SwipeRow(item: LibraryItem, enabled: Boolean, onPin: () -> Unit, onD
         }
     ) { Box(Modifier.background(Brand.Background)) { content() } }
 }
+
+/** Local recordings on their way to the server, shown in the Library until the server has them. */
+private val UPLOADING_STATES = setOf("queued", "uploading", "failed")
+
+/** How often the Library asks again while something is uploading or being transcribed. */
+private const val LIVE_REFRESH_MS = 5_000L

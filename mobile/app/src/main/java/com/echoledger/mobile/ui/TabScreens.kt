@@ -85,6 +85,8 @@ fun ActivityScreen(
 ) {
     var items by remember { mutableStateOf<List<ActivityItemDto>?>(null) }
     var unread by remember { mutableIntStateOf(0) }
+    // Informational items this list already marked read on the server (they still look new until the next visit).
+    var seenMarked by remember { mutableStateOf(setOf<String>()) }
     var failed by remember { mutableStateOf(false) }
     var attempt by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
@@ -95,16 +97,21 @@ fun ActivityScreen(
         failed = answer == null
         items = answer?.data.orEmpty()
         unread = answer?.unreadCount ?: 0
-        onUnread(unread)
+        onUnread(ActivityBadge.needs(items))
+        // Informational items (transcript ready and the like) count as read once this list has shown them.
+        ActivityBadge.seen(items).takeIf { it.isNotEmpty() }?.let { seen ->
+            markRead(seen)?.let {
+                unread = it
+                seenMarked = seen.toSet()
+            }
+        }
     }
     fun open(item: ActivityItemDto) {
         scope.launch {
-            if (!item.read) {
-                markRead(listOf(item.id))?.let {
-                    unread = it
-                    onUnread(it)
-                }
+            if (!item.read && item.id !in seenMarked) {
+                markRead(listOf(item.id))?.let { unread = it }
                 items = items?.map { i -> if (i.id == item.id) i.copy(read = true) else i }
+                onUnread(ActivityBadge.needs(items))
             }
             item.sessionId?.let(onOpen)
         }
@@ -113,12 +120,11 @@ fun ActivityScreen(
     var dismissed by remember { mutableStateOf(setOf<String>()) }
     fun dismiss(item: ActivityItemDto) {
         dismissed = dismissed + item.id
-        if (!item.read) {
+        if (!item.read && item.id !in seenMarked) {
             scope.launch {
-                markRead(listOf(item.id))?.let {
-                    unread = it
-                    onUnread(it)
-                }
+                markRead(listOf(item.id))?.let { unread = it }
+                items = items?.map { i -> if (i.id == item.id) i.copy(read = true) else i }
+                onUnread(ActivityBadge.needs(items))
             }
         }
     }
@@ -133,8 +139,8 @@ fun ActivityScreen(
                         scope.launch {
                             markRead(null)?.let {
                                 unread = it
-                                onUnread(it)
                                 items = items?.map { i -> i.copy(read = true) }
+                                onUnread(0)
                             }
                         }
                     }, kind = ButtonKind.Text)
@@ -168,17 +174,7 @@ fun ActivityScreen(
         }
         if (waiting.isNotEmpty() || needsAction.isNotEmpty()) {
             item(key = "h-action") { SectionHeader("Needs action") }
-            items(waiting, key = { "w-${it.id}" }) { rec ->
-                RecordingRow(
-                    title = "Keep or discard?",
-                    time = rowTime(rec.startedAt, today),
-                    meta = Notifications.decisionText(rec, null),
-                    tile = { IconTile(Icons.Rounded.HourglassTop, LocalEchoColors.current.warning) },
-                    onClick = onOpenWaiting,
-                    onLongClick = onOpenWaiting,
-                    unopened = true
-                )
-            }
+            item(key = "waiting") { WaitingSummaryCard(waiting, onReview = onOpenWaiting) }
             itemsIndexed(needsAction, key = { _, it -> "a-${it.id}" }) { i, row ->
                 DismissibleRow(onDismiss = { dismiss(row) }) {
                     ActivityRow(row, today, divider = i < needsAction.lastIndex) { open(row) }
@@ -218,9 +214,19 @@ private fun DismissibleRow(onDismiss: () -> Unit, content: @Composable () -> Uni
     ) { Box(Modifier.background(Brand.Background)) { content() } }
 }
 
-private fun ActivityItemDto.isProblem(): Boolean = kind.orEmpty().let {
+internal fun ActivityItemDto.isProblem(): Boolean = kind.orEmpty().let {
     it.contains("fail") || it.contains("error") ||
         it.contains("problem")
+}
+
+/** The Activity tab's badge (since 1.3.2): only what needs me (unread problems, calls waiting), "9+" above 9. */
+object ActivityBadge {
+    fun needs(items: List<ActivityItemDto>?): Int = items.orEmpty().count { !it.read && it.isProblem() }
+
+    /** Informational items not read yet: marked read once the Activity list has shown them. */
+    fun seen(items: List<ActivityItemDto>?): List<String> = items.orEmpty().filter { !it.read && !it.isProblem() }.map { it.id }
+
+    fun label(count: Int): String = if (count > 9) "9+" else count.toString()
 }
 
 @Composable
@@ -256,7 +262,12 @@ fun ClientsScreen(vm: MainViewModel, onOpenItem: (LibraryItem) -> Unit, scrollTo
     var adding by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val list = rememberLazyListState()
-    LaunchedEffect(scrollToTop) { if (scrollToTop > 0) list.animateScrollToItem(0) }
+    // The tab tapped again (since 1.3.2): a client page closes first; on the list it scrolls to the top.
+    LaunchedEffect(scrollToTop) {
+        if (scrollToTop > 0) {
+            if (openId != null) openId = null else list.animateScrollToItem(0)
+        }
+    }
     val live = library.filter { !it.deleted }
     val open = clients.firstOrNull { it.id == openId }
     if (open != null) {

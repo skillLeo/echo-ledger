@@ -463,7 +463,7 @@ class MainActivityTest : AppTest() {
     }
 
     @Test
-    fun `opening with open=pending shows the Record tab`() {
+    fun `opening with open=pending shows the calls waiting`() {
         serve()
         runBlocking {
             app.pairLocally(server)
@@ -473,17 +473,17 @@ class MainActivityTest : AppTest() {
         controller.get().simulateBiometrics(false)
         controller.start().postCreate(null).resume().visible()
 
-        awaitText("Auto-record WhatsApp calls")
+        awaitText("Waiting for you")
         assertTrue(!present("Weekly sync"))
     }
 
     @Test
-    fun `a new intent with open=pending switches a running app to the Record tab`() {
+    fun `a new intent with open=pending switches a running app to the calls waiting`() {
         val controller = launch(preload = true)
         awaitText("Weekly sync")
 
         controller.newIntent(pendingIntent())
 
-        awaitText("Auto-record WhatsApp calls")
+        awaitText("Waiting for you")
     }
 }

@@ -49,6 +49,7 @@ import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.ui.design.BarIcon
 import com.echoledger.mobile.ui.design.ButtonKind
+import com.echoledger.mobile.ui.design.CompactBarIcon
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoFilterChip
 
@@ -220,9 +221,9 @@ fun RowScope.SelectionActions(
     var moreOpen by remember { mutableStateOf(false) }
     var newClient by remember { mutableStateOf<String?>(null) }
     var label by remember { mutableStateOf("") }
-    BarIcon(Icons.Rounded.SelectAll, "Select all", onSelectAll)
+    CompactBarIcon(Icons.Rounded.SelectAll, "Select all", onSelectAll)
     Box {
-        BarIcon(Icons.AutoMirrored.Rounded.DriveFileMove, "Move to", { moveOpen = true })
+        CompactBarIcon(Icons.AutoMirrored.Rounded.DriveFileMove, "Move to", { moveOpen = true })
         DropdownMenu(expanded = moveOpen, onDismissRequest = {
             moveOpen = false
             newClient = null
@@ -255,7 +256,7 @@ fun RowScope.SelectionActions(
         }
     }
     Box {
-        BarIcon(Icons.AutoMirrored.Rounded.Label, "Label", { labelOpen = true })
+        CompactBarIcon(Icons.AutoMirrored.Rounded.Label, "Label", { labelOpen = true })
         DropdownMenu(expanded = labelOpen, onDismissRequest = { labelOpen = false }) {
             Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(label, {
@@ -281,7 +282,7 @@ fun RowScope.SelectionActions(
         }
     }
     Box {
-        BarIcon(Icons.Rounded.Delete, "Delete", { deleteOpen = true })
+        CompactBarIcon(Icons.Rounded.Delete, "Delete", { deleteOpen = true })
         DropdownMenu(expanded = deleteOpen, onDismissRequest = { deleteOpen = false }) {
             DropdownMenuItem(text = { Text("Delete $count (restorable for 48 hours)", color = Brand.Danger) }, onClick = {
                 deleteOpen = false
@@ -290,7 +291,7 @@ fun RowScope.SelectionActions(
         }
     }
     Box {
-        BarIcon(Icons.Rounded.MoreVert, "More actions", { moreOpen = true })
+        CompactBarIcon(Icons.Rounded.MoreVert, "More actions", { moreOpen = true })
         DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
             fun pick(action: () -> Unit) {
                 moreOpen = false

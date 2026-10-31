@@ -45,10 +45,13 @@ import com.echoledger.mobile.translate.LiveTranslateService
 import com.echoledger.mobile.translate.TranslateCost
 import com.echoledger.mobile.translate.TranslateLanguages
 import com.echoledger.mobile.translate.TranslateMode
+import com.echoledger.mobile.translate.TranslateStatus
 import com.echoledger.mobile.translate.TranslateToggleActivity
+import com.echoledger.mobile.ui.design.BannerKind
 import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoTopBar
+import com.echoledger.mobile.ui.design.InlineBanner
 
 /** One line of the permissions health card: what it is, whether it is fine, and the one-tap fix. */
 data class HealthItem(val key: String, val title: String, val ok: Boolean, val fix: String?, val note: String? = null)
@@ -161,6 +164,18 @@ fun LiveTranslatePage(vm: MainViewModel, mode: TranslateMode, onSetup: () -> Uni
             Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(Space.s3)
         ) {
+            // Why the last start ended (no Soniox credit, no key, budget): inline here, never over a header.
+            val blocked = remember(resumed, running, test?.status) { TranslateStatus.blocked(context) }
+            if (blocked != null && !on) {
+                InlineBanner(
+                    "$blocked. Live Translate stops by itself until this is fixed.",
+                    kind = BannerKind.Warning,
+                    onDismiss = {
+                        TranslateStatus.remember(context, null)
+                        resumed++
+                    }
+                )
+            }
             SectionCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(10.dp).clip(CircleShape).background(if (on) c.success else c.border))

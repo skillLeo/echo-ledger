@@ -96,7 +96,7 @@ fun SourceAppTile(app: SourceApp, size: Dp = 44.dp) {
     val context = LocalContext.current
     val hue = app.hue()
     val px = with(androidx.compose.ui.platform.LocalDensity.current) { (size * 0.6f).roundToPx() }
-    val icon = remember(app, px) { installedIcon(context, app, px) }
+    val icon = rememberAppIcon("source:${app.name}:$px") { installedIcon(context, app, px) }
     Box(
         Modifier.size(size).clip(RoundedCornerShape(Radius.field)).background(hue.copy(alpha = 0.12f)).semantics {
             contentDescription =
@@ -161,11 +161,13 @@ fun rowTime(iso: String?, today: LocalDate, zone: ZoneId = ZoneId.systemDefault(
     return at.format(DateTimeFormatter.ofPattern(pattern, locale))
 }
 
-/** "2:02 · Acme · Urdu": only the parts that exist (Auto and English are not worth a word). */
+/**
+ * "2:02 · Acme": only the parts that exist. The language is not on the row (since 1.3.2): it is a Library filter and is
+ * on the recording page.
+ */
 fun rowMeta(item: LibraryItem): String = listOfNotNull(
     formatDuration(item.durationMs).ifEmpty { null },
-    item.client?.name?.takeIf { it.isNotBlank() },
-    item.languageChip?.takeIf { it != "Auto" && it != "English" && it.isNotBlank() }
+    item.client?.name?.takeIf { it.isNotBlank() }
 ).joinToString(" · ")
 
 /**

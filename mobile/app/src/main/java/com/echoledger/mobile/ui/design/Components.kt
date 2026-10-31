@@ -41,9 +41,11 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.WarningAmber
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -458,13 +460,32 @@ fun SelectionBar(count: Int, onClose: () -> Unit, modifier: Modifier = Modifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
         BarIcon(Icons.Rounded.Close, "Leave selection", onClose, tint = Brand.Text)
+        // One line, whatever the screen width (since 1.3.2: "4 / selected" wrapped on 360 dp phones).
         Text(
             "$count selected",
             style = LocalEchoType.current.titleS,
             color = Brand.Text,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(start = Space.s1)
         )
         actions()
+    }
+}
+
+/** A 40 dp bar icon whose name shows on a long-press (selection and other crowded bars); TalkBack reads [label]. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CompactBarIcon(icon: ImageVector, label: String, onClick: () -> Unit, tint: Color = Brand.Muted) {
+    androidx.compose.material3.TooltipBox(
+        positionProvider = androidx.compose.material3.TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = androidx.compose.material3.rememberTooltipState()
+    ) {
+        IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+        }
     }
 }
 

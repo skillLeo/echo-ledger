@@ -73,3 +73,34 @@ class TranslateUsage(context: Context, private val zone: ZoneId = ZoneId.systemD
 
     fun spentUsd(month: String = month()): Double = TranslateMode.entries.sumOf { TranslateCost.usd(ms(it, month)) }
 }
+
+/**
+ * Why Live Translate cannot run right now, from Soniox's or the server's last refusal (since 1.3.2): the Record sheet
+ * and the Game and Watch pages say "Needs Soniox credit" instead of letting the person start it to find out. Cleared
+ * as soon as a session goes live.
+ */
+object TranslateStatus {
+    private const val KEY = "blocked"
+
+    fun blocked(context: Context): String? =
+        context.applicationContext.getSharedPreferences("live_translate_usage", Context.MODE_PRIVATE).getString(KEY, null)
+
+    /** Remembers the short reason for [notice] (null clears it). */
+    fun remember(context: Context, notice: String?) {
+        val short = shortReason(notice)
+        context.applicationContext.getSharedPreferences("live_translate_usage", Context.MODE_PRIVATE).edit().apply {
+            if (short == null) remove(KEY) else putString(KEY, short)
+        }.apply()
+    }
+
+    /** "Needs Soniox credit", "Needs a Soniox key", "Budget used up", or null for anything passing. */
+    fun shortReason(notice: String?): String? {
+        val text = notice?.lowercase() ?: return null
+        return when {
+            "credit" in text -> "Needs Soniox credit"
+            "soniox key" in text || "did not accept the key" in text -> "Needs a Soniox key"
+            "budget" in text -> "Budget used up"
+            else -> null
+        }
+    }
+}

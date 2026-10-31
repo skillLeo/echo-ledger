@@ -37,6 +37,8 @@ data class AppSettings(
     val decisionTimeout: String = "wait",
     /** True once the user picked an option in Settings; until then the phone waits (an older stored "keep" was only the default). */
     val decisionTimeoutChosen: Boolean = false,
+    /** Since 1.3.2: calls still waiting for Keep or Discard after this many hours are kept (24, 72, or 0 = never). */
+    val undecidedKeepHours: Int = 24,
     /** The server's `api_version` ("1.1") from the last config; null for a v1 server or before the first fetch. */
     val serverApiVersion: String? = null,
     /** Per call app (`source_app` wire value): false keeps auto-record from recording it. Missing apps are on. */

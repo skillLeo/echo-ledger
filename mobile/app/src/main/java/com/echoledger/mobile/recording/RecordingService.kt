@@ -555,13 +555,25 @@ class RecordingService : LifecycleService() {
 
     // ---- Capture ------------------------------------------------------------------------------------------------
 
+    /**
+     * The record button: during a call it records both sides through the helper (as before); otherwise it is a voice
+     * note from the phone's own microphone (since 1.3.2: it went through the call path, whose pairer waits for the
+     * other side, so the timer stayed at 0:00, the voice was quiet and the note was filed as "other").
+     */
     private fun startManual() {
         val id = UUID.randomUUID().toString()
-        if (Build.VERSION.SDK_INT >= 34 && graph.helper.helper != null) {
+        if (Build.VERSION.SDK_INT >= 34 && graph.helper.helper != null && inCallNow()) {
             startHelperCapture(SourceApp.OTHER.wire, id, fromCall = false)
         } else {
-            startMicCapture(id)
+            startMicCapture(id, SourceApp.VOICE_NOTE.wire)
         }
+    }
+
+    /** A call is going on (an app call or the phone line), so the record button should take both sides. */
+    private fun inCallNow(): Boolean {
+        val mode = getSystemService(android.media.AudioManager::class.java)?.mode
+        return callState is CallState.InCall || mode == android.media.AudioManager.MODE_IN_CALL ||
+            mode == android.media.AudioManager.MODE_IN_COMMUNICATION
     }
 
     private fun startHelperCapture(sourceApp: String, id: String, fromCall: Boolean) {
@@ -645,16 +657,16 @@ class RecordingService : LifecycleService() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun startMicCapture(id: String) {
+    private fun startMicCapture(id: String, sourceApp: String = SourceApp.OTHER.wire) {
         if (capture != null) return
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "RECORD_AUDIO not granted")
             settle()
             return
         }
-        val session = Capture(id, SourceApp.OTHER.wire, channels = 1, fromCall = false, clientId = settings.clientId)
+        val session = Capture(id, sourceApp, channels = 1, fromCall = false, clientId = settings.clientId)
         session.micFgs = true
-        session.title = "Recording"
+        session.title = if (sourceApp == SourceApp.VOICE_NOTE.wire) "Voice note" else "Recording"
         session.detail = "Microphone"
         capture = session
         if (!goForeground(mic = true, title = session.title, detail = session.detail)) {

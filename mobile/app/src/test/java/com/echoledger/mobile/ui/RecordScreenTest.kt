@@ -5,6 +5,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.testsupport.FakeServer
@@ -40,6 +42,7 @@ import org.robolectric.Shadows.shadowOf
  */
 class RecordScreenTest : ScreenTest() {
     private var setupTaps = 0
+    private var reviewTaps = 0
 
     @Before
     fun freezeClock() {
@@ -50,8 +53,8 @@ class RecordScreenTest : ScreenTest() {
         Capabilities(sdk, helper, micPermission = true, notificationPermission = true, overlayPermission = true)
 
     private fun showRecord(capabilities: Capabilities = caps(), mode: RecordMode = RecordMode.VOICE) {
-        show { RecordScreen(vm, capabilities, onSetup = { setupTaps++ }, mode = mode) }
-        awaitText(if (mode == RecordMode.VOICE) "Voice notes are never recorded automatically" else "Auto-record WhatsApp calls")
+        show { RecordScreen(vm, capabilities, onSetup = { setupTaps++ }, mode = mode, onReviewWaiting = { reviewTaps++ }) }
+        awaitText(if (mode == RecordMode.VOICE) "Voice notes are never recorded automatically" else "Auto-record calls")
     }
 
     private fun awaitUi(what: String, condition: () -> Boolean) = pumpUntil(what) {
@@ -83,15 +86,17 @@ class RecordScreenTest : ScreenTest() {
         compose.onNodeWithText("Record").assertIsDisplayed()
         compose.onNodeWithText("Record").assertIsDisplayed()
         compose.onNodeWithText("Not recording").assertIsDisplayed()
-        compose.onNodeWithText("Microphone only — enable call capture in Setup").assertIsDisplayed()
         assertFalse(RecordingService.isRecording)
     }
 
     @Test
-    fun `with call capture available the recorder promises both sides of a call`() {
+    fun `a voice note says nothing about call sides, the client or auto-record`() {
         showRecord(caps(helper = true))
 
-        compose.onNodeWithText("Both sides of calls (Me + Client)").assertIsDisplayed()
+        assertFalse(present("Both sides", substring = true))
+        assertFalse(present("Microphone only", substring = true))
+        assertFalse(present("Auto-record calls"))
+        assertEquals("Voice note", SourceApp.VOICE_NOTE.label)
     }
 
     @Test
@@ -113,7 +118,7 @@ class RecordScreenTest : ScreenTest() {
         showRecord(caps(sdk = 33, helper = false), RecordMode.CALLS)
 
         compose.onNodeWithText("Requires Android 14 or later").assertIsDisplayed()
-        compose.onNode(isToggleable()).assertIsNotEnabled()
+        autoSwitch().assertIsNotEnabled()
     }
 
     @Test
@@ -121,7 +126,7 @@ class RecordScreenTest : ScreenTest() {
         showRecord(caps(sdk = 34, helper = false), RecordMode.CALLS)
 
         compose.onNodeWithText("Enable call capture in Setup first").assertIsDisplayed()
-        compose.onNode(isToggleable()).assertIsNotEnabled()
+        autoSwitch().assertIsNotEnabled()
         compose.onNodeWithText("Open setup").click()
         assertEquals(1, setupTaps)
     }
@@ -132,8 +137,8 @@ class RecordScreenTest : ScreenTest() {
         compose.onNodeWithText("You'll be asked after each call whether to keep it").assertIsDisplayed()
         assertFalse(present("Open setup"))
 
-        compose.onNode(isToggleable()).assertIsEnabled()
-        compose.onNode(isToggleable()).click()
+        autoSwitch().assertIsEnabled()
+        autoSwitch().click()
 
         assertEquals(RecordingService.ACTION_ARM, shadowOf(app).nextStartedService.action)
     }
@@ -142,24 +147,54 @@ class RecordScreenTest : ScreenTest() {
     fun `an armed recorder shows the switch on and turning it off disarms`() {
         runBlocking { app.graph.settings.update { it.copy(autoRecordArmed = true) } }
         showRecord(caps(sdk = 34, helper = true), RecordMode.CALLS)
-        awaitUi("the armed switch") { runCatching { compose.onNode(isToggleable()).assertIsOn() }.isSuccess }
+        awaitUi("the armed switch") { runCatching { autoSwitch().assertIsOn() }.isSuccess }
 
-        compose.onNode(isToggleable()).click()
+        autoSwitch().click()
 
         assertEquals(RecordingService.ACTION_DISARM, shadowOf(app).nextStartedService.action)
     }
 
     // ---- recordings awaiting a decision ----------------------------------------------------------------------------------------
 
+    private fun showWaiting() {
+        show { WaitingScreen(vm, onBack = {}) }
+        awaitText("waiting ·")
+        compose.mainClock.advanceTimeByFrame()
+    }
+
+    private fun autoSwitch() = compose.onNode(hasContentDescription("Auto-record calls") and isToggleable())
+
+    @Test
+    fun `calls waiting are one summary card with Review, never a row per call`() {
+        app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 60_000)
+        app.storeRecording(id = "call-2", state = "pending_decision", durationMs = 78_000, startedAt = "2026-10-23T18:30:00Z")
+        showRecord(mode = RecordMode.CALLS)
+        awaitText("2 calls waiting")
+
+        compose.onNodeWithText("2 calls waiting · oldest Oct 23 · 2:18 total").assertExists()
+        assertFalse(present("WhatsApp call · 1:00"))
+        compose.onNodeWithText("Review").performScrollTo().click()
+        assertEquals(1, reviewTaps)
+    }
+
+    @Test
+    fun `the summary line counts the calls, the oldest day and the total length`() {
+        val one = app.storeRecording(id = "a", state = "pending_decision", durationMs = 36_000, startedAt = "2026-10-30T06:39:00Z")
+        val two = app.storeRecording(id = "b", state = "pending_decision", durationMs = 102_000, startedAt = "2026-10-29T20:00:00Z")
+        val karachi = java.time.ZoneId.of("Asia/Karachi")
+        assertEquals("1 call waiting · Oct 30 · 0:36 total", WaitingSummary.line(listOf(one), karachi))
+        assertEquals("2 calls waiting · oldest Oct 30 · 2:18 total", WaitingSummary.line(listOf(one, two), karachi))
+        assertEquals("", WaitingSummary.line(emptyList(), karachi))
+    }
+
     @Test
     fun `finished calls ask whether to save them and keeping queues the upload`() {
         app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 60_000)
         app.storeRecording(id = "call-2", state = "pending_decision", durationMs = 125_000, startedAt = "2026-10-23T18:30:00Z")
-        showRecord()
-        awaitText("Save these recordings?")
+        showWaiting()
 
         compose.onNodeWithText("WhatsApp call · 1:00").assertIsDisplayed()
-        compose.onNodeWithText("WhatsApp call · 2:05").assertIsDisplayed()
+        compose.onNodeWithText("WhatsApp call · 2:05").assertExists()
         compose.onNodeWithText("Oct 23 · 6:30 PM").assertIsDisplayed()
         compose.onAllNodesWithText("Keep")[0].click()
         awaitUi("the first call to be queued") { app.peekRecording("call-1")?.state == "queued" }
@@ -178,8 +213,7 @@ class RecordScreenTest : ScreenTest() {
         vm.refresh()
         pumpUntil("the clients to load") { vm.clients.value.isNotEmpty() }
         app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 60_000)
-        showRecord()
-        awaitText("Save these recordings?")
+        showWaiting()
 
         val client = vm.clients.value.first()
         compose.onNodeWithContentDescription("Client: none").assertExists()
@@ -199,17 +233,39 @@ class RecordScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `discarding a finished call deletes it`() {
+    fun `discarding a finished call deletes it after the undo time`() {
         app.storeRecording(id = "call-1", state = "pending_decision")
-        showRecord()
-        awaitText("Save these recordings?")
+        showWaiting()
 
         compose.onNodeWithText("Discard").click()
+        awaitText("Discarding 1 call")
+        assertNotNull("nothing is deleted while Undo is offered", app.peekRecording("call-1"))
+        compose.mainClock.advanceTimeBy(5_100)
         awaitUi("the recording to be deleted") { app.peekRecording("call-1") == null }
-        awaitGone("Save these recordings?")
+        awaitText("Nothing waiting")
 
         assertFalse(app.graph.recordings.encryptedFile("call-1").exists())
         assertTrue(workStates("call-1").isEmpty())
+    }
+
+    @Test
+    fun `Discard all can be undone and Keep all keeps every call`() {
+        app.storeRecording(id = "call-1", state = "pending_decision")
+        app.storeRecording(id = "call-2", state = "pending_decision", startedAt = "2026-10-23T18:30:00Z")
+        showWaiting()
+
+        compose.onNodeWithText("Discard all").click()
+        awaitText("Discarding 2 calls")
+        compose.onNodeWithText("Undo").click()
+        compose.mainClock.advanceTimeBy(6_000)
+        awaitText("2 calls waiting")
+        assertNotNull(app.peekRecording("call-1"))
+        assertNotNull(app.peekRecording("call-2"))
+
+        compose.onNodeWithText("Keep all").click()
+        awaitUi("both calls to be queued") {
+            listOf("call-1", "call-2").all { app.peekRecording(it)?.state == "queued" }
+        }
     }
 
     // ---- uploads in progress -------------------------------------------------------------------------------------------------
@@ -296,7 +352,7 @@ class RecordScreenTest : ScreenTest() {
     fun `with nothing waiting only the recorder and the voice note hint are shown`() {
         showRecord()
 
-        assertFalse(present("Save these recordings?"))
+        assertFalse(present("Keep or discard?"))
         assertFalse(present("Uploading", substring = true))
         assertFalse(present("could not be uploaded", substring = true))
         compose.onNodeWithText("Voice notes are never recorded automatically — share them to EchoLedger from WhatsApp.").assertIsDisplayed()

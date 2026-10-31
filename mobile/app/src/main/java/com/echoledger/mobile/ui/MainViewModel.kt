@@ -169,6 +169,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Whether this phone has finished at least one library sync since it was paired. */
     fun hasSynced(): Boolean = graph.library.hasSynced()
 
+    /** The live status (since 1.3.2): the library again, without the pull-to-refresh spinner or a config fetch. */
+    fun refreshQuietly() = viewModelScope.launch(Dispatchers.IO) {
+        runCatching { graph.library.refresh() }
+    }
+
     fun refresh() = viewModelScope.launch {
         _syncing.value = true
         try {
@@ -651,7 +656,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 },
                 onOpenMs = { usage.add(mode, it) }
             )
-            val watcher = launch { session.feed.collect { _testFeed.value = it } }
+            val watcher = launch {
+                session.feed.collect {
+                    _testFeed.value = it
+                    when (it.status) {
+                        com.echoledger.mobile.translate.TranslateFeed.Status.STOPPED ->
+                            com.echoledger.mobile.translate.TranslateStatus.remember(getApplication(), it.notice)
+
+                        com.echoledger.mobile.translate.TranslateFeed.Status.LIVE ->
+                            com.echoledger.mobile.translate.TranslateStatus.remember(getApplication(), null)
+
+                        else -> Unit
+                    }
+                }
+            }
             frames.forEach { frame ->
                 session.send(listOf(frame))
                 delay(100)

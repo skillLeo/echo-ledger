@@ -56,7 +56,7 @@ object SettingsCatalogue {
             "after-call",
             SettingsGroup.Calls,
             "After a call",
-            "keep discard wait decision timeout 60 seconds ask before saving"
+            "keep discard wait decision timeout 60 seconds ask before saving undecided calls 24 hours 3 days never"
         ),
         SettingsEntry(
             "microphone",

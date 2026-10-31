@@ -32,6 +32,7 @@ object SettingsTransfer {
         "decisionTimeout",
         "afterShare",
         "decisionTimeoutChosen",
+        "undecidedKeepHours",
         "autoRecordApps",
         "extraCallApps",
         "captionsDuringCalls",

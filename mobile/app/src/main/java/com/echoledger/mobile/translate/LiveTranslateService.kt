@@ -271,8 +271,12 @@ class LiveTranslateService :
                 val feed = s.feed.value
                 // The session ended by itself (no Soniox credit, no key, the budget used up): stop and say why.
                 if (feed.status == TranslateFeed.Status.STOPPED) {
+                    TranslateStatus.remember(this@LiveTranslateService, feed.notice)
                     finishAndStop(feed.notice)
                     return
+                }
+                if (feed.status == TranslateFeed.Status.LIVE && TranslateStatus.blocked(this@LiveTranslateService) != null) {
+                    TranslateStatus.remember(this@LiveTranslateService, null)
                 }
                 val fadeAfter = (if (mode == TranslateMode.WATCH) 4 else style.fadeAfterSeconds) * 1_000L
                 val recent = maxOf(feed.heardAt, lastSpeechAt)

@@ -82,8 +82,10 @@ class ActivityCentreTest : ScreenTest() {
         ActivityWorker.schedule(app) // enqueues without crashing
     }
 
+    private fun problem(id: String) = ActivityItemDto(id, "transcription_failed", "Transcription failed", "Call $id", "s-$id")
+
     @Test
-    fun `tapping an item marks it read and opens its recording`() {
+    fun `an informational item is marked read once seen and never raises the badge`() {
         val opened = mutableListOf<String>()
         val marked = mutableListOf<List<String>?>()
         var unread = -1
@@ -99,13 +101,46 @@ class ActivityCentreTest : ScreenTest() {
             )
         }
         pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Call n2").assertExists() }.isSuccess }
-        assertEquals(1, unread)
-        compose.onNodeWithText("Mark all as read").assertExists()
+        pumpUntil("the seen item to be marked read") { marked == listOf(listOf("n2")) }
+        assertEquals(0, unread)
         compose.onNodeWithText("Call n2").performClick()
         pumpUntil("the recording to open") { opened == listOf("s-n2") }
         assertEquals(listOf(listOf("n2")), marked)
+        compose.onNodeWithText("Mark all as read").assertDoesNotExist()
+    }
+
+    @Test
+    fun `a problem raises the badge until it is opened`() {
+        val opened = mutableListOf<String>()
+        val marked = mutableListOf<List<String>?>()
+        var unread = -1
+        show {
+            ActivityScreen(
+                load = { ActivityResponse(listOf(problem("bad"), item("n1", read = true)), 1) },
+                markRead = {
+                    marked += it
+                    0
+                },
+                onOpen = { opened += it },
+                onUnread = { unread = it }
+            )
+        }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Call bad").assertExists() }.isSuccess }
+        assertEquals(1, unread)
+        assertTrue(marked.isEmpty())
+        compose.onNodeWithText("Mark all as read").assertExists()
+        compose.onNodeWithText("Call bad").performClick()
+        pumpUntil("the recording to open") { opened == listOf("s-bad") }
+        assertEquals(listOf(listOf("bad")), marked)
         assertEquals(0, unread)
         compose.onNodeWithText("Mark all as read").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the badge shows 9+ above nine`() {
+        assertEquals("9", ActivityBadge.label(9))
+        assertEquals("9+", ActivityBadge.label(10))
+        assertEquals(2, ActivityBadge.needs(listOf(problem("a"), problem("b"), item("c"), problem("d").copy(read = true))))
     }
 
     @Test
@@ -113,7 +148,7 @@ class ActivityCentreTest : ScreenTest() {
         val marked = mutableListOf<List<String>?>()
         show {
             ActivityScreen(
-                load = { ActivityResponse(listOf(item("n2"), item("n1", read = true)), 1) },
+                load = { ActivityResponse(listOf(problem("n2"), item("n1", read = true)), 1) },
                 markRead = {
                     marked += it
                     0

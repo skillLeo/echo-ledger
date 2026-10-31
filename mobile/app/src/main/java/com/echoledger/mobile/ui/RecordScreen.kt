@@ -113,16 +113,26 @@ fun RecordSheet(capabilities: Capabilities, autoRecordOn: Boolean, onPick: (Reco
             Spacer(Modifier.height(Space.s3))
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
                 val translating by com.echoledger.mobile.translate.LiveTranslateService.state.collectAsState()
+                // What Soniox said last time it refused ("Needs Soniox credit"), until a session runs again.
+                val blocked = com.echoledger.mobile.translate.TranslateStatus.blocked(androidx.compose.ui.platform.LocalContext.current)
                 ModeTile(
                     Icons.Rounded.SportsEsports,
                     "Game translate",
-                    if (translating == com.echoledger.mobile.translate.TranslateMode.GAME) "Game: on" else "Game: off",
+                    when {
+                        translating == com.echoledger.mobile.translate.TranslateMode.GAME -> "Game: on"
+                        blocked != null -> blocked
+                        else -> "Game: off"
+                    },
                     Modifier.weight(1f)
                 ) { onPick(RecordMode.GAME) }
                 ModeTile(
                     Icons.Rounded.Tv,
                     "Watch translate",
-                    if (translating == com.echoledger.mobile.translate.TranslateMode.WATCH) "Watch: on" else "Watch: off",
+                    when {
+                        translating == com.echoledger.mobile.translate.TranslateMode.WATCH -> "Watch: on"
+                        blocked != null -> blocked
+                        else -> "Watch: off"
+                    },
                     Modifier.weight(1f)
                 ) { onPick(RecordMode.WATCH) }
             }
@@ -134,23 +144,26 @@ fun RecordSheet(capabilities: Capabilities, autoRecordOn: Boolean, onPick: (Reco
 private fun ModeTile(icon: ImageVector, name: String, status: String, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     val c = LocalEchoColors.current
     val type = LocalEchoType.current
+    // A fixed 112 dp tile (since 1.3.2: a flexible spacer stretched each tile to the whole sheet).
     Column(
         modifier
-            .heightIn(min = 112.dp)
+            .height(112.dp)
             .clip(RoundedCornerShape(Radius.md))
             .background(c.surface2)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(Space.s4)
+            .padding(horizontal = Space.s4, vertical = Space.s3),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
         Box(
-            Modifier.size(40.dp).clip(CircleShape).background(if (enabled) c.accentSoft else c.surface3),
+            Modifier.size(36.dp).clip(CircleShape).background(if (enabled) c.accentSoft else c.surface3),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = if (enabled) c.accentText else c.textFaint, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = null, tint = if (enabled) c.accentText else c.textFaint, modifier = Modifier.size(20.dp))
         }
-        Spacer(Modifier.weight(1f).height(Space.s3))
-        Text(name, style = type.bodyL, color = if (enabled) c.text else c.textMuted, maxLines = 2)
-        Text(status, style = type.labelM, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Column {
+            Text(name, style = type.bodyL, color = if (enabled) c.text else c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(status, style = type.labelM, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
     }
 }
 
@@ -159,7 +172,13 @@ private fun ModeTile(icon: ImageVector, name: String, status: String, modifier: 
  * live controls and transcript; Import file opens the system picker. Calls: auto-record and calls waiting for Keep or Discard.
  */
 @Composable
-fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> Unit, mode: RecordMode = RecordMode.VOICE) {
+fun RecordScreen(
+    vm: MainViewModel,
+    capabilities: Capabilities,
+    onSetup: () -> Unit,
+    mode: RecordMode = RecordMode.VOICE,
+    onReviewWaiting: () -> Unit = {}
+) {
     // Game and Watch translate have their own pages (Phase B).
     if (mode == RecordMode.GAME || mode == RecordMode.WATCH) {
         LiveTranslatePage(
@@ -207,13 +226,7 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                     recordingAction(context, action)
                 }
             }
-            Text(
-                if (capabilities.canCaptureCalls) "Both sides of calls (Me + Client)" else "Microphone only — enable call capture in Setup",
-                style = type.caption,
-                color = Brand.Muted,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s2),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-            )
+            Spacer(Modifier.height(Space.s3))
             if (live.active) {
                 Box(Modifier.padding(horizontal = Space.screen)) { LiveRecordingCard(live, settings) }
             } else {
@@ -224,11 +237,11 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                 }
             }
         }
-        if (mode == RecordMode.CALLS || waiting.isNotEmpty()) {
-            if (mode != RecordMode.CALLS || live.active) SectionHeader("Calls & meetings")
+        if (mode == RecordMode.CALLS) {
+            if (live.active) SectionHeader("Calls & meetings")
             SettingsRow(
                 Icons.Rounded.Call,
-                "Auto-record WhatsApp calls",
+                "Auto-record calls",
                 summary = when {
                     !capabilities.callCaptureSupportedByOs -> "Requires Android 14 or later"
                     !capabilities.helperConnected -> "Enable call capture in Setup first"
@@ -239,7 +252,7 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
                     Switch(
                         checked = settings.autoRecordArmed,
                         enabled = capabilities.canCaptureCalls,
-                        modifier = Modifier.semantics { contentDescription = "Auto-record WhatsApp calls" },
+                        modifier = Modifier.semantics { contentDescription = "Auto-record calls" },
                         onCheckedChange = { on ->
                             context.startForegroundService(
                                 RecordingService.intent(context, if (on) RecordingService.ACTION_ARM else RecordingService.ACTION_DISARM)
@@ -251,33 +264,10 @@ fun RecordScreen(vm: MainViewModel, capabilities: Capabilities, onSetup: () -> U
             if (!capabilities.helperConnected) {
                 Box(Modifier.padding(horizontal = Space.screen)) { EchoButton("Open setup", onSetup, kind = ButtonKind.Secondary) }
             }
-        }
-        if (waiting.isNotEmpty()) {
-            SectionHeader("Save these recordings?")
-            waiting.forEach { rec ->
-                KeepDiscardCard(
-                    whenText = formatWhen(rec.startedAt),
-                    title = Notifications.decisionText(rec, null),
-                    app = SourceApp.from(rec.sourceApp),
-                    language = rec.language,
-                    onLanguage = { vm.setPendingLanguage(rec.id, it) },
-                    onKeep = { title ->
-                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                        vm.decide(rec.id, keep = true, title = title)
-                    },
-                    onDiscard = {
-                        haptics.performHapticFeedback(HapticFeedbackType.Reject)
-                        vm.decide(rec.id, keep = false)
-                    },
-                    question = learn?.takeIf { it.recordingId == rec.id }?.question,
-                    onAnswer = { vm.answerLearn(it) },
-                    typedTitle = rec.title,
-                    onTitle = { vm.setPendingTitle(rec.id, it) },
-                    clients = clients,
-                    clientId = rec.clientId,
-                    onClient = { vm.setPendingClient(rec.id, it) }
-                )
-            }
+            // Calls waiting for a decision: one card, the list is one tap away (since 1.3.2).
+            WaitingSummaryCard(waiting, onReview = onReviewWaiting)
+            // The apps auto-record listens to, right under its switch (since 1.3.2).
+            Box(Modifier.padding(horizontal = Space.screen, vertical = Space.s2)) { AutoRecordSection(vm, settings) }
         }
         val queued = pending.filter { it.state in setOf("queued", "uploading") }
         if (queued.isNotEmpty()) {

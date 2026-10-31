@@ -165,8 +165,8 @@ internal fun SpeedControl(selected: String, onPick: (SpeedPreset) -> Unit) {
 internal fun AppIcon(pkg: String, size: Dp = 32.dp) {
     val context = LocalContext.current
     val px = with(LocalDensity.current) { size.roundToPx() }
-    val icon: ImageBitmap? = remember(pkg, px) {
-        runCatching { context.packageManager.getApplicationIcon(pkg).toBitmap(px, px).asImageBitmap() }.getOrNull()
+    val icon: ImageBitmap? = com.echoledger.mobile.ui.design.rememberAppIcon("package:$pkg:$px") {
+        context.packageManager.getApplicationIcon(pkg).toBitmap(px, px).asImageBitmap()
     }
     if (icon != null) {
         Image(icon, contentDescription = null, modifier = Modifier.size(size))
@@ -210,21 +210,27 @@ internal fun AppPickerSheet(
     val context = LocalContext.current
     val type = LocalEchoType.current
     val c = LocalEchoColors.current
-    val apps = remember { TranslateApps.forPicker(TranslateApps.installed(context), context.packageName, gamesFirst) }
+    // Reading every launcher app's label takes a moment: off the main thread, the list fills in when ready.
+    val apps by androidx.compose.runtime.produceState<List<com.echoledger.mobile.translate.InstalledApp>?>(null) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            TranslateApps.forPicker(TranslateApps.installed(context), context.packageName, gamesFirst)
+        }
+    }
     var chosen by remember { mutableStateOf(picked.toSet()) }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = c.surface) {
         Row(Modifier.fillMaxWidth().padding(horizontal = Space.screen), verticalAlignment = Alignment.CenterVertically) {
             Text(title, style = type.titleM, color = c.text, modifier = Modifier.weight(1f))
-            EchoButton("Done", { onDone(apps.map { it.packageName }.filter { it in chosen }) })
+            EchoButton("Done", { onDone(apps?.map { it.packageName }?.filter { it in chosen } ?: picked) })
         }
         LazyColumn(
             Modifier.fillMaxWidth().heightIn(max = 520.dp),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = Space.s6)
         ) {
-            if (apps.isEmpty()) {
+            if (apps == null) items(4, key = { "loading-$it" }) { com.echoledger.mobile.ui.design.SkeletonRow() }
+            if (apps?.isEmpty() == true) {
                 item { Text("No apps found.", style = type.bodyM, color = c.textMuted, modifier = Modifier.padding(Space.screen)) }
             }
-            items(apps, key = { it.packageName }) { app ->
+            items(apps.orEmpty(), key = { it.packageName }) { app ->
                 val on = app.packageName in chosen
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 56.dp)

@@ -950,6 +950,24 @@ internal fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
             }
         }
     }
+    SectionCard {
+        Text("Undecided calls", fontWeight = FontWeight.SemiBold)
+        Text("Keep automatically, so a call you forgot is never lost", color = Brand.Muted, fontSize = 12.sp)
+        com.echoledger.mobile.calls.UndecidedKeepWorker.CHOICES.forEach { (hours, label) ->
+            Row(
+                Modifier.fillMaxWidth()
+                    .selectable(
+                        selected = settings.undecidedKeepHours == hours,
+                        role = Role.RadioButton,
+                        onClick = { vm.updateSettings { it.copy(undecidedKeepHours = hours) } }
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(selected = settings.undecidedKeepHours == hours, onClick = null)
+                Text(label, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+    }
 }
 
 /**

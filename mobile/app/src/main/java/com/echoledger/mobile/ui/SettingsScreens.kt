@@ -102,10 +102,18 @@ private fun SettingsGroup.icon(): ImageVector = when (this) {
  * predictive back gesture) returns from a group to this list.
  */
 @Composable
-fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit) {
+fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0) {
     var group by rememberSaveable { mutableStateOf<String?>(null) }
     var focus by rememberSaveable { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
+    // The You tab tapped again (since 1.3.2): back to the list of panels.
+    LaunchedEffect(home) {
+        if (home > 0) {
+            group = null
+            focus = null
+            query = ""
+        }
+    }
     val open = group?.let { name -> SettingsGroup.entries.firstOrNull { it.name == name } }
     if (open != null) {
         // General is a list of its own pages; Back from one of them returns to that list.

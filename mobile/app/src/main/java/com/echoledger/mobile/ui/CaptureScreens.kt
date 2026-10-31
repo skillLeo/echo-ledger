@@ -11,6 +11,8 @@ import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,13 +24,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -353,12 +358,61 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
 @Composable
 private fun <T> Choices(label: String, options: List<Pair<T, String>>, selected: T, onSelect: (T) -> Unit) {
     Text(label, color = Brand.Muted, fontSize = 12.sp)
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // Scrolls sideways instead of squeezing a chip to one letter per line (since 1.3.2).
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         options.forEach { (value, text) ->
-            FilterChip(selected = value == selected, onClick = { onSelect(value) }, label = { Text(text) })
+            FilterChip(selected = value == selected, onClick = { onSelect(value) }, label = { Text(text, maxLines = 1, softWrap = false) })
         }
     }
 }
+
+/**
+ * Colour choices as round swatches with a check on the chosen one (since 1.3.2: hex text in chips, which wrapped one
+ * character per line). The first swatch is the theme's own colour; TalkBack reads each colour's name.
+ */
+@Composable
+private fun ColourSwatches(label: String, selected: String?, onSelect: (String?) -> Unit) {
+    val c = LocalEchoColors.current
+    Text(label, color = Brand.Muted, fontSize = 12.sp)
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+        COLOUR_PRESETS.forEach { hex ->
+            val on = hex == selected
+            val fill = hex?.let { androidx.compose.ui.graphics.Color(android.graphics.Color.parseColor(it)) } ?: c.accent
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(fill)
+                    .border(if (on) 2.dp else 1.dp, if (on) c.text else c.border, CircleShape)
+                    .selectable(selected = on, role = Role.RadioButton, onClick = { onSelect(hex) })
+                    .semantics { contentDescription = COLOUR_NAMES[hex] ?: "Colour" },
+                contentAlignment = Alignment.Center
+            ) {
+                if (on) {
+                    Icon(
+                        Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = if (hex ==
+                            "#ffffff"
+                        ) {
+                            Color.Black
+                        } else {
+                            Color.White
+                        },
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val COLOUR_NAMES = mapOf(
+    null to "Theme colour",
+    "#a78bfa" to "Violet",
+    "#22d3ee" to "Cyan",
+    "#34d399" to "Green",
+    "#fbbf24" to "Amber",
+    "#fb7185" to "Rose",
+    "#ffffff" to "White"
+)
 
 /** The speaker colour presets offered on the phone (null = theme colour). */
 val COLOUR_PRESETS = listOf<String?>(null, "#a78bfa", "#22d3ee", "#34d399", "#fbbf24", "#fb7185", "#ffffff")
@@ -399,14 +453,8 @@ fun CaptionStyleSection(vm: MainViewModel, settings: AppSettings) {
                 modifier = Modifier.semantics { contentDescription = "Compact captions" }
             )
         }
-        Choices("Colour for Me", COLOUR_PRESETS.map { it to (it ?: "Default") }, style.meColor) { save(style.copy(meColor = it)) }
-        Choices(
-            "Colour for Client",
-            COLOUR_PRESETS.map {
-                it to (it ?: "Default")
-            },
-            style.clientColor
-        ) { save(style.copy(clientColor = it)) }
+        ColourSwatches("Colour for Me", style.meColor) { save(style.copy(meColor = it)) }
+        ColourSwatches("Colour for Client", style.clientColor) { save(style.copy(clientColor = it)) }
     }
 }
 
