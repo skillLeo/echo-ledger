@@ -281,15 +281,12 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(app.label)
-                    Text(
-                        when {
-                            !on -> "Not recorded"
-                            settings.autoRecordArmed -> "Recorded automatically"
-                            else -> "Recorded when auto-record is on"
-                        },
-                        color = Brand.Muted,
-                        fontSize = 12.sp
-                    )
+                    // One line only when it tells something: the card already says once when auto-record is off.
+                    when {
+                        !on -> "Not recorded"
+                        settings.autoRecordArmed -> "Recorded automatically"
+                        else -> null
+                    }?.let { Text(it, color = Brand.Muted, fontSize = 12.sp) }
                 }
                 Switch(
                     checked = on,

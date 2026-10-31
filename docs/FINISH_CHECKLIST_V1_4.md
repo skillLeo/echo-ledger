@@ -18,16 +18,16 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 ## P0 — Phone fixes before the meeting
 
 - [ ] 1. In-app voice note: timer runs, a stopped note shows in Library at once (Uploading → Transcribing → ready). *Accept:* `RecordScreenTest` timer + saved-note test; **(phone)** record 10 s, see it in Library.
-- [ ] 2. Record sheet: compact 2×2 grid, tiles ~112 dp (icon, title, one-line status), height wraps content; Game/Watch say "Needs Soniox credit" when refused. *Accept:* screenshot `phone-record-sheet-*`; `RecordSheetTest`.
+- [x] 2. Record sheet: compact 2×2 grid, tiles ~112 dp (icon, title, one-line status), height wraps content; Game/Watch say "Needs Soniox credit" when refused. *Accept:* screenshot `phone-new-sheet-*`; `UndecidedKeepWorkerTest` (refusal remembered).
 - [ ] 3. Waiting: one summary card ("4 calls waiting · oldest Oct 30 · 2:18 total", Review) → Waiting screen with per-item Keep / Discard / Rename / Client / Language and Keep all / Discard all with undo; setting "Undecided calls: keep automatically after 24 h / 3 days / never" (default 24 h); same card on desktop and web. *Accept:* `WaitingScreenTest`, `UndecidedPolicyTest`; screenshots; **(phone)**.
-- [ ] 4. Selection bar: "4 selected" on one line; compact icons, labels on long-press. *Accept:* screenshot at 200 % text; test.
+- [x] 4. Selection bar: "4 selected" on one line; compact icons, labels on long-press. *Accept:* screenshot at 200 % text; test.
 - [ ] 5. Bottom nav: any tab tap returns to that tab's main screen (closes sub-screens); a second tap scrolls to top. *Accept:* `MainActivityTest`; **(phone)**.
-- [ ] 6. Colour settings: swatches (circles with a check), no hex text; no one-character-per-line chip. *Accept:* screenshot; test.
-- [ ] 7. Messages never over a header: inline banner on Game/Watch or a snackbar above the nav. *Accept:* screenshot; no overlay text without a running session.
-- [ ] 8. Voice note screen: no "Client" meter, no "Both sides of calls" text. *Accept:* `RecordScreenTest`.
-- [ ] 9. Library rows: no "EN"/"UR" codes. *Accept:* `LibraryScreenTest`.
-- [ ] 10. Activity badge: only items that need action; "9+" above 9; informational items read once seen. *Accept:* test.
-- [ ] 11. "Auto-record calls" with the per-app list under it. *Accept:* screenshot; test.
+- [x] 6. Colour settings: swatches (circles with a check), no hex text; no one-character-per-line chip. *Accept:* screenshot; test.
+- [x] 7. Messages never over a header: inline banner on Game/Watch or a snackbar above the nav. *Accept:* screenshot; no overlay text without a running session.
+- [x] 8. Voice note screen: no "Client" meter, no "Both sides of calls" text. *Accept:* `RecordScreenTest`.
+- [x] 9. Library rows: no "EN"/"UR" codes. *Accept:* `LibraryScreenTest`.
+- [x] 10. Activity badge: only items that need action; "9+" above 9; informational items read once seen. *Accept:* test.
+- [x] 11. "Auto-record calls" with the per-app list under it. *Accept:* screenshot; test.
 - [ ] 12. Lag: profile (gfxinfo / JankStats / Perfetto), fix the top 3 causes, janky-frame % before and after. *Accept:* numbers in HANDOFF **(phone)**.
 - [ ] P0 suites: phone full suite, desktop, web.
 

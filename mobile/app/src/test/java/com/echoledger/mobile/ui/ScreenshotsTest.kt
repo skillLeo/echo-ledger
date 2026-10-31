@@ -367,8 +367,33 @@ class ScreenshotsTest : ScreenTest() {
                 mode = RecordMode.CALLS
             )
         }
-        pumpUntil("the waiting call") { runCatching { compose.onNodeWithText("Keep").assertExists() }.isSuccess }
+        pumpUntil("the waiting card") { runCatching { compose.onNodeWithText("Review").assertExists() }.isSuccess }
         capture("record-calls")
+    }
+
+    @Test
+    fun waiting() {
+        runBlocking { app.pairLocally(server) }
+        app.storeRecording(id = "call-1", state = "pending_decision", durationMs = 125_000)
+        app.storeRecording(id = "call-2", state = "pending_decision", durationMs = 36_000, startedAt = "2026-10-23T18:30:00Z")
+        shoot { WaitingScreen(vm, onBack = {}) }
+        pumpUntil("the waiting calls") { runCatching { compose.onNodeWithText("Keep all").assertExists() }.isSuccess }
+        capture("waiting")
+    }
+
+    @Test
+    fun newSheet() {
+        shoot {
+            RecordSheet(
+                Capabilities(34, true, micPermission = true, notificationPermission = true, overlayPermission = true),
+                autoRecordOn = true,
+                onPick = {},
+                onDismiss = {}
+            )
+        }
+        pumpUntil("the sheet") { runCatching { compose.onNodeWithText("New").assertExists() }.isSuccess }
+        compose.mainClock.advanceTimeBy(1_000)
+        capture("new-sheet")
     }
 
     @Test

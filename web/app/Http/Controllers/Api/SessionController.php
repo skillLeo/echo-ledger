@@ -100,6 +100,7 @@ final class SessionController extends Controller
             'duration_ms' => ['nullable', 'integer', 'min:0', 'max:86400000'],
             'language' => ['nullable', 'string', 'max:16'],
             'artifacts' => ['sometimes', 'array', 'min:1', 'max:3'],
+            'skip_duplicate' => ['sometimes', 'boolean'],
             ...self::artifactRules('artifacts.*.'),
             ...SessionMarkers::rules(),
             ...CallerMatcher::rules(),
@@ -119,9 +120,39 @@ final class SessionController extends Controller
             return $this->sessionCreatedResponse($existing, $stt, 200);
         }
 
+        // Imports (since v1.4): a file whose audio is already in the workspace's Library is skipped, not stored twice.
+        if ($withArtifacts && ($data['skip_duplicate'] ?? false)) {
+            $duplicate = $this->duplicateOf($device, $data['artifacts']);
+            if ($duplicate !== null) {
+                throw new ApiError(409, 'duplicate_recording', 'This file is already in your Library.', ['session_id' => $duplicate]);
+            }
+        }
+
         $session = $withArtifacts ? $lifecycle->createWithArtifacts($device, $data) : $lifecycle->open($device, $data);
 
         return $this->sessionCreatedResponse($session, $stt, 201);
+    }
+
+    /**
+     * The id of a live recording of this workspace whose primary file has the same SHA-256 as the one about to be
+     * uploaded, or null. Deleted recordings (tombstones and the undo bin) do not count.
+     *
+     * @param  list<array<string, mixed>>  $artifacts
+     */
+    private function duplicateOf(Device $device, array $artifacts): ?string
+    {
+        $primary = collect($artifacts)->firstWhere('role', RecordingRole::Primary->value);
+        $sha = is_array($primary) ? strtolower((string) ($primary['sha256'] ?? '')) : '';
+        if ($sha === '') {
+            return null;
+        }
+        $found = Recording::query()
+            ->where('role', RecordingRole::Primary->value)
+            ->where('sha256', $sha)
+            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id))
+            ->value('capture_session_id');
+
+        return is_string($found) ? $found : null;
     }
 
     /** POST /api/sessions/{id}/finish — attach the artifacts of an open session (creator device only; idempotent). */

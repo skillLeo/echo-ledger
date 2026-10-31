@@ -113,11 +113,13 @@ final class LibraryOrganiser
             return null;
         }
         $oldest = Carbon::parse((string) $stats->oldest, (string) config('app.timezone'))->setTimezone($zone)->format('M j');
-        $total = TranscriptExporter::clock((int) ($stats->total_ms ?? 0));
+        // An open session has no length until its device finishes it: the total is left out while none is known.
+        $totalMs = (int) ($stats->total_ms ?? 0);
+        $total = $totalMs > 0 ? " · ".TranscriptExporter::clock($totalMs)." total" : "";
 
         return $count === 1
-            ? "1 call waiting · {$oldest} · {$total} total"
-            : "{$count} calls waiting · oldest {$oldest} · {$total} total";
+            ? "1 call waiting · {$oldest}{$total}"
+            : "{$count} calls waiting · oldest {$oldest}{$total}";
     }
 
     /**

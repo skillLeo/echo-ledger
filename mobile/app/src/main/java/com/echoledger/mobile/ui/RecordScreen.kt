@@ -27,6 +27,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.FileUpload
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Pause
@@ -52,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -77,6 +80,7 @@ import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.share.ShareImportActivity
 import com.echoledger.mobile.ui.design.BannerKind
 import com.echoledger.mobile.ui.design.ButtonKind
+import com.echoledger.mobile.ui.design.CompactBarIcon
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoFilterChip
 import com.echoledger.mobile.ui.design.EchoTopBar
@@ -440,6 +444,7 @@ fun KeepDiscardCard(
     val c = LocalEchoColors.current
     val type = LocalEchoType.current
     var text by remember { mutableStateOf(typedTitle.orEmpty()) }
+    val titleFocus = remember { FocusRequester() }
     // Kept when leaving without a decision; Keep itself always carries the words typed so far.
     LaunchedEffect(text) {
         if (text != typedTitle.orEmpty()) {
@@ -466,11 +471,13 @@ fun KeepDiscardCard(
                         singleLine = true,
                         textStyle = type.bodyL.copy(color = c.text),
                         cursorBrush = SolidColor(c.accentText),
-                        modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Title" }
+                        modifier = Modifier.fillMaxWidth().focusRequester(titleFocus).semantics { contentDescription = "Title" }
                     )
                 }
                 whenText?.let { Text(it, style = type.labelM, color = c.textMuted) }
             }
+            // The title is typed in place; the pencil says so and puts the cursor there.
+            CompactBarIcon(Icons.Rounded.Edit, "Rename", { runCatching { titleFocus.requestFocus() } })
         }
         if (clients.isNotEmpty()) ClientChip(clients, clientId, onClient)
         LanguageChips(language, onLanguage)

@@ -64,6 +64,7 @@ Every addition below is marked **(since v1.1)**.
 | 409 | `too_many_open_sessions` | 10 or more sessions of this device are still `recording` | Finish or discard them, then retry |
 | 409 | `current_device` | `DELETE devices/{id}` for the device making the request | Unpair from the device's own settings |
 | 409 | `nothing_to_export` | `sessions/export`: none of the chosen recordings has a finished transcript | Permanent for those recordings |
+| 409 | `duplicate_recording` | `POST /api/sessions` with `skip_duplicate`: the same file (by SHA-256) is already a live recording of this workspace; `session_id` names it (since v1.4) | Mark the import as skipped (already in the Library); do not retry |
 | 409 | `views_unavailable` | `transcripts/{id}/views`: the transcript is not finished, or no Anthropic key is set (since v1.2) | Add the key, or wait for the transcript |
 | 409 | `cannot_retranscribe` | `sessions/{id}/retranscribe`: the recording's audio is not on the server (not uploaded yet, or erased; since v1.2) | Retry once the upload has finished |
 | 410 | `restore_expired` | `sessions/{id}/restore` after the 48-hour undo bin ended | Permanent: the recording is gone |
@@ -348,6 +349,10 @@ Idempotent on `(device, client_ref)`: repeating the call returns `200` with the 
   **(since v1.1)**. If it matches a deleted session the tombstone is returned unchanged (`200`, upload slots
   refuse chunks) — create the recording again with a new `client_ref`.
 - `404 client_not_found` for an unknown `client_id`; `409 too_many_open_uploads` / `409 too_many_open_sessions`.
+- **Imports (since v1.4):** `"skip_duplicate": true` (one-shot create only) asks the server to skip a file whose primary
+  artifact has the same `sha256` as a live recording of the same workspace: `409 duplicate_recording` with
+  `session_id` of that recording, and nothing is stored. A repeat with the same `client_ref` still answers `200` with
+  the existing session. Deleted recordings do not count. Without the key the server stores every file, as before.
 
 ### `POST /api/sessions/{id}/finish` — `sessions:write` (since v1.1)
 Moves an open session to `uploading` and returns its upload slots. Only the device that created the session may

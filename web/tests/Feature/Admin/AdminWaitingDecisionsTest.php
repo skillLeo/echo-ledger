@@ -65,6 +65,14 @@ it('counts hours past an hour of waiting calls', function () {
     expect(waitingSummaryFor($owner))->toBe('2 calls waiting · oldest Oct 30 · 1:02:03 total');
 });
 
+it('leaves the total out while no waiting call has a length yet', function () {
+    $owner = User::factory()->create();
+    waitingCall($owner, '2026-10-30 09:00:00', null);
+    waitingCall($owner, '2026-10-30 10:00:00', null);
+
+    expect(waitingSummaryFor($owner))->toBe('2 calls waiting · oldest Oct 30');
+});
+
 it('only counts the waiting calls of the given workspace', function () {
     $alice = User::factory()->create();
     $bob = User::factory()->create();
