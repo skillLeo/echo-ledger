@@ -29,7 +29,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 - [x] 10. Activity badge: only items that need action; "9+" above 9; informational items read once seen. *Accept:* test.
 - [x] 11. "Auto-record calls" with the per-app list under it. *Accept:* screenshot; test.
 - [ ] 12. Lag: profile (gfxinfo / JankStats / Perfetto), fix the top 3 causes, janky-frame % before and after. *Accept:* numbers in HANDOFF **(phone)**.
-- [ ] P0 suites: phone full suite, desktop, web.
+- [x] P0 suites: phone 1075/1075 + ktlint + lint + APK; desktop vitest 1087/1087 + tsc; web 3310 (2 stale error-table counts fixed) + PHPStan + Pint.
 
 ## P1 — Import, rename, save, live status
 
