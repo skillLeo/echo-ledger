@@ -23,7 +23,7 @@ final class TranscriptEditController extends Controller
     public function __construct(private readonly TranscriptEditor $editor) {}
 
     /** PATCH /api/transcripts/{id}: new text for some segments (timings stay). */
-    public function update(Request $request, string $id): TranscriptResource
+    public function update(Request $request, string $id): JsonResponse
     {
         $data = $request->validate([
             'edits' => ['required', 'array', 'min:1', 'max:2000'],
@@ -48,7 +48,8 @@ final class TranscriptEditController extends Controller
             TranscriptEditor::learnable($before, $edits, TextReplacements::rules($client->replacements)),
         );
 
-        return (new TranscriptResource($saved))->additional(['learn' => $learn]);
+        // The transcript stays flat at the top level (as before v1.4), with `learn` beside its fields.
+        return response()->json([...(new TranscriptResource($saved))->resolve($request), 'learn' => $learn]);
     }
 
     /** POST /api/transcripts/{id}/suggestions/{suggestion} — accept (the words change) or dismiss a suggested fix. */

@@ -32,6 +32,8 @@ final class SettingsTransfer
         'languages.auto_more',
         'languages.auto_fallback',
         'accuracy.double_check',
+        'accuracy.double_check_clients',
+        'client_ai.monthly_usd',
         'claude.model',
         'views.default_ur',
         'views.default_en',

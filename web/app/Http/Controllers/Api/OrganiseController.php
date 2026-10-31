@@ -11,6 +11,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
 use App\Services\LibraryOrganiser;
+use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -79,8 +80,10 @@ final class OrganiseController extends Controller
             'ids' => ['required', 'array', 'min:1', 'max:'.LibraryOrganiser::MAX_BULK],
             'ids.*' => ['string', 'size:26'],
             'format' => ['required', Rule::in(LibraryOrganiser::EXPORT_FORMATS)],
+            // Since v1.4: a Show as view (Roman Urdu, English, اردو); a recording without it keeps its own words.
+            'view' => ['sometimes', 'nullable', Rule::in(array_keys(TranscriptViews::VIEWS))],
         ]);
-        $file = $this->organiser->exportZip($this->device($request)->workspace_id, array_values($data['ids']), $data['format']);
+        $file = $this->organiser->exportZip($this->device($request)->workspace_id, array_values($data['ids']), $data['format'], $data['view'] ?? null);
 
         return response($file['body'], 200, [
             'Content-Type' => 'application/zip',

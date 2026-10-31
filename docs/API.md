@@ -511,6 +511,8 @@ need `label`, `delete` makes tombstones exactly like `DELETE /api/sessions/{id}`
 `{"ids": [...], "format": "txt|md|srt|vtt|json|docx"}` → `200 application/zip` with one file per finished final
 transcript (names as in `GET /api/transcripts/{id}/export`, numbered when two match) and the header
 `X-Export-Count`. Recordings without a finished transcript are skipped; when none has one, `409 nothing_to_export`.
+Since v1.4 an optional `"view"` (roman | english | urdu) exports each transcript in that Show as view when it is
+ready (the others keep their own words), with the same unsure-word markers.
 
 ### `POST /api/clients` — `sessions:write` (since v1.1)
 `{"name": "Acme", "color": "#22d3ee", "avatar": "AC", "pinned": false}` → `201 {"data": <client>}`. `name` is
