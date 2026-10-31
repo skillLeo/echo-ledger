@@ -2,7 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type PendingItem, type TranscriptionLanguage, type UploadItem } from "../../lib/ipc";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, learnPrompt, menuLabel, type LanguageChoice } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
-import { DISCARD_CONFIRM, failedUploads, pendingTitle, uploadTitle, verifyingUploads } from "../../lib/pending";
+import {
+  DISCARD_CONFIRM,
+  bulkNotice,
+  discardAllConfirm,
+  failedUploads,
+  pendingTitle,
+  uploadTitle,
+  verifyingUploads,
+  waitingSummary,
+} from "../../lib/pending";
 import { AlertIcon, ClockIcon, SourceAppIcon } from "../../components/Icons";
 
 /** A `main:navigate` request to bring one waiting recording into view, optionally with its title open for editing. */
@@ -25,17 +34,22 @@ const meta = (sourceApp: string, startedAt: string, durationMs: number, extra?: 
 /**
  * The top of the Library list: recordings waiting for Keep / Discard (A2.5) and uploads that stopped and need the
  * user (A5.1). Both lists come from the core and follow its `pending:changed` / `uploads:changed` events.
+ * The waiting recordings sit behind one summary card (as on the phone); Review opens the list.
  */
 export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
   const [pending, setPending] = useState<PendingItem[]>([]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
   const [assigning, setAssigning] = useState<string | null>(null);
   const [clients, setClients] = useState<Client[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [highlight, setHighlight] = useState<{ id: string; seq: number } | null>(null);
   const [learn, setLearn] = useState<{ itemId: string; clientId: string; question: string; language: LanguageChoice } | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
+  // The row a focus request asked for; scrolled to once the opened list has rendered it.
+  const scrollTo = useRef<string | null>(null);
   const appliedFocus = useRef(0);
   // Mirrors `renaming` so Enter followed by the input's blur saves once.
   const renameRef = useRef<{ id: string; text: string } | null>(null);
@@ -85,18 +99,32 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
       return;
     }
     appliedFocus.current = focus.seq;
+    setOpen(true);
+    scrollTo.current = item.id;
     setHighlight({ id: item.id, seq: focus.seq });
-    rows.current.get(item.id)?.scrollIntoView?.({ block: "center" });
     if (focus.rename) setRename({ id: item.id, text: item.title ?? "" });
     // Handled: coming back to the Library later must not highlight or open the title again.
     onFocusHandled?.();
   }, [focus, pending]);
 
   useEffect(() => {
+    const id = scrollTo.current;
+    const el = id ? rows.current.get(id) : undefined;
+    if (!el) return;
+    scrollTo.current = null;
+    el.scrollIntoView?.({ block: "center" });
+  }, [open, highlight, pending]);
+
+  useEffect(() => {
     if (!highlight) return;
     const timer = window.setTimeout(() => setHighlight(null), HIGHLIGHT_MS);
     return () => window.clearTimeout(timer);
   }, [highlight]);
+
+  // Once nothing waits the card goes away; the next recording to arrive starts with the summary again.
+  useEffect(() => {
+    if (pending.length === 0) setOpen(false);
+  }, [pending.length]);
 
   /** Runs one command for an item; on failure reports the core's message and re-reads both lists. */
   const perform = async (id: string, fn: () => Promise<unknown>, ok?: string): Promise<boolean> => {
@@ -127,6 +155,31 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
   const discard = async (item: PendingItem) => {
     if (!window.confirm(DISCARD_CONFIRM)) return;
     if (await perform(item.id, () => api.pendingDiscard(item.id), "Discarded")) drop(item.id);
+  };
+
+  /** Keep all / Discard all: one command per recording, in order; a failure is reported and the rest still run. */
+  const decideAll = async (verb: "Kept" | "Discarded", command: (id: string) => Promise<unknown>) => {
+    const items = pending;
+    setBulkBusy(true);
+    let done = 0;
+    try {
+      for (const item of items) {
+        if (await perform(item.id, () => command(item.id))) {
+          drop(item.id);
+          done++;
+        }
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+    if (done > 0) notify(bulkNotice(verb, done));
+  };
+
+  const keepAll = () => decideAll("Kept", (id) => api.pendingKeep(id));
+
+  const discardAll = () => {
+    if (!window.confirm(discardAllConfirm(pending.length))) return;
+    return decideAll("Discarded", (id) => api.pendingDiscard(id));
   };
 
   const saveRename = async () => {
@@ -200,90 +253,112 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     <div className="queue">
       {pending.length > 0 && (
         <section className="queue-section" aria-labelledby="queue-pending-title">
-          <div className="queue-head">
-            <ClockIcon size={14} />
-            <h2 id="queue-pending-title" className="queue-label">Waiting for your decision</h2>
-            <span className="queue-count">{pending.length}</span>
-          </div>
-          {pending.map((item) => {
-            const title = pendingTitle(item);
-            const isBusy = busy === item.id;
-            const knownClient = !item.clientId || (clients ?? []).some((c) => c.id === item.clientId);
-            return (
-              <div
-                key={item.id}
-                ref={(el) => {
-                  if (el) rows.current.set(item.id, el);
-                  else rows.current.delete(item.id);
-                }}
-                role="group"
-                aria-label={title}
-                className={`queue-item pending ${highlight?.id === item.id ? "highlight" : ""}`}
-                data-testid={`pending-${item.id}`}
-              >
-                <div className="row">
-                  <span className="avatar desktop"><SourceAppIcon app={item.sourceApp} size={18} /></span>
-                  <div className="item-main">
-                    {renaming?.id === item.id ? (
-                      <input
-                        className="input queue-rename"
-                        aria-label="Title"
-                        autoFocus
-                        maxLength={200}
-                        value={renaming.text}
-                        placeholder={pendingTitle({ ...item, title: null })}
-                        onChange={(e) => setRename({ id: item.id, text: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") void saveRename();
-                          if (e.key === "Escape") setRename(null);
-                        }}
-                        onBlur={() => void saveRename()}
-                      />
-                    ) : (
-                      <div className="queue-title">{title}</div>
-                    )}
-                    <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName)}</div>
-                  </div>
-                </div>
-                {item.firstLine && <div className="item-preview">{item.firstLine}</div>}
-                {learn?.itemId === item.id && (
-                  <div className="queue-learn" role="group" aria-label="Remember the language">
-                    <span className="small">{learn.question}</span>
-                    <button type="button" className="btn primary compact" onClick={() => void answerLearn(true)}>Yes</button>
-                    <button type="button" className="btn ghost compact" onClick={() => void answerLearn(false)}>No</button>
-                  </div>
-                )}
-                {assigning === item.id && (
-                  <select
-                    className="input queue-client"
-                    aria-label="Client"
-                    autoFocus
-                    value={item.clientId ?? ""}
-                    onChange={(e) => void assign(item, e.target.value)}
-                    onBlur={() => setAssigning(null)}
-                    onKeyDown={(e) => e.key === "Escape" && setAssigning(null)}
-                  >
-                    <option value="">No client</option>
-                    {!knownClient && <option value={item.clientId ?? ""}>{item.clientName ?? item.clientId}</option>}
-                    {(clients ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                )}
-                <div className="queue-actions">
-                  <button type="button" className="btn primary compact" disabled={isBusy} onClick={() => void keep(item)}>Keep</button>
-                  <button type="button" className="btn compact" disabled={isBusy} onClick={() => void discard(item)}>Discard</button>
-                  <button type="button" className="btn ghost compact" disabled={isBusy} onClick={() => setRename({ id: item.id, text: item.title ?? "" })}>Rename</button>
-                  <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Assign client</button>
-                  <select className="input compact queue-language" aria-label="Language" title="Language of the transcript" disabled={isBusy}
-                    value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
-                    {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
-                    <optgroup label="More languages">
-                      {MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
-                    </optgroup>
-                  </select>
-                </div>
+          <div className="queue-card">
+            <div className="queue-card-main">
+              <div className="queue-head">
+                <ClockIcon size={14} />
+                <h2 id="queue-pending-title" className="queue-label">Waiting for your decision</h2>
+                <span className="queue-count">{pending.length}</span>
               </div>
-            );
-          })}
+              <div className="small muted queue-meta" data-testid="waiting-summary">{waitingSummary(pending)}</div>
+            </div>
+            <button
+              type="button"
+              className={`btn compact ${open ? "ghost" : "primary"}`}
+              aria-expanded={open}
+              aria-controls={open ? "queue-pending-list" : undefined}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? "Hide" : "Review"}
+            </button>
+          </div>
+          {open && (
+            <div id="queue-pending-list" className="queue-list">
+              <div className="queue-actions queue-bulk">
+                <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void keepAll()}>Keep all</button>
+                <button type="button" className="btn compact danger" disabled={bulkBusy} onClick={() => void discardAll()}>Discard all</button>
+              </div>
+              {pending.map((item) => {
+                const title = pendingTitle(item);
+                const isBusy = bulkBusy || busy === item.id;
+                const knownClient = !item.clientId || (clients ?? []).some((c) => c.id === item.clientId);
+                return (
+                  <div
+                    key={item.id}
+                    ref={(el) => {
+                      if (el) rows.current.set(item.id, el);
+                      else rows.current.delete(item.id);
+                    }}
+                    role="group"
+                    aria-label={title}
+                    className={`queue-item pending ${highlight?.id === item.id ? "highlight" : ""}`}
+                    data-testid={`pending-${item.id}`}
+                  >
+                    <div className="row">
+                      <span className="avatar desktop"><SourceAppIcon app={item.sourceApp} size={18} /></span>
+                      <div className="item-main">
+                        {renaming?.id === item.id ? (
+                          <input
+                            className="input queue-rename"
+                            aria-label="Title"
+                            autoFocus
+                            maxLength={200}
+                            value={renaming.text}
+                            placeholder={pendingTitle({ ...item, title: null })}
+                            onChange={(e) => setRename({ id: item.id, text: e.target.value })}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void saveRename();
+                              if (e.key === "Escape") setRename(null);
+                            }}
+                            onBlur={() => void saveRename()}
+                          />
+                        ) : (
+                          <div className="queue-title">{title}</div>
+                        )}
+                        <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs, item.clientName)}</div>
+                      </div>
+                    </div>
+                    {item.firstLine && <div className="item-preview">{item.firstLine}</div>}
+                    {learn?.itemId === item.id && (
+                      <div className="queue-learn" role="group" aria-label="Remember the language">
+                        <span className="small">{learn.question}</span>
+                        <button type="button" className="btn primary compact" onClick={() => void answerLearn(true)}>Yes</button>
+                        <button type="button" className="btn ghost compact" onClick={() => void answerLearn(false)}>No</button>
+                      </div>
+                    )}
+                    {assigning === item.id && (
+                      <select
+                        className="input queue-client"
+                        aria-label="Client"
+                        autoFocus
+                        value={item.clientId ?? ""}
+                        onChange={(e) => void assign(item, e.target.value)}
+                        onBlur={() => setAssigning(null)}
+                        onKeyDown={(e) => e.key === "Escape" && setAssigning(null)}
+                      >
+                        <option value="">No client</option>
+                        {!knownClient && <option value={item.clientId ?? ""}>{item.clientName ?? item.clientId}</option>}
+                        {(clients ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    )}
+                    <div className="queue-actions">
+                      <button type="button" className="btn primary compact" disabled={isBusy} onClick={() => void keep(item)}>Keep</button>
+                      <button type="button" className="btn compact" disabled={isBusy} onClick={() => void discard(item)}>Discard</button>
+                      <button type="button" className="btn ghost compact" disabled={isBusy} onClick={() => setRename({ id: item.id, text: item.title ?? "" })}>Rename</button>
+                      <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Assign client</button>
+                      <select className="input compact queue-language" aria-label="Language" title="Language of the transcript" disabled={isBusy}
+                        value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
+                        {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
+                        <optgroup label="More languages">
+                          {MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
+                        </optgroup>
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
       )}
       {failed.length > 0 && (
