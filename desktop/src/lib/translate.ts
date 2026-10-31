@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "./ipc";
 
 /** Live Translate on the desktop (v1.3, plan B6): one app's sound translated in a click-through overlay. */
 export type TranslateMode = "game" | "watch";
@@ -38,13 +38,24 @@ export const TRANSLATE_TARGETS: [string, string][] = [
 
 export const RTL_TARGETS = new Set(["ur", "ar", "fa"]);
 
+/** `translate_start`: which app, Game or Watch, the language to write in, the languages spoken (empty = any), the speed. */
+export interface TranslateStartRequest {
+  pid: number;
+  name: string;
+  mode: TranslateMode;
+  target: string;
+  hints: string[];
+  speed: TranslateSpeed;
+}
+
+/** The Live Translate commands (wrapped in ipc.ts with the others, where the contract test checks them). */
 export const translateApi = {
-  apps: () => invoke<TranslateApp[]>("translate_apps"),
-  status: () => invoke<TranslateFeed | null>("translate_status"),
+  apps: () => api.translateApps(),
+  status: () => api.translateStatus(),
   start: (app: TranslateApp, mode: TranslateMode, target: string, hints: string[], speed: TranslateSpeed) =>
-    invoke<string[]>("translate_start", { request: { pid: app.pid, name: app.name, mode, target, hints, speed } }),
-  stop: () => invoke<void>("translate_stop"),
-  toggleLock: () => invoke<void>("translate_toggle_lock"),
+    api.translateStart({ pid: app.pid, name: app.name, mode, target, hints, speed }),
+  stop: () => api.translateStop(),
+  toggleLock: () => api.translateToggleLock(),
 };
 
 /** The newest `lines` lines of the text, roughly: the overlay has a fixed size and shows the end of the flow. */

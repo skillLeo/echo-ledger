@@ -2,7 +2,8 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-export type ShortcutAction = "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark";
+/** `translate_lock` and `translate_hide` (v1.3, Live Translate) are bound only while it runs and never shown in Settings. */
+export type ShortcutAction = "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "translate_lock" | "translate_hide";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 export type AskBeforeSaving = "always" | "auto_only" | "never";
 export type DecisionTimeout = "keep" | "discard" | "wait";
@@ -601,6 +602,12 @@ export const api = {
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),
   resetShortcuts: () => invoke<Settings>("reset_shortcuts"),
   toggleCaptions: () => invoke<AppStatus>("toggle_captions"),
+  // Live Translate (v1.3, lib/translate.ts holds its types).
+  translateApps: () => invoke<import("./translate").TranslateApp[]>("translate_apps"),
+  translateStatus: () => invoke<import("./translate").TranslateFeed | null>("translate_status"),
+  translateStart: (request: import("./translate").TranslateStartRequest) => invoke<string[]>("translate_start", { request }),
+  translateStop: () => invoke<void>("translate_stop"),
+  translateToggleLock: () => invoke<void>("translate_toggle_lock"),
   startRecording: (sourceApp?: string) => invoke<AppStatus>("start_recording", { sourceApp: sourceApp ?? null }),
   stopRecording: () => invoke<AppStatus>("stop_recording"),
   toggleVoiceNote: () => invoke<AppStatus>("toggle_voice_note"),

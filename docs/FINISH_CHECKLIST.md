@@ -55,7 +55,7 @@ laptop tests.
 ## Release
 
 - [ ] Full suites green: phone (`ktlintCheck testDebugUnitTest lintDebug`), desktop (vitest, tsc, cargo test, clippy), web (Pest, PHPStan, Pint) — at end of Phase C, end of Phase B, final.
-- [ ] Web deploy: backup, maintenance mode, migrate, optimize, queue restart, up, verify.
+- [x] Web deploy v1.3.0 (2026-10-30 23:55 UTC): backup `~/echoledger-backups/pre-v1.3.0-20261030-235514/` (34 tables, Dump completed; laptop copy `C:choledger-backups` hash-equal), down → 23 files → migrate (session_opens) → optimize → filament:optimize → queue:restart → up. Verified: 23/23 files = HEAD, migration Ran, new routes 401 without a token, /admin/login 200, /.env 403, 0 jobs / 0 failed, no new errors.
 - [ ] Desktop installer built.
 - [ ] APK: signed (H4) or debug.
 - [ ] USER_GUIDE, MANUAL_QA, HANDOFF updated; tag `v1.3.0`; pushed.
