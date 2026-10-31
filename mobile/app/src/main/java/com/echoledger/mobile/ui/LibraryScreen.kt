@@ -380,7 +380,7 @@ fun LibraryScreen(
                                 }
                             }
                             val grouped = if (sort == LibrarySort.NEWEST || sort == LibrarySort.OLDEST) {
-                                visible.groupBy { dateGroup(it.startedAt, today) }
+                                LibraryGroups.byDate(visible) { dateGroup(it.startedAt, today) }
                             } else {
                                 mapOf(sort.label to visible)
                             }
@@ -581,3 +581,19 @@ object UploadRow {
 
 /** How often the Library asks again while something is uploading or being transcribed. */
 private const val LIVE_REFRESH_MS = 5_000L
+
+/** The Library's sections when sorted by date (since 1.4.0). */
+object LibraryGroups {
+    /**
+     * Pinned recordings first under "Pinned", then the rest by day. A pinned old recording no longer pulls its day
+     * ("This week") above newer days such as Today and Yesterday.
+     */
+    fun <T : com.echoledger.mobile.data.LibraryItem> byDate(items: List<T>, day: (T) -> String): Map<String, List<T>> {
+        val out = LinkedHashMap<String, List<T>>()
+        items.filter { it.pinned }.takeIf { it.isNotEmpty() }?.let { out[PINNED] = it }
+        out.putAll(items.filterNot { it.pinned }.groupBy(day))
+        return out
+    }
+
+    const val PINNED = "Pinned"
+}

@@ -111,7 +111,7 @@ fun RecordSheet(capabilities: Capabilities, autoRecordOn: Boolean, onPick: (Reco
                 else -> "Calls: ready"
             }
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
-                ModeTile(Icons.Rounded.Mic, "Voice notes & files", "Record or import", Modifier.weight(1f)) { onPick(RecordMode.VOICE) }
+                ModeTile(Icons.Rounded.Mic, "Voice & files", "Record or import", Modifier.weight(1f)) { onPick(RecordMode.VOICE) }
                 ModeTile(Icons.Rounded.Call, "Calls & meetings", calls, Modifier.weight(1f)) { onPick(RecordMode.CALLS) }
             }
             Spacer(Modifier.height(Space.s3))

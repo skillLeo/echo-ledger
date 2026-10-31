@@ -344,4 +344,23 @@ class LibraryOrganiseTest : ScreenTest() {
         compose.onNodeWithContentDescription("More actions").performClick()
         compose.onNodeWithText("Rename").assertDoesNotExist()
     }
+
+    @Test
+    fun `pinned recordings get their own section first, so newer days stay above older ones`() {
+        fun item(id: String, day: String, pinned: Boolean = false) =
+            com.echoledger.mobile.data.LibraryItem(id = id, startedAt = day, updatedAt = day, pinned = pinned)
+        val items =
+            listOf(
+                item("old-pinned", "Wed", pinned = true),
+                item("today", "Today"),
+                item("yesterday", "Yesterday"),
+                item("thu", "This week")
+            )
+
+        val groups = LibraryGroups.byDate(items) { it.startedAt.orEmpty() }
+
+        assertEquals(listOf("Pinned", "Today", "Yesterday", "This week"), groups.keys.toList())
+        assertEquals(listOf("old-pinned"), groups.getValue("Pinned").map { it.id })
+        assertEquals(listOf("Today"), LibraryGroups.byDate(listOf(item("a", "Today"))) { it.startedAt.orEmpty() }.keys.toList())
+    }
 }

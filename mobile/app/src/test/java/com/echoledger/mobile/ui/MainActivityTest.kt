@@ -135,9 +135,9 @@ class MainActivityTest : AppTest() {
         awaitText("Weekly sync")
 
         compose.onNodeWithContentDescription("Record").performClick()
-        awaitText("Voice notes & files")
+        awaitText("Voice & files")
         compose.onNodeWithText("Calls: set up first", substring = true).assertExists()
-        compose.onNodeWithText("Voice notes & files").performClick()
+        compose.onNodeWithText("Voice & files").performClick()
         awaitText("Not recording")
         pumpUntil("the library to leave") {
             compose.waitForIdle()
