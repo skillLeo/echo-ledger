@@ -797,7 +797,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               {group.label && <div className="group-label">{group.label}</div>}
               {group.items.map((item) => {
                 const state = itemState(item);
-                const sub = [formatDuration(item.duration_ms) || null, item.client?.name, item.language_chip && item.language_chip !== "Auto" ? item.language_chip : null,
+                // Like the phone (v1.4): length, client and bookmarks; the language is a filter and lives on the recording page.
+                const sub = [formatDuration(item.duration_ms) || null, item.client?.name,
                   item.marker_count ? `${item.marker_count} bookmark${item.marker_count === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ");
                 const avatar = (
                   <span className={`avatar ${item.source_device ?? "web"} app-${appKind(item.source_app)}`}>
