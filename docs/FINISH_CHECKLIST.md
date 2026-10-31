@@ -54,11 +54,11 @@ laptop tests.
 
 ## Release
 
-- [ ] Full suites green: phone (`ktlintCheck testDebugUnitTest lintDebug`), desktop (vitest, tsc, cargo test, clippy), web (Pest, PHPStan, Pint) — at end of Phase C, end of Phase B, final.
-- [x] Web deploy v1.3.0 (2026-10-30 23:55 UTC): backup `~/echoledger-backups/pre-v1.3.0-20261030-235514/` (34 tables, Dump completed; laptop copy `C:choledger-backups` hash-equal), down → 23 files → migrate (session_opens) → optimize → filament:optimize → queue:restart → up. Verified: 23/23 files = HEAD, migration Ran, new routes 401 without a token, /admin/login 200, /.env 403, 0 jobs / 0 failed, no new errors.
-- [ ] Desktop installer built.
-- [ ] APK: signed (H4) or debug.
-- [ ] USER_GUIDE, MANUAL_QA, HANDOFF updated; tag `v1.3.0`; pushed.
+- [x] Milestone suites green (Phase C + Phase B): phone 1064 unit tests + ktlint + lint 0 errors; web Pest 3295/3295, PHPStan 0, Pint clean; desktop vitest 1060/1060 (after the IPC contract fix), tsc clean, cargo test all ok, clippy -D warnings clean. Final run before the tag.
+- [x] Web deploy v1.3.0 (2026-10-30 23:55 UTC): backup `~/echoledger-backups/pre-v1.3.0-20261030-235514/` (34 tables, Dump completed; laptop copy `C:\echoledger-backups\pre-v1.3.0-20261030-235514\` hash-equal), down → 23 files → migrate (session_opens) → optimize → filament:optimize → queue:restart → up. Verified: 23/23 files = HEAD, migration Ran, new routes 401 without a token, /admin/login 200, /.env 403, 0 jobs / 0 failed, no new errors.
+- [x] Desktop installer built: `C:\echoledger-releases\v1.3.0\EchoLedger_1.3.0_x64-setup.exe` (NSIS, unsigned: Authenticode needs a code-signing certificate).
+- [x] APK: debug build 1.3.0 (versionCode 9) `C:\echoledger-releases\v1.3.0\EchoLedger-1.3.0-debug.apk` (installs over the phone's debug build keeping data). Signed build waits for H4.
+- [x] USER_GUIDE (§16 Live Translate), MANUAL_QA (L1-L12, P1), HANDOFF updated; tag `v1.3.0`; pushed.
 
 ## Phone window 1 (after Phase B is built)
 
