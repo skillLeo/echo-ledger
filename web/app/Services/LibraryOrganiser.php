@@ -268,12 +268,13 @@ final class LibraryOrganiser
 
     /**
      * The finished transcripts of the chosen recordings in one zip file. Recordings without a finished transcript
-     * are skipped; when none has one, 409 `nothing_to_export`.
+     * are skipped; when none has one, 409 `nothing_to_export`. With a Show as `$view` (roman, urdu, english) each
+     * transcript whose view is ready is exported in it; the others keep their original words.
      *
      * @param  list<string>  $ids
      * @return array{body: string, filename: string, count: int}
      */
-    public function exportZip(int $workspaceId, array $ids, string $format): array
+    public function exportZip(int $workspaceId, array $ids, string $format, ?string $view = null): array
     {
         $sessions = CaptureSession::query()->where('workspace_id', $workspaceId)->whereIn('id', array_slice(array_values(array_unique($ids)), 0, self::MAX_BULK))
             ->with(['finalTranscript', 'client'])->orderBy('started_at')->get();
@@ -292,7 +293,7 @@ final class LibraryOrganiser
                 if ($transcript === null || $transcript->status !== TranscriptStatus::Completed) {
                     continue;
                 }
-                $file = $this->exporter->export($transcript->setRelation('captureSession', $session), $format);
+                $file = $this->exporter->export($transcript->setRelation('captureSession', $session), $format, ['view' => $view]);
                 $zip->addFromString(self::uniqueName($file['filename'], $names), $file['body']);
             }
             $count = count($names);

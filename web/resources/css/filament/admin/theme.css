@@ -225,6 +225,286 @@ html.fi body {
     --loading-skeleton-border-radius: 6px;
 }
 
+/* ---------- Library → Upload: the drop zone, the batch choices and each file's progress ---------- */
+.el-uploader {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.el-drop {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-4);
+    border: 1.5px dashed var(--border-strong);
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+    color: var(--text-muted);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+
+.el-drop:hover,
+.el-drop:focus-visible,
+.el-drop[data-dragging] {
+    border-color: var(--accent);
+    background-color: var(--accent-soft);
+}
+
+.el-drop-icon {
+    width: 24px;
+    height: 24px;
+    color: var(--accent-text);
+}
+
+.el-drop-title {
+    font-size: var(--text-md);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.el-drop-link,
+.el-link {
+    color: var(--accent-text);
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.el-drop-hint {
+    font-size: var(--text-xs);
+}
+
+.el-batch,
+.el-files,
+.el-summary {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-1);
+}
+
+.el-batch {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+}
+
+.el-batch-title {
+    font-size: var(--text-md);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.el-batch-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-3);
+}
+
+.el-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text);
+}
+
+.el-batch-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.el-files > li + li {
+    border-top: 1px solid var(--border);
+}
+
+.el-file {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+}
+
+.el-file-head,
+.el-file-foot,
+.el-summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-3);
+}
+
+.el-file-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: var(--text-md);
+    font-weight: 500;
+    color: var(--text);
+}
+
+.el-file-size,
+.el-file-status {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.el-file-actions {
+    display: flex;
+    gap: var(--space-3);
+    font-size: var(--text-sm);
+}
+
+/* Touch-sized targets for the file actions on phones. */
+.el-file-actions > *,
+.el-summary .el-link {
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.el-bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: var(--radius-full);
+    background-color: var(--surface-3);
+}
+
+.el-bar > span {
+    display: block;
+    height: 100%;
+    background-color: var(--accent);
+    transition: width var(--motion-base) linear;
+}
+
+.el-file[data-state='paused'] .el-bar > span {
+    background-color: var(--warning);
+}
+
+.el-summary {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.el-file-status.el-tone-success {
+    color: var(--success);
+}
+
+.el-file-status.el-tone-danger {
+    color: var(--danger);
+}
+
+.el-file-status.el-tone-warning {
+    color: var(--warning);
+}
+
+.el-file-status.el-tone-info {
+    color: var(--client);
+}
+
+/* ---------- recording page: title with Rename, Download, live status ---------- */
+.el-title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.el-title-edit {
+    display: inline-flex;
+    flex: none;
+    padding: 6px;
+    border-radius: var(--radius-sm);
+    color: var(--text-faint);
+    transition: color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+
+.el-title-edit:hover,
+.el-title-edit:focus-visible {
+    color: var(--accent-text);
+    background-color: var(--accent-soft);
+}
+
+.el-title-edit svg {
+    width: 20px;
+    height: 20px;
+}
+
+.el-download {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+}
+
+.el-download-part {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.el-download-heading {
+    font-size: var(--text-md);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.el-download-views {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--text);
+}
+
+.el-download-views legend {
+    margin-bottom: var(--space-2);
+    color: var(--text-muted);
+}
+
+.el-download-view {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 32px;
+}
+
+.el-download-formats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.el-download-hint {
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+}
+
+.el-live {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+}
+
+.el-live-spinner {
+    width: 16px;
+    height: 16px;
+    color: var(--accent-text);
+}
+
 /* ---------- media and focus ---------- */
 .dark audio {
     color-scheme: dark;

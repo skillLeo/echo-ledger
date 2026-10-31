@@ -41,7 +41,7 @@ class CaptureSessionResource extends Resource
 
     public static function canCreate(): bool
     {
-        return false; // sessions come from devices or the "Upload voice note" action
+        return false; // sessions come from devices or Upload on the list
     }
 
     public static function getEloquentQuery(): Builder

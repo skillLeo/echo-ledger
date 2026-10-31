@@ -22,7 +22,6 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -48,7 +47,7 @@ function adminTinyWav(int $samples = 800): string
 it('renders the sessions list page', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin/sessions')->assertOk()->assertSee('Sessions')->assertSee('Upload voice note');
+    $this->get('/admin/sessions')->assertOk()->assertSee('Sessions')->assertSee('Upload')->assertSee('Drop sound or video files here');
 });
 
 it('shows a helpful empty state when there are no sessions', function () {
@@ -523,39 +522,6 @@ it('deletes a session from its view page and returns to the list', function () {
     expect(CaptureSession::query()->find($session->id))->toBeNull();
 });
 
-it('puts a voice note in the library as a Web upload, encrypted at rest, and queues transcription', function () {
-    Queue::fake();
-    $this->isolatedStorage();
-    $admin = $this->signInAsAdmin();
-    app(SettingsRepository::class)->set('provider.voice_note', 'elevenlabs');
-    $client = Client::factory()->create(['user_id' => $admin->id]);
-    $wav = adminTinyWav();
-
-    $this->panelComponent(ListCaptureSessions::class)
-        ->callAction('uploadVoiceNote', [
-            'audio' => UploadedFile::fake()->createWithContent('note.wav', $wav),
-            'title' => 'Site visit note',
-            'client_id' => $client->id,
-        ])
-        ->assertHasNoActionErrors()
-        ->assertNotified('Voice note uploaded');
-
-    $session = CaptureSession::query()->with('primaryRecording')->firstOrFail();
-    expect($session->user_id)->toBe($admin->id)
-        ->and($session->source_device)->toBe(SourceDevice::Web)
-        ->and($session->source_app)->toBe(SourceApp::VoiceNote)
-        ->and($session->title)->toBe('Site visit note')
-        ->and($session->client_id)->toBe($client->id)
-        ->and($session->device_id)->toBeNull()
-        ->and($session->final_provider)->toBe('elevenlabs')
-        ->and($session->primaryRecording->isReady())->toBeTrue();
-
-    $stored = Storage::disk('recordings')->get($session->primaryRecording->stored_path);
-    expect($stored)->not->toContain('RIFF')->not->toContain('WAVEfmt');
-    expect(Storage::disk('local')->allFiles('tmp-uploads'))->toBe([]);
-    Queue::assertPushed(TranscribeFinalJob::class, 1);
-});
-
 /** Smallest byte sequences that identify each container the way real files begin. */
 function adminAudioSample(string $kind): string
 {
@@ -572,9 +538,8 @@ function adminAudioSample(string $kind): string
 }
 
 /*
- * While tests run, Livewire reports the client-declared type for uploads, so it cannot exercise the content sniffing
- * that runs in production. These cases run the same detector (Flysystem's finfo detector, used by Livewire's
- * TemporaryUploadedFile) over real file signatures and check the result against the rule the upload field applies.
+ * The console upload sniffs the first chunk of a file with Flysystem's finfo detector. These cases run that detector
+ * over real file signatures and check the result against the accepted types.
  */
 it('recognises each audio container the product lists as supported', function (string $kind) {
     $detected = (new FinfoMimeTypeDetector)->detectMimeTypeFromBuffer(adminAudioSample($kind));
@@ -603,11 +568,12 @@ it('stores an AMR, ADTS AAC or WebM voice note under its audio type (A6.W28)', f
     $this->isolatedStorage();
     $this->signInAsAdmin();
     $bytes = adminAudioSample($kind);
-    $sniffed = (string) (new FinfoMimeTypeDetector)->detectMimeTypeFromBuffer($bytes);
 
-    $this->panelComponent(ListCaptureSessions::class)
-        ->callAction('uploadVoiceNote', ['audio' => UploadedFile::fake()->createWithContent($name, $bytes)->mimeType($sniffed)])
-        ->assertHasNoActionErrors();
+    // Library → Upload: one chunk, then complete.
+    $start = $this->postJson(route('admin.uploads.store'), ['name' => $name, 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes)])->assertCreated();
+    $this->call('POST', route('admin.uploads.chunk', [$start->json('recording_id'), 0]), [], [], [],
+        ['CONTENT_TYPE' => 'application/octet-stream', 'HTTP_ACCEPT' => 'application/json', 'HTTP_UPLOAD_CHUNK_SHA256' => hash('sha256', $bytes)], $bytes)->assertOk();
+    $this->postJson(route('admin.uploads.complete', $start->json('recording_id')))->assertStatus(202);
 
     $recording = Recording::query()->sole();
     expect($recording->mime)->toBe($stored)
@@ -642,70 +608,6 @@ it('does not mistake non-audio content for audio, whatever the file is called', 
     'windows executable' => "MZ\x90\x00".str_repeat("\0", 64),
     'php source' => '<?php system($_GET["c"]);',
 ]);
-it('requires an audio file for a voice note', function () {
-    Queue::fake();
-    $this->signInAsAdmin();
-
-    $this->panelComponent(ListCaptureSessions::class)
-        ->callAction('uploadVoiceNote', ['title' => 'No file'])
-        ->assertHasActionErrors(['audio' => 'required']);
-
-    expect(CaptureSession::query()->count())->toBe(0);
-});
-
-it('rejects a voice note whose type is not an accepted audio type', function () {
-    Queue::fake();
-    $this->isolatedStorage();
-    $this->signInAsAdmin();
-
-    $this->panelComponent(ListCaptureSessions::class)
-        ->callAction('uploadVoiceNote', ['audio' => UploadedFile::fake()->createWithContent('payload.exe', "MZ\x90\x00this is not audio")])
-        ->assertHasActionErrors(['audio']);
-
-    expect(CaptureSession::query()->count())->toBe(0);
-});
-
-it('rejects a voice note larger than 12 MB', function () {
-    Queue::fake();
-    $this->isolatedStorage();
-    $this->signInAsAdmin();
-    $big = adminTinyWav(7_000_000); // ~14 MB
-
-    $this->panelComponent(ListCaptureSessions::class)
-        ->callAction('uploadVoiceNote', ['audio' => UploadedFile::fake()->createWithContent('long.wav', $big)])
-        ->assertHasActionErrors(['audio']);
-
-    expect(CaptureSession::query()->count())->toBe(0);
-});
-
-it('rejects an over-long voice note title', function () {
-    Queue::fake();
-    $this->isolatedStorage();
-    $this->signInAsAdmin();
-
-    $this->panelComponent(ListCaptureSessions::class)
-        ->callAction('uploadVoiceNote', [
-            'audio' => UploadedFile::fake()->createWithContent('note.wav', adminTinyWav()),
-            'title' => str_repeat('t', 201),
-        ])
-        ->assertHasActionErrors(['title' => 'max']);
-});
-
-it('does not let a voice note be filed under another admin\'s client', function () {
-    Queue::fake();
-    $this->isolatedStorage();
-    $this->signInAsAdmin();
-    $foreign = Client::factory()->create(['user_id' => $this->makeAdmin()->id]);
-
-    $this->panelComponent(ListCaptureSessions::class)
-        ->callAction('uploadVoiceNote', [
-            'audio' => UploadedFile::fake()->createWithContent('note.wav', adminTinyWav()),
-            'client_id' => $foreign->id,
-        ])
-        ->assertHasActionErrors(['client_id']);
-
-    expect(CaptureSession::query()->count())->toBe(0);
-});
 
 // --- Console details (A6.W26) -----------------------------------------------------------------------------------
 

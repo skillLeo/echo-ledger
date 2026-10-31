@@ -4,33 +4,23 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\Pages;
 
-use App\Enums\RecordingRole;
-use App\Enums\SessionStatus;
-use App\Enums\SourceApp;
-use App\Enums\SourceDevice;
-use App\Enums\SttUseCase;
-use App\Exceptions\ApiError;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
-use App\Models\CaptureSession;
 use App\Models\Client;
-use App\Services\FinalTranscriptCoordinator;
+use App\Services\ConsoleUploads;
 use App\Services\LibraryOrganiser;
-use App\Services\RecordingIngestor;
-use App\Services\SettingsRepository;
 use App\Services\Workspaces\CurrentWorkspace;
-use App\Services\Workspaces\PlanLimits;
+use App\Stt\LanguageChoice;
 use Filament\Actions\Action;
-use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\RenderHook;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\View;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 
 class ListCaptureSessions extends ListRecords
 {
@@ -45,6 +35,9 @@ class ListCaptureSessions extends ListRecords
         'failed' => 'Failed uploads',
         'pinned' => 'Pinned',
     ];
+
+    /** Files up to this size are hashed by the browser's own SHA-256 (it needs the whole file in memory). */
+    public const NATIVE_HASH_MAX_BYTES = 100 * 1024 * 1024;
 
     /** @return array<string, Tab> */
     public function getTabs(): array
@@ -67,61 +60,46 @@ class ListCaptureSessions extends ListRecords
         return [WaitingDecisionsWidget::class];
     }
 
+    /** The upload drop zone sits above the smart views and the list. */
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([
+            View::make('filament.library.uploader')->viewData(fn (): array => ['config' => $this->uploaderConfig()]),
+            $this->getTabsContentComponent(),
+            RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
+            EmbeddedTable::make(),
+            RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
+        ]);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('uploadVoiceNote')
-                ->label('Upload voice note')
+            // Opens the file picker of the drop zone below (several files at once, on phones too).
+            Action::make('upload')
+                ->label('Upload')
                 ->icon(Heroicon::OutlinedArrowUpTray)
-                ->modalDescription('Voice notes are never auto-recorded. Upload one here (source: Web).')
-                ->schema([
-                    FileUpload::make('audio')
-                        ->label('Audio file')
-                        ->disk('local')
-                        ->directory('tmp-uploads')
-                        ->visibility('private')
-                        ->acceptedFileTypes((array) config('echoledger.accepted_mimes'))
-                        ->maxSize(12 * 1024)
-                        ->required(),
-                    TextInput::make('title')->maxLength(200),
-                    Select::make('client_id')->label('Client')
-                        ->options(fn (): array => Client::query()->where('workspace_id', CurrentWorkspace::id())->orderBy('name')->pluck('name', 'id')->all())
-                        ->searchable(),
-                ])
-                ->action(function (array $data, RecordingIngestor $ingestor, FinalTranscriptCoordinator $coordinator, SettingsRepository $settings): void {
-                    $disk = Storage::disk('local');
-                    $relative = (string) $data['audio'];
-                    $path = $disk->path($relative);
-                    try {
-                        app(PlanLimits::class)->assertStorage((int) CurrentWorkspace::id(), (int) $disk->size($relative));
-                    } catch (ApiError $e) {
-                        $disk->delete($relative);
-                        Notification::make()->title($e->getMessage())->danger()->send();
+                ->alpineClickHandler("\$dispatch('el-upload-pick')"),
+        ];
+    }
 
-                        return;
-                    }
-                    try {
-                        $session = CaptureSession::query()->create([
-                            'workspace_id' => CurrentWorkspace::id(),
-                            'user_id' => auth()->id(),
-                            'client_id' => $data['client_id'] ?? null,
-                            'client_ref' => (string) Str::uuid(),
-                            'source_device' => SourceDevice::Web,
-                            'source_app' => SourceApp::VoiceNote,
-                            'title' => $data['title'] ?? null,
-                            'started_at' => now(),
-                            'status' => SessionStatus::Processing,
-                            'final_provider' => $settings->providerFor(SttUseCase::VoiceNote)->value,
-                        ]);
-                        $mime = (string) ($disk->mimeType($relative) ?: 'application/octet-stream');
-                        $ingestor->ingestLocalFile($session, $path, RecordingRole::Primary, $mime);
-                        $coordinator->maybeStart($session);
-                    } finally {
-                        $disk->delete($relative); // plaintext upload removed right after encryption
-                    }
-
-                    Notification::make()->title('Voice note uploaded')->body('Transcription runs on the next queue tick.')->success()->send();
-                }),
+    /**
+     * What the uploader needs: its routes, the batch choices (client, language) and the limits it checks before
+     * sending anything.
+     *
+     * @return array<string, mixed>
+     */
+    protected function uploaderConfig(): array
+    {
+        return [
+            'store' => route('admin.uploads.store'),
+            'csrf' => csrf_token(),
+            'clients' => Client::query()->where('workspace_id', CurrentWorkspace::id())->orderByDesc('pinned')->orderBy('name')
+                ->get(['id', 'name'])->map(fn (Client $c): array => ['value' => $c->id, 'label' => $c->name])->values()->all(),
+            'languages' => LanguageChoice::selectOptions(),
+            'extensions' => array_keys(ConsoleUploads::EXTENSIONS),
+            'maxBytes' => (int) config('echoledger.max_recording_bytes'),
+            'nativeHashMaxBytes' => self::NATIVE_HASH_MAX_BYTES,
         ];
     }
 

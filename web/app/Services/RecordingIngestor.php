@@ -10,7 +10,7 @@ use App\Models\CaptureSession;
 use App\Models\Recording;
 
 /**
- * Ingests a local plaintext file (admin "Upload voice note", demo seeder) straight into encrypted storage.
+ * Ingests a local plaintext file (demo seeder) straight into encrypted storage.
  */
 final class RecordingIngestor
 {
@@ -19,6 +19,7 @@ final class RecordingIngestor
         'audio/amr' => 'audio/amr',
         'audio/x-hx-aac-adts' => 'audio/aac',
         'video/webm' => 'audio/webm', // a WebM voice note is audio-only; serve it with an audio type
+        'video/mp4' => 'audio/mp4', // an imported video is kept for its sound (console Upload)
     ];
 
     public function __construct(private readonly ChunkedUploadService $uploads) {}

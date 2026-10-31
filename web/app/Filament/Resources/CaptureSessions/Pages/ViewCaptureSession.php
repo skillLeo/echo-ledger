@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\Pages;
 
+use App\Enums\SessionStatus;
 use App\Enums\SttProviderKey;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
+use App\Http\Controllers\AdminMediaController;
 use App\Models\CaptureSession;
 use App\Models\SessionOpen;
 use App\Models\Transcript;
@@ -26,6 +29,7 @@ use App\Stt\ChannelLanguage;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use App\Stt\ScriptCheck;
+use App\Support\UnsureMarkers;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
@@ -37,13 +41,28 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\View as ViewComponent;
+use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\HtmlString;
 use RuntimeException;
 
 class ViewCaptureSession extends ViewRecord
 {
     protected static string $resource = CaptureSessionResource::class;
+
+    /** Transcript files offered under Download, in this order; PDF is the print page the browser saves as PDF. */
+    public const DOWNLOAD_FORMATS = [
+        'txt' => 'Text (.txt)',
+        'docx' => 'Word (.docx)',
+        'html' => 'PDF (print)',
+        'srt' => 'Subtitles (.srt)',
+        'json' => 'JSON (.json)',
+        'md' => 'Markdown (.md)',
+        'vtt' => 'Web subtitles (.vtt)',
+    ];
 
     /** Opening the page counts as opening the recording (the apps stop showing it as new for this user). */
     public function mount(int|string $record): void
@@ -58,6 +77,53 @@ class ViewCaptureSession extends ViewRecord
     public function getTitle(): string
     {
         return $this->session()->displayTitle();
+    }
+
+    /** The title with its Rename button; the browser tab keeps the plain title. */
+    public function getHeading(): Htmlable
+    {
+        return new HtmlString(view('filament.library.editable-title', ['title' => $this->session()->displayTitle()])->render());
+    }
+
+    /** Live status above the details, only while the recording is uploading or being transcribed. */
+    public function content(Schema $schema): Schema
+    {
+        if ($this->hasCombinedRelationManagerTabsWithContent()) {
+            return parent::content($schema);
+        }
+
+        return $schema->components([
+            ViewComponent::make('filament.library.live-status')
+                ->visible(fn (): bool => CaptureSessionsTable::isPending($this->session()))
+                ->viewData(fn (): array => ['interval' => CaptureSessionsTable::LIVE_POLL, 'message' => $this->liveMessage()]),
+            $this->getInfolistContentComponent(),
+            $this->getRelationManagersContentComponent(),
+        ]);
+    }
+
+    /**
+     * The live-status poll. Livewire re-renders the page with the new status; the player is not re-rendered, so it is
+     * sent the transcript once nothing is pending any more (the poll then stops with the status line).
+     */
+    public function refreshLiveStatus(): void
+    {
+        $session = $this->session()->refresh();
+        if (CaptureSessionsTable::isPending($session)) {
+            return;
+        }
+        $this->pushPlayer();
+        match ($session->finalTranscript?->status) {
+            TranscriptStatus::Completed => Notification::make()->title('The transcript is ready')->success()->send(),
+            TranscriptStatus::Failed => Notification::make()->title('The transcript could not be made')->body('See the error on this page, then try again.')->danger()->send(),
+            default => null,
+        };
+    }
+
+    private function liveMessage(): string
+    {
+        return $this->session()->status === SessionStatus::Uploading
+            ? 'Uploading. This page updates by itself.'
+            : 'Transcribing. This page updates by itself when the transcript is ready.';
     }
 
     /**
@@ -90,29 +156,12 @@ class ViewCaptureSession extends ViewRecord
                 $this->historyAction(),
             ])->label('Edit')->icon(Heroicon::OutlinedPencilSquare)->button()->color('gray')
                 ->visible(fn (): bool => $this->editableTranscript() !== null),
-            ActionGroup::make([
-                ...array_map(fn (array $f): Action => Action::make('export_'.$f[0])->label($f[1])
-                    ->url(fn (): string => route('admin.transcripts.export', ['transcript' => $this->editableTranscript()->id ?? '0', 'format' => $f[0]]))
-                    ->openUrlInNewTab($f[0] === 'html'), [
-                        ['docx', 'Word (.docx)'], ['html', 'Print or save as PDF'], ['txt', 'Text (.txt)'], ['md', 'Markdown (.md)'],
-                        ['srt', 'Subtitles (.srt)'], ['vtt', 'Web subtitles (.vtt)'], ['json', 'JSON'],
-                    ]),
-                // Show as: the same files in Roman Urdu or English, once those views are made.
-                ...array_map(fn (array $f): Action => Action::make('export_'.$f[0].'_'.$f[2])->label($f[1])
-                    ->url(fn (): string => route('admin.transcripts.export', ['transcript' => $this->editableTranscript()->id ?? '0', 'format' => $f[0], 'view' => $f[2]]))
-                    ->openUrlInNewTab($f[0] === 'html')
-                    ->visible(fn (): bool => in_array($f[2], $this->readyViews(), true)), [
-                        ['docx', 'Word (.docx) in Roman Urdu', 'roman'], ['docx', 'Word (.docx) in English', 'english'],
-                        ['html', 'Print in Roman Urdu', 'roman'], ['html', 'Print in English', 'english'],
-                        ['txt', 'Text (.txt) in Roman Urdu', 'roman'], ['txt', 'Text (.txt) in English', 'english'],
-                        ['docx', 'Word (.docx) in Urdu', 'urdu'], ['html', 'Print in Urdu', 'urdu'], ['txt', 'Text (.txt) in Urdu', 'urdu'],
-                    ]),
-            ])->label('Export')->icon(Heroicon::OutlinedArrowDownTray)->button()->color('gray')
-                ->visible(fn (): bool => $this->editableTranscript() !== null),
+            $this->downloadAction(),
             $this->wrongScriptAction(),
             $this->showAsAction(),
             $this->shareAction(),
             ActionGroup::make([
+                CaptureSessionsTable::renameAction(),
                 $this->retryAction(),
                 $this->retranscribeAsAction(),
                 $this->secondEngineAction(),
@@ -123,6 +172,51 @@ class ViewCaptureSession extends ViewRecord
                 $this->clearReferenceAction(),
                 DeleteAction::make()->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
             ])->icon(Heroicon::OutlinedEllipsisVertical)->color('gray'),
+        ];
+    }
+
+    /** Download: the audio, and the transcript as a file in the chosen Show as view (unsure words keep their marks). */
+    private function downloadAction(): Action
+    {
+        return Action::make('download')
+            ->label('Download')
+            ->icon(Heroicon::OutlinedArrowDownTray)
+            ->button()
+            ->color('gray')
+            ->visible(fn (): bool => $this->editableTranscript() !== null || $this->session()->primaryRecording?->isReady() === true)
+            ->modalHeading('Download')
+            ->modalWidth('lg')
+            ->modalContent(fn (): View => view('filament.library.download-panel', $this->downloadOptions()))
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close');
+    }
+
+    /** @return array{audio: array{url: string, label: string}|null, links: array<string, list<array{label: string, url: string, print: bool}>>, views: array<string, string>, default: string, unsure: bool} */
+    private function downloadOptions(): array
+    {
+        $recording = $this->session()->primaryRecording;
+        $transcript = $this->editableTranscript();
+        $views = ['original' => 'Original'] + array_intersect_key(TranscriptViews::VIEWS, array_flip($this->readyViews()));
+        $links = [];
+        foreach ($transcript !== null ? array_keys($views) : [] as $view) {
+            foreach (self::DOWNLOAD_FORMATS as $format => $label) {
+                $query = array_filter(['view' => $view === 'original' ? null : $view, 'print' => $format === 'html' ? 1 : null]);
+                $links[$view][] = ['label' => $label, 'print' => $format === 'html',
+                    'url' => route('admin.transcripts.export', ['transcript' => $transcript->id, 'format' => $format, ...$query])];
+            }
+        }
+        // Opens in the view the player opens in (Settings → Transcription), when it is made.
+        $default = $transcript !== null ? app(TranscriptViews::class)->state($transcript)['default'] : 'original';
+
+        return [
+            'audio' => $recording?->isReady() === true ? [
+                'url' => route('admin.recordings.stream', ['recording' => $recording->id, 'download' => 1]),
+                'label' => 'Audio (.'.AdminMediaController::extensionFor($recording->mime).')',
+            ] : null,
+            'links' => $links,
+            'views' => $views,
+            'default' => array_key_exists($default, $views) ? $default : 'original',
+            'unsure' => UnsureMarkers::settings()['style'] !== 'off',
         ];
     }
 
