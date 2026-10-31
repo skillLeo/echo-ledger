@@ -474,6 +474,25 @@ Run these when the change touches the area, or before a release.
 | V-D6 | Browser tab detection with automation on, then off. | On: recorded as Google Meet after the prompt. Off: ignored as an unknown site. |
 | V-D25 | The pill and review card on screen recording. | They appear but are hidden from the recording. |
 
+### Mac app v1.4 (about 30 minutes; paste the results back)
+
+First check the macOS version: Apple menu → **About This Mac**. Calls need 14.2 or newer (the process tap; 14.4+ is
+what the capture code was written against). Get the `.dmg` from the latest **Desktop (macOS)** run on GitHub
+(Actions → the run → Artifacts: `EchoLedger-mac-apple-silicon` for M1–M4, `EchoLedger-mac-intel` for Intel).
+
+| # | Check | Expected |
+|---|---|---|
+| MAC-1 | Open the `.dmg`, drag EchoLedger to Applications, right-click → **Open** → **Open**. | It starts (menu-bar icon, no Dock icon). Later opens need no right-click. |
+| MAC-2 | Pair with the console (QR or code). | Paired; the Library loads. |
+| MAC-3 | First recording: allow the microphone and **system audio recording**. | Both prompts show EchoLedger's text; denying one says what to do. |
+| MAC-4 | A Google Meet call in Chrome or Safari, 1 minute, both people talk. | Recorded as Google Meet; the transcript has both sides (You and the other person). |
+| MAC-5 | A Zoom call, 1 minute. | Recorded as Zoom with both sides. |
+| MAC-6 | A WhatsApp desktop call, 1 minute. | Recorded as WhatsApp with both sides. |
+| MAC-7 | A voice note (Record in the app, 15 seconds). | Shows in the Library at once, then the transcript. |
+| MAC-8 | Import a WhatsApp `.opus` and an `.mp3` (Library → Import or drop them on the window). | Two recordings named after the files; importing one again says it is already in your Library. |
+| MAC-9 | Live captions overlay during MAC-4. | Captions show over the call; ⌘ shortcuts from Settings → Shortcuts work. |
+| MAC-10 | Quit from the menu-bar icon during a recording. | It asks first; after quitting, no audio device is left behind (Audio MIDI Setup shows no extra device). |
+
 ## Appendix B — Accessibility
 
 | # | Check | Expected |
