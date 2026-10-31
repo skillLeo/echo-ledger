@@ -75,7 +75,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## P6 — Release
 
-- [ ] Full suites green; lints clean.
-- [ ] Web deploy (backup, maintenance, migrate, optimize, up, verify); Windows installer; Mac .dmg from CI; APK installed keeping data.
+- [x] Full suites green; lints clean (P2 milestone: phone 1085, desktop 1217 + cargo + clippy, web 3614 + PHPStan + Pint; token and repo-policy checks).
+- [x] Web deploy (2026-10-31 07:38 server time, verified; backup on server and laptop); Windows installer and APK 1.4.0 in `C:echoledger-releases1.4.0`; Mac .dmg from the v1.4.0 tag run. **Left:** APK install on the S25 (needs the phone window).
 - [ ] Phone window (N7); Mac checks (N4).
-- [ ] USER_GUIDE, MANUAL_QA, HANDOFF; tag v1.4.0; push.
+- [x] USER_GUIDE, MANUAL_QA, HANDOFF; tag v1.4.0; push.
