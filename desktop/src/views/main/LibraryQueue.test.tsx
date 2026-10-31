@@ -536,4 +536,62 @@ describe("Uploads that need you", () => {
     await emitEvent("uploads:changed", [failed("u7", { state: "verifying" })]);
     expect(within(uploadRow("u7")).getByText("Checking upload…")).toBeInTheDocument();
   });
+
+  it("discards a failed import without asking (the file is still on the computer)", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    await renderLibrary([], [failed("u1", { imported: true, sourceApp: "voice_note", title: "PTT-20261030-WA0003" })]);
+    fireEvent.click(within(uploadRow("u1")).getByRole("button", { name: "Discard" }));
+    await flushAsync();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(callsOf("upload_discard")).toEqual([{ id: "u1" }]);
+  });
+});
+
+describe("Importing", () => {
+  const imported = (id: string, overrides: Partial<UploadItem> = {}) =>
+    makeUploadItem(id, { imported: true, sourceApp: "voice_note", durationMs: 0, title: `Note ${id}`, ...overrides });
+  const progressOf = (id: string) => within(uploadRow(id)).getByRole("progressbar");
+
+  it("lists each imported file with where it is, and no recording made here", async () => {
+    await renderLibrary([], [
+      imported("i1", { state: "uploading", progress: 40 }),
+      imported("i2", { state: "queued" }),
+      makeUploadItem("rec", { state: "uploading", progress: 10 }),
+    ]);
+    const heading = screen.getByRole("heading", { name: "Importing" });
+    expect(heading.closest(".queue-head")).toHaveTextContent("2");
+    expect(within(uploadRow("i1")).getByText("Note i1")).toBeInTheDocument();
+    expect(within(uploadRow("i1")).getByText("Uploading 40%")).toBeInTheDocument();
+    expect(progressOf("i1")).toHaveAttribute("aria-valuenow", "40");
+    expect(within(uploadRow("i2")).getByText("Waiting to upload")).toBeInTheDocument();
+    expect(progressOf("i2")).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.queryByTestId("upload-rec")).not.toBeInTheDocument();
+  });
+
+  it("moves each file along as the core reports its progress", async () => {
+    await renderLibrary([], [imported("i1", { state: "queued" })]);
+    await emitEvent("uploads:changed", [imported("i1", { state: "uploading", progress: null })]);
+    expect(within(uploadRow("i1")).getByText("Uploading…")).toBeInTheDocument();
+    await emitEvent("uploads:changed", [imported("i1", { state: "uploading", progress: 75 })]);
+    expect(within(uploadRow("i1")).getByText("Uploading 75%")).toBeInTheDocument();
+    await emitEvent("uploads:changed", [imported("i1", { state: "verifying", progress: 100 })]);
+    expect(within(uploadRow("i1")).getByText("Checking upload…")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Importing" })).not.toBeInTheDocument();
+    await emitEvent("uploads:changed", [imported("i1", { state: "failed", lastError: "Storage limit reached — raise it in Settings" })]);
+    expect(within(uploadRow("i1")).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    await emitEvent("uploads:changed", []);
+    expect(screen.queryByTestId("upload-i1")).not.toBeInTheDocument();
+  });
+
+  it("cancels one file without asking and leaves the others", async () => {
+    const confirm = vi.spyOn(window, "confirm");
+    const { notify } = await renderLibrary([], [imported("i1", { state: "uploading", progress: 20 }), imported("i2")]);
+    fireEvent.click(within(uploadRow("i1")).getByRole("button", { name: "Cancel" }));
+    await flushAsync();
+    expect(confirm).not.toHaveBeenCalled();
+    expect(callsOf("upload_discard")).toEqual([{ id: "i1" }]);
+    expect(notify).toHaveBeenCalledWith("Import cancelled");
+    expect(screen.queryByTestId("upload-i1")).not.toBeInTheDocument();
+    expect(uploadRow("i2")).toBeInTheDocument();
+  });
 });

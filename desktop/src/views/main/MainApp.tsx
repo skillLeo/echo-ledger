@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { announceReady, api, errorMessage, listenTo, type AppStatus, type LockStatus } from "../../lib/ipc";
+import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type LockStatus } from "../../lib/ipc";
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityBell } from "./ActivityCentre";
@@ -13,6 +13,7 @@ import type { PendingFocus } from "./LibraryQueue";
 import { RecordView } from "./RecordView";
 import { SettingsView } from "./SettingsView";
 import { CommandPalette } from "./CommandPalette";
+import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
 
 type Tab = "library" | "record" | "settings";
@@ -38,6 +39,27 @@ export default function MainApp() {
   const [restored, setRestored] = useState(false);
   const [restoredRecording, setRestoredRecording] = useState<string | null>(null);
   const restoredScroll = useRef<MainView["scroll"] | null>(null);
+  // Import: the files of the open import sheet, and whether files are being dragged over the window.
+  const [importPaths, setImportPaths] = useState<string[] | null>(null);
+  const [dragging, setDragging] = useState(false);
+  // Drops count only on the app itself, never on the lock screen, the pairing form or the first-run wizard.
+  const acceptDrops = useRef(false);
+  acceptDrops.current = !!status?.paired && restored && !lock?.locked && setupDone !== false;
+
+  // Files dropped anywhere on the window open the import sheet (the core no longer imports a drop by itself).
+  useEffect(() => {
+    const un = listenForFileDrops({
+      onEnter: () => setDragging(acceptDrops.current),
+      onLeave: () => setDragging(false),
+      onDrop: (paths) => {
+        setDragging(false);
+        if (paths.length > 0 && acceptDrops.current) setImportPaths(paths);
+      },
+    });
+    return () => {
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
 
   // First-run wizard (B19): shown until it is finished or skipped.
   useEffect(() => {
@@ -149,6 +171,16 @@ export default function MainApp() {
   }, [toast]);
 
   const notify = (text: string, error = false) => setToast({ text, error });
+  /** The Import button: the core's multi-select picker, then the sheet for the chosen files. */
+  const pickImport = async () => {
+    try {
+      const paths = await api.pickImportFiles();
+      if (paths.length > 0) setImportPaths(paths);
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+  const closeImport = useCallback(() => setImportPaths(null), []);
   const run = async <T,>(fn: () => Promise<T>, ok?: string) => {
     try {
       const result = await fn();
@@ -237,9 +269,9 @@ export default function MainApp() {
         )}
         {tab === "library" && (
           <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
-            initialSelected={restoredRecording} onSelectedChange={rememberRecording} />
+            initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={() => void pickImport()} />
         )}
-        {tab === "record" && <RecordView status={status} run={run} />}
+        {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
         {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} />}
       </main>
       {palette && (
@@ -247,6 +279,10 @@ export default function MainApp() {
           run={(fn, ok) => void run(fn, ok)}
           onOpenRecording={(id, ms) => { setTab("library"); setOpenRequest({ id, ms, seq: ++navigations.current }); }} />
       )}
+      {dragging && !importPaths && (
+        <div className="drop-hint" aria-hidden="true"><div className="drop-hint-card">Drop voice notes, audio or video files to import them</div></div>
+      )}
+      {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
       {toastView}
     </div>
   );

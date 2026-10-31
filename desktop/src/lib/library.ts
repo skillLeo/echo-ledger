@@ -104,3 +104,25 @@ export function bookmarksOf(detail: Record<string, unknown>): Bookmark[] {
     }))
     .sort((a, b) => a.at_ms - b.at_ms);
 }
+
+/** How often the Library re-reads its recordings while one of them is uploading or being transcribed. */
+export const LIVE_STATUS_MS = 5_000;
+
+/** A session that has not changed for this long is not waited for any more (a phone that never finished its upload). */
+const LIVE_STATUS_STALE_MS = 12 * 3_600_000;
+
+const TRANSCRIBING = new Set(["pending", "submitted", "processing"]);
+
+/**
+ * True while a recording's status is still moving: it is uploading, or its transcript (or a Re-transcribe as run) is
+ * being made. The Library refreshes on its own until this is false again.
+ */
+export function needsLiveStatus(items: readonly LibraryItem[], now: number = Date.now()): boolean {
+  return items.some((i) => {
+    if (i.deleted) return false;
+    const changed = Date.parse(i.updated_at);
+    if (Number.isFinite(changed) && now - changed > LIVE_STATUS_STALE_MS) return false;
+    return i.status === "uploading" || i.status === "processing"
+      || TRANSCRIBING.has(i.transcript?.final_status ?? "") || TRANSCRIBING.has(i.transcript?.alternate_status ?? "");
+  });
+}

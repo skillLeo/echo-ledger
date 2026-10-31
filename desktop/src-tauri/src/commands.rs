@@ -445,25 +445,27 @@ pub fn hide_captions(app: AppHandle) -> AppStatus {
     status(&app)
 }
 
+/// Imports files picked with Import or dropped on the main window: one recording each, titled from the file name,
+/// with the batch's client and language (none = automatic). Hashing and copying run off the main thread.
 #[tauri::command]
-pub fn import_voice_notes(app: AppHandle, paths_list: Vec<String>) -> AppResult<usize> {
-    let mut count = 0;
-    for p in paths_list {
-        let path = std::path::PathBuf::from(&p);
-        if is_audio(&path) {
-            crate::actions::import_voice_note(&app, &path)?;
-            count += 1;
-        }
-    }
+pub async fn import_voice_notes(app: AppHandle, paths_list: Vec<String>, client_id: Option<String>, language: Option<String>) -> AppResult<crate::files::ImportSummary> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    let client_id = client_id.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
+    let language = crate::settings::language_or_none(language.as_deref());
+    let sources: Vec<std::path::PathBuf> = paths_list.iter().map(std::path::PathBuf::from).collect();
+    let worker = app.clone();
+    let summary = tauri::async_runtime::spawn_blocking(move || crate::actions::import_files(&worker, &sources, client_id, language))
+        .await
+        .map_err(|e| AppError::msg(e.to_string()))?;
     crate::actions::emit_status(&app);
-    Ok(count)
+    Ok(summary)
 }
 
-pub fn is_audio(path: &std::path::Path) -> bool {
-    matches!(
-        path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
-        Some("ogg" | "opus" | "oga" | "mp3" | "m4a" | "mp4" | "aac" | "wav" | "flac" | "webm" | "amr")
-    )
+/// The Import button's file picker (several files at once); the paths go to the batch sheet. Empty when cancelled.
+#[tauri::command]
+pub async fn import_pick(app: AppHandle) -> AppResult<Vec<String>> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    Ok(crate::files::pick_import_files(&app).await.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
 }
 
 #[tauri::command]
@@ -721,7 +723,6 @@ pub fn export_target(dir: &std::path::Path, filename: &str) -> std::path::PathBu
         .unwrap_or(path)
 }
 
-/// Saves an export to Downloads and returns its path; the print page (`html`) opens in the browser for PDF.
 /// "Show as" (since v1.2): the Roman Urdu and English views of a transcript and their state.
 #[tauri::command]
 pub async fn transcript_views(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
@@ -738,8 +739,14 @@ pub async fn transcript_views_make(app: AppHandle, id: String) -> AppResult<serd
     state.api()?.make_transcript_views(&id).await
 }
 
+/// The Show as views a transcript export can be made in (`view` of `GET /api/transcripts/{id}/export`).
+pub const EXPORT_VIEWS: [&str; 3] = ["roman", "english", "urdu"];
+
+/// Saves a transcript where the person chooses (the dialog offers the server's file name in Downloads) and returns
+/// the path, or `None` when they cancel. The print page (`html`) opens in the browser instead: its "Save as PDF"
+/// keeps Urdu and Hindi shaping right. Unsure-word markers come from the server.
 #[tauri::command]
-pub async fn export_transcript(app: AppHandle, id: String, format: String, timestamps: bool, speakers: bool, view: Option<String>) -> AppResult<String> {
+pub async fn export_transcript(app: AppHandle, id: String, format: String, timestamps: bool, speakers: bool, view: Option<String>) -> AppResult<Option<String>> {
     ensure_unlocked(&app.state::<AppState>())?;
     use tauri_plugin_opener::OpenerExt;
     const FORMATS: [&str; 7] = ["txt", "md", "srt", "vtt", "json", "docx", "html"];
@@ -747,16 +754,33 @@ pub async fn export_transcript(app: AppHandle, id: String, format: String, times
         return Err(AppError::msg("That export format is not available."));
     }
     let state = app.state::<AppState>();
-    // Show as: a Roman Urdu or English view instead of the original words (anything else exports the original).
-    let view = view.filter(|v| v == "roman" || v == "english");
+    // Show as: the view on screen instead of the original words (anything else exports the original).
+    let view = view.filter(|v| EXPORT_VIEWS.contains(&v.as_str()));
     let (bytes, filename) = state.api()?.export_transcript(&id, &format, timestamps, speakers, view.as_deref()).await?;
-    let dir = if format == "html" { std::env::temp_dir() } else { app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone()) };
-    let path = export_target(&dir, &filename);
-    std::fs::write(&path, bytes)?;
     if format == "html" {
+        let path = export_target(&std::env::temp_dir(), &filename);
+        std::fs::write(&path, bytes)?;
         app.opener().open_path(path.to_string_lossy(), None::<&str>).map_err(|e| AppError::msg(e.to_string()))?;
+        return Ok(Some(path.to_string_lossy().into_owned()));
     }
-    Ok(path.to_string_lossy().into_owned())
+    let Some(path) = crate::files::ask_save_path(&app, &filename, crate::files::format_label(&format)).await else { return Ok(None) };
+    std::fs::write(&path, bytes)?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// Saves the recording's audio (its primary file) where the person chooses; `None` when they cancel.
+#[tauri::command]
+pub async fn save_audio(app: AppHandle, id: String) -> AppResult<Option<String>> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let api = state.api()?;
+    let detail = api.session(&id).await?;
+    let Some(url) = detail.get("playback_url").and_then(serde_json::Value::as_str).filter(|u| !u.is_empty()).map(str::to_string) else {
+        return Err(AppError::msg("The audio of this recording is not on the server, so there is nothing to save yet."));
+    };
+    let Some(path) = crate::files::ask_save_path(&app, &crate::files::audio_file_name(&detail), "Audio").await else { return Ok(None) };
+    api.download_audio(&url, &path).await?;
+    Ok(Some(path.to_string_lossy().into_owned()))
 }
 
 // ---- Settings export / import (B19) -----------------------------------------------------------------------------
@@ -1079,9 +1103,10 @@ pub async fn sessions_bulk(app: AppHandle, ids: Vec<String>, action: String, cli
     Ok(answer.get("changed").and_then(serde_json::Value::as_u64).unwrap_or(0))
 }
 
-/// Saves the finished transcripts of the selected recordings as one zip file in Downloads; returns its path.
+/// Saves the finished transcripts of the selected recordings as one zip file where the person chooses; returns its
+/// path, or `None` when they cancel.
 #[tauri::command]
-pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -> AppResult<String> {
+pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -> AppResult<Option<String>> {
     ensure_unlocked(&app.state::<AppState>())?;
     if !BULK_EXPORT_FORMATS.contains(&format.as_str()) {
         return Err(AppError::msg("That export format is not available."));
@@ -1091,10 +1116,9 @@ pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -
     }
     let state = app.state::<AppState>();
     let (bytes, filename) = state.api()?.export_sessions(&ids, &format).await?;
-    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
-    let path = export_target(&dir, &filename);
+    let Some(path) = crate::files::ask_save_path(&app, &filename, "Zip archive").await else { return Ok(None) };
     std::fs::write(&path, bytes)?;
-    Ok(path.to_string_lossy().into_owned())
+    Ok(Some(path.to_string_lossy().into_owned()))
 }
 
 /// A new client folder.

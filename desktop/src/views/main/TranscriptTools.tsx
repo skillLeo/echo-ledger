@@ -164,23 +164,29 @@ export function HistoryPanel({ transcriptId, edited, onRestore, onClose }: {
 }
 
 export const EXPORTS: [ExportFormat, string][] = [
-  ["docx", "Word (.docx)"],
-  ["html", "Print or save as PDF"],
   ["txt", "Text (.txt)"],
-  ["md", "Markdown (.md)"],
+  ["docx", "Word (.docx)"],
+  ["html", "PDF (print)"],
   ["srt", "Subtitles (.srt)"],
+  ["json", "JSON (.json)"],
+  ["md", "Markdown (.md)"],
   ["vtt", "Web subtitles (.vtt)"],
-  ["json", "JSON"],
 ];
 
-/** Export menu: the file goes to Downloads; the print page opens in the browser to save as PDF. */
-export function ExportMenu({ onExport }: { onExport: (format: ExportFormat) => void }) {
+/** What "PDF (print)" does: the desktop has no PDF writer of its own, the browser's print page makes the file. */
+export const PDF_HINT = "PDF (print) opens a print page in your browser: choose Save as PDF there.";
+
+/**
+ * Export menu: the transcript in the view on screen (`viewLabel`, e.g. "Roman Urdu"; none = the original words). Each
+ * file is saved where the person chooses; PDF opens the print page in the browser to save as PDF.
+ */
+export function ExportMenu({ onExport, viewLabel = null }: { onExport: (format: ExportFormat) => void; viewLabel?: string | null }) {
   const id = useId();
   return (
     <>
       <label htmlFor={id} className="sr-only">Export</label>
-      <select id={id} className="select compact" value="" onChange={(e) => { if (e.target.value) onExport(e.target.value as ExportFormat); e.target.value = ""; }}>
-        <option value="">Export…</option>
+      <select id={id} className="select compact" value="" title={PDF_HINT} onChange={(e) => { if (e.target.value) onExport(e.target.value as ExportFormat); e.target.value = ""; }}>
+        <option value="">{viewLabel ? `Export as ${viewLabel}…` : "Export…"}</option>
         {EXPORTS.map(([format, label]) => <option key={format} value={format}>{label}</option>)}
       </select>
     </>

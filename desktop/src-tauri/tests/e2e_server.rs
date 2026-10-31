@@ -2086,7 +2086,7 @@ e2e_test!(
         let dir = tempfile::tempdir().unwrap();
         let mut rejected: Vec<String> = Vec::new();
         let mut sessions: Vec<String> = Vec::new();
-        // The drop zone of the main window accepts these extensions (see `commands::import_voice_notes`).
+        // Import and a drop on the main window accept these extensions (see `files::IMPORT_EXTENSIONS`).
         for extension in [
             "flac", "wav", "ogg", "opus", "mp3", "m4a", "mp4", "webm", "oga", "aac", "amr",
         ] {

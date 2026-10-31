@@ -7,12 +7,14 @@ import {
   bulkNotice,
   discardAllConfirm,
   failedUploads,
+  importProgressText,
+  importingUploads,
   pendingTitle,
   uploadTitle,
   verifyingUploads,
   waitingSummary,
 } from "../../lib/pending";
-import { AlertIcon, ClockIcon, SourceAppIcon } from "../../components/Icons";
+import { AlertIcon, ClockIcon, ImportIcon, SourceAppIcon } from "../../components/Icons";
 
 /** A `main:navigate` request to bring one waiting recording into view, optionally with its title open for editing. */
 export interface PendingFocus {
@@ -32,9 +34,10 @@ const meta = (sourceApp: string, startedAt: string, durationMs: number, extra?: 
   [sourceAppLabel(sourceApp), formatWhen(startedAt), formatDuration(durationMs) || "0:00", extra].filter(Boolean).join(" · ");
 
 /**
- * The top of the Library list: recordings waiting for Keep / Discard (A2.5) and uploads that stopped and need the
- * user (A5.1). Both lists come from the core and follow its `pending:changed` / `uploads:changed` events.
- * The waiting recordings sit behind one summary card (as on the phone); Review opens the list.
+ * The top of the Library list: recordings waiting for Keep / Discard (A2.5), imported files on their way up (with
+ * Cancel), and uploads that stopped and need the user (A5.1). The lists come from the core and follow its
+ * `pending:changed` / `uploads:changed` events. The waiting recordings sit behind one summary card (as on the
+ * phone); Review opens the list.
  */
 export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
   const [pending, setPending] = useState<PendingItem[]>([]);
@@ -241,13 +244,19 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
   };
 
   const discardUpload = async (item: UploadItem) => {
-    if (!window.confirm(DISCARD_CONFIRM)) return;
+    // An imported file is still on the computer where it came from, so only a recording made here is asked about.
+    if (!item.imported && !window.confirm(DISCARD_CONFIRM)) return;
     if (await perform(item.id, () => api.uploadDiscard(item.id), "Discarded")) setUploads((list) => list.filter((i) => i.id !== item.id));
+  };
+
+  const cancelImport = async (item: UploadItem) => {
+    if (await perform(item.id, () => api.uploadDiscard(item.id), "Import cancelled")) setUploads((list) => list.filter((i) => i.id !== item.id));
   };
 
   const failed = failedUploads(uploads);
   const verifying = verifyingUploads(uploads);
-  if (pending.length === 0 && failed.length === 0 && verifying.length === 0) return null;
+  const importing = importingUploads(uploads);
+  if (pending.length === 0 && failed.length === 0 && verifying.length === 0 && importing.length === 0) return null;
 
   return (
     <div className="queue">
@@ -359,6 +368,34 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
               })}
             </div>
           )}
+        </section>
+      )}
+      {importing.length > 0 && (
+        <section className="queue-section" aria-labelledby="queue-imports-title">
+          <div className="queue-head">
+            <ImportIcon size={14} />
+            <h2 id="queue-imports-title" className="queue-label">Importing</h2>
+            <span className="queue-count">{importing.length}</span>
+          </div>
+          {importing.map((item) => {
+            const title = uploadTitle(item);
+            const percent = item.state === "uploading" ? item.progress ?? 0 : 0;
+            return (
+              <div key={item.id} role="group" aria-label={title} className="queue-item importing" data-testid={`upload-${item.id}`}>
+                <div className="row">
+                  <span className="avatar desktop"><SourceAppIcon app={item.sourceApp} size={18} /></span>
+                  <div className="item-main">
+                    <div className="queue-title" dir="auto">{title}</div>
+                    <div className="small muted queue-meta">{importProgressText(item)}</div>
+                  </div>
+                  <button type="button" className="btn ghost compact" disabled={busy === item.id} onClick={() => void cancelImport(item)}>Cancel</button>
+                </div>
+                <div className="meter import-meter" role="progressbar" aria-label={`Upload of ${title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+                  <div style={{ width: `${percent}%` }} />
+                </div>
+              </div>
+            );
+          })}
         </section>
       )}
       {failed.length > 0 && (

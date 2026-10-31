@@ -183,6 +183,8 @@ export function makeUploadItem(id = "up-1", overrides: Partial<UploadItem> = {})
     state: "queued",
     lastError: null,
     attempts: 0,
+    imported: false,
+    progress: null,
     ...overrides,
   };
 }

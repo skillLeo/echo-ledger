@@ -129,6 +129,15 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// The one-shot create of an imported file (since v1.4): `"skip_duplicate": true` makes the server refuse a file it
+    /// already holds with `409 duplicate_recording` instead of storing it again.
+    pub async fn create_session_skipping_duplicate(&self, req: &CreateSessionRequest) -> AppResult<CreateSessionResponse> {
+        let mut body = serde_json::to_value(req)?;
+        body["skip_duplicate"] = json!(true);
+        let resp = self.authed(self.http.post(self.url("sessions")))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
     /// Open session (since v1.1): `POST /api/sessions` without `artifacts`; status `recording`, no upload slots.
     pub async fn open_session(&self, req: &OpenSessionRequest) -> AppResult<CreateSessionResponse> {
         let resp = self.authed(self.http.post(self.url("sessions")))?.json(req).send().await?;
@@ -397,6 +406,46 @@ impl ApiClient {
     pub async fn delete_session(&self, id: &str) -> AppResult<()> {
         let resp = self.authed(self.http.delete(self.url(&format!("sessions/{id}"))))?.send().await?;
         Self::ok_empty(resp).await
+    }
+
+    /// Streams a recording's signed `playback_url` (no bearer) into `path`. The file appears only once it is complete,
+    /// so a cut-off download leaves nothing half-written behind.
+    pub async fn download_audio(&self, url: &str, path: &std::path::Path) -> AppResult<u64> {
+        use futures_util::StreamExt;
+        use std::io::Write;
+        if !(url.starts_with("https://") || super::pinning::is_local_dev(url)) {
+            return Err(AppError::msg("The server sent an audio link that is not secure."));
+        }
+        // A long recording takes longer than the client's usual 120 s.
+        let resp = self.http.get(url).timeout(std::time::Duration::from_secs(1800)).send().await?;
+        if !resp.status().is_success() {
+            return Err(Self::error(resp).await);
+        }
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        let part = path.with_file_name(format!("{name}.part"));
+        let written = async {
+            let mut file = std::fs::File::create(&part)?;
+            let mut size = 0u64;
+            let mut body = resp.bytes_stream();
+            while let Some(chunk) = body.next().await {
+                let chunk = chunk?;
+                file.write_all(&chunk)?;
+                size += chunk.len() as u64;
+            }
+            file.sync_all()?;
+            AppResult::Ok(size)
+        }
+        .await;
+        match written {
+            Ok(size) => {
+                std::fs::rename(&part, path)?;
+                Ok(size)
+            }
+            Err(e) => {
+                let _ = std::fs::remove_file(&part);
+                Err(e)
+            }
+        }
     }
 }
 

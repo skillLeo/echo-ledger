@@ -1052,6 +1052,40 @@ async fn the_bearer_token_is_not_forwarded_to_a_different_origin_on_redirect() {
     );
 }
 
+// ---- Save audio ------------------------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn saved_audio_is_the_signed_file_written_whole_without_the_token() {
+    let audio = common::pseudo_random_bytes(70_000, 9);
+    let served = Reply { status: 200, headers: vec![("Content-Type".into(), "audio/flac".into())], body: audio.clone() };
+    let server = MockServer::start(Router::new().fixed("GET", "/api/recordings/REC1/audio", served));
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("Zoom with Acme 2026-10-24.flac");
+    let url = format!("{}/api/recordings/REC1/audio?expires=1&signature=abc", server.base_url());
+    let size = client(&server).download_audio(&url, &target).await.unwrap();
+    assert_eq!(size, audio.len() as u64);
+    assert_eq!(std::fs::read(&target).unwrap(), audio);
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "no partial file is left next to it");
+    assert_eq!(server.requests()[0].header("authorization"), None, "the signed link needs no token");
+}
+
+#[tokio::test]
+async fn an_expired_audio_link_saves_nothing() {
+    let server = MockServer::start(Router::new().fixed(
+        "GET",
+        "/api/recordings/REC1/audio",
+        Reply::json(403, json!({"message": "Invalid signature."})),
+    ));
+    let dir = tempfile::tempdir().unwrap();
+    let target = dir.path().join("call.flac");
+    let url = format!("{}/api/recordings/REC1/audio?expires=1&signature=old", server.base_url());
+    let result = client(&server).download_audio(&url, &target).await;
+    assert!(matches!(result, Err(AppError::Server { status: 403, .. })), "{result:?}");
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+    let insecure = client(&server).download_audio("http://ledger.example.test/audio", &target).await;
+    assert!(insecure.is_err(), "plain http is only allowed for a local server");
+}
+
 // ---- Timeouts (slow) -------------------------------------------------------------------------------------------
 
 #[tokio::test]

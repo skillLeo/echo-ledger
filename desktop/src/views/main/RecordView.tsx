@@ -64,7 +64,12 @@ const BACKEND_LABEL: Record<string, string> = {
   mock: "Simulated source",
 };
 
-export function RecordView({ status, run }: { status: AppStatus; run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined> }) {
+export function RecordView({ status, run, onImport }: {
+  status: AppStatus;
+  run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
+  /** Opens the file picker and then the import sheet. */
+  onImport?: () => void;
+}) {
   const recording = status.recording;
   const paused = !!recording && status.paused;
   const [mic, sys] = status.levels;
@@ -131,7 +136,10 @@ export function RecordView({ status, run }: { status: AppStatus; run: <T>(fn: ()
         </div>
       </div>
       <LiveTranslateCard run={run} />
-      <div className="card dropzone" style={{ marginTop: 14 }}>Drop voice notes here to transcribe them (OPUS, OGG, M4A, MP3 or WAV).</div>
+      <div className="card dropzone" style={{ marginTop: 14 }}>
+        Drop voice notes, audio or video files anywhere in this window to transcribe them (OPUS, OGG, MP3, M4A, AAC, WAV, MP4 or WEBM).
+        {onImport && <div className="card-actions dropzone-actions"><button type="button" className="btn" onClick={onImport}>Choose files…</button></div>}
+      </div>
       {status.uploadErrors.length > 0 && (
         <div className="card" style={{ marginTop: 14 }}>
           <b>Uploads waiting to retry</b>
