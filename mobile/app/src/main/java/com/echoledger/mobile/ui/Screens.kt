@@ -637,6 +637,16 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                 }
 
                 else -> {
+                    // Suggested fixes (since 1.4): likely mishearings, changed only when accepted.
+                    if (t.suggestions.isNotEmpty()) {
+                        item(key = "suggestions") {
+                            Box(Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3)) {
+                                SuggestedFixes(t.suggestions, segments, onSeek = { pendingSeek = it }) { id, accept ->
+                                    scope.launch { vm.decideSuggestion(t.id, id, accept)?.let { transcript = it } }
+                                }
+                            }
+                        }
+                    }
                     item(key = "transcript-head") {
                         Column(Modifier.padding(horizontal = Space.screen), verticalArrangement = Arrangement.spacedBy(Space.s3)) {
                             val available = t.views?.available.orEmpty()

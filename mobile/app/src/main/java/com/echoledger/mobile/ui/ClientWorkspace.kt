@@ -699,3 +699,40 @@ fun CallNotesSection(vm: MainViewModel, sessionId: String, onSeek: (Long) -> Uni
         }
     }
 }
+
+/**
+ * Suggested fixes on a recording (since 1.4): words the engine likely misheard, judged against the client's
+ * vocabulary. Each shows the line's moment (tap to hear it), Accept (the words change) and Dismiss.
+ */
+@Composable
+fun SuggestedFixes(
+    suggestions: List<com.echoledger.mobile.data.SuggestionDto>,
+    segments: List<com.echoledger.mobile.data.SegmentDto>,
+    onSeek: (Long) -> Unit,
+    onDecide: (Int, Boolean) -> Unit
+) {
+    val type = LocalEchoType.current
+    val c = LocalEchoColors.current
+    SectionCard {
+        Text("Suggested fixes", style = type.titleM, color = c.text)
+        Text(
+            "Words that sound like this client's names and terms. Nothing changes until you accept.",
+            style = type.caption,
+            color = c.textMuted
+        )
+        suggestions.forEach { fix ->
+            val at = segments.getOrNull(fix.index)?.startMs ?: 0L
+            Column(Modifier.fillMaxWidth().padding(top = Space.s2)) {
+                Row(Modifier.fillMaxWidth().clickable { onSeek(at) }, verticalAlignment = Alignment.CenterVertically) {
+                    Text("“${fix.from}” → “${fix.to}”", style = type.bodyL, color = c.text, modifier = Modifier.weight(1f))
+                    Text(ClientFiles.clock(at), style = type.caption, color = c.accentText)
+                }
+                if (fix.reason.isNotBlank()) Text(fix.reason, style = type.caption, color = c.textMuted)
+                Row {
+                    EchoButton("Accept", { onDecide(fix.id, true) }, kind = ButtonKind.Text)
+                    EchoButton("Dismiss", { onDecide(fix.id, false) }, kind = ButtonKind.Text)
+                }
+            }
+        }
+    }
+}

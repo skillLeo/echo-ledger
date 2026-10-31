@@ -224,6 +224,12 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
 
     suspend fun transcript(id: String): TranscriptDto = call(request("transcripts/$id").get().build(), TranscriptDto.serializer())!!
 
+    /** `POST /api/transcripts/{id}/suggestions/{n}` (since 1.4): accept (the words change) or dismiss a suggested fix. */
+    suspend fun decideSuggestion(id: String, suggestion: Int, accept: Boolean): TranscriptDto {
+        val body = buildJsonObject { put("accept", accept) }.toString().toRequestBody(jsonType)
+        return call(request("transcripts/$id/suggestions/$suggestion").post(body).build(), TranscriptDto.serializer())!!
+    }
+
     suspend fun sessionDetail(id: String): SessionDetailDto = call(request("sessions/$id").get().build(), SessionDetailDto.serializer())!!
 
     suspend fun deleteSession(id: String) {

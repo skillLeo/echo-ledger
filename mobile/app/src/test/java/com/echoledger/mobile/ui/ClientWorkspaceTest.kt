@@ -101,4 +101,32 @@ class ClientWorkspaceTest : ScreenTest() {
         compose.onNodeWithText("Kick-off · Oct 30 · 2:05").performClick()
         assertEquals(listOf("s1" to 125_000L), opened)
     }
+
+    @Test
+    fun `suggested fixes change nothing until accepted, and a tap plays the line`() {
+        val decided = mutableListOf<Pair<Int, Boolean>>()
+        val seeks = mutableListOf<Long>()
+        show {
+            SuggestedFixes(
+                listOf(com.echoledger.mobile.data.SuggestionDto(0, 1, "la ravel", "Laravel", "framework")),
+                listOf(
+                    com.echoledger.mobile.data.SegmentDto(channel = 1, speaker = "Me", startMs = 0, endMs = 900, text = "Hi"),
+                    com.echoledger.mobile.data.SegmentDto(
+                        channel = 1,
+                        speaker = "Me",
+                        startMs = 61_000,
+                        endMs = 64_000,
+                        text = "we use la ravel"
+                    )
+                ),
+                onSeek = { seeks += it }
+            ) { id, accept -> decided += id to accept }
+        }
+        compose.onNodeWithText("framework").assertExists()
+        compose.onNodeWithText("1:01").performClick()
+        compose.onNodeWithText("Dismiss").performClick()
+        compose.onNodeWithText("Accept").performClick()
+        assertEquals(listOf(61_000L), seeks)
+        assertEquals(listOf(0 to false, 0 to true), decided)
+    }
 }

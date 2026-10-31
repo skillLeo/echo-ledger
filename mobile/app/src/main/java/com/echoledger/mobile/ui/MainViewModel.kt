@@ -417,6 +417,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun bundle(clientId: String) = workspaceCall("The text could not be made.") { it.bundle(clientId) }
 
+    /** Accepts or dismisses a suggested fix; the transcript as it is afterwards. */
+    suspend fun decideSuggestion(transcriptId: String, id: Int, accept: Boolean) =
+        workspaceCall("The suggestion could not be saved.") { it.decideSuggestion(transcriptId, id, accept) }
+
     suspend fun sessionNotes(sessionId: String) = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.sessionNotes(sessionId) }.getOrNull()
     }

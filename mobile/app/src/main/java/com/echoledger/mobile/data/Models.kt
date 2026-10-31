@@ -411,8 +411,13 @@ data class TranscriptDto(
     /** Parts done of all parts while it is being made in pieces (since v1.2). */
     val progress: ProgressDto? = null,
     /** Show as: the views this transcript can have and whether they are made (since v1.2). */
-    val views: ViewsSummaryDto? = null
+    val views: ViewsSummaryDto? = null,
+    /** Likely mishearings Claude flagged with the client's vocabulary (since 1.4); nothing changes until accepted. */
+    val suggestions: List<SuggestionDto> = emptyList()
 )
+
+@Serializable
+data class SuggestionDto(val id: Int, val index: Int, val from: String, val to: String, val reason: String = "")
 
 /** Show as (since v1.2): `roman` and/or `english`, and `status` unavailable | none | making | ready | failed. */
 @Serializable
