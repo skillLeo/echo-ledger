@@ -16,7 +16,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
-use self::gate::{FRAME_SAMPLES, SpeechGate};
+#[cfg(windows)]
+use self::gate::FRAME_SAMPLES;
+use self::gate::SpeechGate;
 use self::protocol::{LiveTranslateToken, Speed};
 
 /// Overlay window label (main.tsx routes it to the translate view).
@@ -225,6 +227,8 @@ fn unregister_hotkeys(app: &AppHandle) {
 }
 
 /// Starts Live Translate for `pid`; `fetch_token` asks the server for a temporary Soniox key.
+/// On the Mac it is not there yet: the arguments go unused until it is.
+#[cfg_attr(not(windows), allow(unused_variables))]
 pub fn start<F, Fut>(
     app: AppHandle,
     pid: u32,
