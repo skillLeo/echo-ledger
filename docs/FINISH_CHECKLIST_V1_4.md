@@ -50,7 +50,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## P3 — Mac app
 
-- [ ] GitHub Actions: tauri-action on macOS, .dmg for Apple Silicon and Intel on v* tags and on demand.
+- [x] GitHub Actions: tauri-action on macOS, .dmg for Apple Silicon and Intel on v* tags and on demand (run 41168864346 green, Rust tests + clippy on macOS).
 - [ ] Core Audio process tap for the other side (14.2+, NSAudioCaptureUsageDescription), mic permission, app detection by bundle id, overlays and pill, ⌘ shortcuts, menu-bar icon.
 - [ ] USER_GUIDE first open (right-click → Open); MANUAL_QA Mac section. **(mac)**
 
