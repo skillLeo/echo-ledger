@@ -13,7 +13,7 @@
   --ctl-muted: var(--glass-muted);
   --ctl-hover: var(--glass-hover);
   --ctl-press: var(--glass-press);
-  --ctl-rec: #ef3e5c;
+  --ctl-rec: var(--rec);
   --ctl-paused: var(--warning);
   --ctl-focus: var(--focus);
   height: 100%;
@@ -23,6 +23,22 @@
   user-select: none;
   -webkit-user-select: none;
   cursor: default;
+}
+
+/* The recording pill is dark in both themes, like the phone's floating pill; the review card follows the theme. */
+.pill-root {
+  --ctl-surface: var(--pill-bg);
+  --ctl-hairline: var(--pill-border);
+  --ctl-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --ctl-text: var(--pill-text);
+  --ctl-muted: var(--pill-muted);
+  --ctl-hover: var(--pill-hover);
+  --ctl-press: var(--pill-press);
+  --me: #9eb1ff;
+  --client: #0bd8b6;
+  --danger: #ff9592;
+  --accent-text: #9eb1ff;
+  --accent-soft: #182449;
 }
 
 .pill-root *,
@@ -68,9 +84,9 @@
 .rec-pill.paused .rec-dot { background: var(--ctl-paused); animation: none; }
 .rec-pill.paused .rec-state { color: var(--ctl-paused); }
 @keyframes rec-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(239, 62, 92, 0.55); }
-  70% { box-shadow: 0 0 0 6px rgba(239, 62, 92, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(239, 62, 92, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.55); }
+  70% { box-shadow: 0 0 0 6px rgba(229, 72, 77, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0); }
 }
 
 .rec-timer { flex: none; min-width: 40px; font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
@@ -124,7 +140,7 @@
 .rec-btn[aria-pressed="true"] { color: var(--accent-text); background: var(--accent-soft); }
 .rec-btn[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--accent-soft), var(--accent) 12%); }
 .rec-btn.stop { color: var(--ctl-rec); }
-.rec-btn.stop:hover { background: rgba(239, 62, 92, 0.16); color: var(--ctl-rec); }
+.rec-btn.stop:hover { background: rgba(229, 72, 77, 0.16); color: var(--ctl-rec); }
 
 .rec-confirm { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; margin-left: auto; }
 .rec-confirm-q { font-weight: 600; margin-right: 2px; white-space: nowrap; }
@@ -142,7 +158,7 @@
 }
 .rec-text-btn:hover { background: var(--ctl-press); }
 .rec-text-btn.danger { background: var(--danger-strong); border-color: transparent; color: var(--on-accent); }
-.rec-text-btn.danger:hover { background: #e0284d; }
+.rec-text-btn.danger:hover { background: color-mix(in srgb, var(--danger-strong) 88%, black); }
 
 /* Bookmark tray (B3) and the silent-other-side warning (B5), under the pill for a few seconds. */
 .mark-tray {
@@ -261,10 +277,10 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 32px;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--ctl-hairline);
+  height: 34px;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
   background: var(--ctl-hover);
   color: var(--ctl-text);
   font: inherit;
@@ -277,8 +293,8 @@
 .ctl-btn:hover { background: var(--ctl-press); }
 .ctl-btn:active { background: var(--ctl-press); }
 .ctl-btn.primary { background: var(--accent-strong); border-color: transparent; color: var(--on-accent); }
-.ctl-btn.primary:hover { background: color-mix(in srgb, var(--accent-strong) 88%, black); }
-.ctl-btn.primary:active { background: color-mix(in srgb, var(--accent-strong) 78%, black); }
+.ctl-btn.primary:hover { background: var(--accent-pressed); }
+.ctl-btn.primary:active { background: var(--accent-pressed); }
 .ctl-btn.icon { width: 32px; padding: 0; color: var(--ctl-muted); background: transparent; border-color: transparent; }
 .ctl-btn.icon:hover { background: var(--ctl-hover); color: var(--ctl-text); }
 .ctl-btn.icon.small { width: 26px; height: 26px; border-radius: 6px; }
@@ -346,7 +362,7 @@
 
 .ask-chip { padding: var(--space-3) var(--space-3) 14px var(--space-4); display: grid; gap: 10px; }
 .ask-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.ask-icon { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none; background: rgba(239, 62, 92, 0.14); color: var(--ctl-rec); }
+.ask-icon { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none; background: rgba(229, 72, 77, 0.14); color: var(--ctl-rec); }
 .ask-text { min-width: 0; font-size: var(--text-sm); color: var(--ctl-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ask-text b { color: var(--ctl-text); font-weight: 600; }
 .ask-error { font-size: var(--text-xs); color: var(--danger); }
@@ -369,7 +385,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rec-dot { animation: none; box-shadow: 0 0 0 3px rgba(239, 62, 92, 0.25); }
+  .rec-dot { animation: none; box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.25); }
   .rec-pill.paused .rec-dot { box-shadow: none; }
   .rec-meter > span { transition: none; }
   .mark-tray { animation: none; }

@@ -62,7 +62,7 @@ export function accentTokens(accent: Rgb, theme: "light" | "dark"): Record<strin
 
 let systemAccent: Rgb | null = null;
 
-/** Remembers the system accent and applies it for the current theme (null = the EchoLedger violet). */
+/** Remembers the system accent and applies it for the current theme (null = the EchoLedger indigo). */
 export function setSystemAccent(accent: Rgb | null): void {
   systemAccent = accent;
   applyAccent();

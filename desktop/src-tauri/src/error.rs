@@ -28,9 +28,9 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
     retry_after_secs.map(|n| format!(" Try again in {n} s.")).unwrap_or_default()
 }
 
-/// Answers whose `message` is written for people (plan limits and roles, the missing Anthropic key for the views,
-/// docs/API.md): shown as they are.
-const PLAIN_CODES: [&str; 5] = ["budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable"];
+/// Answers whose `message` is written for people (plan limits and roles, the missing Anthropic key for the views, the
+/// client workspace's AI budget and key, docs/API.md): shown as they are.
+const PLAIN_CODES: [&str; 9] = ["budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable", "ai_budget_reached", "ai_unavailable", "no_client", "suggestion_not_found"];
 
 fn server_text(status: u16, message: &str, code: Option<&str>, retry_after_secs: &Option<u64>) -> String {
     match code {
@@ -150,6 +150,8 @@ mod server_text_tests {
         assert_eq!(server(403, "Storage limit reached — raise it in Settings", Some("storage_limit_reached")).to_string(), "Storage limit reached — raise it in Settings");
         assert_eq!(server(403, "Device limit reached — raise it in Settings", Some("device_limit_reached")).to_string(), "Device limit reached — raise it in Settings");
         assert_eq!(server(403, "Only the workspace owner can delete recordings made by someone else.", Some("not_allowed")).to_string(), "Only the workspace owner can delete recordings made by someone else.");
+        assert_eq!(server(403, "This month's AI budget ($5.00) is used up. Raise it in Settings → AI.", Some("ai_budget_reached")).to_string(), "This month's AI budget ($5.00) is used up. Raise it in Settings → AI.");
+        assert_eq!(server(409, "File this recording under a client first.", Some("no_client")).to_string(), "File this recording under a client first.");
     }
 
     #[test]

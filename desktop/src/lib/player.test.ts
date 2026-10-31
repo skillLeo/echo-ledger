@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeIndex, activeWord, continuesTurn, hasUncertainWords, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, timelinePercent, UNCERTAIN_BELOW, uncertainWord } from "./player";
+import { activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, timelinePercent, UNCERTAIN_BELOW, uncertainWord, waveformBars } from "./player";
 
 const segments = [
   { speaker: "Me", start_ms: 0, end_ms: 4_000 },
@@ -81,5 +81,46 @@ describe("uncertain words", () => {
     expect(hasUncertainWords({ words: [{ text: "a", start_ms: 0, end_ms: 1, confidence: 0.9 }, { text: "b", start_ms: 1, end_ms: 2, confidence: 0.2 }] })).toBe(true);
     expect(hasUncertainWords({ words: [{ text: "a", start_ms: 0, end_ms: 1 }] })).toBe(false);
     expect(hasUncertainWords({})).toBe(false);
+  });
+});
+
+describe("the docked player's waveform", () => {
+  const lines = [
+    { channel: 1, speaker: "Me", start_ms: 0, end_ms: 10_000, text: "one two three four" },
+    { channel: 2, speaker: "Client", start_ms: 20_000, end_ms: 40_000, text: "five six" },
+  ];
+
+  it("draws speech high, silence low, and colours a bar by the side that talks", () => {
+    const bars = waveformBars(lines, 40_000, 4);
+    expect(bars.map((b) => b.channel)).toEqual([1, 1, 2, 2]);
+    expect(bars[1].level).toBe(0.1);
+    for (const i of [0, 2, 3]) expect(bars[i].level).toBeGreaterThan(0.5);
+    expect(bars.every((b) => b.level > 0 && b.level <= 1)).toBe(true);
+  });
+
+  it("draws nothing for an unknown length and ignores lines outside the recording", () => {
+    expect(waveformBars(lines, 0)).toEqual([]);
+    expect(waveformBars([{ channel: 1, speaker: "Me", start_ms: 50_000, end_ms: 60_000, text: "late" }], 40_000, 4).every((b) => b.level === 0.1)).toBe(true);
+  });
+});
+
+describe("Find in a transcript", () => {
+  it("finds every literal match, ignoring case, in reading order", () => {
+    expect(findMatches(["Launch is soon", "the LAUNCH party, launch day"], "launch")).toEqual([
+      { seg: 0, start: 0, length: 6 }, { seg: 1, start: 4, length: 6 }, { seg: 1, start: 18, length: 6 },
+    ]);
+    expect(findMatches(["a.b"], ".")).toEqual([{ seg: 0, start: 1, length: 1 }]);
+    expect(findMatches(["anything"], "   ")).toEqual([]);
+  });
+
+  it("splits a line around its matches", () => {
+    expect(markParts("the launch party", [{ seg: 0, start: 4, length: 6, index: 3 }])).toEqual([
+      { text: "the ", match: null }, { text: "launch", match: 3 }, { text: " party", match: null },
+    ]);
+  });
+
+  it("finds where a suggested fix's words are, or says they are gone", () => {
+    expect(suggestionSpan("We use La Ravel here", "la ravel")).toEqual([7, 15]);
+    expect(suggestionSpan("We use Laravel here", "la ravel")).toBeNull();
   });
 });

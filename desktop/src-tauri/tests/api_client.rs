@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use common::{Action, MockServer, Reply, Router, fixture, query_pairs, query_value, sha256_hex};
 use desktop_lib::error::AppError;
-use desktop_lib::net::api::{ApiClient, ApiClientCache, with_client_fallback};
+use desktop_lib::net::api::{ApiClient, ApiClientCache, multipart_file, with_client_fallback};
 use desktop_lib::net::models::*;
 
 const TOKEN: &str = "7|eld_TOKEN_PLACEHOLDER";
@@ -1084,6 +1084,213 @@ async fn an_expired_audio_link_saves_nothing() {
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
     let insecure = client(&server).download_audio("http://ledger.example.test/audio", &target).await;
     assert!(insecure.is_err(), "plain http is only allowed for a local server");
+}
+
+// ---- Client workspaces (v1.4) ----------------------------------------------------------------------------------
+
+fn bearer() -> String {
+    format!("Bearer {TOKEN}")
+}
+
+#[tokio::test]
+async fn workspace_reads_hit_the_documented_paths() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("GET", "/api/clients/C1/workspace", Reply::json(200, json!({"data": {"client": {"id": "C1", "name": "Acme", "ai_notes": true}, "memory": [], "notes": [], "files": []}})))
+            .fixed("GET", "/api/clients/C1/bundle", Reply::json(200, json!({"data": {"text": "# Acme: project context\n\n## Brief\n"}})))
+            .fixed("GET", "/api/sessions/S1/notes", Reply::json(200, json!({"data": {"status": "ready", "sections": [], "session": {"id": "S1"}}}))),
+    );
+    let c = client(&server);
+    assert_eq!(c.client_workspace("C1").await.unwrap()["data"]["client"]["name"], "Acme");
+    assert_eq!(c.client_bundle("C1", None).await.unwrap()["data"]["text"], "# Acme: project context\n\n## Brief\n");
+    c.client_bundle("C1", Some(0)).await.unwrap();
+    assert_eq!(c.session_notes("S1").await.unwrap()["data"]["status"], "ready");
+
+    let requests = server.requests();
+    let sent: Vec<(&str, &str)> = requests.iter().map(|r| (r.method.as_str(), r.path())).collect();
+    assert_eq!(sent, [("GET", "/api/clients/C1/workspace"), ("GET", "/api/clients/C1/bundle"), ("GET", "/api/clients/C1/bundle"), ("GET", "/api/sessions/S1/notes")]);
+    assert!(requests.iter().all(|r| r.header("authorization") == Some(bearer().as_str())));
+    assert_eq!(requests[0].query(), None);
+    assert_eq!(requests[1].query(), None, "without a count the server takes its default");
+    assert_eq!(query_pairs(requests[2].query()), [("notes".to_string(), "0".to_string())]);
+}
+
+#[tokio::test]
+async fn the_brief_is_saved_whole_and_refreshed_on_the_queue() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("PUT", "/api/clients/C1/brief", Reply::json(200, json!({"data": {"edited": true, "status": "ready"}})))
+            .fixed("POST", "/api/clients/C1/brief/refresh", Reply::json(202, json!({"data": {"edited": false, "status": "working"}}))),
+    );
+    let c = client(&server);
+    let sections = json!({"goal": "An online shop", "scope": ["Login", "Checkout"], "people": ["Ali (owner)"], "glossary": []});
+    assert_eq!(c.save_client_brief("C1", &sections).await.unwrap()["data"]["edited"], true);
+    assert_eq!(c.refresh_client_brief("C1").await.unwrap()["data"]["status"], "working");
+
+    let requests = server.requests();
+    assert_eq!((requests[0].method.as_str(), requests[0].path()), ("PUT", "/api/clients/C1/brief"));
+    assert_eq!(requests[0].json(), json!({"sections": sections}));
+    assert_eq!((requests[1].method.as_str(), requests[1].path()), ("POST", "/api/clients/C1/brief/refresh"));
+    assert!(requests.iter().all(|r| r.header("authorization") == Some(bearer().as_str())));
+}
+
+#[tokio::test]
+async fn memory_lines_are_added_changed_and_deleted() {
+    let line = json!({"data": {"id": "M1", "kind": "decision", "text": "Use Stripe", "pinned": false, "source": {"type": "user"}}});
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", "/api/clients/C1/memory", Reply::json(201, line.clone()))
+            .fixed("PATCH", "/api/clients/C1/memory/M1", Reply::json(200, line))
+            .fixed("DELETE", "/api/clients/C1/memory/M1", Reply::empty(204))
+            .fixed("DELETE", "/api/clients/C1/memory/GONE", Reply::json(404, json!({"message": "Memory line not found.", "code": "memory_not_found"}))),
+    );
+    let c = client(&server);
+    assert_eq!(c.add_client_memory("C1", "decision", "Use Stripe", Some("2026-10-31")).await.unwrap()["data"]["id"], "M1");
+    c.add_client_memory("C1", "question", "Which hosting?", None).await.unwrap();
+    c.update_client_memory("C1", "M1", &json!({"pinned": true})).await.unwrap();
+    c.delete_client_memory("C1", "M1").await.unwrap();
+    let gone = c.delete_client_memory("C1", "GONE").await.unwrap_err();
+    assert_eq!((gone.status(), gone.code()), (Some(404), Some("memory_not_found")));
+
+    let requests = server.requests();
+    assert_eq!(requests[0].json(), json!({"kind": "decision", "text": "Use Stripe", "happened_on": "2026-10-31"}));
+    assert_eq!(requests[1].json(), json!({"kind": "question", "text": "Which hosting?"}), "no day: the server takes today");
+    assert_eq!((requests[2].method.as_str(), requests[2].path()), ("PATCH", "/api/clients/C1/memory/M1"));
+    assert_eq!(requests[2].json(), json!({"pinned": true}));
+    assert_eq!((requests[3].method.as_str(), requests[3].path()), ("DELETE", "/api/clients/C1/memory/M1"));
+}
+
+#[test]
+fn the_multipart_body_is_one_file_part_between_the_boundaries() {
+    let body = multipart_file("XyZ123", "file", "Scope \"v2\"\r\n.txt", "text/plain", b"Login\r\nCheckout");
+    let expected = "--XyZ123\r\nContent-Disposition: form-data; name=\"file\"; filename=\"Scope v2.txt\"\r\nContent-Type: text/plain\r\n\r\nLogin\r\nCheckout\r\n--XyZ123--\r\n";
+    assert_eq!(String::from_utf8(body).unwrap(), expected, "quotes and line breaks never reach the part's header");
+    let empty = multipart_file("b", "file", "a.md", "text/markdown", b"");
+    assert!(empty.ends_with(b"\r\n\r\n\r\n--b--\r\n"));
+}
+
+#[tokio::test]
+async fn a_client_file_goes_up_as_one_multipart_file_part() {
+    let server = MockServer::start(Router::new().fixed("POST", "/api/clients/C1/files", Reply::json(201, json!({"data": {"id": "F1", "name": "Scope v2.pdf", "status": "extracting"}}))));
+    let bytes = common::pseudo_random_bytes(300_000, 11);
+    let c = client(&server);
+    let file = c.upload_client_file("C1", "Scope \"v2\".pdf", "application/pdf", bytes.clone()).await.unwrap();
+    assert_eq!(file["data"]["status"], "extracting");
+    c.upload_client_file("C1", "notes.md", "text/markdown", b"# Notes".to_vec()).await.unwrap();
+
+    let requests = server.requests();
+    let r = &requests[0];
+    assert_eq!((r.method.as_str(), r.path()), ("POST", "/api/clients/C1/files"));
+    assert_eq!(r.header("authorization"), Some(bearer().as_str()));
+    let content_type = r.header("content-type").unwrap();
+    let boundary = content_type.strip_prefix("multipart/form-data; boundary=").unwrap_or_else(|| panic!("{content_type}"));
+    assert!(!boundary.is_empty());
+    let head = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"Scope v2.pdf\"\r\nContent-Type: application/pdf\r\n\r\n");
+    let tail = format!("\r\n--{boundary}--\r\n");
+    assert!(r.body.starts_with(head.as_bytes()), "{:?}", String::from_utf8_lossy(&r.body[..200]));
+    assert!(r.body.ends_with(tail.as_bytes()));
+    assert_eq!(sha256_hex(&r.body[head.len()..r.body.len() - tail.len()]), sha256_hex(&bytes), "the file's bytes, untouched");
+    assert_ne!(requests[1].header("content-type"), Some(content_type), "every upload has a boundary of its own");
+}
+
+#[tokio::test]
+async fn pasted_instructions_and_file_deletes_use_the_files_endpoint() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", "/api/clients/C1/files", Reply::json(201, json!({"data": {"id": "F2", "status": "ready", "instructions": true}})))
+            .fixed("DELETE", "/api/clients/C1/files/F1", Reply::empty(204)),
+    );
+    let c = client(&server);
+    assert_eq!(c.add_client_instructions("C1", Some("Rules"), "Always copy Ali on invoices.").await.unwrap()["data"]["instructions"], true);
+    c.add_client_instructions("C1", None, "Use metric units.").await.unwrap();
+    c.delete_client_file("C1", "F1").await.unwrap();
+
+    let requests = server.requests();
+    assert!(requests[0].header("content-type").is_some_and(|t| t.starts_with("application/json")));
+    assert_eq!(requests[0].json(), json!({"text": "Always copy Ali on invoices.", "name": "Rules"}));
+    assert_eq!(requests[1].json(), json!({"text": "Use metric units.", "name": null}));
+    assert_eq!((requests[2].method.as_str(), requests[2].path()), ("DELETE", "/api/clients/C1/files/F1"));
+}
+
+#[tokio::test]
+async fn ask_sends_the_question_and_language_and_keeps_the_budget_code() {
+    let server = MockServer::start(Router::new().route("POST", "/api/clients/C1/ask", |_, nth| {
+        Action::Reply(if nth == 0 {
+            Reply::json(200, json!({"data": {"answer": "Launch is on November 15.", "citations": [{"type": "call", "session_id": "S1", "at_ms": 125000}]}}))
+        } else {
+            Reply::json(403, json!({"message": "This month's AI budget ($5.00) is used up. Raise it in Settings → AI.", "code": "ai_budget_reached"}))
+        })
+    }));
+    let c = client(&server);
+    let answer = c.ask_client("C1", "When do we launch?", "roman_urdu").await.unwrap();
+    assert_eq!(answer["data"]["answer"], "Launch is on November 15.");
+    assert_eq!(answer["data"]["citations"][0]["at_ms"], 125000);
+    let spent = c.ask_client("C1", "And the budget?", "en").await.unwrap_err();
+    assert_eq!((spent.status(), spent.code()), (Some(403), Some("ai_budget_reached")));
+    assert_eq!(spent.to_string(), "This month's AI budget ($5.00) is used up. Raise it in Settings → AI.", "the server's sentence is shown as it is");
+
+    let requests = server.requests();
+    assert_eq!(requests[0].json(), json!({"question": "When do we launch?", "language": "roman_urdu"}));
+    assert_eq!(requests[1].json(), json!({"question": "And the budget?", "language": "en"}));
+}
+
+#[tokio::test]
+async fn notes_that_were_never_written_are_a_404_with_their_code() {
+    let server = MockServer::start(Router::new().fixed("GET", "/api/sessions/S2/notes", Reply::json(404, json!({"message": "This recording has no notes yet.", "code": "notes_not_found"}))));
+    let result = client(&server).session_notes("S2").await;
+    assert_eq!(result.as_ref().err().and_then(|e| e.code()), Some("notes_not_found"));
+    let (status, message) = server_error(result);
+    assert_eq!((status, message.as_str()), (404, "This recording has no notes yet."));
+}
+
+#[tokio::test]
+async fn notes_are_written_again_with_or_without_a_language() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", "/api/sessions/S1/notes", Reply::json(202, json!({"data": {"status": "pending"}})))
+            .fixed("POST", "/api/sessions/S3/notes", Reply::json(409, json!({"message": "File this recording under a client first.", "code": "no_client"}))),
+    );
+    let c = client(&server);
+    assert_eq!(c.write_session_notes("S1", Some("roman_urdu")).await.unwrap()["data"]["status"], "pending");
+    c.write_session_notes("S1", None).await.unwrap();
+    assert_eq!(c.write_session_notes("S3", None).await.unwrap_err().code(), Some("no_client"));
+
+    let requests = server.requests();
+    assert_eq!(requests[0].json(), json!({"language": "roman_urdu"}));
+    assert_eq!(requests[1].json(), json!({}), "no language: the server keeps its default");
+}
+
+#[tokio::test]
+async fn always_write_x_as_y_is_a_whole_word_rule_for_the_client() {
+    let server = MockServer::start(Router::new().fixed("POST", "/api/vocabulary/replacements", Reply::json(201, json!({"replacements": [{"from": "la ravel", "to": "Laravel", "match_case": false, "whole_word": true}]}))));
+    let c = client(&server);
+    let answer = c.add_replacement("la ravel", "Laravel", Some("01JB8Q4C1D2E3F4G5H6J7K8M9N")).await.unwrap();
+    assert_eq!(answer["replacements"][0]["to"], "Laravel");
+    c.add_replacement("acme limited", "Acme Ltd", None).await.unwrap();
+
+    let requests = server.requests();
+    assert_eq!(requests[0].json(), json!({"from": "la ravel", "to": "Laravel", "match_case": false, "whole_word": true, "client_id": "01JB8Q4C1D2E3F4G5H6J7K8M9N"}));
+    assert_eq!(requests[1].json(), json!({"from": "acme limited", "to": "Acme Ltd", "match_case": false, "whole_word": true, "client_id": null}));
+}
+
+#[tokio::test]
+async fn a_suggested_fix_is_accepted_or_dismissed_by_its_number() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", "/api/transcripts/T1/suggestions/0", Reply::json(200, json!({"id": "T1", "suggestions": [{"id": 0, "status": "accepted"}]})))
+            .fixed("POST", "/api/transcripts/T1/suggestions/2", Reply::json(200, json!({"id": "T1", "suggestions": [{"id": 2, "status": "dismissed"}]})))
+            .fixed("POST", "/api/transcripts/T1/suggestions/9", Reply::json(404, json!({"message": "That suggestion is no longer open.", "code": "suggestion_not_found"}))),
+    );
+    let c = client(&server);
+    assert_eq!(c.decide_suggestion("T1", 0, true).await.unwrap()["id"], "T1");
+    c.decide_suggestion("T1", 2, false).await.unwrap();
+    let gone = c.decide_suggestion("T1", 9, true).await.unwrap_err();
+    assert_eq!((gone.status(), gone.code()), (Some(404), Some("suggestion_not_found")));
+
+    let requests = server.requests();
+    assert_eq!(requests[0].json(), json!({"accept": true}));
+    assert_eq!(requests[1].json(), json!({"accept": false}));
+    assert!(requests.iter().all(|r| r.method == "POST" && r.header("authorization") == Some(bearer().as_str())));
 }
 
 // ---- Timeouts (slow) -------------------------------------------------------------------------------------------

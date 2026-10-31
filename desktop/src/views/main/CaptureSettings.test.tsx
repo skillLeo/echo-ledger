@@ -54,7 +54,7 @@ describe("caption style (B4)", () => {
   it("picks speaker colours and goes back to the theme colour", () => {
     const patch = vi.fn(async () => true);
     render(<CaptionStyleCard settings={makeSettings({ captionStyle: { ...style, clientColor: "#f59e0b" } })} patch={patch} />);
-    expect(screen.getByLabelText("Colour for Me")).toHaveValue("#a78bfa");
+    expect(screen.getByLabelText("Colour for Me")).toHaveValue("#9eb1ff");
     expect(screen.getAllByRole("button", { name: "Default" })).toHaveLength(1);
     fireEvent.change(screen.getByLabelText("Colour for Me"), { target: { value: "#22c55e" } });
     expect(patch).toHaveBeenLastCalledWith({ captionStyle: { ...style, clientColor: "#f59e0b", meColor: "#22c55e" } });

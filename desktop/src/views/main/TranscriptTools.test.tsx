@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, SpeakersPanel, Timeline, VocabularyHint } from "./TranscriptTools";
+import { ExportMenu, HistoryPanel, PlayerControls, PlayerDock, ReplaceBar, SharePanel, SpeakersPanel, VocabularyHint, WAVE_BARS, Waveform } from "./TranscriptTools";
 import { callsOf, resetTauriMock, respond, respondWith } from "../../test/tauri";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -23,23 +23,43 @@ describe("player controls and timeline (B6)", () => {
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["0.5×", "0.75×", "1×", "1.25×", "1.5×", "1.75×", "2×"]);
   });
 
-  it("draws each side's speech and the bookmarks, and seeks where it is clicked", () => {
+  it("draws each side's speech, the bookmarks and how far it played, and seeks where it is clicked", () => {
     const onSeek = vi.fn();
-    render(<Timeline durationMs={100_000} nowMs={50_000} onSeek={onSeek}
+    render(<Waveform durationMs={100_000} nowMs={50_000} onSeek={onSeek}
       segments={[{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 10_000, text: "a" }, { channel: 2, speaker: "Client", start_ms: 20_000, end_ms: 30_000, text: "b" }]}
       bookmarks={[{ id: "m", at_ms: 25_000, tag: null, note: null }]} />);
-    const timeline = screen.getByTestId("timeline");
-    expect(timeline.querySelector(".tl-lane-2 .tl-talk")).toHaveStyle({ left: "20%", width: "10%" });
-    expect(timeline.querySelector(".tl-mark")).toHaveStyle({ left: "25%" });
-    expect(timeline.querySelector(".tl-head")).toHaveStyle({ left: "50%" });
-    timeline.getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 30, right: 200, bottom: 30, x: 0, y: 0, toJSON: () => ({}) });
-    fireEvent.click(timeline, { clientX: 50 });
+    const wave = screen.getByRole("slider", { name: "Position in the recording" });
+    const bars = [...wave.querySelectorAll<HTMLElement>(".wf-bar")];
+    expect(bars).toHaveLength(WAVE_BARS);
+    // 96 bars over 100 s: bar 0 is Me speaking, bar 24 (25 s) the client, bar 48 (50 s) silence.
+    expect(bars[0]).toHaveClass("ch-1");
+    expect(bars[24]).toHaveClass("ch-2");
+    expect(parseFloat(bars[48].style.height)).toBeLessThan(parseFloat(bars[24].style.height));
+    expect(bars.filter((b) => b.classList.contains("played"))).toHaveLength(48);
+    expect(wave.querySelector(".wf-mark")).toHaveStyle({ left: "25%" });
+    expect(wave).toHaveAttribute("aria-valuetext", "0:50 of 1:40");
+    wave.getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 30, right: 200, bottom: 30, x: 0, y: 0, toJSON: () => ({}) });
+    fireEvent.click(wave, { clientX: 50 });
     expect(onSeek).toHaveBeenCalledWith(25_000);
   });
 
   it("draws nothing without lines or bookmarks", () => {
-    const { container } = render(<Timeline durationMs={1000} nowMs={0} onSeek={vi.fn()} segments={[]} bookmarks={[]} />);
+    const { container } = render(<Waveform durationMs={1000} nowMs={0} onSeek={vi.fn()} segments={[]} bookmarks={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("docks play / pause and ±10 s beside the waveform", () => {
+    const onToggle = vi.fn();
+    const onSkip = vi.fn();
+    const { rerender } = render(<PlayerDock playing={false} nowMs={12_000} durationMs={125_000} onToggle={onToggle} onSkip={onSkip}><span /></PlayerDock>);
+    expect(screen.getByText("0:12 / 2:05")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back 10 seconds" }));
+    fireEvent.click(screen.getByRole("button", { name: "Forward 10 seconds" }));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onSkip.mock.calls).toEqual([[-10], [10]]);
+    rerender(<PlayerDock playing nowMs={12_000} durationMs={125_000} onToggle={onToggle} onSkip={onSkip}><span /></PlayerDock>);
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
   });
 });
 

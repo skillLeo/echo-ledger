@@ -14,7 +14,7 @@ import {
   verifyingUploads,
   waitingSummary,
 } from "../../lib/pending";
-import { AlertIcon, ClockIcon, ImportIcon, SourceAppIcon } from "../../components/Icons";
+import { AlertIcon, AppTileIcon, HourglassIcon, ImportIcon, appKind } from "../../components/Icons";
 
 /** A `main:navigate` request to bring one waiting recording into view, optionally with its title open for editing. */
 export interface PendingFocus {
@@ -263,9 +263,9 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
       {pending.length > 0 && (
         <section className="queue-section" aria-labelledby="queue-pending-title">
           <div className="queue-card">
+            <span className="queue-card-icon" aria-hidden="true"><HourglassIcon size={22} /></span>
             <div className="queue-card-main">
               <div className="queue-head">
-                <ClockIcon size={14} />
                 <h2 id="queue-pending-title" className="queue-label">Waiting for your decision</h2>
                 <span className="queue-count">{pending.length}</span>
               </div>
@@ -273,7 +273,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             </div>
             <button
               type="button"
-              className={`btn compact ${open ? "ghost" : "primary"}`}
+              className="btn text"
               aria-expanded={open}
               aria-controls={open ? "queue-pending-list" : undefined}
               onClick={() => setOpen((v) => !v)}
@@ -284,8 +284,8 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
           {open && (
             <div id="queue-pending-list" className="queue-list">
               <div className="queue-actions queue-bulk">
-                <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void keepAll()}>Keep all</button>
-                <button type="button" className="btn compact danger" disabled={bulkBusy} onClick={() => void discardAll()}>Discard all</button>
+                <button type="button" className="btn primary compact" disabled={bulkBusy} onClick={() => void keepAll()}>Keep all</button>
+                <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void discardAll()}>Discard all</button>
               </div>
               {pending.map((item) => {
                 const title = pendingTitle(item);
@@ -304,7 +304,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                     data-testid={`pending-${item.id}`}
                   >
                     <div className="row">
-                      <span className="avatar desktop"><SourceAppIcon app={item.sourceApp} size={18} /></span>
+                      <span className={`avatar desktop app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} /></span>
                       <div className="item-main">
                         {renaming?.id === item.id ? (
                           <input
@@ -351,17 +351,20 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                       </select>
                     )}
                     <div className="queue-actions">
-                      <button type="button" className="btn primary compact" disabled={isBusy} onClick={() => void keep(item)}>Keep</button>
-                      <button type="button" className="btn compact" disabled={isBusy} onClick={() => void discard(item)}>Discard</button>
-                      <button type="button" className="btn ghost compact" disabled={isBusy} onClick={() => setRename({ id: item.id, text: item.title ?? "" })}>Rename</button>
-                      <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Assign client</button>
-                      <select className="input compact queue-language" aria-label="Language" title="Language of the transcript" disabled={isBusy}
+                      <select className={`chip queue-language ${item.language ? "active" : ""}`} aria-label="Language" title="Language of the transcript" disabled={isBusy}
                         value={item.language ?? ""} onChange={(e) => void setLanguage(item, e.target.value as TranscriptionLanguage | "")}>
                         {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
                         <optgroup label="More languages">
                           {MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
                         </optgroup>
                       </select>
+                      <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Assign client</button>
+                      <button type="button" className="btn ghost compact" disabled={isBusy} onClick={() => setRename({ id: item.id, text: item.title ?? "" })}>Rename</button>
+                    </div>
+                    {/* As on the phone's card: Discard on the left, Keep (the one primary action) on the right. */}
+                    <div className="queue-actions decide">
+                      <button type="button" className="btn" disabled={isBusy} onClick={() => void discard(item)}>Discard</button>
+                      <button type="button" className="btn primary" disabled={isBusy} onClick={() => void keep(item)}>Keep</button>
                     </div>
                   </div>
                 );
@@ -383,7 +386,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             return (
               <div key={item.id} role="group" aria-label={title} className="queue-item importing" data-testid={`upload-${item.id}`}>
                 <div className="row">
-                  <span className="avatar desktop"><SourceAppIcon app={item.sourceApp} size={18} /></span>
+                  <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
                   <div className="item-main">
                     <div className="queue-title" dir="auto">{title}</div>
                     <div className="small muted queue-meta">{importProgressText(item)}</div>
@@ -411,7 +414,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             return (
               <div key={item.id} role="group" aria-label={title} className="queue-item failed" data-testid={`upload-${item.id}`}>
                 <div className="row">
-                  <span className="avatar desktop"><SourceAppIcon app={item.sourceApp} size={18} /></span>
+                  <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
                   <div className="item-main">
                     <div className="queue-title">{title}</div>
                     <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
@@ -430,7 +433,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
       {verifying.map((item) => (
         <div key={item.id} className="queue-item verifying" data-testid={`upload-${item.id}`}>
           <div className="row">
-            <span className="avatar desktop"><SourceAppIcon app={item.sourceApp} size={18} /></span>
+            <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
             <div className="item-main">
               <div className="queue-title">{uploadTitle(item)}</div>
               <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>

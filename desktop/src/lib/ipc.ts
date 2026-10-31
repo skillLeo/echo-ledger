@@ -319,6 +319,106 @@ export interface ClientFolder {
   language?: TranscriptionLanguage | null;
   keyterm_count?: number;
   session_count?: number;
+  /** Claude writes call notes after each kept recording of this client (since v1.4, default on). */
+  ai_notes?: boolean;
+}
+
+/** A line of a client's memory (since v1.4): what was decided, asked, changed or is in scope. */
+export type MemoryKind = "scope" | "decision" | "question" | "change";
+export interface MemoryLine {
+  id: string;
+  kind: MemoryKind;
+  text: string;
+  happened_on: string | null;
+  pinned: boolean;
+  /** Where it came from: a call (at `at_ms`), a file, or a person. */
+  source: { type: "call" | "file" | "user"; id?: string | null; at_ms?: number | null } | null;
+}
+
+/** The one-page brief of a client; `goal` is a line, the others are lists of lines. */
+export interface BriefSections {
+  goal?: string | null;
+  scope?: string[];
+  constraints?: string[];
+  deadlines?: string[];
+  budget?: string[];
+  people?: string[];
+  glossary?: string[];
+}
+export interface ClientBrief {
+  sections: BriefSections | null;
+  /** A person edited it: it is never rewritten by itself. */
+  edited: boolean;
+  status: "none" | "working" | "ready" | "failed";
+  error: string | null;
+  generated_at: string | null;
+  updated_at: string | null;
+}
+
+/** One line of call notes: `verify` = the transcript was unclear there; `at_ms` = the moment of its first line. */
+export interface NoteItem {
+  text: string;
+  verify: boolean;
+  lines: number[];
+  at_ms: number | null;
+  /** Changes only: what kind of change it is. */
+  kind?: "add" | "remove" | "modify";
+}
+export interface NoteSection {
+  key: string;
+  heading: string;
+  items: NoteItem[];
+}
+/** The notes Claude writes after a kept recording of a client (since v1.4). */
+export interface CallNotes {
+  id: string;
+  session_id: string;
+  status: "pending" | "ready" | "failed" | "skipped";
+  error: string | null;
+  language: string | null;
+  sections: NoteSection[];
+  created_at: string | null;
+  session?: { id: string; title: string | null; started_at: string | null; duration_ms: number | null } | null;
+}
+
+/** A file or pasted instructions in a client's workspace; files are read on the server (`extracting`). */
+export interface ClientFile {
+  id: string;
+  name: string;
+  mime: string | null;
+  size_bytes: number | null;
+  pages: number | null;
+  status: "extracting" | "ready" | "failed";
+  error: string | null;
+  instructions: boolean;
+  created_at: string | null;
+}
+
+/** `GET /api/clients/{id}/workspace` (since v1.4). */
+export interface ClientWorkspace {
+  client: { id: string; name: string; ai_notes: boolean };
+  ai: { configured: boolean; spent_usd: number; budget_usd: number; client_spent_usd: number };
+  brief: ClientBrief | null;
+  memory: MemoryLine[];
+  notes: CallNotes[];
+  files: ClientFile[];
+}
+
+/** The language of an Ask answer or of call notes written again. */
+export type AnswerLanguage = "en" | "roman_urdu";
+/** A source of an Ask answer: a moment of a call or a page of a file. */
+export interface AnswerCitation {
+  type: "call" | "file";
+  session_id?: string | null;
+  file_id?: string | null;
+  title: string;
+  at_ms?: number | null;
+  page?: number | null;
+  quote?: string | null;
+}
+export interface ClientAnswer {
+  answer: string;
+  citations: AnswerCitation[];
 }
 export interface SessionOrganisePatch {
   title?: string | null;
@@ -388,6 +488,26 @@ export interface TranscriptDetail {
   progress?: TranscriptProgress | null;
   /** Show as: the views this transcript can have and whether they are made (since v1.2). */
   views?: { available: TranscriptView[]; status: TranscriptViewsStatus; default?: "original" | TranscriptView } | null;
+  /** Suggested fixes: likely mishearings of the client's words, nothing changes until a person decides (since v1.4). */
+  suggestions?: TranscriptSuggestion[];
+}
+
+/** One suggested fix: in segment `index`, `from` may be `to`. */
+export interface TranscriptSuggestion {
+  id: number;
+  index: number;
+  from: string;
+  to: string;
+  reason?: string | null;
+  status: string;
+}
+
+/** After a line edit of a client's recording: words the edit changed, to offer "Always write X as Y" (since v1.4). */
+export interface LearnOffer {
+  from: string;
+  to: string;
+  client_id: string;
+  client_name: string;
 }
 
 /** A "Show as" reading view of a transcript (since v1.2); the transcript itself never changes. */
@@ -644,7 +764,30 @@ export const api = {
   /** One zip file, saved where the person chooses; null when they cancel the save dialog. */
   exportSessions: (ids: string[], format: BulkExportFormat) => invoke<string | null>("sessions_export", { ids, format }),
   createClient: (name: string, color: string | null = null, avatar: string | null = null) => invoke<{ data: ClientFolder }>("client_create", { name, color, avatar }),
-  updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned" | "language">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
+  updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned" | "language" | "ai_notes">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
+  // Client workspaces (since v1.4): brief, memory, files, Ask, Copy for AI and call notes.
+  clientWorkspace: (id: string) => invoke<{ data: ClientWorkspace }>("client_workspace", { id }),
+  saveClientBrief: (id: string, sections: BriefSections) => invoke<{ data: ClientBrief }>("client_brief_save", { id, sections }),
+  refreshClientBrief: (id: string) => invoke<{ data: ClientBrief }>("client_brief_refresh", { id }),
+  addClientMemory: (id: string, kind: MemoryKind, text: string, happenedOn: string | null = null) =>
+    invoke<{ data: MemoryLine }>("client_memory_add", { id, kind, text, happenedOn }),
+  updateClientMemory: (id: string, item: string, patch: { text?: string; pinned?: boolean }) => invoke<{ data: MemoryLine }>("client_memory_update", { id, item, patch }),
+  deleteClientMemory: (id: string, item: string) => invoke<void>("client_memory_delete", { id, item }),
+  /** The native picker for PDF, Word, text and Markdown files; empty when cancelled. */
+  pickClientFiles: () => invoke<string[]>("client_files_pick"),
+  uploadClientFile: (id: string, path: string) => invoke<{ data: ClientFile }>("client_file_upload", { id, path }),
+  addClientInstructions: (id: string, text: string, name: string | null = null) => invoke<{ data: ClientFile }>("client_instructions_add", { id, name, text }),
+  deleteClientFile: (id: string, file: string) => invoke<void>("client_file_delete", { id, file }),
+  askClient: (id: string, question: string, language: AnswerLanguage = "en") => invoke<{ data: ClientAnswer }>("client_ask", { id, question, language }),
+  /** "Copy for AI": the brief, memory and recent call notes as one text. */
+  clientBundle: (id: string, notes: number | null = null) => invoke<string>("client_bundle", { id, notes }),
+  /** The call notes of a recording, or null when none were written. */
+  sessionNotes: (id: string) => invoke<{ data: CallNotes } | null>("session_notes", { id }),
+  writeSessionNotes: (id: string, language: AnswerLanguage | null = null) => invoke<{ data: CallNotes }>("session_notes_write", { id, language }),
+  /** "Always write `from` as `to`" (for the client, or every recording when null). */
+  addReplacement: (from: string, to: string, clientId: string | null) => invoke<{ replacements: unknown[] }>("vocabulary_replace_add", { from, to, clientId }),
+  /** Accepts or dismisses a suggested fix; the answer is the transcript. */
+  decideSuggestion: (id: string, suggestion: number, accept: boolean) => invoke<TranscriptDetail>("transcript_suggestion", { id, suggestion, accept }),
   setHitRegions: (regions: RectPx[]) => invoke<void>("overlay_set_hit_regions", { regions }),
   snapOverlay: () => invoke<void>("overlay_snap"),
   pauseRecording: () => invoke<AppStatus>("pause_recording"),
@@ -680,7 +823,8 @@ export const api = {
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
   openPrivacySettings: (kind: "microphone" | "system_audio" | "automation") => invoke<void>("open_privacy_settings", { kind }),
   searchLibrary: (query: SearchQuery) => invoke<SearchResult>("search_library", { query }),
-  editTranscript: (id: string, index: number, text: string) => invoke<TranscriptDetail>("transcript_edit", { id, index, text }),
+  /** The edited transcript; for a client's recording `learn` lists words to offer "Always write X as Y" for (v1.4). */
+  editTranscript: (id: string, index: number, text: string) => invoke<TranscriptDetail & { learn?: LearnOffer[] }>("transcript_edit", { id, index, text }),
   replaceInTranscript: (id: string, find: string, replace: string, matchCase: boolean, wholeWord: boolean) =>
     invoke<{ replaced: number; transcript: TranscriptDetail }>("transcript_replace", { id, find, replace, matchCase, wholeWord }),
   restoreTranscript: (id: string) => invoke<TranscriptDetail>("transcript_restore", { id }),

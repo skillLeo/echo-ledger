@@ -50,13 +50,36 @@ describe("system-style settings", () => {
   }
   const groupTitles = () => [...document.querySelectorAll(".settings-group-title")].map((h) => h.textContent);
 
-  it("shows every group under its heading, then one group at a time", async () => {
+  it("shows General and every mode panel under its heading, then one panel at a time", async () => {
     await setup();
-    expect(groupTitles()).toEqual(["General", "Recording", "Captions", "Dictation", "Shortcuts", "Privacy & security", "Devices", "Storage", "About"]);
-    fireEvent.click(screen.getByRole("button", { name: "Captions" }));
-    expect(groupTitles()).toEqual(["Captions"]);
-    expect(screen.getByRole("button", { name: "Captions" })).toHaveAttribute("aria-current", "page");
-    expect(screen.queryByRole("switch", { name: "Auto-record calls" })).not.toBeInTheDocument();
+    expect(groupTitles()).toEqual(["General", "Calls & meetings", "Voice notes & dictation", "Shortcuts"]);
+    fireEvent.click(screen.getByRole("button", { name: "Calls & meetings" }));
+    expect(groupTitles()).toEqual(["Calls & meetings"]);
+    expect(screen.getByRole("button", { name: "Calls & meetings" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Calls & meetings" })).toHaveAccessibleDescription("Call apps, after a call, captions, microphone");
+    expect(screen.getByRole("switch", { name: "Auto-record calls" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Caption position" })).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Start EchoLedger when I sign in" })).not.toBeInTheDocument();
+  });
+
+  it("changes the theme from General → Appearance", async () => {
+    window.localStorage.clear();
+    await setup();
+    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    const theme = screen.getByRole("group", { name: "Theme" });
+    fireEvent.click(within(theme).getByRole("button", { name: "Dark" }));
+    expect(within(theme).getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    expect(window.localStorage.getItem("echoledger-theme")).toBe("dark");
+  });
+
+  it("lists the keys of the app itself under Shortcuts", async () => {
+    await setup();
+    fireEvent.click(screen.getByRole("button", { name: "Shortcuts" }));
+    const keys = screen.getByRole("region", { name: "In the app" });
+    for (const what of ["Search recordings and run commands", "Start or stop a voice note", "Play or pause the open recording", "Back or forward 10 seconds"]) {
+      expect(within(keys).getByText(what)).toBeInTheDocument();
+    }
   });
 
   it("finds settings by words, across groups", async () => {
@@ -79,7 +102,8 @@ describe("system-style settings", () => {
     respond("settings_export", "C:\\Users\\me\\Downloads\\EchoLedger settings 2026-10-28.json");
     respondWith("settings_import", ({ text }) => ({ ...makeSettings(), captionLines: JSON.parse(text as string).settings.captionLines }));
     await setup();
-    fireEvent.click(screen.getByRole("button", { name: "About" }));
+    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    expect(screen.getByRole("region", { name: "About" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Export settings" }));
     await waitFor(() => expect(callsOf("settings_export")).toHaveLength(1));
     const file = new File([JSON.stringify({ format: "echoledger-settings", version: 1, settings: { captionLines: 2 } })], "s.json", { type: "application/json" });

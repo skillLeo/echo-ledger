@@ -6,7 +6,7 @@ import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat
 import { formatWhen } from "../../lib/format";
 import { folderBadge, MAX_LABEL_CHARS, sortFolders, withLabel } from "../../lib/organise";
 import { MAX_TITLE_CHARS } from "../../lib/importFiles";
-import { DotsIcon } from "../../components/Icons";
+import { DotsIcon, PinIcon } from "../../components/Icons";
 
 type Notify = (message: string, error?: boolean) => void;
 
@@ -140,12 +140,14 @@ export function RowMenu({ title, pinned, onRename, onPin, onDelete }: {
 }
 
 /** Pin, client folder and labels of the open recording. */
-export function OrganisePanel({ item, clients, knownLabels, notify, onClientCreated }: {
+export function OrganisePanel({ item, clients, knownLabels, notify, onClientCreated, children }: {
   item: LibraryItem;
   clients: ClientFolder[];
   knownLabels: string[];
   notify: Notify;
   onClientCreated: (client: ClientFolder) => void;
+  /** More header chips after Client (the recording page puts Language there). */
+  children?: React.ReactNode;
 }) {
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
@@ -173,32 +175,39 @@ export function OrganisePanel({ item, clients, knownLabels, notify, onClientCrea
     }
     if (await save({ labels: next })) setLabel("");
   };
+  // The recording page's header chips: Client, Language (from the page), Labels; then Pin and Keep forever.
   return (
-    <div className="organise" role="group" aria-label="Organise">
-      <button type="button" className={`btn ghost ${item.pinned ? "pinned" : ""}`} aria-pressed={!!item.pinned} disabled={busy}
+    <div className="organise head-chips" role="group" aria-label="Organise">
+      <span className="head-chip">
+        <FolderPicker label="Client" value={item.client?.id ?? ""} clients={clients} disabled={busy} notify={notify} onCreated={onClientCreated}
+          onPick={(clientId) => void save({ client_id: clientId }, "Moved")} />
+      </span>
+      {children}
+      <span className="head-chip labels-chip">
+        <span className="chip-key" aria-hidden="true">Labels</span>
+        <span className="chips labels" role="list" aria-label="Labels">
+          {labels.map((l) => (
+            <span role="listitem" key={l} className="chip label-chip">
+              {l}
+              <button type="button" className="chip-remove" aria-label={`Remove label ${l}`} disabled={busy} onClick={() => void save({ labels: labels.filter((x) => x !== l) })}>×</button>
+            </span>
+          ))}
+          <span role="listitem" className="label-add">
+            <label htmlFor={labelId} className="sr-only">Add a label</label>
+            <input id={labelId} placeholder="Add label" list={listId} maxLength={MAX_LABEL_CHARS} value={label} disabled={busy}
+              onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void addLabel(); }} />
+            <datalist id={listId}>{knownLabels.filter((k) => !labels.includes(k)).map((k) => <option key={k} value={k} />)}</datalist>
+          </span>
+        </span>
+      </span>
+      <button type="button" className={`btn ghost compact ${item.pinned ? "pinned" : ""}`} aria-pressed={!!item.pinned} disabled={busy}
         onClick={() => void save({ pinned: !item.pinned }, item.pinned ? "Unpinned" : "Pinned")}>
-        <span aria-hidden="true">{item.pinned ? "★" : "☆"}</span>{item.pinned ? "Pinned" : "Pin"}
+        <PinIcon size={15} />{item.pinned ? "Pinned" : "Pin"}
       </button>
-      <button type="button" className="btn ghost" aria-pressed={!!item.keep} disabled={busy} title="Kept recordings are never deleted automatically"
+      <button type="button" className="btn ghost compact" aria-pressed={!!item.keep} disabled={busy} title="Kept recordings are never deleted automatically"
         onClick={() => void save({ keep: !item.keep }, item.keep ? "No longer kept" : "Kept forever")}>
         {item.keep ? "Kept forever" : "Keep forever"}
       </button>
-      <FolderPicker label="Client" value={item.client?.id ?? ""} clients={clients} disabled={busy} notify={notify} onCreated={onClientCreated}
-        onPick={(clientId) => void save({ client_id: clientId }, "Moved")} />
-      <div className="chips labels" role="list" aria-label="Labels">
-        {labels.map((l) => (
-          <span role="listitem" key={l} className="chip label-chip">
-            {l}
-            <button type="button" className="chip-remove" aria-label={`Remove label ${l}`} disabled={busy} onClick={() => void save({ labels: labels.filter((x) => x !== l) })}>×</button>
-          </span>
-        ))}
-        <span role="listitem" className="label-add">
-          <label htmlFor={labelId} className="sr-only">Add a label</label>
-          <input id={labelId} className="input small" placeholder="Add label" list={listId} maxLength={MAX_LABEL_CHARS} value={label} disabled={busy}
-            onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void addLabel(); }} />
-          <datalist id={listId}>{knownLabels.filter((k) => !labels.includes(k)).map((k) => <option key={k} value={k} />)}</datalist>
-        </span>
-      </div>
     </div>
   );
 }

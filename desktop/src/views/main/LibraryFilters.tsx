@@ -1,7 +1,7 @@
 // One "Filters" dropdown for the Library (replaces three rows of chips): checkboxes in three groups. Inside a group the
 // ticked boxes add up (Today or Pinned); between groups they narrow (Today and Phone). Nothing ticked = no filter.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CloseIcon, DesktopIcon, GlobeIcon, PhoneIcon } from "../../components/Icons";
+import { CloseIcon, DesktopIcon, GlobeIcon, PhoneIcon, TuneIcon } from "../../components/Icons";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { SMART_VIEWS, type SmartView } from "../../lib/organise";
 
@@ -69,8 +69,8 @@ export function LibraryFilters({ state, onChange, counts, tags, showBookmarks }:
 
   return (
     <div className="filter-menu" ref={wrap}>
-      <button type="button" className={`btn ${active > 0 ? "filter-on" : "ghost"}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
-        Filters{active > 0 && <span className="badge-inline" aria-label={`${active} filters on`}>{active}</span>}
+      <button type="button" className={`chip ${active > 0 ? "active" : ""}`} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <TuneIcon size={16} />Filters{active > 0 && <span className="badge-inline" aria-label={`${active} filters on`}>{active}</span>}
       </button>
       {open && (
         <div className="card filter-panel" role="dialog" aria-label="Filters">

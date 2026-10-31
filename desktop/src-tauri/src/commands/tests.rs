@@ -155,6 +155,12 @@ fn only_known_fields_are_sent() {
 }
 
 #[test]
+fn a_client_folder_change_may_switch_its_call_notes() {
+    let patch = object(json!({"ai_notes": false, "workspace_id": 3}));
+    assert_eq!(serde_json::Value::Object(allowed_patch(&patch, &CLIENT_PATCH_KEYS)), json!({"ai_notes": false}));
+}
+
+#[test]
 fn bulk_requests_are_checked_first() {
     let ids = vec!["01JB8Q4C1D2E3F4G5H6J7K8M9N".to_string()];
     for action in BULK_ACTIONS {
@@ -233,4 +239,67 @@ fn only_settings_files_are_imported() {
     for text in ["", "{}", "[1]", r#"{"format":"something-else","settings":{}}"#, r#"{"format":"echoledger-settings"}"#] {
         assert!(read_portable(text).is_err(), "{text}");
     }
+}
+
+// ---- client workspaces (v1.4) ----
+
+#[test]
+fn memory_lines_need_a_known_kind_and_some_text() {
+    for kind in MEMORY_KINDS {
+        assert_eq!(check_memory_line(kind, "  Use Stripe \n").unwrap(), "Use Stripe", "{kind}");
+    }
+    assert!(check_memory_line("idea", "Use Stripe").is_err());
+    assert!(check_memory_line("Decision", "Use Stripe").is_err(), "kinds are the server's lower-case names");
+    assert!(check_memory_line("decision", " \n\t ").is_err());
+    assert!(check_memory_line("decision", &"x".repeat(MAX_MEMORY_CHARS + 1)).is_err());
+    assert!(check_memory_line("decision", &"ب".repeat(MAX_MEMORY_CHARS)).is_ok(), "characters are counted, not bytes");
+    let patch = object(json!({"text": "Launch on November 15", "pinned": true, "kind": "scope", "source": {"type": "user"}}));
+    assert_eq!(serde_json::Value::Object(allowed_patch(&patch, &MEMORY_PATCH_KEYS)), json!({"text": "Launch on November 15", "pinned": true}));
+}
+
+#[test]
+fn ask_takes_3_to_500_characters_in_english_or_roman_urdu() {
+    assert_eq!(check_question("  When do we launch? ", None).unwrap(), ("When do we launch?".to_string(), "en"));
+    assert_eq!(check_question("Launch kab hai?", Some("roman_urdu")).unwrap().1, "roman_urdu");
+    assert_eq!(check_question("Why?", Some("en")).unwrap().1, "en");
+    assert!(check_question("  hi  ", None).is_err());
+    assert!(check_question(&"a".repeat(501), None).is_err());
+    assert!(check_question(&"ب".repeat(500), None).is_ok(), "characters are counted, not bytes");
+    for language in ["ur", "", "EN", "roman urdu", "english"] {
+        assert!(check_question("When do we launch?", Some(language)).is_err(), "{language:?}");
+    }
+    assert_eq!(notes_language(None).unwrap(), None, "notes written again without a choice send no language");
+    assert_eq!(notes_language(Some("roman_urdu")).unwrap(), Some("roman_urdu"));
+    assert!(notes_language(Some("ur")).is_err());
+}
+
+#[test]
+fn client_files_are_checked_before_they_are_read() {
+    use std::path::Path;
+    assert_eq!(check_client_file(Path::new("C:/Acme/scope.pdf"), 182_340).unwrap(), "application/pdf");
+    assert_eq!(check_client_file(Path::new("Brief.DOCX"), 1).unwrap(), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    assert_eq!(check_client_file(Path::new("rules.txt"), 10).unwrap(), "text/plain");
+    assert_eq!(check_client_file(Path::new("notes.md"), 20 * 1024 * 1024).unwrap(), "text/markdown", "20 MB itself is allowed");
+    assert_eq!(check_client_file(Path::new("C:/Acme/scan.pdf"), 20 * 1024 * 1024 + 1).unwrap_err().to_string(), "scan.pdf is larger than 20 MB.");
+    let wrong = check_client_file(Path::new("budget.xlsx"), 10).unwrap_err().to_string();
+    assert!(wrong.starts_with("budget.xlsx cannot be added."), "{wrong}");
+    assert!(check_client_file(Path::new("old.doc"), 10).is_err(), "only Word's .docx is read");
+    assert!(check_client_file(Path::new("empty.txt"), 0).is_err());
+}
+
+#[test]
+fn pasted_instructions_are_trimmed_and_limited() {
+    assert_eq!(check_instructions("  Always copy Ali on invoices.\n").unwrap(), "Always copy Ali on invoices.");
+    assert!(check_instructions(" \n\t").is_err());
+    assert!(check_instructions(&"x".repeat(MAX_INSTRUCTIONS_CHARS)).is_ok());
+    assert!(check_instructions(&"x".repeat(MAX_INSTRUCTIONS_CHARS + 1)).is_err());
+}
+
+#[test]
+fn a_recording_without_notes_reads_as_none() {
+    let server = |code: &str| AppError::Server { status: 404, message: "Not found.".into(), code: Some(code.into()), retry_after_secs: None };
+    assert_eq!(notes_or_none(Err(server("notes_not_found"))).unwrap(), None);
+    assert!(notes_or_none(Err(server("session_not_found"))).is_err(), "a recording that is gone is still an error");
+    assert!(notes_or_none(Err(AppError::NotPaired)).is_err());
+    assert_eq!(notes_or_none(Ok(json!({"data": {"status": "ready"}}))).unwrap(), Some(json!({"data": {"status": "ready"}})));
 }
