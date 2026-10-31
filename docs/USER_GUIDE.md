@@ -5,7 +5,7 @@ clear written transcript afterwards. Your recordings stay on your own server.
 
 You use it in three places:
 
-- **The Windows app** on your computer records calls and shows captions.
+- **The Windows or Mac app** on your computer records calls and shows captions.
 - **The phone app** on Android records WhatsApp calls and voice notes.
 - **The web console** in your browser is where you read, search, share and manage everything.
 
@@ -20,6 +20,18 @@ All three show the same library.
    file you got from your own team.
 3. EchoLedger starts in the system tray (the small icons next to the clock). Click its icon to open it.
 4. The first time, a short setup guide walks you through the microphone, pairing and a 10-second test.
+
+## 1b. Install the Mac app
+
+The Mac app is built for Apple Silicon and Intel Macs. Recording the other side of a call needs **macOS 14.2 or
+newer** (Apple menu → **About This Mac** shows your version).
+
+1. Open the `.dmg` file and drag **EchoLedger** into **Applications**.
+2. The app is not signed by Apple yet, so the first time, **right-click EchoLedger in Applications and choose Open**,
+   then **Open** again. After that it opens normally.
+3. EchoLedger lives in the menu bar (top right). Click its icon to open it.
+4. The first recording asks for the **microphone** and for **system audio recording** (the other side of the call).
+   Allow both. You can change them later in **System Settings → Privacy & Security**.
 
 ## 2. Install the phone app
 
@@ -94,6 +106,14 @@ When a recording ends, EchoLedger asks what to do with it.
 If you do nothing, the choice is made after 60 seconds. You can set it to **Keep** (the default) or **Discard**.
 A recording that is still undecided is listed under **Waiting for your decision**, also after a restart.
 
+Calls waiting for you show as one **Keep or discard?** card ("4 calls waiting · oldest Oct 30 · 2:18 total") in the
+Library, in **Calls & meetings** and in Activity, on the phone, on the computer and in the console. **Review** opens
+the list: each call has **Keep**, **Discard**, a name (the pencil), a client and a language, and **Keep all** /
+**Discard all** act on every call at once. On the phone a discard waits 5 seconds so you can **Undo**.
+
+**Undecided calls** (phone: **Settings → Calls & meetings → After a call**) are kept automatically after **24 hours**
+(the default), after **3 days**, or **never**, so a call you forgot is not lost.
+
 In **Settings → Recording**, **Ask before saving** can be **Always**, **Only automatic calls** or **Never**.
 The pill (the small bar at the top of the screen) and the notification on the phone have **Pause** and
 **Stop** buttons. Paused time is not recorded.
@@ -128,7 +148,27 @@ Dictation types what you say into any app. It is never saved as a recording.
 - Press **Ctrl+K** (**Cmd+K** on a Mac) in the console or the Windows app to jump to a page, a recording or a
   command.
 
-## 10. Export and share
+## 10. Import, rename, export and share
+
+### Import files
+
+Bring in recordings you already have: WhatsApp voice notes (.opus, .ogg), MP3, M4A, AAC, WAV, and the sound of MP4 or
+WebM videos.
+
+- **Phone:** **New → Voice notes & files → Import files**. Pick one file or many, choose a client and a language for
+  all of them if you like, then **Import all**. Sharing to EchoLedger from WhatsApp still works too.
+- Each file becomes its own recording, named after the file. A file that is already in your Library is skipped and
+  marked **Already in your Library**.
+- Imports show under **Uploading** at the top of the Library until the server has them. Hold one that has not started
+  to cancel it; tap a failed one to try again.
+
+### Rename
+
+Give any recording a clear name: select it in the Library and choose **⋮ → Rename**, or tap its title on the
+recording page. The new name shows on all your devices. A call waiting for Keep or Discard can be named on its card
+(the pencil).
+
+### Export and share
 
 **Export** saves a transcript as a file: Word, PDF (use **Print or save as PDF**), plain text, Markdown, SRT or
 VTT subtitles, or JSON. Urdu and Hindi text keep the right shape and direction.
@@ -171,6 +211,29 @@ EchoLedger can tell who a call was with. The recording is then called **Call wit
   the contact's language unless you chose a language for that recording.
 - When you move a recording with a caller name to a client, EchoLedger adds the caller to that client's contacts. The
   next call with them is filed under the client by itself.
+
+### Client workspaces: brief, call notes, memory and Ask
+
+Open a client (**Clients → the client**) to see four tabs: **Overview**, **Recordings**, **Files** and **Ask**.
+
+- **Call notes.** After every call, voice note or import filed under the client, EchoLedger writes short notes: what
+  was asked for, changes, new things that are not in the brief, decisions, what to confirm with the client, deadlines
+  and prices, and your own action items. Only sections with something in them are shown. Tap a line to hear that
+  moment. Lines marked **verify** were unclear in the recording: check them before you rely on them. Nothing is added
+  that was not said.
+- **Brief.** One page about the project: goal, scope, constraints, deadlines, budget, people and terms. It is made from
+  the client's files or, with none, from the calls so far. **Edit** it as you like; after an edit it is never rewritten
+  by itself (**Make again** rewrites it on purpose).
+- **Memory.** Decisions, open questions and changes from every call, dated, each with the call it came from. Hold a
+  line to pin or remove it, or **Add** your own.
+- **Files.** Add PDF, Word, text or Markdown files, or **Paste instructions**. They feed the brief and Ask, and stay
+  encrypted on your server.
+- **Ask.** Ask anything about the client ("When did we agree to launch?"). The answer is short and lists its sources:
+  a call and the moment, or a file and the page. Answers can be in English or Roman Urdu.
+- **Copy for AI** copies the brief, memory and latest call notes, ready to paste into your own ChatGPT or Claude
+  project.
+- **AI notes** can be switched off per client. The console shows what the AI costs each month; the budget is $5
+  unless you change it. Anthropic does not train its models on what EchoLedger sends.
 
 ## 12. Languages
 
