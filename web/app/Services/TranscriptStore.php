@@ -14,6 +14,7 @@ use App\Jobs\ScoreAccuracyJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\Transcript;
 use App\Models\TranscriptRevision;
+use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Usage\UsageLedger;
 use App\Services\Views\TranscriptViews;
 use App\Stt\Data\NormalizedTranscript;
@@ -86,6 +87,8 @@ final class TranscriptStore
         if (in_array($transcript->kind, [TranscriptKind::Final, TranscriptKind::Alternate], true)) {
             app(TranscriptViews::class)->autoMake($transcript);
         }
+        // A client's recording gets its call notes and memory lines (v1.4), on the queue.
+        app(ClientWorkspace::class)->afterTranscript($transcript);
 
         return $transcript->refresh();
     }

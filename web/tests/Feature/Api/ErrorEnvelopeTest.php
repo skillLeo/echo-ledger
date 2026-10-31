@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 use App\Enums\SessionStatus;
 use App\Models\CaptureSession;
+use App\Models\Client;
 use App\Models\Plan;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\ChunkedUploadService;
+use App\Services\CredentialVault;
 use App\Services\PairingService;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
@@ -120,6 +122,21 @@ function produceError(object $test, string $code): TestResponse
             return $test->deleteJson('/api/devices/'.ENVELOPE_MISSING_ID);
         case 'current_device':
             return $test->deleteJson('/api/devices/'.$test->device->id);
+        case 'ai_budget_reached':
+            app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+            app(SettingsRepository::class)->set('client_ai.monthly_usd', 0);
+
+            return $test->postJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/ask', ['question' => 'When?']);
+        case 'ai_unavailable':
+            return $test->postJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/ask', ['question' => 'When?']);
+        case 'notes_not_found':
+            return $test->getJson('/api/sessions/'.$test->makeReadySession($test->device, $test->bytes)->id.'/notes');
+        case 'no_client':
+            return $test->postJson('/api/sessions/'.$test->makeReadySession($test->device, $test->bytes)->id.'/notes');
+        case 'memory_not_found':
+            return $test->deleteJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/memory/'.ENVELOPE_MISSING_ID);
+        case 'file_not_found':
+            return $test->deleteJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/files/'.ENVELOPE_MISSING_ID);
         case 'duplicate_recording':
             $test->createSession($test->bytes)->assertCreated();
 
@@ -197,7 +214,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(33);
+        ->and(count(documentedErrorCodes()))->toBe(39);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

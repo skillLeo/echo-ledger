@@ -19,6 +19,8 @@ use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
+use App\Services\ClientAi\ClaudeClientAi;
+use App\Services\ClientAi\ClientAi;
 use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
@@ -45,6 +47,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(CredentialVault::class);
         // "Show as" views come from the Claude API; tests swap in a fake.
         $this->app->bind(TranscriptConverter::class, ClaudeTranscriptConverter::class);
+        // Client workspaces (v1.4) ask Claude through one interface; tests swap in a fake.
+        $this->app->bind(ClientAi::class, ClaudeClientAi::class);
         // Caches each member's role for one request (C9: no query per table row).
         $this->app->scoped(Workspaces::class);
         $this->app->scoped(SttManager::class);
@@ -93,6 +97,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('uploads', fn (Request $request) => Limit::perMinute(600)->by('upload:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('stt-token', fn (Request $request) => Limit::perMinute(30)->by('stt:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('search', fn (Request $request) => Limit::perMinute(60)->by('search:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Ask costs money on every question: at most 20 a minute for a device.
+        RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('share', fn (Request $request) => Limit::perMinute(120)->by('share:'.$request->ip()));
         RateLimiter::for('share-password', fn (Request $request) => Limit::perMinute(10)->by('share-pw:'.$request->ip().'|'.(string) $request->route('token')));
         RateLimiter::for('pairing', fn (Request $request) => Limit::perMinute(5)->by('pair:'.$request->ip()));

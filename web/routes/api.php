@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\BinController;
+use App\Http\Controllers\Api\ClientWorkspaceController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController;
@@ -61,6 +62,16 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->name('api.sessions.bulk');
             Route::post('clients', [OrganiseController::class, 'storeClient'])->name('api.clients.store');
             Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->name('api.clients.update');
+            // Client workspaces (v1.4): brief, memory, files, notes and Ask.
+            Route::put('clients/{id}/brief', [ClientWorkspaceController::class, 'updateBrief'])->name('api.clients.brief.update');
+            Route::post('clients/{id}/brief/refresh', [ClientWorkspaceController::class, 'refreshBrief'])->name('api.clients.brief.refresh');
+            Route::post('clients/{id}/memory', [ClientWorkspaceController::class, 'storeMemory'])->name('api.clients.memory.store');
+            Route::patch('clients/{id}/memory/{item}', [ClientWorkspaceController::class, 'updateMemory'])->name('api.clients.memory.update');
+            Route::delete('clients/{id}/memory/{item}', [ClientWorkspaceController::class, 'destroyMemory'])->name('api.clients.memory.destroy');
+            Route::post('clients/{id}/files', [ClientWorkspaceController::class, 'storeFile'])->name('api.clients.files.store');
+            Route::delete('clients/{id}/files/{file}', [ClientWorkspaceController::class, 'destroyFile'])->name('api.clients.files.destroy');
+            Route::post('clients/{id}/ask', [ClientWorkspaceController::class, 'ask'])->middleware('throttle:ask')->name('api.clients.ask');
+            Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->name('api.sessions.notes.make');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->name('api.sessions.restore');
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->name('api.bin.destroy');
@@ -95,6 +106,9 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('transcripts/{id}/views', [TranscriptViewsController::class, 'show'])->name('api.transcripts.views');
             Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->name('api.sessions.shares');
             Route::get('vocabulary', [VocabularyController::class, 'show'])->name('api.vocabulary');
+            Route::get('clients/{id}/workspace', [ClientWorkspaceController::class, 'show'])->name('api.clients.workspace');
+            Route::get('clients/{id}/bundle', [ClientWorkspaceController::class, 'bundle'])->name('api.clients.bundle');
+            Route::get('sessions/{id}/notes', [ClientWorkspaceController::class, 'notes'])->name('api.sessions.notes');
         });
     });
 

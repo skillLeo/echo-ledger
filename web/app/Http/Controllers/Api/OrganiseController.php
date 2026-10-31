@@ -138,6 +138,8 @@ final class OrganiseController extends Controller
             'retention_days' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:365'],
             // Since v1.1.2: the client's default language ("Use Urdu for Ali from now on").
             'language' => ['sometimes', 'nullable', 'string', 'max:16'],
+            // Since v1.4: call notes and memory after each call for this client.
+            'ai_notes' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -159,6 +161,9 @@ final class OrganiseController extends Controller
         }
         if (array_key_exists('pinned', $data)) {
             $values['pinned'] = (bool) $data['pinned'];
+        }
+        if (array_key_exists('ai_notes', $data)) {
+            $values['ai_notes'] = (bool) $data['ai_notes'];
         }
         if (array_key_exists('language', $data)) {
             $values['language'] = LanguageChoice::normalize($data['language']);

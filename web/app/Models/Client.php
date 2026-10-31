@@ -26,13 +26,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property string|null $notes
  * @property list<array<string, mixed>>|null $replacements text replacements applied to this client's final transcripts
  * @property array<string, string>|null $speaker_names speaker label → name, remembered for this client's recordings
+ * @property bool $ai_notes call notes and memory after each call (v1.4); off = no Claude request for this client
  */
 class Client extends Model
 {
     /** @use HasFactory<ClientFactory> */
     use BelongsToWorkspace, HasFactory, HasUlids;
 
-    protected $fillable = ['workspace_id', 'user_id', 'name', 'color', 'avatar', 'pinned', 'language', 'retention_days', 'notes', 'speaker_names', 'replacements'];
+    protected $fillable = ['workspace_id', 'user_id', 'name', 'color', 'avatar', 'pinned', 'language', 'retention_days', 'notes', 'speaker_names', 'replacements', 'ai_notes'];
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
@@ -67,6 +68,6 @@ class Client extends Model
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['speaker_names' => 'array', 'replacements' => 'array', 'pinned' => 'boolean', 'retention_days' => 'integer'];
+        return ['speaker_names' => 'array', 'replacements' => 'array', 'pinned' => 'boolean', 'retention_days' => 'integer', 'ai_notes' => 'boolean'];
     }
 }

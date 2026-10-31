@@ -51,7 +51,7 @@ class UsageLedgerEntry extends Model
 
     protected $fillable = [
         'workspace_id', 'user_id', 'device_id', 'capture_session_id', 'transcript_id', 'source', 'report_id', 'use_case', 'provider',
-        'model', 'duration_ms', 'channels', 'billed_ms', 'unit_price_usd', 'cost_usd', 'billable', 'occurred_at',
+        'model', 'duration_ms', 'channels', 'billed_ms', 'unit_price_usd', 'cost_usd', 'billable', 'occurred_at', 'client_id',
     ];
 
     /** @return BelongsTo<User, $this> */

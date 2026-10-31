@@ -51,12 +51,16 @@ Every addition below is marked **(since v1.1)**.
 | 403 | `storage_limit_reached` | Since B20: a new recording would pass the workspace plan's storage (message `Storage limit reached — raise it in Settings`) | Permanent for this upload: keep the recording on the device, show the message |
 | 403 | `device_limit_reached` | Since B20: pairing would pass the workspace plan's devices (message `Device limit reached — raise it in Settings`) | Show the message; do not retry |
 | 403 | `not_allowed` | Since B20: the role does not allow it — a member deleting, restoring or erasing someone else's recording, or a non-admin device changing the shared vocabulary | Permanent; show the message |
+| 403 | `ai_budget_reached` | Since v1.4: the workspace's monthly AI budget for client workspaces (`client_ai.monthly_usd`, default $5) is used up | Show the message; client notes and Ask wait until next month or a higher budget |
 | 404 | `not_found` | Unknown route | Permanent |
 | 404 | `session_not_found` | Session unknown, deleted, or (finish, stt/token) not created by this device | finish: create a new session with a new `client_ref`; delete: treat as done |
 | 404 | `recording_not_found` | Recording unknown or its session was deleted | Drop the upload slot |
 | 404 | `transcript_not_found` | Transcript unknown or its session was deleted | Refresh the library |
 | 404 | `client_not_found` | `client_id` unknown or in another workspace | Clear the selected client and retry once without it |
 | 404 | `device_not_found` | `DELETE devices/{id}`: the device is unknown or someone else's | Refresh the device list |
+| 404 | `notes_not_found` | Since v1.4: `GET sessions/{id}/notes` for a recording without notes | Offer to write them (`POST sessions/{id}/notes`) |
+| 404 | `memory_not_found` | Since v1.4: the memory line is unknown or belongs to another client | Refresh the workspace |
+| 404 | `file_not_found` | Since v1.4: the client file is unknown or already deleted | Refresh the workspace |
 | 405 | `method_not_allowed` | Wrong HTTP method | Permanent |
 | 409 | `upload_complete` | Chunk sent after the recording started assembling | Stop sending chunks; poll `GET /api/recordings/{id}` |
 | 409 | `session_not_recording` | `stt/token`: the session is not in status `recording`, or is 4 hours old or older | Captions are unavailable for this recording; keep recording |
@@ -67,6 +71,8 @@ Every addition below is marked **(since v1.1)**.
 | 409 | `duplicate_recording` | `POST /api/sessions` with `skip_duplicate`: the same file (by SHA-256) is already a live recording of this workspace; `session_id` names it (since v1.4) | Mark the import as skipped (already in the Library); do not retry |
 | 409 | `views_unavailable` | `transcripts/{id}/views`: the transcript is not finished, or no Anthropic key is set (since v1.2) | Add the key, or wait for the transcript |
 | 409 | `cannot_retranscribe` | `sessions/{id}/retranscribe`: the recording's audio is not on the server (not uploaded yet, or erased; since v1.2) | Retry once the upload has finished |
+| 409 | `ai_unavailable` | Since v1.4: client notes, brief or Ask without an Anthropic key in API Credentials | Show the message; retry after the key is added |
+| 409 | `no_client` | Since v1.4: `POST sessions/{id}/notes` for a recording not filed under a client | File it under a client first |
 | 410 | `restore_expired` | `sessions/{id}/restore` after the 48-hour undo bin ended | Permanent: the recording is gone |
 | 413 | `too_large` | Body or declared size above the limit | Permanent |
 | 422 | `validation_failed` | Field errors in `errors` | Permanent for that request |
@@ -746,6 +752,94 @@ end of the file is `416` with `Content-Range: bytes */<size>` **(since v1.1)**. 
 temporary file per request (never the whole recording in memory).
 
 ---
+
+## Client workspaces (since v1.4)
+
+Each client has a workspace: files and pasted instructions, a one-page **brief**, **call notes** after every kept
+recording filed under the client, a living **memory**, **Ask** and a **Copy for AI** bundle. Claude (the console's
+Anthropic key) writes the brief, notes and answers; nothing is trained on them (docs/research/anthropic-data-use.md).
+Every Claude request is logged per client (`usage_ledger.client_id`, use cases `client_notes`, `client_brief`,
+`client_file`, `client_ask`) and counts against the workspace's monthly AI budget (`client_ai.monthly_usd`, default
+$5): once it is used up, requests answer `403 ai_budget_reached` and automatic notes are `skipped` with that message.
+Without a key: `409 ai_unavailable`. Client payloads (`GET /api/clients`, `PATCH /api/clients/{id}`) carry
+`ai_notes` (boolean, default `true`); `PATCH` accepts it. With `ai_notes` off no automatic notes are written.
+
+**Call notes.** When a recording of a client with `ai_notes` on gets its final transcript, its notes are written on
+the queue (`status` `pending` → `ready` | `failed` | `skipped`). Only sections with content are listed, in this order
+and with these headings: `asked_for` (Asked for), `changes` (Changes; each item has `kind` add | remove | modify),
+`new_items` (New, not in the brief), `decisions` (Decisions), `to_confirm` (To confirm with the client), `numbers`
+(Deadlines, prices, numbers), `my_actions` (My action items). Every item: `text`, `verify` (true = check it; the
+transcript was unclear), `lines` (indexes into the transcript's segments) and `at_ms` (the moment of the first one).
+An item that points at no real line is dropped. Decisions, changes and points to confirm also become memory lines.
+
+### `GET /api/clients/{id}/workspace` — `library:read` (since v1.4)
+```json
+{"data": {
+  "client": {"id": "01JB…", "name": "Acme", "ai_notes": true},
+  "ai": {"configured": true, "spent_usd": 0.42, "budget_usd": 5, "client_spent_usd": 0.12},
+  "brief": {"sections": {"goal": "An online shop", "scope": ["Login"], "constraints": [], "deadlines": ["Nov 15"],
+            "budget": [], "people": ["Ali (owner)"], "glossary": []},
+            "edited": false, "status": "ready", "error": null, "generated_at": "…", "updated_at": "…"},
+  "memory": [{"id": "01JC…", "kind": "decision", "text": "Launch on November 15", "happened_on": "2026-10-30",
+              "pinned": false, "source": {"type": "call", "id": "01JB…", "at_ms": 125000}}],
+  "notes": [{"id": "01JD…", "session_id": "01JB…", "status": "ready", "error": null, "language": "en",
+             "sections": [{"key": "decisions", "heading": "Decisions",
+                           "items": [{"text": "Launch on November 15", "verify": false, "lines": [3], "at_ms": 125000}]}],
+             "created_at": "…", "session": {"id": "01JB…", "title": "Kick-off", "started_at": "…", "duration_ms": 1800000}}],
+  "files": [{"id": "01JE…", "name": "scope.pdf", "mime": "application/pdf", "size_bytes": 182340, "pages": 4,
+             "status": "ready", "error": null, "instructions": false, "created_at": "…"}]
+}}
+```
+`memory` lists pinned lines first, then the newest; `notes` the last 10; `files` newest first. `kind` is scope |
+decision | question | change; `source.type` is call (with `at_ms`) | file | user. `404 client_not_found`.
+
+### `PUT /api/clients/{id}/brief` — `sessions:write` (since v1.4)
+`{"sections": {"goal": "…", "scope": ["…"], …}}`: a person's edit (goal ≤ 300 characters, lists of at most 20 lines of
+300). The brief is then `edited` and never rewritten by itself. `200 {"data": <brief>}`.
+
+### `POST /api/clients/{id}/brief/refresh` — `sessions:write` (since v1.4)
+Writes the brief again from the client's files (or, with none, from its call notes), replacing an edited one, on the
+queue. `202 {"data": <brief with "status": "working">}`; `403 ai_budget_reached`, `409 ai_unavailable`.
+
+### `POST /api/clients/{id}/memory` — `sessions:write` (since v1.4)
+`{"kind": "decision", "text": "Use Stripe", "happened_on": "2026-10-31"}` (`happened_on` optional, default today).
+`201 {"data": <memory line>}` with `source.type` `user`.
+
+### `PATCH /api/clients/{id}/memory/{item}` — `sessions:write` (since v1.4)
+`{"text": "…", "pinned": true}` (each optional). Pinned lines stay when a call's notes are written again.
+`200 {"data": <memory line>}`; `404 memory_not_found`.
+
+### `DELETE /api/clients/{id}/memory/{item}` — `sessions:write` (since v1.4)
+`204`; `404 memory_not_found`.
+
+### `POST /api/clients/{id}/files` — `sessions:write` (since v1.4)
+Multipart `file` (PDF, Word .docx, text or Markdown, ≤ 20 MB; `422` otherwise), or JSON `{"text": "…", "name":
+"Rules"}` for pasted instructions (≤ 100 000 characters). Files are stored encrypted like recordings; their text is
+read on the queue (PDFs through Claude Haiku, page by page) and the brief is refreshed unless edited.
+`201 {"data": <file>}` with `status` `extracting` (a file) or `ready` (instructions).
+
+### `DELETE /api/clients/{id}/files/{file}` — `sessions:write` (since v1.4)
+Deletes the file and its encrypted original. `204`; `404 file_not_found`.
+
+### `POST /api/clients/{id}/ask` — `sessions:write`, throttled (20/min/device) (since v1.4)
+`{"question": "When do we launch?", "language": "en"}` (`language` en | roman_urdu, default en; question 3–500
+characters). The server picks the passages of the client's transcripts and files that match the question best (about
+12) and sends them with the brief and memory. `200 {"data": {"answer": "Launch is on November 15.", "citations":
+[{"type": "call", "session_id": "01JB…", "title": "Kick-off · Oct 30", "at_ms": 125000, "quote": "…"},
+{"type": "file", "file_id": "01JE…", "title": "scope.pdf", "page": 2, "quote": "…"}]}}`. `403 ai_budget_reached`,
+`409 ai_unavailable`, `502 provider_error`.
+
+### `GET /api/clients/{id}/bundle?notes=` — `library:read` (since v1.4)
+"Copy for AI": `200 {"data": {"text": "# Acme: project context\n\n## Brief\n…\n## Memory\n…\n## Recent call notes\n…"}}`
+with the last `notes` (0–20, default 5) call notes, ready to paste into a chat project.
+
+### `GET /api/sessions/{id}/notes` — `library:read` (since v1.4)
+`200 {"data": <notes, with "session">}`; `404 notes_not_found` when none were written; `404 session_not_found`.
+
+### `POST /api/sessions/{id}/notes` — `sessions:write` (since v1.4)
+`{"language": "roman_urdu"}` (optional, en | roman_urdu): writes the recording's notes again on the queue.
+`202 {"data": <notes with "status": "pending">}`; `409 no_client` when the recording is not filed under a client;
+`403 ai_budget_reached`, `409 ai_unavailable`.
 
 ## Security centre (since v1.1)
 

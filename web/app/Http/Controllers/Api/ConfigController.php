@@ -50,6 +50,8 @@ final class ConfigController extends Controller
             'retention_days' => $client->retention_days,
             // Since v1.1.2: the client's default language (null = the console default / automatic).
             'language' => LanguageChoice::normalize($client->language),
+            // Since v1.4: call notes and memory after each call for this client.
+            'ai_notes' => (bool) ($client->ai_notes ?? true),
             'keyterm_count' => (int) $client->getAttribute('keyterms_count'),
             'session_count' => (int) $client->getAttribute('capture_sessions_count'),
             'updated_at' => $client->updated_at?->toAtomString(),
