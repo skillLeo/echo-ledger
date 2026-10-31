@@ -7,6 +7,8 @@ namespace App\Stt;
 use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Models\Client;
+use App\Models\ClientBrief;
+use App\Models\ClientContact;
 use App\Services\SettingsRepository;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Drivers\AssemblyAiDriver;
@@ -52,7 +54,34 @@ final class SttManager
      */
     public function keytermsFor(?Client $client): array
     {
-        return KeytermPolicy::sanitize([...($client?->keytermList() ?? []), ...app(SettingsRepository::class)->globalKeyterms()]);
+        return KeytermPolicy::sanitize([
+            ...($client?->keytermList() ?? []),
+            ...($client !== null ? self::learnedTerms($client) : []),
+            ...app(SettingsRepository::class)->globalKeyterms(),
+        ]);
+    }
+
+    /**
+     * Words the client's workspace already knows (since v1.4): its contacts' names and the people and glossary terms
+     * of its brief ("Ali (owner)" gives "Ali"; "Laravel: the PHP framework" gives "Laravel").
+     *
+     * @return list<string>
+     */
+    public static function learnedTerms(Client $client): array
+    {
+        $terms = ClientContact::query()->where('client_id', $client->id)->pluck('name')->filter()->map(fn ($n): string => (string) $n)->all();
+        $brief = ClientBrief::query()->withoutGlobalScopes()->where('client_id', $client->id)->first();
+        if ($brief !== null) {
+            $sections = ClientBrief::clean($brief->sections);
+            foreach ([...$sections['people'], ...$sections['glossary']] as $line) {
+                $term = trim((string) preg_split('/[:(,–-]/u', $line)[0]);
+                if ($term !== '' && mb_strlen($term) <= 40) {
+                    $terms[] = $term;
+                }
+            }
+        }
+
+        return array_values(array_unique($terms));
     }
 
     /** @return list<string> roles devices should upload (docs/API.md GET /api/config) */

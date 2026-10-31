@@ -66,6 +66,7 @@ function abilityRoutes(): array
         'ask about a client' => ['POST', "/api/clients/{$id}/ask", 'sessions:write'],
         'call notes' => ['GET', "/api/sessions/{$id}/notes", 'library:read'],
         'make call notes' => ['POST', "/api/sessions/{$id}/notes", 'sessions:write'],
+        'decide suggested fix' => ['POST', "/api/transcripts/{$id}/suggestions/{$id}", 'sessions:write'],
         'security centre' => ['GET', '/api/security', 'config:read'],
         'revoke device' => ['DELETE', "/api/devices/{$id}", 'sessions:write'],
         'undo bin' => ['GET', '/api/bin', 'library:read'],

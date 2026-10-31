@@ -72,6 +72,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::delete('clients/{id}/files/{file}', [ClientWorkspaceController::class, 'destroyFile'])->name('api.clients.files.destroy');
             Route::post('clients/{id}/ask', [ClientWorkspaceController::class, 'ask'])->middleware('throttle:ask')->name('api.clients.ask');
             Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->name('api.sessions.notes.make');
+            Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->name('api.transcripts.suggestions');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->name('api.sessions.restore');
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->name('api.bin.destroy');

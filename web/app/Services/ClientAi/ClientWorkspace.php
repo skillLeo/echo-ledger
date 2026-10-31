@@ -21,6 +21,8 @@ use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
+use App\Services\TranscriptEditor;
+use App\Stt\SttManager;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -194,6 +196,7 @@ final class ClientWorkspace
         $this->bill($client, 'notes', $result, $session->id);
         $note->fill(['status' => 'ready', 'error' => null, 'model' => $result['model'], 'sections' => self::cleanNotes($result['sections'], $segments)])->save();
         $this->remember($note, $session);
+        $this->suggestFixes($transcript, $client);
         if ($brief?->edited !== true && ! ClientFile::query()->withoutGlobalScopes()->where('client_id', $client->id)->exists()) {
             RefreshClientBriefJob::dispatch($client->id);
         }
@@ -263,6 +266,69 @@ final class ClientWorkspace
                 ]);
             }
         }
+    }
+
+    // ---- Suggested fixes (P5) ---------------------------------------------------------------------------------------
+
+    /**
+     * Flags words the engine likely misheard, using the client's vocabulary and brief terms; stored on the transcript
+     * as suggestions (nothing changes until a person accepts one). Skipped without vocabulary or budget. Never throws.
+     */
+    public function suggestFixes(Transcript $transcript, Client $client): void
+    {
+        $terms = app(SttManager::class)->keytermsFor($client);
+        $segments = $transcript->segments ?? [];
+        if ($terms === [] || $segments === []) {
+            return;
+        }
+        try {
+            $this->assertCanSpend($client->workspace_id);
+            $lines = [];
+            foreach ($segments as $i => $segment) {
+                $lines[] = ['i' => $i, 'text' => (string) ($segment['text'] ?? '')];
+            }
+            $result = $this->ai->suggestFixes($client->name, array_slice($terms, 0, 200), $lines);
+        } catch (Throwable $e) {
+            Log::info('Suggested fixes skipped', ['transcript' => $transcript->id, 'error' => mb_substr($e->getMessage(), 0, 200)]);
+
+            return;
+        }
+        $this->bill($client, 'fixes', $result, $transcript->capture_session_id);
+        $fixes = [];
+        foreach ($result['fixes'] as $fix) {
+            $line = $fix['line'];
+            $from = trim($fix['from']);
+            $to = trim($fix['to']);
+            // Only a fix whose words really are in that line, and that changes something, is kept.
+            if (! isset($segments[$line]) || $from === '' || $to === '' || $from === $to || ! str_contains((string) ($segments[$line]['text'] ?? ''), $from)) {
+                continue;
+            }
+            $fixes[] = ['line' => $line, 'from' => mb_substr($from, 0, 100), 'to' => mb_substr($to, 0, 100), 'reason' => mb_substr(trim($fix['reason']), 0, 120), 'status' => 'open'];
+        }
+        $transcript->forceFill(['meta' => [...($transcript->meta ?? []), 'suggestions' => array_slice($fixes, 0, 10)]])->save();
+    }
+
+    /** Accepts (the words are changed in that line, as an edit) or dismisses one suggestion. */
+    public function decideFix(Transcript $transcript, int $id, bool $accept, ?string $author = null): Transcript
+    {
+        $suggestions = $transcript->meta['suggestions'] ?? [];
+        $fix = $suggestions[$id] ?? null;
+        if (! is_array($fix) || ($fix['status'] ?? 'open') !== 'open') {
+            throw new ApiError(404, 'suggestion_not_found', 'That suggestion is no longer open.');
+        }
+        $suggestions[$id]['status'] = $accept ? 'accepted' : 'dismissed';
+        $transcript->forceFill(['meta' => [...($transcript->meta ?? []), 'suggestions' => $suggestions]])->save();
+        if (! $accept) {
+            return $transcript;
+        }
+        $text = (string) (($transcript->segments ?? [])[(int) $fix['line']]['text'] ?? '');
+        $pos = mb_strpos($text, (string) $fix['from']);
+        if ($pos === false) {
+            return $transcript;
+        }
+        $fixed = mb_substr($text, 0, $pos).$fix['to'].mb_substr($text, $pos + mb_strlen((string) $fix['from']));
+
+        return app(TranscriptEditor::class)->edit($transcript, [(int) $fix['line'] => $fixed], $author);
     }
 
     // ---- Brief -----------------------------------------------------------------------------------------------------

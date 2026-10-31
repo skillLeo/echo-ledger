@@ -8,6 +8,7 @@ use App\Enums\RecordingRole;
 use App\Enums\SttProviderKey;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Models\CaptureSession;
 use App\Models\Recording;
 use App\Models\Transcript;
 use App\Services\Usage\BudgetGuard;
@@ -59,11 +60,22 @@ final class DoubleCheck
         return (bool) $this->settings->get('accuracy.double_check', false);
     }
 
+    /** Since v1.4: recordings filed under a client are double-checked even with the general switch off (on by default). */
+    public function enabledForClients(): bool
+    {
+        return (bool) $this->settings->get('accuracy.double_check_clients', true);
+    }
+
     /** Whether a finished transcript should be double-checked now. */
     public function wanted(Transcript $transcript): bool
     {
-        return $this->enabled() && $transcript->kind === TranscriptKind::Final && $transcript->status === TranscriptStatus::Completed
-            && self::linesToCheck($transcript->segments ?? []) !== [];
+        if ($transcript->kind !== TranscriptKind::Final || $transcript->status !== TranscriptStatus::Completed) {
+            return false;
+        }
+        $forClient = $this->enabledForClients()
+            && CaptureSession::query()->withoutGlobalScopes()->whereKey($transcript->capture_session_id)->whereNotNull('client_id')->exists();
+
+        return ($this->enabled() || $forClient) && self::linesToCheck($transcript->segments ?? []) !== [];
     }
 
     /** The engine that listens again: Whisper on Groq, or ElevenLabs Scribe when Whisper wrote the transcript; null without a key. */

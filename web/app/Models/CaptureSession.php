@@ -44,6 +44,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $ended_at
  * @property int|null $duration_ms
  * @property list<array{at_ms: int, paused_ms: int}>|null $pauses
+ * @property array<string, string>|null $speaker_names speaker label → name for this recording (the far side is named after the caller since v1.4)
  * @property list<array{at_ms: int, language: string|null}>|null $language_marks language chip changes during the recording (v1.2)
  * @property string|null $reference_text the owner's corrected transcript for the Accuracy Lab (v1.2)
  * @property Carbon|null $reference_set_at

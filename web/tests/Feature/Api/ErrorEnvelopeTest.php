@@ -137,6 +137,11 @@ function produceError(object $test, string $code): TestResponse
             return $test->deleteJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/memory/'.ENVELOPE_MISSING_ID);
         case 'file_not_found':
             return $test->deleteJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/files/'.ENVELOPE_MISSING_ID);
+        case 'suggestion_not_found':
+            $transcript = $test->makeReadySession($test->device, $test->bytes)->transcripts()->create(['kind' => 'final', 'provider' => 'groq', 'status' => 'completed',
+                'text' => 'x', 'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'x']]]);
+
+            return $test->postJson("/api/transcripts/{$transcript->id}/suggestions/0", ['accept' => true]);
         case 'duplicate_recording':
             $test->createSession($test->bytes)->assertCreated();
 
@@ -214,7 +219,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(39);
+        ->and(count(documentedErrorCodes()))->toBe(40);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

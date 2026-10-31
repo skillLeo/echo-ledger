@@ -11,6 +11,8 @@ use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Transcript;
 use App\Models\TranscriptRevision;
+use App\Services\ClientAi\ClientWorkspace;
+use App\Services\TextReplacements;
 use App\Services\TranscriptEditor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,8 +35,33 @@ final class TranscriptEditController extends Controller
         foreach ($data['edits'] as $edit) {
             $edits[(int) $edit['index']] = (string) $edit['text'];
         }
+        $transcript = $this->transcript($request, $id);
+        $before = [];
+        foreach (array_keys($edits) as $index) {
+            $before[$index] = (string) (($transcript->segments ?? [])[$index]['text'] ?? '');
+        }
+        $saved = $this->editor->edit($transcript, $edits, $this->author($request));
+        // Since v1.4: for a client's recording, the words changed are offered as rules for that client.
+        $client = $saved->captureSession->client;
+        $learn = $client === null ? [] : array_map(
+            fn (array $rule): array => $rule + ['client_id' => $client->id, 'client_name' => $client->name],
+            TranscriptEditor::learnable($before, $edits, TextReplacements::rules($client->replacements)),
+        );
 
-        return new TranscriptResource($this->editor->edit($this->transcript($request, $id), $edits, $this->author($request)));
+        return (new TranscriptResource($saved))->additional(['learn' => $learn]);
+    }
+
+    /** POST /api/transcripts/{id}/suggestions/{suggestion} — accept (the words change) or dismiss a suggested fix. */
+    public function suggestion(Request $request, string $id, string $suggestion): TranscriptResource
+    {
+        $data = $request->validate(['accept' => ['required', 'boolean']]);
+
+        return new TranscriptResource(app(ClientWorkspace::class)->decideFix(
+            $this->transcript($request, $id),
+            (int) $suggestion,
+            (bool) $data['accept'],
+            $this->author($request),
+        ));
     }
 
     /** POST /api/transcripts/{id}/replace */

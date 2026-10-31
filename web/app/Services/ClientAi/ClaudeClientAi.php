@@ -65,6 +65,15 @@ class ClaudeClientAi implements ClientAi
         do not guess. Dates, prices and names exactly as written.
         TXT;
 
+    private const FIXES = <<<'TXT'
+        You check a call transcript for words the speech engine most likely misheard. The input is JSON: the client's
+        name, the client's vocabulary (names, products, technical terms) and the transcript lines, each with an index
+        "i". Flag only clear cases where a word or a short phrase sounds like a vocabulary term or name and that term
+        fits what is being said ("La ravel" → "Laravel", "react native" → "React Native"). "from" is copied exactly
+        from the line; "to" is the fix; "reason" is a few words. Never rephrase, fix grammar, translate or touch words
+        that are fine. At most 10 fixes; none is a fine answer.
+        TXT;
+
     /** USD per million tokens [input, output]. */
     public const PRICES = [
         self::MODEL => [2.00, 10.00],
@@ -192,6 +201,24 @@ class ClaudeClientAi implements ClientAi
         }
 
         return ['answer' => trim($answer), 'citations' => $citations] + self::usage($message);
+    }
+
+    public function suggestFixes(string $clientName, array $terms, array $lines): array
+    {
+        $fix = [
+            'type' => 'object',
+            'properties' => ['line' => ['type' => 'integer'], 'from' => ['type' => 'string'], 'to' => ['type' => 'string'], 'reason' => ['type' => 'string']],
+            'required' => ['line', 'from', 'to', 'reason'],
+            'additionalProperties' => false,
+        ];
+        $schema = ['type' => 'object', 'properties' => ['fixes' => ['type' => 'array', 'items' => $fix]], 'required' => ['fixes'], 'additionalProperties' => false];
+        $input = ['client' => $clientName, 'vocabulary' => $terms, 'lines' => $lines];
+        $message = $this->send(self::MODEL, self::FIXES, [
+            ['role' => 'user', 'content' => json_encode($input, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)],
+        ], ['effort' => 'low', 'format' => ['type' => 'json_schema', 'schema' => $schema]]);
+        $data = json_decode(self::text($message), true);
+
+        return ['fixes' => is_array($data['fixes'] ?? null) ? $data['fixes'] : []] + self::usage($message);
     }
 
     private static function languageRule(string $language): string

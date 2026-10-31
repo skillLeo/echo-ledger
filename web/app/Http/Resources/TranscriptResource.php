@@ -47,6 +47,12 @@ final class TranscriptResource extends JsonResource
             // Since v1.2: the Show as views this transcript can have (roman, english) and whether they are made.
             'views' => ['available' => TranscriptViews::available($transcript), 'status' => app(TranscriptViews::class)->state($transcript)['status'],
                 'default' => TranscriptViews::defaultView(TranscriptViews::available($transcript), TranscriptViews::sourceLanguage($transcript))],
+            // Since v1.4: likely mishearings Claude flagged with the client's vocabulary; nothing changes until accepted.
+            'suggestions' => array_values(array_filter(
+                array_map(fn (array $s, int $n): array => ['id' => $n, 'index' => (int) $s['line'], 'from' => (string) $s['from'], 'to' => (string) $s['to'], 'reason' => (string) ($s['reason'] ?? '')] + ['status' => (string) ($s['status'] ?? 'open')],
+                    $transcript->meta['suggestions'] ?? [], array_keys($transcript->meta['suggestions'] ?? [])),
+                fn (array $s): bool => $s['status'] === 'open',
+            )),
         ];
     }
 

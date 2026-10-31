@@ -119,6 +119,12 @@ final class CallerMatcher
         if ($session->client_id === null && $match['client'] !== null) {
             $session->client_id = $match['client']->id;
         }
+        // Since v1.4 the far side of a call is the person, not "Client" (a meeting title names no one; a name the
+        // person already gave the speaker stays).
+        $person = $session->caller_name !== null && ! in_array($session->caller_source, ['window_title', 'calendar'], true);
+        if ($person && ! isset(($session->speaker_names ?? [])['Client'])) {
+            $session->speaker_names = [...($session->speaker_names ?? []), 'Client' => $session->caller_name];
+        }
         // The contact's own language (the client's language already applies when the transcript is made).
         if ($session->language === null && ($language = LanguageChoice::normalize($match['contact']?->language)) !== null) {
             $session->language = $language;

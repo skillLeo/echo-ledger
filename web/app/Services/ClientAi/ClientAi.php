@@ -48,4 +48,13 @@ interface ClientAi
      * @return array{answer: string, citations: list<array{passage: int, block: int, quote: string}>, input_tokens: int, output_tokens: int, model: string}
      */
     public function ask(string $clientName, array $brief, array $memory, array $passages, string $question, string $language): array;
+
+    /**
+     * Words the speech engine likely misheard, judged against the client's vocabulary ("La ravel" → "Laravel").
+     *
+     * @param  list<string>  $terms
+     * @param  list<array{i: int, text: string}>  $lines
+     * @return array{fixes: list<array{line: int, from: string, to: string, reason: string}>, input_tokens: int, output_tokens: int, model: string}
+     */
+    public function suggestFixes(string $clientName, array $terms, array $lines): array;
 }

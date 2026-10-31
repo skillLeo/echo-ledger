@@ -86,6 +86,51 @@ final class TranscriptEditor
         return [$this->edit($transcript, $edits, $author, TranscriptRevision::REPLACE), $count];
     }
 
+    /**
+     * "Always write X as Y for this client?" (since v1.4): the words a person changed in a line, when they look like a
+     * mishearing to remember (1–4 words replaced by 1–4 words, not just punctuation). At most 3, none already a rule.
+     *
+     * @param  array<int, string>  $before  index => the line before the edit
+     * @param  array<int, string>  $after  index => the line after it
+     * @param  list<array<string, mixed>>  $known  the rules the client already has
+     * @return list<array{from: string, to: string}>
+     */
+    public static function learnable(array $before, array $after, array $known = []): array
+    {
+        $words = static fn (string $text): array => preg_split('/\s+/u', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $letters = static fn (string $text): string => trim((string) preg_replace('/[^\p{L}\p{N}\s]/u', '', $text));
+        $taken = array_map(fn (array $rule): string => mb_strtolower((string) ($rule['from'] ?? '')), $known);
+        $out = [];
+        foreach ($after as $index => $text) {
+            $old = $words($before[$index] ?? '');
+            $new = $words($text);
+            // Drop the words both versions share at the start and the end; what is left is what changed.
+            while ($old !== [] && $new !== [] && $old[0] === $new[0]) {
+                array_shift($old);
+                array_shift($new);
+            }
+            while ($old !== [] && $new !== [] && end($old) === end($new)) {
+                array_pop($old);
+                array_pop($new);
+            }
+            if ($old === [] || $new === [] || count($old) > 4 || count($new) > 4) {
+                continue;
+            }
+            $from = trim(implode(' ', $old), " \t.,;:!?\"'");
+            $to = trim(implode(' ', $new), " \t.,;:!?\"'");
+            // A pure punctuation fix teaches nothing; a word already ruled is not asked again.
+            if ($from === '' || $to === '' || $letters($from) === $letters($to)) {
+                continue;
+            }
+            if (in_array(mb_strtolower($from), $taken, true) || isset($out[mb_strtolower($from)])) {
+                continue;
+            }
+            $out[mb_strtolower($from)] = ['from' => $from, 'to' => $to];
+        }
+
+        return array_slice(array_values($out), 0, 3);
+    }
+
     /** Puts the provider's original text back (a revision records it); a transcript never edited is unchanged. */
     public function restoreOriginal(Transcript $transcript, ?string $author = null): Transcript
     {

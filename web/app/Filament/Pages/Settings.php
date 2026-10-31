@@ -121,6 +121,8 @@ class Settings extends Page
             'languages_auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($all['languages.auto_more'] ?? []))),
             'languages_auto_fallback' => LanguageChoice::fallback(),
             'double_check' => (bool) ($all['accuracy.double_check'] ?? false),
+            'double_check_clients' => (bool) ($all['accuracy.double_check_clients'] ?? true),
+            'client_ai_monthly_usd' => (float) ($all['client_ai.monthly_usd'] ?? 5.0),
             'claude_model' => (string) ($all['claude.model'] ?? 'claude-sonnet-5-5'),
             'live_translate_game_target' => (string) ($all['live_translate.game_target'] ?? 'en'),
             'live_translate_game_spoken' => array_values(array_intersect(array_keys(self::LIVE_TRANSLATE_LANGUAGES), (array) ($all['live_translate.game_spoken'] ?? ['ar', 'en']))),
@@ -286,6 +288,10 @@ class Settings extends Page
                             ...self::routingFields(),
                             Toggle::make('double_check')->label('Double-check unsure lines with a second engine')->columnSpanFull()
                                 ->helperText('Whisper on Groq (or ElevenLabs Scribe when Whisper wrote the transcript) listens again to up to 12 lines the first engine was not sure of. When they disagree, both are shown; the transcript is never changed. Each line is billed (Groq: at least 10 seconds).'),
+                            Toggle::make('double_check_clients')->label('Always double-check recordings filed under a client')->columnSpan(2)
+                                ->helperText('On by default: client calls are the ones you rely on, so their unsure lines get a second listen even with the switch above off.'),
+                            TextInput::make('client_ai_monthly_usd')->label('AI budget for client workspaces (US$ a month)')->numeric()->minValue(0)->maxValue(1000)->step(0.5)->required()->columnSpan(2)
+                                ->helperText('Call notes, briefs, file reading and Ask stop for the month when this is used up. Default $5.'),
                             Select::make('claude_model')->label('Show as (Roman Urdu, اردو and English views)')->options(self::CLAUDE_MODELS)->required()->columnSpan(2)
                                 ->helperText('The Claude model that writes the views (key on API Credentials → Anthropic). An hour of Urdu call costs about US$0.50 with Sonnet, about US$1 with Opus.'),
                             Select::make('views_default_ur')->label('Open Urdu calls as')->required()
@@ -601,6 +607,8 @@ class Settings extends Page
             'languages.auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($state['languages_auto_more'] ?? []))),
             'languages.auto_fallback' => LanguageChoice::normalize($state['languages_auto_fallback'] ?? null) ?? 'ur',
             'accuracy.double_check' => (bool) ($state['double_check'] ?? false),
+            'accuracy.double_check_clients' => (bool) ($state['double_check_clients'] ?? true),
+            'client_ai.monthly_usd' => max(0.0, min(1000.0, (float) ($state['client_ai_monthly_usd'] ?? 5.0))),
             'claude.model' => in_array($state['claude_model'] ?? null, array_keys(self::CLAUDE_MODELS), true) ? $state['claude_model'] : 'claude-sonnet-5-5',
             'views.default_ur' => in_array($state['views_default_ur'] ?? null, ['original', 'roman', 'urdu', 'english'], true) ? $state['views_default_ur'] : 'roman',
             'views.default_en' => in_array($state['views_default_en'] ?? null, ['original', 'urdu'], true) ? $state['views_default_en'] : 'original',

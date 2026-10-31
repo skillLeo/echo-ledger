@@ -61,6 +61,7 @@ Every addition below is marked **(since v1.1)**.
 | 404 | `notes_not_found` | Since v1.4: `GET sessions/{id}/notes` for a recording without notes | Offer to write them (`POST sessions/{id}/notes`) |
 | 404 | `memory_not_found` | Since v1.4: the memory line is unknown or belongs to another client | Refresh the workspace |
 | 404 | `file_not_found` | Since v1.4: the client file is unknown or already deleted | Refresh the workspace |
+| 404 | `suggestion_not_found` | Since v1.4: the suggested fix is unknown or was already accepted or dismissed | Refresh the transcript |
 | 405 | `method_not_allowed` | Wrong HTTP method | Permanent |
 | 409 | `upload_complete` | Chunk sent after the recording started assembling | Stop sending chunks; poll `GET /api/recordings/{id}` |
 | 409 | `session_not_recording` | `stt/token`: the session is not in status `recording`, or is 4 hours old or older | Captions are unavailable for this recording; keep recording |
@@ -570,6 +571,20 @@ the names remembered for that client; the session's own names win.
 whitespace runs collapse) → `200` transcript. `422 segment_not_found` for an index that does not exist,
 `422 segment_empty` for an empty text. Unchanged text saves nothing.
 
+- **Since v1.4:** for a recording filed under a client the answer also carries top-level `"learn": [{"from": "la
+  ravel", "to": "Laravel", "client_id": "01JB…", "client_name": "Acme"}]`: the words the edit changed (1–4 words, not
+  just punctuation, at most 3, none the client already has a rule for). Apps ask "Always write *la ravel* as
+  *Laravel* for Acme?" and, on yes, send `POST /api/vocabulary/replacements` with that `client_id`. Empty for other
+  recordings.
+
+### `POST /api/transcripts/{id}/suggestions/{suggestion}` — `sessions:write` (since v1.4)
+**Suggested fixes.** After a client's call notes are written, Claude compares the transcript with the client's
+vocabulary (keyterms, contacts, the people and terms of its brief) and flags likely mishearings. A transcript lists
+the open ones as `"suggestions": [{"id": 0, "index": 1, "from": "la ravel", "to": "Laravel", "reason": "framework",
+"status": "open"}]` (`index` = the segment). Nothing changes until a person decides: `{"accept": true}` replaces the
+words in that segment (an edit, with a revision); `{"accept": false}` dismisses it. `200` transcript;
+`404 suggestion_not_found` when it is unknown or already decided.
+
 ### `POST /api/transcripts/{id}/replace` — `sessions:write` (since v1.1)
 `{"find": "acme", "replace": "Acme Ltd", "match_case": false, "whole_word": false}` → `200 {"replaced": 3,
 "transcript": {…}}`. The search is literal (no patterns) and Unicode-aware; `replaced: 0` saves nothing.
@@ -705,6 +720,11 @@ words until then.
 Keyterms (names and jargon) of the session's client come first, then the global ones; each engine receives as many
 as it accepts. Text replacements ("always write X as Y") run on every new final transcript, the client's rules
 first; the provider's text stays restorable (`POST /api/transcripts/{id}/restore`).
+**Since v1.4** the client's contacts' names and the people and glossary terms of its brief ("Ali (owner)" → `Ali`,
+"Laravel: the PHP framework" → `Laravel`) follow its keyterms. A call whose caller is a person (not a window title or
+calendar entry) names the far side after them: the session starts with `speaker_names.Client` = the caller's name,
+unless a name was already given. Double-check (`accuracy.double_check_clients`, on by default) also runs for every
+recording filed under a client when the general switch is off.
 
 ### `GET /api/vocabulary?client_id=` — `library:read` (since v1.1)
 `200 {"keyterms": [...], "replacements": [{"from","to","match_case","whole_word"}], "client": {"id","keyterms","replacements"} | null}`.

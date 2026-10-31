@@ -123,6 +123,7 @@ function isoApiCases(array $b): array
         'api.clients.ask' => ['POST', "/api/clients/{$b['client']->id}/ask", ['question' => 'What was agreed?'], 404],
         'api.sessions.notes' => ['GET', "/api/sessions/{$s}/notes", [], 404],
         'api.sessions.notes.make' => ['POST', "/api/sessions/{$s}/notes", [], 404],
+        'api.transcripts.suggestions' => ['POST', "/api/transcripts/{$t}/suggestions/0", ['accept' => true], 404],
         'api.devices.revoke' => ['DELETE', "/api/devices/{$b['device']->id}", [], 404],
         'api.sessions.restore' => ['POST', "/api/sessions/{$b['binned']->id}/restore", [], 404],
         'api.bin.destroy' => ['DELETE', "/api/bin/{$b['binned']->id}", [], 404],
