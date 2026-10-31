@@ -242,10 +242,10 @@ describe("colour contrast meets WCAG AA in both themes (A6.DU7)", () => {
 describe("motion (C5)", () => {
   const controls = readFileSync(join(here, "views/controls.css"), "utf8");
 
-  it("defines the motion tokens: 150, 180 and 220 ms, ease-out", () => {
+  it("defines the motion tokens: 150, 200 and 300 ms, ease-out", () => {
     expect(tokens("dark")["--motion-fast"]).toBe("150ms");
-    expect(tokens("dark")["--motion-base"]).toBe("180ms");
-    expect(tokens("dark")["--motion-slow"]).toBe("220ms");
+    expect(tokens("dark")["--motion-base"]).toBe("200ms");
+    expect(tokens("dark")["--motion-slow"]).toBe("300ms");
     expect(tokens("dark")["--ease-out"].replace(/\s/g, "")).toBe("cubic-bezier(0,0,0,1)");
   });
 

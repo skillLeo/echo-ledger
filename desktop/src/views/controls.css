@@ -309,7 +309,7 @@
   padding: var(--space-1);
   display: grid;
   gap: 1px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-field);
   background: var(--glass-solid);
   border: 1px solid var(--ctl-hairline);
   box-shadow: var(--shadow-2);

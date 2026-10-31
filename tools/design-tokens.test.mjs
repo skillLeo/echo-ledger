@@ -70,17 +70,17 @@ for (const [theme, apps] of Object.entries(themes)) {
   test(`${theme} colours: desktop and phone match`, () => assertSame(theme, apps.desktop, apps.phone, ["desktop", "phone"]));
 }
 
-test("spacing (8-pt), radius (8 / 12 / 16) and motion (150-220 ms) match in all three apps", () => {
+test("spacing (8-pt), radius (10 / 12 / 14 / 20) and motion (150-300 ms) match in all three apps", () => {
   const desktop = cssBlock(desktopCss, ":root");
   const web = cssBlock(webCss, ":root");
-  const expected = { "space-1": 4, "space-2": 8, "space-3": 12, "space-4": 16, "space-5": 24, "space-6": 32, "space-7": 48, "radius-sm": 8, "radius-md": 12, "radius-lg": 16 };
+  const expected = { "space-1": 4, "space-2": 8, "space-3": 12, "space-4": 16, "space-5": 24, "space-6": 32, "space-7": 48, "radius-sm": 10, "radius-field": 12, "radius-md": 14, "radius-lg": 20 };
   for (const [name, px] of Object.entries(expected)) {
     assert.equal(desktop[name], `${px}px`, `desktop --${name}`);
     assert.equal(web[name], `${px}px`, `web --${name}`);
   }
   for (const n of [1, 2, 3, 4, 5, 6, 7]) assert.match(kotlin, new RegExp(`val s${n} = ${expected[`space-${n}`]}\\.dp`), `phone Space.s${n}`);
-  for (const [k, px] of [["sm", 8], ["md", 12], ["lg", 16]]) assert.match(kotlin, new RegExp(`val ${k} = ${px}\\.dp`), `phone Radius.${k}`);
-  for (const [k, ms] of [["fast", 150], ["base", 180], ["slow", 220]]) {
+  for (const [k, px] of [["sm", 10], ["field", 12], ["md", 14], ["lg", 20]]) assert.match(kotlin, new RegExp(`val ${k} = ${px}\\.dp`), `phone Radius.${k}`);
+  for (const [k, ms] of [["fast", 150], ["base", 200], ["slow", 300]]) {
     assert.equal(desktop[`motion-${k}`], `${ms}ms`);
     assert.equal(web[`motion-${k}`], `${ms}ms`);
     assert.match(kotlin, new RegExp(`const val ${k.toUpperCase()} = ${ms}\\b`));
