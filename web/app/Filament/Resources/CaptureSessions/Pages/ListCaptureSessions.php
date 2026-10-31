@@ -6,6 +6,7 @@ namespace App\Filament\Resources\CaptureSessions\Pages;
 
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
+use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\ConsoleUploads;
 use App\Services\LibraryOrganiser;
@@ -14,17 +15,29 @@ use App\Stt\LanguageChoice;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\EmbeddedTable;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\RenderHook;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Filament\Support\Facades\FilamentView;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\View\TablesRenderHook;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
+use Livewire\Attributes\Url;
 
 class ListCaptureSessions extends ListRecords
 {
     protected static string $resource = CaptureSessionResource::class;
+
+    protected static ?string $title = 'Library';
+
+    /** The recording shown beside the list on wide screens; kept in the address so a reload keeps it. */
+    #[Url(as: 'selected')]
+    public ?string $selected = null;
 
     /** Smart views (B15), in the order the tabs show. */
     public const VIEW_LABELS = [
@@ -60,16 +73,56 @@ class ListCaptureSessions extends ListRecords
         return [WaitingDecisionsWidget::class];
     }
 
-    /** The upload drop zone sits above the smart views and the list. */
+    /**
+     * The uploader (its drop zone shows while files are dragged over the page), then the list with its search pill
+     * and smart-view chips, and on wide screens the chosen recording beside it.
+     */
     public function content(Schema $schema): Schema
     {
         return $schema->components([
-            View::make('filament.library.uploader')->viewData(fn (): array => ['config' => $this->uploaderConfig()]),
-            $this->getTabsContentComponent(),
-            RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
-            EmbeddedTable::make(),
-            RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
+            View::make('filament.library.uploader')->viewData(fn (): array => ['config' => self::uploaderConfig(), 'compact' => true]),
+            Grid::make(['default' => 1, 'xl' => 2])->extraAttributes(['class' => 'el-library'])->schema([
+                // The smart views are drawn as chips under the search pill (filament.library.view-chips).
+                Group::make([
+                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
+                    EmbeddedTable::make(),
+                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
+                ])->extraAttributes(['class' => 'el-list el-library-list']),
+                View::make('filament.library.detail')->viewData(fn (): array => ['detail' => $this->selectedRecording()]),
+            ]),
         ]);
+    }
+
+    /**
+     * The smart views as the phone's filter chips, drawn between the search pill and the rows. Registered when the
+     * page boots, so the chips are there however the page is rendered.
+     */
+    public function boot(): void
+    {
+        if (! FilamentView::hasRenderHook(TablesRenderHook::CONTENT_BEFORE, self::class)) {
+            FilamentView::registerRenderHook(TablesRenderHook::CONTENT_BEFORE, fn (): ViewContract => view('filament.library.view-chips'), scopes: self::class);
+        }
+    }
+
+    /** The recording shown beside the list on wide screens (a plain click on a row picks it). */
+    public function selectRecording(string $id): void
+    {
+        $this->selected = $id;
+    }
+
+    public function closeRecording(): void
+    {
+        $this->selected = null;
+    }
+
+    private function selectedRecording(): ?CaptureSession
+    {
+        if ($this->selected === null || $this->selected === '') {
+            return null;
+        }
+        $session = CaptureSessionResource::getEloquentQuery()->with(['labels', 'markers'])->find($this->selected);
+
+        return $session instanceof CaptureSession ? $session : null;
     }
 
     protected function getHeaderActions(): array
@@ -85,11 +138,11 @@ class ListCaptureSessions extends ListRecords
 
     /**
      * What the uploader needs: its routes, the batch choices (client, language) and the limits it checks before
-     * sending anything.
+     * sending anything. The Upload page uses the same.
      *
      * @return array<string, mixed>
      */
-    protected function uploaderConfig(): array
+    public static function uploaderConfig(): array
     {
         return [
             'store' => route('admin.uploads.store'),

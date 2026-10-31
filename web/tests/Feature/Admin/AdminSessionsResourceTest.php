@@ -47,14 +47,14 @@ function adminTinyWav(int $samples = 800): string
 it('renders the sessions list page', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin/sessions')->assertOk()->assertSee('Sessions')->assertSee('Upload')->assertSee('Drop sound or video files here');
+    $this->get('/admin/sessions')->assertOk()->assertSee('Library')->assertSee('Upload')->assertSee('Drop sound or video files here');
 });
 
 it('shows a helpful empty state when there are no sessions', function () {
     $this->signInAsAdmin();
 
     $this->panelComponent(ListCaptureSessions::class)
-        ->assertSee('No sessions yet')
+        ->assertSee('No recordings yet')
         ->assertSee('Pair a phone or desktop under Devices, or upload a voice note.');
 });
 
@@ -284,14 +284,21 @@ it('shows the transcript status of each session, or a dash when none exists', fu
         ->assertTableColumnExists('source_app');
 });
 
-it('lets the Device and Transcript columns be hidden', function () {
-    $this->signInAsAdmin();
+it('folds the device and the transcript state into the row instead of extra columns', function () {
+    $admin = $this->signInAsAdmin();
+    $device = Device::factory()->create(['user_id' => $admin->id, 'name' => 'Work laptop']);
+    $session = CaptureSession::factory()->create(['user_id' => $admin->id, 'device_id' => $device->id, 'status' => SessionStatus::Failed]);
 
-    $columns = collect($this->panelComponent(ListCaptureSessions::class)->instance()->getTable()->getColumns());
+    $list = $this->panelComponent(ListCaptureSessions::class);
+    $columns = collect($list->instance()->getTable()->getColumns());
 
-    expect($columns->get('device.name')->isToggleable())->toBeTrue()
-        ->and($columns->get('finalTranscript.status')->isToggleable())->toBeTrue()
-        ->and($columns->get('started_at')->isToggleable())->toBeFalse();
+    expect($columns->get('device.name')->isHidden())->toBeTrue()
+        ->and($columns->get('finalTranscript.status')->isHidden())->toBeTrue()
+        ->and($columns->get('started_at')->isSortable())->toBeTrue();
+    // The row names the device (for screen readers, beside the tile) and shows a status only when it needs the person.
+    expect($list->html())->toContain('Work laptop')->toContain('el-status-danger');
+    $session->update(['status' => SessionStatus::Completed]);
+    expect($this->panelComponent(ListCaptureSessions::class)->html())->not->toContain('el-status');
 });
 
 it('offers only the admin\'s own clients in the client filter', function () {
@@ -617,11 +624,11 @@ it('says the search found nothing instead of claiming the library is empty', fun
 
     $this->panelComponent(ListCaptureSessions::class)
         ->searchTable('zzz-nothing-like-this')
-        ->assertSee('No sessions match your search')
-        ->assertDontSee('No sessions yet');
+        ->assertSee('No recordings match your search')
+        ->assertDontSee('No recordings yet');
     $this->panelComponent(ListCaptureSessions::class)
         ->filterTable('status', 'failed')
-        ->assertSee('No sessions match these filters');
+        ->assertSee('No recordings match these filters');
 });
 
 it('matches percent signs and underscores in a search literally', function () {

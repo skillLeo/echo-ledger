@@ -16,7 +16,7 @@ it('offers to pair a device when there are no sessions yet', function () {
     $this->signInAsAdmin();
 
     $this->panelComponent(ListCaptureSessions::class)
-        ->assertSee('No sessions yet')
+        ->assertSee('No recordings yet')
         ->assertActionVisible(TestAction::make('pairDevice')->table())
         ->assertActionHidden(TestAction::make('clearSearchAndFilters')->table())
         ->assertSee('/admin/devices', false);
@@ -28,7 +28,7 @@ it('offers to clear the search when nothing matches it', function () {
 
     $this->panelComponent(ListCaptureSessions::class)
         ->searchTable('nothing like this')
-        ->assertSee('No sessions match your search')
+        ->assertSee('No recordings match your search')
         ->assertActionVisible(TestAction::make('clearSearchAndFilters')->table())
         ->assertActionHidden(TestAction::make('pairDevice')->table())
         ->callAction(TestAction::make('clearSearchAndFilters')->table())
