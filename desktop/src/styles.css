@@ -812,6 +812,9 @@ audio.player { display: none; }
 .item-wrap { position: relative; min-width: 0; display: grid; }
 /* Room on the right for the ⋯ button (shown on hover), so it never covers the time. */
 .item-wrap.with-menu > .item { padding-right: 44px; }
+/* The open menu's z-index only counts inside its row (.row-menu's transform makes a stacking context), so the row
+   itself rises above the rows below; otherwise their times paint over the menu. */
+.item-wrap:has(.row-menu-btn[aria-expanded="true"]) { z-index: 7; }
 .row-menu { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); opacity: 0; transition: opacity var(--motion-fast) var(--ease-out); }
 .item-wrap:hover .row-menu, .row-menu:focus-within, .row-menu:has([aria-expanded="true"]) { opacity: 1; }
 .row-menu-btn { width: 32px; height: 32px; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); display: grid; place-items: center; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
