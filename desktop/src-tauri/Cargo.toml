@@ -44,6 +44,11 @@ flacenc = "0.5.1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+# The native open and save dialogs, used from the core only (the webview never picks a path). Not through
+# tauri-plugin-dialog: its page script swaps window.confirm for an asynchronous one, which every "Delete?" relies on.
+rfd = { version = "0.17.2", default-features = false }
+
 [target.'cfg(windows)'.dependencies]
 wasapi = "0.26.0"
 windows = { version = "0.62.2", features = [

@@ -55,3 +55,13 @@ export const failedUploads = (items: readonly UploadItem[]): UploadItem[] => ite
 
 /** Uploads whose chunks are all sent and that wait for the server to verify the file. */
 export const verifyingUploads = (items: readonly UploadItem[]): UploadItem[] => items.filter((i) => i.state === "verifying");
+
+/** Imported files on their way up (recordings made here upload quietly; the sidebar says "Uploading…"). */
+export const importingUploads = (items: readonly UploadItem[]): UploadItem[] =>
+  items.filter((i) => i.imported && (i.state === "queued" || i.state === "uploading"));
+
+/** Where one import is: waiting its turn, or how much of it the server has. */
+export function importProgressText(item: UploadItem): string {
+  if (item.state === "queued") return "Waiting to upload";
+  return item.progress != null ? `Uploading ${item.progress}%` : "Uploading…";
+}

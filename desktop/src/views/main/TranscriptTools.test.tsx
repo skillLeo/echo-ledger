@@ -111,9 +111,16 @@ describe("export and share (B10)", () => {
   it("exports in the chosen format", () => {
     const onExport = vi.fn();
     render(<ExportMenu onExport={onExport} />);
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toContain("Print or save as PDF");
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(
+      ["Export…", "Text (.txt)", "Word (.docx)", "PDF (print)", "Subtitles (.srt)", "JSON (.json)", "Markdown (.md)", "Web subtitles (.vtt)"]);
+    expect(screen.getByLabelText("Export")).toHaveAttribute("title", "PDF (print) opens a print page in your browser: choose Save as PDF there.");
     fireEvent.change(screen.getByLabelText("Export"), { target: { value: "docx" } });
     expect(onExport).toHaveBeenCalledWith("docx");
+  });
+
+  it("names the view it exports in", () => {
+    render(<ExportMenu onExport={vi.fn()} viewLabel="Roman Urdu" />);
+    expect(screen.getAllByRole("option")[0]).toHaveTextContent("Export as Roman Urdu…");
   });
 
   it("makes a link, shows it once with Copy, lists the links and revokes one", async () => {

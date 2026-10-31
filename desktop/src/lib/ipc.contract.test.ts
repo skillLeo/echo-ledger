@@ -220,6 +220,11 @@ describe("wire types", () => {
     for (const [kind, fields] of tsVariants) expect(sorted(fields), `CaptionEvent "${kind}"`).toEqual(sorted(rustVariants.get(kind)!));
   });
 
+  it("every Show as view the transcript offers can be exported in that view", () => {
+    const rust = /EXPORT_VIEWS: \[&str; \d+\] = \[([^\]]+)\]/.exec(commandsRs)?.[1] ?? "";
+    expect(sorted([...rust.matchAll(/"(\w+)"/g)].map((m) => m[1]))).toEqual(sorted(tsUnionValues("TranscriptView")));
+  });
+
   it("the TypeScript SettingsPatch declares exactly the fields the Rust SettingsPatch accepts", () => {
     expect(sorted(tsInterfaceKeys("SettingsPatch"))).toEqual(sorted(settingsPatchKeys));
   });

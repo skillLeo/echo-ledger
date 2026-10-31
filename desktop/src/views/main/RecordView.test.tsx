@@ -159,7 +159,7 @@ describe("RecordView voice notes", () => {
   it("explains that voice notes are never recorded automatically and can be dropped in", async () => {
     await setup();
     expect(screen.getByText(/never recorded automatically/)).toBeInTheDocument();
-    expect(screen.getByText(/Drop voice notes here to transcribe them \(OPUS, OGG, M4A, MP3 or WAV\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Drop voice notes, audio or video files anywhere in this window to transcribe them \(OPUS, OGG, MP3, M4A, AAC, WAV, MP4 or WEBM\)/)).toBeInTheDocument();
   });
 });
 

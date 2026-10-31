@@ -7,6 +7,7 @@ mod commands;
 pub mod detect;
 pub mod dictation;
 pub mod error;
+pub mod files;
 pub mod lifecycle;
 pub mod lock;
 pub mod material;
@@ -25,7 +26,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Instant;
 
-use tauri::{DragDropEvent, Manager, RunEvent, WindowEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
 use error::{AppError, AppResult};
@@ -259,11 +260,8 @@ pub fn run() {
             // next open builds a new one on the same page (main_view_get).
             WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
             WindowEvent::Destroyed => lifecycle::on_destroyed(window.app_handle(), window.label()),
-            WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) if window.label() == "main" => {
-                let app = window.app_handle().clone();
-                let files: Vec<String> = paths.iter().map(|p| p.to_string_lossy().to_string()).collect();
-                let _ = commands::import_voice_notes(app, files);
-            }
+            // Files dropped on the main window are heard by its page, which opens the import sheet (one client and
+            // language for the batch), so nothing is imported here.
             _ => {}
         })
         .invoke_handler(tauri::generate_handler![
@@ -294,6 +292,8 @@ pub fn run() {
             commands::mic_users,
             commands::ask_answer,
             commands::import_voice_notes,
+            commands::import_pick,
+            commands::save_audio,
             commands::copy_last_minutes,
             commands::library_list,
             commands::library_refresh,

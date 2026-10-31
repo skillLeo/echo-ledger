@@ -720,19 +720,23 @@ fn start_ticker(app: &AppHandle) {
     });
 }
 
-/// Appends an item to `uploads.json` and wakes the upload worker.
-pub fn queue_upload(app: &AppHandle, item: PendingUpload) -> AppResult<()> {
+/// Appends an item to `uploads.json` and wakes the upload worker. An import of a file that is already queued (same
+/// SHA-256, checked with the lock held) is not added: false.
+pub fn queue_upload(app: &AppHandle, item: PendingUpload) -> AppResult<bool> {
     let state = app.state::<crate::AppState>();
     let path = paths::uploads(&state.data_dir);
     {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
         let mut queue = UploadQueue::load(&path);
+        if item.sha256.as_deref().is_some_and(|sha| queue.holds_file(sha)) {
+            return Ok(false);
+        }
         queue.items.push(item);
         queue.save(&path)?;
     }
     state.upload_notify.notify_one();
     emit_uploads(app);
-    Ok(())
+    Ok(true)
 }
 
 /// Appends a streaming usage report to `usage.json` (sent by the worker once the server speaks v1.1). Called when
@@ -887,30 +891,74 @@ pub(crate) fn forget_client(app: &AppHandle, client_id: &str) {
     let _ = app.emit("app:toast", "The selected client was removed on the server, so no client is set now.");
 }
 
-/// Imports an audio file (drag-drop) as a voice note and queues it.
-pub fn import_voice_note(app: &AppHandle, source: &std::path::Path) -> AppResult<()> {
+/// Imports files (the Import button or a drop on the main window), one recording each, with one client and language
+/// for all of them. A file whose SHA-256 is already in the upload queue is skipped; the server skips files it holds.
+pub fn import_files(app: &AppHandle, sources: &[std::path::PathBuf], client_id: Option<String>, language: Option<String>) -> crate::files::ImportSummary {
+    let mut summary = crate::files::ImportSummary::default();
+    for source in sources {
+        if !crate::files::is_importable(source) || !source.is_file() {
+            summary.unsupported += 1;
+            continue;
+        }
+        match import_voice_note(app, source, client_id.clone(), language.clone()) {
+            Ok(true) => summary.queued += 1,
+            Ok(false) => summary.duplicates += 1,
+            Err(e) => {
+                eprintln!("[echoledger] import of {} failed: {e}", source.display());
+                summary.failed += 1;
+            }
+        }
+    }
+    summary
+}
+
+/// Copies one file into the queue as a voice note titled after its file name. False when the same file is already
+/// queued (nothing is copied then).
+pub fn import_voice_note(app: &AppHandle, source: &std::path::Path, client_id: Option<String>, language: Option<String>) -> AppResult<bool> {
     let state = app.state::<crate::AppState>();
+    let queue_path = paths::uploads(&state.data_dir);
+    let (sha256, _) = crate::net::uploader::file_sha256(source)?;
+    let queued = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        UploadQueue::load(&queue_path).holds_file(&sha256)
+    };
+    if queued {
+        return Ok(false);
+    }
     let client_ref = uuid::Uuid::new_v4().to_string();
     let dir = paths::recordings(&state.data_dir).join(&client_ref);
     std::fs::create_dir_all(&dir)?;
     let name = source.file_name().ok_or_else(|| AppError::msg("not a file"))?;
     let primary = dir.join(name);
-    std::fs::copy(source, &primary)?;
+    // The copy runs outside the queue lock (a long video must not hold up the uploads).
+    if let Err(e) = std::fs::copy(source, &primary) {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(e.into());
+    }
     let now = chrono::Utc::now().to_rfc3339();
     // Duration 0 marks an import: the uploader declares only what the file's header says (A6.DR5).
     let item = PendingUpload {
         client_ref,
         source_app: "voice_note".into(),
-        client_id: state.settings().client_id.clone(),
+        client_id,
         started_at: now.clone(),
         ended_at: now,
         duration_ms: 0,
-        dir,
+        dir: dir.clone(),
         primary,
         primary_channels: 1,
+        title: crate::files::title_from_file_name(source),
+        language,
+        imported: true,
+        sha256: Some(sha256),
         ..PendingUpload::default()
     };
-    queue_upload(app, item)
+    // Checked again on the way in: the same file may have been queued while this copy ran.
+    let stored = queue_upload(app, item);
+    if !matches!(stored, Ok(true)) {
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+    stored
 }
 
 pub fn copy_last_minutes(app: &AppHandle, minutes: u64) -> AppResult<String> {
@@ -1026,6 +1074,7 @@ async fn run_upload_cycle(app: &AppHandle) {
     }
 
     let mut uploaded = 0usize;
+    let mut duplicates = 0usize;
     for id in pending_uploads {
         // Work on the current copy: the item may have been discarded or changed since the snapshot.
         let Some(mut item) = current_item(app, &id) else { continue };
@@ -1035,11 +1084,16 @@ async fn run_upload_cycle(app: &AppHandle) {
         let was_verifying = item.state == states::VERIFYING;
         if !was_verifying {
             item.state = states::UPLOADING.into();
+            item.progress = None;
             store_item(app, &item);
             emit_uploads(app);
         }
         let client_before = item.client_id.clone();
-        let persist = |p: &PendingUpload| store_item(app, p);
+        // Every stored step also reaches the Library, so an upload's progress shows as it goes.
+        let persist = |p: &PendingUpload| {
+            store_item(app, p);
+            emit_uploads(app);
+        };
         let result = crate::net::uploader::upload_with(&api, &config, &mut item, UploadTiming::default(), &persist).await;
         if let (Some(old), None) = (client_before.as_deref(), item.client_id.as_deref()) {
             forget_client(app, old);
@@ -1055,6 +1109,8 @@ async fn run_upload_cycle(app: &AppHandle) {
             Ok(UploadOutcome::Deleted { .. }) => {
                 let _ = app.emit("app:toast", "This recording was deleted on the server, so its upload was stopped.");
             }
+            // The Library already holds this file: its copy here is gone (finish_item) and nothing is retried.
+            Ok(UploadOutcome::Duplicate) => duplicates += 1,
             Err(AppError::NotPaired) => {
                 let _ = app.emit("app:error", UNPAIRED);
                 break;
@@ -1062,9 +1118,17 @@ async fn run_upload_cycle(app: &AppHandle) {
             _ => {}
         }
     }
+    // One notice for the cycle (a second toast would replace the first).
+    let mut notices = Vec::new();
     if uploaded > 0 {
         let _ = crate::commands::refresh_library_inner(app).await;
-        let _ = app.emit("app:toast", format!("Uploaded {uploaded} recording(s) for transcription"));
+        notices.push(format!("Uploaded {uploaded} recording(s) for transcription"));
+    }
+    if duplicates > 0 {
+        notices.push(crate::files::duplicates_notice(duplicates));
+    }
+    if !notices.is_empty() {
+        let _ = app.emit("app:toast", notices.join(". "));
     }
     emit_status(app);
 }

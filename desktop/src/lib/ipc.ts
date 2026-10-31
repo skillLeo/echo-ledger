@@ -523,6 +523,18 @@ export interface UploadItem {
   state: UploadState;
   lastError: string | null;
   attempts: number;
+  /** A file brought in with Import or a drop: listed while it uploads; cancelling it loses nothing. */
+  imported: boolean;
+  /** Percent sent while `uploading`. */
+  progress: number | null;
+}
+
+/** What one import did: files queued, already in the queue, of a type that cannot be imported, or unreadable. */
+export interface ImportSummary {
+  queued: number;
+  duplicates: number;
+  unsupported: number;
+  failed: number;
 }
 
 /** What the recording pill shows; sent on every change and once a second while recording. */
@@ -614,7 +626,11 @@ export const api = {
   toggleMicNote: () => invoke<AppStatus>("toggle_mic_note"),
   hideCaptions: () => invoke<AppStatus>("hide_captions"),
   micUsers: () => invoke<MicUser[]>("mic_users"),
-  importVoiceNotes: (pathsList: string[]) => invoke<number>("import_voice_notes", { pathsList }),
+  /** One recording per file, with one client and language for the batch (null: no client / automatic). */
+  importVoiceNotes: (pathsList: string[], clientId: string | null = null, language: TranscriptionLanguage | null = null) =>
+    invoke<ImportSummary>("import_voice_notes", { pathsList, clientId, language }),
+  /** The Import button's file picker (several files); empty when cancelled. */
+  pickImportFiles: () => invoke<string[]>("import_pick"),
   copyLastMinutes: (minutes = 2) => invoke<string>("copy_last_minutes", { minutes }),
   library: () => invoke<LibraryItem[]>("library_list"),
   refreshLibrary: () => invoke<LibraryItem[]>("library_refresh"),
@@ -625,7 +641,8 @@ export const api = {
   organiseSession: (id: string, patch: SessionOrganisePatch) => invoke<{ data: LibraryItem }>("session_organise", { id, patch }),
   bulkSessions: (ids: string[], action: BulkAction, clientId: string | null = null, label: string | null = null) =>
     invoke<number>("sessions_bulk", { ids, action, clientId, label }),
-  exportSessions: (ids: string[], format: BulkExportFormat) => invoke<string>("sessions_export", { ids, format }),
+  /** One zip file, saved where the person chooses; null when they cancel the save dialog. */
+  exportSessions: (ids: string[], format: BulkExportFormat) => invoke<string | null>("sessions_export", { ids, format }),
   createClient: (name: string, color: string | null = null, avatar: string | null = null) => invoke<{ data: ClientFolder }>("client_create", { name, color, avatar }),
   updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned" | "language">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
   setHitRegions: (regions: RectPx[]) => invoke<void>("overlay_set_hit_regions", { regions }),
@@ -670,8 +687,11 @@ export const api = {
   transcriptRevisions: (id: string) => invoke<{ data: TranscriptRevision[] }>("transcript_revisions", { id }),
   renameSpeakers: (sessionId: string, names: Record<string, string | null>, rememberForClient: boolean) =>
     invoke<{ speaker_names: Record<string, string> }>("speakers_rename", { sessionId, names, rememberForClient }),
+  /** Saved where the person chooses (null when they cancel); `html` opens the print page in the browser instead. */
   exportTranscript: (id: string, format: ExportFormat, timestamps = true, speakers = true, view: TranscriptView | null = null) =>
-    invoke<string>("export_transcript", { id, format, timestamps, speakers, view }),
+    invoke<string | null>("export_transcript", { id, format, timestamps, speakers, view }),
+  /** The recording's audio file, saved where the person chooses; null when they cancel. */
+  saveAudio: (id: string) => invoke<string | null>("save_audio", { id }),
   /** Show as (since v1.2): the Roman Urdu and English views and their state; `makeTranscriptViews` starts them. */
   transcriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views", { id }),
   makeTranscriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views_make", { id }),
@@ -722,6 +742,22 @@ export function listenTo<E extends AppEvent>(event: E, cb: (payload: EventPayloa
 export function listenTo<T>(event: string, cb: (payload: T) => void): Promise<UnlistenFn>;
 export function listenTo(event: string, cb: (payload: unknown) => void): Promise<UnlistenFn> {
   return listen<unknown>(event, (e) => cb(e.payload));
+}
+
+/** Files dragged over this window and dropped on it. The core hands the page the drop (Tauri's drag-drop events). */
+export interface FileDropHandlers {
+  onEnter?: () => void;
+  onLeave?: () => void;
+  onDrop: (paths: string[]) => void;
+}
+
+export async function listenForFileDrops(handlers: FileDropHandlers): Promise<UnlistenFn> {
+  const unlisten = await Promise.all([
+    listen("tauri://drag-enter", () => handlers.onEnter?.()),
+    listen("tauri://drag-leave", () => handlers.onLeave?.()),
+    listen<{ paths?: string[] }>("tauri://drag-drop", (e) => handlers.onDrop(e.payload?.paths ?? [])),
+  ]);
+  return () => unlisten.forEach((f) => f());
 }
 
 /** Subscribes this window to caption events (replaces any previous subscription of the same window). */

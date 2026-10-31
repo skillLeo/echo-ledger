@@ -4,14 +4,15 @@ import { api, errorMessage, type ClientFolder, type ExportFormat, type LibraryIt
 import { activeIndex, activeWord, continuesTurn, hasUncertainWords, KEY_SECONDS, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, uncertainWord } from "../../lib/player";
 import { ExportMenu, HistoryPanel, PlayerControls, ReplaceBar, SharePanel, SpeakersPanel, Timeline, VocabularyHint } from "./TranscriptTools";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
-import { bookmarksOf, filterByTag, groupItems, itemState, libraryTags, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
+import { bookmarksOf, filterByTag, groupItems, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { CopyIcon, RefreshIcon, SearchIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
+import { CopyIcon, DownloadIcon, ImportIcon, RefreshIcon, SearchIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, smartViewCounts } from "../../lib/organise";
-import { BinPanel, BulkBar, OrganisePanel } from "./LibraryOrganise";
+import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./LibraryOrganise";
+import { useWindowShown } from "../../lib/visibility";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, scriptWarning, transcribingText } from "../../lib/languages";
 
@@ -62,7 +63,7 @@ function withUnsureMarks(text: string): ReactNode {
 const UNSURE_WORD = "Not sure of this word. Click to hear it.";
 const UNSURE_LINE = "The engine was not sure of this line. Click to hear it.";
 
-export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange }: {
+export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange, onImport }: {
   notify: (t: string, e?: boolean) => void;
   focus?: PendingFocus | null;
   onFocusHandled?: () => void;
@@ -71,6 +72,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   /** The recording that was open when the last main window was closed (C9). */
   initialSelected?: string | null;
   onSelectedChange?: (id: string | null) => void;
+  /** The Import button: picks files and opens the import sheet. */
+  onImport?: () => void;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [filters, setFilters] = useState<FilterState>(NO_FILTERS);
@@ -142,6 +145,30 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Live status: while a recording uploads or is transcribed, the list and the open recording sync every few seconds
+  // on their own (quietly: a failed try just waits for the next one) and stop once nothing is moving. Only while the
+  // window is on screen (C9).
+  const shown = useWindowShown();
+  const live = useMemo(() => needsLiveStatus(items), [items]);
+  useEffect(() => {
+    if (!live || !shown) return;
+    let alive = true;
+    let timer = 0;
+    const next = () => {
+      timer = window.setTimeout(() => {
+        api.refreshLibrary()
+          .then((fresh) => { if (alive) setItems(fresh); })
+          .catch(() => undefined)
+          .finally(() => { if (alive) next(); });
+      }, LIVE_STATUS_MS);
+    };
+    next();
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [live, shown]);
 
   const tags = useMemo(() => libraryTags(items), [items]);
   const anyBookmarks = useMemo(() => items.some((i) => !i.deleted && (i.marker_count ?? 0) > 0), [items]);
@@ -439,11 +466,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
   };
 
+  // Exports follow the view on screen (Roman Urdu, اردو, English) once it is made, else the original words.
+  const exportView = showAs !== "original" && views?.status === "ready" ? showAs : null;
   const exportAs = async (format: ExportFormat) => {
     if (!transcript) return;
     try {
-      const path = await api.exportTranscript(transcript.id, format, true, true, showAs !== "original" && views?.status === "ready" ? showAs : null);
-      notify(format === "html" ? "Opened the print page in your browser: choose Save as PDF there" : `Saved to ${path}`);
+      const path = await api.exportTranscript(transcript.id, format, true, true, exportView);
+      // null: the save dialog was cancelled, nothing to say.
+      if (format === "html") notify("Opened the print page in your browser: choose Save as PDF there");
+      else if (path) notify(`Saved to ${path}`);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -463,9 +494,49 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (!window.confirm("Delete this recording and transcript on every device? You can restore it from Recently deleted for 48 hours.")) return;
     try {
       await api.deleteSession(id);
-      setSelected(null);
+      // Deleting another row from its menu leaves the open recording open.
+      setSelected((open) => (open === id ? null : open));
       setItems(await api.library());
       notify("Deleted");
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+
+  // Rename from the row menu (in the list) or by clicking the title of the open recording.
+  const [renaming, setRenaming] = useState<{ id: string; where: "list" | "detail" } | null>(null);
+  const replaceItem = (id: string, change: (item: LibraryItem) => LibraryItem) => setItems((list) => list.map((i) => (i.id === id ? change(i) : i)));
+  /** The new name shows at once; the server's answer (and the next sync on other devices) confirms it. */
+  const rename = async (item: LibraryItem, text: string) => {
+    setRenaming(null);
+    const title = text.trim();
+    if (title === (item.title ?? "").trim()) return;
+    // An empty title clears it: the server says what the recording is called then.
+    if (title) replaceItem(item.id, (i) => ({ ...i, title }));
+    try {
+      const answer = await api.organiseSession(item.id, { title });
+      if (answer?.data?.id === item.id) replaceItem(item.id, () => answer.data);
+      notify(title ? "Renamed" : "Title cleared");
+    } catch (e) {
+      replaceItem(item.id, (i) => ({ ...i, title: item.title }));
+      notify(errorMessage(e), true);
+    }
+  };
+  const togglePin = async (item: LibraryItem) => {
+    try {
+      await api.organiseSession(item.id, { pinned: !item.pinned });
+      replaceItem(item.id, (i) => ({ ...i, pinned: !item.pinned }));
+      notify(item.pinned ? "Unpinned" : "Pinned");
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+
+  const saveAudio = async () => {
+    if (!current) return;
+    try {
+      const path = await api.saveAudio(current.id);
+      if (path) notify(`Saved to ${path}`);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -480,6 +551,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
           <p className="page-sub">{total === 0 ? "Recordings from your phone, this computer and the web will appear here." : `${total} recording${total === 1 ? "" : "s"} from your phone, this computer and the web.`}</p>
         </div>
         <div className="spacer" />
+        {onImport && (
+          <button type="button" className="btn" onClick={onImport} title="Voice notes, audio or video files. You can also drop them anywhere in this window.">
+            <ImportIcon size={16} />Import
+          </button>
+        )}
         <button className="btn" onClick={refresh} disabled={loading}><RefreshIcon size={16} />{loading ? "Syncing…" : "Sync"}</button>
       </div>
       <div className="toolbar">
@@ -556,22 +632,46 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               {group.label && <div className="group-label">{group.label}</div>}
               {group.items.map((item) => {
                 const state = itemState(item);
-                return (
-                  <button key={item.id} type="button" className={`item ${item.id === selected ? "selected" : ""} ${selecting && picked.has(item.id) ? "picked" : ""}`}
-                    aria-current={!selecting && item.id === selected ? "true" : undefined} aria-pressed={selecting ? picked.has(item.id) : undefined}
-                    onClick={() => (selecting ? togglePicked(item.id) : setSelected(item.id))}>
-                    <div className="row">
-                      <span className={`avatar ${item.source_device ?? "web"}`}><SourceAppIcon app={item.source_app} size={18} /></span>
-                      <div className="item-main">
-                        <div className="item-title">{item.pinned && <span className="pin-star" aria-label="Pinned">★ </span>}{item.title}</div>
-                        <div className="small muted">{formatWhen(item.started_at)}{item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ""}{item.client ? ` · ${item.client.name}` : ""}{item.marker_count ? ` · ${item.marker_count} bookmark${item.marker_count === 1 ? "" : "s"}` : ""}</div>
+                const meta = `${formatWhen(item.started_at)}${item.duration_ms ? ` · ${formatDuration(item.duration_ms)}` : ""}${item.client ? ` · ${item.client.name}` : ""}${item.marker_count ? ` · ${item.marker_count} bookmark${item.marker_count === 1 ? "" : "s"}` : ""}`;
+                const avatar = <span className={`avatar ${item.source_device ?? "web"}`}><SourceAppIcon app={item.source_app} size={18} /></span>;
+                // Renaming from the row menu: the row holds the title field instead of being one button.
+                if (renaming?.id === item.id && renaming.where === "list") {
+                  return (
+                    <div key={item.id} className={`item renaming ${item.id === selected ? "selected" : ""}`}>
+                      <div className="row">
+                        {avatar}
+                        <div className="item-main">
+                          <TitleEditor className="item-rename" initial={item.title ?? ""} onSave={(t) => void rename(item, t)} onCancel={() => setRenaming(null)} />
+                          <div className="small muted">{meta}</div>
+                        </div>
                       </div>
-                      {item.language_chip && item.language_chip !== "Auto" && <span className="lang-chip" title="Language">{item.language_chip}</span>}
-                      <span className={`pill ${state}`}>{STATE_LABEL[state]}</span>
                     </div>
-                    {item.transcript?.preview && <div className="item-preview">{item.transcript.preview}</div>}
-                    {(item.labels ?? []).length > 0 && <div className="item-labels">{item.labels!.map((l) => <span key={l} className="label-chip small">{l}</span>)}</div>}
-                  </button>
+                  );
+                }
+                return (
+                  <div key={item.id} className={`item-wrap ${selecting ? "" : "with-menu"}`}>
+                    <button type="button" className={`item ${item.id === selected ? "selected" : ""} ${selecting && picked.has(item.id) ? "picked" : ""}`}
+                      aria-current={!selecting && item.id === selected ? "true" : undefined} aria-pressed={selecting ? picked.has(item.id) : undefined}
+                      onClick={() => (selecting ? togglePicked(item.id) : setSelected(item.id))}>
+                      <div className="row">
+                        {avatar}
+                        <div className="item-main">
+                          <div className="item-title">{item.pinned && <span className="pin-star" aria-label="Pinned">★ </span>}{item.title}</div>
+                          <div className="small muted">{meta}</div>
+                        </div>
+                        {item.language_chip && item.language_chip !== "Auto" && <span className="lang-chip" title="Language">{item.language_chip}</span>}
+                        <span className={`pill ${state}`}>{STATE_LABEL[state]}</span>
+                      </div>
+                      {item.transcript?.preview && <div className="item-preview">{item.transcript.preview}</div>}
+                      {(item.labels ?? []).length > 0 && <div className="item-labels">{item.labels!.map((l) => <span key={l} className="label-chip small">{l}</span>)}</div>}
+                    </button>
+                    {!selecting && (
+                      <RowMenu title={item.title ?? "recording"} pinned={!!item.pinned}
+                        onRename={() => setRenaming({ id: item.id, where: "list" })}
+                        onPin={() => void togglePin(item)}
+                        onDelete={() => void remove(item.id)} />
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -585,10 +685,17 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 <SourceDeviceBadge source={current.source_device} label={current.source_device_label} />
                 <SourceAppBadge app={current.source_app} label={current.source_app_label} />
                 <span className="spacer" />
+                {playbackUrl && <button type="button" className="btn ghost" onClick={() => void saveAudio()} title="Save the recording's audio file on this computer"><DownloadIcon size={15} />Save audio</button>}
                 <button className="btn ghost" aria-pressed={panel === "share"} onClick={() => setPanel(panel === "share" ? null : "share")}>Share</button>
                 <button className="btn danger ghost" onClick={() => remove(current.id)}><TrashIcon size={15} />Delete</button>
               </div>
-              <h2 className="detail-title">{current.title}</h2>
+              {renaming?.id === current.id && renaming.where === "detail" ? (
+                <TitleEditor className="detail-title-input" initial={current.title ?? ""} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
+              ) : (
+                <h2 className="detail-title">
+                  <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{current.title}</button>
+                </h2>
+              )}
               <div className="small muted">{formatWhen(current.started_at)} · {formatDuration(current.duration_ms)}{current.client ? ` · ${current.client.name}` : ""}</div>
               {engineLine(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {engineLine(current.transcript)}</div>}
               {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
@@ -644,7 +751,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
                   </div>
                 ) : isTranscribing(transcript.status) ? (
-                  <div className="empty">{transcribingText(transcript.progress ?? current.transcript?.final_progress)}</div>
+                  // The library's progress is the fresher one: live status re-reads it every few seconds.
+                  <div className="empty">{transcribingText(current.transcript?.final_progress ?? transcript.progress)}</div>
                 ) : (
                   <>
                     <div className="row" style={{ marginTop: 10 }}>
@@ -661,7 +769,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         <button className="btn ghost" aria-pressed={panel === "replace"} onClick={() => setPanel(panel === "replace" ? null : "replace")}>Find and replace</button>
                         <button className="btn ghost" aria-pressed={panel === "speakers"} onClick={() => setPanel(panel === "speakers" ? null : "speakers")}>Speakers</button>
                         <button className="btn ghost" aria-pressed={panel === "history"} onClick={() => setPanel(panel === "history" ? null : "history")}>History</button>
-                        <ExportMenu onExport={(format) => void exportAs(format)} />
+                        <ExportMenu onExport={(format) => void exportAs(format)} viewLabel={exportView ? VIEW_LABELS[exportView] : null} />
                         {(transcript.views?.available.length ?? 0) > 0 && (
                           <span className="row" style={{ gap: 2 }} role="group" aria-label="Show as">
                             <button type="button" className="btn ghost compact" aria-pressed={showAs === "original"} onClick={() => void chooseView("original")}>Original</button>

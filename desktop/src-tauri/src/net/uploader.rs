@@ -109,6 +109,15 @@ pub struct PendingUpload {
     /// Transcription language of the recording (none = automatic), sent when the session is created.
     #[serde(default)]
     pub language: Option<String>,
+    /// A file brought in with Import or a drop (since v1.4): created with `skip_duplicate`, shown with its progress.
+    #[serde(default)]
+    pub imported: bool,
+    /// SHA-256 of an imported file, so the same file is not queued twice.
+    #[serde(default)]
+    pub sha256: Option<String>,
+    /// Percent of the current file's chunks the server holds, while it uploads.
+    #[serde(default)]
+    pub progress: Option<u8>,
 }
 
 impl Default for PendingUpload {
@@ -140,6 +149,9 @@ impl Default for PendingUpload {
             language_marks: vec![],
             caller: None,
             language: None,
+            imported: false,
+            sha256: None,
+            progress: None,
         }
     }
 }
@@ -187,6 +199,10 @@ pub struct UploadItem {
     pub state: String,
     pub last_error: Option<String>,
     pub attempts: u32,
+    /// An imported file: the Library lists it while it uploads, and cancelling it loses nothing.
+    pub imported: bool,
+    /// Percent sent while `uploading`.
+    pub progress: Option<u8>,
 }
 
 impl From<&PendingUpload> for UploadItem {
@@ -200,6 +216,8 @@ impl From<&PendingUpload> for UploadItem {
             state: p.state.clone(),
             last_error: p.last_error.clone(),
             attempts: p.attempts,
+            imported: p.imported,
+            progress: p.progress,
         }
     }
 }
@@ -213,12 +231,16 @@ pub enum UploadOutcome {
     Verifying { session_id: String },
     /// The session was deleted on the server (a tombstone, or the recording is gone): nothing left to send.
     Deleted { session_id: String },
+    /// An imported file the Library already holds (`409 duplicate_recording`): nothing was stored, nothing to retry.
+    Duplicate,
 }
 
 impl UploadOutcome {
+    /// The server session; empty for a duplicate, which created none.
     pub fn session_id(&self) -> &str {
         match self {
             Self::Ready { session_id } | Self::Verifying { session_id } | Self::Deleted { session_id } => session_id,
+            Self::Duplicate => "",
         }
     }
 }
@@ -250,7 +272,7 @@ pub enum AfterAttempt {
 pub fn after_attempt(item: &mut PendingUpload, was_verifying: bool, result: &AppResult<UploadOutcome>) -> AfterAttempt {
     let resume = if was_verifying { states::VERIFYING } else { states::QUEUED };
     match result {
-        Ok(UploadOutcome::Ready { .. } | UploadOutcome::Deleted { .. }) => return AfterAttempt::Remove,
+        Ok(UploadOutcome::Ready { .. } | UploadOutcome::Deleted { .. } | UploadOutcome::Duplicate) => return AfterAttempt::Remove,
         Ok(UploadOutcome::Verifying { .. }) => {
             item.state = states::VERIFYING.into();
             item.last_error = None;
@@ -315,8 +337,8 @@ pub fn file_sha256(path: &Path) -> AppResult<(String, u64)> {
     Ok((ctx.finish().as_ref().iter().map(|b| format!("{b:02x}")).collect(), size))
 }
 
-/// MIME type and codec declared for a file, by extension. Every type the drop zone imports
-/// (`commands::is_audio`) maps to a type in the server's `accepted_mimes` (A6.DR5).
+/// MIME type and codec declared for a file, by extension. Every type Import takes (`files::IMPORT_EXTENSIONS`) maps
+/// to a type in the server's `accepted_mimes` (A6.DR5); videos go up as their container type.
 pub fn mime_for(path: &Path) -> (&'static str, &'static str) {
     match path.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
         Some("flac") => ("audio/flac", "flac"),
@@ -440,6 +462,7 @@ pub async fn upload_with(
     let declared: Vec<String> = artifacts.iter().map(|a| a.role.clone()).collect();
     let created = match open_slots(api, config, item, artifacts, persist).await? {
         Slots::Deleted(session_id) => return Ok(UploadOutcome::Deleted { session_id }),
+        Slots::Duplicate => return Ok(UploadOutcome::Duplicate),
         Slots::Created(created) => created,
     };
     let session_id = created.session.id.clone();
@@ -485,11 +508,13 @@ pub async fn upload_with(
 enum Slots {
     Created(CreateSessionResponse),
     Deleted(String),
+    Duplicate,
 }
 
 /// Finish the open session (v1.1) or create the session in one go, with the documented fallbacks:
 /// `404 session_not_found` on finish → one-shot create with a new `client_ref`; `404 client_not_found` → forget
-/// the client and try once more without it (A6.DR7); a tombstone answer → the session was deleted.
+/// the client and try once more without it (A6.DR7); a tombstone answer → the session was deleted. Imports ask the
+/// server to skip a file it already holds, and `409 duplicate_recording` ends them (since v1.4).
 async fn open_slots(
     api: &ApiClient,
     config: &ServerConfig,
@@ -532,12 +557,13 @@ async fn open_slots(
                     language_marks: item.language_marks.clone(),
                     caller: item.caller.clone(),
                 };
-                api.create_session(&request).await
+                if item.imported { api.create_session_skipping_duplicate(&request).await } else { api.create_session(&request).await }
             }
         };
         match result {
             Ok(created) if created.session.deleted => return Ok(Slots::Deleted(created.session.id)),
             Ok(created) => return Ok(Slots::Created(created)),
+            Err(e) if item.imported && e.code() == Some("duplicate_recording") => return Ok(Slots::Duplicate),
             Err(e) if e.code() == Some("client_not_found") && item.client_id.is_some() && !client_cleared => {
                 client_cleared = true;
                 item.client_id = None;
@@ -593,16 +619,42 @@ enum Sent {
     AlreadyComplete,
 }
 
-/// Sends the chunks the server does not have yet.
-async fn send_chunks(api: &ApiClient, recording_id: &str, path: &Path, plan: &[(u64, u64)], received: &[u64]) -> AppResult<Sent> {
-    for index in missing_chunks(plan.len() as u64, received) {
+/// Percent of a file's `total` chunks the server holds (pure).
+pub fn upload_percent(held: usize, total: usize) -> u8 {
+    if total == 0 {
+        return 100;
+    }
+    (held.min(total) * 100 / total) as u8
+}
+
+/// Keeps the item's progress and stores it when the percent changed, so the Library shows it as it goes.
+fn report_progress(item: &mut PendingUpload, persist: &(dyn Fn(&PendingUpload) + Sync), held: usize, total: usize) {
+    let percent = upload_percent(held, total);
+    if item.progress != Some(percent) {
+        item.progress = Some(percent);
+        persist(item);
+    }
+}
+
+/// Sends the chunks the server does not have yet; `held` hears how many of the file's chunks the server has after each.
+async fn send_chunks(
+    api: &ApiClient,
+    recording_id: &str,
+    path: &Path,
+    plan: &[(u64, u64)],
+    received: &[u64],
+    held: &mut (dyn FnMut(usize) + Send),
+) -> AppResult<Sent> {
+    let missing = missing_chunks(plan.len() as u64, received);
+    let already = plan.len() - missing.len();
+    for (sent, index) in missing.into_iter().enumerate() {
         let (offset, len) = plan[index as usize];
         let mut file = std::fs::File::open(path)?;
         file.seek(SeekFrom::Start(offset))?;
         let mut bytes = vec![0u8; len as usize];
         file.read_exact(&mut bytes)?;
         match send_chunk(api, recording_id, index, bytes).await {
-            Ok(()) => {}
+            Ok(()) => held(already + sent + 1),
             Err(e) if e.status() == Some(409) => return Ok(Sent::AlreadyComplete),
             Err(e) => return Err(e),
         }
@@ -646,9 +698,10 @@ async fn send_and_complete(
 ) -> AppResult<String> {
     let size = std::fs::metadata(path)?.len();
     let plan = plan_chunks(size, chunk_size.max(1));
+    let total = plan.len();
     let mut received = received.to_vec();
     loop {
-        if let Sent::AlreadyComplete = send_chunks(api, recording_id, path, &plan, &received).await? {
+        if let Sent::AlreadyComplete = send_chunks(api, recording_id, path, &plan, &received, &mut |held| report_progress(item, persist, held, total)).await? {
             return Ok("assembling".into());
         }
         let (mut rounds, mut waits) = (0u32, 0u32);
@@ -658,7 +711,8 @@ async fn send_and_complete(
                 Err(e) if is_upload_incomplete(&e) && rounds < MAX_INCOMPLETE_ROUNDS => {
                     rounds += 1;
                     let state = api.recording_status(recording_id).await?;
-                    if let Sent::AlreadyComplete = send_chunks(api, recording_id, path, &plan, &state.upload.received_chunks).await? {
+                    let on_server = state.upload.received_chunks;
+                    if let Sent::AlreadyComplete = send_chunks(api, recording_id, path, &plan, &on_server, &mut |held| report_progress(item, persist, held, total)).await? {
                         return Ok("assembling".into());
                     }
                 }
@@ -799,6 +853,11 @@ impl UploadQueue {
 
     pub fn ui_items(&self) -> Vec<UploadItem> {
         self.items.iter().map(UploadItem::from).collect()
+    }
+
+    /// True when a queued import is this very file (its SHA-256).
+    pub fn holds_file(&self, sha256: &str) -> bool {
+        self.items.iter().any(|i| i.sha256.as_deref() == Some(sha256))
     }
 
     /// Items still on their way (queued, uploading or verifying).

@@ -1,9 +1,12 @@
-// Library organisation on the desktop (plan B15): pin, labels and client folder of one recording, and bulk actions
-// for the selected recordings. Every change goes to the server; the library refreshes when it answers.
-import { useEffect, useId, useState } from "react";
+// Library organisation on the desktop (plan B15): pin, labels and client folder of one recording, renaming it, the
+// row menu, and bulk actions for the selected recordings. Every change goes to the server; the library refreshes
+// when it answers.
+import { useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { folderBadge, MAX_LABEL_CHARS, sortFolders, withLabel } from "../../lib/organise";
+import { MAX_TITLE_CHARS } from "../../lib/importFiles";
+import { DotsIcon } from "../../components/Icons";
 
 type Notify = (message: string, error?: boolean) => void;
 
@@ -59,6 +62,78 @@ export function FolderPicker({ label, value, clients, onPick, onCreated, notify,
           <button type="button" className="btn" disabled={!name.trim()} onClick={() => void create()}>Create</button>
           <button type="button" className="btn ghost" onClick={() => setCreating(false)}>Cancel</button>
         </>
+      )}
+    </div>
+  );
+}
+
+/** A title renamed in place: Enter or leaving the field saves (once), Escape cancels; empty clears the title. */
+export function TitleEditor({ initial, className = "", onSave, onCancel }: {
+  initial: string;
+  className?: string;
+  onSave: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState(initial);
+  const done = useRef(false);
+  const finish = (save: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    if (save) onSave(text.trim());
+    else onCancel();
+  };
+  return (
+    <input className={`input ${className}`.trim()} aria-label="Title" autoFocus maxLength={MAX_TITLE_CHARS} value={text} dir="auto"
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setText(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") finish(true);
+        if (e.key === "Escape") finish(false);
+      }}
+      onBlur={() => finish(true)} />
+  );
+}
+
+/** The ⋯ menu on a Library row: Rename, Pin or Unpin, Delete. */
+export function RowMenu({ title, pinned, onRename, onPin, onDelete }: {
+  title: string;
+  pinned: boolean;
+  onRename: () => void;
+  onPin: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  const pick = (action: () => void) => {
+    setOpen(false);
+    action();
+  };
+  return (
+    <div className="row-menu" ref={box}>
+      <button type="button" className="row-menu-btn" aria-label={`More for ${title}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <DotsIcon size={16} />
+      </button>
+      {open && (
+        <div className="row-menu-pop card" role="menu" aria-label={`Actions for ${title}`}>
+          <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onRename)}>Rename</button>
+          <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onPin)}>{pinned ? "Unpin" : "Pin"}</button>
+          <button type="button" role="menuitem" className="btn ghost small danger" onClick={() => pick(onDelete)}>Delete</button>
+        </div>
       )}
     </div>
   );
@@ -164,8 +239,9 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
   const exportZip = async () => {
     setBusy(true);
     try {
+      // The core asks where to save the zip; null means the person cancelled there.
       const path = await api.exportSessions(ids, format);
-      notify(`Saved ${path}`);
+      if (path) notify(`Saved ${path}`);
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {

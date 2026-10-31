@@ -19,7 +19,7 @@ use desktop_lib::net::uploader::{
     AfterAttempt, DiscardQueue, PendingUpload, UNVERIFIABLE, UploadItem, UploadOutcome, UploadQueue,
     UploadTiming, UsageQueue, after_attempt, delete_local_audio, drain_discards, drain_usage,
     effective_ended_at, file_sha256, flac_stream_info, is_final_failure, missing_chunks, mime_for,
-    plan_chunks, states, upload, upload_with,
+    plan_chunks, states, upload, upload_percent, upload_with,
 };
 
 const SESSION_ID: &str = "01JB8QA0M1X2C3V4B5N6M7K8J9";
@@ -996,13 +996,10 @@ async fn imported_voice_notes_do_not_claim_a_sample_rate_or_duration_they_were_n
 
 #[tokio::test]
 async fn every_audio_extension_the_app_imports_is_declared_with_an_accepted_mime() {
-    // The drag-and-drop filter (`commands::is_audio`) lets these extensions in; the server allow-list must then
-    // accept whatever type the uploader declares for them.
-    let importable = [
-        "ogg", "opus", "oga", "mp3", "m4a", "mp4", "aac", "wav", "flac", "webm", "amr",
-    ];
+    // Import and a drop on the window (`files::IMPORT_EXTENSIONS`) let these extensions in; the server allow-list
+    // must then accept whatever type the uploader declares for them.
     let mut rejected = Vec::new();
-    for extension in importable {
+    for extension in desktop_lib::files::IMPORT_EXTENSIONS {
         let dir = tempfile::tempdir().unwrap();
         let primary = write_file(dir.path(), &format!("note.{extension}"), 100, 22);
         let (server, _) = Flow::new(1_000, vec![Slot::fresh("primary", 100)]).start();
@@ -1516,6 +1513,103 @@ async fn a_tombstone_answer_means_the_session_was_deleted_and_nothing_is_sent() 
     assert_eq!(after_attempt(&mut item, false, &result), AfterAttempt::Remove);
 }
 
+/// A WhatsApp voice note brought in with Import (or a drop): its own title, the batch's client and language.
+fn imported_note(dir: &Path, len: usize) -> PendingUpload {
+    let primary = write_file(dir, "PTT-20261030-WA0003.opus", len, 77);
+    let mut item = pending(dir, primary.clone());
+    item.source_app = "voice_note".into();
+    item.duration_ms = 0;
+    item.primary_channels = 1;
+    item.title = Some("PTT-20261030-WA0003".into());
+    item.language = Some("ur".into());
+    item.imported = true;
+    item.sha256 = Some(file_sha256(&primary).unwrap().0);
+    item
+}
+
+#[tokio::test]
+async fn an_import_asks_the_server_to_skip_a_file_it_already_holds() {
+    let dir = tempfile::tempdir().unwrap();
+    let flow = Flow::new(1_000, vec![Slot::fresh("primary", 1_200)]);
+    let config = config_of(&flow.config);
+    let (server, _) = flow.start();
+    let mut item = imported_note(dir.path(), 1_200);
+    let (result, _) = attempt(&server, &config, &mut item).await;
+    assert!(matches!(result, Ok(UploadOutcome::Ready { .. })), "{result:?}");
+    let body = server.requests_to("POST", "/api/sessions")[0].json();
+    assert_eq!(body["skip_duplicate"], true);
+    assert_eq!((body["title"].as_str(), body["language"].as_str()), (Some("PTT-20261030-WA0003"), Some("ur")));
+    assert_eq!(body["artifacts"][0]["mime"], "audio/ogg");
+    assert_acceptable_to_the_server(&body, &ACCEPTED);
+
+    // A recording made here never sends the key: the server stores every recording, as before.
+    let other = tempfile::tempdir().unwrap();
+    let (server, _) = Flow::new(1_000, vec![Slot::fresh("primary", 500)]).start();
+    upload(&api(&server), &recorded_call(other.path(), 500)).await.unwrap();
+    assert!(server.requests_to("POST", "/api/sessions")[0].json().get("skip_duplicate").is_none());
+}
+
+#[tokio::test]
+async fn a_duplicate_import_is_dropped_without_sending_anything_or_retrying() {
+    let dir = tempfile::tempdir().unwrap();
+    let flow = Flow::new(1_000, vec![Slot::fresh("primary", 2_000)]).sessions(|_, _| {
+        Reply::json(409, json!({"message": "This file is already in the Library.", "code": "duplicate_recording", "session_id": "01JB8QDUP0000000000000000"}))
+    });
+    let config = config_of(&flow.config);
+    let (server, _) = flow.start();
+    let mut item = imported_note(dir.path(), 2_000);
+    let (result, _) = attempt(&server, &config, &mut item).await;
+    assert_eq!(result.as_ref().unwrap(), &UploadOutcome::Duplicate);
+    assert_eq!(result.as_ref().unwrap().session_id(), "");
+    assert_eq!(server.requests_to("POST", "/api/sessions").len(), 1, "asked once, never again");
+    assert!(chunk_requests(&server, "primary").is_empty());
+    // The queue removes the item and its copy here; nothing is shown as failed.
+    assert_eq!(after_attempt(&mut item, false, &result), AfterAttempt::Remove);
+    assert_eq!((item.state.as_str(), item.attempts, item.last_error.as_deref()), (states::QUEUED, 0, None));
+    delete_local_audio(&item);
+    assert!(!dir.path().exists(), "no copy is kept");
+}
+
+#[tokio::test]
+async fn another_conflict_on_an_import_is_still_an_error() {
+    let dir = tempfile::tempdir().unwrap();
+    let flow = Flow::new(1_000, vec![Slot::fresh("primary", 500)])
+        .sessions(|_, _| Reply::json(409, json!({"message": "Too many open uploads.", "code": "too_many_open_uploads"})));
+    let config = config_of(&flow.config);
+    let (server, _) = flow.start();
+    let mut item = imported_note(dir.path(), 500);
+    let (result, _) = attempt(&server, &config, &mut item).await;
+    assert_eq!(result.as_ref().err().and_then(AppError::code), Some("too_many_open_uploads"));
+    assert_eq!(after_attempt(&mut item, false, &result), AfterAttempt::Keep);
+}
+
+#[tokio::test]
+async fn an_upload_reports_its_progress_chunk_by_chunk() {
+    let dir = tempfile::tempdir().unwrap();
+    let flow = Flow::new(1_000, vec![Slot::fresh("primary", 4_000)]);
+    let config = config_of(&flow.config);
+    let (server, _) = flow.start();
+    let mut item = imported_note(dir.path(), 4_000);
+    let (result, persisted) = attempt(&server, &config, &mut item).await;
+    assert!(result.is_ok(), "{result:?}");
+    let mut seen: Vec<u8> = persisted.iter().filter_map(|p| p.progress).collect();
+    seen.dedup();
+    assert_eq!(seen, [25, 50, 75, 100]);
+    assert_eq!(UploadItem::from(&item).progress, Some(100));
+    assert!(UploadItem::from(&item).imported);
+    assert_eq!((upload_percent(0, 0), upload_percent(1, 3), upload_percent(5, 3)), (100, 33, 100));
+}
+
+#[test]
+fn the_same_file_is_found_in_the_queue_by_its_checksum() {
+    let dir = tempfile::tempdir().unwrap();
+    let item = imported_note(dir.path(), 300);
+    let sha = item.sha256.clone().unwrap();
+    let queue = UploadQueue { items: vec![recorded_call(dir.path(), 300), item] };
+    assert!(queue.holds_file(&sha));
+    assert!(!queue.holds_file(&"0".repeat(64)), "recordings made here carry no checksum to match");
+}
+
 #[tokio::test]
 async fn a_recording_deleted_while_it_is_verified_ends_the_upload() {
     let dir = tempfile::tempdir().unwrap();
@@ -1697,6 +1791,7 @@ fn the_queue_outcome_of_each_attempt() {
     let sid = || SESSION_ID.to_string();
     assert_eq!(after_attempt(&mut item, false, &ok(UploadOutcome::Ready { session_id: sid() })), AfterAttempt::Remove);
     assert_eq!(after_attempt(&mut item, false, &ok(UploadOutcome::Deleted { session_id: sid() })), AfterAttempt::Remove);
+    assert_eq!(after_attempt(&mut item, false, &ok(UploadOutcome::Duplicate)), AfterAttempt::Remove);
 
     let transient: Result<UploadOutcome, AppError> = Err(AppError::Network("timed out".into()));
     assert_eq!(after_attempt(&mut item, false, &transient), AfterAttempt::Keep);
@@ -1750,7 +1845,7 @@ fn upload_items_for_the_ui_use_camel_case_and_a_stable_id() {
     assert_eq!(
         ui,
         json!({"id": "9a1d", "sourceApp": "whatsapp", "title": "Standup", "startedAt": "2026-10-24T09:00:00+00:00",
-               "durationMs": 2530000, "state": "verifying", "lastError": null, "attempts": 0})
+               "durationMs": 2530000, "state": "verifying", "lastError": null, "attempts": 0, "imported": false, "progress": null})
     );
     let mut queue = UploadQueue { items: vec![item.clone(), item.clone()] };
     queue.items[1].state = states::FAILED.into();

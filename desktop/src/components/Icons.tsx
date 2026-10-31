@@ -84,6 +84,14 @@ export const AlertIcon = (p: IconProps) => (
 export const ClockIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></Svg>
 );
+/** Import: a file going up into the tray. */
+export const ImportIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v4.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V14" /></Svg>
+);
+/** Save to this computer. */
+export const DownloadIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M4 14v4.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V14" /></Svg>
+);
 
 export function SourceDeviceIcon({ source, ...p }: IconProps & { source?: string }) {
   if (source === "phone") return <PhoneIcon {...p} />;
