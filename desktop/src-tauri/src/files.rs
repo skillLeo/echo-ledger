@@ -40,6 +40,23 @@ pub struct ImportSummary {
     pub failed: usize,
 }
 
+/// What a client's workspace takes (docs/API.md `POST /api/clients/{id}/files`): PDF, Word, text and Markdown.
+pub const CLIENT_FILE_EXTENSIONS: [&str; 4] = ["pdf", "docx", "txt", "md"];
+
+/// The largest file a client's workspace takes.
+pub const MAX_CLIENT_FILE_BYTES: u64 = 20 * 1024 * 1024;
+
+/// The type a client's workspace file is sent as, by its extension; `None` for a file the server would refuse.
+pub fn client_file_mime(path: &Path) -> Option<&'static str> {
+    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+        "pdf" => Some("application/pdf"),
+        "docx" => Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+        "txt" => Some("text/plain"),
+        "md" => Some("text/markdown"),
+        _ => None,
+    }
+}
+
 /// The notice after the server answered `409 duplicate_recording` for imported files.
 pub fn duplicates_notice(count: usize) -> String {
     if count == 1 {
@@ -167,6 +184,14 @@ pub async fn pick_import_files(app: &AppHandle) -> Vec<PathBuf> {
     chosen.flatten().unwrap_or_default().iter().map(|f| f.path().to_path_buf()).collect()
 }
 
+/// The client workspace's picker: several files at once, of the types `CLIENT_FILE_EXTENSIONS` lists. Empty when
+/// cancelled.
+#[cfg(any(windows, target_os = "macos"))]
+pub async fn pick_client_files(app: &AppHandle) -> Vec<PathBuf> {
+    let chosen = file_dialog(app, |dialog| dialog.set_title("Add files for this client").add_filter("PDF, Word, text and Markdown", &CLIENT_FILE_EXTENSIONS).pick_files()).await;
+    chosen.flatten().unwrap_or_default().iter().map(|f| f.path().to_path_buf()).collect()
+}
+
 /// Other systems have no native dialog here: nothing is chosen.
 #[cfg(not(any(windows, target_os = "macos")))]
 pub async fn ask_save_path(_app: &AppHandle, _file_name: &str, _kind: &str) -> Option<PathBuf> {
@@ -175,6 +200,11 @@ pub async fn ask_save_path(_app: &AppHandle, _file_name: &str, _kind: &str) -> O
 
 #[cfg(not(any(windows, target_os = "macos")))]
 pub async fn pick_import_files(_app: &AppHandle) -> Vec<PathBuf> {
+    Vec::new()
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+pub async fn pick_client_files(_app: &AppHandle) -> Vec<PathBuf> {
     Vec::new()
 }
 
@@ -219,6 +249,20 @@ mod tests {
         let long = format!("{}.mp3", "ب".repeat(250));
         let title = title_from_file_name(Path::new(&long)).unwrap();
         assert_eq!(title.chars().count(), MAX_TITLE_CHARS);
+    }
+
+    #[test]
+    fn client_files_are_sent_with_the_type_of_their_extension() {
+        assert_eq!(client_file_mime(Path::new("C:/Acme/Scope.PDF")), Some("application/pdf"));
+        assert_eq!(client_file_mime(Path::new("brief.docx")), Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document"));
+        assert_eq!(client_file_mime(Path::new("rules.txt")), Some("text/plain"));
+        assert_eq!(client_file_mime(Path::new("notes.Md")), Some("text/markdown"));
+        for name in ["old.doc", "sheet.xlsx", "photo.png", "call.mp3", "no_extension", ".pdf"] {
+            assert_eq!(client_file_mime(Path::new(name)), None, "{name}");
+        }
+        for ext in CLIENT_FILE_EXTENSIONS {
+            assert!(client_file_mime(Path::new(&format!("a.{ext}"))).is_some(), "the picker offers {ext}");
+        }
     }
 
     #[test]

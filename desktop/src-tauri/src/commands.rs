@@ -60,7 +60,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let pending_decisions = DecisionFiles::in_dir(&state.data_dir).load().items.len();
     let tray_state = crate::tray::tray_state(recording.is_some(), paused, pending_decisions, queue.failed(), budget == BudgetState::Reached, queue.active() > 0);
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode };
-    crate::tray::update(app, tray_state, paused, pill_hidden, pending_decisions, switches);
+    let mic_note = recording.as_ref().is_some_and(|r| r.mode == crate::audio::RecordingMode::MicNote);
+    crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches);
     AppStatus {
         paired: state.is_paired(),
         server_url: settings.server_url.clone(),
@@ -1057,7 +1058,7 @@ fn main_window_handle(app: &AppHandle) -> isize {
 }
 /// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
 pub const SESSION_PATCH_KEYS: [&str; 5] = ["title", "client_id", "pinned", "keep", "labels"];
-pub const CLIENT_PATCH_KEYS: [&str; 5] = ["name", "color", "avatar", "pinned", "language"];
+pub const CLIENT_PATCH_KEYS: [&str; 6] = ["name", "color", "avatar", "pinned", "language", "ai_notes"];
 pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
 /// The server takes at most this many recordings per bulk action.
@@ -1131,7 +1132,7 @@ pub async fn client_create(state: State<'_, AppState>, name: String, color: Opti
     state.api()?.create_client(&serde_json::json!({ "name": name, "color": color, "avatar": avatar })).await
 }
 
-/// Renames, recolours, sets the avatar of or pins a client folder.
+/// Renames, recolours, sets the avatar of or pins a client folder, or switches its automatic call notes.
 #[tauri::command]
 pub async fn client_update(app: AppHandle, id: String, patch: serde_json::Map<String, serde_json::Value>) -> AppResult<serde_json::Value> {
     let patch = allowed_patch(&patch, &CLIENT_PATCH_KEYS);
@@ -1162,6 +1163,218 @@ pub async fn share_revoke(state: State<'_, AppState>, id: String) -> AppResult<(
 #[tauri::command]
 pub async fn vocabulary_add(state: State<'_, AppState>, term: String, client_id: Option<String>) -> AppResult<serde_json::Value> {
     state.api()?.add_keyterm(&term, client_id.as_deref()).await
+}
+
+/// "Always write X as Y" after an edit (the transcript's `learn` offer): for the recording's client, else for every
+/// recording.
+#[tauri::command]
+pub async fn vocabulary_replace_add(state: State<'_, AppState>, from: String, to: String, client_id: Option<String>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let (from, to) = (from.trim(), to.trim());
+    if from.is_empty() || to.is_empty() {
+        return Err(AppError::msg("Type the words to replace and what to write instead."));
+    }
+    let client_id = client_id.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
+    state.api()?.add_replacement(from, to, client_id.as_deref()).await
+}
+
+/// Accepts (the words are replaced in that line) or dismisses a suggested fix; returns the transcript.
+#[tauri::command]
+pub async fn transcript_suggestion(state: State<'_, AppState>, id: String, suggestion: u64, accept: bool) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.decide_suggestion(&id, suggestion, accept).await
+}
+
+// ---- Client workspaces (v1.4) -----------------------------------------------------------------------------------
+
+/// The kinds of a client's memory line.
+pub const MEMORY_KINDS: [&str; 4] = ["scope", "decision", "question", "change"];
+/// What a memory line edit may change; anything else from the UI is dropped.
+pub const MEMORY_PATCH_KEYS: [&str; 2] = ["text", "pinned"];
+/// The languages Ask answers and call notes are written in.
+pub const NOTES_LANGUAGES: [&str; 2] = ["en", "roman_urdu"];
+/// The longest memory line and pasted instructions the server keeps.
+pub const MAX_MEMORY_CHARS: usize = 500;
+pub const MAX_INSTRUCTIONS_CHARS: usize = 100_000;
+
+/// A memory line's trimmed text, once its kind and text are known to be ones the server takes.
+pub fn check_memory_line(kind: &str, text: &str) -> AppResult<String> {
+    if !MEMORY_KINDS.contains(&kind) {
+        return Err(AppError::msg("Choose scope, decision, question or change."));
+    }
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(AppError::msg("Write the line first."));
+    }
+    if text.chars().count() > MAX_MEMORY_CHARS {
+        return Err(AppError::msg(format!("Keep the line under {MAX_MEMORY_CHARS} characters.")));
+    }
+    Ok(text.to_string())
+}
+
+/// The language of an Ask answer or of call notes: `en` or `roman_urdu`. None stays none (the server writes English).
+pub fn notes_language(language: Option<&str>) -> AppResult<Option<&'static str>> {
+    match language {
+        None => Ok(None),
+        Some(language) => NOTES_LANGUAGES.iter().find(|l| **l == language).map(|l| Some(*l)).ok_or_else(|| AppError::msg("Choose English or Roman Urdu.")),
+    }
+}
+
+/// An Ask question, trimmed to 3-500 characters, and its answer language (English unless Roman Urdu is chosen).
+pub fn check_question(question: &str, language: Option<&str>) -> AppResult<(String, &'static str)> {
+    let question = question.trim();
+    if !(3..=500).contains(&question.chars().count()) {
+        return Err(AppError::msg("Ask a question of 3 to 500 characters."));
+    }
+    Ok((question.to_string(), notes_language(language)?.unwrap_or("en")))
+}
+
+/// Pasted instructions, trimmed: not empty and at most 100 000 characters.
+pub fn check_instructions(text: &str) -> AppResult<String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(AppError::msg("Paste the instructions first."));
+    }
+    if text.chars().count() > MAX_INSTRUCTIONS_CHARS {
+        return Err(AppError::msg("Instructions can be up to 100 000 characters. Add a longer text as a file."));
+    }
+    Ok(text.to_string())
+}
+
+/// The type a file goes to a client's workspace as, or why it cannot go: checked before anything is read or sent.
+pub fn check_client_file(path: &std::path::Path, size: u64) -> AppResult<&'static str> {
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "That file".into());
+    let mime = crate::files::client_file_mime(path).ok_or_else(|| AppError::msg(format!("{name} cannot be added. Add a PDF, Word (.docx), text or Markdown file.")))?;
+    if size > crate::files::MAX_CLIENT_FILE_BYTES {
+        return Err(AppError::msg(format!("{name} is larger than 20 MB.")));
+    }
+    if size == 0 {
+        return Err(AppError::msg(format!("{name} is empty.")));
+    }
+    Ok(mime)
+}
+
+/// A recording's call notes, or `None` when the server has none for it yet (`404 notes_not_found`).
+pub fn notes_or_none(answer: AppResult<serde_json::Value>) -> AppResult<Option<serde_json::Value>> {
+    match answer {
+        Ok(notes) => Ok(Some(notes)),
+        Err(e) if e.code() == Some("notes_not_found") => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// A client's workspace: brief, memory, the last call notes, files and the AI budget.
+#[tauri::command]
+pub async fn client_workspace(state: State<'_, AppState>, id: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.client_workspace(&id).await
+}
+
+/// Saves a person's edit of the brief; the server no longer rewrites it by itself.
+#[tauri::command]
+pub async fn client_brief_save(state: State<'_, AppState>, id: String, sections: serde_json::Map<String, serde_json::Value>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.save_client_brief(&id, &serde_json::Value::Object(sections)).await
+}
+
+/// Writes the brief again from the client's files (or its call notes), replacing an edited one.
+#[tauri::command]
+pub async fn client_brief_refresh(state: State<'_, AppState>, id: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    state.api()?.refresh_client_brief(&id).await
+}
+
+/// A memory line written by the person; `happened_on` (YYYY-MM-DD) defaults to today on the server.
+#[tauri::command]
+pub async fn client_memory_add(state: State<'_, AppState>, id: String, kind: String, text: String, happened_on: Option<String>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let text = check_memory_line(&kind, &text)?;
+    let happened_on = happened_on.map(|d| d.trim().to_string()).filter(|d| !d.is_empty());
+    state.api()?.add_client_memory(&id, &kind, &text, happened_on.as_deref()).await
+}
+
+/// New text for a memory line, or pins it (pinned lines stay when a call's notes are written again).
+#[tauri::command]
+pub async fn client_memory_update(state: State<'_, AppState>, id: String, item: String, patch: serde_json::Map<String, serde_json::Value>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let patch = allowed_patch(&patch, &MEMORY_PATCH_KEYS);
+    if patch.is_empty() {
+        return Err(AppError::msg("Nothing to change."));
+    }
+    state.api()?.update_client_memory(&id, &item, &serde_json::Value::Object(patch)).await
+}
+
+#[tauri::command]
+pub async fn client_memory_delete(state: State<'_, AppState>, id: String, item: String) -> AppResult<()> {
+    ensure_unlocked(&state)?;
+    state.api()?.delete_client_memory(&id, &item).await
+}
+
+/// The picker of a client's Add files (several at once); each path then goes to `client_file_upload`. Empty when
+/// cancelled.
+#[tauri::command]
+pub async fn client_files_pick(app: AppHandle) -> AppResult<Vec<String>> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    Ok(crate::files::pick_client_files(&app).await.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+}
+
+/// Sends one PDF, Word, text or Markdown file to a client's workspace. A file of another type or over 20 MB is refused
+/// here, before it is read.
+#[tauri::command]
+pub async fn client_file_upload(state: State<'_, AppState>, id: String, path: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let path = std::path::PathBuf::from(path);
+    let size = tokio::fs::metadata(&path).await?.len();
+    let mime = check_client_file(&path, size)?;
+    let bytes = tokio::fs::read(&path).await?;
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "File".into());
+    state.api()?.upload_client_file(&id, &name, mime, bytes).await
+}
+
+/// Pasted instructions for a client, kept with its files.
+#[tauri::command]
+pub async fn client_instructions_add(state: State<'_, AppState>, id: String, name: Option<String>, text: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let text = check_instructions(&text)?;
+    let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+    state.api()?.add_client_instructions(&id, name.as_deref(), &text).await
+}
+
+#[tauri::command]
+pub async fn client_file_delete(state: State<'_, AppState>, id: String, file: String) -> AppResult<()> {
+    ensure_unlocked(&state)?;
+    state.api()?.delete_client_file(&id, &file).await
+}
+
+/// Ask: an answer from the client's calls and files, with the lines and pages it rests on.
+#[tauri::command]
+pub async fn client_ask(state: State<'_, AppState>, id: String, question: String, language: Option<String>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let (question, language) = check_question(&question, language.as_deref())?;
+    state.api()?.ask_client(&id, &question, language).await
+}
+
+/// "Copy for AI": the client's brief, memory and last call notes as one text, ready to paste into a chat project.
+#[tauri::command]
+pub async fn client_bundle(state: State<'_, AppState>, id: String, notes: Option<u32>) -> AppResult<String> {
+    ensure_unlocked(&state)?;
+    let answer = state.api()?.client_bundle(&id, notes.map(|n| n.min(20))).await?;
+    answer.pointer("/data/text").and_then(serde_json::Value::as_str).map(str::to_string).ok_or_else(|| AppError::msg("The server sent nothing to copy."))
+}
+
+/// The call notes of a recording (`{"data": …}`), or `None` when none were written yet.
+#[tauri::command]
+pub async fn session_notes(state: State<'_, AppState>, id: String) -> AppResult<Option<serde_json::Value>> {
+    ensure_unlocked(&state)?;
+    notes_or_none(state.api()?.session_notes(&id).await)
+}
+
+/// Writes a recording's call notes again (in English or Roman Urdu; none lets the server choose).
+#[tauri::command]
+pub async fn session_notes_write(state: State<'_, AppState>, id: String, language: Option<String>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let language = notes_language(language.as_deref())?;
+    state.api()?.write_session_notes(&id, language).await
 }
 
 /// The dictation history on this computer, newest first (B14).

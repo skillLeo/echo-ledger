@@ -403,6 +403,119 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `POST /api/vocabulary/replacements`: "Always write X as Y" (for the client, or for every recording), as whole
+    /// words in any case.
+    pub async fn add_replacement(&self, from: &str, to: &str, client_id: Option<&str>) -> AppResult<serde_json::Value> {
+        let body = json!({ "from": from, "to": to, "match_case": false, "whole_word": true, "client_id": client_id });
+        let resp = self.authed(self.http.post(self.url("vocabulary/replacements")))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/transcripts/{id}/suggestions/{suggestion}` (since v1.4): accepts or dismisses a suggested fix;
+    /// returns the transcript.
+    pub async fn decide_suggestion(&self, transcript_id: &str, suggestion: u64, accept: bool) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("transcripts/{transcript_id}/suggestions/{suggestion}"))))?.json(&json!({ "accept": accept })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/clients/{id}/workspace` (since v1.4): the brief, memory, call notes and files of a client.
+    pub async fn client_workspace(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url(&format!("clients/{id}/workspace"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PUT /api/clients/{id}/brief` (since v1.4): a person's edit of the brief, never rewritten by itself after.
+    pub async fn save_client_brief(&self, id: &str, sections: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.put(self.url(&format!("clients/{id}/brief"))))?.json(&json!({ "sections": sections })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/clients/{id}/brief/refresh` (since v1.4): writes the brief again on the server's queue.
+    pub async fn refresh_client_brief(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("clients/{id}/brief/refresh"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/clients/{id}/memory` (since v1.4): a memory line; `happened_on` (YYYY-MM-DD) defaults to today.
+    pub async fn add_client_memory(&self, id: &str, kind: &str, text: &str, happened_on: Option<&str>) -> AppResult<serde_json::Value> {
+        let mut body = json!({ "kind": kind, "text": text });
+        if let Some(day) = happened_on {
+            body["happened_on"] = json!(day);
+        }
+        let resp = self.authed(self.http.post(self.url(&format!("clients/{id}/memory"))))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `PATCH /api/clients/{id}/memory/{item}` (since v1.4): new text or pin of a memory line.
+    pub async fn update_client_memory(&self, id: &str, item: &str, patch: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.patch(self.url(&format!("clients/{id}/memory/{item}"))))?.json(patch).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/clients/{id}/memory/{item}` (since v1.4).
+    pub async fn delete_client_memory(&self, id: &str, item: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("clients/{id}/memory/{item}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/clients/{id}/files` (since v1.4): a PDF, Word, text or Markdown file of at most 20 MB, sent as
+    /// `multipart/form-data`. The server reads its text on its queue.
+    pub async fn upload_client_file(&self, id: &str, name: &str, mime: &str, bytes: Vec<u8>) -> AppResult<serde_json::Value> {
+        let boundary = format!("echoledger-{}", uuid::Uuid::new_v4().simple());
+        let body = multipart_file(&boundary, "file", name, mime, &bytes);
+        drop(bytes);
+        // 20 MB on a slow line takes longer than the client's usual 120 s.
+        let resp = self
+            .authed(self.http.post(self.url(&format!("clients/{id}/files"))))?
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
+            .timeout(std::time::Duration::from_secs(300))
+            .body(body)
+            .send()
+            .await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/clients/{id}/files` (since v1.4) with JSON: pasted instructions, kept like a file.
+    pub async fn add_client_instructions(&self, id: &str, name: Option<&str>, text: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("clients/{id}/files"))))?.json(&json!({ "text": text, "name": name })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/clients/{id}/files/{file}` (since v1.4): the file and its encrypted original.
+    pub async fn delete_client_file(&self, id: &str, file: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("clients/{id}/files/{file}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/clients/{id}/ask` (since v1.4): an answer from the client's calls and files, with citations.
+    pub async fn ask_client(&self, id: &str, question: &str, language: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("clients/{id}/ask"))))?.json(&json!({ "question": question, "language": language })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/clients/{id}/bundle?notes=` (since v1.4): "Copy for AI"; without `notes` the server takes the last 5.
+    pub async fn client_bundle(&self, id: &str, notes: Option<u32>) -> AppResult<serde_json::Value> {
+        let mut req = self.http.get(self.url(&format!("clients/{id}/bundle")));
+        if let Some(notes) = notes {
+            req = req.query(&[("notes", notes.to_string())]);
+        }
+        let resp = self.authed(req)?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/sessions/{id}/notes` (since v1.4): the call notes; `404 notes_not_found` when none were written.
+    pub async fn session_notes(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url(&format!("sessions/{id}/notes"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/sessions/{id}/notes` (since v1.4): writes the call notes again, in `language` when given.
+    pub async fn write_session_notes(&self, id: &str, language: Option<&str>) -> AppResult<serde_json::Value> {
+        let body = language.map_or_else(|| json!({}), |language| json!({ "language": language }));
+        let resp = self.authed(self.http.post(self.url(&format!("sessions/{id}/notes"))))?.json(&body).send().await?;
+        Self::parse(resp).await
+    }
+
     pub async fn delete_session(&self, id: &str) -> AppResult<()> {
         let resp = self.authed(self.http.delete(self.url(&format!("sessions/{id}"))))?.send().await?;
         Self::ok_empty(resp).await
@@ -516,6 +629,19 @@ pub fn filename_from_disposition(header: &str) -> Option<String> {
     let name: String = extended.or(plain)?.chars().filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') && !c.is_control()).collect();
     let name = name.trim().trim_start_matches('.').to_string();
     (!name.is_empty()).then_some(name)
+}
+
+/// A `multipart/form-data` body with one file part (reqwest is built here without its multipart support). Quotes and
+/// line breaks are taken out of the file name, so it cannot end the part's header early.
+pub fn multipart_file(boundary: &str, field: &str, filename: &str, mime: &str, bytes: &[u8]) -> Vec<u8> {
+    let filename: String = filename.chars().filter(|c| !matches!(c, '"' | '\r' | '\n')).collect();
+    let head = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{field}\"; filename=\"{filename}\"\r\nContent-Type: {mime}\r\n\r\n");
+    let tail = format!("\r\n--{boundary}--\r\n");
+    let mut body = Vec::with_capacity(head.len() + bytes.len() + tail.len());
+    body.extend_from_slice(head.as_bytes());
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(tail.as_bytes());
+    body
 }
 
 fn percent_decode(text: &str) -> String {

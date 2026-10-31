@@ -58,14 +58,15 @@ pub fn tooltip(state: TrayState) -> &'static str {
     }
 }
 
-/// Status dot colour (RGBA): red recording, amber paused, blue uploading, violet attention.
+/// Status dot colour (RGBA), step 9 of the design system's Radix scales: red recording, amber paused, blue
+/// uploading, indigo attention.
 pub fn dot_colour(state: TrayState) -> Option<[u8; 4]> {
     match state {
         TrayState::Idle => None,
-        TrayState::Recording => Some([0xF4, 0x3F, 0x5E, 0xFF]),
-        TrayState::Paused => Some([0xF5, 0x9E, 0x0B, 0xFF]),
-        TrayState::Uploading => Some([0x3B, 0x82, 0xF6, 0xFF]),
-        TrayState::Attention => Some([0x8B, 0x5C, 0xF6, 0xFF]),
+        TrayState::Recording => Some([0xE5, 0x48, 0x4D, 0xFF]),
+        TrayState::Paused => Some([0xFF, 0xC5, 0x3D, 0xFF]),
+        TrayState::Uploading => Some([0x00, 0x90, 0xFF, 0xFF]),
+        TrayState::Attention => Some([0x3E, 0x63, 0xDD, 0xFF]),
     }
 }
 
@@ -97,6 +98,8 @@ struct MenuShape {
     recording: bool,
     paused: bool,
     show_controls: bool,
+    /// The recording is a voice note spoken into the microphone.
+    mic_note: bool,
     review: usize,
     captions: bool,
     auto: bool,
@@ -133,6 +136,13 @@ fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
         entries.push(item("controls", "Show recording controls"));
     }
     entries.push(item("voice_note", "Capture voice note playing now"));
+    // Stops only its own note: during a call recording the line is greyed out instead of stopping the call.
+    entries.push(Entry::Item {
+        id: "mic_note",
+        label: (if shape.mic_note { "Stop voice note" } else { "Record a voice note" }).into(),
+        enabled: shape.mic_note || !shape.recording,
+        checked: None,
+    });
     entries.push(Entry::Separator);
     entries.push(Entry::Item { id: "captions", label: "Live captions".into(), enabled: true, checked: Some(shape.captions) });
     entries.push(Entry::Item { id: "auto", label: "Record calls automatically".into(), enabled: true, checked: Some(shape.auto) });
@@ -191,6 +201,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                     }
                     "captions" => crate::actions::toggle_captions(&app).await,
                     "voice_note" => crate::actions::toggle_voice_note(&app).await,
+                    "mic_note" => crate::actions::toggle_mic_note(&app).await,
                     "auto" => {
                         let state = app.state::<crate::AppState>();
                         state
@@ -246,8 +257,9 @@ pub struct Switches {
     pub auto: bool,
 }
 
-/// Applies a new state to the tray: icon, tooltip and menu, each only when it changed.
-pub fn update(app: &AppHandle, state: TrayState, paused: bool, pill_hidden: bool, pending: usize, switches: Switches) {
+/// Applies a new state to the tray: icon, tooltip and menu, each only when it changed. `mic_note`: the recording is a
+/// voice note spoken into the microphone.
+pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, pill_hidden: bool, pending: usize, switches: Switches) {
     let Some(cache) = app.try_state::<TrayCache>() else {
         return;
     };
@@ -274,6 +286,7 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, pill_hidden: bool
         recording,
         paused: recording && paused,
         show_controls: recording && pill_hidden,
+        mic_note: recording && mic_note,
         review: pending,
         captions: switches.captions,
         auto: switches.auto,
@@ -308,7 +321,7 @@ mod tests {
         let shape = MenuShape { auto: true, ..MenuShape::default() };
         assert_eq!(
             labels(&shape),
-            ["Open EchoLedger", "---", "Start recording", "Pause recording", "Capture voice note playing now", "---", "[ ] Live captions", "[x] Record calls automatically", "---", "Quit EchoLedger"]
+            ["Open EchoLedger", "---", "Start recording", "Pause recording", "Capture voice note playing now", "Record a voice note", "---", "[ ] Live captions", "[x] Record calls automatically", "---", "Quit EchoLedger"]
         );
         let pause = menu_entries(&shape).into_iter().find(|e| matches!(e, Entry::Item { id: "pause", .. })).unwrap();
         assert!(matches!(pause, Entry::Item { enabled: false, .. }), "pause needs a recording");
@@ -316,7 +329,7 @@ mod tests {
 
     #[test]
     fn recording_menu_shows_its_state_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, show_controls: true, review: 2, captions: true, auto: false };
+        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false };
         let labels = labels(&shape);
         assert!(labels.contains(&"Stop recording".to_string()));
         assert!(labels.contains(&"Resume recording".to_string()));
@@ -328,10 +341,33 @@ mod tests {
         assert!(labels.len() <= 13, "the tray menu stays short");
     }
 
+    fn mic_note_entry(shape: &MenuShape) -> Entry {
+        menu_entries(shape).into_iter().find(|e| matches!(e, Entry::Item { id: "mic_note", .. })).unwrap()
+    }
+
+    #[test]
+    fn a_voice_note_is_recorded_and_stopped_from_the_same_line() {
+        let idle = mic_note_entry(&MenuShape::default());
+        assert!(matches!(idle, Entry::Item { ref label, enabled: true, .. } if label == "Record a voice note"));
+        let recording = mic_note_entry(&MenuShape { recording: true, mic_note: true, ..MenuShape::default() });
+        assert!(matches!(recording, Entry::Item { ref label, enabled: true, .. } if label == "Stop voice note"));
+        let call = mic_note_entry(&MenuShape { recording: true, ..MenuShape::default() });
+        assert!(matches!(call, Entry::Item { enabled: false, .. }), "a call recording is not stopped from this line");
+    }
+
     #[test]
     fn menu_ids_keep_their_actions() {
         let shape = MenuShape { recording: true, show_controls: true, review: 1, ..MenuShape::default() };
         let ids: Vec<&str> = menu_entries(&shape).into_iter().filter_map(|e| match e { Entry::Item { id, .. } => Some(id), Entry::Separator => None }).collect();
-        assert_eq!(ids, ["open", "record", "pause", "controls", "voice_note", "captions", "auto", "review", "quit"]);
+        assert_eq!(ids, ["open", "record", "pause", "controls", "voice_note", "mic_note", "captions", "auto", "review", "quit"]);
+    }
+
+    #[test]
+    fn status_dots_use_the_design_system_colours() {
+        assert_eq!(dot_colour(TrayState::Idle), None);
+        assert_eq!(dot_colour(TrayState::Recording), Some([0xE5, 0x48, 0x4D, 0xFF]));
+        assert_eq!(dot_colour(TrayState::Paused), Some([0xFF, 0xC5, 0x3D, 0xFF]));
+        assert_eq!(dot_colour(TrayState::Uploading), Some([0x00, 0x90, 0xFF, 0xFF]));
+        assert_eq!(dot_colour(TrayState::Attention), Some([0x3E, 0x63, 0xDD, 0xFF]));
     }
 }
