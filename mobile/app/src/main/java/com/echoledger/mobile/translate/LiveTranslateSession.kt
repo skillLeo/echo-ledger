@@ -235,6 +235,19 @@ class LiveTranslateSession(
             wait = backoffMs(attempt++)
         }
         val words = (problem as? TokenUnavailable)?.message?.takeIf { it.isNotBlank() }
+        // No credit, no key, the budget used up, not paired: retrying cannot help, so Live Translate ends and the
+        // service says why (since v1.3.0.1: the box stayed on screen retrying every minute).
+        if ((problem as? TokenUnavailable)?.permanent == true) {
+            synchronized(lock) {
+                stopped = true
+                wanted = false
+                pending.clear()
+            }
+            state.update {
+                it.copy(status = TranslateFeed.Status.STOPPED, notice = words ?: NO_CONNECTION, partial = "", originalPartial = "")
+            }
+            return
+        }
         state.update {
             it.copy(
                 status = TranslateFeed.Status.RECONNECTING,
@@ -246,10 +259,9 @@ class LiveTranslateSession(
                 reconnects = it.reconnects + 1
             )
         }
-        val permanent = (problem as? TokenUnavailable)?.permanent == true
         synchronized(lock) {
             connectJob = scope.launch {
-                delay(if (permanent) maxOf(wait, PERMANENT_RETRY_MS) else wait)
+                delay(wait)
                 synchronized(lock) { if (!stopped && wanted && socket == null) connect() }
             }
         }
@@ -400,7 +412,6 @@ class LiveTranslateSession(
         private const val NORMAL_CLOSURE = 1000
         private const val MIN_KEY_LEFT_MS = 60_000L
         private const val PREFETCH_BEFORE_MS = 90_000L
-        private const val PERMANENT_RETRY_MS = 60_000L
         private const val RATE_WINDOW_MS = 2_000L
         private val SENTENCE_END = Regex("[.!?۔؟。]")
     }

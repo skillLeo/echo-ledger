@@ -18,7 +18,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -216,10 +216,12 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
                 view.setEditing(true)
             }
 
+            // Hidden means nothing on screen, the dot included (since 1.3.0.1): the notification's Show brings it back.
             BoxState.HIDDEN -> {
                 view.visibility = View.GONE
                 view.setEditing(false)
                 params.flags = LOCKED_FLAGS
+                hideToolbar()
             }
 
             else -> {
@@ -230,7 +232,21 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             }
         }
         runCatching { wm.updateViewLayout(view, params) }
+        grip?.visibility = if (next == BoxState.HIDDEN) View.GONE else View.VISIBLE
         wakeGrip()
+    }
+
+    /** The grip dot on or off at once (Settings → Game translate → Show the grip dot), without restarting. */
+    fun showGrip(on: Boolean) {
+        if (subtitles || on == (grip != null)) return
+        showGrip = on
+        if (on) {
+            if (text != null) addGrip()
+        } else {
+            hideToolbar()
+            grip?.let { runCatching { wm.removeView(it) } }
+            grip = null
+        }
     }
 
     // ---- moving and resizing (Edit) -------------------------------------------------------------------------------
@@ -359,32 +375,38 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             setViewTreeLifecycleOwner(owner)
             setViewTreeSavedStateRegistryOwner(owner)
             setContent {
-                Row(
+                // Stop comes first and the buttons wrap onto a second row on narrow screens (since 1.3.0.1: on a
+                // 360 dp screen the last button, Stop, was cut off).
+                FlowRow(
                     Modifier.clip(
                         RoundedCornerShape(22.dp)
                     ).background(Color(0xEB111113)).border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(22.dp))
                         .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
+                    ToolButton(Icons.Rounded.Close, "Stop Live Translate", danger = true) { actions.onStop() }
                     ToolButton(
                         if (paused.value) Icons.Rounded.PlayArrow else Icons.Rounded.Pause,
                         if (paused.value) "Resume" else "Pause"
                     ) {
                         if (paused.value) actions.onResume() else actions.onPause()
                     }
-                    ToolButton(Icons.Rounded.VisibilityOff, "Hide for 5 minutes") { actions.onHide() }
+                    ToolButton(Icons.Rounded.VisibilityOff, "Hide the box and the dot") { actions.onHide() }
                     ToolButton(Icons.Rounded.TextDecrease, "Smaller text") { actions.onTextSize(-2) }
                     ToolButton(Icons.Rounded.TextIncrease, "Larger text") { actions.onTextSize(2) }
                     ToolButton(Icons.Rounded.Contrast, "Less opaque") { actions.onOpacity(-0.1f) }
                     ToolButton(Icons.Rounded.Contrast, "More opaque", bright = true) { actions.onOpacity(0.1f) }
                     ToolButton(Icons.Rounded.Subtitles, "Show or hide what was said") { actions.onToggleOriginal() }
                     ToolButton(Icons.Rounded.Translate, "Next language") { actions.onLanguage() }
-                    ToolButton(Icons.Rounded.Close, "Stop Live Translate") { actions.onStop() }
                 }
             }
         }
+        val (screenW, _) = screen()
+        val margin = (8 * density).toInt()
+        val width = minOf((TOOLBAR_DP * density).toInt(), screenW - 2 * margin)
         val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            width,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
@@ -393,8 +415,8 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val bp = boxParams
-            x = ((bp?.x ?: 0) + (bp?.width ?: 0) - (9 * 44 * density).toInt()).coerceAtLeast(0)
-            y = (bp?.y ?: 0) + (bp?.height ?: 0) + (8 * density).toInt()
+            x = ((bp?.x ?: 0) + (bp?.width ?: 0) - width).coerceIn(margin, (screenW - width - margin).coerceAtLeast(margin))
+            y = (bp?.y ?: 0) + (bp?.height ?: 0) + margin
         }
         view.setOnTouchListener { _, e ->
             if (e.actionMasked == MotionEvent.ACTION_OUTSIDE) hideToolbar()
@@ -413,7 +435,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
     }
 
     @androidx.compose.runtime.Composable
-    private fun ToolButton(icon: ImageVector, label: String, bright: Boolean = false, onClick: () -> Unit) {
+    private fun ToolButton(icon: ImageVector, label: String, bright: Boolean = false, danger: Boolean = false, onClick: () -> Unit) {
         Box(
             Modifier.size(40.dp).clip(CircleShape)
                 .combinedClickable(
@@ -428,7 +450,16 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
                 .semantics { contentDescription = label },
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = if (bright) Color.White else Color(0xFFB0B4BA), modifier = Modifier.size(20.dp))
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = when {
+                    danger -> Color(0xFFFF9592)
+                    bright -> Color.White
+                    else -> Color(0xFFB0B4BA)
+                },
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 
@@ -463,6 +494,9 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         const val GRIP_DP = 24
         const val GRIP_FADE_MS = 3_000L
         const val TOOLBAR_IDLE_MS = 6_000L
+
+        /** Nine 40 dp buttons with 2 dp gaps and 4 dp padding: one row when the screen is wide enough. */
+        const val TOOLBAR_DP = 9 * 40 + 8 * 2 + 8
         const val FADE_IN_MS = 120L
         const val FADE_OUT_MS = 250L
         const val TAIL = 400

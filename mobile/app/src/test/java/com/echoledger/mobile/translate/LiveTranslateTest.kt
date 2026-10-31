@@ -206,16 +206,21 @@ class LiveTranslateTest {
     }
 
     @Test
-    fun `the server's own words are shown when it refuses a key`() {
+    fun `a refused key ends Live Translate with the server's own words instead of retrying`() {
+        var asked = 0
         val session = LiveTranslateSession(OkHttpClient(), scope, SpeedPreset.BALANCED, fetchToken = {
+            asked++
             throw TokenUnavailable("Soniox has no credit left. Add credit to the Soniox account, then try again.", permanent = true)
         }, backoffMs = { 20 })
 
         session.send(speech())
-        waitFor("the notice") { session.feed.value.notice != null }
+        waitFor("the end") { session.feed.value.status == TranslateFeed.Status.STOPPED }
+        Thread.sleep(200)
+        session.send(speech())
+        Thread.sleep(200)
 
         assertTrue(session.feed.value.notice!!.startsWith("Soniox has no credit left"))
-        session.stop()
+        assertEquals("asked once, never again", 1, asked)
     }
 
     @Test

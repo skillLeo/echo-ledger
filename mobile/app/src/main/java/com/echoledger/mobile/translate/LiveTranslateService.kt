@@ -36,10 +36,12 @@ import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 
@@ -88,6 +90,7 @@ class LiveTranslateService :
             ACTION_RESUME -> onResume()
             ACTION_EDIT -> onGripTap()
             ACTION_HIDE -> onHide()
+            ACTION_SHOW -> onShow()
             else -> if (running.value == null) stopSelf()
         }
         return START_NOT_STICKY
@@ -239,6 +242,7 @@ class LiveTranslateService :
         applyStyle()
         startThermalGuard()
         main.post(ticker)
+        watchSettings()
     }
 
     private fun applyStyle() {
@@ -259,9 +263,17 @@ class LiveTranslateService :
             val o = overlay ?: return
             val s = session
             val now = elapsed()
+            val before = machine.state
             o.state(machine.on(BoxEvent.Tick(now)))
+            // Edit locked itself, or the box came back after 5 minutes: the notification's buttons follow.
+            if (machine.state != before) updateNotification()
             if (s != null) {
                 val feed = s.feed.value
+                // The session ended by itself (no Soniox credit, no key, the budget used up): stop and say why.
+                if (feed.status == TranslateFeed.Status.STOPPED) {
+                    finishAndStop(feed.notice)
+                    return
+                }
                 val fadeAfter = (if (mode == TranslateMode.WATCH) 4 else style.fadeAfterSeconds) * 1_000L
                 val recent = maxOf(feed.heardAt, lastSpeechAt)
                 val quiet = fadeAfter > 0 && now - recent > fadeAfter
@@ -338,6 +350,8 @@ class LiveTranslateService :
 
     private fun finishSession() {
         main.removeCallbacks(ticker)
+        settingsJob?.cancel()
+        settingsJob = null
         thermal?.let { if (Build.VERSION.SDK_INT >= 29) getSystemService(PowerManager::class.java).removeThermalStatusListener(it) }
         thermal = null
         source?.stop()
@@ -430,6 +444,34 @@ class LiveTranslateService :
         updateNotification()
     }
 
+    private var settingsJob: Job? = null
+
+    /**
+     * Changes made in Settings while Live Translate runs apply at once (since 1.3.0.1): the grip dot on or off, the
+     * box's style. Before, they waited for the next start.
+     */
+    private fun watchSettings() {
+        val graph = (application as EchoLedgerApp).graph
+        settingsJob?.cancel()
+        settingsJob = scope.launch {
+            graph.settings.settings.drop(1).collect { s ->
+                val lt = s.liveTranslate
+                main.post {
+                    if (running.value == null) return@post
+                    prefs = lt
+                    overlay?.showGrip(lt.showGrip)
+                    if (mode == TranslateMode.GAME) style = lt.game.perGame[packageName] ?: lt.game.style
+                    applyStyle()
+                }
+            }
+        }
+    }
+
+    private fun onShow() {
+        overlay?.state(machine.on(BoxEvent.Show))
+        updateNotification()
+    }
+
     override fun onStop() {
         finishAndStop()
     }
@@ -517,6 +559,7 @@ class LiveTranslateService :
     private fun notification(): Notification {
         val paused = ::machine.isInitialized && machine.state == BoxState.PAUSED
         val editing = ::machine.isInitialized && machine.state == BoxState.EDIT
+        val hidden = ::machine.isInitialized && machine.state == BoxState.HIDDEN
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(mode.label)
@@ -527,7 +570,7 @@ class LiveTranslateService :
             .setContentIntent(open(this))
             .addAction(0, if (paused) "Resume" else "Pause", action(if (paused) ACTION_RESUME else ACTION_PAUSE, 1))
             .addAction(0, if (editing) "Lock" else "Edit", action(ACTION_EDIT, 2))
-            .addAction(0, "Hide", action(ACTION_HIDE, 3))
+            .addAction(0, if (hidden) "Show" else "Hide", action(if (hidden) ACTION_SHOW else ACTION_HIDE, 3))
             .addAction(0, "Stop", action(ACTION_STOP, 4))
             .build()
     }
@@ -561,6 +604,7 @@ class LiveTranslateService :
         const val ACTION_RESUME = "com.echoledger.mobile.translate.RESUME"
         const val ACTION_EDIT = "com.echoledger.mobile.translate.EDIT"
         const val ACTION_HIDE = "com.echoledger.mobile.translate.HIDE"
+        const val ACTION_SHOW = "com.echoledger.mobile.translate.SHOW"
         const val EXTRA_MODE = "mode"
         const val EXTRA_PACKAGE = "package"
         const val EXTRA_PROJECTION = "projection"
