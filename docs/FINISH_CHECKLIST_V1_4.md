@@ -43,7 +43,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 - [ ] Tokens (Inter, slate + indigo, radii, spacing, icons, light/dark) on desktop and web; old palette removed.
 - [ ] Structure Library · Clients · Record · Activity · You; collapsible sidebar; bottom nav on narrow web.
 - [ ] Components and screens: search pill + chips, rows, Waiting card, list + detail, recording page (chips, view switch, speaker blocks, docked player, find, Copy / Copy for AI), Keep card, Clients, Activity, settings panels, empty/loading/error.
-- [ ] Desktop extras: Ctrl/⌘+K, N, Space, J/L; tray menu; pill and captions restyled; native notifications.
+- [x] Desktop extras: Ctrl/⌘+K, N, Space, J/L; tray menu; pill and captions restyled; native notifications (desktop `599e3c3`).
 - [ ] Web: Filament theme on every page; user pages as custom Livewire pages; admin pages themed; responsive.
 - [ ] Playwright screenshots (web 1440 + 390 px, desktop; light/dark) compared with the phone; before/after saved.
 - [ ] P2 suites: phone, desktop, web.
