@@ -21,6 +21,7 @@ use App\Services\ActivityFeed;
 use App\Services\AuditLog;
 use App\Services\ClientAi\ClaudeClientAi;
 use App\Services\ClientAi\ClientAi;
+use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
@@ -63,6 +64,9 @@ class AppServiceProvider extends ServiceProvider
 
         // docs/API.md returns single resources unwrapped ({"id": …}); Laravel would otherwise wrap them in {"data": …}.
         JsonResource::withoutWrapping();
+
+        // A client's documents may be up to 20 MB on the console too; Livewire's own uploads stop at 12 MB.
+        config(['livewire.temporary_file_upload.rules' => ['required', 'file', 'max:'.(ClientWorkspace::MAX_FILE_BYTES / 1024)]]);
 
         // The security centre's audit log (B16).
         AuditLog::listen();

@@ -7,6 +7,7 @@ namespace App\Filament\Resources\Clients;
 use App\Filament\Resources\Clients\Pages\CreateClient;
 use App\Filament\Resources\Clients\Pages\EditClient;
 use App\Filament\Resources\Clients\Pages\ListClients;
+use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Resources\Clients\RelationManagers\ContactsRelationManager;
 use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
 use App\Http\Controllers\Api\OrganiseController;
@@ -16,9 +17,11 @@ use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use BackedEnum;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -29,9 +32,10 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\ColorColumn;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\Layout\Split;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\Rules\Unique;
@@ -44,7 +48,7 @@ class ClientResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Library';
+    protected static string|UnitEnum|null $navigationGroup = null;
 
     protected static ?int $navigationSort = 2;
 
@@ -52,7 +56,8 @@ class ClientResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->withCount(['keyterms', 'captureSessions']);
+        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->withCount(['keyterms', 'captureSessions'])
+            ->withMax('captureSessions', 'started_at');
     }
 
     public static function form(Schema $schema): Schema
@@ -98,19 +103,28 @@ class ClientResource extends Resource
         return $table
             ->defaultSort('name')
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->orderByDesc('pinned'))
+            // The phone's client list: initials avatar, name, "2 recordings · Last call Oct 24"; a row opens the workspace.
             ->columns([
-                ColorColumn::make('color')->label(''),
-                TextColumn::make('avatar')->label('')->placeholder('')->weight('semibold'),
-                TextColumn::make('name')->searchable()->sortable()->weight('semibold'),
-                TextColumn::make('keyterms_count')->label('Keyterms')->badge()->color('primary'),
-                TextColumn::make('capture_sessions_count')->label('Sessions')->badge()->color('gray'),
-                TextColumn::make('language')->placeholder('Automatic')
-                    ->formatStateUsing(fn (?string $state): string => LanguageChoice::OFFERED[(string) $state] ?? (string) $state),
-                TextColumn::make('updated_at')->since()->label('Updated'),
-                IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)->trueColor('warning')->falseColor('gray')
-                    ->action(fn (Client $record) => $record->update(['pinned' => ! $record->pinned])),
+                Split::make([
+                    ViewColumn::make('name')->label('Name')->view('filament.clients.row')->searchable()->sortable(),
+                    TextColumn::make('language')->placeholder('Automatic')->grow(false)->visibleFrom('md')->color('gray')
+                        ->formatStateUsing(fn (?string $state): string => LanguageChoice::OFFERED[(string) $state] ?? (string) $state),
+                    IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)->trueColor('warning')->falseColor('gray')
+                        ->grow(false)->tooltip(fn (Client $record): string => $record->pinned ? 'Unpin' : 'Pin to the top')
+                        ->extraAttributes(fn (Client $record): array => ['class' => $record->pinned ? 'el-pin el-on' : 'el-pin'])
+                        ->action(fn (Client $record) => $record->update(['pinned' => ! $record->pinned])),
+                ])->extraAttributes(['class' => 'el-split']),
+                TextColumn::make('keyterms_count')->label('Keyterms')->hidden(),
+                TextColumn::make('capture_sessions_count')->label('Recordings')->hidden(),
             ])
-            ->recordActions([EditAction::make(), DeleteAction::make()])
+            ->recordActions([
+                ActionGroup::make([
+                    ViewAction::make()->label('Open'),
+                    EditAction::make()->label('Settings'),
+                    DeleteAction::make(),
+                ])->label('More')->tooltip('More')->color('gray'),
+            ])
+            ->emptyStateIcon(Heroicon::OutlinedUsers)
             ->emptyStateHeading('No clients yet')
             ->emptyStateDescription('A client groups its recordings and teaches the engines its names and words.')
             ->emptyStateActions([CreateAction::make()->label('Add a client')]);
@@ -126,6 +140,7 @@ class ClientResource extends Resource
         return [
             'index' => ListClients::route('/'),
             'create' => CreateClient::route('/create'),
+            'view' => ViewClient::route('/{record}'),
             'edit' => EditClient::route('/{record}/edit'),
         ];
     }
