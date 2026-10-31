@@ -2,7 +2,8 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 import { api, listenTo, type AppStatus, type AskBeforeSaving, type Corner, type DecisionTimeout, type Settings, type ShortcutAction, type SiteRule, type TranscriptionLanguage } from "../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut, sourceAppLabel } from "../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
-import { SourceAppIcon } from "../../components/Icons";
+import { CallIcon, ChevronRightIcon, KeyboardIcon, MicIcon, SearchIcon, SettingsIcon, SourceAppIcon, TuneIcon } from "../../components/Icons";
+import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SelectRow, Toggle } from "./SettingsControls";
 import { AutoRecordApps, CaptionStyleCard, MicrophoneCard } from "./CaptureSettings";
 import { DictationCard } from "./DictationSettings";
@@ -20,13 +21,28 @@ const ACTIONS: [ShortcutAction, string][] = [
   ["mark", "Bookmark this moment of a recording"],
 ];
 
-type Group = "general" | "recording" | "captions" | "dictation" | "shortcuts" | "privacy" | "devices" | "storage" | "about";
-/** Settings groups, in the order a system settings app would show them (B19). */
-export const GROUPS: readonly Group[] = ["general", "recording", "captions", "dictation", "shortcuts", "privacy", "devices", "storage", "about"];
+type Group = "general" | "calls" | "voice" | "shortcuts";
+/** General, then one panel per way of using the app, as on the phone's settings (B19). */
+export const GROUPS: readonly Group[] = ["general", "calls", "voice", "shortcuts"];
 export const GROUP_LABEL: Record<Group, string> = {
-  general: "General", recording: "Recording", captions: "Captions", dictation: "Dictation", shortcuts: "Shortcuts",
-  privacy: "Privacy & security", devices: "Devices", storage: "Storage", about: "About",
+  general: "General", calls: "Calls & meetings", voice: "Voice notes & dictation", shortcuts: "Shortcuts",
 };
+const GROUP_SUB: Record<Group, string> = {
+  general: "This computer, look, lock, privacy, storage",
+  calls: "Call apps, after a call, captions, microphone",
+  voice: "The dictation box, its words and history",
+  shortcuts: "Keys for captions, saving, bookmarks, the app",
+};
+const GROUP_ICON: Record<Group | "all", typeof SettingsIcon> = { all: SettingsIcon, general: TuneIcon, calls: CallIcon, voice: MicIcon, shortcuts: KeyboardIcon };
+const THEMES: readonly [ThemeChoice, string][] = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
+/** Keys of the main window itself (not global; they work while EchoLedger is in front). */
+const APP_KEYS: readonly [string, string][] = [
+  ["Ctrl+K", "Search recordings and run commands"],
+  ["N", "Start or stop a voice note"],
+  ["Space", "Play or pause the open recording"],
+  ["J / L", "Back or forward 10 seconds"],
+  ["Ctrl+F", "Find in the open transcript"],
+];
 interface SettingsSection { id: string; group: Group; title: string; keywords: string; node: ReactNode }
 
 const ASK_BEFORE_SAVING: readonly (readonly [AskBeforeSaving, string])[] = [["always", "Always"], ["auto_only", "Only automatic calls"], ["never", "Never"]];
@@ -106,11 +122,21 @@ function CallSites({ rules, onSave }: { rules: SiteRule[]; onSave: (rules: SiteR
   );
 }
 
-export function SettingsView({ status, run, onUnpaired }: {
+export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
   status: AppStatus;
   run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
   onUnpaired: (s: AppStatus) => void;
+  /** The theme choice and how to change it (the sidebar's toggle does the same). */
+  theme?: ThemeChoice;
+  onTheme?: (theme: ThemeChoice) => void;
 }) {
+  const [ownTheme, setOwnTheme] = useState<ThemeChoice>(getThemeChoice);
+  const themeChoice = theme ?? ownTheme;
+  const chooseTheme = onTheme ?? ((next: ThemeChoice) => {
+    saveThemeChoice(next);
+    applyTheme(next);
+    setOwnTheme(next);
+  });
   const [settings, setSettings] = useState<Settings | null>(null);
   const [recording, setRecording] = useState<ShortcutAction | null>(null);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
@@ -169,6 +195,17 @@ export function SettingsView({ status, run, onUnpaired }: {
         </div>
       </div>
     ) },
+    { id: "appearance", group: "general", title: "Appearance", keywords: "theme dark light system look", node: (
+      <div className="card">
+        <b>Appearance</b>
+        <div className="toggle">
+          <span id="settings-theme">Theme</span>
+          <span className="segmented" role="group" aria-labelledby="settings-theme">
+            {THEMES.map(([value, text]) => <button key={value} type="button" aria-pressed={themeChoice === value} onClick={() => chooseTheme(value)}>{text}</button>)}
+          </span>
+        </div>
+      </div>
+    ) },
     { id: "notifications", group: "general", title: "Notifications", keywords: "notifications quiet hours bell activity", node: <NotificationsCard settings={settings} patch={patch} /> },
     { id: "consent", group: "general", title: "Privacy & consent", keywords: "consent law participants", node: (
       <div className="card">
@@ -177,7 +214,7 @@ export function SettingsView({ status, run, onUnpaired }: {
         <Toggle label="I understand and will obtain consent where required" on={settings.consentAcknowledged} onChange={(v) => patch({ consentAcknowledged: v })} />
       </div>
     ) },
-    { id: "recording", group: "recording", title: "Recording", keywords: "auto record calls unknown apps ask before saving decision timeout browser tab", node: (
+    { id: "recording", group: "calls", title: "Recording", keywords: "auto record calls unknown apps ask before saving decision timeout browser tab", node: (
       <div className="card">
         <b>Recording</b>
         <Toggle label="Auto-record calls" hint="Records a call when an app both uses your microphone and plays audio. Dictation and voice typing are never recorded." on={settings.autoMode} onChange={(v) => patch({ autoMode: v })} />
@@ -189,10 +226,10 @@ export function SettingsView({ status, run, onUnpaired }: {
         <SelectRow label="If I don't choose within 60 s" value={settings.decisionTimeout} options={DECISION_TIMEOUT} onChange={(v) => patch({ decisionTimeout: v })} />
       </div>
     ) },
-    { id: "auto-apps", group: "recording", title: "Auto-record apps", keywords: "whatsapp zoom teams meet apps", node: <AutoRecordApps settings={settings} patch={patch} /> },
-    { id: "call-sites", group: "recording", title: "Call sites", keywords: "sites browser never record rules", node: <CallSites rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules: siteRules })} /> },
-    { id: "microphone", group: "recording", title: "Microphone", keywords: "microphone device test permission silence far side", node: <MicrophoneCard settings={settings} patch={patch} disabled={!!status.recording || status.dictationActive} /> },
-    { id: "captions", group: "captions", title: "Captions", keywords: "captions lines overlay screen sharing position corner", node: (
+    { id: "auto-apps", group: "calls", title: "Auto-record apps", keywords: "whatsapp zoom teams meet apps", node: <AutoRecordApps settings={settings} patch={patch} /> },
+    { id: "call-sites", group: "calls", title: "Call sites", keywords: "sites browser never record rules", node: <CallSites rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules: siteRules })} /> },
+    { id: "microphone", group: "calls", title: "Microphone", keywords: "microphone device test permission silence far side", node: <MicrophoneCard settings={settings} patch={patch} disabled={!!status.recording || status.dictationActive} /> },
+    { id: "captions", group: "calls", title: "Captions", keywords: "captions lines overlay screen sharing position corner", node: (
       <div className="card">
         <b>Captions</b>
         <Toggle label="Show live captions while recording" on={settings.captionsOnRecord} onChange={(v) => patch({ captionsOnRecord: v })} />
@@ -207,8 +244,8 @@ export function SettingsView({ status, run, onUnpaired }: {
         </div>
       </div>
     ) },
-    { id: "caption-style", group: "captions", title: "Caption style", keywords: "size width opacity colour compact", node: <CaptionStyleCard settings={settings} patch={patch} /> },
-    { id: "dictation", group: "dictation", title: "Dictation", keywords: "dictation hold talk clean up sounds replacements snippets history", node: <DictationCard settings={settings} patch={patch} /> },
+    { id: "caption-style", group: "calls", title: "Caption style", keywords: "size width opacity colour compact", node: <CaptionStyleCard settings={settings} patch={patch} /> },
+    { id: "dictation", group: "voice", title: "Dictation", keywords: "dictation hold talk clean up sounds replacements snippets history", node: <DictationCard settings={settings} patch={patch} /> },
     { id: "shortcuts", group: "shortcuts", title: "Global shortcuts", keywords: "shortcuts keys hotkeys keyboard", node: (
       <div className="card">
         <div className="row"><b>Global shortcuts</b><span className="spacer" /><button className="btn ghost small" onClick={async () => { const s = await run(api.resetShortcuts, "Shortcuts reset"); if (s) setSettings(s); }}>Reset defaults</button></div>
@@ -229,20 +266,31 @@ export function SettingsView({ status, run, onUnpaired }: {
         <p className="small muted">A shortcut used by another EchoLedger action is refused; one used by another app is reported here.</p>
       </div>
     ) },
-    { id: "lock", group: "privacy", title: "App lock", keywords: "lock pin windows hello touch id privacy security", node: <LockCard settings={settings} patch={patch} run={run} /> },
-    { id: "devices", group: "devices", title: "Devices", keywords: "devices revoke paired activity audit", node: <DevicesCard run={run} /> },
-    { id: "this-device", group: "devices", title: "This computer", keywords: "unpair device name", node: (
+    { id: "app-keys", group: "shortcuts", title: "In the app", keywords: "keys search voice note play pause find", node: (
+      <div className="card">
+        <b>In the app</b>
+        {APP_KEYS.map(([keys, what]) => (
+          <div className="toggle" key={keys}><span>{what}</span><span className="kbd">{status.platform === "macos" ? keys.replace("Ctrl+", "⌘") : keys}</span></div>
+        ))}
+      </div>
+    ) },
+    { id: "lock", group: "general", title: "App lock", keywords: "lock pin windows hello touch id privacy security", node: <LockCard settings={settings} patch={patch} run={run} /> },
+    { id: "devices", group: "general", title: "Devices", keywords: "devices revoke paired activity audit", node: <DevicesCard run={run} /> },
+    { id: "this-device", group: "general", title: "This computer", keywords: "unpair device name", node: (
       <div className="card">
         <div className="row"><div><b>Device</b><div className="small muted">{status.deviceName}</div></div><span className="spacer" />
           <button className="btn danger" onClick={async () => { if (window.confirm("Unpair this computer? Pending uploads stay queued until you pair again.")) { const s = await run(api.unpair); if (s) onUnpaired(s); } }}>Unpair</button>
         </div>
       </div>
     ) },
-    { id: "storage", group: "storage", title: "Storage and retention", keywords: "storage disk retention deleted bin", node: <StorageCard /> },
-    { id: "about", group: "about", title: "About", keywords: "version server export import backup settings file", node: <AboutCard status={status} run={run} onImported={setSettings} /> },
+    { id: "storage", group: "general", title: "Storage and retention", keywords: "storage disk retention deleted bin", node: <StorageCard /> },
+    { id: "about", group: "general", title: "About", keywords: "version server export import backup settings file", node: <AboutCard status={status} run={run} onImported={setSettings} /> },
   ];
   const q = query.trim().toLowerCase();
-  const visible = sections.filter((s) => (q ? `${s.title} ${s.keywords} ${GROUP_LABEL[s.group]}`.toLowerCase().includes(q) : group === "all" || s.group === group));
+  // Panels in their order (General first), the cards of a panel in the order they are listed.
+  const visible = sections
+    .filter((s) => (q ? `${s.title} ${s.keywords} ${GROUP_LABEL[s.group]}`.toLowerCase().includes(q) : group === "all" || s.group === group))
+    .sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group));
 
   return (
     <>
@@ -250,10 +298,22 @@ export function SettingsView({ status, run, onUnpaired }: {
       <p className="page-sub">Connected to {hostOf(status.serverUrl)} {status.pinned ? "· secure connection" : "· connection not verified"}</p>
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings groups">
-          <label className="searchbox"><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
-          {(["all", ...GROUPS] as const).map((g) => (
-            <button key={g} type="button" className={`nav-btn ${!q && group === g ? "active" : ""}`} aria-current={!q && group === g ? "page" : undefined} onClick={() => { setGroup(g); setQuery(""); }}>{g === "all" ? "All settings" : GROUP_LABEL[g]}</button>
-          ))}
+          <label className="searchbox compact"><SearchIcon size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
+          {(["all", ...GROUPS] as const).map((g) => {
+            const Icon = GROUP_ICON[g];
+            const active = !q && group === g;
+            return (
+              <button key={g} type="button" className={`settings-row ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}
+                aria-labelledby={`settings-row-${g}`} aria-describedby={`settings-sub-${g}`} onClick={() => { setGroup(g); setQuery(""); }}>
+                <span className="settings-row-icon"><Icon size={20} /></span>
+                <span className="settings-row-main">
+                  <span className="settings-row-title" id={`settings-row-${g}`}>{g === "all" ? "All settings" : GROUP_LABEL[g]}</span>
+                  <span className="settings-row-sub" id={`settings-sub-${g}`}>{g === "all" ? "Every setting on one page" : GROUP_SUB[g]}</span>
+                </span>
+                <ChevronRightIcon size={16} />
+              </button>
+            );
+          })}
         </nav>
         <div className="settings-content">
           {visible.length === 0 && <div className="empty">No setting matches “{query}”.</div>}

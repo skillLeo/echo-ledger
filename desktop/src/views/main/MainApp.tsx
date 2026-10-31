@@ -1,30 +1,67 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type LockStatus } from "../../lib/ipc";
-import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainView } from "../../lib/mainView";
+import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
-import { ActivityBell } from "./ActivityCentre";
+import { ActivityView, useActivityUnread } from "./ActivityCentre";
 import { OnboardingView } from "./OnboardingView";
-import { AlertIcon, CaptionsIcon, CloseIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SunIcon } from "../../components/Icons";
+import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SidebarIcon, SunIcon, UsersIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { PairingView } from "./PairingView";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
 import { RecordView } from "./RecordView";
 import { SettingsView } from "./SettingsView";
+import { ClientsView } from "./ClientsView";
 import { CommandPalette } from "./CommandPalette";
 import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
+import { fileDropClaim } from "../../lib/dropTarget";
 
-type Tab = "library" | "record" | "settings";
-const TABS: readonly Tab[] = ["library", "record", "settings"];
+type Tab = MainTab;
+const TABS: readonly Tab[] = ["library", "clients", "record", "activity", "settings"];
+const NAV: readonly [Tab, string, typeof LibraryIcon][] = [
+  ["library", "Library", LibraryIcon],
+  ["clients", "Clients", UsersIcon],
+  ["record", "Record", MicIcon],
+  ["activity", "Activity", BellIcon],
+  ["settings", "Settings", SettingsIcon],
+];
 
 const BUDGET_REACHED = "Monthly transcription limit reached. Recordings are kept but not transcribed.";
 const BUDGET_WARN = "You have used 80% of this month's transcription limit.";
+/** Whether the sidebar shows icons only; kept on this computer like the theme. */
+const SIDEBAR_KEY = "echoledger-sidebar";
+
+/** A key typed into a field, a select or editable text is the field's, never a shortcut. */
+export function typingIn(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
+}
 
 export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(SIDEBAR_KEY) === "collapsed";
+    } catch {
+      return false;
+    }
+  });
+  const toggleSidebar = () => {
+    setCollapsed((c) => {
+      try {
+        window.localStorage.setItem(SIDEBAR_KEY, c ? "expanded" : "collapsed");
+      } catch {
+        // Storage can be unavailable; the choice then lasts until the app restarts.
+      }
+      return !c;
+    });
+  };
+  const [unread, setUnread] = useActivityUnread();
+  // A client page opened from elsewhere (a recording's client chip, the palette).
+  const [clientRequest, setClientRequest] = useState<{ id: string; seq: number } | null>(null);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
   const [focus, setFocus] = useState<PendingFocus | null>(null);
@@ -49,11 +86,15 @@ export default function MainApp() {
   // Files dropped anywhere on the window open the import sheet (the core no longer imports a drop by itself).
   useEffect(() => {
     const un = listenForFileDrops({
-      onEnter: () => setDragging(acceptDrops.current),
+      // A page that takes drops itself (a client's Files tab) shows its own drop target.
+      onEnter: () => setDragging(acceptDrops.current && !fileDropClaim()),
       onLeave: () => setDragging(false),
       onDrop: (paths) => {
         setDragging(false);
-        if (paths.length > 0 && acceptDrops.current) setImportPaths(paths);
+        if (paths.length === 0 || !acceptDrops.current) return;
+        const claim = fileDropClaim();
+        if (claim) claim(paths);
+        else setImportPaths(paths);
       },
     });
     return () => {
@@ -84,25 +125,42 @@ export default function MainApp() {
     };
   }, []);
 
-  // Ctrl / Cmd + K opens the command palette from anywhere in the window.
+  // Ctrl / Cmd + K opens search (the command palette) from anywhere in the window; N starts or stops a voice note.
+  // Space and J / L belong to the player of the open recording (LibraryView).
+  const statusRef = useRef(status);
+  statusRef.current = status;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPalette((open) => !open);
+        return;
+      }
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat || typingIn(e.target)) return;
+      if (e.key.toLowerCase() === "n" && statusRef.current?.paired && !document.querySelector(".palette-backdrop, .sheet-backdrop")) {
+        const recording = statusRef.current.recording;
+        e.preventDefault();
+        // Like the Record page: a call or a captured voice note has to stop first.
+        if (recording && recording.mode !== "mic_note") {
+          setToast({ text: "A recording is running. Stop it before starting a voice note.", error: true });
+          return;
+        }
+        setTab("record");
+        void run(api.toggleMicNote, recording ? "Voice note saved" : "Recording a voice note. Press N again to stop.");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const cycleTheme = () => {
-    const next = nextThemeChoice(theme);
+  const chooseTheme = (next: ThemeChoice) => {
     saveThemeChoice(next);
     applyTheme(next);
     setTheme(next);
     api.setWindowTheme(next).catch(() => undefined);
   };
+  const cycleTheme = () => chooseTheme(nextThemeChoice(theme));
 
   const clearFocus = useCallback(() => setFocus(null), []);
 
@@ -224,17 +282,36 @@ export default function MainApp() {
     );
   }
 
+  const openRecording = (id: string, ms = 0) => {
+    setTab("library");
+    setOpenRequest({ id, ms, seq: ++navigations.current });
+  };
+  const openClient = (id: string) => {
+    setTab("clients");
+    setClientRequest({ id, seq: ++navigations.current });
+  };
+
   return (
-    <div className="app">
+    <div className={`app ${collapsed ? "collapsed" : ""}`}>
       {/* macOS: the title bar is inset (traffic lights over the sidebar); this strip keeps the window draggable. */}
       <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark" />EchoLedger<span className="spacer" /><ActivityBell onOpenRecording={(id) => { setTab("library"); setOpenRequest({ id, ms: 0, seq: ++navigations.current }); }} /></div>
-        <button className={`nav-btn ${tab === "library" ? "active" : ""}`} onClick={() => setTab("library")}><LibraryIcon />Library</button>
-        <button className={`nav-btn ${tab === "record" ? "active" : ""}`} onClick={() => setTab("record")}>
-          <MicIcon />Record {status.recording && <span className="status-dot live" style={{ marginLeft: "auto" }} />}
-        </button>
-        <button className={`nav-btn ${tab === "settings" ? "active" : ""}`} onClick={() => setTab("settings")}><SettingsIcon />Settings</button>
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true"><MicIcon size={14} /></span>
+          <span className="brand-name">EchoLedger</span>
+          <button type="button" className="sidebar-toggle" aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"} aria-expanded={!collapsed}
+            title={collapsed ? "Expand" : "Collapse"} onClick={toggleSidebar}><SidebarIcon size={18} /></button>
+        </div>
+        <nav className="nav" aria-label="Main">
+          {NAV.map(([id, label, Icon]) => (
+            <button key={id} type="button" className={`nav-btn ${tab === id ? "active" : ""}`} aria-current={tab === id ? "page" : undefined}
+              title={collapsed ? label : undefined} onClick={() => setTab(id)}>
+              <Icon size={20} /><span className="nav-label">{label}</span>
+              {id === "record" && status.recording && <span className="status-dot live" aria-hidden="true" />}
+              {id === "activity" && unread > 0 && <><span className="nav-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</span><span className="sr-only">, {unread} unread</span></>}
+            </button>
+          ))}
+        </nav>
         <div className="sidebar-footer">
           <button className="theme-toggle" onClick={cycleTheme} aria-label={`Theme: ${theme}. Click to change.`}>
             {theme === "light" ? <SunIcon size={15} /> : theme === "dark" ? <MoonIcon size={15} /> : <MonitorIcon size={15} />}
@@ -257,7 +334,7 @@ export default function MainApp() {
           <div className="small">{status.pendingUploads > 0 ? "Uploading…" : "All uploads done"}</div>
         </div>
       </aside>
-      <main className={`content ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
+      <main className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
         {status.budget === "reached" && (
           <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
         )}
@@ -269,15 +346,20 @@ export default function MainApp() {
         )}
         {tab === "library" && (
           <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
-            initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={() => void pickImport()} />
+            initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={() => void pickImport()} onOpenClient={openClient} />
         )}
+        {tab === "clients" && <ClientsView notify={notify} openRequest={clientRequest} onOpenRecording={openRecording} />}
         {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
-        {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} />}
+        {tab === "activity" && (
+          <ActivityView status={status} onUnread={setUnread} onOpenRecording={(id) => openRecording(id)}
+            onReview={(id) => { setTab("library"); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
+        )}
+        {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />}
       </main>
       {palette && (
         <CommandPalette status={status} onClose={() => setPalette(false)} onGo={setTab}
           run={(fn, ok) => void run(fn, ok)}
-          onOpenRecording={(id, ms) => { setTab("library"); setOpenRequest({ id, ms, seq: ++navigations.current }); }} />
+          onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}
       {dragging && !importPaths && (
         <div className="drop-hint" aria-hidden="true"><div className="drop-hint-card">Drop voice notes, audio or video files to import them</div></div>

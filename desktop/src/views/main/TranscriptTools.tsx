@@ -1,10 +1,12 @@
 // Tools around a recording's transcript in the library (plan B6, B7, B10, B11): player controls, the activity
 // timeline, find and replace, speaker names, history, export, share links and "Add to vocabulary".
-import { useEffect, useId, useState } from "react";
-import { api, errorMessage, type ExportFormat, type Segment, type ShareLink, type TranscriptRevision } from "../../lib/ipc";
-import { formatWhen } from "../../lib/format";
-import { SPEEDS, timelinePercent } from "../../lib/player";
+import { useEffect, useId, useMemo, useState } from "react";
+import { api, errorMessage, type ExportFormat, type LearnOffer, type Segment, type ShareLink, type TranscriptRevision, type TranscriptSuggestion } from "../../lib/ipc";
+import { formatWhen, timestamp } from "../../lib/format";
+import { SPEEDS, timelinePercent, waveformBars } from "../../lib/player";
 import type { Bookmark } from "../../lib/library";
+import { ChevronRightIcon, CloseIcon, SearchIcon, SkipIcon } from "../../components/Icons";
+import { ChevronLeftIcon, PauseIcon, PlayIcon } from "../../components/ControlIcons";
 
 /** Speed, skip silence and follow. */
 export function PlayerControls({ rate, onRate, skipSilence, onSkipSilence, follow, onFollow }: {
@@ -29,32 +31,123 @@ export function PlayerControls({ rate, onRate, skipSilence, onSkipSilence, follo
   );
 }
 
-/** Who speaks when (one lane per side), the bookmarks and the playhead. Clicking seeks. */
-export function Timeline({ segments, bookmarks, durationMs, nowMs, onSeek }: {
+/** How many bars the docked player's waveform draws. */
+export const WAVE_BARS = 96;
+
+/**
+ * The waveform of the docked player: who speaks when (bars coloured by side), the bookmarks and how far it has played.
+ * Clicking seeks; the arrow keys and J / L move through the recording (LibraryView's player keys).
+ */
+export function Waveform({ segments, bookmarks, durationMs, nowMs, onSeek }: {
   segments: Segment[];
   bookmarks: Bookmark[];
   durationMs: number;
   nowMs: number;
   onSeek: (ms: number) => void;
 }) {
+  const bars = useMemo(() => waveformBars(segments, durationMs, WAVE_BARS), [segments, durationMs]);
   if (durationMs <= 0 || (segments.length === 0 && bookmarks.length === 0)) return null;
   const seekAt = (e: React.MouseEvent<HTMLDivElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
     if (box.width > 0) onSeek(Math.max(0, ((e.clientX - box.left) / box.width) * durationMs));
   };
-  const lane = (channel: 1 | 2) => (
-    <div className={`tl-lane tl-lane-${channel}`}>
-      {segments.filter((s) => (s.channel === 2 ? 2 : 1) === channel).map((s, i) => (
-        <span key={i} className="tl-talk" style={{ left: `${timelinePercent(s.start_ms, durationMs)}%`, width: `${timelinePercent(s.end_ms - s.start_ms, durationMs)}%` }} />
+  const played = timelinePercent(nowMs, durationMs);
+  return (
+    <div className="waveform" data-testid="waveform" role="slider" tabIndex={0} aria-label="Position in the recording"
+      aria-valuemin={0} aria-valuemax={Math.round(durationMs / 1000)} aria-valuenow={Math.round(nowMs / 1000)}
+      aria-valuetext={`${timestamp(nowMs)} of ${timestamp(durationMs)}`} onClick={seekAt}>
+      {bars.map((b, i) => (
+        <span key={i} className={`wf-bar ch-${b.channel} ${((i + 0.5) / bars.length) * 100 <= played ? "played" : ""}`} style={{ height: `${Math.round(b.level * 100)}%` }} />
       ))}
+      {bookmarks.map((b) => <span key={b.id} className="wf-mark" style={{ left: `${timelinePercent(b.at_ms, durationMs)}%` }} />)}
     </div>
   );
+}
+
+/** The player docked at the bottom of a recording: ±10 s, play / pause, the time and the waveform. */
+export function PlayerDock({ playing, nowMs, durationMs, onToggle, onSkip, children, below }: {
+  playing: boolean;
+  nowMs: number;
+  durationMs: number;
+  onToggle: () => void;
+  onSkip: (seconds: number) => void;
+  /** The audio element and the waveform, on the player's line. */
+  children: React.ReactNode;
+  /** The speed and follow controls, under it. */
+  below?: React.ReactNode;
+}) {
   return (
-    <div className="timeline" data-testid="timeline" onClick={seekAt} aria-hidden="true">
-      {lane(1)}
-      {lane(2)}
-      {bookmarks.map((b) => <span key={b.id} className="tl-mark" style={{ left: `${timelinePercent(b.at_ms, durationMs)}%` }} />)}
-      <span className="tl-head" style={{ left: `${timelinePercent(nowMs, durationMs)}%` }} />
+    <div className="player-dock" role="region" aria-label="Player">
+      <div className="player-row">
+        <button type="button" className="skip-btn" aria-label="Back 10 seconds" title="Back 10 s (J)" onClick={() => onSkip(-10)}><SkipIcon back size={22} /></button>
+        <button type="button" className="play-btn" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space)" : "Play (Space)"} onClick={onToggle}>
+          {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
+        </button>
+        <button type="button" className="skip-btn" aria-label="Forward 10 seconds" title="Forward 10 s (L)" onClick={() => onSkip(10)}><SkipIcon size={22} /></button>
+        <span className="player-time">{timestamp(nowMs)} / {timestamp(durationMs)}</span>
+        {children}
+      </div>
+      {below}
+    </div>
+  );
+}
+
+/** Find in the transcript on screen: every match marked, Enter / Shift+Enter or the arrows step through them. */
+export function FindBar({ query, onQuery, count, current, onStep, onClose }: {
+  query: string;
+  onQuery: (q: string) => void;
+  count: number;
+  current: number;
+  onStep: (delta: 1 | -1) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="find-bar" role="search" aria-label="Find in transcript">
+      <label className="searchbox compact">
+        <SearchIcon size={16} />
+        <input value={query} onChange={(e) => onQuery(e.target.value)} placeholder="Find in this transcript" aria-label="Find in transcript" autoFocus
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onStep(e.shiftKey ? -1 : 1);
+            }
+            if (e.key === "Escape") onClose();
+          }} />
+      </label>
+      <span className="find-count" role="status">{query.trim() ? (count === 0 ? "No matches" : `${current + 1} of ${count}`) : ""}</span>
+      <button type="button" className="btn ghost compact icon-only" aria-label="Previous match" disabled={count === 0} onClick={() => onStep(-1)}><ChevronLeftIcon size={16} /></button>
+      <button type="button" className="btn ghost compact icon-only" aria-label="Next match" disabled={count === 0} onClick={() => onStep(1)}><ChevronRightIcon size={16} /></button>
+      <button type="button" className="btn ghost compact icon-only" aria-label="Close find" onClick={onClose}><CloseIcon size={16} /></button>
+    </div>
+  );
+}
+
+/** "Always write *la ravel* as *Laravel* for Acme?" after an edit: Yes saves a replacement rule for that client. */
+export function LearnOfferBar({ offer, onAnswer }: { offer: LearnOffer | null; onAnswer: (yes: boolean) => void }) {
+  if (!offer) return null;
+  return (
+    <div className="learn-offer" role="group" aria-label="Always write it this way">
+      <span>Always write <em>{offer.from}</em> as <em>{offer.to}</em> for {offer.client_name}?</span>
+      <button type="button" className="btn primary compact" onClick={() => onAnswer(true)}>Yes</button>
+      <button type="button" className="btn ghost compact" onClick={() => onAnswer(false)}>No</button>
+    </div>
+  );
+}
+
+/** A suggested fix opened from its mark in the text: Accept changes the words (an edit), Dismiss leaves them. */
+export function SuggestionPop({ suggestion, busy, onDecide, onClose }: {
+  suggestion: TranscriptSuggestion;
+  busy: boolean;
+  onDecide: (accept: boolean) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="suggest-pop" role="group" aria-label="Suggested fix">
+      <span>Change <b>{suggestion.from}</b> to <b>{suggestion.to}</b>?{suggestion.reason ? <span className="muted"> ({suggestion.reason})</span> : null}</span>
+      <span className="spacer" />
+      <button type="button" className="btn primary compact" disabled={busy} onClick={() => onDecide(true)}>Accept</button>
+      <button type="button" className="btn ghost compact" disabled={busy} onClick={() => onDecide(false)}>Dismiss</button>
+      <button type="button" className="btn ghost compact icon-only" aria-label="Close" onClick={onClose}><CloseIcon size={14} /></button>
     </div>
   );
 }

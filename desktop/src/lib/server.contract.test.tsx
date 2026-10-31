@@ -252,11 +252,16 @@ describe("Library screen fed with server data", () => {
     for (const title of ["Quarterly review", "Vendor sync", "WhatsApp call", "WhatsApp Business call", "Shopping list"]) {
       expect(within(list).getByText(title)).toBeInTheDocument();
     }
-    expect(within(list).getAllByText("Ready")).toHaveLength(3);
-    expect(within(list).getAllByText("Processing")).toHaveLength(1);
-    expect(within(list).getAllByText("Failed")).toHaveLength(1);
+    // A status shows only when it needs the person: ready recordings show their second line instead.
+    expect(within(list).queryAllByText("Ready")).toHaveLength(0);
+    expect(within(list).getAllByText("Transcribing")).toHaveLength(1);
+    expect(within(list).getAllByText("Transcription failed")).toHaveLength(1);
     expect(screen.getByText(/5 recordings from your phone/)).toBeInTheDocument();
-    expect(within(list).getByText(/This is a test of the EchoLedger transcription system\. Loud and clear/)).toBeInTheDocument();
+    // The transcript preview is what the list search matches.
+    fireEvent.change(screen.getByLabelText("Search recordings"), { target: { value: "Loud and clear" } });
+    const withPhrase = items.filter((i) => !i.deleted && i.transcript?.preview?.includes("Loud and clear")).map((i) => i.title);
+    expect(withPhrase.length).toBeGreaterThan(0);
+    expect([...list.querySelectorAll(".item-title")].map((n) => n.textContent).sort()).toEqual([...withPhrase].sort());
   });
 
   it("opens a completed stereo call: speakers, text and the signed playback URL", async () => {

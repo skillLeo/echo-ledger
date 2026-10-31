@@ -277,7 +277,8 @@ describe("Live status", () => {
     respond("library_refresh", [done("a", "Zoom with Acme"), done("b", "WhatsApp call")]);
     await advance(5_000);
     expect(callsOf("library_refresh")).toHaveLength(4);
-    expect(within(list()).getByText("WhatsApp call").closest("button")).toHaveTextContent("Ready");
+    // Ready: the row drops its "Transcribing" status (a status shows only while it needs the person).
+    expect(within(list()).getByText("WhatsApp call").closest("button")).not.toHaveTextContent("Transcribing");
     await advance(30_000);
     expect(callsOf("library_refresh")).toHaveLength(4);
   });

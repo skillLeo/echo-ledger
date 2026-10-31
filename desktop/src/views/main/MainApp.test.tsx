@@ -196,6 +196,52 @@ describe("MainApp navigation", () => {
   });
 });
 
+describe("MainApp sidebar and keys", () => {
+  it("lists Library, Clients, Record, Activity and Settings, and collapses to icons that keep their names", async () => {
+    await renderPaired();
+    expect([...document.querySelectorAll(".nav .nav-btn")].map((b) => b.textContent)).toEqual(["Library", "Clients", "Record", "Activity", "Settings"]);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse the sidebar" }));
+    expect(document.querySelector(".app")).toHaveClass("collapsed");
+    expect(nav("Clients")).toHaveAttribute("title", "Clients");
+    expect(window.localStorage.getItem("echoledger-sidebar")).toBe("collapsed");
+    fireEvent.click(screen.getByRole("button", { name: "Expand the sidebar" }));
+    expect(document.querySelector(".app")).not.toHaveClass("collapsed");
+    expect(window.localStorage.getItem("echoledger-sidebar")).toBe("expanded");
+  });
+
+  it("opens Clients and Activity from the sidebar", async () => {
+    respond("activity_list", { data: [], unread_count: 0 });
+    respond("pending_list", []);
+    await renderPaired();
+    fireEvent.click(nav("Clients"));
+    expect(await screen.findByRole("heading", { name: "Clients" })).toBeInTheDocument();
+    expect(nav("Clients")).toHaveAttribute("aria-current", "page");
+    fireEvent.click(nav("Activity"));
+    expect(await screen.findByRole("heading", { name: "Activity" })).toBeInTheDocument();
+    await flushAsync();
+  });
+
+  it("N starts a voice note, never while typing; Ctrl+K opens search", async () => {
+    respond("toggle_mic_note", makeStatus({ recording: makeRecording({ mode: "mic_note" }) }));
+    await renderPaired();
+    fireEvent.keyDown(screen.getByLabelText("Search recordings"), { key: "n" });
+    expect(callsOf("toggle_mic_note")).toHaveLength(0);
+    fireEvent.keyDown(document.body, { key: "n" });
+    await waitFor(() => expect(callsOf("toggle_mic_note")).toHaveLength(1));
+    expect(screen.getByRole("heading", { name: "Record" })).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("Recording a voice note. Press N again to stop.");
+    fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+    expect(document.querySelector(".palette")).not.toBeNull();
+  });
+
+  it("does not start a voice note over a call that is being recorded", async () => {
+    await renderPaired({ recording: makeRecording({ mode: "call" }) });
+    fireEvent.keyDown(document.body, { key: "n" });
+    expect(callsOf("toggle_mic_note")).toHaveLength(0);
+    expect(screen.getByRole("status")).toHaveTextContent("A recording is running. Stop it before starting a voice note.");
+  });
+});
+
 describe("MainApp theme toggle", () => {
   const toggle = () => screen.getByRole("button", { name: /^Theme:/ });
 

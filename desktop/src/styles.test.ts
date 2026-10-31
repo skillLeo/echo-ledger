@@ -131,7 +131,9 @@ describe("long text never breaks the layout (A6.DU8)", () => {
     for (const selector of [".item-preview", ".detail-title", ".seg-text", ".notice", ".toast", ".dictation-text"]) {
       expect(prop(selector, "overflow-wrap"), selector).toBe("anywhere");
     }
-    expect(prop(".segment", "grid-template-columns")).toBe("48px 72px minmax(0, 1fr)");
+    // Speaker blocks: avatar, name and time on the first line; the words take the rest and may shrink to nothing.
+    expect(prop(".segment", "grid-template-columns")).toBe("36px max-content minmax(0, 1fr)");
+    expect(prop(".seg-text", "grid-area")).toMatch(/^text/);
     expect(prop(".list", "min-width")).toBe("0px");
     expect(prop(".detail", "min-width")).toBe("0px");
   });
@@ -165,10 +167,14 @@ describe("long text never breaks the layout (A6.DU8)", () => {
     expect(prop(".site-pattern", "overflow-wrap")).toBe("anywhere");
   });
 
-  it("gives the library less height while the budget banner is up, only in the two-column layout", () => {
+  it("gives the library what is left of the page, so a budget banner takes its own height, only in the two-column layout", () => {
     const wide = media("(min-width: 1030px)");
-    expect(prop(".content.has-banner .library", "height", wide)).toBe("calc(100% - 224px)");
-    expect(prop(".content.has-banner .library", "height")).toBe("");
+    expect(prop(".content.page-library", "display", wide)).toBe("flex");
+    expect(prop(".content.page-library", "flex-direction", wide)).toBe("column");
+    expect(prop(".content.page-library .library", "flex", wide)).toMatch(/^1 1 0/);
+    expect(prop(".content.page-library .library", "min-height", wide)).toBe("0px");
+    expect(prop(".banner", "flex")).toMatch(/^(none|0 0 auto)$/);
+    expect(prop(".content.page-library", "display")).toBe("");
   });
 });
 

@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ActivityBell } from "./ActivityCentre";
+import { ActivityView } from "./ActivityCentre";
 import { NotificationsCard } from "./SecuritySettings";
 import MainApp from "./MainApp";
-import { callsOf, emitEvent, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { makeItem, makePendingItem, makeSettings, makeStatus } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -16,66 +16,89 @@ const ITEMS = [
 
 beforeEach(() => resetTauriMock());
 
-describe("activity bell (B18)", () => {
-  it("shows the unread count and follows updates from the core", async () => {
+describe("activity page (B18)", () => {
+  function renderPage(status = makeStatus()) {
+    const props = { onOpenRecording: vi.fn(), onReview: vi.fn(), onUnread: vi.fn() };
+    render(<ActivityView status={status} {...props} />);
+    return props;
+  }
+  beforeEach(() => respond("pending_list", []));
+
+  it("lists the notifications with the unread one marked, and reports the unread count", async () => {
     respond("activity_list", { data: ITEMS, unread_count: 1 });
-    render(<ActivityBell onOpenRecording={vi.fn()} />);
-    expect(await screen.findByRole("button", { name: "Activity, 1 unread" })).toBeInTheDocument();
-    await emitEvent("activity:updated", 4);
-    expect(screen.getByRole("button", { name: "Activity, 4 unread" })).toBeInTheDocument();
-    await emitEvent("activity:updated", 0);
-    expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument();
+    const { onUnread } = renderPage();
+    expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
+    expect(screen.getByText("Pixel 9 paired")).toBeInTheDocument();
+    expect(screen.getByText("Transcript ready").closest("button")).toHaveClass("unread");
+    expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveClass("unread");
+    expect(onUnread).toHaveBeenCalledWith(1);
   });
 
   it("opens a recording from its notification and marks it read", async () => {
     respond("activity_list", { data: ITEMS, unread_count: 1 });
     respond("activity_read", { unread_count: 0 });
-    const onOpen = vi.fn();
-    render(<ActivityBell onOpenRecording={onOpen} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Activity, 1 unread" }));
-    const panel = await screen.findByRole("dialog", { name: "Activity" });
-    fireEvent.click(await within(panel).findByText("Acme kickoff"));
-    await waitFor(() => expect(onOpen).toHaveBeenCalledWith("s1"));
+    const { onOpenRecording, onUnread } = renderPage();
+    fireEvent.click(await screen.findByText("Acme kickoff"));
+    await waitFor(() => expect(onOpenRecording).toHaveBeenCalledWith("s1"));
     expect(callsOf("activity_read")).toEqual([{ ids: ["n2"] }]);
-    expect(screen.queryByRole("dialog", { name: "Activity" })).not.toBeInTheDocument();
+    expect(onUnread).toHaveBeenLastCalledWith(0);
+    expect(screen.getByText("Transcript ready").closest("button")).not.toHaveClass("unread");
   });
 
-  it("closes with its close button, with Escape and with a click anywhere outside", async () => {
-    respond("activity_list", { data: ITEMS, unread_count: 1 });
-    render(<div><ActivityBell onOpenRecording={vi.fn()} /><p>Somewhere else</p></div>);
-    const bell = await screen.findByRole("button", { name: "Activity, 1 unread" });
-
-    fireEvent.click(bell);
-    fireEvent.click(await screen.findByRole("button", { name: "Close activity" }));
-    expect(screen.queryByRole("dialog", { name: "Activity" })).not.toBeInTheDocument();
-
-    fireEvent.click(bell);
-    await screen.findByRole("dialog", { name: "Activity" });
-    fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "Activity" })).not.toBeInTheDocument();
-
-    fireEvent.click(bell);
-    const panel = await screen.findByRole("dialog", { name: "Activity" });
-    fireEvent.mouseDown(panel); // a press inside does not close it
-    expect(screen.getByRole("dialog", { name: "Activity" })).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByText("Somewhere else"));
-    expect(screen.queryByRole("dialog", { name: "Activity" })).not.toBeInTheDocument();
-  });
-  it("marks everything read and explains an empty list", async () => {
+  it("marks everything read", async () => {
     respondWith("activity_list", () => ({ data: ITEMS, unread_count: 1 }));
     respond("activity_read", { unread_count: 0 });
-    render(<ActivityBell onOpenRecording={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Activity, 1 unread" }));
+    const { onUnread } = renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Mark all read" }));
     await waitFor(() => expect(callsOf("activity_read")).toEqual([{ ids: null }]));
-    expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument();
+    expect(onUnread).toHaveBeenLastCalledWith(0);
+    expect(screen.queryByRole("button", { name: "Mark all read" })).not.toBeInTheDocument();
   });
 
   it("says when nothing has happened yet", async () => {
     respond("activity_list", { data: [], unread_count: 0 });
-    render(<ActivityBell onOpenRecording={vi.fn()} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Activity" }));
+    renderPage();
     expect(await screen.findByText(/Nothing yet/)).toBeInTheDocument();
+  });
+
+  it("puts what needs the person first: calls waiting for Keep or Discard and failed transcriptions", async () => {
+    respond("pending_list", [makePendingItem("p1")]);
+    respond("activity_list", { data: [{ id: "n3", kind: "transcript_failed", title: "Transcription failed", body: "Call with Omar", session_id: "s3", read: false, at: "2026-10-28T09:00:00Z" }, ...ITEMS], unread_count: 2 });
+    const { onReview } = renderPage(makeStatus({ pendingDecisions: 1 }));
+    const needs = await screen.findByRole("region", { name: "Needs action" });
+    expect(await within(needs).findByText("Keep or discard?")).toBeInTheDocument();
+    expect(within(needs).getByText("Transcription failed")).toBeInTheDocument();
+    // The card says what waits once the core's list is in (the status only has the count).
+    await waitFor(() => expect(within(needs).queryByText("1 waiting for your decision")).not.toBeInTheDocument());
+    fireEvent.click(within(needs).getByRole("button", { name: "Review" }));
+    expect(onReview).toHaveBeenCalledWith("p1");
+  });
+
+  it("shows the error with Retry when the list cannot be read", async () => {
+    respond("activity_list", { data: [], unread_count: 0 });
+    fail("activity_list", "Network error");
+    renderPage();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't load the activity. Network error");
+    respond("activity_list", { data: ITEMS, unread_count: 1 });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
+  });
+});
+
+describe("Activity in the sidebar", () => {
+  it("counts the unread notifications and follows updates from the core", async () => {
+    respond("app_status", makeStatus());
+    respond("library_list", []);
+    respond("library_refresh", []);
+    respond("get_settings", makeSettings());
+    respond("list_clients", { data: [] });
+    respond("activity_list", { data: ITEMS, unread_count: 1 });
+    render(<MainApp />);
+    expect(await screen.findByRole("button", { name: /^Activity\s*,\s*1 unread$/ })).toBeInTheDocument();
+    await emitEvent("activity:updated", 4);
+    expect(screen.getByRole("button", { name: /^Activity\s*,\s*4 unread$/ })).toBeInTheDocument();
+    await emitEvent("activity:updated", 0);
+    expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument();
   });
 });
 

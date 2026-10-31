@@ -56,9 +56,9 @@ export function AutoRecordApps({ settings, patch }: { settings: Settings; patch:
 const SIZES: readonly (readonly [CaptionSize, string])[] = [["small", "Small"], ["medium", "Medium"], ["large", "Large"]];
 const WIDTHS: readonly (readonly [CaptionWidth, string])[] = [["narrow", "Narrow"], ["normal", "Normal"], ["wide", "Wide"]];
 const AUTO_HIDE = [["0", "Never"], ["5", "After 5 seconds"], ["10", "After 10 seconds"], ["30", "After 30 seconds"]] as const;
-/** The theme's speaker colours (the pill meters and captions use the same). */
-export const DEFAULT_ME_COLOR = "#a78bfa";
-export const DEFAULT_CLIENT_COLOR = "#22d3ee";
+/** The speaker colours of the dark caption pill (the pill meters use the same). */
+export const DEFAULT_ME_COLOR = "#9eb1ff";
+export const DEFAULT_CLIENT_COLOR = "#0bd8b6";
 
 /** Settings → Caption style (B4). Every change saves the whole style; the overlay restyles at once. */
 export function CaptionStyleCard({ settings, patch }: { settings: Settings; patch: Patch }) {

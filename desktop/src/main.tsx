@@ -3,7 +3,6 @@ import ReactDOM from "react-dom/client";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import "./styles.css";
 import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
-import { cssAccent, parseHex, setSystemAccent } from "./lib/accent";
 import { api } from "./lib/ipc";
 
 // One index.html for every window; the view is chosen from the window label.
@@ -36,14 +35,14 @@ document.documentElement.dataset.window = label;
 applyTheme(getThemeChoice());
 watchSystemTheme();
 
-// C2: the window material (Mica / vibrancy) and the system accent. Backgrounds turn translucent only when the core
+// C2: the window material (Mica / vibrancy). The accent stays the design system's indigo, as on the phone, so the OS
+// accent colour is not applied (lib/accent.ts can still map one). Backgrounds turn translucent only when the core
 // says the material applied; the native title bar follows the app's theme.
 api
   .windowAppearance()
   .then((a) => {
     document.documentElement.dataset.platform = a.platform;
     if (label === "main" && a.material !== "none") document.documentElement.dataset.material = a.material;
-    setSystemAccent(parseHex(a.accent) ?? cssAccent());
   })
   .catch(() => undefined);
 if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined);

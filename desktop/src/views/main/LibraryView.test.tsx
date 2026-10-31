@@ -141,16 +141,16 @@ describe("LibraryView list", () => {
     expect(screen.getByText("1 recording from your phone, this computer and the web.")).toBeInTheDocument();
   });
 
-  it("renders title, local 12-hour time, duration, client, preview and a state pill per row", async () => {
+  it("renders the title, the local 12-hour time, a second line, and a status only when one needs the person", async () => {
     await renderLibrary();
     const row = itemButton("Zoom with Acme");
-    expect(within(row).getByText(/^Today · 9:30\s?AM · 2:05 · Acme Holdings$/)).toBeInTheDocument();
-    expect(within(row).getByText("Let us discuss the invoice")).toBeInTheDocument();
-    expect(within(row).getByText("Ready")).toHaveClass("pill", "ready");
-    expect(within(itemButton("WhatsApp call")).getByText("Processing")).toHaveClass("processing");
-    expect(within(itemButton("WhatsApp call")).getByText(/^Today · 8:15\s?AM · 1:02:05$/)).toBeInTheDocument();
-    expect(within(itemButton("Google Meet standup")).getByText("Failed")).toHaveClass("failed");
-    expect(within(itemButton("Google Meet standup")).getByText(/^Yesterday · 4:00\s?PM · 15:00$/)).toBeInTheDocument();
+    expect(within(row).getByText(/^9:30\s?AM$/)).toHaveClass("item-time");
+    expect(within(row).getByText("2:05 · Acme Holdings")).toBeInTheDocument();
+    expect(within(row).queryByText("Ready")).not.toBeInTheDocument();
+    expect(within(itemButton("WhatsApp call")).getByText("Transcribing")).toHaveClass("pill", "processing");
+    expect(within(itemButton("WhatsApp call")).getByText(/^8:15\s?AM$/)).toBeInTheDocument();
+    expect(within(itemButton("Google Meet standup")).getByText("Transcription failed")).toHaveClass("pill", "failed");
+    expect(within(itemButton("Google Meet standup")).getByText(/^4:00\s?PM$/)).toBeInTheDocument();
   });
 
   it("colours the avatar by source device and omits the tombstone", async () => {
@@ -332,7 +332,8 @@ describe("LibraryView transcript", () => {
     expect(panel.getByRole("heading", { name: "Zoom with Acme" })).toBeInTheDocument();
     expect(panel.getByText(/Today · 9:30\s?AM · 2:05 · Acme Holdings/)).toBeInTheDocument();
     expect(panel.getByText("Final transcript · AssemblyAI")).toBeInTheDocument();
-    const rows = [...detail().querySelectorAll(".segment")].map((n) => [...n.children].map((c) => c.textContent));
+    // The speaker block's avatar letter is decorative (aria-hidden), so it is left out of the row's cells.
+    const rows = [...detail().querySelectorAll(".segment")].map((n) => [...n.children].filter((c) => !c.classList.contains("seg-avatar")).map((c) => c.textContent));
     expect(rows).toEqual([
       ["0:00", "Me", "Hello, this is Sam."],
       ["0:12", "Client", "Hi Sam, thanks for calling back."],
@@ -532,7 +533,11 @@ describe("LibraryView audio playback", () => {
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     await waitFor(() => expect(audio()).not.toBeNull());
     expect(audio()).toHaveAttribute("src", "https://audio.example.test/rec.wav");
-    expect(audio()).toHaveAttribute("controls");
+    // The docked player draws its own controls (play, ±10 s, the waveform) instead of the browser's.
+    const player = within(detail()).getByRole("region", { name: "Player" });
+    expect(within(player).getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(within(player).getByRole("button", { name: "Back 10 seconds" })).toBeInTheDocument();
+    expect(within(player).getByRole("slider", { name: "Position in the recording" })).toBeInTheDocument();
   });
 
   it("has no player (and segments are not clickable) when the server gives no playback URL", async () => {
@@ -591,7 +596,7 @@ describe("LibraryView audio playback", () => {
     await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     await waitFor(() => expect(audio()).not.toBeNull());
-    const active = () => [...detail().querySelectorAll(".segment.active")].map((n) => n.textContent);
+    const active = () => [...detail().querySelectorAll(".segment.active")].map((n) => [...n.children].filter((c) => !c.classList.contains("seg-avatar")).map((c) => c.textContent).join(""));
 
     expect(active()).toEqual([]);
     audio().currentTime = 0.5;
