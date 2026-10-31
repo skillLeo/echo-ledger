@@ -11,6 +11,7 @@ use App\Enums\SourceDevice;
 use App\Enums\SttUseCase;
 use App\Exceptions\ApiError;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\FinalTranscriptCoordinator;
@@ -58,6 +59,12 @@ class ListCaptureSessions extends ListRecords
         }
 
         return $tabs;
+    }
+
+    /** The "Keep or discard?" card, only while recordings wait for a decision. */
+    protected function getHeaderWidgets(): array
+    {
+        return [WaitingDecisionsWidget::class];
     }
 
     protected function getHeaderActions(): array

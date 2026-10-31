@@ -99,6 +99,28 @@ final class LibraryOrganiser
     }
 
     /**
+     * The one-line summary of the workspace's recordings waiting for Keep or Discard, worded like the phone and
+     * desktop cards: "4 calls waiting · oldest Oct 30 · 2:18 total", or "1 call waiting · Oct 30 · 0:42 total". The
+     * date is the oldest start in [zone]; the total adds up the stored lengths. Null when nothing is waiting.
+     */
+    public function waitingSummary(int $workspaceId, ?string $zone = null): ?string
+    {
+        $zone ??= $this->settings->displayTimezone();
+        $stats = $this->applyView(CaptureSession::query()->where('workspace_id', $workspaceId), 'waiting', $zone)->toBase()
+            ->selectRaw('COUNT(*) AS waiting, MIN(started_at) AS oldest, SUM(duration_ms) AS total_ms')->first();
+        $count = (int) ($stats->waiting ?? 0);
+        if ($stats === null || $count === 0) {
+            return null;
+        }
+        $oldest = Carbon::parse((string) $stats->oldest, (string) config('app.timezone'))->setTimezone($zone)->format('M j');
+        $total = TranscriptExporter::clock((int) ($stats->total_ms ?? 0));
+
+        return $count === 1
+            ? "1 call waiting · {$oldest} · {$total} total"
+            : "{$count} calls waiting · oldest {$oldest} · {$total} total";
+    }
+
+    /**
      * Every label the workspace uses, with how many recordings carry it.
      *
      * @return list<array{label: string, count: int}>
