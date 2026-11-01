@@ -10,6 +10,7 @@ use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
+use App\Services\ActivityFeed;
 use App\Stt\LanguageRouter;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -68,6 +69,8 @@ final class EngineFallbackJob implements ShouldQueue
                 $error .= ' (Tried: '.$names.'. No other engine with a key can do this language: add one on API Credentials.)';
             }
             $transcript->update(['meta' => [...$meta, 'route' => [...$route, 'tried' => $tried]], 'error' => mb_substr($error, 0, 2000)]);
+            // The activity feed held "Transcription failed" back while another engine could still try (ActivityFeed).
+            app(ActivityFeed::class)->transcriptFailed($transcript, $session);
 
             return;
         }

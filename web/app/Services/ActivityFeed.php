@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Enums\UploadStatus;
@@ -16,6 +17,7 @@ use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Services\Usage\UsageSummary;
+use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Notifications\DatabaseNotification;
@@ -61,9 +63,25 @@ final class ActivityFeed
         }
         match ($transcript->status) {
             TranscriptStatus::Completed => $this->post($session->user, 'transcript_ready', 'Transcript ready', $session->displayTitle(), $session, 'heroicon-o-document-text'),
-            TranscriptStatus::Failed => $this->post($session->user, 'transcript_failed', 'Transcription failed', $session->displayTitle().': '.($transcript->error ?? 'try again from the recording.'), $session, 'heroicon-o-exclamation-triangle'),
+            // A provider failure goes to the next engine first (TranscriptStore::fail queues EngineFallbackJob), so
+            // "failed" waits until no engine is left: EngineFallbackJob posts it then.
+            TranscriptStatus::Failed => self::fallsBack($transcript) ? null : $this->transcriptFailed($transcript, $session),
             default => null,
         };
+    }
+
+    /** True when a failure of this final transcript is handed to another engine before anyone is told. */
+    public static function fallsBack(Transcript $transcript): bool
+    {
+        return TranscriptErrorCode::tryFrom((string) $transcript->error_code)?->retryable() === true;
+    }
+
+    public function transcriptFailed(Transcript $transcript, ?CaptureSession $session = null): void
+    {
+        $session ??= $transcript->captureSession()->first();
+        if ($session instanceof CaptureSession && ! $session->trashed()) {
+            $this->post($session->user, 'transcript_failed', 'Transcription failed', $session->displayTitle().': '.($transcript->error ?? 'try again from the recording.'), $session, 'heroicon-o-exclamation-triangle');
+        }
     }
 
     public function uploadFailed(Recording $recording): void
@@ -99,7 +117,9 @@ final class ActivityFeed
 
     private function sentThisMonth(User $user, string $kind, string $periodStart): bool
     {
-        return $user->notifications()->where('created_at', '>=', $periodStart)->get()
+        // A date, not the ISO string: compared as text, "2026-11-01 09:00:00" sorts before "2026-11-01T00:00:00+00:00",
+        // so on the first day of a month every warning looked unsent and was posted again.
+        return $user->notifications()->where('created_at', '>=', Carbon::parse($periodStart))->get()
             ->contains(fn (DatabaseNotification $n): bool => self::kindOf($n) === $kind);
     }
 

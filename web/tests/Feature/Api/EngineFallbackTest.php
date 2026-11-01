@@ -10,6 +10,7 @@ use App\Jobs\EngineFallbackJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Services\ActivityFeed;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptStore;
@@ -116,6 +117,38 @@ describe('the next engine', function () {
             ->and($transcript->error)->toContain('Tried: AssemblyAI, Groq')
             ->and(array_column($transcript->meta['route']['tried'], 'engine'))->toBe(['assemblyai', 'groq']);
         Queue::assertPushed(TranscribeFinalJob::class, 1);
+    });
+
+    it('says "Transcription failed" only when no engine is left, not while the next one tries', function () {
+        Queue::fake();
+        app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_key');
+        app(CredentialVault::class)->put('groq', 'api_key', 'gsk_test');
+        $transcript = failingTranscript($this);
+        $user = $transcript->captureSession->user;
+        $user->notifications()->delete();
+        $failures = fn (): int => $user->notifications()->get()->filter(fn ($n): bool => ActivityFeed::kindOf($n) === 'transcript_failed')->count();
+        $router = app(LanguageRouter::class);
+
+        app(TranscriptStore::class)->fail($transcript, TranscriptErrorCode::rejectedMessage('HTTP 429'), TranscriptErrorCode::ProviderRejected);
+        (new EngineFallbackJob($transcript->id))->handle($router);
+        expect($failures())->toBe(0)
+            ->and($transcript->refresh()->provider)->toBe('groq');
+
+        $transcript->update(['status' => TranscriptStatus::Processing]);
+        app(TranscriptStore::class)->fail($transcript, TranscriptErrorCode::rejectedMessage('HTTP 429'), TranscriptErrorCode::ProviderRejected);
+        (new EngineFallbackJob($transcript->id))->handle($router);
+        expect($failures())->toBe(1);
+    });
+
+    it('still says "Transcription failed" for a failure no engine can fix', function () {
+        Queue::fake();
+        $transcript = failingTranscript($this);
+        $user = $transcript->captureSession->user;
+        $user->notifications()->delete();
+
+        app(TranscriptStore::class)->failWith($transcript, TranscriptErrorCode::BudgetExceeded);
+
+        expect($user->notifications()->get()->map(fn ($n) => ActivityFeed::kindOf($n))->all())->toBe(['transcript_failed']);
     });
 
     it('leaves the limit, missing recordings and alternates alone', function () {

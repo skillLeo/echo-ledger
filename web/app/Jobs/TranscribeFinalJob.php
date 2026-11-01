@@ -11,6 +11,7 @@ use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
+use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
 use App\Services\ProviderCopyEraser;
 use App\Services\SettingsRepository;
@@ -240,6 +241,8 @@ final class TranscribeFinalJob implements ShouldQueue
             ]);
             if ($transcript->kind === TranscriptKind::Final) {
                 $transcript->captureSession->update(['status' => SessionStatus::Failed]);
+                // No engine fallback follows a crashed job, so nothing else would tell the user (ActivityFeed::fallsBack).
+                app(ActivityFeed::class)->transcriptFailed($transcript);
             }
         }
     }
