@@ -19,9 +19,9 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 - [x] 1. In-app voice note: timer runs, a stopped note shows in Library at once (Uploading → Transcribing → ready). *Accept:* `RecordScreenTest` timer + saved-note test; **(phone)** record 10 s, see it in Library.
 - [x] 2. Record sheet: compact 2×2 grid, tiles ~112 dp (icon, title, one-line status), height wraps content; Game/Watch say "Needs Soniox credit" when refused. *Accept:* screenshot `phone-new-sheet-*`; `UndecidedKeepWorkerTest` (refusal remembered).
-- [ ] 3. Waiting: one summary card ("4 calls waiting · oldest Oct 30 · 2:18 total", Review) → Waiting screen with per-item Keep / Discard / Rename / Client / Language and Keep all / Discard all with undo; setting "Undecided calls: keep automatically after 24 h / 3 days / never" (default 24 h); same card on desktop and web. *Accept:* `WaitingScreenTest`, `UndecidedPolicyTest`; screenshots; **(phone)**.
+- [x] 3. Waiting: one summary card ("4 calls waiting · oldest Oct 30 · 2:18 total", Review) → Waiting screen with per-item Keep / Discard / Rename / Client / Language and Keep all / Discard all with undo; setting "Undecided calls: keep automatically after 24 h / 3 days / never" (default 24 h); same card on desktop and web. *Accept:* `WaitingScreenTest`, `UndecidedPolicyTest`; screenshots; **(phone)**.
 - [x] 4. Selection bar: "4 selected" on one line; compact icons, labels on long-press. *Accept:* screenshot at 200 % text; test.
-- [ ] 5. Bottom nav: any tab tap returns to that tab's main screen (closes sub-screens); a second tap scrolls to top. *Accept:* `MainActivityTest`; **(phone)**.
+- [x] 5. Bottom nav: any tab tap returns to that tab's main screen (closes sub-screens); a second tap scrolls to top. *Accept:* `MainActivityTest`; **(phone)**.
 - [x] 6. Colour settings: swatches (circles with a check), no hex text; no one-character-per-line chip. *Accept:* screenshot; test.
 - [x] 7. Messages never over a header: inline banner on Game/Watch or a snackbar above the nav. *Accept:* screenshot; no overlay text without a running session.
 - [x] 8. Voice note screen: no "Client" meter, no "Both sides of calls" text. *Accept:* `RecordScreenTest`.
@@ -77,12 +77,12 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 - [x] Full suites green; lints clean (P2 milestone: phone 1085, desktop 1217 + cargo + clippy, web 3614 + PHPStan + Pint; token and repo-policy checks).
 - [x] Web deploy (2026-10-31 07:38 server time, verified; backup on server and laptop); Windows installer and APK 1.4.0 in `C:\echoledger-releases\v1.4.0\`; Mac .dmg from the v1.4.0 tag run. **Left:** APK install on the S25 (needs the phone window).
-- [ ] Phone window (N7); Mac checks (N4).
+- [x] Phone window (N7). **Left:** Mac checks (N4).
 - [x] USER_GUIDE, MANUAL_QA, HANDOFF; tag v1.4.0; push.
 
 ## After v1.4.0
 
 - [x] Phone 1.4.1 installed (Library pinned section); voice note and lag checked on the S25 (numbers in HANDOFF).
 - [x] Desktop 1.4.1 installed on the laptop (row menu); web: "Transcription failed" only after every engine; monthly warnings once on the 1st.
-- [ ] Phone 1.4.2 on the S25 (adb helper on Android 17) and the "Test client" call-notes / Ask check, then delete the test client. **(phone)**
-- [ ] Waiting screen and bottom-nav checks (P0 3, 5) on the S25. **(phone)**
+- [x] Phone 1.4.2 on the S25 (kept data): the adb-started helper ran with no crash and handed over (log empty, process alive). "Test client": call notes ready (all sections empty: the note held only music), Ask answered with a citation; client deleted, its voice note kept unfiled.
+- [x] Waiting card → "Waiting for you" (Keep all, Discard all, per-call Client / Language / Rename / Keep / Discard) and the Library tab back to Library, on the S25.
