@@ -51,18 +51,18 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 ## P3 — Mac app
 
 - [x] GitHub Actions: tauri-action on macOS, .dmg for Apple Silicon and Intel on v* tags and on demand (run 41168864346 green, Rust tests + clippy on macOS).
-- [ ] Core Audio process tap for the other side (14.2+, NSAudioCaptureUsageDescription), mic permission, app detection by bundle id, overlays and pill, ⌘ shortcuts, menu-bar icon.
-- [ ] USER_GUIDE first open (right-click → Open); MANUAL_QA Mac section. **(mac)**
+- [x] Core Audio process tap for the other side (14.2+, NSAudioCaptureUsageDescription), mic permission, app detection by bundle id, overlays and pill, ⌘ shortcuts, menu-bar icon. Built and green on the macOS runner; **not yet tried on a real Mac (N4)**.
+- [x] USER_GUIDE first open (right-click → Open); MANUAL_QA "Mac app v1.4" section written. Running it is N4. **(mac)**
 
 ## P4 — Client workspaces
 
-- [ ] Client tabs Overview · Recordings · Files · Ask; files encrypted, text extracted.
-- [ ] Brief (one page, editable, grows from calls).
-- [ ] Call notes after each kept recording for a client (only sections with content, timestamps, never invented, "verify").
-- [ ] Client memory (scope, dated decisions, open questions, changelog; edit/pin; citations).
-- [ ] Ask with citations; English / Roman Urdu output; Copy for AI bundle.
-- [ ] Per-client AI on/off, monthly AI budget ($5) with usage; Anthropic data-use note in docs/research/.
-- [ ] Same on phone, desktop and web.
+- [x] Client tabs Overview · Recordings · Files · Ask; files encrypted, text extracted.
+- [x] Brief (one page, editable, grows from calls).
+- [x] Call notes after each kept recording for a client (only sections with content, timestamps, never invented, "verify").
+- [x] Client memory (scope, dated decisions, open questions, changelog; edit/pin; citations).
+- [x] Ask with citations; English / Roman Urdu output; Copy for AI bundle.
+- [x] Per-client AI on/off, monthly AI budget ($5) with usage; Anthropic data-use note in docs/research/.
+- [x] Same on phone, desktop and web.
 
 ## P5 — Accuracy boosters
 
