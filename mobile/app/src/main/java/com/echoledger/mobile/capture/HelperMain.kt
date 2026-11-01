@@ -78,14 +78,73 @@ object HelperMain {
         val extras = Bundle().apply { putBinder(BinderHandoffProvider.EXTRA_BINDER, helper.asBinder()) }
         val authority = args.firstOrNull() ?: "com.echoledger.mobile.handoff"
         val uri = Uri.parse("content://$authority")
-        context.contentResolver.call(uri, BinderHandoffProvider.METHOD_ATTACH, null, extras)
+        val handOff = {
+            if (!ShellProviderCall.call(authority, BinderHandoffProvider.METHOD_ATTACH, extras)) {
+                context.contentResolver.call(uri, BinderHandoffProvider.METHOD_ATTACH, null, extras)
+            }
+        }
+        handOff()
         // Android may stop the app at any time; a restarted app has no binder until it is handed over again.
         thread(name = "el-helper-handoff", isDaemon = true) {
             while (true) {
                 Thread.sleep(HANDOFF_EVERY_MS)
-                runCatching { context.contentResolver.call(uri, BinderHandoffProvider.METHOD_ATTACH, null, extras) }
+                runCatching { handOff() }
             }
         }
         Looper.loop() // keep serving binder calls until destroy()
+    }
+}
+
+/**
+ * Calls a content provider as the shell package without a ContentResolver. From `app_process` the resolver names the
+ * system context's package "android", and Android 17 refuses that for UID 2000 ("Given calling package android does
+ * not match caller's uid 2000"). This asks the activity manager for the provider and calls it with an attribution
+ * source naming com.android.shell (what scrcpy does). Returns false when the hidden API is not there, so the caller
+ * falls back to the resolver.
+ */
+internal object ShellProviderCall {
+    private const val SHELL_UID = 2000
+    private const val SHELL = "com.android.shell"
+
+    @SuppressLint("PrivateApi", "DiscouragedPrivateApi")
+    fun call(authority: String, method: String, extras: Bundle): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < 31) return false
+        val token = android.os.Binder()
+        val am =
+            runCatching { Class.forName("android.app.ActivityManager").getMethod("getService").invoke(null) }.getOrNull() ?: return false
+        return runCatching {
+            val holder = am.javaClass
+                .getMethod(
+                    "getContentProviderExternal",
+                    String::class.java,
+                    Int::class.javaPrimitiveType,
+                    android.os.IBinder::class.java,
+                    String::class.java
+                )
+                .invoke(am, authority, 0, token, null) ?: return false
+            try {
+                val provider = holder.javaClass.getField("provider").get(holder) ?: return false
+                val source = AttributionSource.Builder(SHELL_UID).setPackageName(SHELL).build()
+                provider.javaClass
+                    .getMethod(
+                        "call",
+                        AttributionSource::class.java,
+                        String::class.java,
+                        String::class.java,
+                        String::class.java,
+                        Bundle::class.java
+                    )
+                    .invoke(provider, source, authority, method, null, extras)
+                true
+            } finally {
+                runCatching {
+                    am.javaClass.getMethod(
+                        "removeContentProviderExternal",
+                        String::class.java,
+                        android.os.IBinder::class.java
+                    ).invoke(am, authority, token)
+                }
+            }
+        }.getOrDefault(false)
     }
 }

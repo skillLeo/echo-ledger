@@ -73,7 +73,7 @@ class RotationTest : AppTest() {
         val controller = launch()
         compose.onNodeWithContentDescription("Record").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("Voice notes & files").performClick()
+        compose.onNodeWithText("Voice & files").performClick()
         pumpUntil("the Record tab") {
             compose.waitForIdle()
             compose.onAllNodesWithText("Not recording").fetchSemanticsNodes().isNotEmpty()
