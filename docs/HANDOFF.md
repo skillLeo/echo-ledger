@@ -1,6 +1,11 @@
-Active plan: docs/PLAN_V1_4.md (local only). Checklist (single source of truth): docs/FINISH_CHECKLIST_V1_4.md
+Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth): docs/FINISH_CHECKLIST_V1_5.md
 
 # EchoLedger v1.1 — Handoff
+
+## v1.5 session 11 (2026-11-04): "ECHOLEDGER v1.5 — SAAS LAUNCH PLAN"
+- **Rules (user's order):** phases 1 → 8 (calls + Urdu accuracy → Projects + sharing → screen moments → SaaS foundation → distribution → MCP connector → brand/motion → release v1.5.0). After each item: this section + `docs/FINISH_CHECKLIST_V1_5.md`, commit, push. Related test classes after each item; full suites at the end of each phase; Gradle `--max-workers=2`; ~90 min per item. Up to 2 helpers at a time, only for `desktop/` and `web/`, each in its own worktree (`.claude/worktrees/`, excluded); mobile and the API contract stay here. S25: adb only in approved phone windows, `pm install -r` only. Migrations: backup first, reversible, tried on a production copy. No secrets anywhere.
+- **Step 0 done:** plan saved locally, checklist committed with the "Needs Hassam" list (N1 Groq plan … N13 Soniox).
+- **Phase 1 findings so far:** the phone starts a call recording when the audio mode turns to a call (`CaptureHelperService.startCallMonitor`: MODE_IN_COMMUNICATION + a VOICE_COMMUNICATION player of a call app, or MODE_IN_CALL), which for outgoing calls is at dialling, so ringing (and unanswered calls) are recorded; `CallStateMachine.MIN_DURATION_MS` is 3 s. The desktop has `askBeforeSaving` (always / auto_only / never) + `decisionTimeout` (keep / discard / wait, 60 s); Hassam's laptop has always + wait, which is why calls pile up in Waiting.
 
 ## After v1.4.0 (2026-10-31 / 11-01): phone window, a client meeting, three small releases
 - **Phone window (S25, 1.4.0 → 1.4.1 kept data):** voice note checked end to end (records, shows in Library at once, uploads, transcribes). "Missing" Library recordings were the pinned group sorting above Today; 1.4.1 puts Pinned in its own section first and keeps the date groups in order. Two calls undecided for more than 24 h were kept by `UndecidedKeepWorker` (by design). Lag (gfxinfo, Library scroll): janky frames 5.57 % (legacy 15.42 %), p99 40 ms before; 6.14 % (legacy 4.95 %), p99 32 ms after `cmd package compile -m speed-profile`. A "Test client" (one voice note filed under it) was made for the call-notes/Ask check: Checked 2026-11-01: call notes ready (empty: the note held only music), Ask answered with a citation; the client is deleted, the voice note kept.
