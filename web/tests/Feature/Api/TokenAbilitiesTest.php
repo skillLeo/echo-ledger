@@ -55,6 +55,7 @@ function abilityRoutes(): array
         'make request link' => ['POST', '/api/request-links', 'sessions:write'],
         'list request links' => ['GET', '/api/request-links', 'library:read'],
         'revoke request link' => ['DELETE', "/api/request-links/{$id}", 'sessions:write'],
+        'resolve app link' => ['GET', '/api/links/resolve', 'library:read'],
         'vocabulary' => ['GET', '/api/vocabulary', 'library:read'],
         'add keyterm' => ['POST', '/api/vocabulary/keyterms', 'sessions:write'],
         'add replacement' => ['POST', '/api/vocabulary/replacements', 'sessions:write'],

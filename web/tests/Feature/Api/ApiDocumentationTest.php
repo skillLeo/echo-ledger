@@ -83,13 +83,8 @@ it('documents every endpoint the router serves, except the provider webhook whic
     $served = collect(array_keys(registeredApiRoutes()))->reject(fn (string $key) => str_contains($key, '/webhooks/'))->sort()->values()->all();
 
     expect(array_values(array_diff($served, $documented)))->toBe([], 'served but not documented')
-        ->and(array_values(array_diff($documented, $served, NOT_YET_SERVED)))->toBe([], 'documented but not served');
+        ->and(array_values(array_diff($documented, $served)))->toBe([], 'documented but not served');
 });
-
-/** The v1.5 Phase 2 contract came before the server: these land one part at a time (empty once all are served). */
-const NOT_YET_SERVED = [
-    'GET /api/links/resolve',
-];
 
 it('documents the provider webhook', function () {
     $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md');
@@ -100,9 +95,6 @@ it('documents the provider webhook', function () {
 it('names, in each heading, the ability the route actually enforces', function () {
     $routes = registeredApiRoutes();
     foreach (documentedEndpoints() as $endpoint) {
-        if (in_array($endpoint['method'].' '.shapeOf($endpoint['uri']), NOT_YET_SERVED, true)) {
-            continue;
-        }
         $route = $routes[$endpoint['method'].' '.shapeOf($endpoint['uri'])] ?? null;
         expect($route)->not->toBeNull("{$endpoint['method']} {$endpoint['uri']} is not routed");
 

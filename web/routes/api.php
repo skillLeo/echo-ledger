@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FilingRuleController;
 use App\Http\Controllers\Api\LibraryController;
+use App\Http\Controllers\Api\LinkController;
 use App\Http\Controllers\Api\LiveTranslateTokenController;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Http\Controllers\Api\RecordingController;
@@ -127,6 +128,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('shares', [ShareController::class, 'all'])->name('api.shares');
             Route::get('shared-with-me', [TeammateController::class, 'index'])->name('api.shared');
             Route::get('request-links', [RequestLinkController::class, 'index'])->name('api.request-links');
+            // Links in the apps (v1.5): what a /s/, /p/ or /r/ link is for this device, to open it in place.
+            Route::get('links/resolve', [LinkController::class, 'resolve'])->name('api.links.resolve');
             Route::get('vocabulary', [VocabularyController::class, 'show'])->name('api.vocabulary');
             Route::get('clients/{id}/workspace', [ClientWorkspaceController::class, 'show'])->name('api.clients.workspace');
             Route::get('clients/{id}/bundle', [ClientWorkspaceController::class, 'bundle'])->name('api.clients.bundle');

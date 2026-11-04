@@ -56,6 +56,7 @@ const ISO_WEB_BYPASS = [
     'request.files.store' => 'public request link: the token is the only key',
     'request.files.chunk' => 'public request link: the token is the only key',
     'request.files.complete' => 'public request link: the token is the only key',
+    'app-links' => 'Android App Links statement: the app package and signing keys, no workspace data',
     'passkeys.login.options' => 'sign-in, before any workspace',
     'passkeys.login' => 'sign-in, before any workspace',
 ];
@@ -78,7 +79,7 @@ function isoWorld(): array
     $transcript = Fx::transcript($session, 'BOBSECRETTRANSCRIPT spoken here');
     $marker = SessionMarker::query()->create(['capture_session_id' => $session->id, 'at_ms' => 1000, 'note' => 'BOBSECRETNOTE', 'source' => 'device']);
     SessionLabel::query()->create(['capture_session_id' => $session->id, 'label' => 'bobsecretlabel']);
-    ['link' => $share] = app(ShareLinks::class)->create($session, 3600, null, false, 'Bob');
+    ['link' => $share, 'url' => $shareUrl] = app(ShareLinks::class)->create($session, 3600, null, false, 'Bob');
     $binned = Fx::session($bob, $device, ['title' => 'BOB-SECRET-TITLE binned']);
     $binned->delete();
     $uploading = Fx::session($bob, $device, ['title' => 'BOB-SECRET-TITLE uploading']);
@@ -86,7 +87,7 @@ function isoWorld(): array
     ['link' => $requestLink] = app(RequestLinks::class)->create($client->workspace_id, $bob->id, $client, 'BOB-SECRET-TITLE request', null, 20, 100);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink');
+    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
@@ -160,6 +161,8 @@ function isoApiCases(array $b): array
         'api.request-links.store' => ['POST', '/api/request-links', ['client_id' => $b['client']->id], 404],
         'api.request-links' => ['GET', '/api/request-links', [], 'list'],
         'api.request-links.destroy' => ['DELETE', "/api/request-links/{$b['requestLink']->id}", [], 404],
+        // B's own share link is not A's to open in the app: the same 404 as an unknown link.
+        'api.links.resolve' => ['GET', '/api/links/resolve?url='.rawurlencode($b['shareUrl']), [], 404],
         'api.vocabulary.keyterms' => ['POST', '/api/vocabulary/keyterms', ['term' => 'Hijack', 'client_id' => $b['client']->id], 404],
         'api.vocabulary.replacements' => ['POST', '/api/vocabulary/replacements', ['from' => 'a', 'to' => 'b', 'client_id' => $b['client']->id], 404],
         'api.transcripts.update' => ['PATCH', "/api/transcripts/{$t}", ['edits' => [['index' => 0, 'text' => 'hijacked']]], 404],

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
+use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
@@ -12,6 +13,9 @@ use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/admin');
+
+// Android App Links (v1.5): the phone app opens this server's /s/, /p/ and /r/ links itself when it is installed.
+Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app-links');
 
 // Decrypted playback for the admin transcript player (HTTP Range supported).
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)

@@ -34,4 +34,15 @@ return [
         // stored as audio/amr, audio/aac and audio/webm (RecordingIngestor::canonicalMime).
         'audio/AMR', 'audio/x-hx-aac-adts', 'video/webm',
     ],
+
+    // Android App Links (v1.5): /.well-known/assetlinks.json lets the phone app open /s/, /p/ and /r/ links of this
+    // server. The SHA-256 fingerprints of the signing certificates, comma separated: the debug build's by default; add
+    // the release key's when there is one.
+    'android_app' => [
+        'package' => env('ECHOLEDGER_ANDROID_PACKAGE', 'com.echoledger.mobile'),
+        'fingerprints' => array_values(array_filter(array_map('trim', explode(',', (string) env(
+            'ECHOLEDGER_ANDROID_FINGERPRINTS',
+            '34:AC:18:19:18:77:F6:C3:12:A2:88:3E:07:C8:40:0B:85:C4:71:62:A4:0F:77:B4:FE:2D:4F:27:08:AF:F1:B6',
+        ))))),
+    ],
 ];
