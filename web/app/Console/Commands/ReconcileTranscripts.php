@@ -52,15 +52,19 @@ final class ReconcileTranscripts extends Command
                     $result = $driver->fetchResult($transcript);
                     if ($result !== null) {
                         $store->complete($transcript, $result);
-                        $driver->deleteRemote($transcript);
-                        $transcript->update(['provider_deleted_at' => now()]);
+                        // Pending again (a forced re-run in another language): its copy is already queued for deletion.
+                        if ($transcript->status !== TranscriptStatus::Pending) {
+                            $driver->deleteRemote($transcript);
+                            $transcript->update(['provider_deleted_at' => now()]);
+                        }
                         $this->info("Recovered transcript {$transcript->id}");
                     } elseif ($transcript->submitted_at?->lt(now()->subHours(6))) {
                         $store->failWith($transcript, TranscriptErrorCode::ProviderTimeout);
                     }
                 } catch (ProviderJobFailed $e) {
                     $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
-                    if (app(ProviderCopyEraser::class)->erase($transcript)) {
+                    // Pending again when it waits for this engine (EngineWait): its copy is already queued for deletion.
+                    if ($transcript->status !== TranscriptStatus::Pending && app(ProviderCopyEraser::class)->erase($transcript)) {
                         $transcript->update(['provider_deleted_at' => now()]);
                     }
                 } catch (Throwable $e) {

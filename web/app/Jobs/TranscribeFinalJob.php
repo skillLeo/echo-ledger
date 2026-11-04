@@ -163,6 +163,8 @@ final class TranscribeFinalJob implements ShouldQueue
                 'status' => TranscriptStatus::Submitted,
                 'provider_job_id' => $result->jobId,
                 'provider_transcript_id' => $result->transcriptId,
+                // A new job whose copy is not deleted yet: an earlier attempt's time would hide it from stt:reconcile.
+                'provider_deleted_at' => null,
                 'submitted_at' => now(),
             ]),
             'completed' => $this->completed($transcript, $result, $store),

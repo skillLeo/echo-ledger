@@ -8,12 +8,14 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Jobs\EngineFallbackJob;
 use App\Jobs\TranscribeFinalJob;
+use App\Models\ProviderDeletion;
 use App\Models\Transcript;
 use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
 use App\Services\CredentialVault;
 use App\Services\EngineWait;
 use App\Services\FinalTranscriptCoordinator;
+use App\Services\ProviderCopyEraser;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptStore;
 use App\Stt\Audio\AudioPrep;
@@ -55,6 +57,8 @@ beforeEach(function () {
     $this->groqCalls = 0;
     $this->assemblyCalls = 0;
     $this->groq = [];
+    // AssemblyAI refuses everything unless a test answers for it.
+    $this->assembly = null;
     Http::fake(function (HttpRequest $request) {
         if (str_contains($request->url(), 'api.groq.com')) {
             $this->groqCalls++;
@@ -63,7 +67,7 @@ beforeEach(function () {
         }
         $this->assemblyCalls++;
 
-        return Http::response(['error' => 'Unsupported audio'], 400);
+        return $this->assembly !== null ? ($this->assembly)($request) : Http::response(['error' => 'Unsupported audio'], 400);
     });
 });
 
@@ -364,6 +368,57 @@ describe('finishing and duplicates', function () {
         // The scheduled run arriving late finds the work done.
         engineWaitRun($transcript, '2026-11-04T11:00:00+00:00');
         expect($this->groqCalls)->toBe(2);
+    });
+
+    it('deletes the copy AssemblyAI kept of every attempt while an Urdu recording waits for it', function () {
+        Carbon::setTestNow('2026-11-04 10:00:00');
+        $this->configureAssemblyAi();
+        $log = [];
+        $jobs = ['job-2'];
+        $this->assembly = function (HttpRequest $request) use (&$log, &$jobs) {
+            $path = (string) parse_url($request->url(), PHP_URL_PATH);
+            $log[] = $request->method().' '.$path;
+
+            return match (true) {
+                $request->method() === 'POST' && $path === '/v2/upload' => Http::response(['upload_url' => 'https://cdn.assemblyai.com/upload/abc'], 200),
+                $request->method() === 'POST' && $path === '/v2/transcript' => Http::response(['id' => array_shift($jobs), 'status' => 'queued'], 200),
+                $request->method() === 'DELETE' => Http::response(['status' => 'deleted'], 200),
+                // Every job ends in AssemblyAI's own server error, a problem that passes.
+                default => Http::response(['status' => 'error', 'error' => 'Internal server error'], 200),
+            };
+        };
+        $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'ur', 'final_provider' => 'assemblyai']);
+        // It came to AssemblyAI after an earlier engine whose copy was deleted: that time must not hide job-1's copy.
+        $transcript = $session->transcripts()->create([
+            'kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Submitted, 'language' => 'ur',
+            'provider_job_id' => 'job-1', 'submitted_at' => now()->subMinutes(20), 'provider_deleted_at' => now()->subHour(),
+            'meta' => ['route' => ['used' => 'assemblyai', 'wanted' => 'groq', 'language' => 'ur', 'fallback' => true]],
+        ]);
+        $queued = fn (): array => ProviderDeletion::query()->orderBy('provider_job_id')->pluck('provider_job_id')->all();
+
+        // stt:reconcile finds job-1 failed: the recording waits and job-1's copy is queued for deletion.
+        $this->artisan('stt:reconcile')->assertSuccessful();
+        $transcript->refresh();
+        expect($transcript->status)->toBe(TranscriptStatus::Pending)
+            ->and($transcript->provider_job_id)->toBeNull()
+            ->and($transcript->provider_deleted_at)->toBeNull()
+            ->and($queued())->toBe(['job-1']);
+
+        // The scheduled run sends it to AssemblyAI again (job-2), which fails too.
+        $this->travelTo(Carbon::parse($transcript->meta['route']['retry_at']));
+        engineWaitRun($transcript, $transcript->meta['route']['retry_at']);
+        expect($transcript->provider_job_id)->toBe('job-2')->and($transcript->provider_deleted_at)->toBeNull();
+        $this->travel(20)->minutes();
+        $this->artisan('stt:reconcile')->assertSuccessful();
+
+        // job-1's copy went once its delete was due; job-2's is queued and goes when its turn comes.
+        expect($transcript->refresh()->status)->toBe(TranscriptStatus::Pending)
+            ->and($transcript->provider_deleted_at)->toBeNull()
+            ->and($log)->toContain('DELETE /v2/transcript/job-1')
+            ->and($queued())->toBe(['job-2']);
+        $this->travel(ProviderCopyEraser::FIRST_RETRY_MINUTES + 1)->minutes();
+        $this->artisan('stt:reconcile')->assertSuccessful();
+        expect($log)->toContain('DELETE /v2/transcript/job-2')->and($queued())->toBe([]);
     });
 });
 

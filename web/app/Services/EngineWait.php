@@ -253,14 +253,15 @@ final class EngineWait
 
     /**
      * Puts the transcript back to pending until [$at] and queues the run for that time. The copy an async engine kept
-     * of the failed attempt is deleted (ProviderCopyEraser); the next run starts a new job.
+     * of the failed attempt is queued for deletion (ProviderCopyEraser), whatever provider_deleted_at still says about
+     * an earlier attempt (deleting a copy twice is harmless); the next run starts a new job.
      *
      * @param  array<string, mixed>  $route
      */
     private function schedule(Transcript $transcript, CarbonInterface $at, string $reason, array $route): void
     {
         $provider = $transcript->providerKey();
-        if ($provider !== null && $transcript->provider_job_id !== null && $transcript->provider_job_id !== '' && $transcript->provider_deleted_at === null) {
+        if ($provider !== null && $transcript->provider_job_id !== null && $transcript->provider_job_id !== '') {
             app(ProviderCopyEraser::class)->schedule($provider, $transcript->provider_job_id, $transcript->provider_transcript_id);
         }
         $token = $at->copy()->utc()->toAtomString();
@@ -269,6 +270,7 @@ final class EngineWait
                 'status' => TranscriptStatus::Pending,
                 'provider_job_id' => null,
                 'provider_transcript_id' => null,
+                'provider_deleted_at' => null,
                 'submitted_at' => null,
                 'error' => null,
                 'error_code' => null,
