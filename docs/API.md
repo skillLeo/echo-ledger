@@ -65,6 +65,7 @@ Every addition below is marked **(since v1.1)**.
 | 404 | `rule_not_found` | Since v1.5: the filing rule is unknown or belongs to another project | Refresh the rules |
 | 404 | `recipient_not_found` | Since v1.5: an email to send to has no account on this server; nothing was sent | Check the address |
 | 409 | `rule_exists` | Since v1.5: another project already has a rule with that kind and value | Show which project has it |
+| 409 | `too_many_screens` | Since v1.5: a recording keeps at most 400 screen moments | Stop sending screens for this recording |
 | 422 | `invalid_parent` | Since v1.5: a project cannot go under itself or one of its own subfolders | Pick another folder |
 | 422 | `too_deep` | Since v1.5: projects nest at most 4 levels | Pick a higher folder |
 | 405 | `method_not_allowed` | Wrong HTTP method | Permanent |
@@ -618,6 +619,43 @@ workspace, or one sent to the caller), `{"kind": "project", "client_id": "…"}`
 "…"}` (an item in Shared with me) or `{"kind": "request", "request_link_id": "…"}` (one of the caller's request
 links). Anything else — someone else's link, revoked, expired, unknown — is `404 not_found`, and the app opens the
 web page instead. The token is checked like the page checks it; nothing about other workspaces is told.
+
+### Screen moments (since v1.5)
+During a meeting the desktop app keeps what was on the shared screen at each moment ("screen moments"), linked to the
+recording's timeline, so the transcript and an AI reading it know what "this page" or "click here" meant. Screens
+are stored encrypted like recordings, go with the recording (retention, the undo bin, delete) and are never public
+unless a share link of the recording allows downloads.
+
+- `POST /api/sessions/{id}/screens` — `sessions:write`, throttled (uploads limiter): multipart with `image` (WebP,
+  PNG or JPEG, at most 3 MB; checked by content), `at_ms` (the moment in the recording, 0 or more), `width`,
+  `height`, `trigger` (`change` = the picture changed and settled, `words` = someone said "this page", "click
+  here", "yeh dekhein" …, `manual` = the person pressed the button) and `sha256` (of the image; the same image twice
+  for one recording is `200` with the existing screen, not a copy). → `201 {"data": <screen>}`. At most 400 screens
+  per recording (`409 too_many_screens`); a recording in the undo bin is `404 session_not_found`.
+- A screen: `{"id": "01JE…", "index": 7, "at_ms": 872000, "width": 1920, "height": 1080, "trigger": "change",
+  "ocr_text": "Invoice #2041 …" | null, "description": "The client's invoice page with the Pay button" | null,
+  "image_url": "…", "thumb_url": "…", "created_at": "…"}`. `index` numbers the screens of the recording in time
+  order from 1 ("Screen 7"). `image_url` and `thumb_url` are signed links valid for 30 minutes (thumbnails are 480 px
+  wide); fetch them with no token.
+- `GET /api/sessions/{id}/screens` — `library:read` → `200 {"data": [<screen>]}` in time order;
+  `DELETE /api/sessions/{id}/screens/{screen}` — `sessions:write` → `204` (the others keep their numbers until the
+  list is read again, then they are renumbered).
+- Text and a one-line description per screen (`ocr_text`, `description`) are made on the server with Claude Haiku
+  5.5 when Settings → Screen moments → "Describe screens" is on (the default); they make screens searchable
+  (`GET /api/search` also finds screen text) and are billed to the workspace's AI usage. Off: both stay `null`.
+- Library items and `GET /api/sessions/{id}` gain `screen_count`.
+- Projects (client objects) gain `screens` (bool, default `true`): `false` = the desktop does not capture screens for
+  meetings filed under that project. `PATCH /api/clients/{id}` accepts it.
+
+### Meeting pack (since v1.5)
+- `GET /api/sessions/{id}/pack?format=pdf|zip&view=roman|english|urdu|original&include_audio=0|1` — `library:read`:
+  - `pdf`: a title page (title, date, length, people, project), then the transcript in the view, each screen placed
+    at its moment with the label "[Screen 7 at 14:32]". Claude and ChatGPT read PDF pages as text and images.
+  - `zip`: `transcript.md` (the same order, each screen as `![Screen 7 at 14:32](images/screen-07.webp)` with its
+    description), the `images/` folder, and with `include_audio=1` the recording's audio.
+  - `409 nothing_to_export` without a finished transcript. Names like `GET /api/transcripts/{id}/export`.
+- "Copy for AI" (in the apps) puts `[Screen N at mm:ss: <description>]` lines between the transcript lines at the
+  screens' moments; the apps build it from `GET /api/sessions/{id}/screens`.
 
 ### `GET /api/search` — `library:read`, throttled (60/min/device) (since v1.1)
 Searches titles and transcript text (final and live) of every device. Query: `q` (2–200 characters; every word
