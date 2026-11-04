@@ -1,9 +1,22 @@
 // Dialogs of the Projects page (since v1.5): naming a project or a subfolder, moving a project into another one (or to
-// the top level), deleting one, and the project picker they and the recordings' Move dialog share.
+// the top level), deleting one, moving recordings into a project or the Inbox, and the project picker they share.
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import type { ClientFolder } from "../../lib/ipc";
+import { createPortal } from "react-dom";
+import { api, errorMessage, type ClientFolder } from "../../lib/ipc";
 import { canMoveTo, projectLabel, projectTree, subtreeIds, visibleRows } from "../../lib/projects";
-import { FolderIcon, InboxIcon, SearchIcon } from "../../components/Icons";
+import { FolderIcon, InboxIcon, PlusIcon, SearchIcon } from "../../components/Icons";
+
+/** Moves recordings into a project (null: the Inbox): one through its own change, several in one bulk action. */
+export async function moveRecordings(ids: readonly string[], projectId: string | null): Promise<void> {
+  if (ids.length === 1) await api.organiseSession(ids[0], { client_id: projectId });
+  else await api.bulkSessions([...ids], "move", projectId);
+}
+
+/** "Moved “Kick-off” to Acme › Invoices", "Moved 3 recordings to the Inbox". */
+export function movedText(count: number, title: string | null | undefined, projects: readonly ClientFolder[], projectId: string | null): string {
+  const where = projectId ? projectLabel(projects, projectId) || "the project" : "the Inbox";
+  return count === 1 ? `Moved “${title || "the recording"}” to ${where}` : `Moved ${count} recordings to ${where}`;
+}
 
 /** A dialog sheet: Escape or a click beside it closes it, except while it is busy. */
 export function Sheet({ title, onClose, busy = false, className = "", children }: {
@@ -21,13 +34,15 @@ export function Sheet({ title, onClose, busy = false, className = "", children }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onClose]);
-  return (
+  // On the page itself, not inside the row or bar that opened it (a sticky bar would hold it under the rest).
+  return createPortal(
     <div className="sheet-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
       <div className={`sheet card ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <h2 id={titleId} className="sheet-title">{title}</h2>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -142,6 +157,76 @@ export function MoveProjectDialog({ project, projects, onMove, onClose }: {
         <span className="spacer" />
         <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>Cancel</button>
         <button type="button" className="btn primary" disabled={busy || target === undefined} onClick={() => void move()}>Move</button>
+      </div>
+    </Sheet>
+  );
+}
+
+/**
+ * Moves recordings into a project or the Inbox (one from its row menu, several from the selection bar), or into a new
+ * project made here.
+ */
+export function MoveRecordingsDialog({ ids, title = null, current, projects, notify, onClose, onMoved, onProjectCreated }: {
+  ids: readonly string[];
+  /** The recording's title when one is moved. */
+  title?: string | null;
+  /** The project they are all in now (null: the Inbox; undefined: not all the same). */
+  current?: string | null;
+  projects: readonly ClientFolder[];
+  notify: (text: string, error?: boolean) => void;
+  onClose: () => void;
+  onMoved?: (projectId: string | null) => void;
+  onProjectCreated?: (project: ClientFolder) => void;
+}) {
+  const [target, setTarget] = useState<string | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const nameId = useId();
+  const count = ids.length;
+  const move = async (projectId: string | null, list: readonly ClientFolder[] = projects) => {
+    setBusy(true);
+    try {
+      await moveRecordings(ids, projectId);
+      notify(movedText(count, title, list, projectId));
+      onMoved?.(projectId);
+      onClose();
+    } catch (e) {
+      notify(errorMessage(e), true);
+      setBusy(false);
+    }
+  };
+  const createAndMove = async () => {
+    const text = name.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    try {
+      const { data } = await api.createClient(text);
+      onProjectCreated?.(data);
+      await move(data.id, [...projects, data]);
+    } catch (e) {
+      notify(errorMessage(e), true);
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet title={count === 1 ? `Move “${title || "recording"}”` : `Move ${count} recordings`} onClose={onClose} busy={busy}>
+      <ProjectPicker projects={projects} top={{ label: "Inbox", inbox: true }} value={target} onChange={setTarget} label="Move to"
+        blocked={(id) => (current !== undefined && id === current ? (count === 1 ? "It is here now" : "They are here now") : null)} />
+      {creating ? (
+        <form className="row" onSubmit={(e) => { e.preventDefault(); void createAndMove(); }}>
+          <label htmlFor={nameId} className="sr-only">New project name</label>
+          <input id={nameId} className="input" placeholder="Project name" maxLength={120} autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+          <button type="submit" className="btn" disabled={busy || !name.trim()}>Create and move</button>
+          <button type="button" className="btn ghost" disabled={busy} onClick={() => setCreating(false)}>Cancel</button>
+        </form>
+      ) : (
+        <button type="button" className="btn text compact" style={{ justifySelf: "start" }} onClick={() => setCreating(true)}><PlusIcon size={14} />New project</button>
+      )}
+      <div className="row sheet-actions">
+        <span className="spacer" />
+        <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>Cancel</button>
+        <button type="button" className="btn primary" disabled={busy || target === undefined} onClick={() => target !== undefined && void move(target)}>Move</button>
       </div>
     </Sheet>
   );

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type LibraryItem, type SearchResult, type SharedItem, type SmartFolder, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
 import { folderLabel, inFolderHere } from "../../lib/folders";
+import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { SharedWithMe, sentLine } from "./SharedWithMe";
+import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialogs";
 import { activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SharePanel, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
@@ -79,7 +81,7 @@ const initialOf = (name: string): string => [...name.trim()][0]?.toUpperCase() ?
  * recording beside it. Recordings waiting for a decision and uploads that need the user sit at the top of the list;
  * `focus` brings one of them into view.
  */
-export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange, onImport, onOpenClient, smartFolder = null, onSmartFolder, sharedFocus = null }: {
+export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange, onImport, onOpenClient, smartFolder = null, onSmartFolder, sharedFocus = null, projects = null }: {
   notify: (t: string, e?: boolean) => void;
   focus?: PendingFocus | null;
   onFocusHandled?: () => void;
@@ -97,7 +99,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   onSmartFolder?: (folder: SmartFolder | null) => void;
   /** An item of Shared with me to open (an echoledger link to it). */
   sharedFocus?: string | null;
+  /** Every project, as the sidebar has them (since v1.5); without them the Library asks for its own. */
+  projects?: ClientFolder[] | null;
 }) {
+  // The Move dialog of one recording (its row menu).
+  const [moveFor, setMoveFor] = useState<{ ids: string[]; title: string | null; current: string | null } | null>(null);
   const [items, setItems] = useState<LibraryItem[]>([]);
   // The smart folder's recordings as the server lists them; null until it answered (or when it cannot be reached).
   const [folderItems, setFolderItems] = useState<LibraryItem[] | null>(null);
@@ -241,8 +247,23 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const pickedIds = useMemo(() => [...picked].filter((id) => items.some((i) => i.id === id && !i.deleted)), [picked, items]);
   const togglePicked = (id: string) => setPicked((p) => { const next = new Set(p); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const endSelecting = () => { setSelecting(false); setPicked(new Set()); };
-  const folders = useMemo(() => foldersOf(items, clients), [items, clients]);
+  const folders = useMemo(() => foldersOf(items, projects ? [...projects, ...clients.filter((c) => !projects.some((p) => p.id === c.id))] : clients), [items, clients, projects]);
   const addClient = (client: ClientFolder) => setClients((list) => [...list.filter((c) => c.id !== client.id), client]);
+  /** Recordings dropped on a project or the Inbox in the sidebar (since v1.5); the library then syncs on its own. */
+  const dropMove = async (ids: string[], projectId: string | null) => {
+    try {
+      await moveRecordings(ids, projectId);
+      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, folders, projectId));
+      if (ids.length > 1) endSelecting();
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+  /** A row pressed and moved: the recording, or every selected one when it is selected, follows the pointer. */
+  const startDrag = (e: React.PointerEvent, item: LibraryItem) => {
+    const ids = selecting && picked.has(item.id) ? pickedIds : [item.id];
+    beginRecordingDrag(e, () => ({ ids, label: dragLabel(ids.map((id) => items.find((i) => i.id === id)?.title)) }), (moved, projectId) => void dropMove(moved, projectId));
+  };
   // A smart folder's recordings: the server's list (each shown as saved here when it is), else what this computer can tell.
   const shared = smartFolder === "shared";
   const folderBase = useMemo(() => {
@@ -262,7 +283,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   // Transcript matches of a smart folder's own recordings only.
   const shownHits = useMemo(() => (smartFolder ? found.filter((r) => folderBase.some((i) => i.id === r.session.id)) : found), [smartFolder, found, folderBase]);
   // The full client list (folders without recordings too) is fetched once, when a recording is opened or selecting starts.
-  const needClients = !!current || selecting;
+  const needClients = (!!current || selecting || moveFor !== null) && !projects;
   useEffect(() => {
     if (!needClients || clientsLoaded) return;
     setClientsLoaded(true);
@@ -957,7 +978,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   <div key={item.id} className={`item-wrap ${selecting ? "" : "with-menu"}`}>
                     <button type="button" className={`item ${item.id === selected ? "selected" : ""} ${selecting && picked.has(item.id) ? "picked" : ""}`}
                       aria-current={!selecting && item.id === selected ? "true" : undefined} aria-pressed={selecting ? picked.has(item.id) : undefined}
-                      onClick={() => (selecting ? togglePicked(item.id) : setSelected(item.id))}>
+                      onPointerDown={(e) => startDrag(e, item)}
+                      onClick={() => { if (dragJustEnded()) return; if (selecting) togglePicked(item.id); else setSelected(item.id); }}>
                       <div className="row">
                         {avatar}
                         <div className="item-main">
@@ -981,6 +1003,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {!selecting && (
                       <RowMenu title={item.title ?? "recording"} pinned={!!item.pinned}
                         onRename={() => setRenaming({ id: item.id, where: "list" })}
+                        onMove={() => setMoveFor({ ids: [item.id], title: item.title ?? null, current: item.client?.id ?? null })}
                         onPin={() => void togglePin(item)}
                         onDelete={() => void remove(item.id)} />
                     )}
@@ -1220,6 +1243,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
           )}
         </div>
       </div>
+      {moveFor && (
+        <MoveRecordingsDialog ids={moveFor.ids} title={moveFor.title} current={moveFor.current} projects={folders} notify={notify}
+          onClose={() => setMoveFor(null)} onProjectCreated={addClient} />
+      )}
     </>
   );
 }

@@ -2,12 +2,12 @@
 // call client folders projects; the API keeps the name clients. A project can be renamed, moved into another one or
 // to the top, get a folder inside, or be deleted: its recordings then go to the Inbox and its folders up a level.
 import { useEffect, useMemo, useState } from "react";
-import { api, errorMessage, type ClientFolder, type LibraryItem } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type ClientFolder, type LibraryItem } from "../../lib/ipc";
 import { canAddSubfolder, hasSubfolders, projectLabel } from "../../lib/projects";
 import { FolderIcon, PlusIcon } from "../../components/Icons";
 import { ClientWorkspace } from "./ClientWorkspace";
 import { ProjectTree } from "./ProjectTree";
-import { DeleteProjectDialog, MoveProjectDialog, NameDialog } from "./ProjectDialogs";
+import { DeleteProjectDialog, MoveProjectDialog, moveRecordings, movedText, NameDialog } from "./ProjectDialogs";
 
 type Notify = (text: string, error?: boolean) => void;
 type Dialog =
@@ -26,7 +26,7 @@ export function deletedText(name: string, answer: { moved_sessions?: number; mov
   return parts.join(" · ");
 }
 
-export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, onMoveRecordings, expanded, onToggle }: {
+export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle }: {
   notify: Notify;
   /** Every project; null while they load. */
   projects: ClientFolder[] | null;
@@ -39,7 +39,6 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   projectId: string | null;
   onOpenProject: (id: string | null) => void;
   onOpenRecording: (id: string, ms?: number) => void;
-  onMoveRecordings?: (ids: string[], projectId: string | null) => void;
   /** Which projects show their folders (shared with the sidebar). */
   expanded: ReadonlySet<string>;
   onToggle: (id: string) => void;
@@ -50,6 +49,12 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
     // The saved library says how many recordings each project has and when the last call was, without a server trip.
     api.library().then(setItems).catch(() => undefined);
   }, [projectId]);
+  useEffect(() => {
+    const un = listenTo("library:updated", () => api.library().then(setItems).catch(() => undefined));
+    return () => {
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
 
   const list = projects ?? [];
   const nested = hasSubfolders(list);
@@ -99,6 +104,16 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       return false;
     }
   };
+  /** Recordings dragged from a project's list onto another project or the Inbox in the sidebar. */
+  const dropMove = async (ids: string[], target: string | null) => {
+    try {
+      await moveRecordings(ids, target);
+      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, list, target));
+      void onReload();
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
   const remove = async (target: ClientFolder): Promise<boolean> => {
     try {
       const answer = await api.deleteClient(target.id);
@@ -142,7 +157,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       <div className="project-page">
         <ClientWorkspace key={project.id} client={project} projects={list} items={items} notify={notify} onOpenRecording={onOpenRecording}
           onClientChanged={(next) => onChanged((all) => all.map((c) => (c.id === next.id ? { ...c, ...next } : c)))}
-          onOpenProject={onOpenProject} menu={menu} onMoveRecordings={onMoveRecordings} />
+          onOpenProject={onOpenProject} menu={menu} onMoveRecordings={(ids, target) => void dropMove(ids, target)} />
         {dialogs}
       </div>
     );

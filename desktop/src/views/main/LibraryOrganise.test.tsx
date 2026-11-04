@@ -122,7 +122,7 @@ describe("organise panel", () => {
     renderPanel();
     fireEvent.click(screen.getByRole("button", { name: "Pinned" }));
     await waitFor(() => expect(callsOf("session_organise")).toHaveLength(1));
-    fireEvent.change(screen.getByRole("combobox", { name: "Client" }), { target: { value: "c2" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "c2" } });
     await waitFor(() => expect(callsOf("session_organise")).toHaveLength(2));
     fireEvent.click(screen.getByRole("button", { name: "Remove label Invoice" }));
     await waitFor(() => expect(callsOf("session_organise")).toHaveLength(3));
@@ -134,14 +134,14 @@ describe("organise panel", () => {
     ]);
   });
 
-  it("lists folders pinned first and creates a new one", async () => {
+  it("lists the Inbox, then projects pinned first, and creates a new one", async () => {
     respond("client_create", { data: { id: "c3", name: "Globex" } });
     respondWith("session_organise", () => ({ data: item }));
     renderPanel();
-    const select = screen.getByRole("combobox", { name: "Client" }) as HTMLSelectElement;
-    expect([...select.options].map((o) => o.text)).toEqual(["No client", "NO · Northwind", "AH · Acme Holdings", "New client…"]);
+    const select = screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
+    expect([...select.options].map((o) => o.text)).toEqual(["Inbox", "Northwind", "Acme Holdings", "New project…"]);
     fireEvent.change(select, { target: { value: "__new__" } });
-    fireEvent.change(screen.getByLabelText("New client name"), { target: { value: "Globex" } });
+    fireEvent.change(screen.getByLabelText("New project name"), { target: { value: "Globex" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { client_id: "c3" } }]));
     expect(callsOf("client_create")).toEqual([{ name: "Globex", color: null, avatar: null, parentId: null }]);
@@ -167,8 +167,11 @@ describe("bulk bar", () => {
     respond("sessions_bulk", 2);
     respond("sessions_export", "C:\\Users\\me\\Downloads\\EchoLedger transcripts.zip");
     const { notify } = renderBar();
-    fireEvent.change(screen.getByRole("combobox", { name: "Move to" }), { target: { value: "c1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Move…" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Move to" })).getByRole("radio", { name: /Acme Holdings/ }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Move 2 recordings" })).getByRole("button", { name: "Move" }));
     await waitFor(() => expect(callsOf("sessions_bulk")).toHaveLength(1));
+    expect(notify).toHaveBeenCalledWith("Moved 2 recordings to Acme Holdings");
     fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Q4" } });
     fireEvent.click(screen.getByRole("button", { name: "Add label" }));
     await waitFor(() => expect(callsOf("sessions_bulk")).toHaveLength(2));

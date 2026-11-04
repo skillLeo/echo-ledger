@@ -422,7 +422,7 @@ export default function MainApp() {
         {tab === "library" && (
           <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
             initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={() => void pickImport()} onOpenClient={(id) => openProject(id)}
-            smartFolder={libraryFolder} onSmartFolder={openFolder} sharedFocus={sharedFocus} />
+            smartFolder={libraryFolder} onSmartFolder={openFolder} sharedFocus={sharedFocus} projects={projects} />
         )}
         {tab === "projects" && (
           <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}

@@ -4,9 +4,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
-import { folderBadge, MAX_LABEL_CHARS, sortFolders, withLabel } from "../../lib/organise";
+import { MAX_LABEL_CHARS, withLabel } from "../../lib/organise";
+import { projectLabel, projectTree, visibleRows } from "../../lib/projects";
 import { MAX_TITLE_CHARS } from "../../lib/importFiles";
 import { DotsIcon, PinIcon } from "../../components/Icons";
+import { MoveRecordingsDialog } from "./ProjectDialogs";
+import { FiledByLine } from "./FilingRules";
 
 type Notify = (message: string, error?: boolean) => void;
 
@@ -20,7 +23,10 @@ const EXPORT_FORMATS: readonly (readonly [BulkExportFormat, string])[] = [
   ["json", "JSON"],
 ];
 
-/** A client folder picker with "No client" and "New client…", which asks for a name and creates the folder. */
+/**
+ * A project picker with the Inbox (no project), every project by its place ("Acme › Invoices", since v1.5) and "New
+ * project…", which asks for a name and creates the project.
+ */
 export function FolderPicker({ label, value, clients, onPick, onCreated, notify, disabled = false }: {
   label: string;
   value: string;
@@ -50,14 +56,14 @@ export function FolderPicker({ label, value, clients, onPick, onCreated, notify,
       <label htmlFor={id} className="small muted">{label}</label>
       <select id={id} className="select" value={value} disabled={disabled}
         onChange={(e) => (e.target.value === NEW_CLIENT ? setCreating(true) : onPick(e.target.value || null))}>
-        <option value="">No client</option>
-        {sortFolders(clients).map((c) => <option key={c.id} value={c.id}>{`${folderBadge(c)} · ${c.name}`}</option>)}
-        <option value={NEW_CLIENT}>New client…</option>
+        <option value="">Inbox</option>
+        {visibleRows(projectTree(clients), "all").map(({ project }) => <option key={project.id} value={project.id}>{projectLabel(clients, project.id)}</option>)}
+        <option value={NEW_CLIENT}>New project…</option>
       </select>
       {creating && (
         <>
-          <label htmlFor={nameId} className="sr-only">New client name</label>
-          <input id={nameId} className="input" placeholder="Client name" maxLength={120} value={name} autoFocus
+          <label htmlFor={nameId} className="sr-only">New project name</label>
+          <input id={nameId} className="input" placeholder="Project name" maxLength={120} value={name} autoFocus
             onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && name.trim()) void create(); if (e.key === "Escape") setCreating(false); }} />
           <button type="button" className="btn" disabled={!name.trim()} onClick={() => void create()}>Create</button>
           <button type="button" className="btn ghost" onClick={() => setCreating(false)}>Cancel</button>
@@ -94,12 +100,14 @@ export function TitleEditor({ initial, className = "", onSave, onCancel }: {
   );
 }
 
-/** The ⋯ menu on a Library row: Rename, Pin or Unpin, Delete. It opens upwards when it would end below the visible
- * part of the list (the last rows), where the list's scroll box cut it off. */
-export function RowMenu({ title, pinned, onRename, onPin, onDelete }: {
+/** The ⋯ menu on a Library row: Rename, Move to (since v1.5), Pin or Unpin, Delete. It opens upwards when it would end
+ * below the visible part of the list (the last rows), where the list's scroll box cut it off. */
+export function RowMenu({ title, pinned, onRename, onMove, onPin, onDelete }: {
   title: string;
   pinned: boolean;
   onRename: () => void;
+  /** Opens the Move dialog. */
+  onMove?: () => void;
   onPin: () => void;
   onDelete: () => void;
 }) {
@@ -146,6 +154,7 @@ export function RowMenu({ title, pinned, onRename, onPin, onDelete }: {
       {open && (
         <div ref={pop} className={`row-menu-pop card${up ? " up" : ""}`} role="menu" aria-label={`Actions for ${title}`}>
           <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onRename)}>Rename</button>
+          {onMove && <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onMove)}>Move to…</button>}
           <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onPin)}>{pinned ? "Unpin" : "Pin"}</button>
           <button type="button" role="menuitem" className="btn ghost small danger" onClick={() => pick(onDelete)}>Delete</button>
         </div>
@@ -190,12 +199,14 @@ export function OrganisePanel({ item, clients, knownLabels, notify, onClientCrea
     }
     if (await save({ labels: next })) setLabel("");
   };
-  // The recording page's header chips: Client, Language (from the page), Labels; then Pin and Keep forever.
+  // The recording page's header chips: Project, Language (from the page), Labels; then Pin and Keep forever. Under them,
+  // how it got into its project when a filing rule or a contact filed it (since v1.5).
   return (
+    <>
     <div className="organise head-chips" role="group" aria-label="Organise">
       <span className="head-chip">
-        <FolderPicker label="Client" value={item.client?.id ?? ""} clients={clients} disabled={busy} notify={notify} onCreated={onClientCreated}
-          onPick={(clientId) => void save({ client_id: clientId }, "Moved")} />
+        <FolderPicker label="Project" value={item.client?.id ?? ""} clients={clients} disabled={busy} notify={notify} onCreated={onClientCreated}
+          onPick={(clientId) => void save({ client_id: clientId }, clientId ? `Moved to ${projectLabel(clients, clientId) || "the project"}` : "Moved to the Inbox")} />
       </span>
       {children}
       <span className="head-chip labels-chip">
@@ -224,6 +235,8 @@ export function OrganisePanel({ item, clients, knownLabels, notify, onClientCrea
         {item.keep ? "Kept forever" : "Keep forever"}
       </button>
     </div>
+    <FiledByLine item={item} />
+    </>
   );
 }
 
@@ -242,6 +255,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
   const [format, setFormat] = useState<BulkExportFormat>("docx");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [moving, setMoving] = useState(false);
   const labelId = useId();
   const formatId = useId();
   const listId = useId();
@@ -279,7 +293,8 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
       {onSelectAll && <button type="button" className="btn ghost small" onClick={onSelectAll}>Select all</button>}
       {count > 0 && (
         <>
-          <FolderPicker label="Move to" value="" clients={clients} disabled={busy} notify={notify} onCreated={onClientCreated} onPick={(clientId) => void run("move", clientId)} />
+          <button type="button" className="btn ghost small" disabled={busy} onClick={() => setMoving(true)}>Move…</button>
+          {moving && <MoveRecordingsDialog ids={ids} projects={clients} notify={notify} onClose={() => setMoving(false)} onProjectCreated={onClientCreated} />}
           <details className="bulk-menu">
             <summary className="btn ghost small">Label</summary>
             <div className="bulk-pop card">

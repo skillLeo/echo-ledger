@@ -29,9 +29,11 @@ export function dragLabel(titles: readonly (string | null | undefined)[]): strin
 
 let endedAt = 0;
 
-/** True for the click that ends a drag: the row it started on must not open. */
+/** True for the click that ends a drag (asked once): the row it started on must not open. */
 export function dragJustEnded(now: number = Date.now()): boolean {
-  return now - endedAt < 400;
+  const ended = now - endedAt < 400;
+  endedAt = 0;
+  return ended;
 }
 
 /**
