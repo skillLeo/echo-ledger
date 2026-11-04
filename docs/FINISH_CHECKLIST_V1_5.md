@@ -41,8 +41,8 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## Phase 2 — Projects, smart folders, sharing
 
-- [ ] 2.1 Library unchanged (everything, newest first, filters).
-- [ ] 2.2 Projects tab replaces Clients (clients migrate to projects): folders with subfolders, contacts, instructions/notes, files, recordings; smart folders (WhatsApp · WhatsApp Business · Google Meet · Zoom · Teams · Phone (SIM) · Voice notes · Imported · Shared with me · Inbox); auto-filing rules (contact/number, meeting title text, app → project, else Inbox); move (drag-and-drop / Move, bulk); project page tabs (Recordings · Files · Notes · Screens · AI notes when on); breadcrumbs, search in project, sort, rename, delete (recordings go to Inbox). *Accept:* migration test on a copy of production; Pest, phone and desktop tests.
+- [x] 2.1 Library unchanged (everything, newest first, filters). **Live** 2026-11-04 (beta.2).
+- [x] 2.2 Projects tab replaces Clients (clients migrate to projects): folders with subfolders, contacts, instructions/notes, files, recordings; smart folders (WhatsApp · WhatsApp Business · Google Meet · Zoom · Teams · Phone (SIM) · Voice notes · Imported · Shared with me · Inbox); auto-filing rules (contact/number, meeting title text, app → project, else Inbox); move (drag-and-drop / Move, bulk); project page tabs (Recordings · Files · Notes · Screens · AI notes when on); breadcrumbs, search in project, sort, rename, delete (recordings go to Inbox). *Accept:* migration test on a copy of production; Pest, phone and desktop tests. **Live** 2026-11-04 (beta.2): production copy up/down/up with equal counts; web 3,974 on SQLite and MariaDB, phone 1,131 + 11, desktop vitest 1,423 + cargo.
 - [ ] 2.3 Sharing: links (public / password / chosen signed-in people; expiry, download on/off, revoke, views); send to a teammate ("Shared with me", "Save to my library"); "Request files" link into the Inbox (size/type limits); links open in the app when installed. *Accept:* authorisation tests for every share route; **(phone)** a teammate share.
 
 ## Phase 3 — Screen moments

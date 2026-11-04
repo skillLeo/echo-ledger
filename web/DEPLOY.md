@@ -75,6 +75,16 @@ openssl s_client -connect ledger.example.com:443 -servername ledger.example.com 
 Enter each as `sha256/<base64>` in Settings → Device security. Let's Encrypt renewals keep the pin only with
 `--reuse-key`; always keep a pre-generated backup key's pin in the list so rotation never locks devices out.
 
+## Android App Links (since v1.5)
+The phone app opens this server's `/s/`, `/p/` and `/r/` links itself when the server answers
+`/.well-known/assetlinks.json` (made by the app from `ECHOLEDGER_ANDROID_FINGERPRINTS`). Hosts often pass every
+`/.well-known/` request straight through for certificate renewals, so the app never sees it. When the project folder
+itself is the web root and a root `.htaccess` rewrites into `public/`, put this line before that pass-through:
+```
+RewriteRule ^\.well-known/assetlinks\.json$ public/.well-known/assetlinks.json [L]
+```
+Check: `curl -s https://<server>/.well-known/assetlinks.json` returns JSON naming `com.echoledger.mobile`.
+
 ## Updating
 Upload the new code, then: `php artisan migrate --force && php artisan optimize:clear && php artisan optimize`.
 

@@ -31,9 +31,10 @@ android {
         // gets its own (minutes since 2026-01-01): an updated app never keeps talking to an old helper.
         buildConfigField("int", "HELPER_BUILD", ((System.currentTimeMillis() / 60_000L) - 29_446_560L).toString())
         // Since v1.5: the server whose /s/, /p/ and /r/ links open in the app (App Links). From the gradle property
-        // echoledger.appLinkHost (in the user's gradle.properties or -P, never in the repository); "invalid" matches nothing.
+        // echoledger.appLinkHost (in the user's gradle.properties or -P, never in the repository); the reserved
+        // "applinks.invalid" (RFC 2606: never resolves) matches nothing and is still a domain lint accepts.
         manifestPlaceholders["appLinkHost"] =
-            (project.findProperty("echoledger.appLinkHost") as String?)?.takeIf { it.isNotBlank() } ?: "invalid"
+            (project.findProperty("echoledger.appLinkHost") as String?)?.takeIf { it.isNotBlank() } ?: "applinks.invalid"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Every instrumented test runs in its own process with cleared app data (a crash fails only that test).
         testInstrumentationRunnerArguments["clearPackageData"] = "true"
