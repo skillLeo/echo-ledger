@@ -33,6 +33,12 @@ final class AccuracyLab
     /** @var array<string, string> the categories a reference can be put in => label */
     public const CATEGORIES = ['ur' => 'Urdu', 'en' => 'English', LanguageRouter::AUTO => 'Mixed (Urdu and English)'];
 
+    /**
+     * The lists "Apply winners" may change: the categories, and Arabic as before v1.5. The list of the other languages is
+     * shared by eight of them, so one French recording never reorders it (the Lab still shows its scores).
+     */
+    private const WINNER_LISTS = ['ur', 'en', LanguageRouter::AUTO, 'ar'];
+
     public function __construct(private readonly LanguageRouter $router, private readonly TranscriptViews $views) {}
 
     /** The spoken words of a transcript, line by line (the default reference before the owner corrects it). */
@@ -44,7 +50,8 @@ final class AccuracyLab
 
     /**
      * Saves the references: the words as spoken and, when given, in Roman Urdu (each cleaned of time codes and speaker
-     * labels, so TurboScribe or subtitle texts can be pasted as they are), and the category the recording counts in.
+     * labels, so TurboScribe or subtitle texts can be pasted as they are), and the category the recording counts in
+     * (Urdu, English or mixed; anything else counts in the recording's own language).
      */
     public function setReference(CaptureSession $session, ?string $original, ?string $roman = null, ?string $category = null): void
     {
@@ -78,6 +85,19 @@ final class AccuracyLab
     public static function categoryLabel(string $key): string
     {
         return self::CATEGORIES[$key] ?? LanguageRouter::routeLabel($key);
+    }
+
+    /**
+     * What the reference of [$session] can count in: the categories, and the recording's own language when it is none
+     * of them (Arabic or another language), so an Arabic call is never scored as mixed Urdu and English.
+     *
+     * @return array<string, string>
+     */
+    public function categoryOptions(CaptureSession $session): array
+    {
+        $own = LanguageRouter::routeKey($this->router->languageFor($session));
+
+        return [...self::CATEGORIES, $own => self::categoryLabel($own)];
     }
 
     /** Changes with either reference, so the runs are scored again. */
@@ -125,7 +145,9 @@ final class AccuracyLab
      * Per category and engine: recordings scored, average word and character error rates of the original transcript
      * and of the Roman Urdu view, speed and cost per audio hour, the winner per category, and the recordings with their
      * scores. The winner has the lowest word error rate on the original transcript; the Roman Urdu view breaks ties,
-     * and decides when a category has Roman Urdu references only.
+     * and decides when a category has Roman Urdu references only. An engine with no rate yet (its Roman Urdu view is
+     * being made, or cannot be made) is listed last and never wins; a category none of whose engines has one has no
+     * winner.
      *
      * @return array{languages: list<array{language: string, label: string, winner: string|null, roman: bool, engines: list<array<string, mixed>>}>, recordings: list<array<string, mixed>>}
      */
@@ -203,7 +225,8 @@ final class AccuracyLab
             $languages[] = [
                 'language' => (string) $category,
                 'label' => self::categoryLabel((string) $category),
-                'winner' => $list[0]['provider'], // a category is made by its first scored run
+                // Ranked first, so when the first engine has no rate, none has.
+                'winner' => $list[0]['wer'] !== null || $list[0]['roman_wer'] !== null ? $list[0]['provider'] : null,
                 'roman' => collect($list)->contains(fn (array $e): bool => $e['roman_recordings'] > 0),
                 'engines' => $list,
             ];
@@ -216,7 +239,8 @@ final class AccuracyLab
 
     /**
      * "Apply winners": each category's winner goes to the front of that category's engine list (Settings → Engine per
-     * language: Urdu, English, Auto for mixed); the other engines keep their order behind it.
+     * language: Urdu, English, Auto for mixed, and Arabic); the other engines keep their order behind it. The list the
+     * other languages share is left as it is.
      *
      * @return list<array{language: string, provider: string}>
      */
@@ -225,7 +249,7 @@ final class AccuracyLab
         $changed = [];
         foreach ($this->report($workspaceId)['languages'] as $category) {
             $winner = $category['winner'] !== null ? SttProviderKey::tryFrom($category['winner']) : null;
-            if ($winner !== null && $this->router->preferKey($category['language'], $winner)) {
+            if ($winner !== null && in_array($category['language'], self::WINNER_LISTS, true) && $this->router->preferKey($category['language'], $winner)) {
                 $changed[] = ['language' => $category['label'], 'provider' => $winner->getLabel()];
             }
         }

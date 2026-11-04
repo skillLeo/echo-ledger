@@ -49,7 +49,7 @@ class AccuracyLab extends Page
         return [
             Action::make('apply_winners')->label('Apply winners')->icon(Heroicon::OutlinedTrophy)
                 ->requiresConfirmation()
-                ->modalDescription('For each category, the engine with the lowest word error rate on the original transcript (the Roman Urdu view breaks ties) becomes the first engine of its list in Settings → Engine per language: Urdu, English, and Auto for mixed calls. The other engines keep their order behind it.')
+                ->modalDescription('For each category, the engine with the lowest word error rate on the original transcript (the Roman Urdu view breaks ties) becomes the first engine of its list in Settings → Engine per language: Urdu, English, Auto for mixed calls, and Arabic. The other engines keep their order behind it. Engines not scored yet never win, and the list the other languages share is left as it is.')
                 ->visible(fn (): bool => app(Lab::class)->report((int) CurrentWorkspace::id())['languages'] !== [])
                 ->action(function (): void {
                     $changed = app(Lab::class)->useWinners((int) CurrentWorkspace::id());

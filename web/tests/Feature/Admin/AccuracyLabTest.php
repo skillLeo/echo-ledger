@@ -279,3 +279,72 @@ it('takes an uploaded TurboScribe file on the recording page, with a Roman Urdu 
     $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])->callAction('accuracy_reference_clear');
     expect($session->fresh()->hasReference())->toBeFalse()->and($session->fresh()->reference_roman)->toBeNull();
 });
+
+it('names no winner and applies nothing while no engine has a score yet', function () {
+    Queue::fake();
+    $this->admin = $this->signInAsAdmin();
+    $routes = app(SettingsRepository::class)->get('routing.final');
+    $session = labV15Session($this, 'ur');
+    // Only TurboScribe's Roman Urdu text, and no Anthropic key: the runs' Roman Urdu views cannot be made.
+    app(AccuracyLab::class)->setReference($session, '', 'main kal invoice bhejun ga', 'ur');
+    labV15Run($session, 'gemini', 'میں کل انوائس');
+    labV15Run($session, 'groq', 'میں کل invoice بھیجوں گا');
+    app(AccuracyLab::class)->scoreSession($session->refresh());
+
+    $urdu = collect(app(AccuracyLab::class)->report($this->admin->current_workspace_id)['languages'])->firstWhere('language', 'ur');
+    expect($urdu['winner'])->toBeNull()
+        ->and(collect($urdu['engines'])->pluck('roman_wer')->all())->toBe([null, null])
+        ->and(app(AccuracyLab::class)->useWinners($this->admin->current_workspace_id))->toBe([])
+        ->and(app(SettingsRepository::class)->get('routing.final')['ur'])->toBe($routes['ur']);
+
+    // With the key the views are being made: still nothing to apply.
+    app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-key-1234567890');
+    app(AccuracyLab::class)->setReference($session, '', 'main kal invoice bhejoon ga', 'ur');
+    app(AccuracyLab::class)->scoreSession($session->refresh());
+    expect($session->trials()->get()->every(fn (Transcript $run): bool => ($run->meta['score']['roman_pending'] ?? false) === true))->toBeTrue()
+        ->and(app(AccuracyLab::class)->useWinners($this->admin->current_workspace_id))->toBe([])
+        ->and(app(SettingsRepository::class)->get('routing.final')['ur'])->toBe($routes['ur']);
+    $this->get(LabPage::getUrl())->assertOk()->assertSee('not scored yet');
+});
+
+it('keeps an Arabic recording\'s reference in Arabic, so its winner never reorders the list for mixed calls', function () {
+    Queue::fake();
+    $this->admin = $this->signInAsAdmin();
+    $routes = app(SettingsRepository::class)->get('routing.final');
+    $session = labV15Session($this, 'ar');
+
+    // Saved as offered: the dialog starts in the recording's own language, which is one of its choices.
+    $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])
+        ->callAction('accuracy_reference', data: ['reference' => 'مرحبا كيف حالك'])
+        ->assertNotified('Reference saved. Run "Compare engines" to score the engines on this recording.');
+    expect($session->refresh()->reference_category)->toBeNull()
+        ->and(app(AccuracyLab::class)->category($session))->toBe('ar')
+        ->and(app(AccuracyLab::class)->categoryOptions($session))->toBe([...AccuracyLab::CATEGORIES, 'ar' => 'Arabic']);
+    $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])
+        ->callAction('accuracy_reference', data: ['category' => 'ar', 'reference' => 'مرحبا كيف حالك'])
+        ->assertNotified('Reference saved. Run "Compare engines" to score the engines on this recording.');
+
+    labV15Run($session, 'groq', 'مرحبا كيف حالك', null, 'ar');
+    app(AccuracyLab::class)->scoreSession($session->refresh());
+
+    expect(app(AccuracyLab::class)->useWinners($this->admin->current_workspace_id))->toBe([['language' => 'Arabic', 'provider' => 'Groq Whisper large-v3']]);
+    $after = app(SettingsRepository::class)->get('routing.final');
+    expect($after['ar'])->toBe(['groq', ...array_values(array_diff($routes['ar'], ['groq']))])
+        ->and($after['auto'])->toBe($routes['auto']);
+});
+
+it('never reorders the list the other languages share', function () {
+    Queue::fake();
+    $this->admin = $this->signInAsAdmin();
+    $routes = app(SettingsRepository::class)->get('routing.final');
+    $session = labV15Session($this, 'fr');
+    // A reference from before v1.5: no category, so it counts in its own language.
+    $session->forceFill(['reference_text' => 'bonjour à tous', 'reference_set_at' => now()])->save();
+    labV15Run($session, 'groq', 'bonjour à tous', null, 'fr');
+    app(AccuracyLab::class)->scoreSession($session->refresh());
+
+    $other = collect(app(AccuracyLab::class)->report($this->admin->current_workspace_id)['languages'])->firstWhere('language', 'other');
+    expect($other['winner'])->toBe('groq')
+        ->and(app(AccuracyLab::class)->useWinners($this->admin->current_workspace_id))->toBe([])
+        ->and(app(SettingsRepository::class)->get('routing.final')['other'])->toBe($routes['other']);
+});

@@ -13,7 +13,7 @@
                 <li>On each recording choose <strong>⋯ → Use as Accuracy Lab reference</strong>: correct the words exactly as spoken, or paste or upload a corrected text (TurboScribe's .txt, .srt, .vtt or .docx; time codes and speaker labels are removed). Add the Roman Urdu text too to score the Roman Urdu view, and choose the category.</li>
                 <li>Choose <strong>⋯ → Compare engines</strong> with up to three engines (Gemini is one once its key is on API Credentials).</li>
                 <li>Come back here when the runs are done: each one is scored against your references, the original transcript and its Roman Urdu view apart.</li>
-                <li>Press <strong>Apply winners</strong> to make the best engine the first one of each category's list (Urdu, English, and Auto for mixed calls). The other engines keep their order.</li>
+                <li>Press <strong>Apply winners</strong> to make the best engine the first one of each category's list (Urdu, English, Auto for mixed calls, and Arabic). The other engines keep their order.</li>
             </ol>
             <p style="font-size:.8rem;opacity:.7;margin-top:.5rem">
                 Word error rate (WER) and character error rate (CER) count the words or letters an engine got wrong, left out or added,
@@ -36,7 +36,7 @@
                         <tbody>
                             @foreach ($language['engines'] as $engine)
                                 <tr>
-                                    <td style="{{ $cell }}">{{ $engine['label'] }} @if ($engine['provider'] === $language['winner']) <span style="font-size:.7rem;opacity:.7">· best</span> @endif</td>
+                                    <td style="{{ $cell }}">{{ $engine['label'] }} @if ($engine['provider'] === $language['winner']) <span style="font-size:.7rem;opacity:.7">· best</span> @elseif ($engine['wer'] === null && $engine['roman_wer'] === null) <span style="font-size:.7rem;opacity:.7">· not scored yet</span> @endif</td>
                                     <td style="{{ $num }}">{{ max($engine['recordings'], $engine['roman_recordings']) }}</td>
                                     <td style="{{ $num }}">{{ $pct($engine['wer']) }}</td>
                                     <td style="{{ $num }}">{{ $pct($engine['cer']) }}</td>

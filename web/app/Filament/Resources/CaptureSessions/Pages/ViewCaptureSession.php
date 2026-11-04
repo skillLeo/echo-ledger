@@ -701,8 +701,9 @@ class ViewCaptureSession extends ViewRecord
             ->visible(fn (): bool => self::isOwner() && $this->editableTranscript() !== null)
             ->modalDescription('The spoken words exactly as said, one line per turn, without speaker names: correct the transcript below, or paste or upload a corrected text (TurboScribe\'s .txt, .srt, .vtt or .docx; time codes and speaker labels are removed). Add the Roman Urdu text too to score the Roman Urdu view on its own. Every "Compare engines" run of this recording is scored against it in the Accuracy Lab.')
             ->schema([
-                Select::make('category')->label('Counts in')->options(AccuracyLab::CATEGORIES)->required()->selectablePlaceholder(false)
-                    ->default(fn (): string => array_key_exists($key = app(AccuracyLab::class)->category($this->session()), AccuracyLab::CATEGORIES) ? $key : LanguageRouter::AUTO),
+                // An Arabic (or other language) recording also offers its own language, and starts in it.
+                Select::make('category')->label('Counts in')->options(fn (): array => app(AccuracyLab::class)->categoryOptions($this->session()))
+                    ->required()->selectablePlaceholder(false)->default(fn (): string => app(AccuracyLab::class)->category($this->session())),
                 Textarea::make('reference')->label('Reference transcript (as spoken)')->rows(12)
                     ->default(fn (): string => $this->session()->hasReference() ? (string) $this->session()->reference_text : AccuracyLab::spokenText($this->editableTranscript())),
                 $file('reference_file'),
