@@ -73,6 +73,9 @@ export default function MainApp() {
   const [views, setViews] = useState<LibraryViews | null>(null);
   const [libraryFolder, setLibraryFolder] = useState<SmartFolder | null>(null);
   const [sharedFocus, setSharedFocus] = useState<string | null>(null);
+  // An echoledger://open link waiting to be opened (since v1.5), and a request link it pointed at.
+  const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);
+  const [requestFocus, setRequestFocus] = useState<{ id: string; seq: number } | null>(null);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
   const [focus, setFocus] = useState<PendingFocus | null>(null);
@@ -205,6 +208,11 @@ export default function MainApp() {
       listen<string>("app:toast", (e) => setToast({ text: e.payload })),
       // Tray "Review recordings (N)" and the after-call chip's title, which opens its title field (contract 4.5).
       listenTo("main:navigate", (nav) => {
+        // A share, project or request link (echoledger://open): opened once the app is paired and unlocked.
+        if (nav?.link) {
+          setLinkRequest({ url: nav.link, seq: ++navigations.current });
+          return;
+        }
         if (!nav || !TABS.includes(nav.view)) return;
         setTab(nav.view);
         const id = nav.pendingId;
@@ -271,6 +279,43 @@ export default function MainApp() {
     };
   }, [ready, loadProjects, loadViews]);
   const changeProjects = useCallback((change: (list: ClientFolder[]) => ClientFolder[]) => setProjects((list) => change(list ?? [])), []);
+
+  // An app link (docs/API.md "Links in the apps"): the server says what it is in this workspace, and the window opens
+  // the recording, the project, the item of Shared with me or the request link. A link the app cannot open in place
+  // (someone else's, revoked, expired, or another server's) opens its web page in the browser instead.
+  useEffect(() => {
+    if (!linkRequest || !ready) return;
+    const { url } = linkRequest;
+    setLinkRequest(null);
+    api.resolveLink(url).then(async (target) => {
+      if (!target) {
+        await api.openLink(url);
+        setToast({ text: "Opened in your browser: this link is not one of your workspace's, or it no longer works." });
+        return;
+      }
+      switch (target.kind) {
+        case "session":
+          setTab("library");
+          setLibraryFolder(null);
+          setOpenRequest({ id: target.session_id, ms: 0, seq: ++navigations.current });
+          break;
+        case "project":
+          setTab("projects");
+          setProjectId(target.client_id);
+          break;
+        case "shared":
+          setTab("library");
+          setLibraryFolder("shared");
+          setSharedFocus(target.shared_id);
+          break;
+        case "request":
+          setTab("projects");
+          setProjectId(null);
+          setRequestFocus({ id: target.request_link_id, seq: ++navigations.current });
+          break;
+      }
+    }).catch((e) => setToast({ text: errorMessage(e), error: true }));
+  }, [linkRequest, ready]);
   useEffect(() => {
     const scroll = restoredScroll.current;
     if (!restored || !paired || !scroll) return;
@@ -426,7 +471,7 @@ export default function MainApp() {
         )}
         {tab === "projects" && (
           <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
-            projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded} />
+            projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded} requestFocus={requestFocus} />
         )}
         {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
         {tab === "activity" && (
