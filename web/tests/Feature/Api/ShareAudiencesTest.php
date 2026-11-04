@@ -195,6 +195,16 @@ describe('downloads and expiry', function () {
             ->and($this->workFiles())->toBe([]);
     });
 
+    it('names the ZIP and its files without any path in them, whatever the title', function () {
+        $this->session = sharedRecording($this, '../../..\\Windows\\evil:name?', $this->audio);
+        $response = browser($this)->get(pathOf(shareOf($this, ['allow_download' => true])).'/download')->assertOk();
+
+        expect($response->headers->get('Content-Disposition'))->not->toContain('/')->not->toContain('\\');
+        foreach (array_keys(zipEntries($response)) as $name) {
+            expect($name)->not->toContain('/')->not->toContain('\\')->not->toContain(':');
+        }
+    });
+
     it('puts the audio in the ZIP as it is, without packing it again on every download', function () {
         $silence = 'OggS'.str_repeat("\0", 200_000);
         $this->session = sharedRecording($this, 'Quiet call', $silence);

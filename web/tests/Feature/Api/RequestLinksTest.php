@@ -218,6 +218,29 @@ describe('the page', function () {
             ->and($this->asToken($this->token)->getJson('/api/request-links')->json('data.0.received'))->toBe(0);
     });
 
+    it('refuses scripts dressed as images or text and empty files, and keeps an image with more behind it encrypted', function () {
+        $link = requestLink($this);
+        $png = (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+
+        foreach ([
+            'logo.png' => '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            'shell.txt' => '<?php system($_GET["c"]); ?>',
+            'page.txt' => "Notes\n<script>alert(1)</script>\n",
+        ] as $name => $bytes) {
+            $start = startUpload($this, $link['url'], $bytes, $name, 'text/plain')->assertCreated();
+            sendChunk($this, $link['url'], $start->json('upload_id'), 0, $bytes, $start->json('chunk_size'))->assertStatus(422)
+                ->assertJsonPath('code', 'unsupported_type');
+        }
+        visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH).'/files', ['name' => 'empty.txt', 'size' => 0, 'sha256' => hash('sha256', '')])
+            ->assertStatus(422)->assertJsonPath('errors.size.0', 'This file is empty.');
+        // A real image with a page after it is an image: kept encrypted, never served as a page (Files has no download).
+        $polyglot = $png.'<html><script>alert(1)</script></html>';
+        sendWhole($this, $link['url'], $polyglot, 'photo.png', 'image/png')->assertOk();
+        $file = unscoped(fn () => ClientFile::query()->sole());
+        expect($file->mime)->toBe('image/png')
+            ->and(Storage::disk('recordings')->get((string) $file->path))->not->toContain('<script>');
+    });
+
     it('refuses files over the link\'s size and more files than it takes', function () {
         $link = requestLink($this, ['max_files' => 1, 'max_mb' => 1]);
 
