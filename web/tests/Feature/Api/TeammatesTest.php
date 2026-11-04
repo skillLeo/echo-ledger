@@ -18,6 +18,7 @@ use App\Services\ChunkedUploadService;
 use App\Services\Views\TranscriptViews;
 use Filament\Notifications\Notification;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\DB;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
@@ -150,6 +151,42 @@ describe('reading what was sent', function () {
         $this->postJson("/api/sessions/{$this->call->id}/shares", ['audience' => 'public'])->assertNotFound();
         $this->getJson("/api/sessions/{$notSent->id}")->assertNotFound();
         expect($this->call->fresh()->title)->toBe('Call with Omar');
+    });
+
+    it('counts a sent project\'s recordings as the recipient can open them, in it and below it', function () {
+        $project = Client::factory()->create(['user_id' => $this->ana->id, 'name' => 'Acme']);
+        $sub = Client::factory()->create(['user_id' => $this->ana->id, 'name' => 'Design', 'parent_id' => $project->id]);
+        sentRecording($this, 'Kick-off', Fixtures::audio(5300), $project);
+        sentRecording($this, 'Design review', Fixtures::audio(5400), $sub);
+        // Still being recorded: not something Omar can open yet.
+        $this->makeReadySession($this->device, Fixtures::audio(5500), ['title' => 'Live now', 'status' => SessionStatus::Recording, 'client_id' => $project->id]);
+        $this->postJson("/api/clients/{$project->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+
+        expect(received($this)[0]['client'])->toMatchArray(['session_count' => 1, 'nested_session_count' => 2, 'children_count' => 1]);
+    });
+
+    it('lists Shared with me in the same number of queries however much was sent', function () {
+        $queries = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            received($this);
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+        $send = function (int $i): void {
+            $project = Client::factory()->create(['user_id' => $this->ana->id, 'name' => "Project {$i}"]);
+            $call = sentRecording($this, "Call {$i}", Fixtures::audio(6000 + $i), $project);
+            $this->asToken($this->token)->postJson("/api/sessions/{$call->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+            $this->asToken($this->token)->postJson("/api/clients/{$project->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+        };
+        $send(1);
+        $few = $queries();
+        foreach (range(2, 6) as $i) {
+            $send($i);
+        }
+
+        expect(received($this))->toHaveCount(12)->and($queries())->toBeLessThanOrEqual($few);
     });
 
     it('drops a recording from the list once the sender deletes it', function () {
