@@ -35,18 +35,36 @@ newer** (Apple menu → **About This Mac** shows your version).
 
 ## 2. Install the phone app
 
-1. Copy the `.apk` file to your phone and open it.
-2. Android asks whether this source may install apps. Allow it once.
-3. Open EchoLedger. A short setup guide asks for the microphone, notifications and pairing.
+1. On the phone, open your server's **Downloads** page (`https://<your server>/downloads`) and tap **Download**
+   under Android phone. (Or copy the `.apk` file to the phone and open it.)
+2. Android asks whether this source may install apps. Allow it once. If Play Protect warns about an unknown
+   developer, choose **More details → Install anyway**.
+3. Open EchoLedger. A short setup guide asks for the microphone, notifications and signing in.
+
+**Updates (since v1.5).** The app looks for a new version every 12 hours. When there is one, a banner on the Record
+tab says so: tap **Update**, allow EchoLedger to install apps the first time Android asks, and confirm Android's
+install screen. Your recordings and settings stay. You can also look in **You → General → About → Check for
+updates**.
+
+**Google Play version.** EchoLedger may also come from Google Play. That version updates through Play and does not
+record calls, because Google Play does not allow the capture helper that hears the other side. To record calls, use
+the version from your server's Downloads page.
 
 **WhatsApp calls** need Android 14 or newer and a one-time setup. In **Settings → Devices → This phone**, open the **Setup guide** and follow the steps (Shizuku or a computer with ADB). You do this once. After a phone restart, the guide
 shows how to turn it on again.
 
 **Voice notes** need no setup. In WhatsApp, press and hold a voice note, tap **Share**, then choose EchoLedger.
 
-## 3. Pair your devices
+## 3. Sign in or pair your devices
 
-Pairing connects a device to your server. You need the web console.
+**Sign in (phone, since v1.5).** On the phone's first screen, **Sign in to EchoLedger**: type the server address,
+your email and password, then the code from your authenticator app when it asks. **Sign in in the browser** does the
+same with Google or a passkey: the browser opens, you sign in there, and the phone is signed in when you come back.
+Your account's page on the phone (**You → Account**) exports your data, signs out every device, or deletes the
+account (you have 7 days to change your mind by signing in again).
+
+**Pairing** still works, also for older apps. It connects a device to your server with a one-time code; you need
+the web console.
 
 1. In the console, open **Devices** and click **Pair a device**. A code and a QR code appear. The code works for
    10 minutes and only once.
