@@ -148,4 +148,12 @@ describe("errorMessage", () => {
     expect(errorMessage(undefined)).toBe("Something went wrong");
     expect(errorMessage(null)).toBe("Something went wrong");
   });
+
+  it("never gives an empty message: an empty or blank rejection, or an Error without one, reads as the generic text", () => {
+    expect(errorMessage("")).toBe("Something went wrong");
+    expect(errorMessage("   ")).toBe("Something went wrong");
+    expect(errorMessage(new Error(""))).toBe("Something went wrong");
+    expect(errorMessage({ message: "Not allowed" })).toBe("Not allowed");
+    expect(errorMessage({ message: "" })).toBe("Something went wrong");
+  });
 });

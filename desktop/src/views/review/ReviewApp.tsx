@@ -148,7 +148,7 @@ function KeepChip({ item, onGone }: { item: PendingItem; onGone: (id: string) =>
   const title = afterCallTitle(item);
   return (
     <section className="after-pill chip" data-hit data-testid="keep-chip" aria-label={`Keep ${title}?`}>
-      <span className="after-icon app" aria-hidden="true"><SourceAppIcon app={item.sourceApp} size={14} /></span>
+      <span className="after-icon source" aria-hidden="true"><SourceAppIcon app={item.sourceApp} size={14} /></span>
       {error ? (
         <span className="after-text error" role="alert" title={error}>{error}</span>
       ) : (

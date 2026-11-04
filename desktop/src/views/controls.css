@@ -269,7 +269,8 @@
 }
 .after-icon { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
 .after-icon.ok { background: rgba(61, 214, 140, 0.16); color: var(--after-ok); }
-.after-icon.app { color: var(--ctl-muted); }
+/* Not ".app": that is the main window's shell grid (styles.css), which pushed the icon over the title. */
+.after-icon.source { color: var(--ctl-muted); }
 .after-text { display: flex; align-items: center; gap: 5px; flex: 1 1 auto; min-width: 0; white-space: nowrap; }
 .after-text.error { display: block; color: var(--danger); overflow: hidden; text-overflow: ellipsis; }
 .after-word { flex: none; font-weight: 600; }

@@ -89,6 +89,18 @@ describe("after-call styles", () => {
     expect(rule?.style.getPropertyValue("--ctl-text").trim()).toBe("var(--pill-text)");
   });
 
+  it("keeps the chip's app icon a 20 px circle, not the main window's shell grid", () => {
+    // Regression: the icon was "after-icon app", and styles.css's `.app` (the 232 px sidebar grid) pushed it over the
+    // title. Both stylesheets load in the after-call window.
+    const icon = styleOf("after-icon source", "after-pill");
+    expect(icon.width).toBe("20px");
+    expect(icon.display).toBe("grid");
+    expect(icon.gridTemplateColumns).toBe("none");
+    expect(styleOf("after-icon app", "after-pill").gridTemplateColumns, "what the old class picked up").toBe("232px 1fr");
+    const ok = styleOf("after-icon ok", "after-pill");
+    expect(ok.width).toBe("20px");
+  });
+
   it("ellipsises a long title and keeps the length in tabular digits", () => {
     const title = styleOf("after-title", "after-pill");
     expect(title.textOverflow).toBe("ellipsis");

@@ -100,6 +100,17 @@ describe("library layout down to the minimum window (A6.DU5)", () => {
     expect(prop(".list", "max-height", narrow)).not.toBe("");
   });
 
+  it("pins the find bar and the player to the page edges when the page scrolls", () => {
+    // Regression: below 1030 px .content scrolls with 24 px padding, so the sticky bars stopped 24 px in and transcript
+    // lines showed above the find bar and below the player.
+    const narrow = media("(max-width: 1029px)");
+    expect(prop(".content", "padding", narrow)).toBe("var(--space-5) var(--space-5)");
+    expect(prop(".detail .find-bar", "top", narrow)).toBe("calc(-1 * var(--space-5))");
+    expect(prop(".detail .player-dock", "bottom", narrow)).toBe("calc(-1 * var(--space-5))");
+    expect(prop(".find-bar", "top")).toBe("0px");
+    expect(prop(".player-dock", "bottom")).toBe("0px");
+  });
+
   it("covers the smallest window the app allows", () => {
     const main = tauriConf.app.windows.find((w) => w.label === "main")!;
     expect(main.minWidth).toBe(860);
@@ -155,6 +166,28 @@ describe("long text never breaks the layout (A6.DU8)", () => {
   it("lays out a seekable transcript row button like the plain rows", () => {
     expect(prop("button.segment", "text-align")).toBe("left");
     expect(prop("button.segment", "width")).toBe("100%");
+  });
+
+  it("shows the whole language name in the Re-transcribe chip", () => {
+    // Regression: "Urdu (with English words)" was cut to "Urdu (with English v" by the chips' 150 px.
+    expect(prop(".head-chip select", "max-width")).toBe("150px");
+    expect(prop(".head-chip.retranscribe-row select", "max-width")).toBe("240px");
+  });
+
+  it("starts an Urdu or Arabic line from the right inside the left-aligned row button", () => {
+    // Regression: .seg-text (dir="auto") inherited the button's text-align: left, so a wrapped Urdu line hung on the left.
+    expect(prop(".seg-text", "text-align")).toBe("start");
+    expect(prop(".hit-snippet", "text-align")).toBe("start");
+    const row = document.createElement("button");
+    row.className = "segment";
+    const line = document.createElement("span");
+    line.className = "seg-text";
+    line.dir = "auto";
+    line.textContent = "سب کو خوش آمدید، کونٹوسو ویب سائٹ کے آغاز میں شامل ہونے کا شکریہ۔";
+    row.appendChild(line);
+    document.body.appendChild(row);
+    expect(getComputedStyle(line).textAlign).toBe("start");
+    row.remove();
   });
 
   it("keeps waiting recordings and failed uploads inside the list column", () => {

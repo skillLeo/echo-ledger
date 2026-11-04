@@ -339,7 +339,8 @@ select.chip option { color: var(--text); background: var(--surface); }
 .segment:hover { background: var(--surface-3); }
 .seg-spk { grid-area: spk; font-weight: 600; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
 .seg-time { grid-area: time; color: var(--text-faint); font-size: var(--text-xs); }
-.seg-text { grid-area: text; font-size: 16px; line-height: 26px; color: var(--text); }
+/* text-align: start, not the row button's left: an Urdu or Arabic line (dir="auto") wraps from the right. */
+.seg-text { grid-area: text; font-size: 16px; line-height: 26px; color: var(--text); text-align: start; }
 .segment.cont { grid-template-areas: ". text text"; padding-top: 0; }
 .segment.cont .seg-avatar { display: none; }
 .segment.cont .seg-spk, .segment.cont .seg-time { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
@@ -495,6 +496,10 @@ button.segment.active { background: var(--accent-soft); }
   .library { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
   .list { max-height: 45vh; min-height: 160px; }
   .detail { overflow: visible; }
+  /* Here the page (.content, 24 px padding) is what scrolls, and sticky bars stop at its padding: without these the
+     transcript showed through above the find bar and below the player. */
+  .detail .find-bar { top: calc(-1 * var(--space-5)); }
+  .detail .player-dock { bottom: calc(-1 * var(--space-5)); }
 }
 
 /* ---------- caption overlay + dictation (transparent windows) ---------- */
@@ -554,6 +559,8 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .head-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 var(--space-1) 0 var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: transparent; font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; }
 .head-chip > .chip-key { color: var(--text-faint); font-weight: 500; }
 .head-chip select, .head-chip input { height: 28px; border: 0; background: transparent; color: var(--text); font-size: var(--text-sm); font-weight: 600; padding: 0 var(--space-1); max-width: 150px; border-radius: var(--radius-tag); }
+/* The language names are long ("Auto (English / Urdu / Arabic)", "Urdu (with English words)"): 150 px cut them. */
+.head-chip.retranscribe-row select { max-width: 240px; }
 .head-chip select:focus, .head-chip input:focus { outline: 2px solid var(--focus); outline-offset: 0; }
 .head-chip .btn { height: 26px; padding: 0 var(--space-2); font-size: var(--text-xs); }
 .head-chip.labels-chip { padding-right: var(--space-1); gap: var(--space-1); }
@@ -631,7 +638,7 @@ audio.player { display: none; }
 .search-hits .hit-card { padding: var(--space-2) var(--space-3); border-radius: var(--radius-field); border: 1px solid var(--border); background: var(--surface); margin-bottom: var(--space-2); }
 .search-hits .hit { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: var(--space-2); width: 100%; text-align: start; padding: var(--space-1) 6px; margin-top: var(--space-1); border: 0; border-radius: var(--radius-tag); background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .search-hits .hit:hover { background: var(--surface-3); }
-.hit-snippet { overflow-wrap: anywhere; unicode-bidi: plaintext; }
+.hit-snippet { overflow-wrap: anywhere; unicode-bidi: plaintext; text-align: start; }
 .search-hits mark, .hit-snippet mark { background: color-mix(in srgb, var(--warning-fill) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 /* Call notes of a recording filed under a client. */
@@ -730,7 +737,7 @@ audio.player { display: none; }
 .skipped-head > .btn, .skipped-row > .btn { flex: none; }
 .skipped-list { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); display: grid; gap: 0; }
 .skipped-row { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; min-width: 0; }
-.skipped-meta { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
+.skipped-meta { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
 
 /* Settings: General plus one panel per mode, chosen from a list like the phone's (B19). */
 .settings-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-5); align-items: start; }

@@ -963,7 +963,10 @@ export async function subscribeCaptions(onEvent: (e: CaptionEvent) => void): Pro
 }
 
 export function errorMessage(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e instanceof Error) return e.message;
-  return "Something went wrong";
+  // A rejection with an empty text (or an Error without a message) used to show an empty error, or none at all.
+  const text = typeof e === "string" ? e
+    : e instanceof Error ? e.message
+      : typeof (e as { message?: unknown } | null)?.message === "string" ? (e as { message: string }).message
+        : "";
+  return text.trim() || "Something went wrong";
 }
