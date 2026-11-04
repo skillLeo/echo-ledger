@@ -96,9 +96,10 @@ Every addition below is marked **(since v1.1)**.
 | recording `role` | `primary` (stereo or mono file used for playback + multichannel providers), `channel_1` (mono "Me"), `channel_2` (mono "Client") |
 | upload `status` | `pending`, `uploading`, `assembling`, `ready`, `failed` |
 | transcript `kind` / `status` | `live`, `final`, `alternate` (since v1.1), `trial` (since v1.1.2: a Compare engines run, never in the library or search) / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
-| provider | `assemblyai`, `elevenlabs`, `azure_mai`, `whispercpp_local`, `parakeet_local`, `soniox` (since v1.1.2, final transcripts only), `groq` (since v1.2: Whisper large-v3, final transcripts only) |
+| provider | `assemblyai`, `elevenlabs`, `azure_mai`, `whispercpp_local`, `parakeet_local`, `soniox` (since v1.1.2, final transcripts only), `groq` (since v1.2: Whisper large-v3, final transcripts only), `gemini` (since v1.5: Google Gemini, final transcripts only) |
 | use case | `live_captions`, `dictation`, `final_transcript`, `voice_note`, `game_translate`, `watch_translate` |
 | transcript `error_code` (since v1.1, set when `status` is `failed`) | `no_audio`, `budget_exceeded`, `provider_unreachable`, `provider_rejected`, `provider_not_configured`, `provider_timeout`, `interrupted`, `recording_missing` |
+| transcript `backup_reason` / `retry_reason` (since v1.5) | `waited`, `rejected` / `rate_limited`, `unavailable` |
 
 **Segment** (shared transcript shape; channel 1 = "Me" mic/left, channel 2 = "Client" system/right; mono = channel 1 "Speaker"):
 ```json
@@ -544,7 +545,8 @@ must match, `"quoted phrases"` stay together, case does not matter), and the opt
 ### `GET /api/sessions/{id}` — `library:read`
 Library item fields plus `"recordings": [{"id","role","mime","size_bytes","duration_ms","status"}]`,
 `"transcripts": [{"id","kind","provider","status","language","error","error_code"}]` (`error`/`error_code` since
-v1.1, `null` unless `failed`), `"markers"` and `"pauses"` (since v1.1, shapes as above), `"speaker_names"`
+v1.1, `null` unless `failed`; since v1.5 also `backup_engine`, `backup_reason`, `retry_at` and `retry_reason`, as in
+`GET /api/transcripts/{id}`), `"markers"` and `"pauses"` (since v1.1, shapes as above), `"speaker_names"`
 (since v1.1, see "Editing transcripts") and `"playback_url"`
 (temporary signed URL, 30 min).
 
@@ -557,6 +559,21 @@ v1.1, `null` unless `failed`), `"markers"` and `"pauses"` (since v1.1, shapes as
 - `error` / `error_code` are `null` unless `status` is `failed` (`error_code` since v1.1; values in the
   enumeration table). A transcript that is `pending`, `submitted` or `processing` has no text yet: clients show
   "Transcribing…", never "no speech".
+- **Since v1.5:** `backup_engine` (bool), `backup_reason` (`waited`, `rejected` or `null`), `retry_at` (ISO 8601 or
+  `null`) and `retry_reason` (`rate_limited`, `unavailable` or `null`). Urdu or mixed speech (a recording whose
+  language is Urdu, or not chosen) never falls back to a weaker engine for a passing problem: when its engine is rate
+  limited (HTTP 429, or the provider says rate limit or quota) or down (a 5xx, unreachable, timed out, interrupted),
+  the final transcript stays `pending`, the session `processing`, and the same engine is tried again after 2, 4, 8,
+  16 and then every 30 minutes (or when the provider's `Retry-After` says), for up to 6 hours after the first failure
+  (console: Settings → Engine per language, "Urdu waits for its best engine up to N hours"). Meanwhile `retry_at`
+  says when and `retry_reason` why, and no `transcript_failed` activity is posted. After the wait the next engine of
+  the routing table writes it, with `backup_engine: true` and `backup_reason: "waited"`; an engine that refuses the
+  recording hands it on at once (`"rejected"`). Apps show "Backup engine — Re-transcribe?";
+  `POST /api/sessions/{id}/retranscribe` with the same language tries the preferred engine again. A finished
+  transcript has `retry_at` `null`. English, Arabic and the other languages still go to the next engine at once
+  (`backup_engine` stays `false`). The four fields are also on the transcripts of `GET /api/sessions/{id}` and on
+  every response that returns a transcript (`PATCH /api/transcripts/{id}`, replace, restore, suggestions,
+  `POST /api/sessions/{id}/transcripts`). Older servers send none of them: read a missing field as `false` / `null`.
 
 ### Editing transcripts (since v1.1)
 Only `completed` transcripts can be edited (`409 transcript_not_ready` otherwise). Timings never change: an edited

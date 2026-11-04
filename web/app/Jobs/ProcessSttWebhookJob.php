@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Enums\SttProviderKey;
 use App\Enums\TranscriptErrorCode;
+use App\Enums\TranscriptStatus;
 use App\Models\WebhookEvent;
 use App\Services\ProviderCopyEraser;
 use App\Services\TranscriptStore;
@@ -77,7 +78,9 @@ final class ProcessSttWebhookJob implements ShouldQueue
     private function deleteRemoteQuietly(SttManager $stt, WebhookEvent $event): void
     {
         $transcript = $event->transcript;
-        if ($transcript === null) {
+        // Pending again when it waits for this engine (EngineWait) or is re-run in another language: this job's copy is
+        // already queued for deletion, and the transcript has no copy of its own to mark deleted.
+        if ($transcript === null || $transcript->status === TranscriptStatus::Pending) {
             return;
         }
         try {

@@ -8,6 +8,8 @@ use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Models\Setting;
 use App\Rules\CertificatePin;
+use App\Stt\Drivers\GeminiDriver;
+use App\Stt\GroqPacer;
 use App\Stt\KeytermPolicy;
 use App\Stt\LanguageRouter;
 use Illuminate\Support\Facades\Schema;
@@ -55,6 +57,8 @@ final class SettingsRepository
         'accuracy.double_check_clients' => true,         // since v1.4: always for recordings filed under a client
         'client_ai.monthly_usd' => 5.0,                  // since v1.4: Claude spend of client workspaces per month
         'groq.model' => 'whisper-large-v3',              // not turbo (docs: console.groq.com/docs/model/whisper-large-v3)
+        'groq.plan' => GroqPacer::DEFAULT_PLAN,          // since v1.5: free | developer, the limits Groq requests are paced under
+        'gemini.model' => GeminiDriver::DEFAULT_MODEL,   // since v1.5 (docs: aistudio.google.com/docs/models, 2026-11-04)
         'audio.ffmpeg_path' => null,                     // null = FFMPEG_PATH, then ~/bin/ffmpeg, then the system one
         'audio.chunk_seconds' => 600,                    // Whisper chunks are cut at pauses, at most this long
         'audio.silence_db' => -40,                       // quieter than this for 0.6 s is a pause
@@ -62,6 +66,8 @@ final class SettingsRepository
         // (App\Stt\LanguageRouter). Automatic uses provider.final_transcript / provider.voice_note.
         'routing.final' => LanguageRouter::DEFAULT_FINAL_ROUTES,
         'routing.live' => LanguageRouter::DEFAULT_LIVE_ROUTES,
+        // Since v1.5: an Urdu or Auto recording waits this long for its engine before a lower one takes it (EngineWait).
+        'routing.urdu_wait_hours' => EngineWait::DEFAULT_HOURS,
         'azure.region' => null,
         'azure.endpoint' => null,
         'azure.model' => 'MAI-Transcribe-2',         // MAI-Transcribe-2 | standard
@@ -84,6 +90,9 @@ final class SettingsRepository
             'azure_mai' => ['final_transcript' => 0.10, 'voice_note' => 0.10],
             'soniox' => ['final_transcript' => 0.10, 'voice_note' => 0.10, 'game_translate' => 0.18, 'watch_translate' => 0.18],
             'groq' => ['final_transcript' => 0.111, 'voice_note' => 0.111],
+            // Since v1.5: the audio input of Gemini 3.1 Pro (32 tokens a second at US$2 per million); the answer's
+            // tokens come on top and are not in this price.
+            'gemini' => ['final_transcript' => 0.23, 'voice_note' => 0.23],
         ],
     ];
 

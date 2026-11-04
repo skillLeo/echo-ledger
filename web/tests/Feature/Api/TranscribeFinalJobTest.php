@@ -33,10 +33,13 @@ beforeEach(function () {
     $this->configureAssemblyAi();
 });
 
-/** A pending final transcript for $session, as the coordinator would create it. */
-function pendingFinal(CaptureSession $session, string $provider = 'assemblyai'): Transcript
+/**
+ * A pending final transcript for $session, as the coordinator would create it. With no language it is Auto, which
+ * since v1.5 waits for its engine after a passing failure (UrduRoutingTest); English fails over at once.
+ */
+function pendingFinal(CaptureSession $session, string $provider = 'assemblyai', ?string $language = null): Transcript
 {
-    return $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => $provider, 'status' => TranscriptStatus::Pending]);
+    return $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => $provider, 'status' => TranscriptStatus::Pending, 'language' => $language]);
 }
 
 /** Run the job the way the queue worker does. */
@@ -306,7 +309,7 @@ describe('provider errors and retries', function () {
     it('fails the transcript with provider_rejected when the provider refuses the upload, without retrying it', function (int $status) {
         Http::fake(['api.assemblyai.com/v2/upload' => Http::response(['error' => 'try later'], $status)]);
         $session = $this->makeReadySession($this->device, $this->audio);
-        $transcript = pendingFinal($session);
+        $transcript = pendingFinal($session, language: 'en');
 
         runFinalJob($transcript);
 
@@ -322,7 +325,7 @@ describe('provider errors and retries', function () {
     it('fails the transcript with provider_unreachable when the provider cannot be reached', function () {
         Http::fake(fn () => throw new ConnectionException('cURL error 28: Operation timed out'));
         $session = $this->makeReadySession($this->device, $this->audio);
-        $transcript = pendingFinal($session);
+        $transcript = pendingFinal($session, language: 'en');
 
         runFinalJob($transcript);
 
@@ -339,7 +342,7 @@ describe('provider errors and retries', function () {
             'api.assemblyai.com/v2/transcript' => Http::response(['error' => 'overloaded'], 503),
         ]);
         $session = $this->makeReadySession($this->device, $this->audio);
-        $transcript = pendingFinal($session);
+        $transcript = pendingFinal($session, language: 'en');
 
         runFinalJob($transcript);
 
@@ -361,7 +364,7 @@ describe('provider errors and retries', function () {
             return Http::response(['id' => 'job_retry'], 200);
         });
         $session = $this->makeReadySession($this->device, $this->audio);
-        $transcript = pendingFinal($session);
+        $transcript = pendingFinal($session, language: 'en');
 
         runFinalJob($transcript);
         runFinalJob($transcript);
@@ -373,7 +376,7 @@ describe('provider errors and retries', function () {
 
     it('marks the transcript and session failed with the reason once the queue gives up', function () {
         $session = $this->makeReadySession($this->device, $this->audio);
-        $transcript = pendingFinal($session);
+        $transcript = pendingFinal($session, language: 'en');
         $transcript->update(['status' => TranscriptStatus::Processing]);
 
         (new TranscribeFinalJob($transcript->id))->failed(new RuntimeException(str_repeat('boom ', 1000)));

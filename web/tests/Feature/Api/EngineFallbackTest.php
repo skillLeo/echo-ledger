@@ -23,6 +23,8 @@ uses(InteractsWithDeviceApi::class);
 /*
  * Why transcriptions failed on production (v1.3 audit) and what happens now: a provider that heard no speech is
  * "No audio", and any other provider failure hands the final transcript to the next engine of the routing table.
+ * Since v1.5 an Urdu or Auto recording waits for its engine after a failure that passes by itself (UrduRoutingTest), so
+ * the chain tests below use English.
  */
 
 beforeEach(function () {
@@ -92,6 +94,9 @@ describe('the next engine', function () {
             ->and($transcript->meta['route']['fallback'])->toBeTrue()
             ->and($transcript->meta['route']['tried'][0]['engine'])->toBe('assemblyai')
             ->and($transcript->meta['route']['tried'][0]['code'])->toBe('provider_rejected')
+            // Since v1.5 an Urdu recording on a lower engine is marked as a backup (UrduRoutingTest).
+            ->and($transcript->meta['route']['backup'])->toBeTrue()
+            ->and($transcript->meta['route']['backup_reason'])->toBe('rejected')
             ->and($transcript->captureSession->status)->toBe(SessionStatus::Processing);
         Queue::assertPushed(TranscribeFinalJob::class, fn (TranscribeFinalJob $job) => $job->transcriptId === $transcript->id);
     });
@@ -100,7 +105,7 @@ describe('the next engine', function () {
         Queue::fake();
         app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_key');
         app(CredentialVault::class)->put('groq', 'api_key', 'gsk_test');
-        $transcript = failingTranscript($this);
+        $transcript = failingTranscript($this, language: 'en');
         $router = app(LanguageRouter::class);
 
         app(TranscriptStore::class)->failWith($transcript, TranscriptErrorCode::ProviderUnreachable);
@@ -123,7 +128,7 @@ describe('the next engine', function () {
         Queue::fake();
         app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_key');
         app(CredentialVault::class)->put('groq', 'api_key', 'gsk_test');
-        $transcript = failingTranscript($this);
+        $transcript = failingTranscript($this, language: 'en');
         $user = $transcript->captureSession->user;
         $user->notifications()->delete();
         $failures = fn (): int => $user->notifications()->get()->filter(fn ($n): bool => ActivityFeed::kindOf($n) === 'transcript_failed')->count();

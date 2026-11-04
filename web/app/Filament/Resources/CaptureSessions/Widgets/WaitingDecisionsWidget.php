@@ -10,34 +10,37 @@ use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Widgets\Widget;
 
 /**
- * The "Keep or discard?" card above the recordings list: one summary of the calls still waiting for a decision, as
- * the phone and desktop show it, with a link to the Waiting for decision view. Hidden when nothing is waiting.
+ * The calls still waiting for Keep or Discard, above the recordings list: since v1.5 one slim line, "4 calls waiting ·
+ * Review", where Review opens the Waiting for decision view (the details are its tooltip). Hidden when nothing waits.
  */
 class WaitingDecisionsWidget extends Widget
 {
-    /** Rendered with the page: a card that pops in after the list has loaded would shift the table down. */
+    /** Rendered with the page: a line that pops in after the list has loaded would shift the table down. */
     protected static bool $isLazy = false;
 
     protected int|string|array $columnSpan = 'full';
 
-    protected string $view = 'filament.widgets.waiting-decisions';
+    protected string $view = 'filament.widgets.waiting-chip';
 
     public static function canView(): bool
     {
-        return self::summary() !== null;
+        return self::count() > 0;
     }
 
-    /** @return array{line: string|null, reviewUrl: string} */
+    /** @return array{label: string, detail: string|null, reviewUrl: string} */
     protected function getViewData(): array
     {
+        $count = self::count();
+
         return [
-            'line' => self::summary(),
+            'label' => $count === 1 ? '1 call waiting' : "{$count} calls waiting",
+            'detail' => app(LibraryOrganiser::class)->waitingSummary((int) CurrentWorkspace::id()),
             'reviewUrl' => CaptureSessionResource::getUrl('index', ['tab' => 'waiting']),
         ];
     }
 
-    private static function summary(): ?string
+    private static function count(): int
     {
-        return app(LibraryOrganiser::class)->waitingSummary((int) CurrentWorkspace::id());
+        return app(LibraryOrganiser::class)->waitingCount((int) CurrentWorkspace::id());
     }
 }

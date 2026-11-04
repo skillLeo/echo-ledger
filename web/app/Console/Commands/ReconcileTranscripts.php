@@ -10,6 +10,7 @@ use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptStatus;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\Transcript;
+use App\Services\EngineWait;
 use App\Services\ProviderCopyEraser;
 use App\Services\TempFileSweeper;
 use App\Services\TranscriptStore;
@@ -51,15 +52,19 @@ final class ReconcileTranscripts extends Command
                     $result = $driver->fetchResult($transcript);
                     if ($result !== null) {
                         $store->complete($transcript, $result);
-                        $driver->deleteRemote($transcript);
-                        $transcript->update(['provider_deleted_at' => now()]);
+                        // Pending again (a forced re-run in another language): its copy is already queued for deletion.
+                        if ($transcript->status !== TranscriptStatus::Pending) {
+                            $driver->deleteRemote($transcript);
+                            $transcript->update(['provider_deleted_at' => now()]);
+                        }
                         $this->info("Recovered transcript {$transcript->id}");
                     } elseif ($transcript->submitted_at?->lt(now()->subHours(6))) {
                         $store->failWith($transcript, TranscriptErrorCode::ProviderTimeout);
                     }
                 } catch (ProviderJobFailed $e) {
                     $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
-                    if (app(ProviderCopyEraser::class)->erase($transcript)) {
+                    // Pending again when it waits for this engine (EngineWait): its copy is already queued for deletion.
+                    if ($transcript->status !== TranscriptStatus::Pending && app(ProviderCopyEraser::class)->erase($transcript)) {
                         $transcript->update(['provider_deleted_at' => now()]);
                     }
                 } catch (Throwable $e) {
@@ -67,12 +72,14 @@ final class ReconcileTranscripts extends Command
                 }
             });
 
-        // 2. Pending transcripts whose job was lost (e.g. queue table cleared).
+        // 2. Pending transcripts whose job was lost (e.g. queue table cleared). One that waits for its engine (EngineWait)
+        //    has its run queued for later: it is queued again only when that run is well overdue.
         Transcript::query()
             ->where('status', TranscriptStatus::Pending->value)
             ->whereNull('provider_job_id')
             ->where('updated_at', '<', now()->subMinutes(30))
             ->limit($limit)->get()
+            ->filter(fn (Transcript $t): bool => EngineWait::due($t))
             ->each(fn (Transcript $t) => TranscribeFinalJob::dispatch($t->id));
 
         // 3. Completed transcripts whose provider copy could not be deleted yet.

@@ -13,6 +13,7 @@ use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
 use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
+use App\Services\EngineWait;
 use App\Services\ProviderCopyEraser;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptStore;
@@ -22,6 +23,7 @@ use App\Services\Workspaces\PlanLimits;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\SubmitResult;
+use App\Stt\Exceptions\ProviderBusy;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\LanguageChoice;
@@ -54,13 +56,25 @@ final class TranscribeFinalJob implements ShouldQueue
     /** Smaller than any real recording: an Ogg/Opus header alone is ~100 bytes, one second of speech is several KB. */
     public const MIN_AUDIO_BYTES = 1024;
 
-    public function __construct(public readonly string $transcriptId) {}
+    /**
+     * Since v1.5: the time this run was scheduled for while the transcript waits for its engine (EngineWait). A plain
+     * property with a default, so a job queued before the field existed still reads null.
+     */
+    public ?string $retryToken = null;
+
+    public function __construct(public readonly string $transcriptId, ?string $retryToken = null)
+    {
+        $this->retryToken = $retryToken;
+    }
 
     public function handle(SttManager $stt, ChunkedUploadService $uploads, TranscriptStore $store): void
     {
         $transcript = Transcript::query()->find($this->transcriptId);
         if ($transcript === null || $transcript->provider_job_id !== null || $transcript->status !== TranscriptStatus::Pending) {
             return; // gone, already submitted, finished, handed to the device, or another run holds it
+        }
+        if (! EngineWait::mayRun($transcript, $this->retryToken)) {
+            return; // waiting for its engine: the run scheduled for later goes on then
         }
 
         $session = $transcript->captureSession;
@@ -125,6 +139,7 @@ final class TranscribeFinalJob implements ShouldQueue
                 return;
             }
             $transcript->refresh();
+            EngineWait::started($transcript);
 
             $result = $this->submit($driver, $request, $transcript, $store);
         } finally {
@@ -148,6 +163,8 @@ final class TranscribeFinalJob implements ShouldQueue
                 'status' => TranscriptStatus::Submitted,
                 'provider_job_id' => $result->jobId,
                 'provider_transcript_id' => $result->transcriptId,
+                // A new job whose copy is not deleted yet: an earlier attempt's time would hide it from stt:reconcile.
+                'provider_deleted_at' => null,
                 'submitted_at' => now(),
             ]),
             'completed' => $this->completed($transcript, $result, $store),
@@ -175,17 +192,26 @@ final class TranscribeFinalJob implements ShouldQueue
         }
     }
 
-    /** The provider call. Any error fails the transcript with its documented code; nothing is retried automatically. */
+    /**
+     * The provider call. Any error fails the transcript with its documented code; nothing is retried at once (since
+     * v1.5 an Urdu or Auto recording waits and its engine is tried again later, see TranscriptStore::fail).
+     */
     private function submit(SttProvider $driver, FinalJobRequest $request, Transcript $transcript, TranscriptStore $store): ?SubmitResult
     {
         try {
             return $driver->submitFinal($request);
+        } catch (ProviderBusy $e) {
+            // The engine's limits have no room now (since v1.5, Groq): not a failure, the same engine goes on later where
+            // it stopped. An Urdu or Auto recording whose wait is over goes to the next engine, as after a rate limit.
+            if (! app(EngineWait::class)->pace($transcript, $e->retryAfterSeconds)) {
+                $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
+            }
         } catch (ProviderNotConfigured $e) {
             $store->fail($transcript, $e->getMessage(), TranscriptErrorCode::ProviderNotConfigured);
         } catch (ProviderJobFailed $e) {
             $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
         } catch (RequestException $e) {
-            $store->fail($transcript, TranscriptErrorCode::rejectedMessage(self::providerReason($e)), TranscriptErrorCode::ProviderRejected);
+            $store->fail($transcript, TranscriptErrorCode::rejectedMessage(self::providerReason($e)), TranscriptErrorCode::ProviderRejected, $e->response);
         } catch (ConnectionException) {
             $store->failWith($transcript, TranscriptErrorCode::ProviderUnreachable);
         } catch (Throwable $e) {
@@ -234,9 +260,17 @@ final class TranscribeFinalJob implements ShouldQueue
     {
         $transcript = Transcript::query()->find($this->transcriptId);
         if ($transcript !== null && ! $transcript->status->isTerminal()) {
+            $error = mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000);
+            // Since v1.5 a crashed run of an Urdu or Auto recording is an interrupted one: it waits and its engine is tried
+            // again (EngineWait), and once the wait is over the next engine takes it as a backup (EngineFallbackJob).
+            if ($transcript->kind === TranscriptKind::Final && EngineWait::forUrdu($transcript)) {
+                app(TranscriptStore::class)->fail($transcript, $error, TranscriptErrorCode::Interrupted);
+
+                return;
+            }
             $transcript->update([
                 'status' => TranscriptStatus::Failed,
-                'error' => mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000),
+                'error' => $error,
                 'error_code' => TranscriptErrorCode::Interrupted->value,
             ]);
             if ($transcript->kind === TranscriptKind::Final) {

@@ -9,15 +9,16 @@
     <div style="display:flex;flex-direction:column;gap:1.5rem">
         <x-filament::section heading="How to test the engines" collapsible :collapsed="$report['recordings'] !== []">
             <ol style="list-style:decimal;padding-left:1.25rem;display:flex;flex-direction:column;gap:.35rem;font-size:.9rem">
-                <li>Pick about 10 typical recordings per language (real calls, both speakers, a few noisy ones).</li>
-                <li>On each recording choose <strong>⋯ → Use as Accuracy Lab reference</strong>, correct the words exactly as spoken and save.</li>
-                <li>Choose <strong>⋯ → Compare engines</strong> with up to three engines for that language.</li>
-                <li>Come back here when the runs are done: each one is scored against your reference.</li>
-                <li>Press <strong>Use the winners</strong> to make the best engine the first one for each language.</li>
+                <li>Pick about 10 typical recordings per category: Urdu, English and mixed (real calls, both speakers, a few noisy ones).</li>
+                <li>On each recording choose <strong>⋯ → Use as Accuracy Lab reference</strong>: correct the words exactly as spoken, or paste or upload a corrected text (TurboScribe's .txt, .srt, .vtt or .docx; time codes and speaker labels are removed). Add the Roman Urdu text too to score the Roman Urdu view, and choose the category.</li>
+                <li>Choose <strong>⋯ → Compare engines</strong> with up to three engines (Gemini is one once its key is on API Credentials).</li>
+                <li>Come back here when the runs are done: each one is scored against your references, the original transcript and its Roman Urdu view apart.</li>
+                <li>Press <strong>Apply winners</strong> to make the best engine the first one of each category's list (Urdu, English, Auto for mixed calls, and Arabic). The other engines keep their order.</li>
             </ol>
             <p style="font-size:.8rem;opacity:.7;margin-top:.5rem">
                 Word error rate (WER) and character error rate (CER) count the words or letters an engine got wrong, left out or added,
-                after ignoring case, punctuation and Urdu spelling variants. Lower is better. Long recordings are scored on their first 4,000 words.
+                after ignoring case, punctuation and Urdu spelling variants; Roman Urdu also ignores doubled letters ("theek" and "thik" are the same word).
+                Lower is better. The winner has the lowest WER on the original transcript; Roman Urdu breaks ties. Long recordings are scored on their first 4,000 words.
             </p>
         </x-filament::section>
 
@@ -26,16 +27,23 @@
                 <div style="overflow-x:auto">
                     <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                         <thead><tr style="text-align:left;opacity:.7">
-                            <th style="padding:.5rem .75rem">Engine</th><th style="{{ $head }}">Recordings</th><th style="{{ $head }}">WER</th>
-                            <th style="{{ $head }}">CER</th><th style="{{ $head }}">Seconds per audio minute</th><th style="{{ $head }}">Cost per audio hour</th>
+                            <th style="padding:.5rem .75rem">Engine</th><th style="{{ $head }}">Recordings</th><th style="{{ $head }}">WER</th><th style="{{ $head }}">CER</th>
+                            @if ($language['roman'])
+                                <th style="{{ $head }}">Roman Urdu WER</th><th style="{{ $head }}">Roman Urdu CER</th>
+                            @endif
+                            <th style="{{ $head }}">Seconds per audio minute</th><th style="{{ $head }}">Cost per audio hour</th>
                         </tr></thead>
                         <tbody>
                             @foreach ($language['engines'] as $engine)
                                 <tr>
-                                    <td style="{{ $cell }}">{{ $engine['label'] }} @if ($engine['provider'] === $language['winner']) <span style="font-size:.7rem;opacity:.7">· best</span> @endif</td>
-                                    <td style="{{ $num }}">{{ $engine['recordings'] }}</td>
+                                    <td style="{{ $cell }}">{{ $engine['label'] }} @if ($engine['provider'] === $language['winner']) <span style="font-size:.7rem;opacity:.7">· best</span> @elseif ($engine['wer'] === null && $engine['roman_wer'] === null) <span style="font-size:.7rem;opacity:.7">· not scored yet</span> @endif</td>
+                                    <td style="{{ $num }}">{{ max($engine['recordings'], $engine['roman_recordings']) }}</td>
                                     <td style="{{ $num }}">{{ $pct($engine['wer']) }}</td>
                                     <td style="{{ $num }}">{{ $pct($engine['cer']) }}</td>
+                                    @if ($language['roman'])
+                                        <td style="{{ $num }}">{{ $pct($engine['roman_wer']) }}</td>
+                                        <td style="{{ $num }}">{{ $pct($engine['roman_cer']) }}</td>
+                                    @endif
                                     <td style="{{ $num }}">{{ $engine['seconds_per_audio_minute'] ?? '—' }}</td>
                                     <td style="{{ $num }}">{{ $engine['cost_per_hour_usd'] === null ? '—' : '$'.number_format($engine['cost_per_hour_usd'], 3) }}</td>
                                 </tr>
@@ -54,7 +62,7 @@
             <x-filament::section heading="Reference recordings">
                 <div style="overflow-x:auto">
                     <table style="width:100%;font-size:.85rem;border-collapse:collapse">
-                        <thead><tr style="text-align:left;opacity:.7"><th style="padding:.5rem .75rem">Recording</th><th style="padding:.5rem .75rem">Language</th><th style="padding:.5rem .75rem">Word error rate per engine</th></tr></thead>
+                        <thead><tr style="text-align:left;opacity:.7"><th style="padding:.5rem .75rem">Recording</th><th style="padding:.5rem .75rem">Category</th><th style="padding:.5rem .75rem">Word error rate per engine (original · Roman Urdu)</th></tr></thead>
                         <tbody>
                             @foreach ($report['recordings'] as $recording)
                                 <tr>
@@ -62,7 +70,13 @@
                                     <td style="{{ $cell }}">{{ $recording['language'] }}</td>
                                     <td style="{{ $cell }}">
                                         @forelse ($recording['scores'] as $provider => $score)
-                                            <span style="margin-right:.75rem">{{ \App\Enums\SttProviderKey::tryFrom($provider)?->getLabel() ?? $provider }}: {{ $score === null ? 'scoring…' : $pct($score['wer']) }}</span>
+                                            <span style="margin-right:.75rem">{{ \App\Enums\SttProviderKey::tryFrom($provider)?->getLabel() ?? $provider }}:
+                                                @if ($score === null)
+                                                    scoring…
+                                                @else
+                                                    {{ $pct($score['wer']) }}@if ($score['roman_wer'] !== null) · {{ $pct($score['roman_wer']) }}@elseif ($score['roman_pending']) · Roman Urdu being made…@endif
+                                                @endif
+                                            </span>
                                         @empty
                                             <span style="opacity:.6">No "Compare engines" runs yet</span>
                                         @endforelse

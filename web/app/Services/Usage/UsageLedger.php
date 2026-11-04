@@ -90,8 +90,9 @@ final class UsageLedger
         $reported = $meta['audio_duration_s'] ?? null;
         $duration = match (true) {
             $provider === SttProviderKey::AssemblyAi && is_numeric($reported) && $reported > 0 => (int) round((float) $reported * 1000),
-            // Groq bills the audio of each request (at least 10 s): the driver adds up exactly what it sent.
-            $provider === SttProviderKey::Groq && is_numeric($meta['billed_audio_ms'] ?? null) => (int) $meta['billed_audio_ms'],
+            // Groq bills the audio of each request (at least 10 s), Gemini the audio of each chunk it heard (since
+            // v1.5): the driver adds up exactly what it sent.
+            in_array($provider, [SttProviderKey::Groq, SttProviderKey::Gemini], true) && is_numeric($meta['billed_audio_ms'] ?? null) => (int) $meta['billed_audio_ms'],
             default => (int) ($primary->duration_ms ?? $session->duration_ms ?? 0),
         };
 
@@ -104,8 +105,8 @@ final class UsageLedger
             SttProviderKey::AzureMai => ($meta['model'] ?? null) === 'standard' ? 1 : max(1, min(2, (int) ($meta['audio_channels'] ?? 1))),
             // Soniox: one job per channel file (2), or one job for the whole file (1).
             SttProviderKey::Soniox => max(1, min(2, (int) ($meta['audio_channels'] ?? 1))),
-            // Groq: billed_audio_ms already covers every side and chunk.
-            SttProviderKey::Groq => 1,
+            // Groq and Gemini: billed_audio_ms already covers every side and chunk.
+            SttProviderKey::Groq, SttProviderKey::Gemini => 1,
             default => $recordingChannels,
         };
 

@@ -8,6 +8,7 @@ use App\Enums\TranscriptStatus;
 use App\Jobs\ProcessSttWebhookJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
+use App\Models\ProviderDeletion;
 use App\Models\Transcript;
 use App\Models\WebhookEvent;
 use App\Services\CredentialVault;
@@ -282,6 +283,23 @@ describe('AssemblyAI processing', function () {
             ->and($transcript->captureSession->status)->toBe(SessionStatus::Failed)
             ->and($transcript->provider_deleted_at)->not->toBeNull()
             ->and($this->log)->toBe(['GET /v2/transcript/job_1', 'DELETE /v2/transcript/job_1']);
+    });
+
+    it('lets an Urdu recording wait for AssemblyAI after a passing error, with the failed job\'s copy queued for deletion', function () {
+        Queue::fake();
+        $transcript = submittedTranscript(attributes: ['language' => 'ur', 'provider_deleted_at' => now()->subHour()]);
+        $this->fakeAssemblyAi('job_1', ['id' => 'job_1', 'status' => 'error', 'error' => 'Internal server error'], $this->log);
+
+        $this->postJson(aaiUrl($transcript), ['transcript_id' => 'job_1', 'status' => 'error'], aaiHeaders($transcript))->assertOk();
+
+        // Since v1.5 it waits for the same engine (EngineWait); the copy goes with the provider deletions, not here.
+        $transcript->refresh();
+        expect($transcript->status)->toBe(TranscriptStatus::Pending)
+            ->and($transcript->provider_job_id)->toBeNull()
+            ->and($transcript->provider_deleted_at)->toBeNull()
+            ->and(ProviderDeletion::query()->pluck('provider_job_id')->all())->toBe(['job_1'])
+            ->and($this->log)->toBe(['GET /v2/transcript/job_1']);
+        Queue::assertPushed(TranscribeFinalJob::class, fn (TranscribeFinalJob $job): bool => $job->transcriptId === $transcript->id && $job->retryToken !== null);
     });
 
     it('leaves the transcript untouched and retries later while the provider is still working', function () {
@@ -605,7 +623,8 @@ describe('reconciliation', function () {
     });
 
     it('fails a job the provider never finishes after six hours', function () {
-        $stale = submittedTranscript('assemblyai', 'job_1', ['submitted_at' => now()->subHours(7)]);
+        // English: an Urdu or Auto recording waits for its engine instead (UrduRoutingTest).
+        $stale = submittedTranscript('assemblyai', 'job_1', ['submitted_at' => now()->subHours(7), 'language' => 'en']);
         $calls = [];
         $this->fakeAssemblyAi('job_1', ['id' => 'job_1', 'status' => 'processing'], $calls);
 

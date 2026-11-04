@@ -25,9 +25,12 @@ use App\Stt\Data\StreamingRequest;
 use App\Stt\Data\SubmitResult;
 use App\Stt\Data\WebhookEnvelope;
 use App\Stt\Data\Word;
+use App\Stt\Exceptions\ProviderBusy;
 use App\Stt\Exceptions\UnsupportedFeature;
+use App\Stt\GroqPacer;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
+use App\Stt\Support\PartCache;
 use App\Stt\TranscriptNormalizer;
 use App\Stt\WhisperGuards;
 use App\Support\UrduText;
@@ -49,6 +52,9 @@ use RuntimeException;
  * anywhere on it makes it Urdu and its chunks heard otherwise run again as Urdu (a long, pure English stretch stays
  * English; nothing is ever forced to English). Whisper's invented text removed ([WhisperGuards]), low-confidence
  * lines marked uncertain, Urdu letter forms normalised. Synchronous: the job stores the result directly.
+ *
+ * Since v1.5 every request stays within Groq's rate limits for its key ([GroqPacer]): one that would go over them is
+ * not sent, the transcript waits for room and goes on later where it stopped (the parts already answered are kept).
  */
 final class GroqWhisperDriver implements ClipTranscriber, SttProvider
 {
@@ -63,11 +69,16 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     /** @var list<array{at_ms: int, language: string|null}> the language marks of the recording being transcribed */
     private array $marks = [];
 
+    /** The transcript being made, whose finished parts are kept (PartCache); null for a Double-check clip. */
+    private ?string $transcriptId = null;
+
     public function __construct(
         private readonly CredentialVault $vault,
         private readonly SettingsRepository $settings,
         private readonly ChunkedUploadService $uploads,
         private readonly AudioPrep $prep,
+        private readonly GroqPacer $pacer,
+        private readonly PartCache $parts,
     ) {}
 
     public function key(): SttProviderKey
@@ -94,6 +105,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     public function submitFinal(FinalJobRequest $request): SubmitResult
     {
         $language = LanguageChoice::normalize($request->language);
+        $this->transcriptId = $request->transcript->id;
         // The chip changed during the recording: each chunk takes the language in effect where it starts (the user's
         // marks win over detection); without marks every chunk has the recording's language.
         $this->marks = SessionMarkers::cleanLanguageMarks($request->session->language_marks ?? []);
@@ -247,17 +259,17 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
      * it, the whole file (a signed link when it is too big to upload).
      *
      * @param  list<string>  $temps
-     * @return list<array{path: ?string, url: ?string, start: float, end: float, keep_from: float}>
+     * @return list<array{path: ?string, url: ?string, start: float, end: float, keep_from: float, side: int}>
      */
     private function chunks(string $path, ?Recording $recording, int $channel, int $sides, array &$temps): array
     {
         if (! $this->prep->available()) {
             $size = (int) @filesize($path);
             if ($size > self::MAX_UPLOAD_BYTES && $recording !== null) {
-                return [['path' => null, 'url' => URL::temporarySignedRoute('api.recordings.audio', now()->addMinutes(30), ['recording' => $recording->id]), 'start' => 0.0, 'end' => ($recording->duration_ms ?? 0) / 1000, 'keep_from' => 0.0]];
+                return [['path' => null, 'url' => URL::temporarySignedRoute('api.recordings.audio', now()->addMinutes(30), ['recording' => $recording->id]), 'start' => 0.0, 'end' => ($recording->duration_ms ?? 0) / 1000, 'keep_from' => 0.0, 'side' => $channel]];
             }
 
-            return [['path' => $path, 'url' => null, 'start' => 0.0, 'end' => ($recording->duration_ms ?? 0) / 1000, 'keep_from' => 0.0]];
+            return [['path' => $path, 'url' => null, 'start' => 0.0, 'end' => ($recording->duration_ms ?? 0) / 1000, 'keep_from' => 0.0, 'side' => $channel]];
         }
         $wav = $temps[] = $this->uploads->tempPath('groq-side');
         // A two-sided file split here takes one channel; a per-channel file or a mono file is taken as it is.
@@ -270,7 +282,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
         // Cuts inside speech overlap by 1 s; the join keeps each word once (see toSegments).
         foreach (AudioPrep::overlapHardCuts($plan, $silences) as $i => $piece) {
             $file = $temps[] = $this->uploads->tempPath('groq-chunk-'.$i).'.flac';
-            $out[] = ['path' => $this->prep->cut($wav, $piece['start'], $piece['end'], $file), 'url' => null, 'start' => $piece['start'], 'end' => $piece['end'], 'keep_from' => $piece['keep_from']];
+            $out[] = ['path' => $this->prep->cut($wav, $piece['start'], $piece['end'], $file), 'url' => null, 'start' => $piece['start'], 'end' => $piece['end'], 'keep_from' => $piece['keep_from'], 'side' => $channel];
         }
 
         return $out;
@@ -280,7 +292,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
      * One chunk, with the language rules: a forced language is sent as is; Auto takes what Whisper detects when it
      * is one Auto may pick (Hindi is Urdu), else runs again in the fallback; Hindi letters run again as Urdu.
      *
-     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float}  $chunk
+     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float, side?: int}  $chunk
      * @return array{segments: list<array<string, mixed>>, words: list<array<string, mixed>>, language: ?string, forced: int, requests: int}
      */
     private function transcribeChunk(array $chunk, ?string $language, string $prompt): array
@@ -322,11 +334,28 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     }
 
     /**
-     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float}  $chunk
+     * One request. Since v1.5 it waits for room within Groq's limits (GroqPacer: ProviderBusy, the transcript goes on
+     * later) and the answer for a part of a transcript is kept, so a run that goes on later does not send it again.
+     *
+     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float, side?: int}  $chunk
      * @return array<string, mixed>
      */
     private function request(array $chunk, ?string $language, string $prompt): array
     {
+        $part = $this->transcriptId !== null && isset($chunk['side'])
+            ? sprintf('groq:%s:%d:%.3f-%.3f:%s:%s', $this->model(), $chunk['side'], $chunk['start'], $chunk['end'], $language ?? 'auto', sha1($prompt))
+            : null;
+        $kept = $part !== null ? $this->parts->get((string) $this->transcriptId, $part) : null;
+        if ($kept !== null) {
+            return $kept;
+        }
+        $key = $this->vault->require('groq', 'api_key');
+        $keyId = GroqPacer::keyId($key);
+        $billedMs = max(self::MIN_BILLED_MS, (int) round(max(0.0, $chunk['end'] - $chunk['start']) * 1000));
+        $wait = $this->pacer->waitFor($keyId, $billedMs);
+        if ($wait > 0) {
+            throw new ProviderBusy("Groq's rate limit leaves no room for this part for {$wait} s.", $wait);
+        }
         $fields = [
             'model' => $this->model(),
             'response_format' => 'verbose_json',
@@ -339,31 +368,37 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
         if ($prompt !== '') {
             $fields['prompt'] = $prompt;
         }
-        $http = Http::withToken($this->vault->require('groq', 'api_key'))->acceptJson()->connectTimeout(15)->timeout(600)->asMultipart();
-        $parts = [];
+        $http = Http::withToken($key)->acceptJson()->connectTimeout(15)->timeout(600)->asMultipart();
+        $fieldParts = [];
         foreach ($fields as $name => $value) {
             foreach ((array) $value as $v) {
-                $parts[] = ['name' => $name, 'contents' => (string) $v];
+                $fieldParts[] = ['name' => $name, 'contents' => (string) $v];
             }
         }
         if ($chunk['url'] !== null) {
-            $parts[] = ['name' => 'url', 'contents' => $chunk['url']];
-
-            return (array) $http->post(self::ENDPOINT, $parts)->throw()->json();
-        }
-        $stream = fopen((string) $chunk['path'], 'rb');
-        if ($stream === false) {
-            throw new RuntimeException('Cannot read audio for Groq.');
-        }
-        try {
-            $parts[] = ['name' => 'file', 'contents' => $stream, 'filename' => basename((string) $chunk['path'])];
-
-            return (array) $http->post(self::ENDPOINT, $parts)->throw()->json();
-        } finally {
-            if (is_resource($stream)) {
-                fclose($stream);
+            $response = $http->post(self::ENDPOINT, [...$fieldParts, ['name' => 'url', 'contents' => $chunk['url']]]);
+        } else {
+            $stream = fopen((string) $chunk['path'], 'rb');
+            if ($stream === false) {
+                throw new RuntimeException('Cannot read audio for Groq.');
+            }
+            try {
+                $response = $http->post(self::ENDPOINT, [...$fieldParts, ['name' => 'file', 'contents' => $stream, 'filename' => basename((string) $chunk['path'])]]);
+            } finally {
+                if (is_resource($stream)) {
+                    fclose($stream);
+                }
             }
         }
+        // Groq's limits as it reports them, whatever the answer; a request it answered counts towards them.
+        $this->pacer->observe($keyId, $response);
+        $json = (array) $response->throw()->json();
+        $this->pacer->record($keyId, $billedMs);
+        if ($part !== null) {
+            $this->parts->put((string) $this->transcriptId, $part, $json);
+        }
+
+        return $json;
     }
 
     /**
@@ -426,6 +461,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     /** Double-check (since v1.2): one short clip, in the recording's language. Groq keeps no copy. */
     public function transcribeClip(string $path, float $seconds, ?string $language): array
     {
+        $this->transcriptId = null;
         $language = LanguageChoice::normalize($language);
         $json = $this->request(['path' => $path, 'url' => null, 'start' => 0.0, 'end' => $seconds, 'keep_from' => 0.0], $language, self::stylePrompt($language, []));
         $kept = WhisperGuards::filter(array_values((array) ($json['segments'] ?? [])))['kept'];

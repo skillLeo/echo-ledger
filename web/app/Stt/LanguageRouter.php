@@ -41,6 +41,8 @@ final class LanguageRouter
         'elevenlabs' => self::ALL,
         'soniox' => self::ALL,
         'groq' => self::ALL,
+        // Since v1.5, final transcripts only; in no default list until the Accuracy Lab picks it.
+        'gemini' => self::ALL,
         'azure_mai' => ['en'],
         'whispercpp_local' => self::ALL,
         'parakeet_local' => ['en'],
@@ -182,10 +184,23 @@ final class LanguageRouter
         if (LanguageChoice::normalize($language) === null) {
             return;
         }
-        $key = self::routeKey($language);
+        $this->preferKey(self::routeKey($language), $engine);
+    }
+
+    /**
+     * Puts [$engine] first in the list of routing key [$key] (en, ur, ar, other or auto; since v1.5 for the Accuracy
+     * Lab's categories); the other engines keep their order behind it. False for a key that has no list.
+     */
+    public function preferKey(string $key, SttProviderKey $engine): bool
+    {
+        if (! array_key_exists($key, self::DEFAULT_FINAL_ROUTES)) {
+            return false;
+        }
         $routes = $this->routes('routing.final', self::DEFAULT_FINAL_ROUTES);
         $routes[$key] = array_values(array_unique([$engine->value, ...($routes[$key] ?? [])]));
         $this->settings->set('routing.final', $routes);
+
+        return true;
     }
 
     public function supportsFinal(SttProviderKey $key, string $language): bool
@@ -213,6 +228,7 @@ final class LanguageRouter
             SttProviderKey::ElevenLabs => $this->vault->has('elevenlabs', 'api_key'),
             SttProviderKey::Soniox => $this->vault->has('soniox', 'api_key'),
             SttProviderKey::Groq => $this->vault->has('groq', 'api_key'),
+            SttProviderKey::Gemini => $this->vault->has('gemini', 'api_key'),
             SttProviderKey::AzureMai => $this->vault->has('azure', 'api_key') && $this->settings->get('azure.endpoint') !== null,
             SttProviderKey::WhisperCppLocal => $this->settings->get('whisper.base_url') !== null,
             SttProviderKey::ParakeetLocal => true,

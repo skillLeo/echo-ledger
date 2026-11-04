@@ -6,6 +6,8 @@ namespace App\Filament\Pages;
 
 use App\Models\User;
 use App\Services\CredentialVault;
+use App\Services\SettingsRepository;
+use App\Stt\GroqPacer;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -88,7 +90,7 @@ class ApiCredentials extends Page
                 }
                 $inputs[] = $input;
             }
-            $sections[] = Section::make(match ($provider) {
+            $section = Section::make(match ($provider) {
                 'assemblyai' => 'AssemblyAI (default)',
                 'elevenlabs' => 'ElevenLabs',
                 'soniox' => 'Soniox (optional)',
@@ -97,10 +99,47 @@ class ApiCredentials extends Page
                 'azure' => 'Azure Speech',
                 'whispercpp' => 'whisper.cpp server',
                 'openai' => 'OpenAI (optional)',
+                'gemini' => 'Google Gemini (optional, an Urdu challenger)',
             })->columns(2)->collapsible()->schema($inputs);
+            if ($provider === 'groq') {
+                $section->description(fn (): ?string => self::groqUse());
+            }
+            if ($provider === 'gemini') {
+                $section->description('Use a key from a Google Cloud project with billing enabled (the paid tier): on the free tier Google may use the audio and transcripts to improve its products. Each piece of audio is uploaded for one request and deleted right after it.');
+            }
+            $sections[] = $section;
         }
 
         return $schema->statePath('data')->components($sections);
+    }
+
+    /**
+     * The Groq row (since v1.5): the limits requests are paced under, the plan's or the ones Groq reported, and what the
+     * stored key used this minute, hour and day.
+     */
+    public static function groqUse(): ?string
+    {
+        $key = app(CredentialVault::class)->get('groq', 'api_key');
+        if ($key === null) {
+            return null;
+        }
+        $pacer = app(GroqPacer::class);
+        $id = GroqPacer::keyId($key);
+        $limits = $pacer->limits($id);
+        $use = $pacer->usage($id);
+        $n = fn (int $value): string => number_format($value);
+        $line = sprintf(
+            'Limits (%s plan%s): %s requests a minute, %s a day; %s audio seconds an hour, %s a day. Used: %s requests this minute, %s audio seconds this hour, %s today (%s requests).',
+            GroqPacer::PLAN_LABELS[$limits['plan']], $limits['from_groq'] ? ', requests a day as Groq reports them' : '',
+            $n($limits['rpm']), $n($limits['rpd']), $n($limits['ash']), $n($limits['asd']),
+            $n($use['minute_requests']), $n($use['hour_seconds']), $n($use['day_seconds']), $n($use['day_requests']),
+        );
+        $until = $pacer->blockedUntil($id);
+        if ($until !== null) {
+            $line .= ' Groq asked to wait until '.$until->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('g:i A').'.';
+        }
+
+        return $line;
     }
 
     public function content(Schema $schema): Schema

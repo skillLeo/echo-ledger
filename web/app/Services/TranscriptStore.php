@@ -20,6 +20,8 @@ use App\Services\Views\TranscriptViews;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
+use App\Stt\Support\PartCache;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\DB;
 
 /** Persists normalized transcripts and keeps the parent session status in step. */
@@ -29,6 +31,8 @@ final class TranscriptStore
 
     public function complete(Transcript $transcript, NormalizedTranscript $result): Transcript
     {
+        // The engine answered for the whole recording: the parts kept for a run that had to wait are not needed.
+        app(PartCache::class)->forget($transcript->id);
         // The right language every time: a result in a language the recording may not use, or in Hindi letters, is
         // run once more with the language forced (the billed first run stays in the usage ledger).
         if (($forced = $this->forcedLanguage($transcript, $result)) !== null) {
@@ -48,6 +52,10 @@ final class TranscriptStore
             $meta = array_merge($transcript->meta ?? [], $result->meta, array_filter(['detected_language' => $result->language]));
             if ($flagged > 0) {
                 $meta['wrong_script_segments'] = $flagged;
+            }
+            // Since v1.5: no longer waiting for an engine (EngineWait); whether a backup engine wrote it stays.
+            if (is_array($meta['route'] ?? null)) {
+                $meta['route'] = EngineWait::cleared($meta['route']);
             }
             $transcript->update([
                 'status' => TranscriptStatus::Completed,
@@ -76,7 +84,7 @@ final class TranscriptStore
             app(Retranscriber::class)->choose($transcript);
         }
         // Accuracy Lab: a comparison run of a recording with a reference is scored against it, on the queue.
-        if ($transcript->kind === TranscriptKind::Trial && $transcript->captureSession->reference_text !== null) {
+        if ($transcript->kind === TranscriptKind::Trial && $transcript->captureSession->hasReference()) {
             ScoreAccuracyJob::dispatch($transcript->capture_session_id);
         }
         // Double-check (when it is on): a second engine hears the unsure lines again, on the queue.
@@ -128,6 +136,10 @@ final class TranscriptStore
         if ($provider !== null && $transcript->provider_job_id !== null && $transcript->provider_job_id !== '') {
             app(ProviderCopyEraser::class)->schedule($provider, $transcript->provider_job_id, $transcript->provider_transcript_id);
         }
+        $meta = $transcript->meta ?? [];
+        if (is_array($meta['route'] ?? null)) {
+            $meta['route'] = EngineWait::cleared($meta['route']); // the engine answered: a wait before this run is over
+        }
         $transcript->update([
             'status' => TranscriptStatus::Pending,
             'provider_job_id' => null,
@@ -135,7 +147,7 @@ final class TranscriptStore
             'provider_deleted_at' => null,
             'attempts' => 0,
             'language' => $language,
-            'meta' => array_merge($transcript->meta ?? [], [
+            'meta' => array_merge($meta, [
                 'forced_language' => $language,
                 'forced_reason' => $reason,
                 'first_detected_language' => $result->language,
@@ -216,21 +228,39 @@ final class TranscriptStore
         }
     }
 
-    /** Marks the transcript (and, for a final one, its session) failed with a readable reason and its error code. */
-    public function fail(Transcript $transcript, string $error, ?TranscriptErrorCode $code = null): void
+    /**
+     * Marks the transcript (and, for a final one, its session) failed with a readable reason and its error code.
+     * Since v1.5 the final transcript of an Urdu or Auto recording whose engine failed for a reason that passes by
+     * itself waits for that engine instead (EngineWait); [$response] is the provider's refusal, when there was one.
+     */
+    public function fail(Transcript $transcript, string $error, ?TranscriptErrorCode $code = null, ?Response $response = null): void
     {
         // A provider that found no speech at all: the recording is silent (every engine would say the same).
         if ($code === TranscriptErrorCode::ProviderRejected && TranscriptErrorCode::saysNoSpeech($error)) {
             $code = TranscriptErrorCode::NoAudio;
             $error = $code->message();
         }
-        DB::transaction(function () use ($transcript, $error, $code): void {
-            $transcript->update([
+        $final = $transcript->kind === TranscriptKind::Final;
+        $transient = $final && $code?->retryable() === true
+            ? ($response !== null ? EngineWait::fromResponse($response, $error) : EngineWait::transient($code, $error))
+            : null;
+        if ($transient !== null && app(EngineWait::class)->hold($transcript, $transient, EngineWait::retryAfter($response))) {
+            return;
+        }
+        DB::transaction(function () use ($transcript, $error, $code, $final, $transient): void {
+            $attributes = [
                 'status' => TranscriptStatus::Failed,
                 'error' => mb_substr($error, 0, 2000),
                 'error_code' => $code?->value,
-            ]);
-            if ($transcript->kind === TranscriptKind::Final) {
+            ];
+            $stored = is_array($transcript->meta['route'] ?? null) ? $transcript->meta['route'] : null;
+            if ($final && ($stored !== null || $transient !== null)) {
+                // Not waiting any more. EngineFallbackJob reads whether the engine stayed unavailable or refused it.
+                $route = EngineWait::cleared($stored ?? [], keepSince: true);
+                $attributes['meta'] = [...($transcript->meta ?? []), 'route' => $transient !== null ? [...$route, 'transient' => $transient] : $route];
+            }
+            $transcript->update($attributes);
+            if ($final) {
                 $transcript->captureSession->update(['status' => SessionStatus::Failed]);
             }
         });

@@ -10,6 +10,7 @@ use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\User;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
+use App\Services\EngineWait;
 use App\Services\RetentionPolicy;
 use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
@@ -18,6 +19,8 @@ use App\Services\SettingsTransfer;
 use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
+use App\Stt\Drivers\GeminiDriver;
+use App\Stt\GroqPacer;
 use App\Stt\KeytermPolicy;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
@@ -116,6 +119,7 @@ class Settings extends Page
             'provider_final_transcript' => $all['provider.final_transcript'],
             'provider_voice_note' => $all['provider.voice_note'],
             ...self::routingFormState($all['routing.final'] ?? null),
+            'urdu_wait_hours' => EngineWait::clampHours($all['routing.urdu_wait_hours'] ?? null),
             'captions_channels' => $all['captions.channels'],
             'default_language' => LanguageChoice::normalize($all['default_language']) ?? '',
             'languages_auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($all['languages.auto_more'] ?? []))),
@@ -143,6 +147,8 @@ class Settings extends Page
             'assemblyai_region' => $all['assemblyai.region'],
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
             'assemblyai_async_models' => $all['assemblyai.async_models'],
+            'groq_plan' => isset(GroqPacer::PLANS[$all['groq.plan'] ?? '']) ? $all['groq.plan'] : GroqPacer::DEFAULT_PLAN,
+            'gemini_model' => GeminiDriver::modelOr($all['gemini.model'] ?? null),
             'elevenlabs_base_url' => $all['elevenlabs.base_url'],
             'elevenlabs_model_id' => $all['elevenlabs.model_id'],
             'azure_region' => $all['azure.region'],
@@ -163,7 +169,7 @@ class Settings extends Page
      */
     public static function priceFields(): array
     {
-        $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI', 'soniox' => 'Soniox', 'groq' => 'Groq Whisper'];
+        $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI', 'soniox' => 'Soniox', 'groq' => 'Groq Whisper', 'gemini' => 'Gemini'];
         $useCases = ['live_captions' => 'Live captions', 'dictation' => 'Dictation', 'final_transcript' => 'Final transcript', 'voice_note' => 'Voice notes', 'game_translate' => 'Game translate', 'watch_translate' => 'Watch translate'];
         $fields = [];
         foreach (SettingsRepository::DEFAULTS['budget.prices'] as $provider => $pairs) {
@@ -286,6 +292,9 @@ class Settings extends Page
                         ->description('Which engine writes each language, in order: the first one with a key on API Credentials is used, the next ones are the fallback. Other covers the More languages; Auto is for recordings whose language is not chosen. Run “Compare engines” on a recording to choose.')
                         ->collapsible()->columns(4)->schema([
                             ...self::routingFields(),
+                            TextInput::make('urdu_wait_hours')->label('Urdu waits for its best engine up to (hours)')->numeric()
+                                ->minValue(0)->maxValue(EngineWait::MAX_HOURS)->step(0.5)->required()->columnSpan(2)
+                                ->helperText('When the first engine of the Urdu or Auto list is busy (rate limited) or down, the recording waits for it and it is tried again (after 2, 4, 8, 16, then every 30 minutes) instead of going to a weaker engine. After this long the next engine writes it, marked "Backup engine". 0 hands it on at once, like the other languages. Default 6.'),
                             Toggle::make('double_check')->label('Double-check unsure lines with a second engine')->columnSpanFull()
                                 ->helperText('Whisper on Groq (or ElevenLabs Scribe when Whisper wrote the transcript) listens again to up to 12 lines the first engine was not sure of. When they disagree, both are shown; the transcript is never changed. Each line is billed (Groq: at least 10 seconds).'),
                             Toggle::make('double_check_clients')->label('Always double-check recordings filed under a client')->columnSpan(2)
@@ -326,6 +335,15 @@ class Settings extends Page
                             'universal-streaming-multilingual' => 'Universal-Streaming Multilingual (budget)',
                         ])->required(),
                         TagsInput::make('assemblyai_async_models')->label('Final transcript models (priority order)')->columnSpanFull(),
+                    ]),
+                    $this->section('groq')->collapsible()->collapsed()->columns(2)->schema([
+                        Select::make('groq_plan')->label('Groq plan')->options(GroqPacer::PLAN_LABELS)->required()->selectablePlaceholder(false)
+                            ->helperText('Requests to Groq are paced under the plan\'s limits (Free: 20 requests a minute, 2 hours of audio an hour, 8 a day). The limits Groq reports in its answers always win. API Credentials → Groq shows this hour\'s and today\'s use.'),
+                    ]),
+                    $this->section('gemini')->collapsible()->collapsed()->columns(2)->schema([
+                        TextInput::make('gemini_model')->label('Gemini model')->required()->maxLength(80)
+                            ->regex(GeminiDriver::MODEL_PATTERN)->datalist(GeminiDriver::SUGGESTED_MODELS)
+                            ->helperText('Writes final transcripts word for word (Urdu in Urdu letters, English in English) when it is on an engine list or chosen in Compare engines. Key on API Credentials → Google Gemini.'),
                     ]),
                     $this->section('elevenlabs')->collapsible()->collapsed()->columns(2)->schema([
                         TextInput::make('elevenlabs_base_url')->label('API base URL')->url()->required()->rule(new ProviderEndpoint('elevenlabs')),
@@ -622,6 +640,8 @@ class Settings extends Page
             'assemblyai.region' => $state['assemblyai_region'],
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],
+            'groq.plan' => isset(GroqPacer::PLANS[$state['groq_plan'] ?? '']) ? $state['groq_plan'] : GroqPacer::DEFAULT_PLAN,
+            'gemini.model' => GeminiDriver::modelOr($state['gemini_model'] ?? null),
             'elevenlabs.base_url' => rtrim((string) $state['elevenlabs_base_url'], '/'),
             'elevenlabs.model_id' => $state['elevenlabs_model_id'],
             'azure.region' => $state['azure_region'] ?: null,
@@ -643,6 +663,7 @@ class Settings extends Page
             'live_translate.watch_target' => array_key_exists($state['live_translate_watch_target'] ?? '', self::LIVE_TRANSLATE_LANGUAGES) ? $state['live_translate_watch_target'] : 'ur',
             'live_translate.watch_speed' => array_key_exists($state['live_translate_watch_speed'] ?? '', self::LIVE_TRANSLATE_SPEEDS) ? $state['live_translate_watch_speed'] : 'balanced',
             'routing.final' => self::routingFromState($state),
+            'routing.urdu_wait_hours' => EngineWait::clampHours($state['urdu_wait_hours'] ?? null),
         ]);
         // Plan limits live on the plan of the current workspace, not in settings (never exported).
         $limit = fn (string $key): ?int => filled($state[$key] ?? null) ? (int) $state[$key] : null;

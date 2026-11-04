@@ -8,6 +8,10 @@
     $language = \App\Stt\LanguageChoice::label($final->language ?? $session->language);
     $canRetranscribe = $session->primaryRecording?->isReady() === true && ! $session->hasNoAudio();
     $labels = $session->labelList();
+    // Since v1.5: an Urdu or Auto recording written by a lower engine of its list (the first one stayed busy or refused it).
+    $backup = $final?->status === \App\Enums\TranscriptStatus::Completed ? \App\Services\EngineWait::fields($final) : null;
+    $first = \App\Enums\SttProviderKey::tryFrom((string) ($final?->meta['route']['tried'][0]['engine'] ?? ''))?->getLabel() ?? 'The first engine for this language';
+    $writer = $final?->providerKey()?->getLabel() ?? 'another engine';
 @endphp
 <div class="el-recording-chips" style="display: flex; flex-direction: column; gap: var(--space-3)">
     <div class="el-chips" role="group" aria-label="Organise">
@@ -50,6 +54,17 @@
             <p class="el-banner-body"><strong>Transcription failed.</strong> {{ $final->error ?? 'Try again.' }}</p>
             @if ($session->primaryRecording?->isReady())
                 <button type="button" class="el-text-btn" wire:click="mountAction('retry')">Transcribe again</button>
+            @endif
+        </div>
+    @elseif ($backup !== null && $backup['backup_engine'])
+        <div class="el-banner" data-backup-engine>
+            @svg('heroicon-o-arrow-path', ['aria-hidden' => 'true'])
+            <p class="el-banner-body"><strong>Backup engine — Re-transcribe?</strong>
+                {{ $backup['backup_reason'] === 'rejected'
+                    ? $first.' could not take this recording, so '.$writer.' wrote this transcript.'
+                    : $first.' stayed busy, so '.$writer.' wrote this transcript.' }}</p>
+            @if ($canRetranscribe)
+                <button type="button" class="el-text-btn" wire:click="mountAction('retranscribeBackup')">Re-transcribe</button>
             @endif
         </div>
     @endif

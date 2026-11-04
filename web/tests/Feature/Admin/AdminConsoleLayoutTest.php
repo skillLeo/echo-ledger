@@ -101,10 +101,11 @@ describe('library', function () {
             ->not->toContain('Not yours')->toContain('Choose a recording');
     });
 
-    it('puts the waiting card above the list in the phone\'s words', function () {
+    it('puts one slim waiting line above the list (since v1.5, no card)', function () {
         CaptureSession::factory()->create(['user_id' => $this->admin->id, 'status' => SessionStatus::Recording, 'duration_ms' => 125_000]);
 
-        $this->get(CaptureSessionResource::getUrl('index'))->assertOk()->assertSee('el-waiting', false)->assertSee('Keep or discard?')->assertSee('1 call waiting');
+        $this->get(CaptureSessionResource::getUrl('index'))->assertOk()->assertSee('el-waiting-chip', false)
+            ->assertSeeInOrder(['1 call waiting', 'Review'])->assertDontSee('Keep or discard?');
     });
 });
 

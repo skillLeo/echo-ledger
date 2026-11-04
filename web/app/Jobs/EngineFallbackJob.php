@@ -11,7 +11,9 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
 use App\Services\ActivityFeed;
+use App\Services\EngineWait;
 use App\Stt\LanguageRouter;
+use App\Stt\Support\PartCache;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +23,9 @@ use Illuminate\Support\Facades\DB;
  * that can do its language and has a key (LanguageRouter::candidates), never to one it already tried. Every attempt
  * is kept in `meta.route.tried` (engine, error code, reason, time) and `meta.route.fallback` turns true. When no engine
  * is left the transcript stays failed and its reason names the engines tried, so the apps can say why and offer Retry.
+ *
+ * Since v1.5 an Urdu or Auto recording gets here only when its engine refused it or stayed unavailable for the whole
+ * wait (App\Services\EngineWait), and the next engine is marked a backup (`meta.route.backup`, `backup_reason`).
  */
 final class EngineFallbackJob implements ShouldQueue
 {
@@ -46,12 +51,16 @@ final class EngineFallbackJob implements ShouldQueue
         $meta = $transcript->meta ?? [];
         $route = is_array($meta['route'] ?? null) ? $meta['route'] : [];
         $tried = is_array($route['tried'] ?? null) ? $route['tried'] : [];
-        $tried[] = [
+        // Set by TranscriptStore::fail when the engine stayed unavailable (an Urdu or Auto recording waited for it).
+        $transient = is_string($route['transient'] ?? null) ? $route['transient'] : null;
+        $tried[] = array_filter([
             'engine' => $transcript->provider,
             'code' => $code->value,
             'error' => mb_substr((string) $transcript->error, 0, self::MAX_REASON_CHARS),
+            'transient' => $transient,
             'at' => now()->toAtomString(),
-        ];
+        ], fn ($value): bool => $value !== null);
+        $route = EngineWait::cleared($route, keepSince: true);
         $done = array_values(array_unique(array_column($tried, 'engine')));
 
         $next = null;
@@ -75,7 +84,12 @@ final class EngineFallbackJob implements ShouldQueue
             return;
         }
 
-        DB::transaction(function () use ($transcript, $session, $meta, $route, $tried, $next): void {
+        // Since v1.5 an Urdu or Auto recording on a lower engine says so (docs/API.md `backup_engine`): it waited for its
+        // engine for the whole wait, or that engine refused it. Re-transcribe tries the preferred engine again.
+        $backup = EngineWait::forUrdu($transcript)
+            ? ['backup' => true, 'backup_reason' => $transient !== null ? EngineWait::WAITED : EngineWait::REJECTED]
+            : [];
+        DB::transaction(function () use ($transcript, $session, $meta, $route, $tried, $next, $backup): void {
             $transcript->update([
                 'provider' => $next->value,
                 'status' => TranscriptStatus::Pending,
@@ -84,10 +98,11 @@ final class EngineFallbackJob implements ShouldQueue
                 'submitted_at' => null,
                 'error' => null,
                 'error_code' => null,
-                'meta' => [...$meta, 'route' => [...$route, 'used' => $next->value, 'fallback' => true, 'tried' => $tried]],
+                'meta' => [...$meta, 'route' => [...$route, 'used' => $next->value, 'fallback' => true, 'tried' => $tried, ...$backup]],
             ]);
             $session->update(['status' => SessionStatus::Processing, 'final_provider' => $next->value]);
         });
+        app(PartCache::class)->forget($transcript->id); // what the last engine answered so far is not used again
         TranscribeFinalJob::dispatch($transcript->id);
     }
 }

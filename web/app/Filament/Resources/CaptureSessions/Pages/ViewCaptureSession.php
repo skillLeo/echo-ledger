@@ -22,8 +22,10 @@ use App\Models\SessionOpen;
 use App\Models\Transcript;
 use App\Models\User;
 use App\Services\Accuracy\AccuracyLab;
+use App\Services\Accuracy\ReferenceText;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\EngineComparison;
+use App\Services\EngineWait;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\LibraryOrganiser;
 use App\Services\Retranscriber;
@@ -43,6 +45,7 @@ use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
@@ -55,7 +58,9 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\HtmlString;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use RuntimeException;
 
 class ViewCaptureSession extends ViewRecord
@@ -153,9 +158,22 @@ class ViewCaptureSession extends ViewRecord
 
     private function liveMessage(): string
     {
-        return $this->session()->status === SessionStatus::Uploading
-            ? 'Uploading. This page updates by itself.'
-            : 'Transcribing. This page updates by itself when the transcript is ready.';
+        $session = $this->session();
+        if ($session->status === SessionStatus::Uploading) {
+            return 'Uploading. This page updates by itself.';
+        }
+        // Since v1.5 an Urdu or Auto recording waits for its engine when that one is busy or down (EngineWait).
+        $final = $session->finalTranscript()->first();
+        $retryAt = $final !== null ? EngineWait::fields($final)['retry_at'] : null;
+        if ($final !== null && $retryAt !== null) {
+            $zone = app(SettingsRepository::class)->displayTimezone();
+            $at = Carbon::parse($retryAt)->setTimezone($zone);
+
+            return 'Waiting for '.($final->providerKey()?->getLabel() ?? $final->provider).' — retrying at '
+                .$at->format($at->isSameDay(now()->setTimezone($zone)) ? 'g:i A' : 'M j, g:i A').'. This page updates by itself.';
+        }
+
+        return 'Transcribing. This page updates by itself when the transcript is ready.';
     }
 
     /**
@@ -667,21 +685,40 @@ class ViewCaptureSession extends ViewRecord
     }
 
     /** The runs side by side, with cost; pick the winner for the language or use a run as the transcript. */
-    /** Accuracy Lab: the corrected transcript the engines are scored against (owner only). */
+    /**
+     * Accuracy Lab: the corrected transcript the engines are scored against (owner only). Since v1.5 it can be uploaded
+     * (a TurboScribe or subtitle file), a Roman Urdu reference scores the Roman Urdu view on its own, and the recording
+     * is put in a category (Urdu, English or mixed).
+     */
     private function referenceAction(): Action
     {
+        $file = fn (string $name): FileUpload => FileUpload::make($name)->label('…or upload it (.txt, .srt, .vtt or .docx)')->storeFiles(false)
+            ->maxSize((int) (ReferenceText::MAX_BYTES / 1024));
+
         return Action::make('accuracy_reference')
-            ->label(fn (): string => $this->session()->reference_text !== null ? 'Edit the Accuracy Lab reference' : 'Use as Accuracy Lab reference')
+            ->label(fn (): string => $this->session()->hasReference() ? 'Edit the Accuracy Lab reference' : 'Use as Accuracy Lab reference')
             ->icon(Heroicon::OutlinedBeaker)
             ->visible(fn (): bool => self::isOwner() && $this->editableTranscript() !== null)
-            ->modalDescription('The spoken words exactly as said, one line per turn, without speaker names. Correct the transcript below; every "Compare engines" run of this recording is scored against it in the Accuracy Lab.')
+            ->modalDescription('The spoken words exactly as said, one line per turn, without speaker names: correct the transcript below, or paste or upload a corrected text (TurboScribe\'s .txt, .srt, .vtt or .docx; time codes and speaker labels are removed). Add the Roman Urdu text too to score the Roman Urdu view on its own. Every "Compare engines" run of this recording is scored against it in the Accuracy Lab.')
             ->schema([
-                Textarea::make('reference')->label('Reference transcript')->rows(14)->required()
-                    ->default(fn (): string => $this->session()->reference_text ?? AccuracyLab::spokenText($this->editableTranscript())),
+                // An Arabic (or other language) recording also offers its own language, and starts in it.
+                Select::make('category')->label('Counts in')->options(fn (): array => app(AccuracyLab::class)->categoryOptions($this->session()))
+                    ->required()->selectablePlaceholder(false)->default(fn (): string => app(AccuracyLab::class)->category($this->session())),
+                Textarea::make('reference')->label('Reference transcript (as spoken)')->rows(12)
+                    ->default(fn (): string => $this->session()->hasReference() ? (string) $this->session()->reference_text : AccuracyLab::spokenText($this->editableTranscript())),
+                $file('reference_file'),
+                Textarea::make('reference_roman')->label('Roman Urdu reference (optional)')->rows(6)
+                    ->default(fn (): ?string => $this->session()->reference_roman),
+                $file('reference_roman_file'),
             ])
             ->action(function (array $data): void {
                 try {
-                    app(AccuracyLab::class)->setReference($this->session(), (string) $data['reference']);
+                    app(AccuracyLab::class)->setReference(
+                        $this->session(),
+                        self::uploadedReference($data['reference_file'] ?? null) ?? (string) ($data['reference'] ?? ''),
+                        self::uploadedReference($data['reference_roman_file'] ?? null) ?? ($data['reference_roman'] ?? null),
+                        is_string($data['category'] ?? null) ? $data['category'] : null,
+                    );
                 } catch (RuntimeException $e) {
                     Notification::make()->title($e->getMessage())->danger()->send();
 
@@ -691,10 +728,25 @@ class ViewCaptureSession extends ViewRecord
             });
     }
 
+    /** The text of an uploaded reference file, or null when none was uploaded. Throws with a message safe to show. */
+    private static function uploadedReference(mixed $file): ?string
+    {
+        $file = is_array($file) ? (array_values($file)[0] ?? null) : $file;
+        if (! $file instanceof TemporaryUploadedFile) {
+            return null;
+        }
+        $path = $file->getRealPath();
+        if ($path === '' || ! is_file($path)) {
+            throw new RuntimeException('The file could not be read.');
+        }
+
+        return ReferenceText::fromFile($path, $file->getClientOriginalName());
+    }
+
     private function clearReferenceAction(): Action
     {
         return Action::make('accuracy_reference_clear')->label('Remove the Accuracy Lab reference')->icon(Heroicon::OutlinedXMark)
-            ->visible(fn (): bool => self::isOwner() && $this->session()->reference_text !== null)
+            ->visible(fn (): bool => self::isOwner() && $this->session()->hasReference())
             ->requiresConfirmation()
             ->action(function (): void {
                 app(AccuracyLab::class)->clearReference($this->session());
@@ -804,6 +856,32 @@ class ViewCaptureSession extends ViewRecord
                     return;
                 }
                 Notification::make()->title('Re-transcribing in '.LanguageChoice::label($run->language).' with '.($run->providerKey()?->getLabel() ?? $run->provider))->success()->send();
+            });
+    }
+
+    /**
+     * "Backup engine — Re-transcribe?" (since v1.5, the banner under the chips): a lower engine wrote the transcript of
+     * an Urdu or Auto recording, so the first engine of its list tries again in the same language (Re-transcribe as).
+     */
+    public function retranscribeBackupAction(): Action
+    {
+        return Action::make('retranscribeBackup')
+            ->label('Re-transcribe')
+            ->requiresConfirmation()
+            ->modalHeading('Re-transcribe with the first engine?')
+            ->modalDescription('The first engine for this language transcribes the recording again, in the same language. The current transcript stays until the new one is ready.')
+            ->modalSubmitActionLabel('Re-transcribe')
+            ->visible(fn (): bool => $this->session()->primaryRecording?->isReady() === true && ! $this->session()->hasNoAudio())
+            ->action(function (): void {
+                $session = $this->session();
+                try {
+                    $run = app(Retranscriber::class)->startAs($session, LanguageChoice::normalize($session->language));
+                } catch (RuntimeException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+                Notification::make()->title('Re-transcribing with '.($run->providerKey()?->getLabel() ?? $run->provider))->success()->send();
             });
     }
 
