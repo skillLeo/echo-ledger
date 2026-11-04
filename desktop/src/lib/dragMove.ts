@@ -68,6 +68,12 @@ export function beginRecordingDrag(
     if (moving) endedAt = Date.now();
   };
   const onMove = (e: PointerEvent) => {
+    // The button was let go where the page did not hear it (over another window): nothing is dropped, ever.
+    if (e.buttons === 0) {
+      moving = null;
+      finish();
+      return;
+    }
     if (!moving) {
       if (Math.hypot(e.clientX - start.clientX, e.clientY - start.clientY) < DRAG_THRESHOLD_PX) return;
       moving = drag();

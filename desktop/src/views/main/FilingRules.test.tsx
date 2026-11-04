@@ -86,6 +86,12 @@ describe("filing rules", () => {
     await waitFor(() => expect(screen.queryByText("From Zoom")).not.toBeInTheDocument());
   });
 
+  it("says when the rules could not be read", async () => {
+    fail("client_rules", "Network error: offline");
+    render(<RulesSection project={PROJECT} notify={vi.fn()} />);
+    expect(await screen.findByText("Couldn't load them. Check the connection.")).toBeInTheDocument();
+  });
+
   it("is not shown on a server without filing rules", async () => {
     await renderRules(null);
     expect(screen.queryByText("Filing rules")).not.toBeInTheDocument();

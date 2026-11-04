@@ -10,7 +10,7 @@ function sidebar() {
   Object.defineProperty(document, "elementFromPoint", { configurable: true, value: vi.fn(() => under) });
   return { pointAt: (id: string | null) => { under = id ? document.getElementById(id) : null; } };
 }
-const move = (x: number, y: number) => window.dispatchEvent(new PointerEvent("pointermove", { clientX: x, clientY: y }));
+const move = (x: number, y: number, buttons = 1) => window.dispatchEvent(new PointerEvent("pointermove", { clientX: x, clientY: y, buttons }));
 const up = (x: number, y: number) => window.dispatchEvent(new PointerEvent("pointerup", { clientX: x, clientY: y }));
 const press = { clientX: 10, clientY: 10, button: 0 };
 
@@ -79,6 +79,20 @@ describe("dragging recordings onto the sidebar", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(document.querySelector(".drag-ghost")).toBeNull();
     up(80, 80);
+    expect(onDrop).not.toHaveBeenCalled();
+  });
+
+  it("drops nothing after the button was let go where the page did not hear it", () => {
+    const { pointAt } = sidebar();
+    const onDrop = vi.fn();
+    beginRecordingDrag(press, () => ({ ids: ["a"], label: "Moving" }), onDrop);
+    pointAt("acme");
+    move(80, 80);
+    expect(document.querySelector(".drag-ghost")).not.toBeNull();
+    // The next move comes with no button pressed: the drag is over, and a later click on a project moves nothing.
+    move(90, 90, 0);
+    expect(document.querySelector(".drag-ghost")).toBeNull();
+    up(90, 90);
     expect(onDrop).not.toHaveBeenCalled();
   });
 

@@ -134,7 +134,7 @@ describe("dragging recordings onto the sidebar", () => {
     fireEvent.pointerDown(from, { clientX: 300, clientY: 300, button: 0 });
     under = target;
     act(() => {
-      window.dispatchEvent(new PointerEvent("pointermove", { clientX: 120, clientY: 200 }));
+      window.dispatchEvent(new PointerEvent("pointermove", { clientX: 120, clientY: 200, buttons: 1 }));
     });
     act(() => {
       window.dispatchEvent(new PointerEvent("pointerup", { clientX: 120, clientY: 200 }));

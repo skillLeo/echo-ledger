@@ -24,12 +24,18 @@ export function RulesSection({ project, notify }: { project: Pick<ClientFolder, 
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [unread, setUnread] = useState(false);
   const kindId = useId();
   const valueId = useId();
   useEffect(() => {
     let alive = true;
     setRules(undefined);
-    api.clientRules(project.id).then((r) => alive && setRules(r ? r.data : null), () => alive && setRules([]));
+    setUnread(false);
+    api.clientRules(project.id).then((r) => alive && setRules(r ? r.data : null), () => {
+      if (!alive) return;
+      setRules([]);
+      setUnread(true);
+    });
     return () => {
       alive = false;
     };
@@ -69,7 +75,9 @@ export function RulesSection({ project, notify }: { project: Pick<ClientFolder, 
     <section className="card rules-card" aria-labelledby={`${kindId}-title`}>
       <div className="row">
         <b id={`${kindId}-title`}>Filing rules</b>
-        <span className="small muted rules-summary">{rules === undefined ? "Loading…" : list.length === 0 ? "None yet" : list.map(ruleText).join(" · ")}</span>
+        <span className="small muted rules-summary">
+          {rules === undefined ? "Loading…" : unread ? "Couldn't load them. Check the connection." : list.length === 0 ? "None yet" : list.map(ruleText).join(" · ")}
+        </span>
         <span className="spacer" />
         <button type="button" className="btn ghost compact" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Done" : "Edit rules"}</button>
       </div>

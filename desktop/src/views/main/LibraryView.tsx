@@ -278,7 +278,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   // A recording opened from a transcript match stays open even when its title does not match the typed words.
   const [hitSelected, setHitSelected] = useState<string | null>(null);
   const sharedSession = sharedOpen?.session && sharedOpen.session.id === selected ? sharedOpen.session : null;
-  const current = (shared ? null : filtered.find((i) => i.id === selected)) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? sharedSession ?? null;
+  // In Shared with me only a recording a teammate sent is open beside the list.
+  const current = shared ? sharedSession
+    : filtered.find((i) => i.id === selected) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? null;
   // A recording a teammate sent can be played and read, not changed.
   const readOnly = !!current && current === sharedSession;
   // Transcript matches of a smart folder's own recordings only.
