@@ -62,6 +62,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->name('api.sessions.bulk');
             Route::post('clients', [OrganiseController::class, 'storeClient'])->name('api.clients.store');
             Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->name('api.clients.update');
+            // Projects (v1.5): deleting one sends its recordings to the Inbox and its subfolders up a level.
+            Route::delete('clients/{id}', [OrganiseController::class, 'destroyClient'])->name('api.clients.destroy');
             // Client workspaces (v1.4): brief, memory, files, notes and Ask.
             Route::put('clients/{id}/brief', [ClientWorkspaceController::class, 'updateBrief'])->name('api.clients.brief.update');
             Route::post('clients/{id}/brief/refresh', [ClientWorkspaceController::class, 'refreshBrief'])->name('api.clients.brief.refresh');

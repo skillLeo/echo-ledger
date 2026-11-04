@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\SessionStatus;
+use App\Enums\SourceApp;
 use App\Enums\TranscriptStatus;
 use App\Enums\UploadStatus;
 use App\Exceptions\ApiError;
@@ -27,6 +28,25 @@ use ZipArchive;
 final class LibraryOrganiser
 {
     public const VIEWS = ['today', 'this_week', 'waiting', 'bookmarked', 'failed', 'pinned'];
+
+    /**
+     * Smart folders (since v1.5): computed views of the library, never copies. `shared` is what others sent the
+     * asking person, the rest are recordings of the workspace.
+     */
+    public const FOLDERS = ['inbox', 'whatsapp', 'whatsapp_business', 'google_meet', 'zoom', 'teams', 'phone', 'voice_notes', 'imported', 'shared'];
+
+    /** The apps each app folder holds (WhatsApp on the desktop's browser counts as WhatsApp). */
+    public const FOLDER_APPS = [
+        'whatsapp' => [SourceApp::WhatsApp, SourceApp::WhatsAppWeb],
+        'whatsapp_business' => [SourceApp::WhatsAppBusiness],
+        'google_meet' => [SourceApp::GoogleMeet],
+        'zoom' => [SourceApp::Zoom],
+        'teams' => [SourceApp::MicrosoftTeams],
+        'phone' => [SourceApp::PhoneCall],
+    ];
+
+    /** Files that came in as files rather than being recorded. */
+    public const FILE_ORIGINS = [CaptureSession::ORIGIN_IMPORTED, CaptureSession::ORIGIN_REQUESTED];
 
     public const BULK_ACTIONS = ['move', 'label', 'unlabel', 'pin', 'unpin', 'keep', 'unkeep', 'delete'];
 
@@ -93,6 +113,49 @@ final class LibraryOrganiser
                 $query->where('status', '!=', SessionStatus::Recording->value);
             }
             $counts[$view] = $this->applyView($query, $view, $zone)->count();
+        }
+
+        return $counts;
+    }
+
+    /**
+     * Restricts the query to a smart folder of the workspace (since v1.5): the Inbox (no project), one app's calls,
+     * SIM calls, voice notes recorded on a device, or files imported, uploaded or sent through a request link.
+     * `shared` is not the workspace's: it lists nothing here.
+     *
+     * @param  Builder<CaptureSession>  $query
+     * @return Builder<CaptureSession>
+     */
+    public function applyFolder(Builder $query, string $folder): Builder
+    {
+        $app = $query->qualifyColumn('source_app');
+        $origin = $query->qualifyColumn('origin');
+
+        return match ($folder) {
+            'inbox' => $query->whereNull($query->qualifyColumn('client_id')),
+            'voice_notes' => $query->where($app, SourceApp::VoiceNote->value)
+                ->where(fn (Builder $q) => $q->whereNull($origin)->orWhereNotIn($origin, self::FILE_ORIGINS)),
+            'imported' => $query->whereIn($origin, self::FILE_ORIGINS),
+            'shared' => $query->whereRaw('1 = 0'),
+            default => array_key_exists($folder, self::FOLDER_APPS)
+                ? $query->whereIn($app, array_map(fn (SourceApp $a): string => $a->value, self::FOLDER_APPS[$folder]))
+                : $query,
+        };
+    }
+
+    /**
+     * How many recordings each smart folder of the workspace holds, counted like the library lists them (recordings
+     * still running are left out). `shared` is not the workspace's: it is 0 here.
+     *
+     * @return array<string, int>
+     */
+    public function folderCounts(int $workspaceId): array
+    {
+        $counts = [];
+        foreach (self::FOLDERS as $folder) {
+            $counts[$folder] = $folder === 'shared' ? 0
+                : $this->applyFolder(CaptureSession::query()->where('workspace_id', $workspaceId)
+                    ->where('status', '!=', SessionStatus::Recording->value), $folder)->count();
         }
 
         return $counts;

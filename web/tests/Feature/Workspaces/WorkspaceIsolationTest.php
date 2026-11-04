@@ -111,6 +111,7 @@ function isoApiCases(array $b): array
         'api.sessions.bulk' => ['POST', '/api/sessions/bulk', ['ids' => [$s], 'action' => 'delete'], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('changed') === 0],
         'api.clients.store' => ['POST', '/api/clients', ['name' => 'Alice new client'], fn (TestResponse $r): bool => $r->status() === 201],
         'api.clients.update' => ['PATCH', "/api/clients/{$b['client']->id}", ['name' => 'hijacked'], 404],
+        'api.clients.destroy' => ['DELETE', "/api/clients/{$b['client']->id}", [], 404],
         'api.clients.workspace' => ['GET', "/api/clients/{$b['client']->id}/workspace", [], 404],
         'api.clients.bundle' => ['GET', "/api/clients/{$b['client']->id}/bundle", [], 404],
         'api.clients.brief.update' => ['PUT', "/api/clients/{$b['client']->id}/brief", ['sections' => ['goal' => 'hijacked']], 404],

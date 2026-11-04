@@ -130,6 +130,9 @@ describe('smart views and filters', function () {
         $this->getJson('/api/library/views')->assertOk()->assertExactJson([
             'views' => ['today' => 1, 'this_week' => 2, 'waiting' => 1, 'bookmarked' => 1, 'failed' => 2, 'pinned' => 1],
             'labels' => [['label' => 'Invoice', 'count' => 1]],
+            // Since v1.5: the smart folders (every recording here is a WhatsApp call in no project).
+            'folders' => ['inbox' => 4, 'whatsapp' => 4, 'whatsapp_business' => 0, 'google_meet' => 0, 'zoom' => 0, 'teams' => 0,
+                'phone' => 0, 'voice_notes' => 0, 'imported' => 0, 'shared' => 0],
         ]);
     });
 });

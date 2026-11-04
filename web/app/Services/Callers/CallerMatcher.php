@@ -118,6 +118,7 @@ final class CallerMatcher
         ]);
         if ($session->client_id === null && $match['client'] !== null) {
             $session->client_id = $match['client']->id;
+            $session->filed_by = CaptureSession::FILED_BY_CONTACT;
         }
         // Since v1.4 the far side of a call is the person, not "Client" (a meeting title names no one; a name the
         // person already gave the speaker stays).

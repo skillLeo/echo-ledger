@@ -13,10 +13,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * A client "folder" whose keyterms boost transcription accuracy.
+ * A client "folder" whose keyterms boost transcription accuracy. The apps call it a project (v1.5): it can sit
+ * inside another one (`parent_id`, at most MAX_DEPTH levels; App\Services\Projects\ProjectTree keeps the tree).
  *
  * @property string $id
  * @property int $user_id
+ * @property string|null $parent_id the project it sits in; null = top level (v1.5)
  * @property string $name
  * @property string|null $color
  * @property string|null $avatar one emoji or up to two letters shown on the folder (B15)
@@ -33,12 +35,33 @@ class Client extends Model
     /** @use HasFactory<ClientFactory> */
     use BelongsToWorkspace, HasFactory, HasUlids;
 
-    protected $fillable = ['workspace_id', 'user_id', 'name', 'color', 'avatar', 'pinned', 'language', 'retention_days', 'notes', 'speaker_names', 'replacements', 'ai_notes'];
+    /** Projects nest at most this many levels (docs/API.md "Projects", `too_deep`). */
+    public const MAX_DEPTH = 4;
+
+    protected $fillable = ['workspace_id', 'user_id', 'parent_id', 'name', 'color', 'avatar', 'pinned', 'language', 'retention_days', 'notes', 'speaker_names', 'replacements', 'ai_notes'];
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** @return BelongsTo<self, $this> the project this one sits in (v1.5) */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_id');
+    }
+
+    /** @return HasMany<self, $this> its subfolders (v1.5) */
+    public function children(): HasMany
+    {
+        return $this->hasMany(self::class, 'parent_id');
+    }
+
+    /** @return HasMany<ClientFile, $this> */
+    public function files(): HasMany
+    {
+        return $this->hasMany(ClientFile::class);
     }
 
     /** @return HasMany<ClientKeyterm, $this> */

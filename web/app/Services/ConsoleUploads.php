@@ -162,6 +162,7 @@ final class ConsoleUploads
                 'device_id' => null,
                 'client_id' => $client?->id,
                 'client_ref' => (string) Str::uuid(),
+                'origin' => CaptureSession::ORIGIN_IMPORTED,
                 'source_device' => SourceDevice::Web,
                 // Imported files are filed like the phone's imports and voice notes.
                 'source_app' => SourceApp::VoiceNote,

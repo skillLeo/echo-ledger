@@ -222,6 +222,8 @@ final class SessionLifecycle
             'device_id' => $device->id,
             'client_id' => $clientId,
             'client_ref' => $data['client_ref'],
+            // Since v1.5: the apps send `skip_duplicate` only for imported files (the Imported smart folder).
+            'origin' => ! empty($data['skip_duplicate']) ? CaptureSession::ORIGIN_IMPORTED : null,
             'source_device' => $device->sourceDevice(),
             'source_app' => $sourceApp,
             'title' => $data['title'] ?? null,

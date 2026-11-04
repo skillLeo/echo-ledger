@@ -54,6 +54,7 @@ function abilityRoutes(): array
         'smart views' => ['GET', '/api/library/views', 'library:read'],
         'create client' => ['POST', '/api/clients', 'sessions:write'],
         'update client' => ['PATCH', "/api/clients/{$id}", 'sessions:write'],
+        'delete project' => ['DELETE', "/api/clients/{$id}", 'sessions:write'],
         'client workspace' => ['GET', "/api/clients/{$id}/workspace", 'library:read'],
         'copy for AI bundle' => ['GET', "/api/clients/{$id}/bundle", 'library:read'],
         'edit brief' => ['PUT', "/api/clients/{$id}/brief", 'sessions:write'],

@@ -12,9 +12,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\LibraryItemResource;
 use App\Http\Resources\TranscriptResource;
 use App\Models\CaptureSession;
+use App\Models\Client;
 use App\Models\Device;
 use App\Models\Transcript;
 use App\Services\LibraryOrganiser;
+use App\Services\Projects\ProjectTree;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\Cursor;
@@ -25,7 +27,7 @@ use Throwable;
 final class LibraryController extends Controller
 {
     /** GET /api/library — every session of the owner, from every device, plus tombstones when `since` is given. */
-    public function index(Request $request, LibraryOrganiser $organiser): JsonResponse
+    public function index(Request $request, LibraryOrganiser $organiser, ProjectTree $projects): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
@@ -43,6 +45,9 @@ final class LibraryController extends Controller
             'tz' => ['nullable', 'timezone:all'],
             'label' => ['nullable', 'string', 'max:40'],
             'pinned' => ['nullable', 'boolean'],
+            // Since v1.5: a smart folder, and a project's subfolders with `client_id`.
+            'folder' => ['nullable', Rule::in(LibraryOrganiser::FOLDERS)],
+            'include_subfolders' => ['nullable', 'boolean'],
         ]);
         $cursor = empty($data['cursor']) ? null : self::decodeCursor($data['cursor']);
 
@@ -69,10 +74,20 @@ final class LibraryController extends Controller
             )));
             $query->whereIn('source_device', $sources === [] ? ['__none__'] : $sources);
         }
-        foreach (['source_app', 'client_id', 'status'] as $field) {
+        foreach (['source_app', 'status'] as $field) {
             if (! empty($data[$field])) {
                 $query->where($field, $data[$field]);
             }
+        }
+        if (! empty($data['client_id'])) {
+            $project = $request->boolean('include_subfolders')
+                ? Client::query()->where('workspace_id', $device->workspace_id)->find($data['client_id']) : null;
+            $project instanceof Client
+                ? $query->whereIn('client_id', $projects->withDescendants($project))
+                : $query->where('client_id', $data['client_id']);
+        }
+        if (! empty($data['folder'])) {
+            $organiser->applyFolder($query, $data['folder']);
         }
 
         if (! empty($data['tag'])) {

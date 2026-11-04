@@ -11,6 +11,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
 use App\Services\LibraryOrganiser;
+use App\Services\Projects\ProjectTree;
 use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\JsonResponse;
@@ -21,7 +22,7 @@ use Illuminate\Validation\Rule;
 /** Library organisation for devices (since v1.1, plan B15): folders, labels, pins, smart views and bulk actions. */
 final class OrganiseController extends Controller
 {
-    public function __construct(private readonly LibraryOrganiser $organiser) {}
+    public function __construct(private readonly LibraryOrganiser $organiser, private readonly ProjectTree $projects) {}
 
     /** PATCH /api/sessions/{id}: title, client folder, pin and labels; only the fields sent change. */
     public function update(Request $request, string $id): JsonResponse
@@ -103,38 +104,73 @@ final class OrganiseController extends Controller
         return response()->json([
             'views' => $this->organiser->counts($workspaceId, $data['tz'] ?? null),
             'labels' => $this->organiser->labels($workspaceId),
+            // Since v1.5: the smart folders, counted like GET /api/library?folder=… lists them.
+            'folders' => $this->organiser->folderCounts($workspaceId),
         ]);
     }
 
-    /** POST /api/clients: a new client folder. */
+    /** POST /api/clients: a new project, at the top or inside another one (since v1.5). */
     public function storeClient(Request $request): JsonResponse
     {
         $device = $this->device($request);
-        $data = $request->validate(self::clientRules($device->workspace_id, null, true));
-        $client = Client::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, ...self::clientValues($data)]);
+        $data = $request->validate(self::clientRules(true));
+        $parent = $this->projects->parentFor($device->workspace_id, $data['parent_id'] ?? null);
+        $this->projects->assertCanPlace(null, $parent);
+        $values = self::clientValues($data);
+        $this->projects->assertNameFree($device->workspace_id, $parent?->id, (string) $values['name']);
+        $client = Client::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'parent_id' => $parent?->id, ...$values]);
 
-        return response()->json(['data' => ConfigController::clientPayload($client->loadCount('keyterms', 'captureSessions'))], 201);
+        return response()->json(['data' => $this->projects->payload($client)], 201);
     }
 
-    /** PATCH /api/clients/{id}: rename, colour, avatar or pin a client folder. */
+    /** PATCH /api/clients/{id}: rename, colour, avatar or pin a project, or move it into another one (since v1.5). */
     public function updateClient(Request $request, string $id): JsonResponse
     {
-        $workspaceId = $this->device($request)->workspace_id;
-        $client = Client::query()->where('workspace_id', $workspaceId)->find($id);
+        $client = $this->client($request, $id);
+        $data = $request->validate(self::clientRules(false));
+        $parentId = $client->parent_id;
+        if (array_key_exists('parent_id', $data)) {
+            $parent = $this->projects->parentFor($client->workspace_id, $data['parent_id']);
+            $this->projects->assertCanPlace($client, $parent);
+            $parentId = $parent?->id;
+        }
+        $values = self::clientValues($data);
+        if (array_key_exists('name', $values) || $parentId !== $client->parent_id) {
+            $this->projects->assertNameFree($client->workspace_id, $parentId, (string) ($values['name'] ?? $client->name), $client->id);
+        }
+        $client->fill(['parent_id' => $parentId, ...$values])->save();
+
+        return response()->json(['data' => $this->projects->payload($client)]);
+    }
+
+    /**
+     * DELETE /api/clients/{id} (since v1.5): its recordings go to the Inbox and its subfolders up a level; its files,
+     * brief, notes, memory and rules go with it. Owners only.
+     */
+    public function destroyClient(Request $request, string $id): JsonResponse
+    {
+        $client = $this->client($request, $id);
+
+        return response()->json($this->projects->delete($client, $this->device($request)->user));
+    }
+
+    private function client(Request $request, string $id): Client
+    {
+        $client = Client::query()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
         if (! $client instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }
-        $data = $request->validate(self::clientRules($workspaceId, $client->id, false));
-        $client->fill(self::clientValues($data))->save();
 
-        return response()->json(['data' => ConfigController::clientPayload($client->loadCount('keyterms', 'captureSessions'))]);
+        return $client;
     }
 
     /** @return array<string, list<mixed>> */
-    private static function clientRules(int $workspaceId, ?string $ignore, bool $creating): array
+    private static function clientRules(bool $creating): array
     {
         return [
-            'name' => [$creating ? 'required' : 'sometimes', 'string', 'max:120', Rule::unique('clients', 'name')->where('workspace_id', $workspaceId)->ignore($ignore)],
+            // Unique among the projects of one folder (ProjectTree::assertNameFree), capitals ignored.
+            'name' => [$creating ? 'required' : 'sometimes', 'string', 'max:120'],
+            'parent_id' => ['sometimes', 'nullable', 'string', 'size:26'],
             'color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'avatar' => ['sometimes', 'nullable', 'string', 'max:16'],
             'pinned' => ['sometimes', 'boolean'],
