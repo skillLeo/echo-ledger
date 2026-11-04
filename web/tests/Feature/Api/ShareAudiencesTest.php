@@ -289,6 +289,23 @@ describe('project links', function () {
         expect(ShareLink::query()->where('client_id', $this->sub->id)->exists())->toBeFalse();
     });
 
+    it('never lists a recording in the undo bin, moved out after the link was made, or still being recorded', function () {
+        $share = shareOf($this, ['audience' => 'public', 'allow_download' => true], "/api/clients/{$this->project->id}/shares");
+        $binned = sharedRecording($this, 'Binned call', Fixtures::audio(3200), $this->project);
+        $moved = sharedRecording($this, 'Moved call', Fixtures::audio(3300), $this->sub);
+        $live = sharedRecording($this, 'Live call', Fixtures::audio(3400), $this->project, ['status' => SessionStatus::Recording]);
+        $binned->delete();
+        $this->patchJson("/api/sessions/{$moved->id}", ['client_id' => null])->assertOk();
+
+        $page = browser($this)->get(pathOf($share))->assertOk()->assertSee('Kick-off')->assertSee('Design review');
+        expect($page->getContent())->not->toContain('Binned call')->not->toContain('Moved call')->not->toContain('Live call');
+        foreach ([$binned, $moved, $live] as $hidden) {
+            foreach (['', '/audio', '/download'] as $part) {
+                browser($this)->get(pathOf($share).'/'.$hidden->id.$part)->assertNotFound();
+            }
+        }
+    });
+
     it('keeps a password or people check on the project page and its recordings', function () {
         $share = shareOf($this, ['audience' => 'password', 'password' => 'secret12'], "/api/clients/{$this->project->id}/shares");
         browser($this)->get(pathOf($share))->assertOk()->assertSee('These recordings are protected')->assertDontSee('Kick-off');
