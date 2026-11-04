@@ -10,6 +10,7 @@ use App\Models\Device;
 use App\Models\Setting;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
+use App\Stt\LanguageRouter;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
@@ -604,4 +605,14 @@ it('saves the Live Translate defaults and hands them to the phone', function () 
         ->and($config->json('live_translate.watch'))->toBe(['target' => 'en', 'speed' => 'fastest'])
         ->and($config->json('live_translate.monthly_usd'))->toEqual(25)
         ->and($config->json('live_translate.budget.reached'))->toBeFalse();
+});
+
+it('keeps all five engines of a language list when the settings are saved (since Gemini, v1.5)', function () {
+    $this->signInAsAdmin();
+    $five = ['groq', 'gemini', 'soniox', 'elevenlabs', 'assemblyai'];
+    app(SettingsRepository::class)->set('routing.final', [...LanguageRouter::DEFAULT_FINAL_ROUTES, 'ur' => $five]);
+
+    adminSettingsPage($this)->assertFormSet(['route_ur_5' => 'assemblyai'])->call('save')->assertHasNoFormErrors();
+
+    expect(app(SettingsRepository::class)->get('routing.final')['ur'])->toBe($five);
 });

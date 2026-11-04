@@ -79,20 +79,22 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 | ☐ | 34 | Click **Pause**, wait 30 seconds, click **Resume**. | The timer freezes and the dot turns amber while paused. Captions stop. Recording continues after Resume. | V-D8, C-D4 |
 | ☐ | 35 | Ask the other side to stay silent for 30 seconds. | The pill says "Not hearing the other side for 30 s". It goes away when they speak. | C-D8 |
 | ☐ | 36 | Press **Ctrl+Alt+Shift+C**, then paste into Notepad. | The last 2 minutes of captions, labelled Me and Client. | W-13 |
-| ☐ | 37 | Click **Stop**. | The review card slides in at the bottom right without taking the focus. It shows the source, the length and the first caption. | V-D12 |
-| ☐ | 38 | Click **Keep**. | The recording uploads. The Library shows it as uploading, then verifying. | V-D19 |
+| ☐ | 37 | Click **Stop**. | With **After a call: Keep automatically** (the default since v1.5), a small "Saved · <title> · m:ss · Undo" toast shows near the tray for 6 s without taking the focus. With **Ask me**, a small chip with the title, ✓ and ✕ instead. | V-D12 |
+| ☐ | 38 | Let the toast go (or click ✓ on the Ask me chip). | The recording uploads. The Library shows it as uploading, then verifying. | V-D19 |
 | ☐ | 39 | Wait a few minutes. | A Windows notification says the transcript is ready. Clicking it opens that recording. | N-2 |
 
-### Keep, Discard and waiting
+### After a call, skipped calls and waiting (v1.5)
 
 | ☐ | # | Do this | You should see | Ref |
 |---|---|---|---|---|
-| ☐ | 40 | Press **Ctrl+Alt+Shift+R**, speak for 20 seconds, press it again. | A recording starts and stops. The review card appears. | — |
-| ☐ | 41 | Click **Discard**. | The card closes. Nothing is left in the Library and nothing is uploaded. | V-D13 |
-| ☐ | 42 | Record another 20 seconds and let the review card count down without touching it. | After the countdown, the default action happens (Keep). | V-D13 |
-| ☐ | 43 | Record another 20 seconds, press Stop, then quit EchoLedger from the tray, and start it again. | The recording is listed under "Waiting for your decision". | V-D14 |
+| ☐ | 40 | Press **Ctrl+Alt+Shift+R**, speak for 20 seconds, press it again, then click **Undo** on the Saved toast. | The recording is deleted; nothing is left in the Library and nothing is uploaded. | — |
+| ☐ | 41 | Settings → Calls & meetings → **After a call: Ask me**; record 20 seconds; click **✕** on the chip. | The chip closes. Nothing is left in the Library and nothing is uploaded. | V-D13 |
+| ☐ | 42 | With Ask me, record another 20 seconds and leave the chip alone. | After 10 s (the thin line runs out) the recording is kept and uploads. | V-D13 |
+| ☐ | 43 | With Ask me, record 20 seconds, press Stop, quit EchoLedger from the tray at once and start it again. | The recording is listed under "N calls waiting · Review" (or was kept if its 10 s had passed). | V-D14 |
 | ☐ | 44 | Click **Cancel** on a new recording and answer "Yes". | It is discarded with no review card. "No" restores the buttons. | V-D9 |
 | ☐ | 45 | Watch the tray icon while idle, recording, paused and uploading. | The icon and tooltip change for each state. | V-D17 |
+| ☐ | 45a | Join a call automatically detected, leave it after 5 seconds. | Nothing asks; Activity shows "Skipped 1 short call"; **Show → Restore** keeps it. | v1.5 |
+| ☐ | 45b | Record with a Bluetooth headset as the microphone. | "Accuracy is lower with Bluetooth mics" on the Record page and under the pill. | v1.5 |
 
 ### Library, transcript and search
 

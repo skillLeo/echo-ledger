@@ -96,27 +96,30 @@ Captions show what you and the other person say, while you talk.
 - **Hide from screen sharing** is on by default. The other people on your call cannot see the captions.
 - Press **Ctrl+Alt+Shift+C** to copy the last 2 minutes of captions.
 
-## 6. Keep or Discard
+## 6. After a call
 
-When a recording ends, EchoLedger asks what to do with it.
+Since v1.5 EchoLedger records a call from the moment it is **answered**, not while it rings, and it does not interrupt
+you afterwards. Choose how in **Settings → Calls & meetings → After a call** (phone and computer):
 
-- **Keep** uploads the recording and makes the transcript.
-- **Discard** deletes it from your device. Nothing is uploaded and nothing is paid for.
+- **Keep automatically** (the default): the call is kept and a small **"Saved · Call with Omar · 4:12 · Undo"**
+  shows for 6 seconds. **Undo** deletes it; nothing has been uploaded yet.
+- **Ask me**: a small chip with the title, **✓** (keep) and **✕** (discard). Tap the title to rename it or pick a
+  client. If you do nothing, the call is kept after 10 seconds.
 
-If you do nothing, the choice is made after 60 seconds. You can set it to **Keep** (the default) or **Discard**.
-A recording that is still undecided is listed under **Waiting for your decision**, also after a restart.
+Calls are **skipped** quietly, with no question: a call that was never answered (on the phone), a call shorter than
+**Skip calls shorter than** (10 seconds by default), and a call where nobody spoke. Activity shows one line,
+**"Skipped 3 short calls"**; **Show** lists them and **Restore** keeps one. Skipped calls are deleted after 24 hours.
 
-Calls waiting for you show as one **Keep or discard?** card ("4 calls waiting · oldest Oct 30 · 2:18 total") in the
-Library, in **Calls & meetings** and in Activity, on the phone, on the computer and in the console. **Review** opens
-the list: each call has **Keep**, **Discard**, a name (the pencil), a client and a language, and **Keep all** /
-**Discard all** act on every call at once. On the phone a discard waits 5 seconds so you can **Undo**.
+Calls left waiting from before v1.5, or "Ask me" calls not decided yet, show as one slim line, **"4 calls waiting ·
+Review"**, in the Library, in **Calls & meetings** and in Activity. **Review** opens the list: each call has **Keep**,
+**Discard**, a name (the pencil), a client and a language, and **Keep all** / **Discard all** act on every call at once.
+**Undecided calls** are kept automatically after **24 hours** (the default), after **3 days**, or **never**.
 
-**Undecided calls** (phone: **Settings → Calls & meetings → After a call**) are kept automatically after **24 hours**
-(the default), after **3 days**, or **never**, so a call you forgot is not lost.
-
-In **Settings → Recording**, **Ask before saving** can be **Always**, **Only automatic calls** or **Never**.
 The pill (the small bar at the top of the screen) and the notification on the phone have **Pause** and
-**Stop** buttons. Paused time is not recorded.
+**Stop** buttons. Paused time is not recorded. While an outgoing call rings, the pill says **Waiting for an answer**.
+
+A Bluetooth headset's microphone gives lower accuracy; EchoLedger says **"Accuracy is lower with Bluetooth mics"** when
+one is in use. Use the phone's or the laptop's own microphone for important calls.
 
 ## 7. Bookmarks
 
@@ -261,8 +264,8 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
 - **During a call:** tap the language chip (for example **UR**) on the desktop recording pill, or on the
   phone next to the caption bubble or on the Record tab. Live captions switch to the new language; the
   recording does not stop. The transcript switches language at that moment too.
-- **After the call:** the Keep card, the phone popup and the "Waiting for your decision" list have the same chip.
-  The transcript uses whatever it shows when you press **Keep**.
+- **After the call:** the "Waiting for you" list (Ask me, or calls left from before) has the same chip; the
+  transcript uses whatever it shows when the call is kept. Calls kept automatically use the language of the call.
 - **Any time later:** open the recording (desktop Library, the phone's recording page or the console) and choose
   **Re-transcribe as…** with the language. The current transcript stays until the new one is ready; then the new
   one is shown and **Current / Previous** switches between the two versions.
@@ -302,6 +305,21 @@ names you use). For each one:
    also see how long it took and what an hour of audio cost.
 4. Press **Use the winners**: the best engine becomes the first one for each language in **Settings → Engine per
    language** (the others stay as the fallback).
+
+Since v1.5 a reference can also be in **Roman Urdu** (or uploaded as .txt, .srt, .vtt or .docx), and the Lab scores
+the Original transcript and the Roman Urdu view separately, per category (Urdu, English, mixed, Arabic). **Google
+Gemini** is one of the engines you can compare (add its key under **API Credentials → Google Gemini**, from a Google
+project with billing on).
+
+### Urdu waits for its best engine (since v1.5)
+
+Urdu and mixed (Auto) recordings are never handed to a weaker engine because the best one is busy. When it is rate
+limited or down, the recording waits and is tried again (after 2, 4, 8, 16, then every 30 minutes), up to **6 hours**
+(**Settings → Engine per language → Urdu waits for its best engine up to**). The recording page says **"Waiting for
+Groq — retrying at 2:05 pm"** meanwhile. Only after the wait does the next engine write it, and the recording then
+says **"Backup engine — Re-transcribe?"**; **Re-transcribe** tries the best engine again. English and the other
+languages still move to the next engine at once. The console's **API Credentials → Groq** row shows your plan's
+limits and this hour's use; EchoLedger paces its requests to stay under them.
 
 ### Privacy at the speech providers
 

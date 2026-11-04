@@ -228,18 +228,28 @@ the `final` transcript replaces them.
 A streaming session is limited by the provider's maximum session length: 3 hours for AssemblyAI, set in the
 token request. Captions stop at that limit, but the final transcript always covers the whole recording.
 
-## Keep or Discard
+## After a call (Keep or Discard)
 
-A recording does not leave the device until the user decides. When it ends it enters `PendingDecision` (desktop
-`pending.rs`, Android `RecordingStore` state `pending_decision`) and stays local.
+Since v1.5 one setting, `afterCall` (phone `AppSettings.afterCall`, desktop `afterCall`), decides what happens when a
+call recording ends:
 
-- **Keep** creates or finishes the server session, uploads the chunks and queues the final transcript. This is the
-  first moment that costs money for the final pass.
-- **Discard** deletes the local files and any open server session. Nothing is uploaded and no transcript is requested.
-- **Undecided** items follow the timeout setting (Keep by default, Discard, or Keep waiting). They are saved on disk
-  and listed under "Waiting for your decision" after a restart.
-- "Ask before saving" is `Always` (default), `Only automatic calls` or `Never`. With `Never` the recording is kept
-  at once.
+- `keep` (default; settings from before v1.5 load as keep): the recording is kept at once and a small "Saved · … ·
+  Undo" chip shows for 6 s. The upload waits until the chip is gone, so **Undo** deletes the local files and nothing
+  has left the device. Keep creates or finishes the server session, uploads the chunks and queues the final transcript.
+- `ask`: the recording enters `PendingDecision` (desktop `pending.rs`, Android `RecordingStore` state
+  `pending_decision`) and stays local; a small chip offers ✓ / ✕ and keeps it after 10 s. **Discard** deletes the local
+  files and any open server session; nothing is uploaded and no transcript is requested.
+- **Skipped** (automatic call recordings only): never answered (phone, see below), shorter than the "Skip calls shorter
+  than" setting (10 s), or no speech on either side. Kept on the device for 24 h (state `skipped`, desktop
+  `skipped.json`) so Activity's "Skipped N short calls" can restore one; then deleted.
+- Leftover undecided items (from before v1.5, or Ask me) are listed under "Waiting for you" and kept automatically
+  after 24 h by default.
+
+**Answered, not ringing (phone, since v1.5):** an outgoing call turns the audio to call mode when it is dialled, so the
+capture holds the audio in memory (`recording/ConnectGate.kt`, up to 90 s) until the call is answered and keeps it from
+3 s before the answer (never before the last ringback tone). Answer signals: the call app's notification timer
+(`core/CallNotices.kt`), the other side speaking rather than a ringback tone (a spectral two-peak share on the far
+channel), this side speaking with no ringback for 6 s, or a SIM call's call-log talk time at the end.
 
 Live captions are separate. A device opens a streaming socket only when the user started the recording or an
 auto-record rule approved it, and closes it on Pause. `POST /api/stt/token` is refused unless the session is open,
@@ -390,7 +400,7 @@ row is pruned later.
 | `detect/` | Call detection: audio sessions, process trees, site rules for browsers, the decision explainer. |
 | `stt/` | Live caption streams (AssemblyAI, ElevenLabs) with the short-lived grants from the server. |
 | `net/` | Pinned HTTP client, uploader (resumable, checksummed), library cache and sync, keychain token store. |
-| `pending.rs` | Keep / Discard decisions that survive a restart. |
+| `pending.rs` | Recordings waiting for a decision ("Ask me") that survive a restart; skipped calls (`skipped.json`, 24 h). |
 | `dictation/` | Push-to-talk or toggle, text rules (clean-up, replacements, snippets), insertion at the cursor with clipboard restore. |
 | `lock/` | App lock: PIN (PBKDF2-SHA256, 210 000 rounds, stored in `app_lock.json`) and Windows Hello / Touch ID. |
 | `overlay/`, `lifecycle.rs`, `material.rs`, `tray.rs` | Windows, tray and window material. |

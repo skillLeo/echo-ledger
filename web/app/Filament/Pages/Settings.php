@@ -290,7 +290,7 @@ class Settings extends Page
                     ]),
                     $this->section('routing')
                         ->description('Which engine writes each language, in order: the first one with a key on API Credentials is used, the next ones are the fallback. Other covers the More languages; Auto is for recordings whose language is not chosen. Run “Compare engines” on a recording to choose.')
-                        ->collapsible()->columns(4)->schema([
+                        ->collapsible()->columns(self::ROUTE_SLOTS)->schema([
                             ...self::routingFields(),
                             TextInput::make('urdu_wait_hours')->label('Urdu waits for its best engine up to (hours)')->numeric()
                                 ->minValue(0)->maxValue(EngineWait::MAX_HOURS)->step(0.5)->required()->columnSpan(2)
@@ -553,14 +553,17 @@ class Settings extends Page
     /** The languages that have an engine list, and their form field prefix. */
     private const ROUTED = ['en' => 'en', 'ur' => 'ur', 'ar' => 'ar', LanguageRouter::OTHER => 'other', LanguageRouter::AUTO => 'auto'];
 
-    /** @return list<Select> four engines per language */
+    /** Engines per language in the form: room for every cloud engine (five since Gemini, v1.5). */
+    private const ROUTE_SLOTS = 5;
+
+    /** @return list<Select> the engines of each language, in order */
     private static function routingFields(): array
     {
         $engines = collect(SttProviderKey::cases())->reject(fn (SttProviderKey $k): bool => $k === SttProviderKey::ParakeetLocal)
             ->mapWithKeys(fn (SttProviderKey $k): array => [$k->value => $k->getLabel()])->all();
         $fields = [];
         foreach (self::ROUTED as $language => $slug) {
-            foreach ([1 => '1st', 2 => '2nd', 3 => '3rd', 4 => '4th'] as $n => $order) {
+            foreach ([1 => '1st', 2 => '2nd', 3 => '3rd', 4 => '4th', 5 => '5th'] as $n => $order) {
                 $field = Select::make("route_{$slug}_{$n}")->label(LanguageRouter::routeLabel($language).' · '.$order)->options($engines)->placeholder('—');
                 $fields[] = $n === 1 ? $field->required() : $field;
             }
@@ -575,7 +578,7 @@ class Settings extends Page
         $routes = LanguageRouter::merge($stored, LanguageRouter::DEFAULT_FINAL_ROUTES);
         $state = [];
         foreach (self::ROUTED as $language => $slug) {
-            foreach ([1, 2, 3, 4] as $n) {
+            foreach (range(1, self::ROUTE_SLOTS) as $n) {
                 $state["route_{$slug}_{$n}"] = $routes[$language][$n - 1] ?? null;
             }
         }
@@ -592,7 +595,7 @@ class Settings extends Page
         $routes = [];
         foreach (self::ROUTED as $language => $slug) {
             $list = [];
-            foreach ([1, 2, 3, 4] as $n) {
+            foreach (range(1, self::ROUTE_SLOTS) as $n) {
                 $value = $state["route_{$slug}_{$n}"] ?? null;
                 if (is_string($value) && SttProviderKey::tryFrom($value) !== null && ! in_array($value, $list, true)) {
                     $list[] = $value;
