@@ -175,7 +175,7 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
 }
 
 /// The active capture endpoints with their friendly names; the default communications device is marked, and
-/// Bluetooth ones are told by their device instance id (else by their name).
+/// Bluetooth ones are told by their device instance id or their name (`is_bluetooth_mic`).
 fn input_devices_with(enumerator: &DeviceEnumerator) -> Vec<super::InputDevice> {
     let default = enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications).ok().and_then(|d| d.get_id().ok());
     let Ok(collection) = enumerator.get_device_collection(&Direction::Capture) else { return Vec::new() };

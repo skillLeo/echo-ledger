@@ -40,17 +40,20 @@ pub fn bus_of_instance_id(instance_id: Option<&str>) -> MicBus {
     if ["BTHENUM", "BTHHFENUM", "BTHLE"].iter().any(|bus| id.contains(bus)) { MicBus::Bluetooth } else { MicBus::Other }
 }
 
-/// Whether a microphone is Bluetooth (pure): what the system says about its bus wins, so a wired "Headset Microphone"
-/// on the laptop's audio jack is not one; when the system says nothing the name decides ("Headset (WH-1000XM4
-/// Hands-Free AG Audio)", "AirPods Pro", "Galaxy Buds2 Pro").
+/// Names only Bluetooth microphones have ("Headset (WH-1000XM4 Hands-Free AG Audio)", "AirPods Pro", "Galaxy Buds2
+/// Pro").
+const BLUETOOTH_NAMES: [&str; 5] = ["hands-free", "handsfree", "bluetooth", "airpods", "buds"];
+
+/// Whether a microphone is Bluetooth (pure): the system says so, or its name does. A Bluetooth name counts whatever
+/// the bus, because a headset behind the audio chip's Bluetooth offload reports that chip's bus. "Headset" alone
+/// counts only when the system says nothing, so a wired "Headset Microphone" on the laptop's audio jack is not one.
 pub fn is_bluetooth_mic(bus: MicBus, name: &str) -> bool {
+    let name = name.to_lowercase();
+    let bluetooth_name = BLUETOOTH_NAMES.iter().any(|word| name.contains(word));
     match bus {
         MicBus::Bluetooth => true,
-        MicBus::Other => false,
-        MicBus::Unknown => {
-            let name = name.to_lowercase();
-            ["hands-free", "handsfree", "bluetooth", "airpods", "buds", "headset"].iter().any(|word| name.contains(word))
-        }
+        MicBus::Other => bluetooth_name,
+        MicBus::Unknown => bluetooth_name || name.contains("headset"),
     }
 }
 

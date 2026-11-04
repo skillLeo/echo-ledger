@@ -272,15 +272,19 @@ fn a_bluetooth_microphone_is_told_by_its_device_instance_id() {
 }
 
 #[test]
-fn the_name_decides_only_when_the_system_does_not_say() {
+fn a_bluetooth_name_counts_whatever_the_bus_and_headset_only_when_the_system_does_not_say() {
     for name in ["Headset (WH-1000XM4 Hands-Free AG Audio)", "AirPods Pro", "Galaxy Buds2 Pro", "Bluetooth Headset", "Jabra Handsfree Link", "Headset Microphone (Jabra Evolve2 65)"] {
         assert!(is_bluetooth_mic(MicBus::Unknown, name), "{name}");
     }
     for name in ["Microphone Array (Realtek(R) Audio)", "MacBook Pro Microphone", "USB Audio Device", "Yeti Stereo Microphone"] {
         assert!(!is_bluetooth_mic(MicBus::Unknown, name), "{name}");
+        assert!(!is_bluetooth_mic(MicBus::Other, name), "{name}");
+    }
+    // A Bluetooth headset behind the audio chip's Bluetooth offload reports the chip's bus ({1}.INTELAUDIO\…).
+    for name in ["Headset (WH-1000XM4 Hands-Free AG Audio)", "AirPods Pro", "Galaxy Buds2 Pro", "Microphone (Intel Smart Sound Technology for Bluetooth Audio)"] {
+        assert!(is_bluetooth_mic(MicBus::Other, name), "{name}");
     }
     assert!(!is_bluetooth_mic(MicBus::Other, "Headset Microphone (Realtek(R) Audio)"), "a wired headset on the audio jack");
-    assert!(!is_bluetooth_mic(MicBus::Other, "AirPods Pro"), "the bus wins over the name");
     assert!(is_bluetooth_mic(MicBus::Bluetooth, "Microphone"));
 }
 
