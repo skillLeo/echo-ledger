@@ -283,6 +283,20 @@ describe('waiting for the engine', function () {
             ->and($transcript->meta['route']['backup_reason'])->toBe('waited')
             ->and($transcript->meta['route']['tried'][0])->toMatchArray(['engine' => 'groq', 'code' => 'interrupted', 'transient' => 'unavailable']);
     });
+
+    it('never waits for a recording in the undo bin: no later run sends it to an engine again', function () {
+        $transcript = engineWaitTranscript($this);
+        $transcript->update(['status' => TranscriptStatus::Processing]);
+        $transcript->captureSession->delete();
+
+        app(TranscriptStore::class)->failWith($transcript->refresh(), TranscriptErrorCode::ProviderUnreachable);
+
+        expect($transcript->refresh()->status)->toBe(TranscriptStatus::Failed)
+            ->and(app(EngineWait::class)->pace($transcript, 60))->toBeFalse();
+        // The fallback stops at the bin as well.
+        expect(engineWaitFallback($transcript)->status)->toBe(TranscriptStatus::Failed)->and($transcript->provider)->toBe('groq');
+        Queue::assertNotPushed(TranscribeFinalJob::class, fn (TranscribeFinalJob $job): bool => $job->transcriptId === $transcript->id);
+    });
 });
 
 describe('refusals and other languages', function () {

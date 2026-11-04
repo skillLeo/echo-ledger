@@ -135,7 +135,7 @@ final class EngineWait
      */
     public function hold(Transcript $transcript, string $reason, ?int $retryAfter = null): bool
     {
-        if ($transcript->kind !== TranscriptKind::Final || ! self::forUrdu($transcript) || $transcript->captureSession()->doesntExist()) {
+        if ($transcript->kind !== TranscriptKind::Final || ! self::forUrdu($transcript) || self::binned($transcript)) {
             return false;
         }
         $route = self::route($transcript);
@@ -155,10 +155,13 @@ final class EngineWait
     /**
      * Pacing (Groq's limits, App\Stt\GroqPacer): the engine has no room for this request for [$seconds]. Any transcript
      * waits for it, without a failure and on the same engine; an Urdu or Auto final one only within its wait. False
-     * when that wait is over: the caller hands it on.
+     * when that wait is over, or the recording is in the bin: the caller fails it.
      */
     public function pace(Transcript $transcript, int $seconds): bool
     {
+        if (self::binned($transcript)) {
+            return false;
+        }
         $route = self::route($transcript);
         $at = now()->addSeconds(max(self::MIN_SECONDS, $seconds));
         if ($transcript->kind === TranscriptKind::Final && self::forUrdu($transcript)) {
@@ -287,6 +290,17 @@ final class EngineWait
     private function deadline(CarbonInterface $since): CarbonInterface
     {
         return $since->copy()->addMinutes((int) round($this->hours() * 60));
+    }
+
+    /**
+     * Deleted, or in the undo bin (B17): no later run sends it to an engine again. The relation also finds a recording
+     * in the bin, so it is asked directly.
+     */
+    private static function binned(Transcript $transcript): bool
+    {
+        $session = $transcript->captureSession()->first();
+
+        return $session === null || $session->trashed();
     }
 
     /** @return array<string, mixed> */
