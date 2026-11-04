@@ -683,7 +683,9 @@ that is already in a project.
 - `GET /api/clients/{id}/rules` — `library:read` → `200 {"data": [{"id": 7, "kind": "title", "value": "Acme", "created_at": "…"}]}`.
 - `POST /api/clients/{id}/rules` — `sessions:write`: `{"kind": "title" | "app" | "contact", "value": "Acme"}`
   (`contact` is a phone number or an email and adds a contact; `app` is a `source_app` wire value; ≤ 120
-  characters) → `201 {"data": <rule>}`. The same kind and value on another project is `409 rule_exists`.
+  characters) → `201 {"data": <rule>}`; the same rule again on the same project → `200` with the existing rule. The
+  same kind and value on another project is `409 rule_exists` (with `client_id` and `client_name` of that project).
+  Within a kind the oldest rule wins.
 - `DELETE /api/clients/{id}/rules/{rule}` — `sessions:write` → `204`; `404 rule_not_found`.
 
 ### Share links (since v1.5)
@@ -704,9 +706,11 @@ Share links can now be for a project too, and say who may open them.
 - `GET /api/shares` — `library:read`: every share of the workspace's recordings and projects, newest first
   (`?session_id=` or `?client_id=` to narrow) → `200 {"data": [ShareLink]}`; `GET /api/sessions/{id}/shares` and
   `DELETE /api/shares/{id}` work as before.
-- Pages: `/s/{token}` (a recording, as before) and `/p/{token}` (a project: its recordings, newest first, each
-  opening as `/s/…` would). With `allow_download`, `/s/{token}/download` gives a ZIP of the audio and the
-  transcript (in the link's view). People-only links ask for the console sign-in first and refuse other emails.
+- Pages: `/s/{token}` (a recording, as before) and `/p/{token}` (a project: up to 500 of its recordings, newest
+  first, each opening at `/p/{token}/{recording}` as `/s/…` would). With `allow_download`, `/s/{token}/download`
+  gives a ZIP of the audio and the transcript (in the link's view). People-only links ask for the console sign-in
+  first and let in only the listed emails (compared without capitals; members of the workspace are not let in
+  unless listed). `GET /api/shares` returns the newest 1,000.
 
 ### Sending to a teammate (since v1.5)
 - `POST /api/sessions/{id}/send` and `POST /api/clients/{id}/send` — `sessions:write`: `{"to": ["ana@example.com"],
@@ -715,7 +719,12 @@ Share links can now be for a project too, and say who may open them.
 - `GET /api/shared-with-me` — `library:read`: `{"data": [{"id": "01JD…", "kind": "session" | "project", "from":
   {"name": "Hassam", "email": "…"}, "note": "…", "title": "Call with Omar", "sent_at": "…", "saved_at": null,
   "session": <library item, read-only> | null, "client": <client> | null}]}`. Received recordings are also in the
-  `shared` smart folder; they can be played and read, not edited.
+  `shared` smart folder (`GET /api/library?folder=shared`), not in the normal library sync. They can be played and
+  read, not edited: `GET /api/sessions/{id}` (with `client`, `device` and `filed_by` null), `POST
+  /api/sessions/{id}/opened`, `GET /api/transcripts/{id}`, `GET /api/transcripts/{id}/views` and the signed
+  `playback_url` work; every edit, export and share route answers `404`.
+- The recipient's activity gets `shared_with_you` ("Ana sent you Call with Omar", the note as its text);
+  `session_id` is the sent recording (opened read-only), null for a project.
 - `POST /api/shared-with-me/{id}/save` — `sessions:write`: copies it into your own workspace (a recording with its
   audio, final transcript and views; a project with its recordings) → `201 {"session_id": "…"}` or
   `{"client_id": "…"}`; the copy is yours and independent of the original.
@@ -729,7 +738,10 @@ Share links can now be for a project too, and say who may open them.
 - `/r/{token}` is a public upload page (throttled, no account): audio and video (opus, ogg, mp3, m4a, aac, wav, mp4,
   webm) become recordings in the link's project or the Inbox, titled from the file name; with a project, PDF,
   DOCX, TXT and images (PNG, JPG, WebP) go to its Files. Other types, files over `max_mb` or more than `max_files`
-  are refused with a plain message.
+  are refused with a plain message. The page's upload calls answer `413 too_large`, `422 too_many_files`, `422
+  unsupported_type`, `409 upload_finished` and `403 storage_limit_reached`; types are checked by content (the
+  console's upload set, so also FLAC, AMR and OGA). `max_files` counts files in progress and finished; `received`
+  counts finished ones.
 
 ### Links in the apps (since v1.5)
 `/.well-known/assetlinks.json` lets Android open `/s/…`, `/p/…` and `/r/…` links of this server in the phone app
@@ -988,7 +1000,8 @@ going. A failed or unfinished transcript is simply run again in the new language
 the transcript: `roman` (Roman Urdu), `english` and `urdu` (translations).
 `200 {"status","available","roman","english","urdu","default","model","made_at","error"}`: `status` is `unavailable`
 (not finished), `none`, `making`, `ready` or `failed` (with `error`); `available` lists the views this transcript can
-have (`roman` and `english` for Urdu, `roman` and `urdu` for English, `english` for Arabic and the other languages);
+have (`roman`, `urdu` and `english` for Urdu, `urdu` for English, `english` and `urdu` for Arabic, `english` for the
+other languages; as made since v1.3);
 when ready, each available view is a list aligned with the segments (`null` for an empty line); `default` is the view
 the apps open it in (console setting, `original` unless that view is available). An edit to the transcript makes the
 views stale (`none`) until they are made again. Every transcript carries `views: {"available", "status", "default"}`.
@@ -1176,7 +1189,8 @@ Revokes another paired device of the owner: its tokens stop working at once; its
 
 The console bell and the device apps share one list of notifications: `transcript_ready`, `transcript_failed`,
 `upload_failed` (a recording did not finish uploading; its device can send it again), `device_paired`, `budget_warn`
-(the monthly limit's warning threshold) and `budget_reached`, each budget notice once per month. Recordings in the
+(the monthly limit's warning threshold) and `budget_reached`, each budget notice once per month, and since v1.5
+`shared_with_you` (a teammate sent a recording or a project; see "Sending to a teammate"). Recordings in the
 undo bin make none. Read notifications are kept 90 days, unread ones 180. Device apps poll and show new ones as OS
 notifications that open `session_id`, outside the quiet hours the person chose on that device.
 
