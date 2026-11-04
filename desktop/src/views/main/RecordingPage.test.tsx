@@ -125,7 +125,7 @@ describe("Call notes of a client's recording", () => {
     await within(notes).findByText("Build on Laravel");
     fireEvent.click(within(within(notes).getByRole("group", { name: "Notes language" })).getByRole("button", { name: "Roman Urdu" }));
     await waitFor(() => expect(callsOf("session_notes_write")).toEqual([{ id: "a", language: "roman_urdu" }]));
-    expect(within(notes).getByRole("button", { name: "Roman Urdu" })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(within(notes).getByRole("button", { name: "Roman Urdu" })).toHaveAttribute("aria-pressed", "true"));
   });
 
   it("says when the notes cannot be loaded and lets the person retry", async () => {
