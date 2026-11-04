@@ -131,7 +131,7 @@ export function retryLine(transcript: { provider?: string | null; retry_at?: str
   const engine = providerName(transcript.provider) || "the engine";
   if (at.getTime() <= now.getTime()) return `Waiting for ${engine} — retrying now`;
   // "2:05 pm"; newer ICU puts a narrow no-break space before the day period.
-  const time = at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/s/g, " ").toLowerCase();
+  const time = at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/\s/g, " ").toLowerCase();
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
   const day = at.toDateString() === now.toDateString() ? "" : at.toDateString() === tomorrow.toDateString() ? "tomorrow " : `${at.toLocaleDateString("en-US", { month: "short", day: "numeric" })} `;

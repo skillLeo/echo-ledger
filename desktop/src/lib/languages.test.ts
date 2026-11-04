@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcribingText, usedBackupEngine } from "./languages";
 
 describe("languages", () => {
@@ -89,6 +89,16 @@ describe("backup engine and waiting for the engine (v1.5)", () => {
     expect(retryLine({ provider: "gemini", retry_at: at(7, 18, 0) }, now)).toBe("Waiting for Gemini — retrying Nov 7 at 6:00 pm");
     expect(retryLine({ provider: "groq", retry_at: at(4, 12, 59) }, now)).toBe("Waiting for Groq — retrying now");
     expect(retryLine({ provider: null, retry_at: at(4, 14, 5) }, now)).toBe("Waiting for the engine — retrying at 2:05 pm");
+  });
+
+  it("writes a plain space before am / pm, also where the runtime puts a narrow no-break space", () => {
+    const time = vi.spyOn(Date.prototype, "toLocaleTimeString").mockReturnValue("2:05\u202FPM");
+    try {
+      const line = retryLine({ provider: "groq", retry_at: new Date(2026, 10, 4, 14, 5).toISOString() }, new Date(2026, 10, 4, 13, 0));
+      expect(line).toBe("Waiting for Groq — retrying at 2:05 pm");
+    } finally {
+      time.mockRestore();
+    }
   });
 
   it("says nothing without a retry time (not waiting, or an older server)", () => {
