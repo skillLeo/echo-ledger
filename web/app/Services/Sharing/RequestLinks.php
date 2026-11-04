@@ -170,8 +170,9 @@ final class RequestLinks
             throw new ApiError(413, 'too_large', 'Documents and images can be at most '.intdiv(ClientWorkspace::MAX_FILE_BYTES, 1024 * 1024).' MB.');
         }
         $this->assertRoom($link, $size);
-        $name = mb_substr((string) str_replace('\\', '/', $file['name']), 0, 255);
-        $name = mb_substr((string) basename($name), 0, 255) ?: 'File';
+        // The last part of a path, without control or direction-changing characters (they can make a name read as another).
+        $name = (string) preg_replace('/\p{C}+/u', '', basename(str_replace('\\', '/', $file['name'])));
+        $name = mb_substr(trim($name), 0, 255) ?: 'File';
 
         return DB::transaction(function () use ($link, $project, $audioMime, $name, $size, $sha): RequestUpload {
             // One start at a time in a workspace, and the checks run again once the new upload is in: two senders at
