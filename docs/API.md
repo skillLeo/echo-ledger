@@ -648,9 +648,12 @@ unless a share link of the recording allows downloads.
   meetings filed under that project. `PATCH /api/clients/{id}` accepts it.
 
 ### Meeting pack (since v1.5)
-- `GET /api/sessions/{id}/pack?format=pdf|zip&view=roman|english|urdu|original&include_audio=0|1` — `library:read`:
-  - `pdf`: a title page (title, date, length, people, project), then the transcript in the view, each screen placed
-    at its moment with the label "[Screen 7 at 14:32]". Claude and ChatGPT read PDF pages as text and images.
+- `GET /api/sessions/{id}/pack?format=html|zip&view=roman|english|urdu|original&include_audio=0|1` — `library:read`:
+  - `html`: one self-contained page, ready to print: a title page (title, date, length, people, project), then the
+    transcript in the view, each screen placed at its moment with the label "[Screen 7 at 14:32]" (images embedded,
+    print CSS, Urdu in Noto Nastaliq right to left). The apps make the **PDF** from it the way transcript PDFs are
+    made today (the print dialog's "Save as PDF"), so Urdu letters are shaped correctly; Claude and ChatGPT read PDF
+    pages as text and images.
   - `zip`: `transcript.md` (the same order, each screen as a Markdown image titled "Screen 7 at 14:32" that points to
     `images/screen-07.webp`, with its description), the `images/` folder, and with `include_audio=1` the recording's
     audio.

@@ -174,11 +174,15 @@ fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, 
                             }
                         })
                     }
-                    // Since v1.5: the transcript with the meeting's screens at their moments, for Claude or ChatGPT.
+                    // Since v1.5: the transcript with the meeting's screens at their moments, for Claude or ChatGPT. The
+                    // PDF is printed from the server's page ("Save as PDF"), like the transcript's, so Urdu is shaped right.
                     listOf("pdf" to "Meeting pack (PDF, with screens)", "zip" to "Meeting pack (ZIP)").forEach { (format, label) ->
                         DropdownMenuItem(text = { Text(label) }, onClick = {
                             menu = false
-                            scope.launch { vm.meetingPack(sessionId, format, view)?.let { shareFile(context, it) } }
+                            scope.launch {
+                                val file = vm.meetingPack(sessionId, if (format == "pdf") "html" else format, view) ?: return@launch
+                                if (format == "pdf") printHtml(context, file) else shareFile(context, file)
+                            }
                         })
                     }
                 }
