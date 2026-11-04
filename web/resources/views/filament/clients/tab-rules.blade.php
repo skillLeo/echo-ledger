@@ -46,7 +46,8 @@
                             <span class="el-row-title">{{ $rule->kind === 'app' ? ($apps[$rule->value] ?? $rule->value) : $rule->value }}</span>
                             <span class="el-row-sub"><span class="el-row-meta">{{ $kinds[$rule->kind] ?? $rule->kind }}</span></span>
                         </span>
-                        <button type="button" class="el-text-btn" wire:click="removeRule({{ $rule->id }})" wire:confirm="Remove this rule?">Remove</button>
+                        <button type="button" class="el-text-btn" wire:click="removeRule({{ $rule->id }})"
+                            wire:confirm="{{ $rule->client_contact_id !== null ? 'Remove this rule and the contact it added?' : 'Remove this rule?' }}">Remove</button>
                     </div>
                 </li>
             @endforeach

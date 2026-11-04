@@ -99,6 +99,52 @@ describe('the rules of a project', function () {
         expect(ClientContact::query()->where('client_id', $this->acme->id)->count())->toBe(1);
     });
 
+    it('keeps a contact the project already had when its rule is removed', function () {
+        $ali = ClientContact::query()->create(['client_id' => $this->acme->id, 'name' => 'Ali Khan', 'phone' => '+92 321 7654321', 'email' => 'ali@example.com', 'language' => 'ur']);
+        $rule = addRule($this, $this->acme, 'contact', '03217654321');
+        $byEmail = addRule($this, $this->acme, 'contact', 'ALI@example.com');
+        expect(ClientContact::query()->count())->toBe(1);
+
+        $this->deleteJson("/api/clients/{$this->acme->id}/rules/{$rule['id']}")->assertNoContent();
+        $this->deleteJson("/api/clients/{$this->acme->id}/rules/{$byEmail['id']}")->assertNoContent();
+        expect(ClientContact::query()->find($ali->id))->not->toBeNull()
+            ->name->toBe('Ali Khan')->email->toBe('ali@example.com')->language->toBe('ur')
+            ->and(keep($this, ['source_app' => 'phone_call', 'caller' => ['number' => '03217654321', 'source' => 'phone']]))
+            ->toMatchArray(['client' => $this->acme->id, 'filed_by' => 'contact']);
+    });
+
+    it('drops a contact rule once no contact of the project has its number or email', function () {
+        $phone = addRule($this, $this->acme, 'contact', '+92 300 1234567');
+        $email = addRule($this, $this->acme, 'contact', 'omar@example.com');
+        $own = ClientContact::query()->create(['client_id' => $this->acme->id, 'name' => 'Sara', 'phone' => '+44 7700 900123']);
+        $reused = addRule($this, $this->acme, 'contact', '07700900123');
+        $added = ClientContact::query()->where('client_id', $this->acme->id)->where('phone_digits', '3001234567')->sole();
+
+        // A new name or language keeps the rule; so does the same number written another way.
+        $added->update(['name' => 'Omar', 'language' => 'ur', 'phone' => '0300-1234567']);
+        expect(FilingRule::query()->count())->toBe(3);
+        // The contact is deleted (as on the console's Contacts), or its email changes: its rule goes.
+        $added->delete();
+        ClientContact::query()->where('email', 'omar@example.com')->sole()->update(['email' => 'omar@acme.example']);
+        $own->delete();
+        expect(FilingRule::query()->pluck('id')->all())->toBe([])
+            ->and($this->getJson("/api/clients/{$this->acme->id}/rules")->json('data'))->toBe([]);
+        // The number is free for another project again.
+        addRule($this, $this->beta, 'contact', '03001234567');
+        expect([$phone['id'], $email['id'], $reused['id']])->toHaveCount(3);
+    });
+
+    it('keeps a contact rule while another contact of the project still has its number', function () {
+        addRule($this, $this->acme, 'contact', '+92 300 1234567');
+        $twin = ClientContact::query()->create(['client_id' => $this->acme->id, 'name' => 'Omar (office)', 'phone' => '03001234567']);
+        ClientContact::query()->where('client_id', $this->acme->id)->whereKeyNot($twin->id)->sole()->delete();
+
+        expect(FilingRule::query()->count())->toBe(1);
+        $this->deleteJson("/api/clients/{$this->acme->id}/rules/".FilingRule::query()->sole()->id)->assertNoContent();
+        // The rule did not add this contact: it stays.
+        expect(ClientContact::query()->find($twin->id))->not->toBeNull();
+    });
+
     it('answers 404 for another workspace\'s project', function () {
         $foreign = Client::factory()->create(['user_id' => User::factory()]);
         $rule = FilingRule::query()->create(['workspace_id' => $foreign->workspace_id, 'client_id' => $foreign->id, 'kind' => 'app', 'value' => 'zoom', 'match_value' => 'zoom']);

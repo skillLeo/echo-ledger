@@ -19,7 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $kind
  * @property string $value
  * @property string $match_value
- * @property int|null $client_contact_id
+ * @property int|null $client_contact_id the contact a contact rule added, removed with the rule
  * @property Carbon $created_at
  * @property-read Client $client
  */

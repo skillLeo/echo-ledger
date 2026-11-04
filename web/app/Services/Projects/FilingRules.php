@@ -61,7 +61,8 @@ final class FilingRules
     /**
      * Adds a rule to the project. The same kind and value on this project returns the rule it already has
      * (`created` false); on another project of the workspace it is `409 rule_exists` naming that project. A contact
-     * rule also adds the contact (or uses the project's contact with that number or email).
+     * rule also adds the contact (or uses the project's contact with that number or email); only a contact it added
+     * is remembered, so removing the rule never deletes a contact the project already had.
      *
      * @return array{rule: FilingRule, created: bool}
      */
@@ -88,7 +89,7 @@ final class FilingRules
                 'kind' => $kind,
                 'value' => $value,
                 'match_value' => $match,
-                'client_contact_id' => $contact?->id,
+                'client_contact_id' => $contact?->wasRecentlyCreated === true ? $contact->id : null,
             ]);
 
             return ['rule' => $rule, 'created' => true];
@@ -127,7 +128,7 @@ final class FilingRules
         return new ApiError(409, 'rule_exists', $message, ['client_id' => $owner?->id, 'client_name' => $owner?->name]);
     }
 
-    /** Removes a rule; a contact rule takes the contact it added with it. */
+    /** Removes a rule; a contact rule takes the contact it added with it (a contact the project already had stays). */
     public function remove(FilingRule $rule): void
     {
         DB::transaction(function () use ($rule): void {
@@ -137,6 +138,26 @@ final class FilingRules
                 ClientContact::query()->whereKey($contactId)->first()?->delete();
             }
         });
+    }
+
+    /**
+     * Removes the contact rules of a project that none of its contacts carries any more (a contact was deleted, or its
+     * number or email changed, on the console's Contacts): such a rule would file nothing and still keep the number or
+     * email from other projects. Called by ClientContact when one is deleted or changed.
+     */
+    public static function forgetUncarried(string $projectId): void
+    {
+        $rules = FilingRule::query()->withoutGlobalScope(WorkspaceScope::class)->where('client_id', $projectId)
+            ->where('kind', 'contact')->get(['id', 'match_value']);
+        foreach ($rules as $rule) {
+            [$type, $value] = explode(':', $rule->match_value, 2) + [1 => ''];
+            $carried = ClientContact::query()->where('client_id', $projectId)
+                ->where(fn ($q) => $type === 'email' ? $q->whereRaw('LOWER(email) = ?', [$value]) : $q->where('phone_digits', $value))
+                ->exists();
+            if (! $carried) {
+                $rule->delete();
+            }
+        }
     }
 
     /**

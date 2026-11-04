@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SourceApp;
+use App\Filament\Pages\Activity;
 use App\Filament\Pages\RequestLinksPage;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Pages\Shares;
@@ -19,7 +20,9 @@ use App\Models\SentItem;
 use App\Models\ShareLink;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\ActivityFeed;
 use App\Services\ShareLinks;
+use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\Workspaces;
 use Filament\Actions\Testing\TestAction;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
@@ -131,6 +134,9 @@ describe('a project\'s page', function () {
             ->set('ruleKind', 'title')->set('ruleValue', 'weekly SYNC')->call('addRule')->assertHasErrors(['ruleValue']);
         $page->call('removeRule', FilingRule::query()->where('kind', 'title')->value('id'));
         expect(FilingRule::query()->pluck('kind')->all())->toBe(['app']);
+        // Removing a contact rule says that the contact it added goes with it.
+        $page->set('ruleKind', 'contact')->set('ruleValue', '+92 300 1234567')->call('addRule')->assertHasNoErrors()
+            ->assertSee('Remove this rule and the contact it added?');
     });
 });
 
@@ -211,6 +217,26 @@ describe('sharing in the console', function () {
 
         $this->panelComponent(SharedWithMe::class)->callTableAction('remove', $item);
         expect(SentItem::query()->count())->toBe(0);
+    });
+
+    it('opens what a teammate sent from Activity in Shared with me, and no recording page of another workspace', function () {
+        $ana = User::factory()->create(['name' => 'Ana']);
+        $call = $this->sessionWithTranscript($ana, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Plans for May']], ['title' => 'Call with Omar']);
+        $folder = adminProject($ana, 'Acme');
+        app(Teammates::class)->send($ana, $call, [$this->admin->email], null);
+        app(Teammates::class)->send($ana, $folder, [$this->admin->email], null);
+        $notice = fn (string $title): string => (string) $this->admin->notifications()->where('data->title', $title)->value('id');
+
+        $this->panelComponent(Activity::class)->call('open', $notice('Ana sent you Call with Omar'))->assertRedirect(SharedWithMe::getUrl());
+        $this->panelComponent(Activity::class)->call('open', $notice('Ana sent you Acme'))->assertRedirect(SharedWithMe::getUrl());
+        expect($this->admin->unreadNotifications()->where('data->title', 'like', 'Ana sent you%')->count())->toBe(0);
+
+        // A recording that is no longer in this workspace's library says so instead of opening a missing page.
+        $gone = CaptureSession::factory()->create(['user_id' => $this->admin->id, 'title' => 'Old call']);
+        app(ActivityFeed::class)->post($this->admin, 'transcript_ready', 'Transcript ready', 'Old call', $gone, 'heroicon-o-document-text');
+        $gone->delete();
+        $this->panelComponent(Activity::class)->call('open', $notice('Transcript ready'))->assertNoRedirect()
+            ->assertNotified('This recording is no longer in this workspace\'s library.');
     });
 });
 

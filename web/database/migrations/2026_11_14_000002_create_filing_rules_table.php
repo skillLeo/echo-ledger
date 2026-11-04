@@ -24,7 +24,7 @@ return new class extends Migration
             $table->string('value', 120);
             // What is compared: a title in lower case, an app's wire value, "phone:" + the last 10 digits, "email:" + the address.
             $table->string('match_value', 190);
-            // A contact rule adds the contact it names; deleting the rule removes that contact again.
+            // The contact a contact rule added (not one the project already had); deleting the rule removes it again.
             $table->foreignId('client_contact_id')->nullable()->constrained('client_contacts')->nullOnDelete();
             $table->timestamps();
             $table->unique(['workspace_id', 'kind', 'match_value']);
