@@ -22,6 +22,7 @@ use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use Closure;
+use Filament\Auth\Notifications\VerifyEmail;
 use Filament\Facades\Filament;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -151,6 +152,10 @@ final class PublicShareController extends Controller
             if (! $link->allows($viewer->email)) {
                 return response()->view('share.refused', ['email' => $viewer->email], 403, self::HEADERS);
             }
+            if (! $viewer->hasVerifiedEmail()) {
+                // An account can carry any address (Add member, the profile page): the email must be shown to be theirs.
+                return response()->view('share.confirm', ['email' => $viewer->email, 'action' => url($base)], 403, self::HEADERS);
+            }
         }
 
         return $this->asLinkWorkspace($link, fn (): Response => $page($link));
@@ -168,6 +173,9 @@ final class PublicShareController extends Controller
     private function unlockLink(Request $request, string $token, string $kind, string $base): RedirectResponse|Response
     {
         $link = $this->usable($token, $kind);
+        if ($link !== null && $link->audience === 'people') {
+            return $this->sendEmailConfirmation($request, $link, $base);
+        }
         if ($link === null || $link->audience !== 'password') {
             return $this->gone();
         }
@@ -180,6 +188,26 @@ final class PublicShareController extends Controller
         $request->session()->put('share_unlocked.'.$link->id, true);
 
         return redirect()->to($base)->withHeaders(self::HEADERS);
+    }
+
+    /**
+     * "Send me the link" for a person a people-only link names whose email is not confirmed yet: the console mails its
+     * confirmation link and, once it is opened, comes back to this page. Anyone else gets what the password form gives
+     * them on such a link: nothing.
+     */
+    private function sendEmailConfirmation(Request $request, ShareLink $link, string $base): RedirectResponse|Response
+    {
+        $viewer = $request->user('web');
+        if (! $viewer instanceof User || ! $link->allows($viewer->email) || $viewer->hasVerifiedEmail()) {
+            return $this->gone();
+        }
+        $panel = Filament::getPanel('admin');
+        $notification = app(VerifyEmail::class);
+        $notification->url = $panel->getVerifyEmailUrl($viewer);
+        $viewer->notify($notification);
+        $request->session()->put('url.intended', url($base));
+
+        return redirect()->to((string) $panel->getEmailVerificationPromptUrl())->withHeaders(self::HEADERS);
     }
 
     private function recordingPage(ShareLink $link, ?CaptureSession $session, string $base, ?string $back, string $outcome, Request $request): Response
@@ -256,7 +284,7 @@ final class PublicShareController extends Controller
     {
         return match ($link->audience) {
             'password' => $this->unlocked($request, $link),
-            'people' => ($viewer = $request->user('web')) instanceof User && $link->allows($viewer->email),
+            'people' => ($viewer = $request->user('web')) instanceof User && $link->allows($viewer->email) && $viewer->hasVerifiedEmail(),
             default => true,
         };
     }

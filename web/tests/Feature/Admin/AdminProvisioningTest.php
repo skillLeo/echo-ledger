@@ -23,7 +23,9 @@ it('creates a super admin from the command who can then sign in to the console',
     expect($user->is_super_admin)->toBeTrue()
         ->and($user->name)->toBe('Farah Khan')
         ->and(Hash::check('a-long-enough-passphrase', $user->password))->toBeTrue()
-        ->and($user->password)->not->toContain('a-long-enough-passphrase');
+        ->and($user->password)->not->toContain('a-long-enough-passphrase')
+        // The operator types the address on the server: it counts as confirmed (people-only share links need that).
+        ->and($user->hasVerifiedEmail())->toBeTrue();
 
     $this->panelComponent(Login::class)
         ->fillForm(['email' => 'owner@example.test', 'password' => 'a-long-enough-passphrase'])
