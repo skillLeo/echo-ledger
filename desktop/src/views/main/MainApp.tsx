@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type ClientFolder, type LibraryViews, type LockStatus, type SmartFolder } from "../../lib/ipc";
-import { SmartFolderList } from "./SmartFolders";
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityUnread } from "./ActivityCentre";
@@ -15,6 +14,7 @@ import { RecordView } from "./RecordView";
 import { SettingsView } from "./SettingsView";
 import { ProjectsView, useExpandedProjects } from "./ProjectsView";
 import { ProjectTree } from "./ProjectTree";
+import { SmartFolderList } from "./SmartFolders";
 import { CommandPalette } from "./CommandPalette";
 import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";

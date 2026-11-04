@@ -360,7 +360,7 @@ describe("Notes", () => {
     expect(toggle).toHaveAttribute("aria-checked", "true");
     fireEvent.click(toggle);
     await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { ai_notes: false } }]));
-    expect(screen.getByRole("switch", { name: "AI notes" })).toHaveAttribute("aria-checked", "false");
+    await waitFor(() => expect(screen.getByRole("switch", { name: "AI notes" })).toHaveAttribute("aria-checked", "false"));
     expect(screen.queryByRole("tab", { name: "AI notes" })).not.toBeInTheDocument();
   });
 
@@ -420,7 +420,7 @@ describe("Notes", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Remove “Guest checkout added”" }));
     await waitFor(() => expect(callsOf("client_memory_delete")).toEqual([{ id: "c1", item: "m3" }]));
-    expect(screen.queryByText("Guest checkout added")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Guest checkout added")).not.toBeInTheDocument());
 
     fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), { target: { value: "question" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Add to memory" }), { target: { value: "When is the review?" } });
@@ -519,7 +519,7 @@ describe("Files", () => {
     expect(await screen.findByText("Pasted instructions · 1 KB")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Remove scope.pdf" }));
     await waitFor(() => expect(callsOf("client_file_delete")).toEqual([{ id: "c1", file: "f1" }]));
-    expect(screen.queryByText("scope.pdf")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("scope.pdf")).not.toBeInTheDocument());
   });
 
   it("asks again every 5 s while a file is being read, and stops once it is", async () => {

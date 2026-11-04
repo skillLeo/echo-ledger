@@ -81,7 +81,7 @@ describe("the share dialog", () => {
     expect(made).toHaveTextContent("Copy it now. It is shown only once.");
     fireEvent.click(within(made).getByRole("button", { name: "Copy link" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://ledger.example.test/s/tok"));
-    expect(props.notify).toHaveBeenCalledWith("Link copied");
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Link copied"));
   });
 
   it("needs a password of six characters for a password link, and never sends it as a person", async () => {

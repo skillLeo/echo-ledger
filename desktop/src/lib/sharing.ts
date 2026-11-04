@@ -46,9 +46,6 @@ export function expiryTime(choice: ExpiryChoice, now: Date, day = ""): string | 
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59).toISOString();
 }
 
-/** The share links of the v1.1 dialog (an older server): 1 hour, 1 day or 7 days, in seconds. */
-export const LEGACY_LIFETIMES: readonly (readonly [number, string])[] = [[3600, "1 hour"], [86_400, "1 day"], [604_800, "7 days"]];
-
 /** Who may open a link, in words. */
 export function audienceText(link: Pick<ShareLink, "audience" | "people" | "has_password">): string {
   if (link.audience === "people") return link.people && link.people.length > 0 ? `Only ${link.people.join(", ")}` : "Only the people chosen";
