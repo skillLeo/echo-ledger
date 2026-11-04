@@ -41,7 +41,7 @@ pub struct Recovery {
 /// one that cannot be deleted now (a file held open by a virus scanner) is deleted at the next start instead of being
 /// recovered.
 pub fn delete_recording_folder(dir: &Path) {
-    if dir.as_os_str().is_empty() {
+    if dir.as_os_str().is_empty() || !dir.exists() {
         return;
     }
     let marker = leaving_marker(dir);
