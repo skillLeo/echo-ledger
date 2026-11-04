@@ -31,7 +31,9 @@ with its own key.
 - **Updating itself**: Play forbids apps that update themselves any other way. The Play build has no updater code and
   no `REQUEST_INSTALL_PACKAGES` permission.
 
-`PlayBuildTest` checks the Play build's merged manifest and these switches on every test run.
+`PlayBuildTest` checks the Play build's merged manifest and these switches on every test run. `testPlayDebugUnitTest`
+runs only the Play build's own tests and the shared update rules; the rest of the code is shared and tested once in
+the website build (`testFullDebugUnitTest`), whose behaviour those tests describe.
 
 ## Build
 

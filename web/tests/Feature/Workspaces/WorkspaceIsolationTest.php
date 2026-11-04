@@ -57,6 +57,11 @@ const ISO_WEB_BYPASS = [
     'request.files.chunk' => 'public request link: the token is the only key',
     'request.files.complete' => 'public request link: the token is the only key',
     'app-links' => 'Android App Links statement: the app package and signing keys, no workspace data',
+    'site.home' => 'public landing page: no workspace data',
+    'downloads' => 'public downloads page: the apps\' builds, server-wide, no workspace data',
+    'downloads.android' => 'public update manifest of the phone app, server-wide',
+    'downloads.desktop' => 'public update manifest of the desktop app, server-wide',
+    'downloads.file' => 'a published build by its file name, server-wide',
     'passkeys.login.options' => 'sign-in, before any workspace',
     'passkeys.login' => 'sign-in, before any workspace',
 ];

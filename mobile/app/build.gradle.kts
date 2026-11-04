@@ -202,4 +202,12 @@ roborazzi {
 }
 tasks.withType<Test>().configureEach {
     systemProperty("screenshots.dir", designScreens.absolutePath)
+    // The Google Play build runs its own tests (its merged manifest and switches) and the shared update rules; all
+    // other code is shared and tested once, in the website build, whose behaviour those tests describe.
+    if (name.startsWith("testPlay")) {
+        filter {
+            includeTestsMatching("com.echoledger.mobile.update.PlayBuildTest")
+            includeTestsMatching("com.echoledger.mobile.update.AppUpdatesTest")
+        }
+    }
 }

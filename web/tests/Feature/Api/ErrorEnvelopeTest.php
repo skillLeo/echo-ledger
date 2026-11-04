@@ -30,8 +30,18 @@ uses(InteractsWithDeviceApi::class);
 
 const ENVELOPE_MISSING_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
 
-/** Codes produced by later work packages; their own tests cover them until then. */
-const ENVELOPE_PENDING_CODES = ['budget_exceeded'];
+/**
+ * Codes produced by later work packages; their own tests cover them until then. The v1.5 contract is written ahead
+ * of the server: each phase removes its codes here when it adds their scenarios.
+ */
+const ENVELOPE_PENDING_CODES = [
+    'budget_exceeded',
+    // Phase 3: screen moments.
+    'too_many_screens',
+    // Phase 4: signing in with an account, the account itself, plans.
+    'otp_required', 'email_not_verified', 'owner_of_team', 'invalid_credentials', 'invalid_otp', 'invalid_code',
+    'too_many_attempts', 'feature_not_in_plan', 'seat_limit_reached',
+];
 
 /** @return array<string, array{0: int, 1: string}> the docs table as code => [status, code] */
 function documentedErrorCodes(): array
@@ -242,7 +252,7 @@ it('produces each documented code with its status, a message and nothing interna
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(45);
+        ->and(count(documentedErrorCodes()))->toBe(55);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

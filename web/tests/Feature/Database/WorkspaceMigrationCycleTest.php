@@ -202,6 +202,9 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
 /** The v1.5 Phase 2 migrations (projects, filing rules, share audiences, sent items, request links). */
 const PHASE2_STEPS = 5;
 
+/** Migrations that came after them (rolled back first); add yours here as for LATER_MIGRATIONS. */
+const AFTER_PHASE2 = 1;
+
 /** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
 function seedPhase2Library(Connection $db): array
 {
@@ -238,7 +241,7 @@ it('runs the v1.5 Phase 2 migrations down and up again on a library that uses th
     cycleArtisan('migrate:fresh');
     $seeded = seedPhase2Library($db);
 
-    cycleArtisan('migrate:rollback', ['--step' => PHASE2_STEPS]);
+    cycleArtisan('migrate:rollback', ['--step' => PHASE2_STEPS + AFTER_PHASE2]);
     $schema = $db->getSchemaBuilder();
     expect($schema->hasColumn('clients', 'parent_id'))->toBeFalse()
         ->and($schema->hasColumn('capture_sessions', 'filed_by'))->toBeFalse()
@@ -282,7 +285,7 @@ it('refuses to roll projects back while one person has two projects of the same 
     $now = now();
     // "Website" twice: once under Acme (seeded), once at the top. The old unique index could not hold both.
     $db->table('clients')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $db->table('clients')->value('workspace_id'), 'user_id' => $seeded['user'], 'name' => 'Website', 'created_at' => $now, 'updated_at' => $now]);
-    cycleArtisan('migrate:rollback', ['--step' => PHASE2_STEPS - 1]);
+    cycleArtisan('migrate:rollback', ['--step' => PHASE2_STEPS - 1 + AFTER_PHASE2]);
 
     expect(fn () => Artisan::call('migrate:rollback', ['--database' => 'cycle', '--force' => true, '--step' => 1]))
         ->toThrow(RuntimeException::class, 'rename one of them before rolling back');

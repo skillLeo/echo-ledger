@@ -78,12 +78,27 @@ function registeredApiRoutes(): array
     return $routes;
 }
 
+/*
+ * The contract is written ahead of the server (v1.5): endpoints documented for a phase that is not built yet. Each
+ * phase removes its own lines when it serves them; nothing else may be documented without a route.
+ */
+const NOT_SERVED_YET = [
+    // Phase 3: screen moments and the meeting pack.
+    'POST /api/sessions/{}/screens', 'GET /api/sessions/{}/screens', 'DELETE /api/sessions/{}/screens/{}',
+    'GET /api/clients/{}/screens', 'GET /api/sessions/{}/pack',
+    // Phase 4: signing in with an account, the account itself.
+    'POST /api/auth/password', 'POST /api/auth/device/token', 'GET /api/account', 'DELETE /api/account',
+    'POST /api/account/sign-out-everywhere', 'POST /api/account/export', 'GET /api/account/export/{}',
+];
+
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();
     $served = collect(array_keys(registeredApiRoutes()))->reject(fn (string $key) => str_contains($key, '/webhooks/'))->sort()->values()->all();
 
     expect(array_values(array_diff($served, $documented)))->toBe([], 'served but not documented')
-        ->and(array_values(array_diff($documented, $served)))->toBe([], 'documented but not served');
+        ->and(array_values(array_diff($documented, $served, NOT_SERVED_YET)))->toBe([], 'documented but not served')
+        // A line that stays after its phase served the route would hide a missing one later.
+        ->and(array_values(array_intersect(NOT_SERVED_YET, $served)))->toBe([], 'served now: remove it from NOT_SERVED_YET');
 });
 
 it('documents the provider webhook', function () {
@@ -95,7 +110,11 @@ it('documents the provider webhook', function () {
 it('names, in each heading, the ability the route actually enforces', function () {
     $routes = registeredApiRoutes();
     foreach (documentedEndpoints() as $endpoint) {
-        $route = $routes[$endpoint['method'].' '.shapeOf($endpoint['uri'])] ?? null;
+        $key = $endpoint['method'].' '.shapeOf($endpoint['uri']);
+        if (in_array($key, NOT_SERVED_YET, true)) {
+            continue;
+        }
+        $route = $routes[$key] ?? null;
         expect($route)->not->toBeNull("{$endpoint['method']} {$endpoint['uri']} is not routed");
 
         $enforced = collect($route->gatherMiddleware())->first(fn ($m) => is_string($m) && str_starts_with($m, 'abilities:'));
