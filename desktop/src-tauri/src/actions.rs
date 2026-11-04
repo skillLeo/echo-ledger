@@ -369,7 +369,7 @@ pub async fn cancel_recording(app: &AppHandle) -> AppResult<()> {
     }
     if let Some((finished, session, _)) = end_capture(app).await? {
         let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&finished.info.client_ref);
-        let _ = std::fs::remove_dir_all(&finished.output.dir);
+        crate::recovery::delete_recording_folder(&finished.output.dir);
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
@@ -391,7 +391,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     // recording the server would reject (the server enforces the same floor).
     let silent = std::fs::metadata(&finished.output.primary).map(|m| m.len() < MIN_AUDIO_BYTES).unwrap_or(true);
     if silent {
-        let _ = std::fs::remove_dir_all(&finished.output.dir);
+        crate::recovery::delete_recording_folder(&finished.output.dir);
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
@@ -684,10 +684,12 @@ pub fn restore_pending(app: &AppHandle) {
     emit_pending(app);
 }
 
-/// Recordings recovered at start (since v1.3) follow "After a call": kept at once, or waiting in the Library.
-pub fn after_recovery(app: &AppHandle, ids: &[String]) {
+/// Recordings recovered at start (since v1.3) wait in the Library. One stopped in the middle of the recording follows
+/// "After a call" (`cut_short`): under "Keep automatically" it is kept at once. One that was already finished waits
+/// whatever the setting, as it may have been discarded, undone or uploaded before (`recovery::Recovery`).
+pub fn after_recovery(app: &AppHandle, cut_short: &[String]) {
     if app.state::<crate::AppState>().settings().after_call == AfterCall::Keep {
-        for id in ids {
+        for id in cut_short {
             if let Err(e) = keep_decision(app, id) {
                 eprintln!("[echoledger] keeping the recovered recording {id}: {e}");
             }

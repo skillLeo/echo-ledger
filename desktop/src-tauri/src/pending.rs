@@ -421,9 +421,7 @@ impl DecisionFiles {
             discards.save(&self.discards)?;
         }
         store.save(&self.pending)?;
-        if !decision.dir.as_os_str().is_empty() {
-            let _ = std::fs::remove_dir_all(&decision.dir);
-        }
+        crate::recovery::delete_recording_folder(&decision.dir);
         Ok(decision)
     }
 

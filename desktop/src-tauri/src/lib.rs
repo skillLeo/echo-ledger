@@ -233,9 +233,9 @@ pub fn run() {
             let recovering = handle.clone();
             std::thread::spawn(move || {
                 let data_dir = recovering.state::<AppState>().data_dir.clone();
-                let recovered = recovery::recover(&data_dir, chrono::Utc::now()).recovered;
-                if !recovered.is_empty() {
-                    actions::after_recovery(&recovering, &recovered);
+                let recovery = recovery::recover(&data_dir, chrono::Utc::now());
+                if !recovery.recovered.is_empty() {
+                    actions::after_recovery(&recovering, &recovery.cut_short);
                 }
             });
             commands::spawn_idle_lock(handle.clone());

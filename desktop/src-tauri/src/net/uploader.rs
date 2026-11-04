@@ -287,11 +287,9 @@ pub fn after_attempt(item: &mut PendingUpload, was_verifying: bool, result: &App
     AfterAttempt::Keep
 }
 
-/// Deletes an item's recording folder.
+/// Deletes an item's recording folder (what cannot be deleted now goes at the next start, `recovery`).
 pub fn delete_local_audio(item: &PendingUpload) {
-    if !item.dir.as_os_str().is_empty() {
-        let _ = std::fs::remove_dir_all(&item.dir);
-    }
+    crate::recovery::delete_recording_folder(&item.dir);
 }
 
 /// Errors after which the worker stops retrying the item on its own and shows it as failed with Retry.
