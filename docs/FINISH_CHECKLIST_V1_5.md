@@ -65,7 +65,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## Phase 5 — Distribution ready
 
-- [ ] Android flavors "full" and "play" (Play: no READ_CALL_LOG / PROCESS_OUTGOING_CALLS, no Accessibility, FGS types, current target SDK, Data safety draft, deletion link, privacy URL); limits documented. *Accept:* both flavors build; lint per flavor. **Phone done** (mobile/DISTRIBUTION.md; the Play build also goes without the capture helper and the special-use services, see HANDOFF); lint per flavor and the AAB at the release.
+- [ ] Android flavors "full" and "play" (Play: no READ_CALL_LOG / PROCESS_OUTGOING_CALLS, no Accessibility, FGS types, current target SDK, Data safety draft, deletion link, privacy URL); limits documented. *Accept:* both flavors build; lint per flavor. **Phone done** (mobile/DISTRIBUTION.md; the Play build also goes without the capture helper and the special-use services, see HANDOFF); lint per flavor: both pass (2026-11-04, after the App Links placeholder became applinks.invalid); the AAB at the release.
 - [ ] Updates: Android full checks the website; desktop Tauri updater with signed manifests. *Accept:* tests. **Phone done** (`SelfUpdateTest`); server `/downloads/android.json` and `desktop.json` + `echoledger:publish-release` with web Phase 5; desktop updater with desktop Phase 5.
 - [ ] Windows code-signing ready (documented; CI signs when the certificate exists); Mac notarization-ready workflow. *Accept:* workflow runs unsigned today.
 - [ ] Download page (APK, Windows, Mac, versions, checksums) and a landing page. *Accept:* page tests. **Built** (`DownloadsTest`, 10 tests; with the publish command and both update manifests); live with the next web deploy.
