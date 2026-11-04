@@ -838,6 +838,8 @@ audio.player { display: none; }
 .row-menu-btn:hover, .row-menu-btn[aria-expanded="true"] { background: var(--surface-3); color: var(--text); }
 .row-menu-pop { position: absolute; top: 36px; right: 0; z-index: 6; min-width: 160px; display: grid; gap: 2px; padding: var(--space-1); box-shadow: var(--shadow-3); border-radius: var(--radius-field); }
 .row-menu-pop .btn { justify-content: flex-start; border-radius: var(--radius-sm); }
+/* Near the bottom of the list it opens upwards, so the list's scroll box does not cut it off. */
+.row-menu-pop.up { top: auto; bottom: 36px; }
 .item.renaming { cursor: default; background: var(--surface-3); }
 .item-rename { padding: 6px 10px; font-weight: 600; margin-bottom: 2px; }
 .title-button { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: text; border-radius: 4px; overflow-wrap: anywhere; letter-spacing: inherit; }

@@ -1,7 +1,7 @@
 // Library organisation on the desktop (plan B15): pin, labels and client folder of one recording, renaming it, the
 // row menu, and bulk actions for the selected recordings. Every change goes to the server; the library refreshes
 // when it answers.
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { api, errorMessage, type BinItem, type BulkAction, type BulkExportFormat, type ClientFolder, type LibraryItem } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { folderBadge, MAX_LABEL_CHARS, sortFolders, withLabel } from "../../lib/organise";
@@ -94,7 +94,8 @@ export function TitleEditor({ initial, className = "", onSave, onCancel }: {
   );
 }
 
-/** The ⋯ menu on a Library row: Rename, Pin or Unpin, Delete. */
+/** The ⋯ menu on a Library row: Rename, Pin or Unpin, Delete. It opens upwards when it would end below the visible
+ * part of the list (the last rows), where the list's scroll box cut it off. */
 export function RowMenu({ title, pinned, onRename, onPin, onDelete }: {
   title: string;
   pinned: boolean;
@@ -103,7 +104,21 @@ export function RowMenu({ title, pinned, onRename, onPin, onDelete }: {
   onDelete: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [up, setUp] = useState(false);
   const box = useRef<HTMLDivElement | null>(null);
+  const pop = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (!open) {
+      setUp(false);
+      return;
+    }
+    const scroller = box.current?.closest(".list");
+    if (!pop.current || !scroller) return;
+    const room = scroller.getBoundingClientRect();
+    const menu = pop.current.getBoundingClientRect();
+    // 36 px: the button the menu hangs from, which it then sits above.
+    if (menu.bottom > room.bottom && menu.top - 36 - menu.height >= room.top) setUp(true);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const outside = (e: MouseEvent) => {
@@ -129,7 +144,7 @@ export function RowMenu({ title, pinned, onRename, onPin, onDelete }: {
         <DotsIcon size={16} />
       </button>
       {open && (
-        <div className="row-menu-pop card" role="menu" aria-label={`Actions for ${title}`}>
+        <div ref={pop} className={`row-menu-pop card${up ? " up" : ""}`} role="menu" aria-label={`Actions for ${title}`}>
           <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onRename)}>Rename</button>
           <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onPin)}>{pinned ? "Unpin" : "Pin"}</button>
           <button type="button" role="menuitem" className="btn ghost small danger" onClick={() => pick(onDelete)}>Delete</button>
