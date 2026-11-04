@@ -221,6 +221,8 @@ export interface InputDevice {
   id: string;
   name: string;
   isDefault: boolean;
+  /** A Bluetooth headset or earbuds (v1.5): "Accuracy is lower with Bluetooth mics". */
+  bluetooth: boolean;
 }
 
 /** The 10-second test recording: loudest 100 ms per side (0-1), whether each side was heard, and a WAV to play. */
@@ -677,6 +679,8 @@ export interface RecordingState {
   hidden: boolean;
   /** The recording's language chip; null = automatic. */
   language?: TranscriptionLanguage | null;
+  /** The recording's microphone is Bluetooth (v1.5): the pill says so when it starts. */
+  bluetoothMic: boolean;
 }
 
 /** "Saved · Call with Omar · 4:12 · Undo": a recording kept at once after a call; `until` is when the toast goes. */

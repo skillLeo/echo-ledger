@@ -80,7 +80,8 @@ unsafe fn device_name(device: AudioObjectID) -> Option<String> {
     unsafe { string_property(device, kAudioObjectPropertyName) }
 }
 
-/// The connected devices with input streams (`input_devices` command); the default input device is marked.
+/// The connected devices with input streams (`input_devices` command); the default input device is marked, and
+/// Bluetooth ones are told by their transport type (else by their name).
 pub fn input_devices() -> Vec<super::InputDevice> {
     unsafe { input_devices_inner() }
 }
@@ -105,7 +106,13 @@ unsafe fn input_devices_inner() -> Vec<super::InputDevice> {
         .filter_map(|device| {
             let id = unsafe { device_uid(device) }?;
             let name = unsafe { device_name(device) }.unwrap_or_else(|| "Microphone".into());
-            Some(super::InputDevice { id, name, is_default: Some(device) == default })
+            let bus = match unsafe { get_u32(device, kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal, None) } {
+                Some(kind) if kind == kAudioDeviceTransportTypeBluetooth || kind == kAudioDeviceTransportTypeBluetoothLE => super::MicBus::Bluetooth,
+                Some(_) => super::MicBus::Other,
+                None => super::MicBus::Unknown,
+            };
+            let bluetooth = super::is_bluetooth_mic(bus, &name);
+            Some(super::InputDevice { id, name, is_default: Some(device) == default, bluetooth })
         })
         .collect()
 }

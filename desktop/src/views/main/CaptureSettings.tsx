@@ -15,6 +15,7 @@ import {
   type TestResult,
 } from "../../lib/ipc";
 import { meterLevel } from "../../lib/controls";
+import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { sourceAppLabel } from "../../lib/format";
 import { SourceAppIcon } from "../../components/Icons";
 import { SelectRow, Toggle } from "./SettingsControls";
@@ -138,6 +139,7 @@ export function MicrophoneCard({ settings, patch, disabled }: { settings: Settin
   }, []);
 
   const chosenMissing = !!settings.inputDevice && devices.length > 0 && !devices.some((d) => d.id === settings.inputDevice);
+  const bluetooth = bluetoothMic(devices, settings.inputDevice);
 
   const test = async () => {
     setTesting(true);
@@ -167,6 +169,7 @@ export function MicrophoneCard({ settings, patch, disabled }: { settings: Settin
         </select>
       </div>
       {chosenMissing && <p className="small muted">The microphone you chose is not connected, so the system default is used.</p>}
+      {bluetooth && <p className="small muted bluetooth-note" data-testid="bluetooth-note" title={bluetooth.name}>{BLUETOOTH_NOTE}. A wired or built-in microphone hears calls better.</p>}
       <div className="toggle">
         <div><div>Test recording</div><div className="small muted">Records 10 seconds of your microphone and this computer's sound, then plays it back.</div></div>
         <button type="button" className="btn" disabled={testing || disabled} onClick={() => void test()}>{testing ? "Recording…" : "Test 10 seconds"}</button>

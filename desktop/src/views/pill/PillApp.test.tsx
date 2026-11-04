@@ -396,3 +396,52 @@ describe("bookmarks and the silent-other-side warning on the pill", () => {
     expect(screen.queryByTestId("far-side-warning")).not.toBeInTheDocument();
   });
 });
+
+describe("Bluetooth microphone notice (v1.5)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    setWindowLabel("pill");
+    vi.stubGlobal("ResizeObserver", NoopResizeObserver);
+    respondAll({ overlay_set_hit_regions: undefined, recording_marked_tag: undefined });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+  const notice = () => screen.queryByTestId("bluetooth-notice");
+
+  it("says once, quietly, when the core finds the recording's microphone is Bluetooth", async () => {
+    await renderPill(makeRecordingState({ bluetoothMic: false }));
+    expect(notice()).not.toBeInTheDocument();
+    await emitEvent("recording:state", makeRecordingState({ bluetoothMic: true }));
+    expect(notice()).toHaveTextContent("Accuracy is lower with Bluetooth mics");
+    expect(notice()).toHaveAttribute("role", "status");
+    fireEvent.click(button("Dismiss notice"));
+    expect(notice()).not.toBeInTheDocument();
+    await emitEvent("recording:state", makeRecordingState({ bluetoothMic: true, elapsedMs: 70_000 }));
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  it("goes by itself after a few seconds and comes back for the next recording", async () => {
+    // Rendered before the timers are faked (waitFor drains with a real setTimeout); the notice comes after.
+    await renderPill(makeRecordingState({ bluetoothMic: false }));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await emitEvent("recording:state", makeRecordingState({ bluetoothMic: true }));
+    expect(notice()).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8_100);
+    });
+    expect(notice()).not.toBeInTheDocument();
+    await emitEvent("recording:state", makeRecordingState({ active: false, sourceApp: null, mode: null, bluetoothMic: false }));
+    await emitEvent("recording:state", makeRecordingState({ bluetoothMic: true, elapsedMs: 1_000 }));
+    expect(notice()).toBeInTheDocument();
+  });
+
+  it("gives way to a bookmark and to the silent-other-side warning", async () => {
+    await renderPill(makeRecordingState({ bluetoothMic: true }));
+    expect(notice()).toBeInTheDocument();
+    await emitEvent("capture:far_side", { silent: true, seconds: 30 });
+    expect(notice()).not.toBeInTheDocument();
+    expect(screen.getByTestId("far-side-warning")).toBeInTheDocument();
+  });
+});

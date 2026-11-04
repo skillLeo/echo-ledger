@@ -144,6 +144,7 @@ export function makeRecordingState(overrides: Partial<RecordingState> = {}): Rec
     levels: [0.4, 0.2],
     auto: true,
     hidden: false,
+    bluetoothMic: false,
     ...overrides,
   };
 }

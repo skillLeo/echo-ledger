@@ -590,6 +590,8 @@ pub struct RecordingState {
     pub hidden: bool,
     /// The recording's language chip (none: automatic, the client's or the console default).
     pub language: Option<String>,
+    /// The recording's microphone is Bluetooth (v1.5): the pill says so when the recording starts.
+    pub bluetooth_mic: bool,
 }
 
 /// `main:navigate`: which view the main window opens on.
@@ -617,6 +619,7 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
         auto: info.is_some() && state.auto_started.load(std::sync::atomic::Ordering::SeqCst),
         hidden: state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst),
         language: info.as_ref().and_then(|i| state.recording_language(&i.client_ref)),
+        bluetooth_mic: info.is_some() && state.bluetooth_mic.load(std::sync::atomic::Ordering::SeqCst),
     }
 }
 

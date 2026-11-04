@@ -181,6 +181,8 @@
 }
 .mark-tray.warn { color: var(--ctl-text); }
 .mark-tray.warn svg { flex: none; color: var(--ctl-paused); }
+.mark-tray.note { color: var(--ctl-text); }
+.mark-tray.note svg { flex: none; color: var(--ctl-muted); }
 .mark-done { flex: none; font-weight: 600; white-space: nowrap; margin-right: 2px; }
 .mark-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
 .mark-tags { display: flex; gap: 2px; min-width: 0; overflow: hidden; }

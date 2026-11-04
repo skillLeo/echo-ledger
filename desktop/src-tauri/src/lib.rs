@@ -71,6 +71,8 @@ pub struct AppState {
     pub captions_on_resume: AtomicBool,
     /// The after-call window (v1.5): the Saved toast, the chip, and what Undo needs.
     pub after_call: Mutex<after_call::Surfaces>,
+    /// The current recording's microphone is Bluetooth (v1.5): the pill says "Accuracy is lower with Bluetooth mics".
+    pub bluetooth_mic: AtomicBool,
     /// The once-a-second `recording:state` task is running.
     pub ticker_running: AtomicBool,
     /// A test recording (B5) is running.
@@ -123,6 +125,7 @@ impl AppState {
             pill_hidden: AtomicBool::new(false),
             captions_on_resume: AtomicBool::new(false),
             after_call: Mutex::new(after_call::Surfaces::default()),
+            bluetooth_mic: AtomicBool::new(false),
             ticker_running: AtomicBool::new(false),
             capture_test: AtomicBool::new(false),
             lock: lock::Lock::new(settings_locked),

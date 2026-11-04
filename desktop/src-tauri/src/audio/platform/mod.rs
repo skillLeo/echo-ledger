@@ -17,6 +17,49 @@ pub struct InputDevice {
     pub name: String,
     /// The system's default microphone for calls.
     pub is_default: bool,
+    /// A Bluetooth headset or earbuds (v1.5): in a call their microphone runs in the narrowband hands-free profile, so
+    /// the app says "Accuracy is lower with Bluetooth mics".
+    pub bluetooth: bool,
+}
+
+/// How a microphone is connected, as far as the system says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MicBus {
+    Bluetooth,
+    Other,
+    /// The system did not say (the property could not be read).
+    Unknown,
+}
+
+/// Windows: the bus in an endpoint's device instance id ("{1}.BTHHFENUM\BthHFPAudio\…" for a Bluetooth headset,
+/// "{1}.USB\VID_…" or "{1}.HDAUDIO\…" for a wired one); none or empty is unknown.
+pub fn bus_of_instance_id(instance_id: Option<&str>) -> MicBus {
+    let Some(id) = instance_id.map(str::trim).filter(|i| !i.is_empty()) else { return MicBus::Unknown };
+    let id = id.to_ascii_uppercase();
+    // BTHLE also covers BTHLEDEVICE (Bluetooth LE Audio).
+    if ["BTHENUM", "BTHHFENUM", "BTHLE"].iter().any(|bus| id.contains(bus)) { MicBus::Bluetooth } else { MicBus::Other }
+}
+
+/// Whether a microphone is Bluetooth (pure): what the system says about its bus wins, so a wired "Headset Microphone"
+/// on the laptop's audio jack is not one; when the system says nothing the name decides ("Headset (WH-1000XM4
+/// Hands-Free AG Audio)", "AirPods Pro", "Galaxy Buds2 Pro").
+pub fn is_bluetooth_mic(bus: MicBus, name: &str) -> bool {
+    match bus {
+        MicBus::Bluetooth => true,
+        MicBus::Other => false,
+        MicBus::Unknown => {
+            let name = name.to_lowercase();
+            ["hands-free", "handsfree", "bluetooth", "airpods", "buds", "headset"].iter().any(|word| name.contains(word))
+        }
+    }
+}
+
+/// The microphone a recording opens (pure): the chosen one while it is connected, else the system default.
+pub fn mic_in_use<'a>(devices: &'a [InputDevice], preferred: Option<&str>) -> Option<&'a InputDevice> {
+    match choose_mic(devices, preferred) {
+        Some(id) => devices.iter().find(|d| d.id == id),
+        None => devices.iter().find(|d| d.is_default),
+    }
 }
 
 static PREFERRED_MIC: RwLock<Option<String>> = RwLock::new(None);

@@ -287,6 +287,31 @@ fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     start_ticker(app);
     emit_status(app);
     emit_recording_state(app);
+    check_bluetooth_mic(app, info);
+}
+
+/// Whether the recording's microphone is Bluetooth (v1.5), asked of the system beside the start so the start does not
+/// wait for it; the pill shows "Accuracy is lower with Bluetooth mics" when it is.
+fn check_bluetooth_mic(app: &AppHandle, info: &crate::audio::RecordingInfo) {
+    let state = app.state::<crate::AppState>();
+    state.bluetooth_mic.store(false, Ordering::SeqCst);
+    if info.mode == RecordingMode::VoiceNote {
+        return; // this computer's sound only
+    }
+    let (app, client_ref) = (app.clone(), info.client_ref.clone());
+    std::thread::spawn(move || {
+        let devices = crate::audio::platform::input_devices();
+        let preferred = crate::audio::platform::preferred_mic();
+        if !crate::audio::platform::mic_in_use(&devices, preferred.as_deref()).is_some_and(|d| d.bluetooth) {
+            return;
+        }
+        let state = app.state::<crate::AppState>();
+        // Still the same recording (a very short one may have ended meanwhile).
+        if state.capture.info().is_some_and(|i| i.client_ref == client_ref) {
+            state.bluetooth_mic.store(true, Ordering::SeqCst);
+            emit_recording_state(&app);
+        }
+    });
 }
 
 /// Stops captions (waiting for their final turns) and the capture. Returns the finished files, the server session
@@ -301,6 +326,7 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     state.captions_on_resume.store(false, Ordering::SeqCst);
     let session = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).begin_stop();
     let finished = state.capture.stop()?;
+    state.bluetooth_mic.store(false, Ordering::SeqCst);
     set_overlay_visible(app, OVERLAY, false);
     crate::overlay::set_pill_visible(app, false);
     *state.recording_started_at.lock().unwrap() = None;

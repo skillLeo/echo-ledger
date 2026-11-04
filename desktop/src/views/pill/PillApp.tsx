@@ -4,7 +4,8 @@ import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type M
 import { useHitRegions } from "../../lib/hitRegions";
 import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
 import { elapsedAt, formatTimer, isTwoChannel, meterLevel, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
-import { CaptionsIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
+import { BLUETOOTH_NOTE } from "../../lib/microphone";
+import { CaptionsIcon, MicIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { AlertIcon, BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon } from "../../components/ControlIcons";
 import "../controls.css";
 
@@ -14,14 +15,17 @@ const ERROR_MS = 4000;
 const DRAG_SAVE_MS = 400;
 /** How long the bookmark tray stays after the last bookmark or tag. */
 export const MARK_TRAY_MS = 6000;
+/** How long "Accuracy is lower with Bluetooth mics" stays under the pill when a recording starts (v1.5). */
+export const BLUETOOTH_NOTICE_MS = 8000;
 
 type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark" | "language";
 
 /**
  * Loom-style recording controls in the 352 x 84 `pill` window: REC + timer, source, Me/Client levels, Pause/Resume,
  * Stop ("After a call" decides what follows), Cancel with an inline confirm, Mark, the language chip, Captions on/off and Hide. Under the pill, a
- * bookmark (from here or the shortcut) shows its tag presets and Undo for a few seconds, and a call that has not
- * heard the other side for 30 s shows a warning. The window never takes
+ * bookmark (from here or the shortcut) shows its tag presets and Undo for a few seconds, a call that has not heard
+ * the other side for 30 s shows a warning, and a recording from a Bluetooth microphone says once that accuracy is lower
+ * with it. The window never takes
  * focus: every control works on click, and only the pill itself is reported as a hit region.
  */
 export default function PillApp() {
@@ -35,6 +39,9 @@ export default function PillApp() {
   const [markAt, setMarkAt] = useState(0);
   const [tags, setTags] = useState<string[]>([]);
   const [farSide, setFarSide] = useState<FarSidePayload | null>(null);
+  const [bluetooth, setBluetooth] = useState(false);
+  /** The Bluetooth notice was shown for this recording (once each). */
+  const bluetoothShown = useRef(false);
   const busy = useRef<Action | null>(null);
   /** Set while Stop, Cancel or Hide runs, so a late once-a-second event cannot bring the pill back. */
   const closing = useRef(false);
@@ -52,6 +59,12 @@ export default function PillApp() {
       setConfirming(false);
       setMark(null);
       setFarSide(null);
+      bluetoothShown.current = false;
+      setBluetooth(false);
+    } else if (state.bluetoothMic && !bluetoothShown.current) {
+      // The core checks the microphone just after the start; said once per recording.
+      bluetoothShown.current = true;
+      setBluetooth(true);
     }
   }, []);
 
@@ -121,7 +134,13 @@ export default function PillApp() {
     return () => window.clearTimeout(timer);
   }, [mark, markAt]);
 
-  const tray = mark ? "mark" : farSide && running ? "warn" : null;
+  useEffect(() => {
+    if (!bluetooth) return;
+    const timer = window.setTimeout(() => setBluetooth(false), BLUETOOTH_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [bluetooth]);
+
+  const tray = mark ? "mark" : farSide && running ? "warn" : bluetooth && shown ? "bluetooth" : null;
   useHitRegions([shown, confirming, tray]);
 
   /** Runs one command at a time; on failure shows the message and resyncs with the core. */
@@ -291,6 +310,13 @@ export default function PillApp() {
           <AlertIcon size={14} />
           <span className="mark-text">Not hearing the other side for {farSide.seconds} s. Check the call's speaker or device.</span>
           <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setFarSide(null)}><MinimizeIcon size={14} /></button>
+        </div>
+      )}
+      {tray === "bluetooth" && (
+        <div className="mark-tray note" data-hit data-testid="bluetooth-notice" role="status">
+          <MicIcon size={14} />
+          <span className="mark-text">{BLUETOOTH_NOTE}</span>
+          <button type="button" className="rec-btn" aria-label="Dismiss notice" title="Dismiss" onClick={() => setBluetooth(false)}><MinimizeIcon size={14} /></button>
         </div>
       )}
     </div>

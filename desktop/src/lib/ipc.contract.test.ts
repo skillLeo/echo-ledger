@@ -229,7 +229,7 @@ describe("wire types", () => {
     expect(sorted(tsInterfaceKeys("SettingsPatch"))).toEqual(sorted(settingsPatchKeys));
   });
 
-  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "SavedToast", "AfterCallState", "SkippedItem", "AskPayload", "NavigatePayload"])(
+  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "SavedToast", "AfterCallState", "SkippedItem", "InputDevice", "AskPayload", "NavigatePayload"])(
     "%s fields match the Rust struct",
     (name) => {
       expect(sorted(tsInterfaceKeys(name))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", name), name)));

@@ -61,6 +61,11 @@ windows = { version = "0.62.2", features = [
   "Win32_Storage_Packaging_Appx",
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_WinRT",
+  # An endpoint's property store (the Bluetooth check reads its device instance id); wasapi enables these as well.
+  "Win32_Media_Audio",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_UI_Shell_PropertiesSystem",
   "Security_Credentials_UI",
   "Foundation",
   "UI",
