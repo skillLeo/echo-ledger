@@ -193,7 +193,7 @@ describe('the page', function () {
     it('keeps a sent file\'s name as plain text: no path, control or direction-changing characters', function () {
         $link = requestLink($this);
 
-        // "notes‮fdp.txt" would show as "notestxt.pdf" in the console.
+        // "notes", a right-to-left override, then "fdp.txt": the console would show "notestxt.pdf".
         sendWhole($this, $link['url'], "Plain notes.\n", "C:\\Users\\x\\notes\u{202E}fdp\u{0000}.txt", 'text/plain')->assertOk();
         sendWhole($this, $link['url'], "More notes.\n", "\u{202E}\u{0007}", 'text/plain')->assertOk();
         expect(unscoped(fn () => ClientFile::query()->orderBy('created_at')->orderBy('id')->pluck('name')->all()))->toEqualCanonicalizing(['notesfdp.txt', 'File']);
