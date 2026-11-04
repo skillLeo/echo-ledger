@@ -343,6 +343,22 @@ describe('the page', function () {
             ->assertStatus(413)->assertJsonPath('code', 'too_large');
     });
 
+    it('refuses the rest of an upload once its link is revoked or expires mid-way', function () {
+        foreach (['revoked', 'expired'] as $how) {
+            $link = requestLink($this);
+            $bytes = wav(600_000);
+            $start = startUpload($this, $link['url'], $bytes, "{$how}.wav", 'audio/wav')->assertCreated();
+            sendChunk($this, $link['url'], $start->json('upload_id'), 0, $bytes, $start->json('chunk_size'))->assertOk();
+            $how === 'revoked'
+                ? $this->asToken($this->token)->deleteJson('/api/request-links/'.$link['id'])->assertNoContent()
+                : RequestLink::query()->withoutGlobalScopes()->whereKey($link['id'])->update(['expires_at' => now()->subSecond()]);
+
+            sendChunk($this, $link['url'], $start->json('upload_id'), 1, $bytes, $start->json('chunk_size'))->assertNotFound()->assertJsonPath('code', 'not_found');
+            visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH).'/files/'.$start->json('upload_id').'/complete')->assertNotFound();
+        }
+        expect(RequestUpload::query()->where('status', 'ready')->count())->toBe(0);
+    });
+
     it('picks up an unfinished upload of the same file', function () {
         $link = requestLink($this);
         $bytes = wav(600_000);
