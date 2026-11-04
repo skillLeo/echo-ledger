@@ -19,6 +19,7 @@ use App\Services\SettingsTransfer;
 use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
+use App\Stt\Drivers\GeminiDriver;
 use App\Stt\GroqPacer;
 use App\Stt\KeytermPolicy;
 use App\Stt\LanguageChoice;
@@ -147,6 +148,7 @@ class Settings extends Page
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
             'assemblyai_async_models' => $all['assemblyai.async_models'],
             'groq_plan' => isset(GroqPacer::PLANS[$all['groq.plan'] ?? '']) ? $all['groq.plan'] : GroqPacer::DEFAULT_PLAN,
+            'gemini_model' => GeminiDriver::modelOr($all['gemini.model'] ?? null),
             'elevenlabs_base_url' => $all['elevenlabs.base_url'],
             'elevenlabs_model_id' => $all['elevenlabs.model_id'],
             'azure_region' => $all['azure.region'],
@@ -167,7 +169,7 @@ class Settings extends Page
      */
     public static function priceFields(): array
     {
-        $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI', 'soniox' => 'Soniox', 'groq' => 'Groq Whisper'];
+        $providers = ['assemblyai' => 'AssemblyAI', 'elevenlabs' => 'ElevenLabs', 'azure_mai' => 'Azure MAI', 'soniox' => 'Soniox', 'groq' => 'Groq Whisper', 'gemini' => 'Gemini'];
         $useCases = ['live_captions' => 'Live captions', 'dictation' => 'Dictation', 'final_transcript' => 'Final transcript', 'voice_note' => 'Voice notes', 'game_translate' => 'Game translate', 'watch_translate' => 'Watch translate'];
         $fields = [];
         foreach (SettingsRepository::DEFAULTS['budget.prices'] as $provider => $pairs) {
@@ -337,6 +339,11 @@ class Settings extends Page
                     $this->section('groq')->collapsible()->collapsed()->columns(2)->schema([
                         Select::make('groq_plan')->label('Groq plan')->options(GroqPacer::PLAN_LABELS)->required()->selectablePlaceholder(false)
                             ->helperText('Requests to Groq are paced under the plan\'s limits (Free: 20 requests a minute, 2 hours of audio an hour, 8 a day). The limits Groq reports in its answers always win. API Credentials → Groq shows this hour\'s and today\'s use.'),
+                    ]),
+                    $this->section('gemini')->collapsible()->collapsed()->columns(2)->schema([
+                        TextInput::make('gemini_model')->label('Gemini model')->required()->maxLength(80)
+                            ->regex(GeminiDriver::MODEL_PATTERN)->datalist(GeminiDriver::SUGGESTED_MODELS)
+                            ->helperText('Writes final transcripts word for word (Urdu in Urdu letters, English in English) when it is on an engine list or chosen in Compare engines. Key on API Credentials → Google Gemini.'),
                     ]),
                     $this->section('elevenlabs')->collapsible()->collapsed()->columns(2)->schema([
                         TextInput::make('elevenlabs_base_url')->label('API base URL')->url()->required()->rule(new ProviderEndpoint('elevenlabs')),
@@ -634,6 +641,7 @@ class Settings extends Page
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],
             'groq.plan' => isset(GroqPacer::PLANS[$state['groq_plan'] ?? '']) ? $state['groq_plan'] : GroqPacer::DEFAULT_PLAN,
+            'gemini.model' => GeminiDriver::modelOr($state['gemini_model'] ?? null),
             'elevenlabs.base_url' => rtrim((string) $state['elevenlabs_base_url'], '/'),
             'elevenlabs.model_id' => $state['elevenlabs_model_id'],
             'azure.region' => $state['azure_region'] ?: null,

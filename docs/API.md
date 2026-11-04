@@ -96,7 +96,7 @@ Every addition below is marked **(since v1.1)**.
 | recording `role` | `primary` (stereo or mono file used for playback + multichannel providers), `channel_1` (mono "Me"), `channel_2` (mono "Client") |
 | upload `status` | `pending`, `uploading`, `assembling`, `ready`, `failed` |
 | transcript `kind` / `status` | `live`, `final`, `alternate` (since v1.1), `trial` (since v1.1.2: a Compare engines run, never in the library or search) / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
-| provider | `assemblyai`, `elevenlabs`, `azure_mai`, `whispercpp_local`, `parakeet_local`, `soniox` (since v1.1.2, final transcripts only), `groq` (since v1.2: Whisper large-v3, final transcripts only) |
+| provider | `assemblyai`, `elevenlabs`, `azure_mai`, `whispercpp_local`, `parakeet_local`, `soniox` (since v1.1.2, final transcripts only), `groq` (since v1.2: Whisper large-v3, final transcripts only), `gemini` (since v1.5: Google Gemini, final transcripts only) |
 | use case | `live_captions`, `dictation`, `final_transcript`, `voice_note`, `game_translate`, `watch_translate` |
 | transcript `error_code` (since v1.1, set when `status` is `failed`) | `no_audio`, `budget_exceeded`, `provider_unreachable`, `provider_rejected`, `provider_not_configured`, `provider_timeout`, `interrupted`, `recording_missing` |
 | transcript `backup_reason` / `retry_reason` (since v1.5) | `waited`, `rejected` / `rate_limited`, `unavailable` |

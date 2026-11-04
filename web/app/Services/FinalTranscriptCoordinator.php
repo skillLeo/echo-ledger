@@ -105,8 +105,8 @@ final class FinalTranscriptCoordinator
         // Submit to the provider immediately on the fast path, so the transcript is not waiting for the next
         // scheduled queue run; otherwise queue it (large recordings, or when assembly ran on the queue).
         // An inline attempt that gives the transcript back (still pending) is queued again by maybeStart().
-        // Whisper on Groq works through every chunk inside the job: never on the upload request itself.
-        if ($sync && $provider !== SttProviderKey::Groq) {
+        // Whisper on Groq and Gemini (since v1.5) work through every chunk inside the job: never on the upload request.
+        if ($sync && ! in_array($provider, [SttProviderKey::Groq, SttProviderKey::Gemini], true)) {
             Cache::forget(self::queuedKey($transcript));
             Bus::dispatchNow(new TranscribeFinalJob($transcript->id));
         } else {

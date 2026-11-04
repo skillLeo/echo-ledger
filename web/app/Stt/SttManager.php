@@ -14,6 +14,7 @@ use App\Stt\Contracts\SttProvider;
 use App\Stt\Drivers\AssemblyAiDriver;
 use App\Stt\Drivers\AzureMaiDriver;
 use App\Stt\Drivers\ElevenLabsDriver;
+use App\Stt\Drivers\GeminiDriver;
 use App\Stt\Drivers\GroqWhisperDriver;
 use App\Stt\Drivers\ParakeetLocalDriver;
 use App\Stt\Drivers\SonioxDriver;
@@ -38,6 +39,7 @@ final class SttManager
             SttProviderKey::ParakeetLocal => $this->container->make(ParakeetLocalDriver::class),
             SttProviderKey::Soniox => $this->container->make(SonioxDriver::class),
             SttProviderKey::Groq => $this->container->make(GroqWhisperDriver::class),
+            SttProviderKey::Gemini => $this->container->make(GeminiDriver::class),
         };
     }
 

@@ -41,6 +41,8 @@ final class LanguageRouter
         'elevenlabs' => self::ALL,
         'soniox' => self::ALL,
         'groq' => self::ALL,
+        // Since v1.5, final transcripts only; in no default list until the Accuracy Lab picks it.
+        'gemini' => self::ALL,
         'azure_mai' => ['en'],
         'whispercpp_local' => self::ALL,
         'parakeet_local' => ['en'],
@@ -213,6 +215,7 @@ final class LanguageRouter
             SttProviderKey::ElevenLabs => $this->vault->has('elevenlabs', 'api_key'),
             SttProviderKey::Soniox => $this->vault->has('soniox', 'api_key'),
             SttProviderKey::Groq => $this->vault->has('groq', 'api_key'),
+            SttProviderKey::Gemini => $this->vault->has('gemini', 'api_key'),
             SttProviderKey::AzureMai => $this->vault->has('azure', 'api_key') && $this->settings->get('azure.endpoint') !== null,
             SttProviderKey::WhisperCppLocal => $this->settings->get('whisper.base_url') !== null,
             SttProviderKey::ParakeetLocal => true,
