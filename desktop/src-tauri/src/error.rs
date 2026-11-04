@@ -32,8 +32,26 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
 /// client workspace's AI budget and key, docs/API.md): shown as they are.
 const PLAIN_CODES: [&str; 9] = ["budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable", "ai_budget_reached", "ai_unavailable", "no_client", "suggestion_not_found"];
 
+/// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
+/// that know more (which project has the rule, which address has no account) say that instead.
+const CODE_TEXT: [(&str, &str); 5] = [
+    ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
+    ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
+    ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
+    ("rule_not_found", "That filing rule is no longer there."),
+    ("recipient_not_found", "One of these emails has no account on this server, so nothing was sent. Check the addresses."),
+];
+
+/// The app's own sentence for a v1.5 error code, when it has one.
+pub fn code_text(code: &str) -> Option<&'static str> {
+    CODE_TEXT.iter().find(|(c, _)| *c == code).map(|(_, text)| *text)
+}
+
 fn server_text(status: u16, message: &str, code: Option<&str>, retry_after_secs: &Option<u64>) -> String {
     let message = message.trim();
+    if let Some(text) = code.and_then(code_text) {
+        return text.to_string();
+    }
     match code {
         Some(c) if PLAIN_CODES.contains(&c) && !message.is_empty() => message.to_string(),
         // An answer without a message (a proxy's empty 502, say) gives the status, not "Server returned 502: ".
@@ -67,6 +85,18 @@ impl AppError {
         match self {
             Self::Server { retry_after_secs, .. } => *retry_after_secs,
             _ => None,
+        }
+    }
+
+    /// The route is not on this server (`404 not_found` for an unknown route, `405 method_not_allowed` when only
+    /// other methods exist): a server older than the feature. `404 client_not_found` and the like are real answers.
+    pub fn is_missing_route(&self) -> bool {
+        match self {
+            Self::Server { status, code, .. } => match code.as_deref() {
+                Some(code) => matches!(code, "not_found" | "method_not_allowed"),
+                None => matches!(status, 404 | 405),
+            },
+            _ => false,
         }
     }
 
@@ -161,6 +191,26 @@ mod server_text_tests {
     fn other_answers_keep_the_status() {
         assert_eq!(server(422, "The pairing code is invalid.", Some("validation_failed")).to_string(), "Server returned 422: The pairing code is invalid.");
         assert_eq!(server(403, "", Some("storage_limit_reached")).to_string(), "Server returned 403.");
+    }
+
+    #[test]
+    fn project_and_sharing_errors_read_as_the_app_s_own_plain_words() {
+        assert_eq!(server(422, "The parent is invalid.", Some("invalid_parent")).to_string(), "A project can't go inside itself or one of its own folders. Pick another folder.");
+        assert_eq!(server(422, "", Some("too_deep")).to_string(), "Projects can be nested 4 levels deep at most. Pick a folder higher up.");
+        assert!(server(409, "Duplicate.", Some("rule_exists")).to_string().starts_with("Another project already has this rule."));
+        assert_eq!(server(404, "No query results", Some("rule_not_found")).to_string(), "That filing rule is no longer there.");
+        assert!(server(404, "Recipient missing", Some("recipient_not_found")).to_string().contains("nothing was sent"));
+        assert_eq!(server(404, "Not found", Some("client_not_found")).to_string(), "Server returned 404: Not found", "older codes keep their text");
+    }
+
+    #[test]
+    fn only_an_unknown_route_counts_as_a_missing_feature() {
+        assert!(server(404, "Not found.", Some("not_found")).is_missing_route());
+        assert!(server(405, "The DELETE method is not supported.", Some("method_not_allowed")).is_missing_route());
+        assert!(server(404, "", None).is_missing_route());
+        assert!(!server(404, "Unknown client.", Some("client_not_found")).is_missing_route());
+        assert!(!server(500, "", None).is_missing_route());
+        assert!(!AppError::NotPaired.is_missing_route());
     }
 
     #[test]

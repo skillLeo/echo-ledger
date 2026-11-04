@@ -1,6 +1,6 @@
 // Sample data for the screenshot fixture: the phone's design screens use the same people and calls, so the desktop
 // and the phone pictures can be compared side by side.
-import type { ActivityItem, CallNotes, ClientFolder, ClientWorkspace, LibraryItem, PendingItem, Segment, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
+import type { ActivityItem, CallNotes, ClientFolder, ClientWorkspace, FilingRule, LibraryItem, LibraryViews, PendingItem, RequestLink, Segment, ShareLink, SharedItem, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
 import { makeItem, makeTranscript } from "../../src/test/fixtures";
 
 const DAY = 86_400_000;
@@ -10,12 +10,16 @@ const at = (daysAgo: number, hour: number, minute = 0): string => {
   return d.toISOString();
 };
 const client = (id: string, name: string) => ({ id, name, color: null, avatar: null });
+const ACME_PATH = [{ id: "c-acme", name: "Acme Holdings" }];
 
+// v1.5: projects with subfolders (Acme Holdings › Invoices, Contracts).
 export const CLIENTS: ClientFolder[] = [
-  { id: "c-acme", name: "Acme Holdings", session_count: 2, ai_notes: true },
-  { id: "c-north", name: "Northwind", session_count: 1, ai_notes: true },
-  { id: "c-aria", name: "Aria Studio", session_count: 1, ai_notes: false },
-  { id: "c-zed", name: "Zed Logistics", session_count: 0, ai_notes: true },
+  { id: "c-acme", name: "Acme Holdings", session_count: 2, ai_notes: true, parent_id: null, path: [], children_count: 2, nested_session_count: 4 },
+  { id: "c-acme-inv", name: "Invoices", session_count: 1, ai_notes: true, parent_id: "c-acme", path: ACME_PATH, children_count: 0, nested_session_count: 1 },
+  { id: "c-acme-con", name: "Contracts", session_count: 1, ai_notes: true, parent_id: "c-acme", path: ACME_PATH, children_count: 0, nested_session_count: 1 },
+  { id: "c-north", name: "Northwind", session_count: 1, ai_notes: true, parent_id: null, path: [], children_count: 0, nested_session_count: 1 },
+  { id: "c-aria", name: "Aria Studio", session_count: 1, ai_notes: false, parent_id: null, path: [], children_count: 0, nested_session_count: 1 },
+  { id: "c-zed", name: "Zed Logistics", session_count: 0, ai_notes: true, parent_id: null, path: [], children_count: 0, nested_session_count: 0 },
 ];
 
 const ready = (id: string, preview: string) => ({
@@ -36,7 +40,12 @@ export const ITEMS: LibraryItem[] = [
     started_at: at(1, 18, 2), duration_ms: 402_000, status: "failed", transcript: { final_status: "failed", final_transcript_id: "t-r4", live_available: false, preview: null } }),
   makeItem("r5", { title: "Kick-off: Contoso website", source_app: "microsoft_teams", source_app_label: "Microsoft Teams", source_device: "desktop", source_device_label: "Desktop",
     client: client("c-acme", "Acme Holdings"), started_at: at(3, 15, 30), duration_ms: 135_000, status: "completed", language: "en", language_chip: "EN", marker_count: 1, tags: ["Budget"],
-    labels: ["Kick-off"], transcript: ready("r5", "Welcome everyone, thanks for joining the kick-off.") }),
+    labels: ["Kick-off"], filed_by: "rule", transcript: ready("r5", "Welcome everyone, thanks for joining the kick-off.") }),
+  // v1.5: recordings in Acme's folders.
+  makeItem("r8", { title: "March invoice follow-up", source_app: "whatsapp_business", source_app_label: "WhatsApp Business", source_device: "phone", source_device_label: "Phone",
+    client: client("c-acme-inv", "Invoices"), started_at: at(2, 10, 20), duration_ms: 318_000, status: "completed", transcript: ready("r8", "The March invoice is still open.") }),
+  makeItem("r9", { title: "Contract review", source_app: "zoom", source_app_label: "Zoom", source_device: "desktop", source_device_label: "Desktop",
+    client: client("c-acme-con", "Contracts"), started_at: at(4, 14, 0), duration_ms: 1_920_000, status: "completed", transcript: ready("r9", "Clause seven needs a change.") }),
   makeItem("r6", { title: "Budget review with Acme", source_app: "google_meet", source_app_label: "Google Meet", source_device: "web", source_device_label: "Web",
     client: client("c-acme", "Acme Holdings"), started_at: at(5, 11, 0), duration_ms: 1_085_000, status: "completed", labels: ["Invoice"], transcript: ready("r6", "The budget for phase one is fixed.") }),
   makeItem("r7", { title: "Voice note", source_app: "voice_note", source_app_label: "Voice note", source_device: "desktop", source_device_label: "Desktop",
@@ -168,4 +177,42 @@ export const SKIPPED: SkippedItem[] = [
   { id: "s1", sourceApp: "whatsapp", title: null, callerName: null, startedAt: at(0, 10, 4), durationMs: 6_000, reason: "too_short", expiresAt: at(-1, 10, 4) },
   { id: "s2", sourceApp: "zoom", title: null, callerName: "Omar Khan", startedAt: at(0, 9, 41), durationMs: 95_000, reason: "no_speech", expiresAt: at(-1, 9, 42) },
   { id: "s3", sourceApp: "microsoft_teams", title: "Stand-up", callerName: null, startedAt: at(0, 8, 30), durationMs: 4_000, reason: "too_short", expiresAt: at(-1, 8, 30) },
+];
+
+/** v1.5: the smart folders' counts. */
+export const LIBRARY_VIEWS: LibraryViews = {
+  views: { today: 3, this_week: 6, waiting: 0, bookmarked: 1, failed: 1, pinned: 1 },
+  labels: [{ label: "Invoice", count: 1 }, { label: "Kick-off", count: 1 }],
+  folders: { inbox: 3, whatsapp: 2, whatsapp_business: 1, google_meet: 1, zoom: 2, teams: 1, phone: 0, voice_notes: 2, imported: 1, shared: 2 },
+};
+
+/** Acme's filing rules (v1.5). */
+export const RULES: Record<string, FilingRule[]> = {
+  "c-acme": [
+    { id: 1, kind: "title", value: "Contoso", created_at: at(9, 10) },
+    { id: 2, kind: "app", value: "microsoft_teams", created_at: at(9, 10) },
+    { id: 3, kind: "contact", value: "sara@contoso.com", created_at: at(6, 12) },
+  ],
+};
+
+/** Share links of the Contoso kick-off (v1.5). */
+export const SHARES: ShareLink[] = [
+  { id: "sh2", session_id: "r5", has_password: false, include_audio: true, expires_at: at(-6, 23, 59), revoked_at: null, active: true, view_count: 3, last_viewed_at: at(1, 16, 5),
+    created_by: "You", created_at: at(2, 11), kind: "session", client_id: null, audience: "people", people: ["sara@contoso.com", "ali@contoso.com"], allow_download: true },
+  { id: "sh1", session_id: "r5", has_password: true, include_audio: false, expires_at: null, revoked_at: at(2, 9), active: false, view_count: 0, last_viewed_at: null,
+    created_by: "You", created_at: at(3, 16), kind: "session", client_id: null, audience: "password", people: [], allow_download: false },
+];
+
+/** What teammates sent (v1.5). */
+export const SHARED: SharedItem[] = [
+  { id: "sw1", kind: "session", from: { name: "Hassam", email: "hassam@example.com" }, note: "For tomorrow's review, the part about the launch date.", title: "Call with Omar", sent_at: at(0, 8, 45), saved_at: null, client: null,
+    session: makeItem("x1", { title: "Call with Omar", source_app: "whatsapp", source_app_label: "WhatsApp", source_device: "phone", source_device_label: "Phone", client: client("x-omar", "Omar Traders"),
+      started_at: at(1, 17, 20), duration_ms: 486_000, status: "completed", transcript: ready("x1", "Assalam o alaikum Omar bhai.") }) },
+  { id: "sw2", kind: "project", from: { name: "Ana", email: "ana@contoso.com" }, note: null, title: "Northwind onboarding", sent_at: at(2, 14), saved_at: null, session: null, client: { id: "x-nw", name: "Northwind onboarding" } },
+];
+
+/** Request links (v1.5). */
+export const REQUESTS: RequestLink[] = [
+  { id: "rq1", title: "Send me your voice notes", client_id: null, expires_at: at(-5, 23, 59), max_files: 20, max_mb: 100, received: 4, revoked_at: null, created_at: at(2, 9) },
+  { id: "rq2", title: "Contoso documents", client_id: "c-acme", expires_at: at(-12, 23, 59), max_files: 10, max_mb: 50, received: 1, revoked_at: null, created_at: at(4, 9) },
 ];

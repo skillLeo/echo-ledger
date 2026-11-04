@@ -324,3 +324,39 @@ fn a_recording_without_notes_reads_as_none() {
     assert!(notes_or_none(Err(AppError::NotPaired)).is_err());
     assert_eq!(notes_or_none(Ok(json!({"data": {"status": "ready"}}))).unwrap(), Some(json!({"data": {"status": "ready"}})));
 }
+
+#[test]
+fn a_subfolder_names_its_parent_and_a_top_level_project_sends_the_v1_1_body() {
+    assert_eq!(new_client_body(" Acme ", None, Some("AC".into()), None).unwrap(), json!({"name": "Acme", "color": null, "avatar": "AC"}));
+    assert_eq!(new_client_body("Invoices", None, None, Some("01JBACME".into())).unwrap(), json!({"name": "Invoices", "color": null, "avatar": null, "parent_id": "01JBACME"}));
+    assert_eq!(new_client_body("Invoices", None, None, Some("  ".into())).unwrap().get("parent_id"), None);
+    assert_eq!(new_client_body("   ", None, None, None).unwrap_err().to_string(), "Give the project a name.");
+}
+
+#[test]
+fn a_project_can_be_moved_but_nothing_else_slips_into_the_patch() {
+    let patch = json!({"parent_id": null, "name": "Acme", "session_count": 4}).as_object().unwrap().clone();
+    let kept = allowed_patch(&patch, &CLIENT_PATCH_KEYS);
+    assert_eq!(serde_json::Value::Object(kept), json!({"parent_id": null, "name": "Acme"}));
+}
+
+#[test]
+fn a_route_an_older_server_lacks_reads_as_none_and_real_refusals_stay_errors() {
+    let server = |status: u16, code: Option<&str>| AppError::Server { status, message: "x".into(), code: code.map(String::from), retry_after_secs: None };
+    assert_eq!(when_available(Err(server(404, Some("not_found")))).unwrap(), None);
+    assert_eq!(when_available(Err(server(404, None))).unwrap(), None);
+    assert_eq!(when_available(Err(server(405, Some("method_not_allowed")))).unwrap(), None);
+    assert!(when_available(Err(server(404, Some("client_not_found")))).is_err());
+    assert!(when_available(Err(server(503, None))).is_err());
+    assert_eq!(when_available(Ok(json!({"data": []}))).unwrap(), Some(json!({"data": []})));
+}
+
+#[test]
+fn only_time_zone_names_go_into_the_views_query() {
+    for zone in ["Asia/Karachi", "UTC", "America/Argentina/Buenos_Aires", "Etc/GMT+5"] {
+        assert!(is_time_zone(zone), "{zone}");
+    }
+    for zone in ["", "Asia/Karachi&limit=1", "Europe/Paris?x", &"A".repeat(65)] {
+        assert!(!is_time_zone(zone), "{zone}");
+    }
+}

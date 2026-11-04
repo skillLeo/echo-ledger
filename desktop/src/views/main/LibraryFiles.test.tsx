@@ -143,7 +143,7 @@ describe("Rename", () => {
     await renderLibrary();
     fireEvent.click(menuOf("Budget review"));
     expect(screen.getByRole("menu", { name: "Actions for Budget review" })).toBeInTheDocument();
-    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Rename", "Unpin", "Delete"]);
+    expect(screen.getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Rename", "Move to…", "Unpin", "Delete"]);
     fireEvent.mouseDown(document.body);
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     fireEvent.click(menuOf("Budget review"));

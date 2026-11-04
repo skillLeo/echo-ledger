@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type LibraryItem, type SearchResult, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
+import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type LibraryItem, type SearchResult, type SharedItem, type SmartFolder, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
+import { folderLabel, inFolderHere } from "../../lib/folders";
+import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
+import { SharedWithMe, sentLine } from "./SharedWithMe";
+import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialogs";
 import { activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
-import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SharePanel, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
+import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
+import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
@@ -77,7 +82,7 @@ const initialOf = (name: string): string => [...name.trim()][0]?.toUpperCase() ?
  * recording beside it. Recordings waiting for a decision and uploads that need the user sit at the top of the list;
  * `focus` brings one of them into view.
  */
-export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange, onImport, onOpenClient }: {
+export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange, onImport, onOpenClient, smartFolder = null, onSmartFolder, sharedFocus = null, projects = null }: {
   notify: (t: string, e?: boolean) => void;
   focus?: PendingFocus | null;
   onFocusHandled?: () => void;
@@ -90,8 +95,23 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   onImport?: () => void;
   /** Opens a client's workspace. */
   onOpenClient?: (id: string) => void;
+  /** A smart folder the Library shows (since v1.5; the sidebar picks it): null shows every recording. */
+  smartFolder?: SmartFolder | null;
+  onSmartFolder?: (folder: SmartFolder | null) => void;
+  /** An item of Shared with me to open (an echoledger link to it). */
+  sharedFocus?: string | null;
+  /** Every project, as the sidebar has them (since v1.5); without them the Library asks for its own. */
+  projects?: ClientFolder[] | null;
 }) {
+  // The Move dialog of one recording (its row menu).
+  const [moveFor, setMoveFor] = useState<{ ids: string[]; title: string | null; current: string | null } | null>(null);
   const [items, setItems] = useState<LibraryItem[]>([]);
+  // The smart folder's recordings as the server lists them; null until it answered (or when it cannot be reached).
+  const [folderItems, setFolderItems] = useState<LibraryItem[] | null>(null);
+  const [folderLoading, setFolderLoading] = useState(false);
+  // A recording a teammate sent, open read-only beside Shared with me.
+  const [sharedOpen, setSharedOpen] = useState<SharedItem | null>(null);
+  const folderRead = useRef(0);
   const [filters, setFilters] = useState<FilterState>(NO_FILTERS);
   const [label, setLabel] = useState<string | null>(null);
   const [folder, setFolder] = useState<string | null>(null);
@@ -172,6 +192,31 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // A smart folder is read from the server when it opens and again shortly after the library changed; the saved
+  // recordings stand in until it answers, or while it cannot be reached. Shared with me reads its own list.
+  useEffect(() => {
+    setFolderItems(null);
+    setSharedOpen(null);
+    const token = ++folderRead.current;
+    if (!smartFolder || smartFolder === "shared") return;
+    const read = () => {
+      setFolderLoading(true);
+      api.libraryFolder(smartFolder)
+        .then((list) => { if (token === folderRead.current) setFolderItems(list); }, () => undefined)
+        .finally(() => { if (token === folderRead.current) setFolderLoading(false); });
+    };
+    read();
+    let timer = 0;
+    const un = listen("library:updated", () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(read, 400);
+    });
+    return () => {
+      window.clearTimeout(timer);
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, [smartFolder]);
+
   // Live status: while a recording uploads or is transcribed, the list and the open recording sync every few seconds
   // on their own (quietly: a failed try just waits for the next one) and stop once nothing is moving. Only while the
   // window is on screen (C9).
@@ -203,15 +248,45 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const pickedIds = useMemo(() => [...picked].filter((id) => items.some((i) => i.id === id && !i.deleted)), [picked, items]);
   const togglePicked = (id: string) => setPicked((p) => { const next = new Set(p); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const endSelecting = () => { setSelecting(false); setPicked(new Set()); };
-  const folders = useMemo(() => foldersOf(items, clients), [items, clients]);
+  const folders = useMemo(() => foldersOf(items, projects ? [...projects, ...clients.filter((c) => !projects.some((p) => p.id === c.id))] : clients), [items, clients, projects]);
   const addClient = (client: ClientFolder) => setClients((list) => [...list.filter((c) => c.id !== client.id), client]);
-  const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(applyFilters(items, filters), label), folder), query), sort), [items, filters, label, folder, query, sort]);
+  /** Recordings dropped on a project or the Inbox in the sidebar (since v1.5); the library then syncs on its own. */
+  const dropMove = async (ids: string[], projectId: string | null) => {
+    try {
+      await moveRecordings(ids, projectId);
+      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, folders, projectId));
+      if (ids.length > 1) endSelecting();
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+  /** A row pressed and moved: the recording, or every selected one when it is selected, follows the pointer. */
+  const startDrag = (e: React.PointerEvent, item: LibraryItem) => {
+    const ids = selecting && picked.has(item.id) ? pickedIds : [item.id];
+    beginRecordingDrag(e, () => ({ ids, label: dragLabel(ids.map((id) => items.find((i) => i.id === id)?.title)) }), (moved, projectId) => void dropMove(moved, projectId));
+  };
+  // A smart folder's recordings: the server's list (each shown as saved here when it is), else what this computer can tell.
+  const shared = smartFolder === "shared";
+  const folderBase = useMemo(() => {
+    if (!smartFolder || smartFolder === "shared") return items;
+    if (folderItems === null) return items.filter((i) => inFolderHere(i, smartFolder) === true);
+    const saved = new Map(items.map((i) => [i.id, i]));
+    return folderItems.map((i) => saved.get(i.id) ?? i).filter((i) => !i.deleted);
+  }, [items, smartFolder, folderItems]);
+  const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(applyFilters(folderBase, filters), label), folder), query), sort), [folderBase, filters, label, folder, query, sort]);
   const groups = useMemo(() => groupItems(filtered, sort), [filtered, sort]);
   // A recording opened from a transcript match stays open even when its title does not match the typed words.
   const [hitSelected, setHitSelected] = useState<string | null>(null);
-  const current = filtered.find((i) => i.id === selected) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? null;
+  const sharedSession = sharedOpen?.session && sharedOpen.session.id === selected ? sharedOpen.session : null;
+  // In Shared with me only a recording a teammate sent is open beside the list.
+  const current = shared ? sharedSession
+    : filtered.find((i) => i.id === selected) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? null;
+  // A recording a teammate sent can be played and read, not changed.
+  const readOnly = !!current && current === sharedSession;
+  // Transcript matches of a smart folder's own recordings only.
+  const shownHits = useMemo(() => (smartFolder ? found.filter((r) => folderBase.some((i) => i.id === r.session.id)) : found), [smartFolder, found, folderBase]);
   // The full client list (folders without recordings too) is fetched once, when a recording is opened or selecting starts.
-  const needClients = !!current || selecting;
+  const needClients = (!!current || selecting || moveFor !== null) && !projects;
   useEffect(() => {
     if (!needClients || clientsLoaded) return;
     setClientsLoaded(true);
@@ -425,6 +500,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (view === "original" || !transcriptId || views?.status === "ready") return;
     try {
       let state = await api.transcriptViews(transcriptId);
+      // A recording a teammate sent is only read: its views show once its owner has them made.
+      if (readOnly && (state.status === "none" || state.status === "failed")) {
+        setShowAs("original");
+        return;
+      }
       if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(transcriptId);
       setViews(state);
     } catch (e) {
@@ -716,7 +796,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       )));
     }
     if (inView !== null) return withUnsureMarks(inView);
-    const fixes = openSuggestions.filter((f) => f.index === i).map((f) => ({ f, span: suggestionSpan(s.text, f.from) })).filter((x) => x.span)
+    // Suggested fixes are decided by whoever may change the transcript, never on a recording a teammate sent.
+    const fixes = (readOnly ? [] : openSuggestions).filter((f) => f.index === i).map((f) => ({ f, span: suggestionSpan(s.text, f.from) })).filter((x) => x.span)
       .sort((a, b) => a.span![0] - b.span![0]);
     if (fixes.length > 0) {
       const out: ReactNode[] = [];
@@ -753,13 +834,20 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
 
   const total = items.filter((i) => !i.deleted).length;
   const durationMs = current && transcript ? Math.max(current.duration_ms ?? 0, ...transcript.segments.map((s) => s.end_ms)) : current?.duration_ms ?? 0;
-  const pendingFix = openSuggestions.find((f) => f.id === openSuggestion) ?? null;
+  const pendingFix = readOnly ? null : openSuggestions.find((f) => f.id === openSuggestion) ?? null;
   return (
     <>
       <div className="page-head">
         <div>
-          <h1 className="page-title">Library</h1>
-          <p className="page-sub">{total === 0 ? "Recordings from your phone, this computer and the web will appear here." : `${total} recording${total === 1 ? "" : "s"} from your phone, this computer and the web.`}</p>
+          <h1 className="page-title">{smartFolder ? folderLabel(smartFolder) : "Library"}</h1>
+          {smartFolder ? (
+            <p className="page-sub">
+              {shared ? "Recordings and projects teammates sent you." : `${filtered.length} recording${filtered.length === 1 ? "" : "s"} in this smart folder of your Library.`}{" "}
+              {onSmartFolder && <button type="button" className="btn text compact inline-link" onClick={() => onSmartFolder(null)}>Show every recording</button>}
+            </p>
+          ) : (
+            <p className="page-sub">{total === 0 ? "Recordings from your phone, this computer and the web will appear here." : `${total} recording${total === 1 ? "" : "s"} from your phone, this computer and the web.`}</p>
+          )}
         </div>
         <div className="spacer" />
         {onImport && (
@@ -769,6 +857,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         )}
         <button className="btn ghost" onClick={refresh} disabled={loading}><RefreshIcon size={16} />{loading ? "Syncing…" : "Sync"}</button>
       </div>
+      {!shared && (<>
       <div className="toolbar">
         <label className="searchbox">
           <SearchIcon size={18} />
@@ -798,21 +887,31 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         <button type="button" className="chip" aria-pressed={selecting} onClick={() => (selecting ? endSelecting() : setSelecting(true))}>{selecting ? "Cancel selection" : "Select"}</button>
         <button type="button" className="chip" aria-pressed={binOpen} onClick={() => setBinOpen(!binOpen)}>Recently deleted</button>
       </div>
+      </>)}
       <div className="library">
         <div className="list" data-testid="library-list">
           {binOpen && <BinPanel notify={notify} onClose={() => setBinOpen(false)} />}
-          {selecting && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} onSelectAll={() => setPicked(new Set(filtered.map((i) => i.id)))} />}
+          {shared && (
+            <SharedWithMe notify={notify} openId={sharedOpen?.id ?? null} focusId={sharedFocus}
+              onOpen={(item) => { if (!item.session) return; setSharedOpen(item); setSelected(item.session.id); }}
+              onSaved={(saved, item) => {
+                if (saved.client_id) onOpenClient?.(saved.client_id);
+                else if (saved.session_id) { onSmartFolder?.(null); openHit(saved.session_id, 0); }
+                else if (item.session) setSelected(item.session.id);
+              }} />
+          )}
+          {selecting && !shared && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} onSelectAll={() => setPicked(new Set(filtered.map((i) => i.id)))} />}
           {syncError && (
             <div className="notice error sync-error" role="alert">
               <span>Couldn't sync with the server. Showing what is saved on this computer.</span>
               <button type="button" className="btn compact" onClick={refresh} disabled={loading}>Retry</button>
             </div>
           )}
-          <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />
-          {found.length > 0 && (
+          {!smartFolder && <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />}
+          {shownHits.length > 0 && (
             <div className="group search-hits" role="region" aria-label="Matches in transcripts">
               <div className="group-label">In transcripts</div>
-              {found.map((r) => (
+              {shownHits.map((r) => (
                 <div key={r.session.id} className="hit-card">
                   <div className="item-title">{r.session.title}</div>
                   <div className="small muted">{formatWhen(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</div>
@@ -827,7 +926,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               ))}
             </div>
           )}
-          {!loaded && items.length === 0 && (
+          {!shared && ((!loaded && items.length === 0) || (smartFolder && folderItems === null && folderLoading && filtered.length === 0)) && (
             <div className="group" aria-busy="true">
               <span className="sr-only">Loading recordings…</span>
               {[0, 1, 2].map((i) => (
@@ -838,8 +937,14 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               ))}
             </div>
           )}
-          {loaded && filtered.length === 0 && (
-            total === 0 && !query && activeFilterCount(filters) === 0 && label === null && folder === null ? (
+          {loaded && !shared && filtered.length === 0 && !(smartFolder && folderItems === null && folderLoading) && (
+            smartFolder && !query && activeFilterCount(filters) === 0 && label === null && folder === null ? (
+              <div className="empty-state">
+                <span className="empty-icon"><LibraryIcon size={26} /></span>
+                <span className="empty-title">{smartFolder === "inbox" ? "The Inbox is empty" : "Nothing here yet"}</span>
+                <p>{smartFolder === "inbox" ? "Recordings in no project land here. Every recording is in a project now." : "Recordings show up here as soon as there are some of this kind."}</p>
+              </div>
+            ) : total === 0 && !query && activeFilterCount(filters) === 0 && label === null && folder === null ? (
               <div className="empty-state">
                 <span className="empty-icon"><LibraryIcon size={26} /></span>
                 <span className="empty-title">No recordings yet.</span>
@@ -850,7 +955,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               <div className="empty">{filters.views.size === 1 && filters.views.has("waiting") ? "Nothing is waiting here. Recordings waiting for Keep or Discard on this computer are listed at the top." : "Nothing matches. Try a different search or filter."}</div>
             )
           )}
-          {groups.map((group) => (
+          {!shared && groups.map((group) => (
             <div key={group.label ?? "all"} className="group">
               {group.label && <div className="group-label">{group.label}</div>}
               {group.items.map((item) => {
@@ -882,7 +987,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   <div key={item.id} className={`item-wrap ${selecting ? "" : "with-menu"}`}>
                     <button type="button" className={`item ${item.id === selected ? "selected" : ""} ${selecting && picked.has(item.id) ? "picked" : ""}`}
                       aria-current={!selecting && item.id === selected ? "true" : undefined} aria-pressed={selecting ? picked.has(item.id) : undefined}
-                      onClick={() => (selecting ? togglePicked(item.id) : setSelected(item.id))}>
+                      onPointerDown={(e) => startDrag(e, item)}
+                      onClick={() => { if (dragJustEnded()) return; if (selecting) togglePicked(item.id); else setSelected(item.id); }}>
                       <div className="row">
                         {avatar}
                         <div className="item-main">
@@ -906,6 +1012,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {!selecting && (
                       <RowMenu title={item.title ?? "recording"} pinned={!!item.pinned}
                         onRename={() => setRenaming({ id: item.id, where: "list" })}
+                        onMove={() => setMoveFor({ ids: [item.id], title: item.title ?? null, current: item.client?.id ?? null })}
                         onPin={() => void togglePin(item)}
                         onDelete={() => void remove(item.id)} />
                     )}
@@ -940,11 +1047,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {transcript && (
                       <button type="button" className="btn ghost icon-only" aria-label="Find in this transcript" aria-pressed={findOpen} title="Find in this transcript (Ctrl+F)" onClick={() => setFindOpen(!findOpen)}><SearchIcon size={18} /></button>
                     )}
-                    {playbackUrl && <button type="button" className="btn ghost icon-only" aria-label="Save audio" onClick={() => void saveAudio()} title="Save the recording's audio file on this computer"><DownloadIcon size={18} /></button>}
-                    <button className="btn ghost icon-only" aria-label="Share" title="Share a view-only link" aria-pressed={panel === "share"} onClick={() => setPanel(panel === "share" ? null : "share")}><ShareIcon size={18} /></button>
-                    <button className="btn danger ghost icon-only" aria-label="Delete" title="Delete this recording" onClick={() => remove(current.id)}><TrashIcon size={18} /></button>
+                    {playbackUrl && !readOnly && <button type="button" className="btn ghost icon-only" aria-label="Save audio" onClick={() => void saveAudio()} title="Save the recording's audio file on this computer"><DownloadIcon size={18} /></button>}
+                    {!readOnly && <button className="btn ghost icon-only" aria-label="Share" title="Share a view-only link" aria-pressed={panel === "share"} onClick={() => setPanel(panel === "share" ? null : "share")}><ShareIcon size={18} /></button>}
+                    {!readOnly && <button className="btn danger ghost icon-only" aria-label="Delete" title="Delete this recording" onClick={() => remove(current.id)}><TrashIcon size={18} /></button>}
                   </div>
-                  {renaming?.id === current.id && renaming.where === "detail" ? (
+                  {readOnly ? (
+                    <h2 className="detail-title">{current.title}</h2>
+                  ) : renaming?.id === current.id && renaming.where === "detail" ? (
                     <TitleEditor className="detail-title-input" initial={current.title ?? ""} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
                   ) : (
                     <h2 className="detail-title">
@@ -953,19 +1062,25 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   )}
                   <div className="detail-meta">
                     {formatWhen(current.started_at)} · {formatDuration(current.duration_ms)}
-                    {current.client ? <> · {onOpenClient ? <button type="button" className="btn text compact" style={{ height: 22, padding: "0 4px" }} onClick={() => onOpenClient(current.client!.id)}>{current.client.name}</button> : current.client.name}</> : null}
+                    {current.client ? <> · {onOpenClient && !readOnly ? <button type="button" className="btn text compact" style={{ height: 22, padding: "0 4px" }} onClick={() => onOpenClient(current.client!.id)}>{current.client.name}</button> : current.client.name}</> : null}
                   </div>
                   {engineLine(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {engineLine(current.transcript)}</div>}
                   {retrying && (
                     <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason, providerName(waitingFinal?.provider) || "The engine") ?? undefined}>{retrying}</div>
                   )}
-                  {transcript?.kind === "final" && transcript.status === "completed" && usedBackupEngine(transcript) && !isTranscribing(finalStatus) && (
+                  {transcript?.kind === "final" && transcript.status === "completed" && usedBackupEngine(transcript) && !isTranscribing(finalStatus) && !readOnly && (
                     <div className="backup-line" role="status" data-testid="backup-engine">
                       <span className="small">Backup engine — Re-transcribe?</span>
                       <button type="button" className="btn ghost compact" title="Tries the preferred engine again, in the same language" onClick={() => void retranscribeSame()}>Re-transcribe</button>
                     </div>
                   )}
-                  <OrganisePanel item={current} clients={folders} knownLabels={labels} notify={notify} onClientCreated={addClient}>
+                  {readOnly && sharedOpen && (
+                    <div className="notice shared-banner" role="note" data-testid="shared-banner">
+                      <div>{sentLine(sharedOpen)}{sharedOpen.note ? ` · “${sharedOpen.note}”` : ""}</div>
+                      <div className="muted">You can play and read it. Save to my library makes a copy you can change.</div>
+                    </div>
+                  )}
+                  {!readOnly && <OrganisePanel item={current} clients={folders} knownLabels={labels} notify={notify} onClientCreated={addClient}>
                     {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
                       <span className="head-chip retranscribe-row">
                         <span className="chip-key" aria-hidden="true">Language</span>
@@ -986,7 +1101,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         </button>
                       </span>
                     )}
-                  </OrganisePanel>
+                  </OrganisePanel>}
                   {englishRisk && englishWarned && (
                     <div className="notice" role="alert" data-testid="english-only-warning">
                       This recording has Urdu in it. English only makes the engine translate the Urdu into English. Choose Urdu (with English words) to keep every word, or click Re-transcribe anyway.
@@ -994,7 +1109,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   )}
                   {scriptWarning(current.transcript?.script_warning) && <div className="notice" role="status">{scriptWarning(current.transcript?.script_warning)}</div>}
                 </div>
-                {panel === "share" && <SharePanel sessionId={current.id} hasAudio={!!playbackUrl} notify={notify} onClose={() => setPanel(null)} />}
+                {panel === "share" && !readOnly && (
+                  <ShareDialog target={{ kind: "session", id: current.id, title: current.title ?? null, hasAudio: !!playbackUrl }} view={exportView} notify={notify} onClose={() => setPanel(null)} />
+                )}
                 {playbackError && <div className="notice" style={{ marginTop: 12 }}>{playbackError}</div>}
                 {bookmarks.length > 0 && (
                   <div className="chips bookmarks" role="list" aria-label="Bookmarks" style={{ marginTop: 12 }}>
@@ -1022,7 +1139,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     <>
                       <div className="transcript-bar">
                         <span className="small muted engine">{transcript.kind === "final" ? `Final transcript · ${providerName(transcript.provider)}${transcript.model ? ` · ${transcript.model}` : ""}${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress) ? ` · ${partsText(current.transcript?.final_progress)}` : ""})`}</span>
-                        {(transcript.views?.available.length ?? 0) > 0 && transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0 && (
+                        {(transcript.views?.available.length ?? 0) > 0 && transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0
+                          && (!readOnly || transcript.views?.status === "ready") && (
                           <span className="segmented view-switch" role="group" aria-label="Show as">
                             {VIEW_ORDER.filter((v) => transcript.views!.available.includes(v)).map((v) => (
                               <button key={v} type="button" lang={v === "urdu" ? "ur" : undefined} aria-pressed={showAs === v} onClick={() => void chooseView(v)}>{VIEW_LABELS[v]}</button>
@@ -1046,7 +1164,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                               : `Writing the ${VIEW_LABELS[showAs]} view… this takes a minute or two.`}
                         </div>
                       )}
-                      {transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0 && (
+                      {transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0 && !readOnly && (
                         <div className="row small transcript-tools" role="toolbar" aria-label="Transcript tools">
                           <button className="btn ghost" aria-pressed={editing} onClick={() => setEditing(!editing)}>{editing ? "Done editing" : "Edit text"}</button>
                           <button className="btn ghost" aria-pressed={panel === "replace"} onClick={() => setPanel(panel === "replace" ? null : "replace")}>Find and replace</button>
@@ -1058,9 +1176,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       {panel === "replace" && <ReplaceBar onReplace={replaceAll} onClose={() => setPanel(null)} />}
                       {panel === "speakers" && <SpeakersPanel labels={speakerLabels(transcript.segments)} names={speakerNames} hasClient={!!current.client} onSave={saveSpeakers} onClose={() => setPanel(null)} />}
                       {panel === "history" && <HistoryPanel transcriptId={transcript.id} edited={!!transcript.edited_at} onRestore={restore} onClose={() => setPanel(null)} />}
-                      <LearnOfferBar offer={learn[0] ?? null} onAnswer={(yes) => void answerLearn(yes)} />
-                      {learn.length === 0 && <VocabularyHint terms={vocabTerms} clientName={current.client?.name ?? null} onAdd={(t) => void addToVocabulary(t)} onDismiss={() => setVocabTerms([])} />}
-                      {openSuggestions.length > 0 && showAs === "original" && !editing && (
+                      {!readOnly && <LearnOfferBar offer={learn[0] ?? null} onAnswer={(yes) => void answerLearn(yes)} />}
+                      {learn.length === 0 && !readOnly && <VocabularyHint terms={vocabTerms} clientName={current.client?.name ?? null} onAdd={(t) => void addToVocabulary(t)} onDismiss={() => setVocabTerms([])} />}
+                      {openSuggestions.length > 0 && showAs === "original" && !editing && !readOnly && (
                         <div className="suggestions-note" role="status">
                           <SparkleIcon size={15} />
                           <span>{openSuggestions.length === 1 ? "1 suggested fix" : `${openSuggestions.length} suggested fixes`}: words that may have been misheard are underlined.</span>
@@ -1124,7 +1242,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     <div className="empty">{isTranscribing(finalStatus) ? transcribingText(current.transcript?.final_progress) : finalStatus ? `Transcript ${finalStatus.replace("_", " ")}` : "Transcript not available yet."}</div>
                   )
                 )}
-                {current.client && <CallNotesSection key={current.id} sessionId={current.id} clientName={current.client.name} onSeek={seek} notify={notify} />}
+                {current.client && !readOnly && <CallNotesSection key={current.id} sessionId={current.id} clientName={current.client.name} onSeek={seek} notify={notify} />}
               </div>
               {playbackUrl && (
                 <PlayerDock playing={playing} nowMs={nowMs} durationMs={durationMs} onToggle={togglePlay} onSkip={skipBy}
@@ -1138,6 +1256,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
           )}
         </div>
       </div>
+      {moveFor && (
+        <MoveRecordingsDialog ids={moveFor.ids} title={moveFor.title} current={moveFor.current} projects={folders} notify={notify}
+          onClose={() => setMoveFor(null)} onProjectCreated={addClient} />
+      )}
     </>
   );
 }

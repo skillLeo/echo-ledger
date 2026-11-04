@@ -28,6 +28,19 @@ describe("command palette (B9)", () => {
     expect(paused).toContain("resume");
   });
 
+  it("offers the smart folders the sidebar lists, after the Library", () => {
+    const openFolder = vi.fn();
+    const folders = [{ folder: "inbox" as const, label: "Inbox" }, { folder: "shared" as const, label: "Shared with me" }];
+    const commands = paletteCommands(makeStatus(), { go: vi.fn(), run: vi.fn(), folders, openFolder });
+    const ids = commands.map((c) => c.id);
+    expect(ids.slice(ids.indexOf("library"), ids.indexOf("projects"))).toEqual(["library", "folder-inbox", "folder-shared"]);
+    commands.find((c) => c.id === "folder-shared")!.run();
+    expect(openFolder).toHaveBeenCalledWith("shared");
+    expect(commands.find((c) => c.id === "folder-shared")!.label).toBe("Go to Shared with me");
+    // Without a way to open them (a server older than v1.5 lists none), there are none.
+    expect(paletteCommands(makeStatus(), { go: vi.fn(), run: vi.fn(), folders }).some((c) => c.id.startsWith("folder-"))).toBe(false);
+  });
+
   function renderPalette(status = makeStatus()) {
     const props = { onClose: vi.fn(), onGo: vi.fn(), run: vi.fn(), onOpenRecording: vi.fn() };
     render(<CommandPalette status={status} {...props} />);
@@ -38,7 +51,7 @@ describe("command palette (B9)", () => {
     const props = renderPalette();
     const input = screen.getByRole("combobox");
     fireEvent.change(input, { target: { value: "go to" } });
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Library", "Go to Clients", "Go to Record", "Go to Activity", "Go to Settings"]);
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Library", "Go to Projects", "Go to Record", "Go to Activity", "Go to Settings"]);
     expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "ArrowDown" });

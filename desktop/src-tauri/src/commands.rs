@@ -603,6 +603,9 @@ pub struct NavigatePayload {
     pub rename: bool,
     /// A recording to open in the library (an OS notification was clicked, B18).
     pub recording_id: Option<String>,
+    /// A share, project or request link of the server to open in place (an `echoledger://open` link, since v1.5);
+    /// the page resolves it with `links_resolve`.
+    pub link: Option<String>,
 }
 
 pub fn recording_state_now(app: &AppHandle) -> RecordingState {
@@ -1053,7 +1056,7 @@ fn main_window_handle(app: &AppHandle) -> isize {
 }
 /// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
 pub const SESSION_PATCH_KEYS: [&str; 5] = ["title", "client_id", "pinned", "keep", "labels"];
-pub const CLIENT_PATCH_KEYS: [&str; 6] = ["name", "color", "avatar", "pinned", "language", "ai_notes"];
+pub const CLIENT_PATCH_KEYS: [&str; 7] = ["name", "color", "avatar", "pinned", "language", "ai_notes", "parent_id"];
 pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
 /// The server takes at most this many recordings per bulk action.
@@ -1117,17 +1120,29 @@ pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
-/// A new client folder.
-#[tauri::command]
-pub async fn client_create(state: State<'_, AppState>, name: String, color: Option<String>, avatar: Option<String>) -> AppResult<serde_json::Value> {
-    let name = name.trim().to_string();
+/// The body of `POST /api/clients`: a trimmed name, and `parent_id` only for a subfolder (a top-level project sends
+/// exactly the v1.1 body).
+pub fn new_client_body(name: &str, color: Option<String>, avatar: Option<String>, parent_id: Option<String>) -> AppResult<serde_json::Value> {
+    let name = name.trim();
     if name.is_empty() {
-        return Err(AppError::msg("Give the client a name."));
+        return Err(AppError::msg("Give the project a name."));
     }
-    state.api()?.create_client(&serde_json::json!({ "name": name, "color": color, "avatar": avatar })).await
+    let mut body = serde_json::json!({ "name": name, "color": color, "avatar": avatar });
+    if let Some(parent) = parent_id.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()) {
+        body["parent_id"] = serde_json::json!(parent);
+    }
+    Ok(body)
 }
 
-/// Renames, recolours, sets the avatar of or pins a client folder, or switches its automatic call notes.
+/// A new client folder (a project; since v1.5 inside another one with `parent_id`).
+#[tauri::command]
+pub async fn client_create(state: State<'_, AppState>, name: String, color: Option<String>, avatar: Option<String>, parent_id: Option<String>) -> AppResult<serde_json::Value> {
+    let body = new_client_body(&name, color, avatar, parent_id)?;
+    state.api()?.create_client(&body).await
+}
+
+/// Renames, recolours, sets the avatar of or pins a client folder, switches its automatic call notes, or (since v1.5)
+/// moves the project into another one (`parent_id`, `null` = the top level).
 #[tauri::command]
 pub async fn client_update(app: AppHandle, id: String, patch: serde_json::Map<String, serde_json::Value>) -> AppResult<serde_json::Value> {
     let patch = allowed_patch(&patch, &CLIENT_PATCH_KEYS);
@@ -1137,6 +1152,227 @@ pub async fn client_update(app: AppHandle, id: String, patch: serde_json::Map<St
     let client = app.state::<AppState>().api()?.update_client(&id, &serde_json::Value::Object(patch)).await?;
     let _ = refresh_library_inner(&app).await;
     Ok(client)
+}
+
+// ---- Projects, smart folders, filing rules, sharing and links (v1.5) ---------------------------------------------
+
+/// What a feature that the server does not have yet says when it is used anyway.
+fn needs_newer_server(what: &str) -> AppError {
+    AppError::msg(format!("{what} needs a newer EchoLedger server. Ask the person who runs it to update."))
+}
+
+/// An answer from a route a server older than the feature does not have: `None` then, and the UI hides the feature.
+pub fn when_available(answer: AppResult<serde_json::Value>) -> AppResult<Option<serde_json::Value>> {
+    match answer {
+        Ok(value) => Ok(Some(value)),
+        Err(e) if e.is_missing_route() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// An IANA time zone name as the webview reports it (`Asia/Karachi`, `UTC`, `Etc/GMT+5`).
+pub fn is_time_zone(zone: &str) -> bool {
+    (1..=64).contains(&zone.len()) && zone.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '+'))
+}
+
+/// Deletes a project. Nothing in it is lost: its recordings go to the Inbox and its subfolders up a level (its files,
+/// brief, notes, memory and rules go with it). Returns `{"moved_sessions", "moved_projects"}`.
+#[tauri::command]
+pub async fn client_delete(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let answer = match state.api()?.delete_client(&id).await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("Deleting a project")),
+        other => other?,
+    };
+    // New recordings stop going to a project that is gone.
+    if state.settings().client_id.as_deref() == Some(id.as_str()) {
+        let settings = state.update_settings(|s| s.client_id = None)?;
+        let _ = app.emit("settings:changed", settings);
+    }
+    let _ = refresh_library_inner(&app).await;
+    Ok(answer)
+}
+
+/// The smart views' counts and the labels and, since v1.5, the smart folders' counts (`folders`).
+#[tauri::command]
+pub async fn library_views(state: State<'_, AppState>, tz: Option<String>) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let tz = tz.filter(|zone| is_time_zone(zone));
+    state.api()?.library_views(tz.as_deref()).await
+}
+
+/// Every recording of one smart folder (Inbox, WhatsApp, Imported, …), read page by page from the server.
+#[tauri::command]
+pub async fn library_folder(state: State<'_, AppState>, folder: String) -> AppResult<Vec<crate::net::models::LibraryItem>> {
+    ensure_unlocked(&state)?;
+    let folder = crate::projects::check_folder(&folder)?;
+    let api = state.api()?;
+    let mut items = Vec::new();
+    let mut cursor: Option<String> = None;
+    let mut seen = std::collections::HashSet::new();
+    for _ in 0..crate::projects::MAX_FOLDER_PAGES {
+        let page = api.library_folder(folder, cursor.as_deref()).await?;
+        items.extend(page.data.into_iter().filter(|item| !item.deleted));
+        match page.next_cursor {
+            Some(next) if seen.insert(next.clone()) => cursor = Some(next),
+            _ => break,
+        }
+    }
+    Ok(items)
+}
+
+/// A project's filing rules, or `None` on a server without them (the project page then hides its rules).
+#[tauri::command]
+pub async fn client_rules(state: State<'_, AppState>, id: String) -> AppResult<Option<serde_json::Value>> {
+    ensure_unlocked(&state)?;
+    when_available(state.api()?.client_rules(&id).await)
+}
+
+/// Adds a filing rule (title contains, app, or a contact's number or email). When another project already has it,
+/// the refusal says which one.
+#[tauri::command]
+pub async fn client_rule_add(state: State<'_, AppState>, id: String, kind: String, value: String) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let value = crate::projects::check_rule(&kind, &value)?;
+    let api = state.api()?;
+    match api.add_client_rule(&id, &kind, &value).await {
+        Err(AppError::Server { code: Some(code), message, .. }) if code == "rule_exists" => {
+            Err(AppError::msg(crate::projects::rule_exists_text(&api, &id, &kind, &value, &message).await))
+        }
+        other => other,
+    }
+}
+
+/// Removes a filing rule; one that is already gone (removed on another device) counts as removed.
+#[tauri::command]
+pub async fn client_rule_delete(state: State<'_, AppState>, id: String, rule: String) -> AppResult<()> {
+    ensure_unlocked(&state)?;
+    match state.api()?.delete_client_rule(&id, &rule).await {
+        Err(e) if e.code() == Some("rule_not_found") => Ok(()),
+        other => other,
+    }
+}
+
+/// A share link for a recording (`kind` session) or a project (`kind` project): who may open it, downloads, expiry.
+/// The answer carries the link's URL, shown once.
+#[tauri::command]
+pub async fn share_link_create(state: State<'_, AppState>, kind: String, id: String, options: crate::sharing::ShareOptions) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let target = crate::sharing::target_path(&kind)?;
+    let body = options.body(chrono::Utc::now())?;
+    let api = state.api()?;
+    let link = match api.create_link_share(target, &id, &body).await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("Sharing a project")),
+        other => other?,
+    };
+    // Never hand out a link more open than the one asked for: revoke it at once.
+    if !crate::sharing::link_as_asked(&options, &link) {
+        if let Some(made) = link["id"].as_str() {
+            let _ = api.revoke_share(made).await;
+        }
+        return Err(AppError::msg(crate::sharing::LINK_NOT_AS_ASKED));
+    }
+    Ok(link)
+}
+
+/// The share links of a recording or a project, newest first, or `None` on a server older than v1.5 (the share
+/// dialog then offers the v1.1 link with `share_list`).
+#[tauri::command]
+pub async fn shares_of(state: State<'_, AppState>, session_id: Option<String>, client_id: Option<String>) -> AppResult<Option<serde_json::Value>> {
+    ensure_unlocked(&state)?;
+    when_available(state.api()?.shares(session_id.as_deref(), client_id.as_deref()).await)
+}
+
+/// Sends a recording or a project to teammates with an account on this server, with a note; returns how many
+/// people it went to. An address without an account is named, and then nothing is sent.
+#[tauri::command]
+pub async fn send_to_teammate(state: State<'_, AppState>, kind: String, id: String, to: Vec<String>, note: Option<String>) -> AppResult<u64> {
+    ensure_unlocked(&state)?;
+    let target = crate::sharing::target_path(&kind)?;
+    let body = crate::sharing::send_body(&to, note.as_deref())?;
+    let emails: Vec<String> = body["to"].as_array().map(|list| list.iter().filter_map(|e| e.as_str().map(str::to_string)).collect()).unwrap_or_default();
+    match state.api()?.send_to(target, &id, &body).await {
+        Ok(answer) => Ok(answer.get("sent").and_then(serde_json::Value::as_u64).unwrap_or(emails.len() as u64)),
+        Err(AppError::Server { code: Some(code), message, .. }) if code == "recipient_not_found" => Err(AppError::msg(crate::sharing::recipient_text(&emails, &message))),
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Sending to a teammate")),
+        Err(e) => Err(e),
+    }
+}
+
+/// What teammates sent: recordings and projects, or `None` on a server without it (Shared with me is then hidden).
+#[tauri::command]
+pub async fn shared_with_me(state: State<'_, AppState>) -> AppResult<Option<serde_json::Value>> {
+    ensure_unlocked(&state)?;
+    when_available(state.api()?.shared_with_me().await)
+}
+
+/// "Save to my library": a copy of what was sent, in this workspace and independent of the original.
+#[tauri::command]
+pub async fn shared_save(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let answer = state.api()?.save_shared(&id).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(answer)
+}
+
+/// Takes something off Shared with me (the sender keeps theirs).
+#[tauri::command]
+pub async fn shared_remove(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    ensure_unlocked(&state)?;
+    state.api()?.remove_shared(&id).await
+}
+
+/// A request link: a page where anyone can send voice notes and files into a project or the Inbox. The answer
+/// carries its URL, shown once.
+#[tauri::command]
+pub async fn request_link_create(state: State<'_, AppState>, options: crate::sharing::RequestLinkOptions) -> AppResult<serde_json::Value> {
+    ensure_unlocked(&state)?;
+    let body = options.body(chrono::Utc::now())?;
+    match state.api()?.create_request_link(&body).await {
+        Err(e) if e.is_missing_route() => Err(needs_newer_server("Requesting files")),
+        other => other,
+    }
+}
+
+/// The request links with what each one received, or `None` on a server without them (Request files is hidden).
+#[tauri::command]
+pub async fn request_links(state: State<'_, AppState>) -> AppResult<Option<serde_json::Value>> {
+    ensure_unlocked(&state)?;
+    when_available(state.api()?.request_links().await)
+}
+
+#[tauri::command]
+pub async fn request_link_revoke(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    ensure_unlocked(&state)?;
+    state.api()?.revoke_request_link(&id).await
+}
+
+/// What a share, project or request link is in this workspace (`GET /api/links/resolve`), or `None` when the app
+/// cannot open it in place: a link of another server (never sent there), someone else's, revoked or expired, or a
+/// server without the route. The window then opens the page in the browser.
+#[tauri::command]
+pub async fn links_resolve(state: State<'_, AppState>, url: String) -> AppResult<Option<serde_json::Value>> {
+    ensure_unlocked(&state)?;
+    let link = crate::deep_link::app_link(&url).ok_or_else(|| AppError::msg("That is not an EchoLedger link."))?;
+    let server = state.settings().server_url.ok_or(AppError::NotPaired)?;
+    if !crate::deep_link::same_server(&link, &server) {
+        return Ok(None);
+    }
+    match state.api()?.resolve_link(&link).await {
+        Ok(answer) => Ok(Some(answer)),
+        Err(e) if e.status() == Some(404) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Opens a share, project or request page in the browser (a link the app cannot open in place).
+#[tauri::command]
+pub fn link_open(app: AppHandle, url: String) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let link = crate::deep_link::app_link(&url).ok_or_else(|| AppError::msg("That is not an EchoLedger link."))?;
+    app.opener().open_url(link, None::<&str>).map_err(|e| AppError::msg(e.to_string()))
 }
 #[tauri::command]
 pub async fn share_create(state: State<'_, AppState>, session_id: String, expires_in: u64, password: Option<String>, include_audio: bool) -> AppResult<serde_json::Value> {

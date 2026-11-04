@@ -5,6 +5,7 @@ pub mod activity;
 pub mod after_call;
 pub mod audio;
 mod commands;
+pub mod deep_link;
 pub mod detect;
 pub mod dictation;
 pub mod error;
@@ -15,8 +16,10 @@ pub mod material;
 pub mod net;
 pub mod overlay;
 pub mod pending;
+pub mod projects;
 pub mod recovery;
 pub mod settings;
+pub mod sharing;
 pub mod shortcuts;
 pub mod skipped;
 pub mod stt;
@@ -199,7 +202,7 @@ pub fn run() {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| actions::show_main_from_outside(app))) // must be first
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))) // must be first
         .plugin(shortcuts::plugin())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
         .plugin(tauri_plugin_notification::init())
@@ -258,6 +261,10 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             if !std::env::args().any(|a| a == "--autostart") {
                 tray::show_main(&handle);
+            }
+            // Started by an echoledger://open link (Windows passes it on the command line, since v1.5).
+            if let Some(link) = deep_link::find_open_link(&std::env::args().collect::<Vec<_>>()) {
+                actions::open_app_link(&handle, link);
             }
             Ok(())
         })
@@ -349,6 +356,23 @@ pub fn run() {
             commands::sessions_export,
             commands::client_create,
             commands::client_update,
+            commands::client_delete,
+            commands::library_views,
+            commands::library_folder,
+            commands::client_rules,
+            commands::client_rule_add,
+            commands::client_rule_delete,
+            commands::share_link_create,
+            commands::shares_of,
+            commands::send_to_teammate,
+            commands::shared_with_me,
+            commands::shared_save,
+            commands::shared_remove,
+            commands::request_link_create,
+            commands::request_links,
+            commands::request_link_revoke,
+            commands::links_resolve,
+            commands::link_open,
             commands::share_create,
             commands::share_list,
             commands::share_revoke,
@@ -398,6 +422,14 @@ pub fn run() {
         .expect("error while building EchoLedger");
 
     app.run(|handle, event| {
+        // macOS hands an echoledger://open link to the running app as an opened URL (Info.plist registers the scheme).
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Opened { urls, .. } = &event {
+            let urls: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
+            if let Some(link) = deep_link::find_open_link(&urls) {
+                actions::open_app_link(handle, link);
+            }
+        }
         if let RunEvent::ExitRequested { code, api, .. } = &event {
             // User-initiated exit (last window closed): stay in the tray. Programmatic exit (Quit) proceeds.
             if code.is_none() {

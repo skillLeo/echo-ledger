@@ -52,6 +52,13 @@
       "freezePrototype": true
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["echoledger"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
