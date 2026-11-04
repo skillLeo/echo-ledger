@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
@@ -101,6 +102,50 @@ describe('the tree', function () {
         project($this, 'Child', $other);
         $this->patchJson("/api/clients/{$other->id}", ['parent_id' => $three->id])->assertStatus(422)->assertJsonPath('code', 'too_deep');
         $this->patchJson("/api/clients/{$other->id}", ['parent_id' => $two->id])->assertOk();
+    });
+
+    it('refuses a move that would close a loop with a move made at the same time', function () {
+        $a = project($this, 'A');
+        $b = project($this, 'B');
+        // Another request moves B under A after this one checked that A may go under B, before it is saved.
+        Client::updating(function (Client $moving) use ($a, $b): void {
+            if ($moving->id === $a->id && $moving->isDirty('parent_id')) {
+                Client::query()->whereKey($b->id)->toBase()->update(['parent_id' => $a->id]);
+            }
+        });
+
+        $this->patchJson("/api/clients/{$a->id}", ['parent_id' => $b->id])->assertStatus(422)->assertJsonPath('code', 'invalid_parent');
+        $parents = Client::query()->pluck('parent_id', 'id')->all();
+        expect($parents[$a->id] === $b->id && $parents[$b->id] === $a->id)->toBeFalse();
+    });
+
+    it('refuses a move that would pass four levels with a move made at the same time', function () {
+        [$one, $two, $three] = [project($this, 'One'), project($this, 'Two'), project($this, 'Three')];
+        $deep = project($this, 'Deep', project($this, 'Mid', $three));
+        // Three levels below "Two" once "Three" moves in, which another request does while this one is saved.
+        Client::updating(function (Client $moving) use ($two, $three): void {
+            if ($moving->id === $two->id && $moving->isDirty('parent_id')) {
+                Client::query()->whereKey($three->id)->toBase()->update(['parent_id' => $two->id]);
+            }
+        });
+
+        $this->patchJson("/api/clients/{$two->id}", ['parent_id' => $one->id])->assertStatus(422)->assertJsonPath('code', 'too_deep');
+        expect(Client::query()->whereKey($two->id)->value('parent_id'))->toBeNull()
+            ->and(Client::query()->whereKey($deep->id)->value('parent_id'))->not->toBeNull();
+    });
+
+    it('keeps one project of a name in a folder when two are made at the same time', function () {
+        // Another request makes "Acme" at the top while this one is saved (a unique index cannot see top-level names).
+        Client::creating(function (Client $client): void {
+            if ($client->name === 'acme' && Client::query()->whereRaw('LOWER(name) = ?', ['acme'])->doesntExist()) {
+                Client::query()->toBase()->insert(['id' => (string) Str::ulid(), 'workspace_id' => $client->workspace_id, 'user_id' => $client->user_id,
+                    'name' => 'Acme', 'pinned' => false, 'created_at' => now(), 'updated_at' => now()]);
+            }
+        });
+
+        $this->postJson('/api/clients', ['name' => 'acme'])->assertStatus(422)->assertJsonPath('code', 'validation_failed')
+            ->assertJsonPath('errors.name.0', 'A project with this name is already in this folder.');
+        expect(Client::query()->whereRaw('LOWER(name) = ?', ['acme'])->count())->toBeLessThanOrEqual(1);
     });
 
     it('answers client_not_found for a parent of another workspace', function () {

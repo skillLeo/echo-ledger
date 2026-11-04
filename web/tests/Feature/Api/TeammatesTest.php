@@ -224,6 +224,20 @@ describe('saving a copy', function () {
     });
 });
 
+describe('saving again', function () {
+    it('checks the plan\'s storage on every save, so saving the same item again cannot pass it', function () {
+        $this->postJson("/api/sessions/{$this->call->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+        $item = received($this)[0];
+        $one = (int) Recording::query()->where('capture_session_id', $this->call->id)->sum('stored_size_bytes');
+        $plan = Plan::query()->create(['key' => 'one-copy', 'name' => 'One copy', 'storage_bytes' => (int) ($one * 1.5)]);
+        Workspace::query()->whereKey($this->omar->current_workspace_id)->update(['plan_id' => $plan->id]);
+
+        $this->postJson("/api/shared-with-me/{$item['id']}/save")->assertCreated();
+        $this->postJson("/api/shared-with-me/{$item['id']}/save")->assertForbidden()->assertJsonPath('code', 'storage_limit_reached');
+        expect(unscoped(fn () => CaptureSession::query()->where('workspace_id', $this->omar->current_workspace_id)->count()))->toBe(1);
+    });
+});
+
 describe('removing', function () {
     it('takes an item off the list and leaves the original; other people\'s items are 404', function () {
         $this->postJson("/api/sessions/{$this->call->id}/send", ['to' => ['omar@example.com']])->assertCreated();

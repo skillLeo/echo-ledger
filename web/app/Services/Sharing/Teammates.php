@@ -159,11 +159,14 @@ final class Teammates
                 ->where('status', '!=', SessionStatus::Recording->value)->get()
             : CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereKey($item->capture_session_id)->get();
         $bytes = (int) Recording::query()->whereIn('capture_session_id', $sessions->modelKeys())->whereNotNull('stored_path')->sum('stored_size_bytes');
-        app(PlanLimits::class)->assertStorage($workspaceId, $bytes);
 
         $this->written = [];
         try {
-            $result = DB::transaction(function () use ($person, $workspaceId, $item, $sessions): array {
+            $result = DB::transaction(function () use ($person, $workspaceId, $item, $sessions, $bytes): array {
+                // One copy at a time in the workspace, with its projects' other changes waiting: two saves at once
+                // cannot both pass the plan's storage, and copied folders take names that are free (ProjectTree::place).
+                ProjectTree::lock($workspaceId);
+                app(PlanLimits::class)->assertStorage($workspaceId, $bytes);
                 if ($item->kind === 'project' && $item->client !== null) {
                     $folders = $this->copyTree($item->client, null, $workspaceId, $person);
                     foreach ($sessions as $session) {
@@ -199,9 +202,10 @@ final class Teammates
     /**
      * Copies a project and its subfolders (names, colours, avatars, languages) into the workspace.
      *
+     * @param  array<string, string>  $map  the folders copied so far: a folder is copied once, even from a tree with a loop
      * @return array<string, string> original project id → its copy's id
      */
-    private function copyTree(Client $project, ?string $parentId, int $workspaceId, User $person): array
+    private function copyTree(Client $project, ?string $parentId, int $workspaceId, User $person, array $map = []): array
     {
         $copy = Client::query()->withoutGlobalScope(WorkspaceScope::class)->create([
             'workspace_id' => $workspaceId,
@@ -212,9 +216,11 @@ final class Teammates
             'avatar' => $project->avatar,
             'language' => $project->language,
         ]);
-        $map = [$project->id => $copy->id];
+        $map[$project->id] = $copy->id;
         foreach (Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('parent_id', $project->id)->orderBy('name')->get() as $child) {
-            $map += $this->copyTree($child, $copy->id, $workspaceId, $person);
+            if (! isset($map[$child->id])) {
+                $map = $this->copyTree($child, $copy->id, $workspaceId, $person, $map);
+            }
         }
 
         return $map;

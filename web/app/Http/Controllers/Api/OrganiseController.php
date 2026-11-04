@@ -115,11 +115,14 @@ final class OrganiseController extends Controller
     {
         $device = $this->device($request);
         $data = $request->validate(self::clientRules(true));
-        $parent = $this->projects->parentFor($device->workspace_id, $data['parent_id'] ?? null);
-        $this->projects->assertCanPlace(null, $parent);
-        $values = self::clientValues($data);
-        $this->projects->assertNameFree($device->workspace_id, $parent?->id, (string) $values['name']);
-        $client = Client::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'parent_id' => $parent?->id, ...$values]);
+        $client = $this->projects->place($device->workspace_id, function () use ($device, $data): Client {
+            $parent = $this->projects->parentFor($device->workspace_id, $data['parent_id'] ?? null);
+            $this->projects->assertCanPlace(null, $parent);
+            $values = self::clientValues($data);
+            $this->projects->assertNameFree($device->workspace_id, $parent?->id, (string) $values['name']);
+
+            return Client::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'parent_id' => $parent?->id, ...$values]);
+        });
 
         return response()->json(['data' => $this->projects->payload($client)], 201);
     }
@@ -129,17 +132,23 @@ final class OrganiseController extends Controller
     {
         $client = $this->client($request, $id);
         $data = $request->validate(self::clientRules(false));
-        $parentId = $client->parent_id;
-        if (array_key_exists('parent_id', $data)) {
-            $parent = $this->projects->parentFor($client->workspace_id, $data['parent_id']);
-            $this->projects->assertCanPlace($client, $parent);
-            $parentId = $parent?->id;
-        }
-        $values = self::clientValues($data);
-        if (array_key_exists('name', $values) || $parentId !== $client->parent_id) {
-            $this->projects->assertNameFree($client->workspace_id, $parentId, (string) ($values['name'] ?? $client->name), $client->id);
-        }
-        $client->fill(['parent_id' => $parentId, ...$values])->save();
+        $client = $this->projects->place($client->workspace_id, function () use ($client, $data): Client {
+            // Where it is now, not where it was when the request came in.
+            $client->refresh();
+            $parentId = $client->parent_id;
+            if (array_key_exists('parent_id', $data)) {
+                $parent = $this->projects->parentFor($client->workspace_id, $data['parent_id']);
+                $this->projects->assertCanPlace($client, $parent);
+                $parentId = $parent?->id;
+            }
+            $values = self::clientValues($data);
+            if (array_key_exists('name', $values) || $parentId !== $client->parent_id) {
+                $this->projects->assertNameFree($client->workspace_id, $parentId, (string) ($values['name'] ?? $client->name), $client->id);
+            }
+            $client->fill(['parent_id' => $parentId, ...$values])->save();
+
+            return $client;
+        });
 
         return response()->json(['data' => $this->projects->payload($client)]);
     }
