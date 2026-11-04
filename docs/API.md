@@ -565,16 +565,21 @@ that is already in a project.
 ### Share links (since v1.5)
 Share links can now be for a project too, and say who may open them.
 
-- `POST /api/sessions/{id}/shares` and the new `POST /api/clients/{id}/shares` — `sessions:write` take
-  `audience`: `public` (anyone with the link, the default and what older apps get), `password` (anyone with the
-  link and `password`, 6–100 characters) or `people` (`people`: up to 20 emails; they open it signed in to the
-  console with one of those emails), plus `allow_download` (default `true`: audio and transcript files can be
-  downloaded; `false` = read and listen only), `expires_at` (ISO, optional) and `view` (as before). The answer is
-  `201 {"data": <share>}` with `url` (shown once).
-- A share: `{"id", "kind": "session" | "project", "session_id" | "client_id", "audience", "people": [...],
-  "allow_download", "expires_at", "revoked_at", "view_count", "last_viewed_at", "created_at"}`.
+- `POST /api/sessions/{id}/shares` and the new `POST /api/clients/{id}/shares` — `sessions:write` take, besides
+  the v1.1 fields (`expires_in` 3600 | 86400 | 604800, `password`, `include_audio`, all still accepted), `audience`:
+  `public` (anyone with the link, the default and what older apps get), `password` (anyone with the link and
+  `password`, 6–100 characters; a `password` given without `audience` means `password` as in v1.1) or `people`
+  (`people`: up to 20 emails; they open it signed in to the console with one of those emails), `allow_download`
+  (`true`: audio and transcript files can be downloaded; `false` = read and listen only; when only the v1.1
+  `include_audio` is sent it decides), `expires_at` (ISO, optional, instead of `expires_in`; neither = no expiry
+  for the new fields, 24 h for a v1.1 body) and `view` (as before). The answer stays as in v1.1, not wrapped:
+  `201 {ShareLink, "url": "https://…/s/…"}` (or `/p/…` for a project), `url` shown once.
+- ShareLink gains `kind` (`session` | `project`), `client_id` (a project's link; `session_id` is then null),
+  `audience`, `people` (the emails, only for `people`) and `allow_download`; the v1.1 fields stay (`has_password`
+  is true for `password`, `include_audio` mirrors `allow_download`).
 - `GET /api/shares` — `library:read`: every share of the workspace's recordings and projects, newest first
-  (`?session_id=` or `?client_id=` to narrow); `DELETE /api/shares/{id}` revokes (as before).
+  (`?session_id=` or `?client_id=` to narrow) → `200 {"data": [ShareLink]}`; `GET /api/sessions/{id}/shares` and
+  `DELETE /api/shares/{id}` work as before.
 - Pages: `/s/{token}` (a recording, as before) and `/p/{token}` (a project: its recordings, newest first, each
   opening as `/s/…` would). With `allow_download`, `/s/{token}/download` gives a ZIP of the audio and the
   transcript (in the link's view). People-only links ask for the console sign-in first and refuse other emails.
