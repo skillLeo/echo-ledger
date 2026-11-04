@@ -494,6 +494,16 @@ export interface TranscriptDetail {
   views?: { available: TranscriptView[]; status: TranscriptViewsStatus; default?: "original" | TranscriptView } | null;
   /** Suggested fixes: likely mishearings of the client's words, nothing changes until a person decides (since v1.4). */
   suggestions?: TranscriptSuggestion[];
+  /**
+   * Since v1.5: an Urdu or Auto recording was transcribed by an engine the routing table ranks lower, because the
+   * preferred one stayed unavailable for the whole wait (`waited`) or refused this recording (`rejected`). Missing on
+   * an older server: false / null.
+   */
+  backup_engine?: boolean;
+  backup_reason?: "waited" | "rejected" | null;
+  /** Since v1.5: while an Urdu or Auto transcript waits for its preferred engine, when it tries again and why. */
+  retry_at?: string | null;
+  retry_reason?: "rate_limited" | "unavailable" | null;
 }
 
 /** One suggested fix: in segment `index`, `from` may be `to`. */
