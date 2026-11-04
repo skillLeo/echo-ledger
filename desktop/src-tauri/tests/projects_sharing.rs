@@ -115,12 +115,24 @@ async fn a_rule_another_project_has_is_refused_naming_that_project() {
 
     let err = api.add_client_rule(ACME, "title", "Weekly Sync").await.unwrap_err();
     assert_eq!(err.code(), Some("rule_exists"));
-    let text = desktop_lib::projects::rule_exists_text(&api, ACME, "title", "Weekly Sync").await;
+    let text = desktop_lib::projects::rule_exists_text(&api, ACME, "title", "Weekly Sync", "Duplicate rule.").await;
     assert_eq!(text, "Zed Logistics already has this rule. Remove it there first, or file these recordings by something else.");
     assert!(server.requests_to("GET", &format!("/api/clients/{ACME}/rules")).is_empty(), "the project itself is not searched");
 
-    let unknown = desktop_lib::projects::rule_exists_text(&api, ACME, "app", "zoom").await;
+    let unknown = desktop_lib::projects::rule_exists_text(&api, ACME, "app", "zoom", "Duplicate rule.").await;
     assert!(unknown.starts_with("Another project already has this rule."), "{unknown}");
+}
+
+#[tokio::test]
+async fn the_project_the_server_names_is_taken_without_reading_every_project() {
+    // The server names the project, also when the number is only another project's contact (no rule to find).
+    let server = MockServer::start(Router::new().fixed("GET", "/api/clients", Reply::json(200, json!({"data": [{"id": ACME, "name": "Acme"}, {"id": ZED, "name": "Zed Logistics"}]}))));
+    let api = client(&server);
+
+    let text = desktop_lib::projects::rule_exists_text(&api, ACME, "contact", "+92 300 1234567", "“Zed Logistics” already has this rule.").await;
+
+    assert_eq!(text, "Zed Logistics already has this rule. Remove it there first, or file these recordings by something else.");
+    assert!(server.requests().is_empty(), "no project was read");
 }
 
 #[tokio::test]

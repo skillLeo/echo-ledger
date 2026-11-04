@@ -18,6 +18,8 @@ pub const RULE_APPS: [&str; 15] = [
 ];
 /// The longest rule value the server keeps.
 pub const MAX_RULE_CHARS: usize = 120;
+/// The longest project name the server keeps.
+const MAX_NAME_CHARS: usize = 120;
 /// Pages of one smart folder read at most (100 recordings each).
 pub const MAX_FOLDER_PAGES: usize = 50;
 /// Projects looked through at most to say which one already has a rule.
@@ -60,15 +62,48 @@ pub fn check_rule(kind: &str, value: &str) -> AppResult<String> {
     }
 }
 
-/// Whether a project's rules (`GET /api/clients/{id}/rules`) hold this kind and value (ignoring capitals).
+/// A rule's value as the server compares it: ignoring capitals and extra spaces, and a contact's phone number by its
+/// last 10 digits (as callers are matched, docs/API.md), so "+92 300 1234567" and "0300-1234567" are one contact.
+pub fn rule_key(kind: &str, value: &str) -> String {
+    let words = value.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    if kind != "contact" || words.contains('@') {
+        return words;
+    }
+    let digits: String = words.chars().filter(char::is_ascii_digit).collect();
+    if digits.len() < 6 {
+        return words;
+    }
+    digits[digits.len().saturating_sub(10)..].to_string()
+}
+
+/// Whether a project's rules (`GET /api/clients/{id}/rules`) hold this kind and value, compared as the server does.
 pub fn has_rule(rules: &Value, kind: &str, value: &str) -> bool {
+    let key = rule_key(kind, value);
     rules["data"].as_array().is_some_and(|list| {
-        list.iter().any(|r| r["kind"].as_str() == Some(kind) && r["value"].as_str().is_some_and(|v| v.trim().eq_ignore_ascii_case(value.trim())))
+        list.iter().any(|r| r["kind"].as_str() == Some(kind) && r["value"].as_str().is_some_and(|v| rule_key(kind, v) == key))
     })
 }
 
-/// `409 rule_exists` in plain words, naming the project that has the rule when it can be found among the others.
-pub async fn rule_exists_text(api: &ApiClient, except: &str, kind: &str, value: &str) -> String {
+/// The project a `409 rule_exists` message names in quotes (“Acme” already has this rule.), when it names one.
+pub fn quoted_name(message: &str) -> Option<&str> {
+    [('“', '”'), ('"', '"')].into_iter().find_map(|(open, close)| {
+        let rest = &message[message.find(open)? + open.len_utf8()..];
+        let name = rest[..rest.find(close)?].trim();
+        (!name.is_empty() && name.chars().count() <= MAX_NAME_CHARS).then_some(name)
+    })
+}
+
+fn owner_text(name: &str) -> String {
+    format!("{name} already has this rule. Remove it there first, or file these recordings by something else.")
+}
+
+/// `409 rule_exists` in plain words, naming the project that has the rule: the one the server's message names (only
+/// the server knows a number that is another project's contact without being its rule), else the one found among the
+/// others' rules.
+pub async fn rule_exists_text(api: &ApiClient, except: &str, kind: &str, value: &str, server_message: &str) -> String {
+    if let Some(name) = quoted_name(server_message) {
+        return owner_text(name);
+    }
     let fallback = crate::error::code_text("rule_exists").unwrap_or_default().to_string();
     let Ok(clients) = api.clients().await else { return fallback };
     let others: Vec<(String, String)> = clients["data"]
@@ -87,7 +122,7 @@ pub async fn rule_exists_text(api: &ApiClient, except: &str, kind: &str, value: 
         .collect()
         .await;
     match owners.into_iter().flatten().find(|name| !name.is_empty()) {
-        Some(name) => format!("{name} already has this rule. Remove it there first, or file these recordings by something else."),
+        Some(name) => owner_text(&name),
         None => fallback,
     }
 }
@@ -132,10 +167,32 @@ mod tests {
 
     #[test]
     fn a_rule_list_is_searched_by_kind_and_value_ignoring_capitals() {
-        let rules = json!({"data": [{"id": 7, "kind": "title", "value": "Acme"}, {"id": 8, "kind": "app", "value": "zoom"}]});
-        assert!(has_rule(&rules, "title", "ACME"));
+        let rules = json!({"data": [{"id": 7, "kind": "title", "value": "Acme  Weekly"}, {"id": 8, "kind": "app", "value": "zoom"}]});
+        assert!(has_rule(&rules, "title", "ACME weekly"));
         assert!(has_rule(&rules, "app", "zoom"));
         assert!(!has_rule(&rules, "contact", "zoom"));
         assert!(!has_rule(&json!({}), "title", "Acme"));
+    }
+
+    #[test]
+    fn contacts_are_compared_as_the_server_matches_callers() {
+        let rules = json!({"data": [{"id": 3, "kind": "contact", "value": "+92 300 1234567"}, {"id": 4, "kind": "contact", "value": "Ana@Example.com"}]});
+        assert!(has_rule(&rules, "contact", "0300-1234567"));
+        assert!(has_rule(&rules, "contact", "+923001234567"));
+        assert!(has_rule(&rules, "contact", "ana@example.com"));
+        assert!(!has_rule(&rules, "contact", "+92 300 7654321"));
+        assert!(!has_rule(&rules, "title", "+92 300 1234567"), "a title is not a contact");
+        assert_eq!(rule_key("contact", "(021) 555-0199"), "0215550199");
+        assert_eq!(rule_key("title", "  Acme   Weekly "), "acme weekly");
+    }
+
+    #[test]
+    fn the_project_the_server_names_is_read_from_its_quotes() {
+        assert_eq!(quoted_name("“Acme Logistics” already has this rule."), Some("Acme Logistics"));
+        assert_eq!(quoted_name("\"Zed\" already has this rule."), Some("Zed"));
+        assert_eq!(quoted_name("Another project already has this rule."), None);
+        assert_eq!(quoted_name("“ ” already has this rule."), None);
+        assert_eq!(quoted_name("“Unclosed already has this rule."), None);
+        assert_eq!(quoted_name(&format!("“{}”", "x".repeat(121))), None);
     }
 }

@@ -1237,7 +1237,9 @@ pub async fn client_rule_add(state: State<'_, AppState>, id: String, kind: Strin
     let value = crate::projects::check_rule(&kind, &value)?;
     let api = state.api()?;
     match api.add_client_rule(&id, &kind, &value).await {
-        Err(e) if e.code() == Some("rule_exists") => Err(AppError::msg(crate::projects::rule_exists_text(&api, &id, &kind, &value).await)),
+        Err(AppError::Server { code: Some(code), message, .. }) if code == "rule_exists" => {
+            Err(AppError::msg(crate::projects::rule_exists_text(&api, &id, &kind, &value, &message).await))
+        }
         other => other,
     }
 }
