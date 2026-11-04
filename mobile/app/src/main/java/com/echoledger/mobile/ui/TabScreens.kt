@@ -65,6 +65,7 @@ import com.echoledger.mobile.ui.design.SectionHeader
 import com.echoledger.mobile.ui.design.SkeletonRow
 import com.echoledger.mobile.ui.design.dateGroup
 import com.echoledger.mobile.ui.design.rowTime
+import com.echoledger.mobile.ui.design.tabular
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -81,7 +82,9 @@ fun ActivityScreen(
     waiting: List<LocalRecording> = emptyList(),
     onOpenWaiting: () -> Unit = {},
     scrollToTop: Int = 0,
-    today: LocalDate = LocalDate.now()
+    today: LocalDate = LocalDate.now(),
+    skipped: List<LocalRecording> = emptyList(),
+    onRestore: (String) -> Unit = {}
 ) {
     var items by remember { mutableStateOf<List<ActivityItemDto>?>(null) }
     var unread by remember { mutableIntStateOf(0) }
@@ -181,6 +184,7 @@ fun ActivityScreen(
                 }
             }
         }
+        if (skipped.isNotEmpty()) item(key = "skipped") { SkippedCallsLine(skipped, onRestore) }
         rest.groupBy { if (dateGroup(it.at, today) == "Today") "Today" else "Earlier" }.toSortedMap(compareBy { it != "Today" })
             .forEach { (group, rows) ->
                 item(key = "h-$group") { SectionHeader(group) }
@@ -190,6 +194,49 @@ fun ActivityScreen(
                     }
                 }
             }
+    }
+}
+
+/**
+ * "Skipped 3 short calls" (since v1.5): one quiet line for the calls skipped in the last 24 h (unanswered, short or
+ * silent); Show lists them, each with Restore, which keeps it like any other call.
+ */
+@Composable
+internal fun SkippedCallsLine(skipped: List<LocalRecording>, onRestore: (String) -> Unit) {
+    val c = LocalEchoColors.current
+    val type = LocalEchoType.current
+    var open by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s1)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                com.echoledger.mobile.calls.SkippedCalls.line(skipped.size),
+                style = type.labelM,
+                color = c.textMuted,
+                modifier = Modifier.weight(1f)
+            )
+            EchoButton(if (open) "Hide" else "Show", { open = !open }, kind = ButtonKind.Text)
+        }
+        if (open) {
+            skipped.sortedByDescending { it.startedAt }.forEach { rec ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    val reason = com.echoledger.mobile.calls.SkippedCalls.reasonOf(rec)?.label ?: "Skipped"
+                    Text(
+                        listOf(
+                            com.echoledger.mobile.core.SourceApp.from(rec.sourceApp).label,
+                            formatWhen(rec.startedAt),
+                            formatDuration(rec.durationMs).ifEmpty { "0:00" },
+                            reason
+                        ).joinToString(" · "),
+                        style = type.labelM.tabular(),
+                        color = c.text,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    EchoButton("Restore", { onRestore(rec.id) }, kind = ButtonKind.Text)
+                }
+            }
+        }
     }
 }
 

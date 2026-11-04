@@ -180,5 +180,9 @@ data class LiveRecording(
     /** Seconds the other side has been silent, while the warning shows. */
     val farSideSilentSeconds: Long? = null,
     /** The recording's language chip (null = automatic); changing it reconnects live captions. */
-    val language: String? = null
+    val language: String? = null,
+    /** Since v1.5: the call is still ringing; the recording starts at the answer. */
+    val waitingForAnswer: Boolean = false,
+    /** Since v1.5: a Bluetooth headset's microphone is in use ("Accuracy is lower with Bluetooth mics"). */
+    val bluetoothMic: Boolean = false
 )

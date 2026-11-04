@@ -125,7 +125,7 @@ class BackgroundWorkTest : AppTest() {
         assertEquals("Save this recording?", shadowOf(posted).contentTitle.toString())
         assertEquals("WhatsApp call · 2:05 · Acme", shadowOf(posted).contentText.toString())
         assertEquals(listOf("Keep", "Discard"), posted.actions.map { it.title.toString() })
-        assertEquals(60_000L, posted.timeoutAfter)
+        assertEquals(10_000L, posted.timeoutAfter)
         assertTrue(
             posted.extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT).toString().endsWith("Client: Thanks for calling back")
         )

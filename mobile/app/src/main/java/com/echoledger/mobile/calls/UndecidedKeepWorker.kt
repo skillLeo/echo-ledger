@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit
 
 /**
  * "Undecided calls: keep automatically after 24 h / 3 days / never" (since 1.3.2): an hourly check keeps every call
- * still waiting for Keep or Discard once it is older than the setting, so a forgotten call is never lost.
+ * still waiting for Keep or Discard once it is older than the setting, so a forgotten call is never lost. Since v1.5 the
+ * same check deletes skipped calls (unanswered, short, silent) a day after they were skipped.
  */
 class UndecidedKeepWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -22,6 +23,7 @@ class UndecidedKeepWorker(context: Context, params: WorkerParameters) : Coroutin
         due(graph.recordings.pendingDecisions(), hours, Instant.now()).forEach {
             Decisions.apply(applicationContext, it, keep = true)
         }
+        SkippedCalls.expired(graph.recordings.all()).forEach { graph.recordings.delete(it.id) }
         return Result.success()
     }
 

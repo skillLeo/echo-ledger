@@ -12,52 +12,42 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
-import com.echoledger.mobile.EchoLedgerApp
-import com.echoledger.mobile.calls.DecisionTimeoutWorker
 import com.echoledger.mobile.calls.Decisions
-import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.SourceApp
-import com.echoledger.mobile.core.SourceDevice
 import com.echoledger.mobile.data.LocalRecording
-import com.echoledger.mobile.ui.Brand
 import com.echoledger.mobile.ui.EchoLedgerTheme
-import com.echoledger.mobile.ui.LocalEchoColors
 import com.echoledger.mobile.ui.LocalEchoType
-import com.echoledger.mobile.ui.Radius
-import com.echoledger.mobile.ui.SourceAvatar
 import com.echoledger.mobile.ui.Space
-import com.echoledger.mobile.ui.design.ButtonKind
-import com.echoledger.mobile.ui.design.EchoButton
-import com.echoledger.mobile.ui.design.SourceAppTile
 import com.echoledger.mobile.ui.design.tabular
 import com.echoledger.mobile.ui.formatDuration
 import kotlinx.coroutines.CoroutineScope
@@ -65,50 +55,61 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 /**
- * The small "Save this call recording?" card shown at the bottom of the screen when a WhatsApp call recording ends
- * (SYSTEM_ALERT_WINDOW). It never takes focus and does not block the screen around it, belongs to the app process and
- * not to the call screen, so it survives WhatsApp closing. After [AUTO_HIDE_MS] it only goes away: the recording keeps
- * waiting in the Record tab, nothing is uploaded and nothing is transcribed. VERIFY ON DEVICE (OEM overlay policies vary).
+ * The small chip after a call (since v1.5, replaces the v1.3 card), at the bottom of the screen over whatever app is
+ * open (SYSTEM_ALERT_WINDOW). It never takes focus and leaves the screen around it alone.
+ * - [Mode.SAVED] ("After a call: Keep automatically"): "Saved · Call with Omar · 4:12 · Undo" for [SAVED_MS]; the
+ *   upload waits that long, so Undo still deletes everything.
+ * - [Mode.ASK] ("Ask me"): the title with ✓ and ✕; the title opens the app to rename it or pick a client; after
+ *   [ASK_KEEP_MS] without a tap the call is kept.
+ * VERIFY ON DEVICE (OEM overlay policies vary).
  */
 object DecisionPopup {
-    const val AUTO_HIDE_MS = 10_000L
+    enum class Mode { SAVED, ASK }
+
+    const val SAVED_MS = 6_000L
+    const val ASK_KEEP_MS = 10_000L
 
     private val handler = Handler(Looper.getMainLooper())
     private var view: ComposeView? = null
     private var owner: OverlayOwner? = null
     private var windowManager: WindowManager? = null
-    private val hideTask = Runnable { hide() }
+    private var timeout: Runnable? = null
 
-    /** The id of the recording the card is asking about; null when no card is showing. */
+    /** The id of the recording the chip is about; null when no chip is showing. */
     var showingFor: String? = null
+        private set
+
+    var showingMode: Mode? = null
         private set
 
     val isShowing: Boolean get() = view != null
 
-    /** Shows the card; false when it could not be added (the caller then posts the notification). */
-    fun show(context: Context, rec: LocalRecording, themeMode: String, afterCallTimeout: String = "wait"): Boolean {
+    /** "Call with Omar", else "WhatsApp call" / "Phone call". */
+    fun title(rec: LocalRecording): String = rec.title?.takeIf { it.isNotBlank() }
+        ?: rec.callerName?.takeIf { it.isNotBlank() }?.let { "Call with $it" }
+        ?: SourceApp.from(rec.sourceApp).let { if (it == SourceApp.PHONE_CALL) "Phone call" else "${it.label} call" }
+
+    /** Shows the chip; false when it could not be added (the caller then relies on the notification). */
+    fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode): Boolean {
         hide()
         val app = context.applicationContext
         val wm = app.getSystemService(WindowManager::class.java) ?: return false
         val lifecycleOwner = OverlayOwner().also { it.start() }
-        val metrics = app.resources.displayMetrics
-        val width = metrics.widthPixels - (2 * SIDE_MARGIN_DP * metrics.density).toInt()
-        val language = mutableStateOf(rec.language)
+        val visibleMs = if (mode == Mode.SAVED) SAVED_MS else ASK_KEEP_MS
         val compose = ComposeView(app).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
                 EchoLedgerTheme(themeMode) {
-                    DecisionCard(
-                        sourceApp = rec.sourceApp,
+                    AfterCallChip(
+                        title = title(rec),
                         durationMs = rec.durationMs,
+                        mode = mode,
+                        visibleMs = visibleMs,
                         onKeep = { decide(app, rec.id, keep = true) },
                         onDiscard = { decide(app, rec.id, keep = false) },
-                        language = language.value,
-                        autoDecision = afterCallTimeout.takeIf { it == "keep" || it == "discard" },
-                        // The card is never focusable (a call or a game may be on screen), so the title and the client
-                        // are typed on the app's own card; only this tap opens it.
-                        onDetails = {
+                        onUndo = { undo(app, rec.id) },
+                        onTitle = {
                             hide()
                             app.startActivity(
                                 android.content.Intent(app, com.echoledger.mobile.MainActivity::class.java)
@@ -120,32 +121,23 @@ object DecisionPopup {
                                         com.echoledger.mobile.MainActivity.OPEN_PENDING
                                     )
                             )
-                        },
-                        onLanguage = {
-                            // The tap is a sign the user is deciding: the card stays its full time again.
-                            language.value = Languages.next(language.value)
-                            handler.removeCallbacks(hideTask)
-                            handler.postDelayed(hideTask, AUTO_HIDE_MS)
-                            val chosen = language.value
-                            CoroutineScope(Dispatchers.IO).launch {
-                                (app as EchoLedgerApp).graph.recordings.update(rec.id) { it.copy(language = chosen) }
-                            }
                         }
                     )
                 }
             }
         }
+        val metrics = app.resources.displayMetrics
         val params = WindowManager.LayoutParams(
-            width,
+            WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            // Not focusable and not modal: touches outside the card go to the app underneath.
+            // Not focusable and not modal: touches outside the chip go to the app underneath.
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = (BOTTOM_MARGIN_DP * app.resources.displayMetrics.density).toInt()
+            y = (BOTTOM_MARGIN_DP * metrics.density).toInt()
         }
         val added = runCatching { wm.addView(compose, params) }.isSuccess
         if (!added) {
@@ -156,19 +148,25 @@ object DecisionPopup {
         owner = lifecycleOwner
         windowManager = wm
         showingFor = rec.id
-        handler.postDelayed(hideTask, AUTO_HIDE_MS)
+        showingMode = mode
+        // Saved: the chip only goes (the call is kept already). Ask: nobody chose, so the call is kept.
+        val task = Runnable { if (mode == Mode.ASK) decide(app, rec.id, keep = true) else hide() }
+        timeout = task
+        handler.postDelayed(task, visibleMs)
         return true
     }
 
-    /** Removes the card. Never decides anything. */
+    /** Removes the chip. Never decides anything. */
     fun hide() {
-        handler.removeCallbacks(hideTask)
+        timeout?.let(handler::removeCallbacks)
+        timeout = null
         view?.let { v -> runCatching { windowManager?.removeView(v) } }
         owner?.stop()
         view = null
         owner = null
         windowManager = null
         showingFor = null
+        showingMode = null
     }
 
     private fun decide(context: Context, id: String, keep: Boolean) {
@@ -176,80 +174,106 @@ object DecisionPopup {
         CoroutineScope(Dispatchers.IO).launch { Decisions.apply(context, id, keep) }
     }
 
-    private const val SIDE_MARGIN_DP = 16
+    private fun undo(context: Context, id: String) {
+        hide()
+        CoroutineScope(Dispatchers.IO).launch { Decisions.undoKeep(context, id) }
+    }
+
     private const val BOTTOM_MARGIN_DP = 72
 }
 
 /**
- * The card itself (since v1.3 design): the app's icon, the question, "WhatsApp · 4:32" with the language chip (a tap
- * steps to the next language, and Keep transcribes in it), then Discard and Keep (primary). [autoDecision] ("keep" or
- * "discard") says what the after-call setting will do if nobody chooses; the thin line shows how long the card stays.
+ * The chip itself: pill-sized, the control pill's near-black look in both themes, one line ("Saved · Call with Omar ·
+ * 4:12" with Undo, or the title and length with ✓ and ✕), and a thin line that shows how long it stays.
  */
 @Composable
-fun DecisionCard(
-    sourceApp: String,
+fun AfterCallChip(
+    title: String,
     durationMs: Long,
+    mode: DecisionPopup.Mode,
+    visibleMs: Long,
     onKeep: () -> Unit,
     onDiscard: () -> Unit,
-    language: String? = null,
-    onLanguage: (() -> Unit)? = null,
-    autoDecision: String? = null,
-    visibleMs: Long = DecisionPopup.AUTO_HIDE_MS,
-    onDetails: (() -> Unit)? = null
+    onUndo: () -> Unit,
+    onTitle: () -> Unit
 ) {
-    val app = SourceApp.from(sourceApp)
-    val c = LocalEchoColors.current
     val type = LocalEchoType.current
-    val shape = RoundedCornerShape(Radius.lg)
+    val shape = RoundedCornerShape(50)
     val left = remember { Animatable(1f) }
     LaunchedEffect(visibleMs) { left.animateTo(0f, tween(visibleMs.toInt(), easing = LinearEasing)) }
+    val duration = formatDuration(durationMs).ifEmpty { "0:00" }
     Column(
         Modifier
-            .fillMaxWidth()
-            .shadow(if (c.isDark) 0.dp else 8.dp, shape)
+            .widthIn(max = 420.dp)
             .clip(shape)
-            .background(c.surface)
-            .border(1.dp, c.border, shape)
-            .semantics { contentDescription = "Save this call recording?" }
+            .background(PillColors.background)
+            .border(1.dp, PillColors.hairline, shape)
+            .semantics { contentDescription = if (mode == DecisionPopup.Mode.SAVED) "Saved: $title" else "Keep $title?" }
     ) {
-        Column(Modifier.padding(Space.s4), verticalArrangement = Arrangement.spacedBy(Space.s3)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SourceAppTile(app, size = 40.dp)
-                Column(Modifier.weight(1f).padding(start = Space.s3)) {
-                    Text("Save this call recording?", style = type.bodyL, color = c.text, maxLines = 1)
-                    Text("${app.label} · ${formatDuration(durationMs)}", style = type.labelM.tabular(), color = c.textMuted, maxLines = 1)
-                }
-                if (onLanguage != null) {
-                    Text(
-                        Languages.chip(language),
-                        style = type.labelM,
-                        color = c.text,
-                        maxLines = 1,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(Radius.sm))
-                            .border(1.dp, c.borderStrong, RoundedCornerShape(Radius.sm))
-                            .clickable(role = Role.Button, onClickLabel = "Change the language") { onLanguage() }
-                            .semantics { contentDescription = "Language: ${Languages.label(language)}" }
-                            .padding(horizontal = Space.s3, vertical = Space.s1 + Space.s0)
+        Row(
+            Modifier.padding(start = Space.s4, end = Space.s1, top = Space.s1, bottom = Space.s1),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val label = if (mode == DecisionPopup.Mode.SAVED) "Saved · $title · $duration" else "$title · $duration"
+            Text(
+                label,
+                style = type.labelL.tabular(),
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    // Asking: the title opens the waiting call to rename it or pick a client (a kept call is in the Library).
+                    .clickable(
+                        enabled = mode == DecisionPopup.Mode.ASK,
+                        role = Role.Button,
+                        onClickLabel = "Rename or pick a client",
+                        onClick = onTitle
                     )
-                }
-            }
-            autoDecision?.let {
-                val what = if (it == "keep") "Kept" else "Discarded"
+                    .padding(vertical = Space.s2)
+            )
+            if (mode == DecisionPopup.Mode.SAVED) {
                 Text(
-                    "$what automatically after ${DecisionTimeoutWorker.WINDOW_SECONDS} s if you don't choose.",
-                    style = type.caption,
-                    color = c.textMuted
+                    "Undo",
+                    style = type.labelL,
+                    color = PillColors.accent,
+                    modifier = Modifier
+                        .padding(start = Space.s2)
+                        .clip(RoundedCornerShape(50))
+                        .clickable(role = Role.Button, onClick = onUndo)
+                        .padding(horizontal = Space.s3, vertical = Space.s2)
                 )
+            } else {
+                ChipIcon(Icons.Rounded.Close, "Discard", onDiscard)
+                ChipIcon(Icons.Rounded.Check, "Keep", onKeep, primary = true)
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
-                EchoButton("Discard", onDiscard, Modifier.weight(1f), kind = ButtonKind.Secondary)
-                EchoButton("Keep", onKeep, Modifier.weight(1f))
-            }
-            if (onDetails != null) EchoButton("Add title or client", onDetails, kind = ButtonKind.Text)
         }
-        Box(Modifier.fillMaxWidth().height(2.dp).background(c.surface2)) {
-            Box(Modifier.fillMaxWidth(left.value).height(2.dp).background(c.accentStrong))
+        Box(Modifier.fillMaxWidth().height(2.dp).background(PillColors.hairline)) {
+            Box(Modifier.fillMaxWidth(left.value).height(2.dp).background(PillColors.accent))
         }
     }
+}
+
+@Composable
+private fun ChipIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit, primary: Boolean = false) {
+    Box(
+        Modifier
+            .padding(start = Space.s1)
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(if (primary) PillColors.accentFill else Color.Transparent)
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+    }
+}
+
+/** The control pill's colours (near-black with a hairline), the same in light and dark. */
+private object PillColors {
+    val background = Color(0xEB111113)
+    val hairline = Color(0x33FFFFFF)
+    val accent = Color(0xFF9EB1FF)
+    val accentFill = Color(0xFF3E63DD)
 }

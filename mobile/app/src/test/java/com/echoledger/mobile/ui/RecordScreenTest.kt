@@ -134,7 +134,7 @@ class RecordScreenTest : ScreenTest() {
     @Test
     fun `with the helper running auto record can be armed and disarmed`() {
         showRecord(caps(sdk = 34, helper = true), RecordMode.CALLS)
-        compose.onNodeWithText("You'll be asked after each call whether to keep it").assertIsDisplayed()
+        compose.onNodeWithText("Answered calls are kept automatically; unanswered and short ones are skipped").assertIsDisplayed()
         assertFalse(present("Open setup"))
 
         autoSwitch().assertIsEnabled()
@@ -352,7 +352,7 @@ class RecordScreenTest : ScreenTest() {
     fun `with nothing waiting only the recorder and the voice note hint are shown`() {
         showRecord()
 
-        assertFalse(present("Keep or discard?"))
+        assertFalse(present("calls waiting", substring = true))
         assertFalse(present("Uploading", substring = true))
         assertFalse(present("could not be uploaded", substring = true))
         compose.onNodeWithText("Voice notes are never recorded automatically — share them to EchoLedger from WhatsApp.").assertIsDisplayed()

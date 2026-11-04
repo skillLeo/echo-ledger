@@ -79,6 +79,18 @@ object TranscriptText {
         return "Transcribing… part ${minOf(progress.total, progress.done + 1)} of ${progress.total}"
     }
 
+    /**
+     * Since v1.5, while an Urdu or Auto transcript waits for its preferred engine: "Waiting for Groq — retrying at
+     * 2:05 pm" (in this phone's time zone); null when it is not waiting.
+     */
+    fun waitingForEngine(t: com.echoledger.mobile.data.TranscriptDto, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String? {
+        val at = t.retryAt?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: return null
+        val time = at.atZone(zone).format(java.time.format.DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)).lowercase(Locale.ENGLISH)
+        val engine = t.providerLabel ?: t.provider.replaceFirstChar { it.titlecase(Locale.ENGLISH) }
+        val why = if (t.retryReason == "rate_limited") " (busy)" else ""
+        return "Waiting for $engine$why — retrying at $time"
+    }
+
     /** `m:ss`, or `h:mm:ss` from one hour. Unlike duration formatting, 0 ms renders as `0:00`. */
     fun stamp(ms: Long): String {
         val total = ms.coerceAtLeast(0) / 1000

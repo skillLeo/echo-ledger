@@ -126,7 +126,7 @@ object SamsungCallImport {
                 sampleRate = 48_000,
                 plainSize = 0,
                 sha256 = "",
-                state = "pending_decision",
+                state = PostCallPrompt.stateFor(settings.afterCall),
                 language = settings.transcriptionLanguage,
                 callerName = caller?.name,
                 callerSource = caller?.source,
@@ -148,7 +148,7 @@ object SamsungCallImport {
             )
             if (stored != null) {
                 withContext(Dispatchers.Main) {
-                    PostCallPrompt.show(applicationContext, stored, settings.afterCallTimeout, settings.themeMode)
+                    PostCallPrompt.show(applicationContext, stored, settings.afterCall, settings.themeMode)
                 }
             }
             Result.success()

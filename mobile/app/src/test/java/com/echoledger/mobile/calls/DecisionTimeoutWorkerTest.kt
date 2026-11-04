@@ -3,21 +3,17 @@ package com.echoledger.mobile.calls
 import androidx.work.ListenableWorker
 import androidx.work.testing.TestListenableWorkerBuilder
 import androidx.work.workDataOf
-import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.data.ApiJson
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.peekRecording
 import com.echoledger.mobile.testsupport.storeRecording
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** "If I don't choose within 60 s" on the phone: the same three choices as the desktop, applied when time is up. */
+/** "After a call: Ask me" (since v1.5): nobody choosing keeps the call after 10 s; keep-automatically is the default. */
 class DecisionTimeoutWorkerTest : AppTest() {
-    private fun setTimeout(value: String) = runBlocking {
-        (app as EchoLedgerApp).graph.settings.update { it.copy(decisionTimeout = value, decisionTimeoutChosen = true) }
-    }
-
     private fun runWorker(id: String): ListenableWorker.Result = runBlocking {
         TestListenableWorkerBuilder<DecisionTimeoutWorker>(app)
             .setInputData(workDataOf(DecisionTimeoutWorker.KEY_ID to id))
@@ -26,69 +22,30 @@ class DecisionTimeoutWorkerTest : AppTest() {
     }
 
     @Test
-    fun `keep, when chosen, queues the recording for upload`() {
-        setTimeout("keep")
+    fun `a call nobody decided on is kept when the ten seconds are up`() {
         app.storeRecording(id = "call-1", state = "pending_decision")
 
         assertEquals(ListenableWorker.Result.success(), runWorker("call-1"))
         assertEquals("queued", app.peekRecording("call-1")?.state)
-    }
-
-    @Test
-    fun `waiting is the default, so nothing is decided, uploaded or paid for`() {
-        app.storeRecording(id = "call-1", state = "pending_decision")
-
-        runWorker("call-1")
-
-        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
-        assertEquals("wait", com.echoledger.mobile.data.AppSettings().afterCallTimeout)
-    }
-
-    @Test
-    fun `a stored keep that was only the old default still waits until the user chooses`() {
-        runBlocking { (app as EchoLedgerApp).graph.settings.update { it.copy(decisionTimeout = "keep") } }
-        app.storeRecording(id = "call-1", state = "pending_decision")
-
-        runWorker("call-1")
-
-        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
-    }
-
-    @Test
-    fun `discard deletes the recording`() {
-        setTimeout("discard")
-        app.storeRecording(id = "call-1", state = "pending_decision")
-
-        runWorker("call-1")
-
-        assertNull(app.peekRecording("call-1"))
-    }
-
-    @Test
-    fun `keep waiting leaves the recording waiting`() {
-        setTimeout("wait")
-        app.storeRecording(id = "call-1", state = "pending_decision")
-
-        runWorker("call-1")
-
-        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertEquals(10L, DecisionTimeoutWorker.WINDOW_SECONDS)
     }
 
     @Test
     fun `a recording the user already decided on is left alone`() {
-        setTimeout("discard")
-        app.storeRecording(id = "call-1", state = "queued")
+        app.storeRecording(id = "call-1", state = "uploaded")
 
         runWorker("call-1")
 
-        assertEquals("queued", app.peekRecording("call-1")?.state)
+        assertEquals("uploaded", app.peekRecording("call-1")?.state)
     }
 
     @Test
-    fun `the policy in force when time is up applies, and unknown values never lose a call`() {
-        assertEquals(true, DecisionTimeoutWorker.timeoutDecision("keep"))
-        assertEquals(false, DecisionTimeoutWorker.timeoutDecision("discard"))
-        assertNull(DecisionTimeoutWorker.timeoutDecision("wait"))
-        assertEquals(true, DecisionTimeoutWorker.timeoutDecision("something else"))
+    fun `calls are kept automatically by default, also with settings saved before v1_5`() {
+        assertEquals(PostCallPrompt.KEEP, AppSettings().afterCall)
+        assertEquals(10, AppSettings().skipCallsShorterThanS)
+        val old = ApiJson.decodeFromString(AppSettings.serializer(), """{"decisionTimeout":"wait","decisionTimeoutChosen":true}""")
+        assertEquals(PostCallPrompt.KEEP, old.afterCall)
+        assertEquals("queued", PostCallPrompt.stateFor(PostCallPrompt.KEEP))
+        assertEquals("pending_decision", PostCallPrompt.stateFor(PostCallPrompt.ASK))
     }
 }

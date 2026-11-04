@@ -89,6 +89,7 @@ import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoFilterChip
+import com.echoledger.mobile.ui.design.InlineBanner
 import kotlinx.coroutines.launch
 
 /** Sends an action to the running recording service (pause, resume, mark, tag, undo). */
@@ -185,6 +186,20 @@ fun LiveRecordingCard(live: LiveRecording, settings: AppSettings) {
         // The same controls as the floating pill and the notification (since v1.3).
         val pill by RecordingService.pillState.collectAsState()
         val feed by RecordingService.captionFeed.collectAsState()
+        // Since v1.5: a ringing call is not recorded yet; the recording starts when it is picked up.
+        if (live.waitingForAnswer) {
+            Text(
+                "Waiting for an answer — the recording starts when the call is picked up.",
+                color = Brand.Muted,
+                fontSize = 13.sp
+            )
+        }
+        if (live.bluetoothMic) {
+            InlineBanner(
+                com.echoledger.mobile.recording.BluetoothMic.NOTE,
+                kind = com.echoledger.mobile.ui.design.BannerKind.Warning
+            )
+        }
         if (live.markers > 0) Text("${live.markers} bookmark${if (live.markers == 1) "" else "s"}", color = Brand.Muted, fontSize = 12.sp)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             EchoButton("Mark", { recordingAction(context, RecordingService.ACTION_MARK) }, kind = ButtonKind.Secondary)

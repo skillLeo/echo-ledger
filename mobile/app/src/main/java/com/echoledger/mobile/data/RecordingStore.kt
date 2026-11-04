@@ -25,7 +25,10 @@ data class LocalRecording(
     val sampleRate: Int,
     val plainSize: Long,
     val sha256: String,
-    /** "pending_decision" (call, awaiting Keep/Discard) | "queued" | "uploading" | "uploaded" | "failed" */
+    /**
+     * "pending_decision" (call, awaiting Keep/Discard) | "queued" | "uploading" | "uploaded" | "failed" | "skipped"
+     * (since v1.5: an unanswered, short or silent call, kept on the phone for a day so it can be restored).
+     */
     val state: String,
     val lastError: String? = null,
     val liveSegments: List<SegmentDto> = emptyList(),
@@ -49,7 +52,10 @@ data class LocalRecording(
     /** A title typed before Keep (since v1.3); sent with the recording, else the server names it. */
     val title: String? = null,
     /** An imported file (since 1.4): the server skips it when the same file is already in the Library. */
-    val skipDuplicate: Boolean = false
+    val skipDuplicate: Boolean = false,
+    /** Since v1.5, for state "skipped": why ([com.echoledger.mobile.calls.SkippedCalls.Reason] wire value) and when. */
+    val skippedReason: String? = null,
+    val skippedAt: String? = null
 )
 
 /**

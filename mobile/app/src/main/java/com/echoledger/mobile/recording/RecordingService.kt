@@ -27,7 +27,9 @@ import com.echoledger.mobile.calls.CallStateMachine
 import com.echoledger.mobile.calls.PhoneCallLog
 import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.calls.SamsungCallImport
+import com.echoledger.mobile.calls.SkippedCalls
 import com.echoledger.mobile.capture.ICallListener
+import com.echoledger.mobile.core.CallNotices
 import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.CallerNames
 import com.echoledger.mobile.core.Devanagari
@@ -98,6 +100,9 @@ class RecordingService : LifecycleService() {
         const val EXTRA_LANGUAGE = "language"
         private const val TAG = "EchoLedgerRec"
         private const val TICK_MS = 1_000L
+
+        /** An "incoming call" notice this recent means the call that just started is that call, answered. */
+        private const val INCOMING_LOOKBACK_MS = 60_000L
         private const val WATCHDOG_MS = 5_000L
 
         @Volatile var isRecording = false
@@ -149,6 +154,7 @@ class RecordingService : LifecycleService() {
     private val callListener = object : ICallListener.Stub() {
         override fun onCallStarted(packageName: String?) {
             val app = SourceApp.fromPackage(packageName) ?: SourceApp.OTHER
+            lastCallPackage = packageName
             CaptureLog.add(this@RecordingService, "call started", app.label)
             main.post { onCallEvent(CallEvent.CallStarted(app, UUID.randomUUID().toString(), System.currentTimeMillis())) }
         }
@@ -507,6 +513,12 @@ class RecordingService : LifecycleService() {
     /** A phone call is ringing on the "Record this phone call?" notification (Ask each time). */
     private var phoneCallAsked = false
 
+    /** The package of the last call the helper reported (its call notifications tell when it was answered). */
+    @Volatile private var lastCallPackage: String? = null
+
+    /** "Record" was tapped on the ask notification: the call is on, so nothing waits for an answer. */
+    private var recordingAskedCall = false
+
     private fun onCallEvent(event: CallEvent) {
         if (event is CallEvent.CallStarted && event.app == SourceApp.PHONE_CALL) {
             // SIM calls follow "Record phone calls" (since v1.2): off, ask each time, or always.
@@ -537,7 +549,9 @@ class RecordingService : LifecycleService() {
         if (!phoneCallAsked || capture != null) return settle()
         phoneCallAsked = false
         CaptureLog.add(this, "phone call", "recording (asked)")
+        recordingAskedCall = true
         reduceCall(CallEvent.CallStarted(SourceApp.PHONE_CALL, UUID.randomUUID().toString(), System.currentTimeMillis()))
+        recordingAskedCall = false
     }
 
     private fun reduceCall(event: CallEvent) {
@@ -632,6 +646,7 @@ class RecordingService : LifecycleService() {
         // A phone line that gives both voices on one track is recorded as one channel (speakers told apart later).
         if (phone) session.channels = runCatching { helper.captureChannels() }.getOrDefault(2).coerceIn(1, 2)
         if (session.channels == 1) session.detail = "Both voices on one track · ${if (fromCall) "auto" else "manual"}"
+        if (fromCall && !recordingAskedCall) waitForAnswer(session, phone)
         session.readerThread = thread(name = "el-pipe-reader") {
             java.io.DataInputStream(ParcelFileDescriptor.AutoCloseInputStream(pipe[0])).use { input ->
                 // Whole 20 ms stereo frames only, so the two channels never swap when a read ends mid-frame.
@@ -654,6 +669,30 @@ class RecordingService : LifecycleService() {
         }
         session.helperStop = { runCatching { helper.stopCapture() } }
         afterStart(session)
+    }
+
+    /**
+     * Since v1.5 an automatic call recording waits for the answer ([ConnectGate]): an answered incoming call (its
+     * notification rang in) or a call whose timer already runs opens at once; a later "answered" notice opens the gate
+     * at the timer's base; otherwise the audio decides, or a SIM call's talk time at the end.
+     */
+    private fun waitForAnswer(session: Capture, sim: Boolean) {
+        val gate = ConnectGate(session.channels)
+        session.gate = gate
+        session.callPackage = if (sim) null else lastCallPackage
+        val startMs = session.startedAt.toEpochMilli()
+        fun apply(notice: CallNotices.Notice) {
+            when (notice.kind) {
+                CallNotices.Kind.INCOMING -> gate.openAt(0, "incoming call answered")
+                CallNotices.Kind.ANSWERED -> gate.openAt((notice.answeredAtMs ?: startMs) - startMs, "call notification timer")
+                CallNotices.Kind.RINGING_OUT -> Unit
+            }
+        }
+        CallNotices.latest(session.callPackage, sim, sinceMs = startMs - INCOMING_LOOKBACK_MS)?.let(::apply)
+        CallNotices.onNotice = { notice -> if (CallNotices.matches(notice, session.callPackage, sim)) apply(notice) }
+        session.detailAfterAnswer = session.detail
+        session.detail = "Waiting for an answer · the recording starts when the call is picked up"
+        CaptureLog.add(this, "waiting for the answer", if (sim) "phone call" else session.callPackage ?: "call")
     }
 
     @SuppressLint("MissingPermission")
@@ -693,6 +732,7 @@ class RecordingService : LifecycleService() {
             val shorts = ShortArray(frames * 4)
             try {
                 record.startRecording()
+                if (BluetoothMic.inUse(this@RecordingService, record)) session.bluetoothMic = true
                 while (session.active) {
                     val n = record.read(shorts, 0, shorts.size)
                     if (n > 0) session.consume(Pcm.toLittleEndianBytes(shorts.copyOf(n)), n * 2)
@@ -706,6 +746,9 @@ class RecordingService : LifecycleService() {
     }
 
     private fun afterStart(session: Capture) {
+        // A call through a Bluetooth headset: transcripts are less accurate (said on the Record tab, kept in the log).
+        if (BluetoothMic.inUse(this)) session.bluetoothMic = true
+        if (session.bluetoothMic) CaptureLog.add(this, "bluetooth mic", BluetoothMic.NOTE)
         isRecording = true
         pillState.value =
             PillState(mode = if (settings.pillDot) PillState.Mode.DOT else PillState.Mode.PILL, language = Languages.chip(session.language))
@@ -909,7 +952,9 @@ class RecordingService : LifecycleService() {
                 markers = session.notes.count(),
                 lastMarker = session.notes.last(),
                 farSideSilentSeconds = session.farSideSeconds,
-                language = session.language
+                language = session.language,
+                waitingForAnswer = session.gate?.waiting == true,
+                bluetoothMic = session.bluetoothMic
             )
         }
     }
@@ -994,25 +1039,46 @@ class RecordingService : LifecycleService() {
         hideControls()
         finalizing++
         val endedMs = System.currentTimeMillis()
+        CallNotices.onNotice = null
+        val isCall = session.fromCall || fromCall
+        val afterCall = settings.afterCall
+        val shorterThanS = settings.skipCallsShorterThanS
+        var skip: SkippedCalls.Reason? = null
         thread(name = "el-finish") {
             val stored = runCatching {
-                session.finish()
+                session.finish { simAnsweredAt(session, endedMs) }
                 val (markers, pauses) = session.notes.finish()
                 val caller = callerFor(session.sourceApp, session.startedAt.toEpochMilli(), endedMs)
+                val durationMs = Pcm.durationMs(session.encoder.framesWritten)
+                // Since v1.5 an automatic call recording starts at the answer: the time and length are the kept part's.
+                val gate = session.gate
+                skip = SkippedCalls.reason(
+                    fromCall = gate != null,
+                    answered = gate?.answered ?: true,
+                    keptMs = durationMs,
+                    shorterThanS = shorterThanS,
+                    speechMs = session.speech.speechMs()
+                )
                 val meta = LocalRecording(
                     id = session.id,
                     sourceApp = session.sourceApp,
                     clientId = session.clientId,
-                    startedAt = session.startedAt.toString(),
+                    startedAt = session.startedAt.plusMillis(gate?.keptFromMs ?: 0).toString(),
                     endedAt = Instant.now().toString(),
-                    durationMs = Pcm.durationMs(session.encoder.framesWritten),
+                    durationMs = durationMs,
                     mime = "audio/ogg",
                     codec = "opus",
                     channels = session.channels,
                     sampleRate = Pcm.CAPTURE_RATE,
                     plainSize = 0,
                     sha256 = "",
-                    state = if (session.fromCall || fromCall) "pending_decision" else "queued",
+                    state = when {
+                        skip != null -> SkippedCalls.STATE
+                        isCall -> PostCallPrompt.stateFor(afterCall)
+                        else -> "queued"
+                    },
+                    skippedReason = skip?.wire,
+                    skippedAt = skip?.let { Instant.now().toString() },
                     liveSegments = synchronized(session.segments) { session.segments.sortedBy { it.startMs } },
                     liveProvider = session.provider,
                     serverSessionId = session.serverSessionId,
@@ -1033,8 +1099,10 @@ class RecordingService : LifecycleService() {
                 session.file.delete()
             }.getOrNull()
             // A recording that captured no sound (0 ms, or every side digital silence) has nothing to keep or transcribe:
-            // say why instead of asking, and never upload it (a provider fails it with "no spoken audio").
-            val silent = stored != null && (stored.durationMs <= 0 || session.levels.silent())
+            // say why instead of asking, and never upload it (a provider fails it with "no spoken audio"). A call that
+            // was never answered is not a capture problem: it is skipped like the short ones.
+            val unanswered = skip == SkippedCalls.Reason.NOT_ANSWERED
+            val silent = stored != null && !unanswered && (stored.durationMs <= 0 || session.levels.silent())
             CaptureLog.add(
                 this,
                 "recording saved",
@@ -1043,14 +1111,20 @@ class RecordingService : LifecycleService() {
                 ) {
                     "saving failed"
                 } else {
-                    "${stored.durationMs / 1000} s, ${stored.plainSize} bytes${if (silent) ", no sound: dropped" else ""}"
+                    "${stored.durationMs / 1000} s, ${stored.plainSize} bytes${if (silent) ", no sound: dropped" else ""}" +
+                        (skip?.let { ", skipped: ${it.label.lowercase()}" } ?: "")
                 }
             )
             if (silent && stored != null) {
                 stored.serverSessionId?.let { DiscardWorker.enqueue(this, stored.id, it) }
                 graph.recordings.delete(stored.id)
+            } else if (skip != null && stored != null) {
+                // Nothing asks and nothing uploads; a server session the captions opened goes now (Restore uploads anew).
+                stored.serverSessionId?.let { sessionId ->
+                    DiscardWorker.enqueue(this, stored.id, sessionId)
+                    graph.recordings.update(stored.id) { it.copy(serverSessionId = null) }
+                }
             }
-            val decisionTimeout = settings.afterCallTimeout
             val themeMode = settings.themeMode
             main.post {
                 if (silent && session.sourceApp == SourceApp.PHONE_CALL.wire) {
@@ -1066,9 +1140,9 @@ class RecordingService : LifecycleService() {
                     )
                 } else if (silent) {
                     Notifications.noAudio(this, CaptureProblems.recent(this))
-                } else if (stored != null) {
-                    if (stored.state == "pending_decision") {
-                        PostCallPrompt.show(this, stored, decisionTimeout, themeMode)
+                } else if (stored != null && skip == null) {
+                    if (isCall) {
+                        PostCallPrompt.show(this, stored, afterCall, themeMode)
                     } else {
                         UploadWorker.enqueue(this, stored.id)
                     }
@@ -1080,8 +1154,20 @@ class RecordingService : LifecycleService() {
         }
     }
 
+    /**
+     * Where a SIM call still waiting in the gate was answered, from the call log's talk time (the row is written when
+     * the call ends): its end minus the talk time, in ms of captured audio; 0 s of talk = never answered (null).
+     */
+    private fun simAnsweredAt(session: Capture, endedMs: Long): Long? {
+        if (session.sourceApp != SourceApp.PHONE_CALL.wire) return null
+        val talkMs = com.echoledger.mobile.calls.PhoneCallLog.talkTimeMs(this, session.startedAt.toEpochMilli(), endedMs) ?: return null
+        if (talkMs <= 0) return null
+        return (endedMs - talkMs - session.startedAt.toEpochMilli()).coerceAtLeast(0)
+    }
+
     /** Short (missed/rejected) calls are dropped without asking. */
     private fun discardCapture(recordingId: String) {
+        CallNotices.onNotice = null
         val session = capture
         if (session?.id == recordingId) {
             capture = null
@@ -1130,6 +1216,20 @@ class RecordingService : LifecycleService() {
 
         /** Since v1.3: a SIM call is holding this app call; nothing is written until it is back. */
         @Volatile var held = false
+
+        /** Since v1.5: holds a ringing call's audio until it is answered; null when everything is kept (recorded by hand). */
+        @Volatile var gate: ConnectGate? = null
+
+        /** The call app's package (null for a SIM call or a recording by hand), to match its call notifications. */
+        var callPackage: String? = null
+
+        /** The notification's detail line once the call is answered (it says "Waiting for an answer" until then). */
+        var detailAfterAnswer: String? = null
+
+        /** Since v1.5: speech heard per side in what is kept, for "nobody spoke" calls. */
+        val speech by lazy { com.echoledger.mobile.calls.SpeechMeter(this.channels) }
+
+        @Volatile var bluetoothMic = false
 
         /** Since v1.3 the live caption streams start when captions are first shown (they cost money). */
         var captionsStarted = false
@@ -1209,32 +1309,70 @@ class RecordingService : LifecycleService() {
                 soundLogged = true
                 CaptureLog.add(this@RecordingService, "sound arriving", "${(System.nanoTime() - startNanos) / 1_000_000} ms after start")
             }
-            encoder.feed(bytes, length)
-            debugWav?.write(bytes, length)
             val samples = Pcm.fromLittleEndianBytes(bytes, length)
-            levels.add(samples)
+            // The meters always move (the pill shows sound while the call rings); the file and captions start at the answer.
             if (channels == 2) {
                 val (me, client) = Pcm.deinterleave(samples)
                 meLevel = Levels.rms(me)
                 clientLevel = Levels.rms(client)
                 if (clientLevel >= Levels.HEARD) lastHeardNanos = System.nanoTime()
-                if (streamers.isEmpty()) return
+            } else {
+                meLevel = Levels.rms(samples)
+            }
+            val gate = gate
+            if (gate != null && gate.waiting) {
+                val kept = gate.accept(bytes, length) ?: return
+                answered(gate)
+                write(kept, kept.size, Pcm.fromLittleEndianBytes(kept, kept.size))
+                return
+            }
+            write(bytes, length, samples)
+        }
+
+        /** Audio that goes into the recording: the file, the level and speech counts, and (with [stream]) live captions. */
+        private fun write(bytes: ByteArray, length: Int, samples: ShortArray, stream: Boolean = true) {
+            if (length <= 0) return
+            encoder.feed(bytes, length)
+            debugWav?.write(bytes, length)
+            levels.add(samples)
+            speech.add(samples)
+            if (!stream || streamers.isEmpty()) return
+            if (channels == 2) {
+                val (me, client) = Pcm.deinterleave(samples)
                 streamers[1]?.sendPcm(Pcm.toLittleEndianBytes(Pcm.downsample48To16(me)))
                 streamers[2]?.sendPcm(Pcm.toLittleEndianBytes(Pcm.downsample48To16(client)))
             } else {
-                meLevel = Levels.rms(samples)
-                if (streamers.isEmpty()) return
                 streamers[1]?.sendPcm(Pcm.toLittleEndianBytes(Pcm.downsample48To16(samples)))
             }
         }
 
-        fun finish() {
+        /** The gate opened: say so in the capture log and on the pill, notification and Record tab. */
+        private fun answered(gate: ConnectGate) {
+            CaptureLog.add(this@RecordingService, "answered", "${gate.openedBy}; kept from ${gate.keptFromMs} ms")
+            main.post {
+                CallNotices.onNotice = null
+                detailAfterAnswer?.let { detail = it }
+                if (capture === this) refresh(this)
+            }
+        }
+
+        /**
+         * The end of the capture. A call still ringing in the gate is let through from [answeredAtMs] when it is known
+         * now (a SIM call's talk time), else whole (never answered: it is skipped, and can be restored for a day).
+         */
+        fun finish(answeredAtMs: () -> Long? = { null }) {
             active = false
             helperStop?.invoke()
             readerThread?.join(3_000)
             streamers.values.forEach { it.stop() }
             if (streamers.isNotEmpty()) Thread.sleep(1_500) // last caption turns arrive
             reportUsage()
+            gate?.takeIf { it.waiting }?.let { g ->
+                val rest = g.finish(answeredAtMs())
+                CaptureLog.add(this@RecordingService, "call ended unanswered or unseen", "${g.openedBy}; kept from ${g.keptFromMs} ms")
+                // Not to the captions: they have stopped, and a call that only rang has nothing to say.
+                write(rest, rest.size, Pcm.fromLittleEndianBytes(rest, rest.size), stream = false)
+            }
             encoder.finish()
             debugWav?.close()
             CaptureLog.add(this@RecordingService, "levels", levels.describe())

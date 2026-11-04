@@ -413,7 +413,17 @@ data class TranscriptDto(
     /** Show as: the views this transcript can have and whether they are made (since v1.2). */
     val views: ViewsSummaryDto? = null,
     /** Likely mishearings Claude flagged with the client's vocabulary (since 1.4); nothing changes until accepted. */
-    val suggestions: List<SuggestionDto> = emptyList()
+    val suggestions: List<SuggestionDto> = emptyList(),
+    /**
+     * Since v1.5: an Urdu or Auto recording made by a lower-ranked engine (the preferred one stayed unavailable or
+     * refused it): "Backup engine — Re-transcribe?". [backupReason] is `waited` or `rejected`.
+     */
+    @SerialName("backup_engine") val backupEngine: Boolean = false,
+    @SerialName("backup_reason") val backupReason: String? = null,
+    /** Since v1.5: while an Urdu or Auto transcript waits for its preferred engine (`rate_limited` or `unavailable`). */
+    @SerialName("retry_at") val retryAt: String? = null,
+    @SerialName("retry_reason") val retryReason: String? = null,
+    @SerialName("provider_label") val providerLabel: String? = null
 )
 
 @Serializable

@@ -22,7 +22,11 @@ class SaveDecisionReceiver : BroadcastReceiver() {
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                Decisions.apply(context, id, keep = intent.action == ACTION_KEEP)
+                if (intent.action == ACTION_UNDO) {
+                    Decisions.undoKeep(context, id)
+                } else {
+                    Decisions.apply(context, id, keep = intent.action == ACTION_KEEP)
+                }
             } finally {
                 pending.finish()
             }
@@ -32,6 +36,9 @@ class SaveDecisionReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_KEEP = "com.echoledger.mobile.KEEP"
         const val ACTION_DISCARD = "com.echoledger.mobile.DISCARD"
+
+        /** Since v1.5: Undo on "Saved · …" (a call kept automatically). */
+        const val ACTION_UNDO = "com.echoledger.mobile.UNDO_KEEP"
         const val EXTRA_ID = "recording_id"
     }
 }
@@ -52,6 +59,29 @@ object Decisions {
             graph.recordings.get(recordingId)?.serverSessionId?.let { DiscardWorker.enqueue(context, recordingId, it) }
             graph.recordings.delete(recordingId)
         }
+        WidgetStateStore.refresh(context)
+    }
+
+    /**
+     * Undo on "Saved · …" (since v1.5): the call kept automatically is deleted after all. Its upload waits until the
+     * chip is gone, so normally nothing has left the phone; an upload that already started is called off, and a server
+     * session it (or the captions) opened is deleted.
+     */
+    suspend fun undoKeep(context: Context, recordingId: String) {
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        UploadWorker.cancel(context, recordingId)
+        Notifications.cancelDecision(context, recordingId)
+        if (DecisionPopup.showingFor == recordingId) Handler(Looper.getMainLooper()).post { DecisionPopup.hide() }
+        graph.recordings.get(recordingId)?.serverSessionId?.let { DiscardWorker.enqueue(context, recordingId, it) }
+        graph.recordings.delete(recordingId)
+        WidgetStateStore.refresh(context)
+    }
+
+    /** Restore of a skipped call (since v1.5): it is kept like any other call and uploads now. */
+    suspend fun restoreSkipped(context: Context, recordingId: String) {
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        graph.recordings.update(recordingId) { it.copy(state = "queued", skippedReason = null, skippedAt = null) } ?: return
+        UploadWorker.enqueue(context, recordingId)
         WidgetStateStore.refresh(context)
     }
 }

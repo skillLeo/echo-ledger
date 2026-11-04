@@ -3,23 +3,23 @@ package com.echoledger.mobile.calls
 import android.Manifest
 import android.app.NotificationManager
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import com.echoledger.mobile.overlay.DecisionCard
+import com.echoledger.mobile.overlay.AfterCallChip
 import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.peekRecording
+import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.ui.EchoLedgerTheme
-import java.time.Duration
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -29,194 +29,147 @@ import org.robolectric.shadows.ShadowLooper
 import org.robolectric.shadows.ShadowSettings
 
 /**
- * The small "Save this call recording?" card after a WhatsApp call: shown on call end, Keep / Discard, the 10-second
- * auto-hide that decides nothing, and the notification when the overlay permission is missing.
+ * After a call (since v1.5): "Keep automatically" keeps the call and shows "Saved · … · Undo" for 6 s while the upload
+ * waits; "Ask me" shows the ✓ / ✕ chip and keeps the call after 10 s; without the overlay permission a notification
+ * does the same job.
  */
 class PostCallPromptTest : AppTest() {
     @get:Rule
     val compose = createComposeRule()
 
     @After
-    fun closeCard() {
+    fun closeChip() {
         DecisionPopup.hide()
     }
 
     private fun overlayAllowed(allowed: Boolean) = ShadowSettings.setCanDrawOverlays(allowed)
 
-    private fun pendingCall(id: String = "call-1", app: String = "whatsapp") =
-        this.app.storeRecording(id = id, state = "pending_decision", sourceApp = app, durationMs = 272_000)
+    private fun call(id: String = "call-1", app: String = "whatsapp", state: String = "queued") =
+        this.app.storeRecording(id = id, state = state, sourceApp = app, durationMs = 272_000)
 
     private fun uploadWork(id: String) = WorkManager.getInstance(app).getWorkInfosForUniqueWork("upload-$id").get(10, TimeUnit.SECONDS)
 
-    private fun shown() = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.size
+    private fun notifications() = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications
 
     @Test
-    fun `the card is shown when a WhatsApp call recording ends`() {
+    fun `keep automatically shows Saved for six seconds and the upload waits for it`() {
         overlayAllowed(true)
-        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-        val rec = pendingCall()
+        PostCallPrompt.show(app, call(), PostCallPrompt.KEEP, "dark")
 
-        PostCallPrompt.show(app, rec, afterCallTimeout = "wait", themeMode = "dark")
-
-        assertTrue(DecisionPopup.isShowing)
         assertEquals("call-1", DecisionPopup.showingFor)
-        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
-    }
-
-    @Test
-    fun `every call gets the card (since v1_3), a voice note does not`() {
-        overlayAllowed(true)
-        PostCallPrompt.show(app, pendingCall("biz", "whatsapp_business"), "wait", "dark")
-        assertEquals("biz", DecisionPopup.showingFor)
-        DecisionPopup.hide()
-
-        PostCallPrompt.show(app, pendingCall("zoom-1", "zoom"), "wait", "dark")
-        assertEquals("zoom-1", DecisionPopup.showingFor)
-        DecisionPopup.hide()
-
-        PostCallPrompt.show(app, pendingCall("sim-1", "phone_call"), "wait", "dark")
-        assertEquals("sim-1", DecisionPopup.showingFor)
-        DecisionPopup.hide()
-
-        PostCallPrompt.show(app, pendingCall("note-1", "voice_note"), "wait", "dark")
-        assertFalse(DecisionPopup.isShowing)
-    }
-
-    @Test
-    fun `doing nothing for ten seconds only hides the card and nothing is uploaded or discarded`() {
-        overlayAllowed(true)
-        val rec = pendingCall()
-        PostCallPrompt.show(app, rec, afterCallTimeout = "wait", themeMode = "dark")
-
-        ShadowLooper.idleMainLooper(DecisionPopup.AUTO_HIDE_MS - 1, TimeUnit.MILLISECONDS)
-        assertTrue("still there just before the ten seconds", DecisionPopup.isShowing)
-        ShadowLooper.idleMainLooper(2, TimeUnit.MILLISECONDS)
-
-        assertFalse(DecisionPopup.isShowing)
-        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
-        assertTrue("no upload was queued", uploadWork("call-1").isEmpty())
-        assertNotNull("the recording is kept for later", app.graph.recordings.get("call-1"))
-        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
-    }
-
-    @Test
-    fun `Keep queues the upload and closes the card`() {
-        overlayAllowed(true)
-        PostCallPrompt.show(app, pendingCall(), "wait", "dark")
-
-        runBlocking { Decisions.apply(app, "call-1", keep = true) }
-        ShadowLooper.idleMainLooper()
-
-        assertEquals("queued", app.peekRecording("call-1")?.state)
+        assertEquals(DecisionPopup.Mode.SAVED, DecisionPopup.showingMode)
         assertEquals(listOf(WorkInfo.State.ENQUEUED), uploadWork("call-1").map { it.state })
+        ShadowLooper.idleMainLooper(DecisionPopup.SAVED_MS - 1, TimeUnit.MILLISECONDS)
+        assertTrue(DecisionPopup.isShowing)
+        ShadowLooper.idleMainLooper(2, TimeUnit.MILLISECONDS)
         assertFalse(DecisionPopup.isShowing)
+        assertEquals("queued", app.peekRecording("call-1")?.state)
     }
 
     @Test
-    fun `Discard deletes the files and requests no upload`() {
+    fun `Undo deletes the call and calls off its upload`() {
         overlayAllowed(true)
-        PostCallPrompt.show(app, pendingCall(), "wait", "dark")
+        PostCallPrompt.show(app, call(), PostCallPrompt.KEEP, "dark")
 
-        runBlocking { Decisions.apply(app, "call-1", keep = false) }
+        runBlocking { Decisions.undoKeep(app, "call-1") }
         ShadowLooper.idleMainLooper()
 
         assertNull(app.graph.recordings.get("call-1"))
         assertFalse(app.graph.recordings.encryptedFile("call-1").exists())
-        assertTrue(uploadWork("call-1").isEmpty())
+        assertTrue(uploadWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
         assertFalse(DecisionPopup.isShowing)
     }
 
     @Test
-    fun `without the overlay permission the heads-up notification is used instead`() {
-        overlayAllowed(false)
-        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
-
-        PostCallPrompt.show(app, pendingCall(), afterCallTimeout = "wait", themeMode = "dark")
-
-        assertFalse(DecisionPopup.isShowing)
-        assertEquals(1, shown())
-        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
-    }
-
-    @Test
-    fun `a second card replaces the first and a decision elsewhere closes it`() {
+    fun `ask me shows the chip and keeps the call after ten seconds without a tap`() {
         overlayAllowed(true)
-        PostCallPrompt.show(app, pendingCall("a"), "wait", "dark")
-        PostCallPrompt.show(app, pendingCall("b"), "wait", "dark")
+        PostCallPrompt.show(app, call(state = "pending_decision"), PostCallPrompt.ASK, "dark")
+        assertEquals(DecisionPopup.Mode.ASK, DecisionPopup.showingMode)
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+
+        ShadowLooper.idleMainLooper(DecisionPopup.ASK_KEEP_MS + 1, TimeUnit.MILLISECONDS)
+        pumpUntil("kept") { app.peekRecording("call-1")?.state == "queued" }
+        assertFalse(DecisionPopup.isShowing)
+    }
+
+    @Test
+    fun `a decision anywhere closes the chip, and only for its own call`() {
+        overlayAllowed(true)
+        PostCallPrompt.show(app, call("a", state = "pending_decision"), PostCallPrompt.ASK, "dark")
+        PostCallPrompt.show(app, call("b", state = "pending_decision"), PostCallPrompt.ASK, "dark")
         assertEquals("b", DecisionPopup.showingFor)
 
         runBlocking { Decisions.apply(app, "a", keep = false) }
         ShadowLooper.idleMainLooper()
-        assertEquals("a decision about another recording leaves the card alone", "b", DecisionPopup.showingFor)
+        assertEquals("b", DecisionPopup.showingFor)
 
-        runBlocking { Decisions.apply(app, "b", keep = true) }
+        runBlocking { Decisions.apply(app, "b", keep = false) }
         ShadowLooper.idleMainLooper()
         assertNull(DecisionPopup.showingFor)
+        assertNull(app.graph.recordings.get("b"))
     }
 
     @Test
-    fun `the card shows the question, the app and the length, and its two buttons call back`() {
-        var kept = 0
-        var discarded = 0
-        compose.setContent {
-            EchoLedgerTheme("light") { DecisionCard("whatsapp", 272_000, onKeep = { kept++ }, onDiscard = { discarded++ }) }
-        }
-
-        compose.onNodeWithText("Save this call recording?").assertExists()
-        compose.onNodeWithText("WhatsApp", substring = true).assertExists()
-        compose.onNodeWithText("Keep").performClick()
-        compose.onNodeWithText("Discard").performClick()
-
-        assertEquals(1, kept)
-        assertEquals(1, discarded)
-    }
-
-    @Test
-    fun `the language chip on the card steps to the next language`() {
-        var language: String? = "ur"
-        compose.setContent {
-            val shown = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(language) }
-            EchoLedgerTheme("light") {
-                DecisionCard("whatsapp", 272_000, onKeep = {}, onDiscard = {}, language = shown.value, onLanguage = {
-                    shown.value = com.echoledger.mobile.core.Languages.next(shown.value)
-                    language = shown.value
-                })
-            }
-        }
-
-        compose.onNodeWithText("UR").performClick()
-        compose.onNodeWithText("AR").assertExists()
-        assertEquals("ar", language)
-    }
-
-    @Test
-    fun `Add title or client on the card asks for the app's own card and decides nothing`() {
-        var details = 0
-        var decided = 0
-        compose.setContent {
-            EchoLedgerTheme("light") {
-                DecisionCard("whatsapp", 272_000, onKeep = { decided++ }, onDiscard = { decided++ }, onDetails = { details++ })
-            }
-        }
-
-        compose.onNodeWithText("Add title or client").performClick()
-
-        assertEquals(1, details)
-        assertEquals(0, decided)
-    }
-
-    @Test
-    fun `a recording that captured no sound says so in a notification`() {
+    fun `without the overlay permission a quiet notification with Undo does the job`() {
+        overlayAllowed(false)
         shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
 
-        com.echoledger.mobile.notify.Notifications.noAudio(app)
+        PostCallPrompt.show(app, call(), PostCallPrompt.KEEP, "dark")
 
-        val posted = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.single()
-        assertEquals("No audio was captured", posted.extras.getString(android.app.Notification.EXTRA_TITLE))
+        assertFalse(DecisionPopup.isShowing)
+        val posted = notifications().single()
+        assertEquals("Saved · WhatsApp call · 4:32", shadowOf(posted).contentTitle.toString())
+        assertEquals(listOf("Undo"), posted.actions.map { it.title.toString() })
+        assertEquals(DecisionPopup.SAVED_MS, posted.timeoutAfter)
     }
 
     @Test
-    fun `the auto-hide window is ten seconds`() {
-        assertEquals(Duration.ofSeconds(10).toMillis(), DecisionPopup.AUTO_HIDE_MS)
+    fun `ask me without the overlay permission asks in a notification that keeps after ten seconds`() {
+        overlayAllowed(false)
+        shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+
+        PostCallPrompt.show(app, call(state = "pending_decision"), PostCallPrompt.ASK, "dark")
+
+        val posted = notifications().single()
+        assertEquals(listOf("Keep", "Discard"), posted.actions.map { it.title.toString() })
+        assertEquals(DecisionTimeoutWorker.WINDOW_SECONDS * 1000, posted.timeoutAfter)
+    }
+
+    @Test
+    fun `a voice note gets no chip`() {
+        overlayAllowed(true)
+        PostCallPrompt.show(app, call("note-1", "voice_note"), PostCallPrompt.KEEP, "dark")
+        assertFalse(DecisionPopup.isShowing)
+    }
+
+    @Test
+    fun `the chip says who the call was with and its buttons call back`() {
+        val rec = call().copy(callerName = "Omar")
+        assertEquals("Call with Omar", DecisionPopup.title(rec))
+        assertEquals("Phone call", DecisionPopup.title(call(app = "phone_call")))
+        var kept = 0
+        var discarded = 0
+        var titled = 0
+        compose.setContent {
+            EchoLedgerTheme("light") {
+                AfterCallChip(
+                    "Call with Omar",
+                    252_000,
+                    DecisionPopup.Mode.ASK,
+                    10_000,
+                    onKeep = { kept++ },
+                    onDiscard = { discarded++ },
+                    onUndo = {},
+                    onTitle = { titled++ }
+                )
+            }
+        }
+
+        compose.onNodeWithText("Call with Omar · 4:12").performClick()
+        compose.onNodeWithContentDescription("Keep").performClick()
+        compose.onNodeWithContentDescription("Discard").performClick()
+        assertEquals(1, titled)
+        assertEquals(1, kept)
+        assertEquals(1, discarded)
     }
 }

@@ -39,7 +39,7 @@ object PhoneCalls {
     fun inCall(mode: Int): Boolean = mode == AudioManager.MODE_IN_CALL || mode == AudioManager.MODE_IN_COMMUNICATION
 
     /** One call-log row: the number, the contact's name when the phone knows it, when it started. */
-    data class LogEntry(val number: String?, val name: String?, val dateMs: Long)
+    data class LogEntry(val number: String?, val name: String?, val dateMs: Long, val durationS: Long? = null)
 
     /** The row of a call recorded from [startMs] to [endMs]: the one that began closest to the start, or null. */
     fun pick(entries: List<LogEntry>, startMs: Long, endMs: Long): LogEntry? = entries

@@ -31,17 +31,37 @@ object PhoneCallLog {
         return null
     }
 
+    /**
+     * Since v1.5: the talk time of the SIM call recorded from [startMs] to [endMs] (the call log's duration counts from
+     * the answer; 0 = never answered); null without the permission or a matching row.
+     */
+    fun talkTimeMs(context: Context, startMs: Long, endMs: Long): Long? {
+        if (!granted(context, Manifest.permission.READ_CALL_LOG)) return null
+        repeat(TRIES) { attempt ->
+            PhoneCalls.pick(rows(context, startMs - PhoneCalls.BEFORE_MS), startMs, endMs)?.durationS?.let { return it * 1000 }
+            if (attempt < TRIES - 1) Thread.sleep(WAIT_MS)
+        }
+        return null
+    }
+
     private fun rows(context: Context, sinceMs: Long): List<PhoneCalls.LogEntry> = runCatching {
         context.contentResolver.query(
             CallLog.Calls.CONTENT_URI,
-            arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.DATE),
+            arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.DATE, CallLog.Calls.DURATION),
             "${CallLog.Calls.DATE} >= ?",
             arrayOf(sinceMs.toString()),
             "${CallLog.Calls.DATE} DESC"
         )?.use { cursor ->
             buildList {
                 while (cursor.moveToNext() && size < 10) {
-                    add(PhoneCalls.LogEntry(number = cursor.getString(0), name = cursor.getString(1), dateMs = cursor.getLong(2)))
+                    add(
+                        PhoneCalls.LogEntry(
+                            number = cursor.getString(0),
+                            name = cursor.getString(1),
+                            dateMs = cursor.getLong(2),
+                            durationS = if (cursor.isNull(3)) null else cursor.getLong(3)
+                        )
+                    )
                 }
             }
         }.orEmpty()

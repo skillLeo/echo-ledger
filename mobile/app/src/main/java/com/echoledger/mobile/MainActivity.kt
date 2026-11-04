@@ -490,7 +490,9 @@ class MainActivity : FragmentActivity() {
                                                     onUnread = { activityUnread = it },
                                                     waiting = pending.filter { it.state == "pending_decision" },
                                                     onOpenWaiting = { showWaiting = true },
-                                                    scrollToTop = reselected
+                                                    scrollToTop = reselected,
+                                                    skipped = pending.filter { it.state == com.echoledger.mobile.calls.SkippedCalls.STATE },
+                                                    onRestore = { vm.restoreSkipped(it) }
                                                 )
 
                                                 TAB_YOU -> SettingsScreen(vm, onSetup = { showSetup = true }, home = reselected)

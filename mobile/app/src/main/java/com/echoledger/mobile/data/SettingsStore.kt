@@ -39,6 +39,13 @@ data class AppSettings(
     val decisionTimeoutChosen: Boolean = false,
     /** Since 1.3.2: calls still waiting for Keep or Discard after this many hours are kept (24, 72, or 0 = never). */
     val undecidedKeepHours: Int = 24,
+    /**
+     * Since v1.5, after a call: "keep" (default: kept at once, a small "Saved · Undo" for 6 s) or "ask" (a small chip
+     * with ✓ and ✕ that keeps the call after 10 s). Settings from before v1.5 have no value and keep automatically.
+     */
+    val afterCall: String = "keep",
+    /** Since v1.5: automatic call recordings shorter than this are skipped (0 = never). */
+    val skipCallsShorterThanS: Int = 10,
     /** The server's `api_version` ("1.1") from the last config; null for a v1 server or before the first fetch. */
     val serverApiVersion: String? = null,
     /** Per call app (`source_app` wire value): false keeps auto-record from recording it. Missing apps are on. */

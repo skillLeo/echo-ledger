@@ -233,6 +233,45 @@ object Notifications {
         runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
     }
 
+    /**
+     * "Saved · Call with Omar · 4:12" with Undo (since v1.5, a call kept automatically, when the chip cannot be shown):
+     * quiet, gone after the same 6 s the upload waits.
+     */
+    fun savedWithUndo(context: Context, rec: LocalRecording, title: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val undo = PendingIntent.getBroadcast(
+            context,
+            rec.id.hashCode() + 2,
+            Intent(context, SaveDecisionReceiver::class.java)
+                .setAction(SaveDecisionReceiver.ACTION_UNDO)
+                .putExtra(SaveDecisionReceiver.EXTRA_ID, rec.id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val duration = com.echoledger.mobile.ui.formatDuration(rec.durationMs).ifEmpty { "0:00" }
+        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Saved · $title · $duration")
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(
+                    context,
+                    CHANNEL_DECISIONS
+                ).setSmallIcon(R.drawable.ic_stat_rec).setContentTitle("Call saved").build()
+            )
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(com.echoledger.mobile.overlay.DecisionPopup.SAVED_MS)
+            .setContentIntent(openApp(context))
+            .addAction(0, "Undo", undo)
+        runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
+    }
+
     /** A call started while the capture helper is not running: say so during the call, with the way to fix it. */
     fun captureNotReady(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

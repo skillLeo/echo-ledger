@@ -109,6 +109,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.echoledger.mobile.calls.PostCallPrompt
+import com.echoledger.mobile.calls.SkippedCalls
 import com.echoledger.mobile.core.Bookmarks
 import com.echoledger.mobile.core.ItemStatus
 import com.echoledger.mobile.core.LibraryFilters
@@ -620,7 +622,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                         com.echoledger.mobile.ui.design.Spinner(16.dp)
                         Spacer(Modifier.width(Space.s2))
                         Text(
-                            TranscriptText.transcribing(t.progress ?: item.transcript?.finalProgress),
+                            // Since v1.5 Urdu waits for its best engine when it is busy, instead of a weaker one.
+                            TranscriptText.waitingForEngine(t) ?: TranscriptText.transcribing(t.progress ?: item.transcript?.finalProgress),
                             style = type.bodyM,
                             color = c.textMuted
                         )
@@ -637,6 +640,28 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                 }
 
                 else -> {
+                    // Since v1.5: made by a backup engine (the preferred one stayed busy or refused it): offer the best one.
+                    if (t.backupEngine && t.kind == "final") {
+                        item(key = "backup-engine") {
+                            val retryScope = rememberCoroutineScope()
+                            var retrying by remember { mutableStateOf(false) }
+                            InlineBanner(
+                                "Backup engine${t.providerLabel?.let { " ($it)" } ?: ""} — Re-transcribe?",
+                                Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3),
+                                kind = BannerKind.Warning,
+                                action = if (retrying) "Starting…" else "Re-transcribe",
+                                onAction = {
+                                    if (!retrying) {
+                                        retrying = true
+                                        retryScope.launch {
+                                            vm.retranscribe(item.id, t.language)
+                                            retrying = false
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
                     // Suggested fixes (since 1.4): likely mishearings, changed only when accepted.
                     if (t.suggestions.isNotEmpty()) {
                         item(key = "suggestions") {
@@ -957,23 +982,52 @@ internal fun ConfirmDialog(text: String, confirmLabel: String, onConfirm: () -> 
     )
 }
 
-/** "If I don't choose within 60 s": what happens to a recording nobody decided on (same choices as the desktop). */
+/**
+ * After a call (since v1.5): keep automatically (a small "Saved · Undo") or ask with the ✓ / ✕ chip, and which calls
+ * are skipped quietly (shorter than the setting; unanswered and silent calls always are).
+ */
 @Composable
 internal fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
     SectionCard {
         Text("After a call", fontWeight = FontWeight.SemiBold)
-        Text("If I don't choose within 60 s", color = Brand.Muted, fontSize = 12.sp)
-        listOf("wait" to "Keep waiting (default)", "keep" to "Keep the recording", "discard" to "Discard it").forEach { (value, label) ->
+        listOf(
+            PostCallPrompt.KEEP to "Keep automatically (default) — a small \"Saved · Undo\" shows for 6 s",
+            PostCallPrompt.ASK to "Ask me — a small chip to keep or discard it; kept after 10 s"
+        ).forEach { (value, label) ->
             Row(
                 Modifier.fillMaxWidth()
                     .selectable(
-                        selected = settings.afterCallTimeout == value,
+                        selected = settings.afterCall == value,
                         role = Role.RadioButton,
-                        onClick = { vm.updateSettings { it.copy(decisionTimeout = value, decisionTimeoutChosen = true) } }
+                        onClick = { vm.updateSettings { it.copy(afterCall = value) } }
                     ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RadioButton(selected = settings.afterCallTimeout == value, onClick = null)
+                RadioButton(selected = settings.afterCall == value, onClick = null)
+                Text(label, modifier = Modifier.padding(start = 8.dp))
+            }
+        }
+    }
+    SectionCard {
+        Text("Skip calls shorter than", fontWeight = FontWeight.SemiBold)
+        Text(
+            "Calls that were not answered, or where nobody spoke, are always skipped. Skipped calls can be restored from Activity for 24 hours.",
+            color = Brand.Muted,
+            fontSize = 12.sp
+        )
+        SkippedCalls.SHORTER_THAN_CHOICES.forEach { seconds ->
+            Row(
+                Modifier.fillMaxWidth()
+                    .selectable(
+                        selected = settings.skipCallsShorterThanS == seconds,
+                        role = Role.RadioButton,
+                        onClick = { vm.updateSettings { it.copy(skipCallsShorterThanS = seconds) } }
+                    ),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(selected = settings.skipCallsShorterThanS == seconds, onClick = null)
+                val label =
+                    SkippedCalls.shorterThanLabel(seconds) + if (seconds == SkippedCalls.DEFAULT_SHORTER_THAN_S) " (default)" else ""
                 Text(label, modifier = Modifier.padding(start = 8.dp))
             }
         }

@@ -33,6 +33,8 @@ object SettingsTransfer {
         "afterShare",
         "decisionTimeoutChosen",
         "undecidedKeepHours",
+        "afterCall",
+        "skipCallsShorterThanS",
         "autoRecordApps",
         "extraCallApps",
         "captionsDuringCalls",

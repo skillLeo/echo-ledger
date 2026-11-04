@@ -21,7 +21,8 @@ import com.echoledger.mobile.data.ActivityResponse
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
-import com.echoledger.mobile.overlay.DecisionCard
+import com.echoledger.mobile.overlay.AfterCallChip
+import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.overlay.PillDot
 import com.echoledger.mobile.overlay.PillToolbar
 import com.echoledger.mobile.overlay.PillView
@@ -408,7 +409,10 @@ class ScreenshotsTest : ScreenTest() {
                 PillDot(PillState(mode = PillState.Mode.DOT))
                 PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, language = "UR"))
                 PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, stopArmedTicks = 2))
-                DecisionCard("whatsapp", 272_000, onKeep = {}, onDiscard = {}, language = "ur", onLanguage = {}, autoDecision = "keep")
+                AfterCallChip("Call with Omar", 252_000, DecisionPopup.Mode.SAVED, 6_000, onKeep = {
+                }, onDiscard = {}, onUndo = {}, onTitle = {})
+                AfterCallChip("WhatsApp call", 272_000, DecisionPopup.Mode.ASK, 10_000, onKeep = {
+                }, onDiscard = {}, onUndo = {}, onTitle = {})
             }
         }
         capture("pill")

@@ -580,6 +580,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         reloadLocal()
     }
 
+    /** Restore on Activity's "Skipped N short calls" (since v1.5): the call is kept and uploads now. */
+    fun restoreSkipped(id: String) = viewModelScope.launch(Dispatchers.IO) {
+        Decisions.restoreSkipped(getApplication(), id)
+        reloadLocal()
+        _message.value = "Restored — it uploads now"
+    }
+
     fun updateSettings(transform: (AppSettings) -> AppSettings) = viewModelScope.launch { graph.settings.update(transform) }
 
     // ---- Onboarding and settings files (B19) ------------------------------------------------------------------------

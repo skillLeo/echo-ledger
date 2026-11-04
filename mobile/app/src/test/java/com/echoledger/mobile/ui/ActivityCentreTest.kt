@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -184,7 +185,7 @@ class ActivityCentreTest : ScreenTest() {
             }
         }
         pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Needs action").assertExists() }.isSuccess }
-        compose.onNodeWithText("Keep or discard?").performClick()
+        compose.onNodeWithText("Review").performClick()
         assertEquals(1, openedWaiting)
         compose.onNodeWithText("Call bad").assertExists()
 
@@ -207,5 +208,28 @@ class ActivityCentreTest : ScreenTest() {
         compose.onNodeWithText("To").performTextClearance()
         compose.onNodeWithText("To").performTextInput("6")
         assertEquals("07:00", settings().quietTo)
+    }
+
+    @Test
+    fun `skipped calls show as one quiet line, and Restore keeps the call`() {
+        val skipped = listOf(
+            app.storeRecording(id = "s1", state = "skipped", durationMs = 6_000).copy(skippedReason = "too_short"),
+            app.storeRecording(id = "s2", state = "skipped", durationMs = 41_000).copy(skippedReason = "not_answered")
+        )
+        val restored = mutableListOf<String>()
+        show {
+            ActivityScreen(load = {
+                ActivityResponse(emptyList(), 0)
+            }, markRead = { 0 }, onOpen = {}, onUnread = {}, skipped = skipped, onRestore = {
+                restored +=
+                    it
+            })
+        }
+
+        pumpUntil("the line") { runCatching { compose.onNodeWithText("Skipped 2 short calls").assertExists() }.isSuccess }
+        compose.onNodeWithText("Show").performClick()
+        compose.onNodeWithText("Not answered", substring = true).assertExists()
+        compose.onAllNodesWithText("Restore")[0].performClick()
+        assertEquals(1, restored.size)
     }
 }

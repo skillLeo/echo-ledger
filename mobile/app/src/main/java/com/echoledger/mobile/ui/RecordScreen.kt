@@ -71,6 +71,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.notify.Notifications
@@ -230,6 +231,15 @@ fun RecordScreen(
             if (live.active) {
                 Box(Modifier.padding(horizontal = Space.screen)) { LiveRecordingCard(live, settings) }
             } else {
+                // Since v1.5: a connected Bluetooth headset would record through its narrow-band microphone.
+                val headset = remember(live.active) { com.echoledger.mobile.recording.BluetoothMic.connected(context) }
+                if (headset) {
+                    InlineBanner(
+                        "A Bluetooth headset is connected. ${com.echoledger.mobile.recording.BluetoothMic.NOTE}.",
+                        Modifier.padding(horizontal = Space.screen),
+                        kind = BannerKind.Warning
+                    )
+                }
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     EchoButton("Import files", {
                         import.launch(arrayOf("audio/*", "video/*"))
@@ -245,7 +255,8 @@ fun RecordScreen(
                 summary = when {
                     !capabilities.callCaptureSupportedByOs -> "Requires Android 14 or later"
                     !capabilities.helperConnected -> "Enable call capture in Setup first"
-                    else -> "You'll be asked after each call whether to keep it"
+                    settings.afterCall == PostCallPrompt.ASK -> "A small chip asks after each call; kept after 10 s"
+                    else -> "Answered calls are kept automatically; unanswered and short ones are skipped"
                 },
                 onClick = if (capabilities.helperConnected) null else onSetup,
                 trailing = {

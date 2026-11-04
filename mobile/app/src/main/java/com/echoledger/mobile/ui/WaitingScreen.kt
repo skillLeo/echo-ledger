@@ -61,24 +61,31 @@ object WaitingSummary {
     }
 }
 
-/** The Library's and the Calls view's one card for every call waiting for a decision, with Review. */
+/**
+ * The Library's, the Calls view's and Activity's one slim line for the calls still waiting for a decision (since v1.5:
+ * no big card; only "Ask me" calls not decided yet, or calls left from before, wait).
+ */
 @Composable
 fun WaitingSummaryCard(waiting: List<LocalRecording>, onReview: () -> Unit, modifier: Modifier = Modifier) {
     if (waiting.isEmpty()) return
     val c = LocalEchoColors.current
     val type = LocalEchoType.current
     Row(
-        modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s2).clip(RoundedCornerShape(Radius.md))
-            .background(c.accentSoft).clickable(role = Role.Button, onClickLabel = "Review the calls waiting", onClick = onReview)
-            .padding(start = Space.s4, top = Space.s3, bottom = Space.s3, end = Space.s2),
+        modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s1).clip(RoundedCornerShape(Radius.field))
+            .clickable(role = Role.Button, onClickLabel = "Review the calls waiting", onClick = onReview)
+            .padding(start = Space.s1, top = Space.s1, bottom = Space.s1, end = 0.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Rounded.HourglassTop, contentDescription = null, tint = c.accentText, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(Space.s3))
-        Column(Modifier.weight(1f)) {
-            Text("Keep or discard?", style = type.bodyL, color = c.text)
-            Text(WaitingSummary.line(waiting), style = type.labelM.tabular(), color = c.textMuted, maxLines = 2)
-        }
+        Icon(Icons.Rounded.HourglassTop, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(Space.s2))
+        Text(
+            WaitingSummary.line(waiting),
+            style = type.labelM.tabular(),
+            color = c.textMuted,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
         EchoButton("Review", onReview, kind = ButtonKind.Text)
     }
 }
