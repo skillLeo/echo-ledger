@@ -118,15 +118,74 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
                 throw IOException(UNREADABLE_ANSWER, e)
             }
         }
-        if (resp.code == 401) throw NotPairedException()
         val json = runCatching { ApiJson.parseToJsonElement(body).jsonObject }.getOrNull()
         val message = json?.get("message")?.let { (it as? JsonPrimitive)?.contentOrNull }
         val code = json?.get("code")?.let { (it as? JsonPrimitive)?.contentOrNull }
+        // A 401 means the token is gone, except signing in's "otp_required" (since v1.5): ask for the code instead.
+        if (resp.code == 401 && code != "otp_required") throw NotPairedException()
         val retryAfter = resp.header("Retry-After")?.trim()?.toLongOrNull()?.coerceAtLeast(0)
         throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter)
     }
 
     private val jsonType = "application/json".toMediaType()
+
+    /** `POST /api/auth/password` (since v1.5): this phone signs in to an account; [otp] when it has two-factor sign-in. */
+    suspend fun signInWithPassword(
+        email: String,
+        password: String,
+        otp: String?,
+        name: String,
+        appVersion: String,
+        osVersion: String
+    ): RegisterResponse {
+        val body = buildJsonObject {
+            put("email", email)
+            put("password", password)
+            otp?.takeIf { it.isNotBlank() }?.let { put("otp", it) }
+            put("name", name)
+            put("platform", "android")
+            put("app_version", appVersion)
+            put("os_version", osVersion)
+        }.toString().toRequestBody(jsonType)
+        return call(request("auth/password").post(body).build(), RegisterResponse.serializer())!!
+    }
+
+    /** `POST /api/auth/device/token` (since v1.5): the browser sign-in's one-time code and the PKCE verifier. */
+    suspend fun deviceToken(code: String, verifier: String, name: String, appVersion: String, osVersion: String): RegisterResponse {
+        val body = buildJsonObject {
+            put("code", code)
+            put("code_verifier", verifier)
+            put("name", name)
+            put("platform", "android")
+            put("app_version", appVersion)
+            put("os_version", osVersion)
+        }.toString().toRequestBody(jsonType)
+        return call(request("auth/device/token").post(body).build(), RegisterResponse.serializer())!!
+    }
+
+    suspend fun account(): com.echoledger.mobile.data.AccountDto =
+        call(request("account").get().build(), com.echoledger.mobile.data.AccountDto.serializer())!!
+
+    suspend fun signOutEverywhere() {
+        call(request("account/sign-out-everywhere").post("{}".toRequestBody(jsonType)).build(), null as KSerializer<Unit>?)
+    }
+
+    /** `DELETE /api/account` (since v1.5), confirmed with the password or a two-factor code; when it will be deleted. */
+    suspend fun deleteAccount(password: String?, otp: String?): String? {
+        val body = buildJsonObject {
+            password?.takeIf { it.isNotEmpty() }?.let { put("password", it) }
+            otp?.takeIf { it.isNotBlank() }?.let { put("otp", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("account").delete(body).build(), com.echoledger.mobile.data.AccountDeletionDto.serializer())?.deletesAt
+    }
+
+    suspend fun startExport(): com.echoledger.mobile.data.AccountExportDto = call(
+        request("account/export").post("{}".toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.AccountExportDto.serializer()
+    )!!
+
+    suspend fun exportStatus(id: String): com.echoledger.mobile.data.AccountExportDto =
+        call(request("account/export/$id").get().build(), com.echoledger.mobile.data.AccountExportDto.serializer())!!
 
     suspend fun register(code: String, name: String, appVersion: String, osVersion: String): RegisterResponse {
         val body = buildJsonObject {

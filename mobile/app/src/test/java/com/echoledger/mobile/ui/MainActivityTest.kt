@@ -112,7 +112,7 @@ class MainActivityTest : AppTest() {
     fun `an unpaired phone opens on the pairing screen without any tabs`() {
         launch(paired = false)
 
-        awaitText("Pair this phone")
+        awaitText("Sign in to EchoLedger")
 
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
         compose.onAllNodesWithContentDescription("You").assertCountEquals(0)
@@ -186,7 +186,7 @@ class MainActivityTest : AppTest() {
 
         compose.onNodeWithText("Skip setup").performClick()
 
-        awaitText("Pair this phone")
+        awaitText("Sign in to EchoLedger")
         assertTrue(runBlocking { app.graph.settings.current().onboardingDone })
         assertTrue(!present("Welcome to EchoLedger"))
     }
@@ -237,7 +237,7 @@ class MainActivityTest : AppTest() {
     @Test
     fun `tapping Scan QR code asks for the camera permission without crashing`() {
         val controller = launch(paired = false)
-        awaitText("Pair this phone")
+        awaitText("Sign in to EchoLedger")
 
         compose.onNodeWithText("Scan QR code").performClick()
         compose.waitForIdle()
@@ -259,7 +259,7 @@ class MainActivityTest : AppTest() {
         compose.onNodeWithText("Unpair").performScrollTo().performClick()
         compose.onNode(hasText("Unpair") and hasAnyAncestor(isDialog())).performClick()
 
-        awaitText("Pair this phone")
+        awaitText("Sign in to EchoLedger")
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
     }
 
@@ -305,7 +305,7 @@ class MainActivityTest : AppTest() {
     @Test
     fun `an unpaired phone never contacts a server when it is opened or resumed`() {
         val controller = launch(paired = false)
-        awaitText("Pair this phone")
+        awaitText("Sign in to EchoLedger")
 
         controller.pause().resume()
         compose.waitForIdle()
@@ -379,7 +379,7 @@ class MainActivityTest : AppTest() {
         launchBeforeSettingsLoad()
         compose.waitForIdle()
 
-        assertTrue("the pairing form must not be shown to an already paired phone", !present("Pair this phone"))
+        assertTrue("the pairing form must not be shown to an already paired phone", !present("Sign in to EchoLedger"))
     }
 
     @Test
@@ -405,7 +405,7 @@ class MainActivityTest : AppTest() {
 
         pumpUntil("the pairing screen", timeoutMs = 10_000) {
             compose.waitForIdle()
-            present("Pair this phone")
+            present("Sign in to EchoLedger")
         }
         compose.onAllNodesWithTag("startup-splash").assertCountEquals(0)
     }

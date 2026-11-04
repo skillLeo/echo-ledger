@@ -79,6 +79,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="echoledger" android:host="open" />
+                <!-- The browser sign-in sends the phone back here with its one-time code (echoledger://signed-in). -->
+                <data android:scheme="echoledger" android:host="signed-in" />
             </intent-filter>
             <!--
               Since v1.5: the server's share (/s/), project (/p/) and request (/r/) links open here (Android App Links,

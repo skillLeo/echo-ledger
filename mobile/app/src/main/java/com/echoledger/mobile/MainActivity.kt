@@ -122,6 +122,7 @@ class MainActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         if (savedInstanceState == null) openRequest.value = intent?.getStringExtra(EXTRA_OPEN) ?: intent?.let(::linkRequest)
+        if (savedInstanceState == null) signedIn(intent)
         // Content hidden in Recents and screenshots while the app lock and its "hide content" option are on.
         lifecycleScope.launch {
             vm.settingsState.collect { state ->
@@ -163,6 +164,12 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         (intent.getStringExtra(EXTRA_OPEN) ?: linkRequest(intent))?.let { openRequest.value = it }
+        signedIn(intent)
+    }
+
+    /** The browser sign-in came back (echoledger://signed-in?code=…&state=…, since v1.5). */
+    private fun signedIn(intent: Intent?) {
+        com.echoledger.mobile.core.SignIn.callback(intent?.data)?.let { (code, state) -> vm.completeBrowserSignIn(code, state) }
     }
 
     /** A share, project or request link opened in the app (since v1.5), as an [openRequest]; null for any other intent. */

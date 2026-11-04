@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
@@ -82,15 +83,41 @@ class PairingScreenTest : ScreenTest() {
     fun `the form explains where the code comes from and starts with an https prefix`() {
         showPairing()
 
-        compose.onNodeWithText("Pair this phone").assertIsDisplayed()
-        compose.onNodeWithText(
-            "In your EchoLedger admin open Devices → Pair a device, then scan the QR code shown there."
-        ).assertIsDisplayed()
-        compose.onNodeWithText("Scan QR code").assertIsDisplayed()
+        compose.onNodeWithText("Sign in to EchoLedger").assertIsDisplayed()
+        compose.onNodeWithText("Email").assertIsDisplayed()
+        compose.onNodeWithText("Sign in in the browser (Google, passkey)").assertIsDisplayed()
+        compose.onNodeWithText("Scan QR code").performScrollTo().assertIsDisplayed()
         compose.onNode(hasSetTextAction() and hasText("https://")).assertIsDisplayed()
         compose.onNodeWithText("Server address").assertIsDisplayed()
         compose.onNodeWithText("Pairing code").assertIsDisplayed()
         compose.onNodeWithText("Name for this phone (optional)").assertIsDisplayed()
+    }
+
+    @Test
+    fun `signing in with an email and password asks for the two-factor code, then signs in (since v1_5)`() {
+        server.on("POST", "/api/auth/password", FakeServer.json(401, """{"message":"Two-factor code needed.","code":"otp_required"}"""))
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
+        showPairing()
+
+        compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(server.baseUrl)
+        compose.onNodeWithText("Email").performTextInput("ana@example.com")
+        compose.onNodeWithText("Password").performTextInput("correct horse")
+        compose.onNodeWithText("Sign in").performClick()
+        pumpUntil("the code question") { vm.otpNeeded.value }
+        server.on(
+            "POST",
+            "/api/auth/password",
+            MockResponse.Builder().code(201).addHeader("Content-Type", "application/json").body(ServerFixtures.registerResponse()).build()
+        )
+        compose.onNodeWithText("Code from your authenticator app").performTextInput("123456")
+        compose.onNodeWithText("Sign in").performClick()
+        pumpUntil("signed in") { runBlocking { app.graph.settings.current().paired } }
+
+        val body = Json.parseToJsonElement(server.requestsTo("POST", "/api/auth/password").last().bodyText()).jsonObject
+        assertEquals("ana@example.com", body["email"]!!.jsonPrimitive.content)
+        assertEquals("123456", body["otp"]!!.jsonPrimitive.content)
+        assertEquals(server.baseUrl, runBlocking { app.graph.settings.current().serverUrl })
     }
 
     @Test
@@ -138,13 +165,12 @@ class PairingScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `pasting the QR payload into the code field hides the address field and pairs with the payload`() {
+    fun `pasting the QR payload into the code field pairs with the payload, not the typed address`() {
         serveRegistration()
         showPairing()
 
         typeCode("""{"v":1,"url":"${server.baseUrl}","code":"TEST2345","pins":[]}""")
 
-        compose.onAllNodesWithText("Server address").assertCountEquals(0)
         compose.onNodeWithText("Pair").performClick()
         pumpUntil("pairing") { runBlocking { app.graph.settings.current().paired } && vm.message.value != null }
         assertEquals(server.baseUrl, runBlocking { app.graph.settings.current().serverUrl })
@@ -167,7 +193,7 @@ class PairingScreenTest : ScreenTest() {
 
         assertEquals("This pairing code is invalid, expired, or already used.", vm.message.value)
         compose.onNodeWithText("Pair").assertIsEnabled()
-        compose.onNodeWithText("Pair this phone").assertIsDisplayed()
+        compose.onNodeWithText("Sign in to EchoLedger").assertIsDisplayed()
     }
 
     @Test

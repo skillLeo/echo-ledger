@@ -11,6 +11,7 @@ import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.core.SettingsTransfer
+import com.echoledger.mobile.core.SignIn
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.BinItemDto
 import com.echoledger.mobile.data.ClientDto
@@ -124,23 +125,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     token = null
                 ).register(payload.code, name, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE)
             }
-            graph.settings.saveToken(response.token)
-            val finalPins = response.config.pins.ifEmpty { payload.pins }
-            graph.settings.update {
-                it.copy(
-                    serverUrl = payload.url,
-                    pins = finalPins,
-                    deviceId = response.device.id,
-                    deviceName = response.device.name,
-                    serverApiVersion = response.config.apiVersion,
-                    markerTags = response.config.markers?.tags.orEmpty(),
-                    unsureStyle = response.config.unsure?.style ?: "brackets",
-                    unsureThreshold = response.config.unsure?.threshold ?: 0.5,
-                    unsureNote = response.config.unsure?.note ?: true
-                )
-            }
-            graph.invalidateApi()
-            refresh()
+            finishSignIn(payload.url, payload.pins, response)
             _message.value = "Paired with ${payload.url.removePrefix("https://")}"
         } catch (e: Exception) {
             _message.value = e.message ?: "Pairing failed"
@@ -148,6 +133,111 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _busy.value = false
         }
     }
+
+    /** What a pairing and every sign-in end with: the token (Keystore-encrypted), the server and its config. */
+    private suspend fun finishSignIn(serverUrl: String, pins: List<String>, response: com.echoledger.mobile.data.RegisterResponse) {
+        graph.settings.saveToken(response.token)
+        val finalPins = response.config.pins.ifEmpty { pins }
+        graph.settings.update {
+            it.copy(
+                serverUrl = serverUrl,
+                pins = finalPins,
+                deviceId = response.device.id,
+                deviceName = response.device.name,
+                serverApiVersion = response.config.apiVersion,
+                markerTags = response.config.markers?.tags.orEmpty(),
+                unsureStyle = response.config.unsure?.style ?: "brackets",
+                unsureThreshold = response.config.unsure?.threshold ?: 0.5,
+                unsureNote = response.config.unsure?.note ?: true
+            )
+        }
+        graph.invalidateApi()
+        refresh()
+    }
+
+    private fun deviceName(typed: String): String = typed.ifBlank { "${Build.MANUFACTURER} ${Build.MODEL}".trim() }
+
+    /** Asked for the two-factor code after an email and password were right (since v1.5). */
+    private val _otpNeeded = MutableStateFlow(false)
+    val otpNeeded: StateFlow<Boolean> = _otpNeeded.asStateFlow()
+
+    /** Signs this phone in with an account's email and password (and the two-factor code once asked). */
+    fun signIn(serverUrl: String, email: String, password: String, otp: String?, typedName: String) = viewModelScope.launch {
+        _busy.value = true
+        val url = SignIn.serverUrl(serverUrl)
+        try {
+            val response = withContext(Dispatchers.IO) {
+                ApiClient(url, emptyList(), token = null)
+                    .signInWithPassword(email.trim(), password, otp, deviceName(typedName), BuildConfig.VERSION_NAME, Build.VERSION.RELEASE)
+            }
+            _otpNeeded.value = false
+            finishSignIn(url, emptyList(), response)
+            _message.value = "Signed in as ${email.trim()}"
+        } catch (e: com.echoledger.mobile.net.ApiException) {
+            if (e.code == "otp_required") _otpNeeded.value = true
+            _message.value = SignIn.message(e.code, e.message)
+        } catch (e: Exception) {
+            _message.value = e.message ?: "Signing in failed"
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    /** The browser sign-in being made (since v1.5): its server, PKCE verifier, state and the phone's name. */
+    private var browserSignIn: SignIn.Browser? = null
+
+    /** Starts the browser sign-in (Google, passkeys, …); the page sends the phone back to echoledger://signed-in. */
+    fun browserSignInUrl(serverUrl: String, typedName: String): String {
+        val started = SignIn.Browser.start(SignIn.serverUrl(serverUrl), deviceName(typedName))
+        browserSignIn = started
+        return started.url()
+    }
+
+    /** echoledger://signed-in?code=…&state=… came back: the code becomes this phone's token. */
+    fun completeBrowserSignIn(code: String?, state: String?) = viewModelScope.launch {
+        val started = browserSignIn
+        if (started == null || code.isNullOrBlank() || state != started.state) {
+            _message.value = "That sign-in link is not for this sign-in. Start again."
+            return@launch
+        }
+        browserSignIn = null
+        _busy.value = true
+        try {
+            val response = withContext(Dispatchers.IO) {
+                ApiClient(started.serverUrl, emptyList(), token = null)
+                    .deviceToken(code, started.verifier, started.deviceName, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE)
+            }
+            finishSignIn(started.serverUrl, emptyList(), response)
+            _message.value = "Signed in"
+        } catch (e: com.echoledger.mobile.net.ApiException) {
+            _message.value = SignIn.message(e.code, e.message)
+        } catch (e: Exception) {
+            _message.value = e.message ?: "Signing in failed"
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    suspend fun account(): com.echoledger.mobile.data.AccountDto? = workspaceCall("The account could not be loaded.") { it.account() }
+
+    /** Signs out every device and console session of the account, this phone too (back to the sign-in screen). */
+    suspend fun signOutEverywhere(): Boolean {
+        workspaceCall("Signing out failed.") { it.signOutEverywhere() } ?: return false
+        graph.settings.clearPairing()
+        graph.library.clear()
+        return true
+    }
+
+    /** Asks for the account's deletion (7 days to change one's mind); the day it will be deleted, or null. */
+    suspend fun deleteAccount(password: String?, otp: String?): String? =
+        workspaceCall("The account could not be deleted.") { it.deleteAccount(password, otp) }
+
+    suspend fun startExport(): com.echoledger.mobile.data.AccountExportDto? = workspaceCall("The export could not be started.") {
+        it.startExport()
+    }
+
+    suspend fun exportStatus(id: String): com.echoledger.mobile.data.AccountExportDto? =
+        workspaceCall("The export could not be checked.") { it.exportStatus(id) }
 
     fun unpair() = viewModelScope.launch {
         graph.settings.clearPairing()

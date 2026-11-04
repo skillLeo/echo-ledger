@@ -681,3 +681,31 @@ data class ScreenDto(
 
 @Serializable
 data class ScreensResponse(val data: List<ScreenDto> = emptyList())
+
+/** `GET /api/account` (since v1.5): who this phone is signed in as, and their workspace and role. */
+@Serializable
+data class AccountDto(
+    val name: String? = null,
+    val email: String? = null,
+    @SerialName("email_verified") val emailVerified: Boolean = false,
+    @SerialName("two_factor") val twoFactor: Boolean = false,
+    val google: Boolean = false,
+    @SerialName("created_at") val createdAt: String? = null,
+    val workspace: AccountWorkspaceDto? = null,
+    @SerialName("deletes_at") val deletesAt: String? = null
+)
+
+@Serializable
+data class AccountWorkspaceDto(val id: Long? = null, val name: String? = null, val role: String? = null)
+
+@Serializable
+data class AccountDeletionDto(@SerialName("deletes_at") val deletesAt: String? = null)
+
+/** A data export (since v1.5): one ZIP of everything the account owns; [url] works for 24 hours once ready. */
+@Serializable
+data class AccountExportDto(
+    val id: String,
+    val status: String = "making",
+    val url: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null
+)

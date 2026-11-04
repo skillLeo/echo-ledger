@@ -201,9 +201,47 @@ fun PairingScreen(vm: MainViewModel) {
         ) {
             Spacer(Modifier.height(40.dp))
             Box(Modifier.size(44.dp).clip(CircleShape).background(Brand.Gradient))
-            Text("Pair this phone", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("Sign in to EchoLedger", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            // Since v1.5: the phone signs in to its owner's account (email and password, or the browser for Google).
+            val otpNeeded by vm.otpNeeded.collectAsState()
+            var email by rememberSaveable { mutableStateOf("") }
+            var password by remember { mutableStateOf("") }
+            var otp by remember { mutableStateOf("") }
+            OutlinedTextField(url, { url = it }, label = { Text("Server address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(email, { email = it }, label = { Text("Email") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                password,
+                { password = it },
+                label = { Text("Password") },
+                singleLine = true,
+                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth()
+            )
+            if (otpNeeded) {
+                OutlinedTextField(otp, {
+                    otp = it.take(20)
+                }, label = { Text("Code from your authenticator app") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            }
+            Button(
+                onClick = {
+                    focusManager.clearFocus()
+                    vm.signIn(url, email, password, otp.takeIf { otpNeeded }, name)
+                },
+                enabled = !busy && email.contains('@') && password.isNotEmpty() && url.length > "https://".length,
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) { Text(if (busy) "Signing in…" else "Sign in", fontSize = 16.sp) }
+            OutlinedButton(
+                onClick = {
+                    val page = vm.browserSignInUrl(url, name)
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page)).addCategory(Intent.CATEGORY_BROWSABLE))
+                    }
+                },
+                enabled = !busy && url.length > "https://".length,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Sign in in the browser (Google, passkey)") }
             Text(
-                "In your EchoLedger admin open Devices → Pair a device, then scan the QR code shown there.",
+                "Or, signed in to the console on a computer: Profile → Devices → Sign in a device, then scan its QR code.",
                 color = Brand.Muted
             )
             Button(
@@ -234,16 +272,12 @@ fun PairingScreen(vm: MainViewModel) {
                 )
             }
             Text(
-                "or enter the server address and one-time code",
+                "or use a one-time pairing code",
                 color = Brand.Muted,
                 fontSize = 13.sp,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
-            if (!qr) {
-                OutlinedTextField(url, {
-                    url = it
-                }, label = { Text("Server address") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            }
+            // The pairing code uses the server address above (a pasted QR text carries its own).
             OutlinedTextField(code, { code = it }, label = { Text("Pairing code") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(name, {
                 name = it

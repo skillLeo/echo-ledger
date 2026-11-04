@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Call
@@ -114,6 +115,13 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0) {
             query = ""
         }
     }
+    var accountOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(home) { if (home > 0) accountOpen = false }
+    if (accountOpen) {
+        BackHandler { accountOpen = false }
+        AccountScreen(vm, onBack = { accountOpen = false })
+        return
+    }
     val open = group?.let { name -> SettingsGroup.entries.firstOrNull { it.name == name } }
     if (open != null) {
         // General is a list of its own pages; Back from one of them returns to that list.
@@ -155,6 +163,11 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0) {
         val results = SettingsCatalogue.search(query)
         when {
             query.isBlank() -> {
+                // Since v1.5: the account this phone is signed in to (export, sign out everywhere, delete).
+                SettingsRow(Icons.Outlined.AccountCircle, "Account", "Sign-in, your data, deleting the account", "Open your account") {
+                    accountOpen =
+                        true
+                }
                 com.echoledger.mobile.ui.design.SectionHeader("Settings")
                 SettingsGroup.entries.forEach { g ->
                     SettingsRow(g.icon(), g.label, g.summary, "Open ${g.label} settings") {
