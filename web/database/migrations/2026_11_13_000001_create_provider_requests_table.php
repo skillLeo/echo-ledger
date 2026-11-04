@@ -20,7 +20,8 @@ return new class extends Migration
             $table->string('provider', 32);
             $table->string('key_id', 32);
             $table->unsignedInteger('audio_ms');
-            $table->timestamp('requested_at');
+            // An explicit default: MariaDB would otherwise add ON UPDATE CURRENT_TIMESTAMP to the first timestamp column.
+            $table->timestamp('requested_at')->useCurrent();
             $table->index(['provider', 'key_id', 'requested_at']);
             $table->index('requested_at');
         });

@@ -390,7 +390,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
                 }
             }
         }
-        // Groq's limits as it reports them, and what this request used, whatever the answer.
+        // Groq's limits as it reports them, whatever the answer; a request it answered counts towards them.
         $this->pacer->observe($keyId, $response);
         $json = (array) $response->throw()->json();
         $this->pacer->record($keyId, $billedMs);
