@@ -66,6 +66,13 @@ Every addition below is marked **(since v1.1)**.
 | 404 | `recipient_not_found` | Since v1.5: an email to send to has no account on this server; nothing was sent | Check the address |
 | 409 | `rule_exists` | Since v1.5: another project already has a rule with that kind and value | Show which project has it |
 | 409 | `too_many_screens` | Since v1.5: a recording keeps at most 400 screen moments | Stop sending screens for this recording |
+| 401 | `otp_required` | Since v1.5: the account has two-factor sign-in; send `otp` | Ask for the code and send again |
+| 403 | `email_not_verified` | Since v1.5: the account's email is not verified yet | Say so; the console's email has the link |
+| 409 | `owner_of_team` | Since v1.5: the owner of a workspace with other members must hand it over before deleting the account | Open the console's Workspace page |
+| 422 | `invalid_credentials` | Since v1.5: wrong email or password (one answer for both) | Ask again |
+| 422 | `invalid_otp` | Since v1.5: the two-factor code is wrong or used | Ask again |
+| 422 | `invalid_code` | Since v1.5: the browser sign-in code is wrong, used, expired or for another verifier | Start the browser sign-in again |
+| 429 | `too_many_attempts` | Since v1.5: sign-in locked for a while after failures | Wait for `Retry-After` |
 | 422 | `invalid_parent` | Since v1.5: a project cannot go under itself or one of its own subfolders | Pick another folder |
 | 422 | `too_deep` | Since v1.5: projects nest at most 4 levels | Pick a higher folder |
 | 405 | `method_not_allowed` | Wrong HTTP method | Permanent |
@@ -158,6 +165,46 @@ Codes are 8 Crockford-base32 chars, displayed `7KQ2-M9XD`; the server ignores hy
 ### `POST /api/devices/rotate-token` — auth
 `200 {"token": "…", "token_expires_at": "…"}`; the old token is revoked immediately. The new token carries exactly the
 abilities of the token that asked for it, never more **(since v1.1)**.
+
+### Signing in with an account (since v1.5)
+People have their own accounts (email and password, or Google), and a phone or computer signs in to its owner's
+account instead of being paired by an admin. The device's token then acts for that person in their current
+workspace, exactly like a paired device's; everything above about tokens, abilities and workspaces still holds.
+Pairing codes keep working for older apps, and every signed-in person (not only an admin) can make one for their own
+account in the console (Profile → Devices → "Sign in a device", the QR of `POST /api/devices/register`).
+
+- `POST /api/auth/password` — public, throttled (5/min/IP and 5 per 15 min per email): `{"email", "password",
+  "otp": "123456" | null, "name", "platform", "app_version", "os_version"}` → `201` exactly like
+  `POST /api/devices/register` (`device`, `token`, `token_expires_at`, `config`). An account with two-factor sign-in
+  needs `otp` (a TOTP code or a recovery code): without it `401 otp_required`, wrong `422 invalid_otp`. Wrong email
+  or password `422 invalid_credentials` (the same answer for both); an address not verified yet `403
+  email_not_verified`; after 5 failures `429 too_many_attempts` with `Retry-After`.
+- Browser sign-in (Google, passkeys and everything the console's sign-in page offers): the app opens
+  `https://<server>/device/sign-in?code_challenge=<BASE64URL(SHA-256(verifier))>&code_challenge_method=S256&state=<random>&redirect_uri=echoledger://signed-in&name=<device name>&platform=android|windows|macos`
+  in the browser. The person signs in (and approves "Sign in EchoLedger on <name>?"), and the browser is sent to
+  `echoledger://signed-in?code=<one-time code, 5 minutes>&state=<the same state>`. The app then calls
+  `POST /api/auth/device/token` — public, throttled — with `{"code", "code_verifier", "name", "platform",
+  "app_version", "os_version"}` → `201` like `POST /api/devices/register`. A wrong or used code, another verifier or
+  an expired code is `422 invalid_code`.
+- Every new device sign-in sends the account an email ("New sign-in: S25 Ultra, Android") and goes into the audit
+  log.
+
+### Your account (since v1.5)
+- `GET /api/account` — `config:read` → `200 {"name", "email", "email_verified": true, "two_factor": true,
+  "google": true, "created_at", "workspace": {"id", "name", "role": "owner" | "admin" | "member" | "viewer"},
+  "deletes_at": null}`.
+- `POST /api/account/sign-out-everywhere` — `sessions:write`: signs out every device and console session of the
+  account, this device included → `204`.
+- `DELETE /api/account` — `sessions:write`: `{"password": "…"}` or `{"otp": "123456"}` (one of them, to confirm it is
+  you) → `202 {"deletes_at": "…"}`: the account and everything only it owns (recordings, transcripts, screens, files,
+  projects of its own workspace, devices) are deleted after 7 days; signing in again before then and choosing "Keep my
+  account" cancels it. The owner of a workspace with other members must hand it over first (`409 owner_of_team`).
+  The same is offered without the app on the public page `/account/delete` (sign in, confirm), which Google Play
+  links to.
+- `POST /api/account/export` — `library:read` → `202 {"id": "01JF…", "status": "making"}`; `GET
+  /api/account/export/{id}` → `{"id", "status": "making" | "ready" | "failed", "url": "…" | null, "expires_at"}`:
+  one ZIP with every recording's audio, transcripts (all views made), screens, project files and notes, and a
+  `manifest.json`. The link works for 24 hours; the account's email gets it too.
 
 ### `GET /api/config` — `config:read`
 ```json
