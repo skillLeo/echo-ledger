@@ -6,6 +6,8 @@ import {
   discardAllConfirm,
   failedUploads,
   pendingTitle,
+  skippedLine,
+  skippedMeta,
   recordingTitle,
   uploadTitle,
   verifyingUploads,
@@ -13,7 +15,7 @@ import {
   waitingLine,
   waitingSummary,
 } from "./pending";
-import { makePendingItem, makeUploadItem } from "../test/fixtures";
+import { makePendingItem, makeSkippedItem, makeUploadItem } from "../test/fixtures";
 
 describe("waitingSummary", () => {
   const call = (id: string, startedAt: string, durationMs: number) => makePendingItem(id, { startedAt, durationMs });
@@ -141,5 +143,20 @@ describe("copy", () => {
   it("matches the contract", () => {
     expect(NO_AUDIO_HINT).toBe("Check your microphone and the audio device, then try again.");
     expect(DISCARD_CONFIRM).toBe("Discard this recording? It can't be undone.");
+  });
+});
+
+describe("skipped calls (v1.5)", () => {
+  it("counts them the way the phone does", () => {
+    expect(skippedLine(1)).toBe("Skipped 1 short call");
+    expect(skippedLine(3)).toBe("Skipped 3 short calls");
+  });
+
+  it("names a skipped call by its title, the caller, else the app, then when, how long and why", () => {
+    const now = new Date(2026, 9, 24, 12, 0, 0);
+    const at = new Date(2026, 9, 24, 9, 12).toISOString();
+    expect(skippedMeta(makeSkippedItem("a", { startedAt: at }), now)).toBe("WhatsApp · Today · 9:12 AM · 0:06 · Too short");
+    expect(skippedMeta(makeSkippedItem("b", { startedAt: at, callerName: " Omar ", reason: "no_speech", durationMs: 0 }), now)).toBe("Call with Omar · Today · 9:12 AM · 0:00 · No speech");
+    expect(skippedMeta(makeSkippedItem("c", { startedAt: at, title: "Stand-up", callerName: "Omar" }), now)).toBe("Stand-up · Today · 9:12 AM · 0:06 · Too short");
   });
 });

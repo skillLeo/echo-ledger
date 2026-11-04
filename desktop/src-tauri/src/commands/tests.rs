@@ -56,6 +56,17 @@ fn after_a_call_and_the_caption_lines_are_applied() {
 }
 
 #[test]
+fn skip_calls_shorter_than_is_applied_only_for_an_offered_choice() {
+    let mut s = Settings::default();
+    patch(json!({"skipCallsShorterThanS": 0})).apply(&mut s);
+    assert_eq!(s.skip_calls_shorter_than_s, 0, "never");
+    patch(json!({"skipCallsShorterThanS": 30})).apply(&mut s);
+    assert_eq!(s.skip_calls_shorter_than_s, 30);
+    patch(json!({"skipCallsShorterThanS": 12})).apply(&mut s);
+    assert_eq!(s.skip_calls_shorter_than_s, 30, "update_settings refuses it; apply never stores it");
+}
+
+#[test]
 fn a_patch_with_the_keys_from_before_v1_5_changes_nothing_and_is_not_refused() {
     // An exported settings file from v1.4 still carries askBeforeSaving / decisionTimeout.
     let mut s = Settings { after_call: AfterCall::Ask, ..Settings::default() };

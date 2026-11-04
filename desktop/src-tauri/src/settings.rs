@@ -229,6 +229,8 @@ pub struct Settings {
     pub consent_acknowledged: bool,
     /// What happens when a call ends: kept at once with Undo, or asked about with a chip that keeps it after 10 s.
     pub after_call: AfterCall,
+    /// Automatic call recordings shorter than this many seconds are skipped quietly (0 = never; v1.5, `skipped`).
+    pub skip_calls_shorter_than_s: u32,
     /// Offer the "Record / Ignore / Always ignore" chip when an unrecognised app or site holds the mic and plays audio.
     pub ask_unknown_apps: bool,
     /// User site rules only (built-ins live in `detect::sites`); a user rule with a built-in's id replaces it.
@@ -292,6 +294,7 @@ impl Default for Settings {
             // Also what a file from before v1.5 (askBeforeSaving / decisionTimeout, no afterCall) loads as: the user
             // asked for Keep automatically as the default. The old keys are read and ignored.
             after_call: AfterCall::Keep,
+            skip_calls_shorter_than_s: crate::skipped::DEFAULT_SHORTER_THAN_S,
             ask_unknown_apps: false,
             site_rules: Vec::new(),
             caption_lines: DEFAULT_CAPTION_LINES,
@@ -346,6 +349,9 @@ impl Settings {
                 "captionLines" => Value::from(caption_lines_or_default(value.as_u64())),
                 "quietFrom" => Value::from(value.as_str().filter(|t| crate::activity::parse_hhmm(t).is_some()).unwrap_or("22:00")),
                 "quietTo" => Value::from(value.as_str().filter(|t| crate::activity::parse_hhmm(t).is_some()).unwrap_or("07:00")),
+                "skipCallsShorterThanS" => Value::from(
+                    value.as_u64().and_then(|v| u32::try_from(v).ok()).filter(|v| crate::skipped::SHORTER_THAN_CHOICES.contains(v)).unwrap_or(crate::skipped::DEFAULT_SHORTER_THAN_S),
+                ),
                 "lockAfterMinutes" => Value::from(value.as_u64().and_then(|m| u32::try_from(m).ok()).filter(|m| crate::lock::LOCK_AFTER_CHOICES.contains(m)).unwrap_or(5)),
                 _ => value,
             };

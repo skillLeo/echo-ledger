@@ -177,6 +177,8 @@ pub struct SettingsPatch {
     browser_automation: Option<bool>,
     /// `keep` (Saved · Undo) or `ask` (the chip).
     after_call: Option<crate::settings::AfterCall>,
+    /// 0, 5, 10, 20 or 30; anything else is refused.
+    skip_calls_shorter_than_s: Option<u32>,
     /// 2, 3 or 5; anything else is refused.
     caption_lines: Option<u8>,
     /// Full replacement; refused when a value is out of range.
@@ -227,6 +229,7 @@ impl SettingsPatch {
         if let Some(v) = &self.site_rules { s.site_rules = v.clone(); }
         if let Some(v) = self.browser_automation { s.browser_automation = v; }
         if let Some(v) = self.after_call { s.after_call = v; }
+        if let Some(v) = self.skip_calls_shorter_than_s && crate::skipped::SHORTER_THAN_CHOICES.contains(&v) { s.skip_calls_shorter_than_s = v; }
         if let Some(v) = self.caption_lines { s.caption_lines = v; }
         if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }
         if let Some(v) = &self.input_device { s.input_device = v.clone(); }
@@ -268,6 +271,11 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         && !crate::lock::LOCK_AFTER_CHOICES.contains(&minutes)
     {
         return Err(AppError::msg("Choose when the app locks."));
+    }
+    if let Some(seconds) = patch.skip_calls_shorter_than_s
+        && !crate::skipped::SHORTER_THAN_CHOICES.contains(&seconds)
+    {
+        return Err(AppError::msg("Choose never, 5, 10, 20 or 30 seconds."));
     }
     if patch.app_lock == Some(true) && !crate::lock::LockFile::load(&paths::app_lock(&app.state::<AppState>().data_dir)).pin_hash.is_some_and(|h| !h.is_empty()) {
         return Err(AppError::msg("Set a PIN first. It unlocks the app when Windows Hello or Touch ID is not available."));
@@ -1567,6 +1575,18 @@ pub async fn saved_undo(app: AppHandle, id: String) -> AppResult<()> {
     crate::actions::undo_saved(&app, &id).await?;
     crate::actions::emit_status(&app);
     Ok(())
+}
+
+/// Short or silent automatic calls skipped in the last 24 hours (Activity's "Skipped 3 short calls"), newest first.
+#[tauri::command]
+pub fn skipped_list(app: AppHandle) -> Vec<crate::skipped::SkippedItem> {
+    crate::actions::skipped_items(&app)
+}
+
+/// Restore on the skipped line: the call is kept and uploaded like any other.
+#[tauri::command]
+pub fn skipped_restore(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::restore_skipped(&app, &id)
 }
 
 // ---- Live Translate (v1.3, plan B6) ---------------------------------------------------------------------------------

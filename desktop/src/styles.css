@@ -720,6 +720,13 @@ audio.player { display: none; }
 .action-card-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .action-card-title { font-size: 16px; font-weight: 500; }
 .activity-page section + section { margin-top: var(--space-4); }
+/* "Skipped 3 short calls" (v1.5): one quiet line; Show lists them, each with Restore, for 24 hours. */
+.skipped-head { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; padding-left: var(--space-3); }
+.skipped-line { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skipped-head > .btn, .skipped-row > .btn { flex: none; }
+.skipped-list { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); display: grid; gap: 0; }
+.skipped-row { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; min-width: 0; }
+.skipped-meta { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
 
 /* Settings: General plus one panel per mode, chosen from a list like the phone's (B19). */
 .settings-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-5); align-items: start; }

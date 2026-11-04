@@ -15,6 +15,7 @@ use desktop_lib::net::models::{MarkerDto, PauseDto, SegmentDto};
 use desktop_lib::net::uploader::{DiscardQueue, UploadQueue};
 use desktop_lib::pending::{self, DecisionFiles, DecisionInput, PendingDecision};
 use desktop_lib::settings::AfterCall;
+use desktop_lib::skipped::{self, SkipReason, SkippedCall, SkippedFiles};
 use desktop_lib::stt::protocol::assemblyai_session_seconds;
 use desktop_lib::tray::{TrayState, tray_state};
 
@@ -105,6 +106,24 @@ fn a_ten_second_pause_leaves_no_gap_and_keeps_both_channels_equal() {
     );
 }
 
+#[test]
+fn the_recorder_measures_how_long_each_side_was_heard() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut recorder = Recorder::create(dir.path(), false).unwrap();
+    // 3 s of speech into the microphone; the other side sends only comfort noise (about -70 dBFS).
+    let comfort_noise = tone(Channel::System, 1.0, 3.0).into_iter().map(|mut chunk| {
+        chunk.samples.iter_mut().for_each(|s| *s *= 0.001);
+        chunk
+    });
+    for (mic, system) in tone(Channel::Mic, 1.0, 3.0).into_iter().zip(comfort_noise) {
+        recorder.push(mic).unwrap();
+        recorder.push(system).unwrap();
+    }
+    let output = recorder.finish().unwrap();
+    assert!((output.speech_ms[0] as i64 - 3_000).abs() <= 100, "the microphone was heard: {:?}", output.speech_ms);
+    assert_eq!(output.speech_ms[1], 0, "comfort noise is not speech");
+}
+
 // ---- decision rules ----------------------------------------------------------------------------------------------
 
 #[test]
@@ -145,6 +164,7 @@ fn finished_recording(root: &Path, name: &str) -> FinishedRecording {
             primary: dir.join("recording.flac"),
             channels: 2,
             duration_ms: 90_000,
+            speech_ms: [30_000, 42_000],
         },
     }
 }
@@ -469,4 +489,54 @@ fn the_billed_streaming_seconds_come_from_assemblyai_termination() {
         None
     );
     assert_eq!(assemblyai_session_seconds("not json"), None);
+}
+
+// ---- skipped calls (v1.5) ----------------------------------------------------------------------------------------
+
+#[test]
+fn a_skipped_call_waits_a_day_and_is_restored_once_into_the_upload_queue() {
+    let root = tempfile::tempdir().unwrap();
+    let files = SkippedFiles::in_dir(root.path());
+    let now = Utc::now();
+    let mut short = decision(root.path(), "short", Some("01SESSIONAAAAAAAAAAAAAAAAA"), now);
+    assert_eq!(short.take_server_session().as_deref(), Some("01SESSIONAAAAAAAAAAAAAAAAA"), "its captions session is deleted at once");
+    files.add(SkippedCall { decision: short, reason: SkipReason::TooShort, skipped_at: now }).unwrap();
+    let an_hour_ago = now - chrono::Duration::hours(1);
+    files.add(SkippedCall { decision: decision(root.path(), "silent", None, an_hour_ago), reason: SkipReason::NoSpeech, skipped_at: an_hour_ago }).unwrap();
+
+    let items = files.load().ui_items(now);
+    assert_eq!(items.iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["short", "silent"], "newest first");
+    assert_eq!(items[0].reason, SkipReason::TooShort);
+    assert_eq!(items[0].expires_at, (now + chrono::Duration::hours(24)).to_rfc3339());
+    assert_eq!((items[0].source_app.as_str(), items[0].duration_ms), ("whatsapp", 90_000));
+    assert!(UploadQueue::load(&files.uploads).items.is_empty(), "nothing is uploaded");
+    assert!(DecisionFiles::in_dir(root.path()).load().items.is_empty(), "nothing waits for a decision");
+
+    let upload = files.restore("short", now).unwrap();
+    assert_eq!(upload.server_session(), None, "a restored call opens a new session");
+    assert_eq!(UploadQueue::load(&files.uploads).items.len(), 1);
+    assert!(root.path().join("recordings/short/recording.flac").exists(), "its audio stays for the upload");
+    assert_eq!(files.restore("short", now).unwrap_err().to_string(), skipped::NOT_SKIPPED);
+    assert_eq!(UploadQueue::load(&files.uploads).items.len(), 1, "restored once");
+    assert_eq!(files.load().items.iter().map(|c| c.decision.id.as_str()).collect::<Vec<_>>(), ["silent"]);
+}
+
+#[test]
+fn skipped_calls_are_deleted_with_their_files_after_24_hours() {
+    let root = tempfile::tempdir().unwrap();
+    let files = SkippedFiles::in_dir(root.path());
+    let now = Utc::now();
+    let yesterday = now - chrono::Duration::hours(25);
+    files.add(SkippedCall { decision: decision(root.path(), "old", None, yesterday), reason: SkipReason::TooShort, skipped_at: yesterday }).unwrap();
+    files.add(SkippedCall { decision: decision(root.path(), "new", None, now), reason: SkipReason::NoSpeech, skipped_at: now }).unwrap();
+
+    assert_eq!(files.load().ui_items(now).iter().map(|i| i.id.as_str()).collect::<Vec<_>>(), ["new"], "an expired call is no longer offered");
+    assert_eq!(files.restore("old", now).unwrap_err().to_string(), skipped::NOT_SKIPPED, "nor restored");
+    assert_eq!(files.purge(now).unwrap(), vec!["old".to_string()]);
+    assert!(!root.path().join("recordings/old").exists(), "its files are gone");
+    assert!(root.path().join("recordings/new/recording.flac").exists());
+    assert!(files.purge(now).unwrap().is_empty());
+    assert_eq!(files.purge(now + chrono::Duration::hours(24)).unwrap(), vec!["new".to_string()]);
+    assert!(files.load().items.is_empty());
+    assert!(UploadQueue::load(&files.uploads).items.is_empty(), "nothing was ever uploaded");
 }

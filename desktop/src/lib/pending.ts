@@ -1,6 +1,6 @@
 // Helpers for the Library's waiting line ("2 calls waiting · Review") and "Uploads that need you" (A2.5, A5.1, v1.5).
-import { formatDuration, sourceAppLabel } from "./format";
-import type { PendingItem, UploadItem } from "./ipc";
+import { formatDuration, formatWhen, sourceAppLabel } from "./format";
+import type { PendingItem, SkipReason, SkippedItem, UploadItem } from "./ipc";
 
 /** The desktop hint added to a failed transcript whose `error_code` is `no_audio` (docs/API.md, DR18). */
 export const NO_AUDIO_HINT = "Check your microphone and the audio device, then try again.";
@@ -77,4 +77,19 @@ export const importingUploads = (items: readonly UploadItem[]): UploadItem[] =>
 export function importProgressText(item: UploadItem): string {
   if (item.state === "queued") return "Waiting to upload";
   return item.progress != null ? `Uploading ${item.progress}%` : "Uploading…";
+}
+
+/** "Skip calls shorter than" (v1.5): the choices in seconds, 0 = never; 10 by default (same as the phone). */
+export const SKIP_SHORTER_THAN: readonly (readonly [number, string])[] = [[0, "Never"], [5, "5 s"], [10, "10 s (default)"], [20, "20 s"], [30, "30 s"]];
+
+export const SKIP_REASON_LABELS: Record<SkipReason, string> = { too_short: "Too short", no_speech: "No speech" };
+
+/** Activity's quiet line: "Skipped 3 short calls" / "Skipped 1 short call" (the phone's wording). */
+export const skippedLine = (count: number): string => (count === 1 ? "Skipped 1 short call" : `Skipped ${count} short calls`);
+
+/** One skipped call: "WhatsApp · Today · 9:12 AM · 0:06 · Too short" (with the caller or the title first when known). */
+export function skippedMeta(item: SkippedItem, now?: Date): string {
+  const who = item.title?.trim() || (item.callerName?.trim() ? `Call with ${item.callerName.trim()}` : sourceAppLabel(item.sourceApp));
+  const reason = SKIP_REASON_LABELS[item.reason] ?? "Skipped";
+  return [who, formatWhen(item.startedAt, now), formatDuration(item.durationMs) || "0:00", reason].filter(Boolean).join(" · ");
 }

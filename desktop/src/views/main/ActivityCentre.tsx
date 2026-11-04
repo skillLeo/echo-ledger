@@ -1,11 +1,11 @@
 // The activity centre (plan B18) as a page of its own, laid out like the phone's: what needs the person first (calls
-// waiting for Keep or Discard, uploads that stopped), then the notifications by day. A notification about a recording
-// opens it; the unread count shows beside Activity in the sidebar.
+// waiting for Keep or Discard, uploads that stopped), the quiet "Skipped 3 short calls" line (v1.5), then the
+// notifications by day. A notification about a recording opens it; the unread count shows beside Activity in the sidebar.
 import { useEffect, useState } from "react";
-import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type PendingItem } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type PendingItem, type SkippedItem } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { dayGroup } from "../../lib/library";
-import { waitingItems, waitingSummary } from "../../lib/pending";
+import { skippedLine, skippedMeta, waitingItems, waitingSummary } from "../../lib/pending";
 import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon } from "../../components/Icons";
 import { CheckIcon } from "../../components/ControlIcons";
 
@@ -38,8 +38,10 @@ function shortWhen(iso: string | null): string {
   return text.startsWith("Today · ") ? text.slice("Today · ".length) : text.split(" · ")[0];
 }
 
-export function ActivityView({ status, onOpenRecording, onReview, onUnread }: {
+export function ActivityView({ status, notify, onOpenRecording, onReview, onUnread }: {
   status: AppStatus;
+  /** The main window's toast (Restore says what happened). */
+  notify?: (text: string, error?: boolean) => void;
   onOpenRecording: (id: string) => void;
   /** Opens the waiting recordings in the Library (the first one in view). */
   onReview: (pendingId: string | null) => void;
@@ -50,6 +52,9 @@ export function ActivityView({ status, onOpenRecording, onReview, onUnread }: {
   const [all, setPending] = useState<PendingItem[]>([]);
   // A recording whose after-call chip still counts down keeps itself: only the ones left waiting need the person.
   const pending = waitingItems(all);
+  const [skipped, setSkipped] = useState<SkippedItem[]>([]);
+  const [showSkipped, setShowSkipped] = useState(false);
+  const [restoring, setRestoring] = useState<string | null>(null);
 
   const load = () =>
     api.activity().then((r) => {
@@ -61,13 +66,36 @@ export function ActivityView({ status, onOpenRecording, onReview, onUnread }: {
   useEffect(() => {
     void load();
     api.pendingList().then((p) => setPending(Array.isArray(p) ? p : [])).catch(() => undefined);
+    api.skippedList().then((s) => setSkipped(Array.isArray(s) ? s : [])).catch(() => undefined);
     const subs = [
       listenTo("activity:updated", () => void load()),
       listenTo("pending:changed", (p) => setPending(Array.isArray(p) ? p : [])),
+      listenTo("skipped:changed", (s) => setSkipped(Array.isArray(s) ? s : [])),
     ];
     return () => subs.forEach((s) => s.then((f) => f()).catch(() => undefined));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Once nothing is skipped the line goes; the next skipped call starts collapsed again.
+  useEffect(() => {
+    if (skipped.length === 0) setShowSkipped(false);
+  }, [skipped.length]);
+
+  /** Restore on the skipped line: the call is kept like any other; the core says what is left. */
+  const restore = async (item: SkippedItem) => {
+    if (restoring) return;
+    setRestoring(item.id);
+    try {
+      await api.skippedRestore(item.id);
+      setSkipped((list) => list.filter((s) => s.id !== item.id));
+      notify?.("Restored. It uploads now and shows in the Library.");
+    } catch (e) {
+      notify?.(errorMessage(e), true);
+      api.skippedList().then((s) => setSkipped(Array.isArray(s) ? s : [])).catch(() => undefined);
+    } finally {
+      setRestoring(null);
+    }
+  };
 
   const choose = async (item: ActivityItem) => {
     if (!item.read) {
@@ -158,7 +186,34 @@ export function ActivityView({ status, onOpenRecording, onReview, onUnread }: {
           ))}
         </div>
       )}
-      {items && items.length === 0 && !waiting && (
+      {skipped.length > 0 && (
+        <section className="skipped-calls" aria-label="Skipped calls" data-testid="skipped-calls">
+          <div className="skipped-head">
+            <span className="skipped-line">{skippedLine(skipped.length)}</span>
+            <button type="button" className="btn text compact" aria-expanded={showSkipped} aria-controls={showSkipped ? "skipped-list" : undefined}
+              onClick={() => setShowSkipped((v) => !v)}>
+              {showSkipped ? "Hide" : "Show"}
+            </button>
+          </div>
+          {showSkipped && (
+            <ul id="skipped-list" className="skipped-list">
+              {skipped.map((item) => {
+                const meta = skippedMeta(item);
+                return (
+                  <li key={item.id} className="skipped-row">
+                    <span className="skipped-meta" dir="auto" title={meta}>{meta}</span>
+                    <button type="button" className="btn text compact" disabled={restoring !== null} aria-label={`Restore ${meta}`}
+                      onClick={() => void restore(item)}>
+                      Restore
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+      {items && items.length === 0 && !waiting && skipped.length === 0 && (
         <div className="empty-state">
           <span className="empty-icon"><BellIcon size={26} /></span>
           <span className="empty-title">All caught up</span>

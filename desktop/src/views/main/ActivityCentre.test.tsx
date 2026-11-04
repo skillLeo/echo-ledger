@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ActivityView } from "./ActivityCentre";
 import { NotificationsCard } from "./SecuritySettings";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makePendingItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeSettings, makeSkippedItem, makeStatus } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -82,6 +82,104 @@ describe("activity page (B18)", () => {
     respond("activity_list", { data: ITEMS, unread_count: 1 });
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
+  });
+});
+
+describe("skipped calls (v1.5)", () => {
+  const local = (hour: number, minute = 0) => new Date(2026, 9, 24, hour, minute).toISOString();
+  const SKIPPED = () => [
+    makeSkippedItem("a", { startedAt: local(9, 12), durationMs: 6_000 }),
+    makeSkippedItem("b", { sourceApp: "zoom", callerName: "Omar Khan", reason: "no_speech", startedAt: local(8, 5), durationMs: 95_000 }),
+    makeSkippedItem("c", { sourceApp: "microsoft_teams", title: "Stand-up", startedAt: local(7, 30), durationMs: 4_000 }),
+  ];
+  function renderPage() {
+    const notify = vi.fn();
+    render(<ActivityView status={makeStatus()} notify={notify} onOpenRecording={vi.fn()} onReview={vi.fn()} onUnread={vi.fn()} />);
+    return notify;
+  }
+  const line = () => screen.queryByTestId("skipped-calls");
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 24, 12, 0, 0) });
+    respond("pending_list", []);
+    respond("activity_list", { data: ITEMS, unread_count: 1 });
+    respond("skipped_restore", undefined);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("is absent when nothing was skipped", async () => {
+    respond("skipped_list", []);
+    renderPage();
+    await screen.findByText("Acme kickoff");
+    await waitFor(() => expect(callsOf("skipped_list")).toHaveLength(1));
+    expect(line()).not.toBeInTheDocument();
+  });
+
+  it("is one quiet line; Show lists each call with why it was skipped", async () => {
+    respond("skipped_list", SKIPPED());
+    renderPage();
+    expect(await screen.findByText("Skipped 3 short calls")).toBeInTheDocument();
+    expect(within(line()!).queryByRole("button", { name: /^Restore/ })).not.toBeInTheDocument();
+    fireEvent.click(within(line()!).getByRole("button", { name: "Show" }));
+    expect(within(line()!).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "WhatsApp · Today · 9:12 AM · 0:06 · Too shortRestore",
+      "Call with Omar Khan · Today · 8:05 AM · 1:35 · No speechRestore",
+      "Stand-up · Today · 7:30 AM · 0:04 · Too shortRestore",
+    ]);
+    expect(within(line()!).getByRole("button", { name: "Hide" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("says Skipped 1 short call for one, and sits above the notifications", async () => {
+    respond("skipped_list", [makeSkippedItem("a")]);
+    renderPage();
+    const text = await screen.findByText("Skipped 1 short call");
+    const notification = await screen.findByText("Acme kickoff");
+    expect(text.compareDocumentPosition(notification) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("Restore keeps the call, takes it off the line and says so", async () => {
+    respond("skipped_list", SKIPPED());
+    const notify = renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Show" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Restore Call with Omar Khan/ }));
+    await waitFor(() => expect(callsOf("skipped_restore")).toEqual([{ id: "b" }]));
+    await waitFor(() => expect(screen.getByText("Skipped 2 short calls")).toBeInTheDocument());
+    expect(screen.queryByText(/Call with Omar Khan/)).not.toBeInTheDocument();
+    expect(notify).toHaveBeenCalledWith("Restored. It uploads now and shows in the Library.");
+  });
+
+  it("says why a Restore failed and reads the list again", async () => {
+    respond("skipped_list", SKIPPED());
+    fail("skipped_restore", "This call is no longer in the skipped list.");
+    const notify = renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Show" }));
+    respond("skipped_list", SKIPPED().slice(1));
+    fireEvent.click(screen.getByRole("button", { name: /^Restore WhatsApp/ }));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("This call is no longer in the skipped list.", true));
+    await waitFor(() => expect(screen.getByText("Skipped 2 short calls")).toBeInTheDocument());
+    expect(callsOf("skipped_list")).toHaveLength(2);
+  });
+
+  it("follows skipped:changed and goes when the list is empty (24 hours later, or all restored)", async () => {
+    respond("skipped_list", [makeSkippedItem("a")]);
+    renderPage();
+    await screen.findByText("Skipped 1 short call");
+    fireEvent.click(screen.getByRole("button", { name: "Show" }));
+    await emitEvent("skipped:changed", SKIPPED());
+    expect(screen.getByText("Skipped 3 short calls")).toBeInTheDocument();
+    await emitEvent("skipped:changed", []);
+    expect(line()).not.toBeInTheDocument();
+    await emitEvent("skipped:changed", [makeSkippedItem("z")]);
+    expect(within(line()!).getByRole("button", { name: "Show" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("keeps a long or Urdu title on one line in its own direction", async () => {
+    respond("skipped_list", [makeSkippedItem("u", { title: "کال اسلم کے ساتھ" })]);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Show" }));
+    const meta = screen.getByText(/کال اسلم کے ساتھ/);
+    expect(meta).toHaveAttribute("dir", "auto");
+    expect(meta).toHaveClass("skipped-meta");
   });
 });
 

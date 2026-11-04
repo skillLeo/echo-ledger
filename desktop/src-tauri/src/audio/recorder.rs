@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use tokio::sync::mpsc::UnboundedSender;
 
 use super::dsp::{f32_to_i16, rms};
+use super::health::HEARD_LEVEL;
 use super::timeline::{Timeline, frames_to_nanos};
 use super::types::{AudioChunk, Channel, TARGET_RATE};
 use super::writer::{MonoWav, encode_mono_flac_from_wav, encode_stereo_flac_from_wavs};
@@ -20,6 +21,9 @@ pub struct RecordingOutput {
     pub primary: PathBuf,
     pub channels: u16,
     pub duration_ms: u64,
+    /// How long each side ([microphone, this computer]) was heard: packets at the far-side warning's level
+    /// ([`HEARD_LEVEL`]) or above. Short or silent automatic calls are skipped by it (v1.5, `skipped`).
+    pub speech_ms: [u64; 2],
 }
 
 pub struct Recorder {
@@ -31,6 +35,8 @@ pub struct Recorder {
     t0_ns: Option<u64>,
     live: [Option<UnboundedSender<Vec<u8>>>; 2],
     levels: [f32; 2],
+    /// Frames heard per channel (see [`RecordingOutput::speech_ms`]).
+    heard: [u64; 2],
     /// `Some(channel)` = a single-channel recording whose upload file is that channel only (voice notes).
     mono: Option<Channel>,
 }
@@ -58,6 +64,7 @@ impl Recorder {
             t0_ns: None,
             live: [None, None],
             levels: [0.0, 0.0],
+            heard: [0, 0],
             mono,
         })
     }
@@ -96,7 +103,11 @@ impl Recorder {
         }
         let body = &chunk.samples[placement.skip..placement.skip + placement.take];
         wav.write(body)?;
-        self.levels[chunk.channel.index()] = rms(body);
+        let level = rms(body);
+        self.levels[chunk.channel.index()] = level;
+        if level >= HEARD_LEVEL {
+            self.heard[chunk.channel.index()] += body.len() as u64;
+        }
 
         if let Some(sink) = &self.live[chunk.channel.index()] {
             let mut bytes = Vec::with_capacity((placement.pad + body.len()) * 2);
@@ -158,6 +169,7 @@ impl Recorder {
             primary,
             channels,
             duration_ms: total * 1000 / TARGET_RATE as u64,
+            speech_ms: self.heard.map(|frames| frames * 1000 / TARGET_RATE as u64),
         })
     }
 }

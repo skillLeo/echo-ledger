@@ -127,6 +127,11 @@ pub mod paths {
         data_dir.join("pending.json")
     }
 
+    /// Short or silent automatic calls, restorable for 24 hours (v1.5).
+    pub fn skipped(data_dir: &std::path::Path) -> PathBuf {
+        data_dir.join("skipped.json")
+    }
+
     pub fn recordings(data_dir: &std::path::Path) -> PathBuf {
         data_dir.join("recordings")
     }

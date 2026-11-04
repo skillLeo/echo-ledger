@@ -30,6 +30,7 @@ fn customised() -> Settings {
         client_id: Some("01JB8Q4C1D2E3F4G5H6J7K8M9N".into()),
         consent_acknowledged: true,
         after_call: AfterCall::Ask,
+        skip_calls_shorter_than_s: 30,
         caption_lines: 5,
         pill_position: Some(PillPosition { x: -1_520, y: 64 }),
         ask_unknown_apps: true,
@@ -97,6 +98,7 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
     assert!(!s.browser_automation, "reading browser tabs is opt-in");
     assert_eq!(s.after_call, AfterCall::Keep, "a call is kept at once, with Undo");
+    assert_eq!(s.skip_calls_shorter_than_s, 10, "automatic calls under 10 s are skipped");
     assert_eq!(s.caption_lines, 3);
     assert_eq!(s.pill_position, None, "the pill starts at the top centre");
     assert!(s.auto_record_apps.is_empty(), "every call app records automatically");
@@ -163,10 +165,11 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "serverUrl",
             "shortcuts",
             "siteRules",
+            "skipCallsShorterThanS",
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 36, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 37, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");
@@ -176,6 +179,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
         json!({"size": "large", "width": "wide", "opacity": 60, "compact": true, "autoHideSeconds": 10, "meColor": "#22c55e", "clientColor": null})
     );
     assert_eq!(v["afterCall"], "ask");
+    assert_eq!(v["skipCallsShorterThanS"], 30);
     assert_eq!(v["captionLines"], 5);
     assert_eq!(v["pillPosition"], json!({"x": -1_520, "y": 64}));
     assert_eq!(v["siteRules"][0]["titleContains"], "Private notes");
@@ -485,6 +489,17 @@ fn a_file_from_before_after_call_loads_as_keep_whatever_it_asked_before() {
     let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(written["afterCall"], "keep");
     assert!(written.get("askBeforeSaving").is_none() && written.get("decisionTimeout").is_none(), "the next save drops the old keys");
+}
+
+#[test]
+fn skip_calls_shorter_than_takes_only_the_offered_choices() {
+    for (stored, loaded) in [(json!(0), 0), (json!(5), 5), (json!(20), 20), (json!(30), 30), (json!(7), 10), (json!(-5), 10), (json!("10"), 10), (json!(4_294_967_296_u64), 10)] {
+        assert_eq!(Settings::from_value(json!({"skipCallsShorterThanS": stored})).skip_calls_shorter_than_s, loaded, "{stored}");
+    }
+    let s = Settings::from_value(json!({"serverUrl": "https://ledger.example.com", "skipCallsShorterThanS": 99}));
+    assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"), "a bad value costs only its own key");
+    let missing = Settings::from_value(json!({"serverUrl": "https://ledger.example.com"}));
+    assert_eq!(missing.skip_calls_shorter_than_s, 10, "a file from before v1.5 skips calls under 10 s");
 }
 
 #[test]

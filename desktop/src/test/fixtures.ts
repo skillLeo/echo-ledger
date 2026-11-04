@@ -11,6 +11,7 @@ import type {
   RecordingState,
   SavedToast,
   Segment,
+  SkippedItem,
   Settings,
   SiteRule,
   TranscriptDetail,
@@ -77,6 +78,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     clientId: null,
     consentAcknowledged: false,
     afterCall: "keep",
+    skipCallsShorterThanS: 10,
     askUnknownApps: false,
     siteRules: [],
     captionLines: 3,
@@ -183,6 +185,21 @@ export function makeSavedToast(overrides: Partial<SavedToast> = {}, now = Date.n
 /** The Ask-me chip of a WhatsApp call, kept by itself 10 s from `now`. */
 export function makeChipItem(id = "pend-1", overrides: Partial<PendingItem> = {}, now = Date.now()): PendingItem {
   return makePendingItem(id, { sourceApp: "whatsapp", durationMs: 252_000, deadlineAt: new Date(now + 10_000).toISOString(), ...overrides });
+}
+
+/** A 6-second WhatsApp call skipped as too short, restorable until a day after 09:12 on 24 Oct 2026. */
+export function makeSkippedItem(id = "skip-1", overrides: Partial<SkippedItem> = {}): SkippedItem {
+  return {
+    id,
+    sourceApp: "whatsapp",
+    title: null,
+    callerName: null,
+    startedAt: "2026-10-24T09:12:00Z",
+    durationMs: 6_000,
+    reason: "too_short",
+    expiresAt: "2026-10-25T09:12:06Z",
+    ...overrides,
+  };
 }
 
 export function makeAfterCallState(overrides: Partial<AfterCallState> = {}): AfterCallState {

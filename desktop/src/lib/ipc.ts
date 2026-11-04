@@ -7,6 +7,8 @@ export type ShortcutAction = "toggle_captions" | "toggle_saving" | "copy_last2_m
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 /** After a call (v1.5): kept at once with "Saved · Undo", or a small chip that keeps it by itself after 10 s. */
 export type AfterCall = "keep" | "ask";
+/** Why an automatic call was skipped quietly (v1.5): shorter than the setting, or nobody spoke on either side. */
+export type SkipReason = "too_short" | "no_speech";
 export type TrayState = "idle" | "recording" | "paused" | "uploading" | "attention";
 export type BudgetState = "ok" | "warn" | "reached";
 export type AskAnswer = "record" | "ignore" | "always_ignore";
@@ -64,6 +66,7 @@ export interface Settings {
   clientId: string | null;
   consentAcknowledged: boolean;
   afterCall: AfterCall;
+  skipCallsShorterThanS: number;
   askUnknownApps: boolean;
   siteRules: SiteRule[];
   captionLines: number;
@@ -181,6 +184,7 @@ export interface SettingsPatch {
   consentAcknowledged?: boolean;
   overlayCorner?: Corner;
   afterCall?: AfterCall;
+  skipCallsShorterThanS?: number;
   askUnknownApps?: boolean;
   siteRules?: SiteRule[];
   captionLines?: number;
@@ -692,6 +696,19 @@ export interface AfterCallState {
   ask: PendingItem | null;
 }
 
+/** A short or silent automatic call kept on this computer for 24 h (Activity's "Skipped 3 short calls"). Times are RFC 3339 UTC. */
+export interface SkippedItem {
+  id: string;
+  sourceApp: string;
+  title: string | null;
+  callerName: string | null;
+  startedAt: string;
+  durationMs: number;
+  reason: SkipReason;
+  /** When it is deleted for good. */
+  expiresAt: string;
+}
+
 /** The unknown-app chip: `name` is the process, `site` the browser host when known, `seconds` how long it stays. */
 export interface AskPayload {
   id: string;
@@ -719,6 +736,7 @@ export interface EventPayloads {
   "recording:state": RecordingState;
   "pill:visibility": boolean;
   "pending:changed": PendingItem[];
+  "skipped:changed": SkippedItem[];
   "aftercall:state": AfterCallState;
   "ask:show": AskPayload;
   "ask:hide": null;
@@ -824,6 +842,10 @@ export const api = {
   afterCallState: () => invoke<AfterCallState>("after_call_state"),
   /** Undo on the Saved toast: the recording goes (to Recently deleted once it is uploaded). */
   savedUndo: (id: string) => invoke<void>("saved_undo", { id }),
+  /** Short or silent automatic calls skipped in the last 24 h, newest first. */
+  skippedList: () => invoke<SkippedItem[]>("skipped_list"),
+  /** Keeps a skipped call like any other (it uploads and is transcribed). */
+  skippedRestore: (id: string) => invoke<void>("skipped_restore", { id }),
   uploadList: () => invoke<UploadItem[]>("upload_list"),
   uploadRetry: (id: string) => invoke<void>("upload_retry", { id }),
   uploadDiscard: (id: string) => invoke<void>("upload_discard", { id }),

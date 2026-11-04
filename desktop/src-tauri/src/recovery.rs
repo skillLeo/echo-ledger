@@ -1,7 +1,9 @@
 //! Recordings cut short (since v1.3): when the app is closed or stops in the middle of a recording, its folder keeps
 //! `mic.wav` and `system.wav` (valid up to the last two seconds: the writer flushes them) but no upload file and no
 //! queue entry, so nobody would ever see it and the audio would stay on disk. At start-up such a folder is encoded
-//! again and waits for Keep or Discard as "Recovered recording"; one with less than a second of sound is removed.
+//! again and waits for Keep or Discard as "Recovered recording"; one with less than a second of sound is removed. A
+//! call skipped as short or silent (v1.5) has no queue entry either: its folder waits in `skipped.json` and is left
+//! alone.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -33,6 +35,7 @@ pub fn recover(data_dir: &Path, now: DateTime<Utc>) -> Recovery {
     let files = DecisionFiles::in_dir(data_dir);
     let mut known: HashSet<PathBuf> = files.load().items.iter().map(|d| d.dir().to_path_buf()).collect();
     known.extend(UploadQueue::load(&paths::uploads(data_dir)).items.iter().map(|u| u.dir.clone()));
+    known.extend(crate::skipped::SkippedStore::load(&paths::skipped(data_dir)).items.iter().map(|c| c.decision.dir().to_path_buf()));
     for entry in entries {
         let dir = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
@@ -121,5 +124,19 @@ mod tests {
         assert_eq!(waiting[0].duration_ms, 3000);
 
         assert_eq!(recover(data.path(), later), Recovery::default(), "a second start finds nothing new");
+    }
+
+    #[test]
+    fn a_skipped_call_is_not_taken_for_one_cut_short() {
+        let data = tempfile::tempdir().unwrap();
+        let dir = recording(data.path(), "skipped", 3.0);
+        let now = Utc::now();
+        let decision = PendingDecision::recovered(dir.clone(), dir.join("recording.flac"), dir.join("mic.wav"), dir.join("system.wav"), 3_000, now, now, now);
+        let call = crate::skipped::SkippedCall { decision, reason: crate::skipped::SkipReason::NoSpeech, skipped_at: now };
+        crate::skipped::SkippedFiles::in_dir(data.path()).add(call).unwrap();
+
+        assert_eq!(recover(data.path(), now + Duration::minutes(2)), Recovery::default());
+        assert!(dir.join("mic.wav").is_file(), "its files wait for Restore");
+        assert!(DecisionFiles::in_dir(data.path()).load().items.is_empty(), "it is not offered for Keep or Discard");
     }
 }

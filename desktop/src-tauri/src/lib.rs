@@ -18,6 +18,7 @@ pub mod pending;
 pub mod recovery;
 pub mod settings;
 pub mod shortcuts;
+pub mod skipped;
 pub mod stt;
 pub mod translate;
 pub mod tray;
@@ -384,6 +385,8 @@ pub fn run() {
             commands::pending_open,
             commands::after_call_state,
             commands::saved_undo,
+            commands::skipped_list,
+            commands::skipped_restore,
             commands::window_ready,
             commands::main_view_get,
             commands::main_view_set,

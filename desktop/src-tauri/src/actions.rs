@@ -21,6 +21,7 @@ use crate::net::uploader::{
 use crate::overlay::{OVERLAY, set_overlay_visible};
 use crate::settings::AfterCall;
 use crate::shortcuts::Action;
+use crate::skipped::{SkipReason, SkippedCall, SkippedFiles, SkippedItem};
 use crate::stt::captions::{CaptionEvent, CaptionHub};
 
 const CAPTION_TARGETS: &[&str] = &[OVERLAY, "main"];
@@ -390,6 +391,10 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             caller: take_caller(&state, &client_ref),
         },
     );
+    let output = &finished.output;
+    if let Some(reason) = crate::skipped::reason(auto, mode, output.duration_ms, settings.skip_calls_shorter_than_s, output.speech_ms) {
+        return skip_finished(app, decision, late, reason, now);
+    }
     let ask = pending::after_call(settings.after_call, mode) == AfterCall::Ask;
     let decision = if ask && interactive { decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)) } else { decision };
     let id = decision.id.clone();
@@ -421,6 +426,77 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
 
 fn surfaces(state: &crate::AppState) -> std::sync::MutexGuard<'_, crate::after_call::Surfaces> {
     state.after_call.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// A short or silent automatic call (v1.5): nothing is shown, kept or uploaded. It waits in `skipped.json` for 24 hours
+/// so Activity can restore it; a server session captions opened for it is deleted at once (a restored call opens a
+/// new one when it uploads).
+fn skip_finished(app: &AppHandle, mut decision: PendingDecision, late: Option<String>, reason: SkipReason, now: chrono::DateTime<Utc>) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    for session in decision.take_server_session().into_iter().chain(late) {
+        queue_discard(app, session)?;
+    }
+    let call = SkippedCall { decision, reason, skipped_at: now };
+    let expires = call.expires_at();
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        SkippedFiles::in_dir(&state.data_dir).add(call)?;
+    }
+    schedule_purge(app, expires);
+    emit_skipped(app);
+    Ok(())
+}
+
+/// The skipped calls Activity lists (still restorable, newest first); the ones whose 24 hours are over go first.
+pub fn skipped_items(app: &AppHandle) -> Vec<SkippedItem> {
+    purge_skipped(app);
+    let state = app.state::<crate::AppState>();
+    SkippedFiles::in_dir(&state.data_dir).load().ui_items(Utc::now())
+}
+
+/// `skipped:changed` with the whole list.
+pub fn emit_skipped(app: &AppHandle) {
+    let state = app.state::<crate::AppState>();
+    let items = SkippedFiles::in_dir(&state.data_dir).load().ui_items(Utc::now());
+    let _ = app.emit("skipped:changed", items);
+}
+
+/// Restore on Activity's skipped line: the call is kept like any other (upload, then the final transcript).
+pub fn restore_skipped(app: &AppHandle, id: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        SkippedFiles::in_dir(&state.data_dir).restore(id, Utc::now())?;
+    }
+    state.upload_notify.notify_one();
+    emit_skipped(app);
+    emit_uploads(app);
+    emit_status(app);
+    Ok(())
+}
+
+/// Deletes the skipped calls whose 24 hours are over.
+pub fn purge_skipped(app: &AppHandle) {
+    let state = app.state::<crate::AppState>();
+    let done = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        SkippedFiles::in_dir(&state.data_dir).purge(Utc::now())
+    };
+    match done {
+        Ok(ids) if !ids.is_empty() => emit_skipped(app),
+        Ok(_) => {}
+        Err(e) => eprintln!("[echoledger] removing skipped calls: {e}"),
+    }
+}
+
+/// Wakes up when a skipped call's 24 hours are over (the list is also cleaned whenever it is read and at start).
+fn schedule_purge(app: &AppHandle, at: chrono::DateTime<Utc>) {
+    let wait = (at - Utc::now()).to_std().unwrap_or_default() + Duration::from_secs(1);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(wait).await;
+        purge_skipped(&app);
+    });
 }
 
 /// Keep: the recording moves to the upload queue and the final transcript follows.
@@ -562,11 +638,16 @@ fn schedule_keep(app: &AppHandle, at: chrono::DateTime<Utc>) {
 
 /// At start: a recording whose chip time ran out while the app was closed is kept, one whose chip still counts (a
 /// restart within 10 s) gets its timer. Recordings that wait for the person stay as they are, whatever the setting.
+/// Skipped calls past their 24 hours are deleted; the others get their timers.
 pub fn restore_pending(app: &AppHandle) {
     keep_due(app);
     let state = app.state::<crate::AppState>();
     if let Some(at) = DecisionFiles::in_dir(&state.data_dir).load().next_keep_at() {
         schedule_keep(app, at);
+    }
+    purge_skipped(app);
+    for call in SkippedFiles::in_dir(&state.data_dir).load().items {
+        schedule_purge(app, call.expires_at());
     }
     emit_pending(app);
 }

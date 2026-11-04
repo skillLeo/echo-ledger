@@ -11,6 +11,7 @@ import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./Securit
 import { conflictFor } from "../../lib/shortcutConflicts";
 import { getVersion } from "@tauri-apps/api/app";
 import { LANGUAGE_OPTIONS, menuLabel } from "../../lib/languages";
+import { SKIP_SHORTER_THAN } from "../../lib/pending";
 
 const ACTIONS: [ShortcutAction, string][] = [
   ["toggle_captions", "Show / hide live captions"],
@@ -51,6 +52,7 @@ const AFTER_CALL_HINT: Record<AfterCall, string> = {
   ask: "A small prompt near the tray asks Keep or Discard, and keeps the call by itself after 10 seconds.",
 };
 const CAPTION_LINES = [["2", "2"], ["3", "3"], ["5", "5"]] as const;
+const SKIP_OPTIONS = SKIP_SHORTER_THAN.map(([seconds, label]) => [String(seconds), label] as const);
 /** Automatic uses the client's language or the console default, else detects it. */
 // Auto, English, Urdu, Arabic, then the More languages (lib/languages); Urdu and Arabic allow English words inside.
 const LANGUAGES: readonly (readonly ["" | TranscriptionLanguage, string])[] = LANGUAGE_OPTIONS.map((o) => [o.value ?? "", o.more ? `${o.label} (more languages)` : menuLabel(o)] as const);
@@ -217,7 +219,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
         <Toggle label="I understand and will obtain consent where required" on={settings.consentAcknowledged} onChange={(v) => patch({ consentAcknowledged: v })} />
       </div>
     ) },
-    { id: "recording", group: "calls", title: "Recording", keywords: "auto record calls unknown apps after a call keep ask undo saved browser tab", node: (
+    { id: "recording", group: "calls", title: "Recording", keywords: "auto record calls unknown apps after a call keep ask undo saved skip short silent calls browser tab", node: (
       <div className="card">
         <b>Recording</b>
         <Toggle label="Auto-record calls" hint="Records a call when an app both uses your microphone and plays audio. Dictation and voice typing are never recorded." on={settings.autoMode} onChange={(v) => patch({ autoMode: v })} />
@@ -226,6 +228,9 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
           <Toggle label="Read browser tab addresses" hint="Lets EchoLedger tell a Google Meet call from dictation. macOS asks for permission once." on={settings.browserAutomation} onChange={(v) => patch({ browserAutomation: v })} />
         )}
         <SelectRow label="After a call" value={settings.afterCall} options={AFTER_CALL} hint={AFTER_CALL_HINT[settings.afterCall]} onChange={(v) => patch({ afterCall: v })} />
+        <SelectRow label="Skip calls shorter than" value={String(settings.skipCallsShorterThanS)} options={SKIP_OPTIONS} width={180}
+          hint="Automatic calls that are this short, or where nobody spoke, are skipped quietly. Activity can restore them for 24 hours."
+          onChange={(v) => patch({ skipCallsShorterThanS: Number(v) })} />
       </div>
     ) },
     { id: "auto-apps", group: "calls", title: "Auto-record apps", keywords: "whatsapp zoom teams meet apps", node: <AutoRecordApps settings={settings} patch={patch} /> },

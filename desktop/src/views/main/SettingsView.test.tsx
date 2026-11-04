@@ -386,6 +386,16 @@ describe("SettingsView decisions and captions (A2.5, A2.6, A3.2)", () => {
     expect(screen.queryByRole("combobox", { name: "If I don't choose within 60 s" })).not.toBeInTheDocument();
   });
 
+  it("offers Skip calls shorter than (10 s by default) and sends the seconds as a number", async () => {
+    await setup({ skipCallsShorterThanS: 10 });
+    const select = screen.getByRole("combobox", { name: "Skip calls shorter than" });
+    expect(select).toHaveValue("10");
+    expect(optionsOf(select)).toEqual([["0", "Never"], ["5", "5 s"], ["10", "10 s (default)"], ["20", "20 s"], ["30", "30 s"]]);
+    expect(select).toHaveAccessibleDescription("Automatic calls that are this short, or where nobody spoke, are skipped quietly. Activity can restore them for 24 hours.");
+    fireEvent.change(select, { target: { value: "0" } });
+    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { skipCallsShorterThanS: 0 } }]));
+  });
+
   it("sends caption lines as a number (2, 3 or 5)", async () => {
     await setup({ captionLines: 3 });
     const select = screen.getByRole("combobox", { name: "Caption lines" });

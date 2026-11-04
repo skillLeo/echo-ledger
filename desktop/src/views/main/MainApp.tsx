@@ -351,7 +351,7 @@ export default function MainApp() {
         {tab === "clients" && <ClientsView notify={notify} openRequest={clientRequest} onOpenRecording={openRecording} />}
         {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
         {tab === "activity" && (
-          <ActivityView status={status} onUnread={setUnread} onOpenRecording={(id) => openRecording(id)}
+          <ActivityView status={status} notify={notify} onUnread={setUnread} onOpenRecording={(id) => openRecording(id)}
             onReview={(id) => { setTab("library"); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
         )}
         {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />}
