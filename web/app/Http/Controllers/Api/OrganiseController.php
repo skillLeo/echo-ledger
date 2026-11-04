@@ -12,6 +12,7 @@ use App\Models\Client;
 use App\Models\Device;
 use App\Services\LibraryOrganiser;
 use App\Services\Projects\ProjectTree;
+use App\Services\Sharing\Teammates;
 use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\JsonResponse;
@@ -104,8 +105,8 @@ final class OrganiseController extends Controller
         return response()->json([
             'views' => $this->organiser->counts($workspaceId, $data['tz'] ?? null),
             'labels' => $this->organiser->labels($workspaceId),
-            // Since v1.5: the smart folders, counted like GET /api/library?folder=… lists them.
-            'folders' => $this->organiser->folderCounts($workspaceId),
+            // Since v1.5: the smart folders, counted like GET /api/library?folder=… lists them (`shared`: sent to this person).
+            'folders' => [...$this->organiser->folderCounts($workspaceId), 'shared' => app(Teammates::class)->sharedCount($this->device($request)->user)],
         ]);
     }
 

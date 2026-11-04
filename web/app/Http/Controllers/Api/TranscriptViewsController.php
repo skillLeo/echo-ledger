@@ -8,6 +8,7 @@ use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\Transcript;
+use App\Services\Sharing\Teammates;
 use App\Services\Views\TranscriptViews;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,7 +22,7 @@ final class TranscriptViewsController extends Controller
 {
     public function show(Request $request, string $id, TranscriptViews $views): JsonResponse
     {
-        return response()->json($views->state($this->transcript($request, $id)));
+        return response()->json($views->state($this->transcript($request, $id, readOnly: true)));
     }
 
     public function store(Request $request, string $id, TranscriptViews $views): JsonResponse
@@ -36,13 +37,17 @@ final class TranscriptViewsController extends Controller
         return response()->json($state, $state['status'] === 'ready' ? 200 : 202);
     }
 
-    private function transcript(Request $request, string $id): Transcript
+    /** The workspace's transcript; to read (not to make views), also one of a recording a teammate sent (v1.5). */
+    private function transcript(Request $request, string $id, bool $readOnly = false): Transcript
     {
         /** @var Device $device */
         $device = $request->user();
         $transcript = Transcript::query()
             ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->whereNull('deleted_at'))
             ->find($id);
+        if (! $transcript instanceof Transcript && $readOnly) {
+            $transcript = Transcript::query()->whereIn('capture_session_id', app(Teammates::class)->sharedSessions($device->user)->select('capture_sessions.id'))->find($id);
+        }
         if (! $transcript instanceof Transcript) {
             throw new ApiError(404, 'transcript_not_found', 'Transcript not found.');
         }

@@ -145,6 +145,12 @@ function isoApiCases(array $b): array
         'api.shares.destroy' => ['DELETE', "/api/shares/{$b['share']->id}", [], 404],
         'api.clients.shares.store' => ['POST', "/api/clients/{$b['client']->id}/shares", ['audience' => 'public'], 404],
         'api.shares' => ['GET', '/api/shares', [], 'list'],
+        'api.sessions.send' => ['POST', "/api/sessions/{$s}/send", ['to' => [$b['bob']->email]], 404],
+        'api.clients.send' => ['POST', "/api/clients/{$b['client']->id}/send", ['to' => [$b['bob']->email]], 404],
+        // Shared with me is the person's own list: nothing of B was sent to A.
+        'api.shared' => ['GET', '/api/shared-with-me', [], 'list'],
+        'api.shared.save' => ['POST', "/api/shared-with-me/{$s}/save", [], 404],
+        'api.shared.destroy' => ['DELETE', "/api/shared-with-me/{$s}", [], 404],
         'api.vocabulary.keyterms' => ['POST', '/api/vocabulary/keyterms', ['term' => 'Hijack', 'client_id' => $b['client']->id], 404],
         'api.vocabulary.replacements' => ['POST', '/api/vocabulary/replacements', ['from' => 'a', 'to' => 'b', 'client_id' => $b['client']->id], 404],
         'api.transcripts.update' => ['PATCH', "/api/transcripts/{$t}", ['edits' => [['index' => 0, 'text' => 'hijacked']]], 404],

@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\SessionController;
 use App\Http\Controllers\Api\ShareController;
 use App\Http\Controllers\Api\SttTokenController;
 use App\Http\Controllers\Api\SttWebhookController;
+use App\Http\Controllers\Api\TeammateController;
 use App\Http\Controllers\Api\TranscriptEditController;
 use App\Http\Controllers\Api\TranscriptViewsController;
 use App\Http\Controllers\Api\UsageController;
@@ -90,6 +91,11 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::delete('shares/{id}', [ShareController::class, 'destroy'])->name('api.shares.destroy');
             // Share links for a project (v1.5): its recordings behind one link.
             Route::post('clients/{id}/shares', [ShareController::class, 'storeForProject'])->name('api.clients.shares.store');
+            // Sending to a teammate (v1.5): a recording or project to accounts on this server; save a copy of one sent to you.
+            Route::post('sessions/{id}/send', [TeammateController::class, 'sendSession'])->name('api.sessions.send');
+            Route::post('clients/{id}/send', [TeammateController::class, 'sendProject'])->name('api.clients.send');
+            Route::post('shared-with-me/{id}/save', [TeammateController::class, 'save'])->name('api.shared.save');
+            Route::delete('shared-with-me/{id}', [TeammateController::class, 'destroy'])->name('api.shared.destroy');
             Route::post('vocabulary/keyterms', [VocabularyController::class, 'addKeyterm'])->name('api.vocabulary.keyterms');
             Route::post('vocabulary/replacements', [VocabularyController::class, 'addReplacement'])->name('api.vocabulary.replacements');
             Route::patch('transcripts/{id}', [TranscriptEditController::class, 'update'])->name('api.transcripts.update');
@@ -115,6 +121,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('transcripts/{id}/views', [TranscriptViewsController::class, 'show'])->name('api.transcripts.views');
             Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->name('api.sessions.shares');
             Route::get('shares', [ShareController::class, 'all'])->name('api.shares');
+            Route::get('shared-with-me', [TeammateController::class, 'index'])->name('api.shared');
             Route::get('vocabulary', [VocabularyController::class, 'show'])->name('api.vocabulary');
             Route::get('clients/{id}/workspace', [ClientWorkspaceController::class, 'show'])->name('api.clients.workspace');
             Route::get('clients/{id}/bundle', [ClientWorkspaceController::class, 'bundle'])->name('api.clients.bundle');

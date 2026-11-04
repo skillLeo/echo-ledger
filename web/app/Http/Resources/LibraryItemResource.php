@@ -55,7 +55,7 @@ final class LibraryItemResource extends JsonResource
             'device' => $session->device ? ['id' => $session->device->id, 'name' => $session->device->name] : null,
             'client' => $session->client ? ['id' => $session->client->id, 'name' => $session->client->name, 'color' => $session->client->color, 'avatar' => $session->client->avatar] : null,
             // Since v1.5: how it got into its project (user, contact, rule), null in the Inbox.
-            'filed_by' => $session->client_id !== null ? $session->filed_by : null,
+            'filed_by' => $session->client !== null ? $session->filed_by : null,
             'title' => $session->displayTitle(),
             // Since v1.2: who the recording was with (name, number, where the device saw it), or null.
             'caller' => SessionController::caller($session),

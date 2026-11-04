@@ -7,8 +7,10 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\RecordingUploadResource;
+use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Recording;
+use App\Models\Scopes\WorkspaceScope;
 use App\Services\ChunkedUploadService;
 use App\Services\Data\CompleteOutcome;
 use App\Services\RecordingCipher;
@@ -69,8 +71,11 @@ final class RecordingController extends Controller
     public function audio(string $recording): BinaryFileResponse
     {
         $model = Recording::query()->findOrFail($recording);
+        // The signature is the key (B20 bypass): the recording may be another workspace's that was sent to the
+        // listener (v1.5), so its session is read past the workspace scope.
+        $session = CaptureSession::withTrashed()->withoutGlobalScope(WorkspaceScope::class)->find($model->capture_session_id);
         // A recording in the undo bin (B17) is not played, even through a link signed before the delete.
-        abort_unless($model->isReady() && ! $model->captureSession->trashed(), 404);
+        abort_unless($model->isReady() && $session !== null && ! $session->trashed(), 404);
 
         return self::streamDecrypted($model);
     }
