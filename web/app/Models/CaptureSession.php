@@ -47,6 +47,8 @@ use Illuminate\Support\Carbon;
  * @property array<string, string>|null $speaker_names speaker label → name for this recording (the far side is named after the caller since v1.4)
  * @property list<array{at_ms: int, language: string|null}>|null $language_marks language chip changes during the recording (v1.2)
  * @property string|null $reference_text the owner's corrected transcript for the Accuracy Lab (v1.2)
+ * @property string|null $reference_roman the same in Roman Urdu, to score the Roman Urdu view (v1.5)
+ * @property string|null $reference_category ur, en or auto: the Lab category it counts in, null = by its language (v1.5)
  * @property Carbon|null $reference_set_at
  * @property string|null $caller_name who the recording was with, as the device saw them (v1.2)
  * @property string|null $caller_number
@@ -154,6 +156,12 @@ class CaptureSession extends Model
     public function transcripts(): HasMany
     {
         return $this->hasMany(Transcript::class)->where('kind', '!=', TranscriptKind::Trial->value);
+    }
+
+    /** Whether the owner gave the Accuracy Lab a reference transcript for it, original or Roman Urdu. */
+    public function hasReference(): bool
+    {
+        return $this->reference_text !== null || $this->reference_roman !== null;
     }
 
     /** @return HasMany<Transcript, $this> runs of Compare engines */

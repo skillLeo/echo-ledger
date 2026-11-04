@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\TranscriptKind;
+use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Services\Views\TranscriptViews;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -23,8 +25,14 @@ final class MakeTranscriptViewsJob implements ShouldQueue
     public function handle(TranscriptViews $views): void
     {
         $transcript = Transcript::query()->find($this->transcriptId);
-        if ($transcript !== null) {
-            $views->make($transcript);
+        if ($transcript === null) {
+            return;
+        }
+        $views->make($transcript);
+        // Accuracy Lab (since v1.5): a comparison run's Roman Urdu view is scored against the Roman Urdu reference.
+        if ($transcript->kind === TranscriptKind::Trial
+            && CaptureSession::query()->withoutGlobalScopes()->whereKey($transcript->capture_session_id)->whereNotNull('reference_roman')->exists()) {
+            ScoreAccuracyJob::dispatch($transcript->capture_session_id);
         }
     }
 }

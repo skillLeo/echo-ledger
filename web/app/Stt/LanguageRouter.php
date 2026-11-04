@@ -184,10 +184,23 @@ final class LanguageRouter
         if (LanguageChoice::normalize($language) === null) {
             return;
         }
-        $key = self::routeKey($language);
+        $this->preferKey(self::routeKey($language), $engine);
+    }
+
+    /**
+     * Puts [$engine] first in the list of routing key [$key] (en, ur, ar, other or auto; since v1.5 for the Accuracy
+     * Lab's categories); the other engines keep their order behind it. False for a key that has no list.
+     */
+    public function preferKey(string $key, SttProviderKey $engine): bool
+    {
+        if (! array_key_exists($key, self::DEFAULT_FINAL_ROUTES)) {
+            return false;
+        }
         $routes = $this->routes('routing.final', self::DEFAULT_FINAL_ROUTES);
         $routes[$key] = array_values(array_unique([$engine->value, ...($routes[$key] ?? [])]));
         $this->settings->set('routing.final', $routes);
+
+        return true;
     }
 
     public function supportsFinal(SttProviderKey $key, string $language): bool

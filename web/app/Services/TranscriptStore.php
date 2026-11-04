@@ -84,7 +84,7 @@ final class TranscriptStore
             app(Retranscriber::class)->choose($transcript);
         }
         // Accuracy Lab: a comparison run of a recording with a reference is scored against it, on the queue.
-        if ($transcript->kind === TranscriptKind::Trial && $transcript->captureSession->reference_text !== null) {
+        if ($transcript->kind === TranscriptKind::Trial && $transcript->captureSession->hasReference()) {
             ScoreAccuracyJob::dispatch($transcript->capture_session_id);
         }
         // Double-check (when it is on): a second engine hears the unsure lines again, on the queue.
