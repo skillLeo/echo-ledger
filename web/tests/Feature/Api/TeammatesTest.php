@@ -10,10 +10,12 @@ use App\Models\Client;
 use App\Models\Plan;
 use App\Models\Recording;
 use App\Models\SentItem;
+use App\Models\Transcript;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
+use App\Services\Views\TranscriptViews;
 use Illuminate\Notifications\DatabaseNotification;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
@@ -38,9 +40,11 @@ beforeEach(function () {
 function sentRecording(object $test, string $title, string $audio, ?Client $client = null): CaptureSession
 {
     $session = $test->makeReadySession($test->device, $audio, ['title' => $title, 'status' => SessionStatus::Completed, 'client_id' => $client?->id]);
+    $segments = [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => "Words of {$title}"]];
     $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'groq', 'status' => TranscriptStatus::Completed, 'language' => 'ur', 'text' => "Words of {$title}",
-        'segments' => [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => "Words of {$title}"]],
-        'meta' => ['views' => ['status' => 'ready', 'roman' => ["Roman {$title}"]], 'suggestions' => [['line' => 0, 'from' => 'Omer', 'to' => 'Omar', 'reason' => 'name', 'status' => 'open']]]]);
+        'segments' => $segments,
+        'meta' => ['views' => ['status' => 'ready', 'fingerprint' => TranscriptViews::fingerprint(new Transcript(['segments' => $segments])), 'roman' => ["Roman {$title}"]],
+            'suggestions' => [['line' => 0, 'from' => 'Omer', 'to' => 'Omar', 'reason' => 'name', 'status' => 'open']]]]);
     $session->markers()->create(['at_ms' => 500, 'tag' => 'Budget', 'source' => 'device']);
 
     return $session;
@@ -151,9 +155,12 @@ describe('saving a copy', function () {
             ->and($copy->recordings)->toHaveCount(1)
             ->and($copy->recordings[0]->id)->not->toBe($this->call->recordings()->value('id'))
             ->and($copy->transcripts->sole()->text)->toBe('Words of Call with Omar')
-            ->and($copy->transcripts->sole()->meta)->toBe(['views' => ['status' => 'ready', 'roman' => ['Roman Call with Omar']]])
+            ->and(array_keys($copy->transcripts->sole()->meta))->toBe(['views'])
             ->and($copy->markers->sole()->tag)->toBe('Budget')
             ->and(received($this)[0]['saved_at'])->not->toBeNull();
+        // The views came with it, still ready (they match the copied words).
+        $this->getJson('/api/transcripts/'.$copy->transcripts->sole()->id.'/views')->assertOk()
+            ->assertJsonPath('status', 'ready')->assertJsonPath('roman', ['Roman Call with Omar']);
         // It is in Omar's own library now, and the save did not post "Transcript ready".
         expect(array_column($this->getJson('/api/library?folder=inbox')->json('data'), 'id'))->toContain($copyId)
             ->and(DatabaseNotification::query()->where('notifiable_id', $this->omar->id)->get()->map(fn ($n) => ActivityFeed::kindOf($n))->reject(fn (?string $k): bool => $k === 'device_paired')->values()->all())->toBe(['shared_with_you']);

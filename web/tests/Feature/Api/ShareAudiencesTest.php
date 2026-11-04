@@ -11,6 +11,7 @@ use App\Models\ShareLink;
 use App\Models\ShareLinkView;
 use App\Models\User;
 use App\Services\ShareLinks;
+use App\Services\Views\TranscriptViews;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
@@ -156,6 +157,17 @@ describe('downloads and expiry', function () {
         expect($audio)->toBe($this->audio)->and($text)->toContain('Me: Secret words of Budget review');
         expect(ShareLinkView::query()->where('outcome', 'download')->count())->toBe(1)
             ->and($this->workFiles())->toBe([]);
+    });
+
+    it('writes the transcript of the ZIP in the link view once that view is ready', function () {
+        $final = $this->session->finalTranscript()->firstOrFail();
+        $final->update(['meta' => ['views' => ['status' => 'ready', 'fingerprint' => TranscriptViews::fingerprint($final), 'urdu' => ['بجٹ کی باتیں']]]]);
+        // An English transcript can be shown in Urdu.
+        $share = shareOf($this, ['allow_download' => true, 'view' => 'urdu']);
+
+        $text = collect(zipEntries(browser($this)->get(pathOf($share).'/download')->assertOk()))
+            ->first(fn (string $body, string $name): bool => str_ends_with($name, '.txt'));
+        expect($text)->toContain('بجٹ کی باتیں')->not->toContain('Secret words');
     });
 
     it('takes an expiry date, refuses one in the past, and stops at it', function () {
