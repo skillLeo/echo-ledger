@@ -88,6 +88,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');
             Route::post('sessions/{id}/shares', [ShareController::class, 'store'])->name('api.sessions.shares.store');
             Route::delete('shares/{id}', [ShareController::class, 'destroy'])->name('api.shares.destroy');
+            // Share links for a project (v1.5): its recordings behind one link.
+            Route::post('clients/{id}/shares', [ShareController::class, 'storeForProject'])->name('api.clients.shares.store');
             Route::post('vocabulary/keyterms', [VocabularyController::class, 'addKeyterm'])->name('api.vocabulary.keyterms');
             Route::post('vocabulary/replacements', [VocabularyController::class, 'addReplacement'])->name('api.vocabulary.replacements');
             Route::patch('transcripts/{id}', [TranscriptEditController::class, 'update'])->name('api.transcripts.update');
@@ -112,6 +114,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('transcripts/{id}/export', [ExportController::class, 'show'])->name('api.transcripts.export');
             Route::get('transcripts/{id}/views', [TranscriptViewsController::class, 'show'])->name('api.transcripts.views');
             Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->name('api.sessions.shares');
+            Route::get('shares', [ShareController::class, 'all'])->name('api.shares');
             Route::get('vocabulary', [VocabularyController::class, 'show'])->name('api.vocabulary');
             Route::get('clients/{id}/workspace', [ClientWorkspaceController::class, 'show'])->name('api.clients.workspace');
             Route::get('clients/{id}/bundle', [ClientWorkspaceController::class, 'bundle'])->name('api.clients.bundle');

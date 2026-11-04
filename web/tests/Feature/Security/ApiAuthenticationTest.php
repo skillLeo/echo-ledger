@@ -61,6 +61,8 @@ function secDeviceGuardedRoutes(): array
         'GET sessions/{id}/shares' => ['GET', '/api/sessions/'.Fx::MISSING_ID.'/shares', 'library:read'],
         'POST sessions/{id}/shares' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/shares', 'sessions:write'],
         'DELETE shares/{id}' => ['DELETE', '/api/shares/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST clients/{id}/shares' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/shares', 'sessions:write'],
+        'GET shares' => ['GET', '/api/shares', 'library:read'],
         'GET vocabulary' => ['GET', '/api/vocabulary', 'library:read'],
         'POST vocabulary/keyterms' => ['POST', '/api/vocabulary/keyterms', 'sessions:write'],
         'POST vocabulary/replacements' => ['POST', '/api/vocabulary/replacements', 'sessions:write'],
@@ -124,7 +126,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(67);
+    expect($guarded)->toBe(69);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

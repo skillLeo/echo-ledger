@@ -37,6 +37,13 @@ Route::middleware('throttle:share')->group(function (): void {
     Route::get('/s/{token}', [PublicShareController::class, 'show'])->name('share.show');
     Route::post('/s/{token}', [PublicShareController::class, 'unlock'])->middleware('throttle:share-password')->name('share.unlock');
     Route::get('/s/{token}/audio', [PublicShareController::class, 'audio'])->name('share.audio');
+    Route::get('/s/{token}/download', [PublicShareController::class, 'download'])->name('share.download');
+    // A project's link (v1.5): its recordings, each opening as /s/ would.
+    Route::get('/p/{token}', [PublicShareController::class, 'project'])->name('share.project');
+    Route::post('/p/{token}', [PublicShareController::class, 'unlockProject'])->middleware('throttle:share-password')->name('share.project.unlock');
+    Route::get('/p/{token}/{session}', [PublicShareController::class, 'projectSession'])->whereUlid('session')->name('share.project.session');
+    Route::get('/p/{token}/{session}/audio', [PublicShareController::class, 'projectAudio'])->whereUlid('session')->name('share.project.audio');
+    Route::get('/p/{token}/{session}/download', [PublicShareController::class, 'projectDownload'])->whereUlid('session')->name('share.project.download');
 });
 
 // Passkey sign-in on the console login page (B16): a challenge, then the signed answer. Throttled per IP.

@@ -45,6 +45,8 @@ function abilityRoutes(): array
         'list share links' => ['GET', "/api/sessions/{$id}/shares", 'library:read'],
         'make share link' => ['POST', "/api/sessions/{$id}/shares", 'sessions:write'],
         'revoke share link' => ['DELETE', "/api/shares/{$id}", 'sessions:write'],
+        'make project share link' => ['POST', "/api/clients/{$id}/shares", 'sessions:write'],
+        'list every share link' => ['GET', '/api/shares', 'library:read'],
         'vocabulary' => ['GET', '/api/vocabulary', 'library:read'],
         'add keyterm' => ['POST', '/api/vocabulary/keyterms', 'sessions:write'],
         'add replacement' => ['POST', '/api/vocabulary/replacements', 'sessions:write'],
