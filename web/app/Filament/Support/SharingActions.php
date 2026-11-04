@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Exceptions\ApiError;
-use App\Filament\Resources\Clients\ClientResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ShareLink;
@@ -243,12 +242,6 @@ final class SharingActions
         asort($options, SORT_NATURAL | SORT_FLAG_CASE);
 
         return $options;
-    }
-
-    /** The project page of a project, for links in notifications. */
-    public static function projectUrl(Client $project): string
-    {
-        return ClientResource::getUrl('view', ['record' => $project]);
     }
 
     /** Who made a link, as the access log shows it. */
