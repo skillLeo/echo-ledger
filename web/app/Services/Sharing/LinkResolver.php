@@ -54,7 +54,7 @@ final class LinkResolver
         $link = $this->shares->find($token);
         $session = $link !== null && $link->kind() === 'session' && $link->isActive() ? $link->captureSession : null;
 
-        return $session !== null && $this->canOpen($device, $session) ? ['kind' => 'session', 'session_id' => $session->id] : null;
+        return $session !== null ? $this->recordingAnswer($device, $session) : null;
     }
 
     /** @return array<string, string>|null */
@@ -70,7 +70,7 @@ final class LinkResolver
             $session = CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)
                 ->whereIn('client_id', $this->projects->withDescendants($project))->find($sessionId);
 
-            return $session instanceof CaptureSession && $this->canOpen($device, $session) ? ['kind' => 'session', 'session_id' => $session->id] : null;
+            return $session instanceof CaptureSession ? $this->recordingAnswer($device, $session) : null;
         }
         if ($project->workspace_id === $device->workspace_id) {
             return ['kind' => 'project', 'client_id' => $project->id];
@@ -88,10 +88,40 @@ final class LinkResolver
         return $link !== null && $link->workspace_id === $device->workspace_id ? ['kind' => 'request', 'request_link_id' => $link->id] : null;
     }
 
-    /** A recording of the device's workspace, or one sent to its person. */
-    private function canOpen(Device $device, CaptureSession $session): bool
+    /**
+     * A recording of the device's workspace opens in place (`session`); one a teammate sent its person (itself, or
+     * inside a sent project) is that person's Shared with me item (`shared`), since it is not in their library.
+     *
+     * @return array<string, string>|null
+     */
+    private function recordingAnswer(Device $device, CaptureSession $session): ?array
     {
-        return ($session->workspace_id === $device->workspace_id && ! $session->trashed())
-            || $this->teammates->readable($device->user, $session->id) !== null;
+        if ($session->workspace_id === $device->workspace_id && ! $session->trashed()) {
+            return ['kind' => 'session', 'session_id' => $session->id];
+        }
+        if ($this->teammates->readable($device->user, $session->id) === null) {
+            return null;
+        }
+        $item = $this->sentItemFor($device, $session);
+
+        return $item !== null ? ['kind' => 'shared', 'shared_id' => $item->id] : null;
+    }
+
+    /** The Shared with me item through which the device's person reads [$session]: sent itself, else in a sent project. */
+    private function sentItemFor(Device $device, CaptureSession $session): ?SentItem
+    {
+        $items = SentItem::query()->where('to_user_id', $device->user_id)->orderBy('sent_at')->get();
+        $direct = $items->first(fn (SentItem $item): bool => $item->kind === 'session' && $item->capture_session_id === $session->id);
+        if ($direct !== null || $session->client_id === null) {
+            return $direct;
+        }
+        foreach ($items->where('kind', 'project') as $item) {
+            $project = Client::query()->withoutGlobalScope(WorkspaceScope::class)->find($item->client_id);
+            if ($project instanceof Client && in_array($session->client_id, $this->projects->withDescendants($project), true)) {
+                return $item;
+            }
+        }
+
+        return null;
     }
 }

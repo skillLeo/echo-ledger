@@ -68,18 +68,24 @@ describe('resolve', function () {
         resolveLink($this, $requestUrl)->assertOk()->assertExactJson(['kind' => 'request', 'request_link_id' => $request->id]);
     });
 
-    it('opens what a teammate sent: a recording by its id, a project as an item of Shared with me', function () {
+    it('opens what a teammate sent as its item of Shared with me: a recording, a project, a recording of a sent project', function () {
         ['url' => $recording] = app(ShareLinks::class)->create($this->otherSession, 3600, null, false, 'Other');
         ['url' => $project] = app(ShareLinks::class)->make($this->otherProject, ['audience' => 'public', 'include_audio' => true, 'allow_download' => false, 'expires_at' => null], 'Other');
         resolveLink($this, $recording)->assertNotFound();
         resolveLink($this, $project)->assertNotFound();
 
         $me = User::query()->findOrFail($this->device->user_id);
-        SentItem::query()->create(['workspace_id' => $this->otherSession->workspace_id, 'from_user_id' => $this->other->id, 'to_user_id' => $me->id, 'kind' => 'session', 'capture_session_id' => $this->otherSession->id, 'title' => 'Call']);
+        $sentRecording = SentItem::query()->create(['workspace_id' => $this->otherSession->workspace_id, 'from_user_id' => $this->other->id, 'to_user_id' => $me->id, 'kind' => 'session', 'capture_session_id' => $this->otherSession->id, 'title' => 'Call']);
         $item = SentItem::query()->create(['workspace_id' => $this->otherProject->workspace_id, 'from_user_id' => $this->other->id, 'to_user_id' => $me->id, 'kind' => 'project', 'client_id' => $this->otherProject->id, 'title' => 'Project']);
 
-        resolveLink($this, $recording)->assertOk()->assertExactJson(['kind' => 'session', 'session_id' => $this->otherSession->id]);
+        // Not in the caller's library, so never `session`: the app opens it from Shared with me (docs/API.md).
+        resolveLink($this, $recording)->assertOk()->assertExactJson(['kind' => 'shared', 'shared_id' => $sentRecording->id]);
         resolveLink($this, $project)->assertOk()->assertExactJson(['kind' => 'shared', 'shared_id' => $item->id]);
+
+        // A recording of the sent project, from the project page (/p/{token}/{recording}): the project's item.
+        $inProject = CaptureSession::factory()->create(['user_id' => $this->other->id, 'workspace_id' => $this->otherProject->workspace_id,
+            'client_id' => $this->otherProject->id, 'status' => SessionStatus::Completed]);
+        resolveLink($this, $project.'/'.$inProject->id)->assertOk()->assertExactJson(['kind' => 'shared', 'shared_id' => $item->id]);
     });
 
     it('answers not_found for another workspace, a revoked, expired or deleted target, and anything that is not a link here', function () {

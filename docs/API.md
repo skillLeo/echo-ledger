@@ -748,7 +748,7 @@ Share links can now be for a project too, and say who may open them.
 when it is installed; the desktop app registers `echoledger://open?link=<url>` and the share page offers "Open in
 EchoLedger". Without the app the web page opens as before.
 
-`GET /api/links/resolve?url=<a /s/, /p/ or /r/ link of this server>` — `library:read`: what the link is for the
+`GET /api/links/resolve?url=<a /s/, /p/ (also /p/{token}/{recording}) or /r/ link of this server>` — `library:read`: what the link is for the
 caller, so the app can open it in place: `200 {"kind": "session", "session_id": "…"}` (a recording in the caller's
 own library), `{"kind": "project", "client_id": "…"}` (one of the caller's projects), `{"kind": "shared",
 "shared_id": "…"}` (something a teammate sent the caller, a recording or a project: its item in Shared with me) or
