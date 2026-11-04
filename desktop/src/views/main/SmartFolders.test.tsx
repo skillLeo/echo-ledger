@@ -124,6 +124,46 @@ describe("Shared with me", () => {
     expect(callsOf("transcript_detail")).toEqual([{ id: "tr-o" }]);
   });
 
+  const openSent = async () => {
+    fireEvent.click(within(screen.getByRole("list", { name: "Shared with me" })).getByRole("button", { name: "Open" }));
+    await screen.findByText("Hello, this is Sam.");
+  };
+  const ROMAN = { status: "ready", available: ["roman"], roman: ["Salaam, main Sam hoon.", null, null, null], english: null, urdu: null, model: "claude-opus-5-5", made_at: null, error: null };
+
+  it("offers no suggested fixes and no views to make on a recording a teammate sent (only its owner changes it)", async () => {
+    await renderShared();
+    respond("transcript_detail", makeTranscript({ id: "tr-o", views: { available: ["roman"], status: "none" },
+      suggestions: [{ id: 7, index: 2, from: "invoice", to: "invoices", reason: null, status: "open" }] }));
+    await openSent();
+    expect(document.querySelector(".suggest-mark")).toBeNull();
+    expect(screen.queryByText(/suggested fix/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Show as" })).not.toBeInTheDocument();
+  });
+
+  it("shows the views its owner made, only reading them", async () => {
+    await renderShared();
+    respond("transcript_detail", makeTranscript({ id: "tr-o", views: { available: ["roman"], status: "ready" } }));
+    respond("transcript_views", ROMAN);
+    await openSent();
+    fireEvent.click(within(screen.getByRole("group", { name: "Show as" })).getByRole("button", { name: "Roman Urdu" }));
+    expect(await screen.findByText("Salaam, main Sam hoon.")).toBeInTheDocument();
+    expect(callsOf("transcript_views")).toEqual([{ id: "tr-o" }]);
+    expect(callsOf("transcript_views_make")).toHaveLength(0);
+  });
+
+  it("stays on the original words when a view is no longer made, without asking for it", async () => {
+    await renderShared();
+    respond("transcript_detail", makeTranscript({ id: "tr-o", views: { available: ["roman"], status: "ready" } }));
+    respond("transcript_views", { ...ROMAN, status: "none", roman: null });
+    await openSent();
+    const roman = within(screen.getByRole("group", { name: "Show as" })).getByRole("button", { name: "Roman Urdu" });
+    fireEvent.click(roman);
+    await waitFor(() => expect(callsOf("transcript_views")).toHaveLength(1));
+    await waitFor(() => expect(roman).toHaveAttribute("aria-pressed", "false"));
+    expect(screen.getByText("Let us go over the invoice.")).toBeInTheDocument();
+    expect(callsOf("transcript_views_make")).toHaveLength(0);
+  });
+
   it("saves a recording to the library and opens the copy", async () => {
     respond("shared_save", { session_id: "a" });
     const props = await renderShared();

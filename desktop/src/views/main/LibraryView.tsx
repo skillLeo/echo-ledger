@@ -500,6 +500,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (view === "original" || !transcriptId || views?.status === "ready") return;
     try {
       let state = await api.transcriptViews(transcriptId);
+      // A recording a teammate sent is only read: its views show once its owner has them made.
+      if (readOnly && (state.status === "none" || state.status === "failed")) {
+        setShowAs("original");
+        return;
+      }
       if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(transcriptId);
       setViews(state);
     } catch (e) {
@@ -791,7 +796,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       )));
     }
     if (inView !== null) return withUnsureMarks(inView);
-    const fixes = openSuggestions.filter((f) => f.index === i).map((f) => ({ f, span: suggestionSpan(s.text, f.from) })).filter((x) => x.span)
+    // Suggested fixes are decided by whoever may change the transcript, never on a recording a teammate sent.
+    const fixes = (readOnly ? [] : openSuggestions).filter((f) => f.index === i).map((f) => ({ f, span: suggestionSpan(s.text, f.from) })).filter((x) => x.span)
       .sort((a, b) => a.span![0] - b.span![0]);
     if (fixes.length > 0) {
       const out: ReactNode[] = [];
@@ -828,7 +834,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
 
   const total = items.filter((i) => !i.deleted).length;
   const durationMs = current && transcript ? Math.max(current.duration_ms ?? 0, ...transcript.segments.map((s) => s.end_ms)) : current?.duration_ms ?? 0;
-  const pendingFix = openSuggestions.find((f) => f.id === openSuggestion) ?? null;
+  const pendingFix = readOnly ? null : openSuggestions.find((f) => f.id === openSuggestion) ?? null;
   return (
     <>
       <div className="page-head">
@@ -1133,7 +1139,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     <>
                       <div className="transcript-bar">
                         <span className="small muted engine">{transcript.kind === "final" ? `Final transcript · ${providerName(transcript.provider)}${transcript.model ? ` · ${transcript.model}` : ""}${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress) ? ` · ${partsText(current.transcript?.final_progress)}` : ""})`}</span>
-                        {(transcript.views?.available.length ?? 0) > 0 && transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0 && (
+                        {(transcript.views?.available.length ?? 0) > 0 && transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0
+                          && (!readOnly || transcript.views?.status === "ready") && (
                           <span className="segmented view-switch" role="group" aria-label="Show as">
                             {VIEW_ORDER.filter((v) => transcript.views!.available.includes(v)).map((v) => (
                               <button key={v} type="button" lang={v === "urdu" ? "ur" : undefined} aria-pressed={showAs === v} onClick={() => void chooseView(v)}>{VIEW_LABELS[v]}</button>
