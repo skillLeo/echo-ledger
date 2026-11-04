@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SourceDevice;
+use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientFile;
@@ -271,6 +272,33 @@ describe('the page', function () {
         rewind($body);
         app(RequestLinks::class)->chunk($stale, 0, hash('sha256', $chunk), $body);
         expect(RequestUpload::query()->findOrFail($id)->received_chunks)->toBe([0, 1]);
+    });
+
+    it('adds a document once and counts it once when it is finished twice at the same time', function () {
+        $link = requestLink($this);
+        $text = "Plain notes from the client.\n";
+        $start = startUpload($this, $link['url'], $text, 'notes.txt', 'text/plain')->assertCreated();
+        $id = $start->json('upload_id');
+        sendChunk($this, $link['url'], $id, 0, $text, $start->json('chunk_size'))->assertOk();
+        // The same `complete` again while the first one is storing the file (two requests at once).
+        $second = null;
+        ClientFile::created(function () use (&$second, $id): void {
+            if ($second === null) {
+                $second = 'running';
+                try {
+                    $second = app(RequestLinks::class)->complete(RequestUpload::query()->findOrFail($id));
+                } catch (ApiError $e) {
+                    $second = $e->apiCode();
+                }
+            }
+        });
+
+        visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH)."/files/{$id}/complete")->assertOk()->assertExactJson(['status' => 'ready']);
+        expect($second)->toBe('upload_finished')
+            ->and(unscoped(fn () => ClientFile::query()->count()))->toBe(1)
+            ->and(RequestLink::query()->withoutGlobalScopes()->findOrFail($link['id'])->received)->toBe(1);
+        // Sent again later, it is simply done.
+        visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH)."/files/{$id}/complete")->assertOk()->assertExactJson(['status' => 'ready']);
     });
 
     it('refuses a small Word file whose body would unpack into too much', function () {

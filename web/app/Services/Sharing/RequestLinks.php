@@ -27,6 +27,7 @@ use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -72,6 +73,9 @@ final class RequestLinks
 
     /** Bytes of the first chunk looked at to tell what a file really is. */
     private const SNIFF_BYTES = 64 * 1024;
+
+    /** Longer than finishing a file takes, so the lock outlives only a request that died while holding it. */
+    private const COMPLETE_LOCK_SECONDS = 900;
 
     public function __construct(private readonly ChunkedUploadService $uploads) {}
 
@@ -304,11 +308,29 @@ final class RequestLinks
 
     /**
      * Finishes a file once every chunk is in: a recording is assembled, verified, encrypted and transcribed as usual; a
-     * document is verified, checked again as a whole and added to the project's Files.
+     * document is verified, checked again as a whole and added to the project's Files. One finish at a time per
+     * upload: a `complete` sent again while one runs is `409 upload_finished` (a document would be added twice, and
+     * each copy read and counted), and one sent after it finds the file done.
      *
      * @return array{status: string, missing_chunks?: list<int>}
      */
     public function complete(RequestUpload $upload): array
+    {
+        $lock = Cache::lock('request-complete:'.$upload->id, self::COMPLETE_LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw new ApiError(409, 'upload_finished', 'This file is already being finished.');
+        }
+        try {
+            return $this->finish($upload->refresh());
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * @return array{status: string, missing_chunks?: list<int>}
+     */
+    private function finish(RequestUpload $upload): array
     {
         if ($upload->status === 'ready') {
             return ['status' => 'ready'];
