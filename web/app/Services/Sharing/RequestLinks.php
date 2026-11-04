@@ -137,8 +137,8 @@ final class RequestLinks
     // ---- Uploads ---------------------------------------------------------------------------------------------------
 
     /**
-     * Starts one file, or picks up its unfinished upload (the same file on the same link). Refuses types the link does
-     * not take, files over its size, and more files than it takes.
+     * Starts one file, or picks up its unfinished upload (the same file on the same link, not yet abandoned). Refuses
+     * types the link does not take, files over its size, and more files than it takes (abandoned uploads not counted).
      *
      * @param  array{name: string, size: int, sha256: string, type?: string|null}  $file
      */

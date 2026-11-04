@@ -114,10 +114,10 @@ describe('the rules of a project', function () {
     });
 
     it('drops a contact rule once no contact of the project has its number or email', function () {
-        $phone = addRule($this, $this->acme, 'contact', '+92 300 1234567');
-        $email = addRule($this, $this->acme, 'contact', 'omar@example.com');
+        addRule($this, $this->acme, 'contact', '+92 300 1234567');
+        addRule($this, $this->acme, 'contact', 'omar@example.com');
         $own = ClientContact::query()->create(['client_id' => $this->acme->id, 'name' => 'Sara', 'phone' => '+44 7700 900123']);
-        $reused = addRule($this, $this->acme, 'contact', '07700900123');
+        addRule($this, $this->acme, 'contact', '07700900123');
         $added = ClientContact::query()->where('client_id', $this->acme->id)->where('phone_digits', '3001234567')->sole();
 
         // A new name or language keeps the rule; so does the same number written another way.
@@ -131,7 +131,6 @@ describe('the rules of a project', function () {
             ->and($this->getJson("/api/clients/{$this->acme->id}/rules")->json('data'))->toBe([]);
         // The number is free for another project again.
         addRule($this, $this->beta, 'contact', '03001234567');
-        expect([$phone['id'], $email['id'], $reused['id']])->toHaveCount(3);
     });
 
     it('keeps a contact rule while another contact of the project still has its number', function () {
