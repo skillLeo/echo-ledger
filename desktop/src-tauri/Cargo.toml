@@ -43,6 +43,8 @@ hound = "3.5.1"
 flacenc = "0.5.1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+# Screen moments (v1.5) are stored as lossy WebP: libwebp built in by libwebp-sys (no image crate).
+webp = { version = "0.3.1", default-features = false }
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 # The native open and save dialogs, used from the core only (the webview never picks a path). Not through

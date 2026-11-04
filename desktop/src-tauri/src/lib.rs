@@ -18,6 +18,7 @@ pub mod overlay;
 pub mod pending;
 pub mod projects;
 pub mod recovery;
+pub mod screens;
 pub mod settings;
 pub mod sharing;
 pub mod shortcuts;
