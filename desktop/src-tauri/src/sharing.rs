@@ -145,6 +145,19 @@ impl RequestLinkOptions {
     }
 }
 
+/// Whether a link the server made is as closed as the one asked for. A server that did not understand the audience
+/// would have made a link anyone can open; such a link is revoked at once instead of handed out.
+pub fn link_as_asked(options: &ShareOptions, link: &Value) -> bool {
+    match options.audience.trim() {
+        "people" => link["audience"].as_str() == Some("people"),
+        "password" => link["has_password"].as_bool() == Some(true) || link["audience"].as_str() == Some("password"),
+        _ => true,
+    }
+}
+
+/// What the app says when the server made a more open link than the one asked for (and the app revoked it).
+pub const LINK_NOT_AS_ASKED: &str = "This server could not make a link only the people you chose can open, so no link was made. Ask the person who runs it to update.";
+
 /// The body of `POST /api/sessions/{id}/send` or `POST /api/clients/{id}/send`: 1-20 emails and an optional note.
 pub fn send_body(to: &[String], note: Option<&str>) -> AppResult<Value> {
     let to = clean_people(to)?;
@@ -263,6 +276,18 @@ mod tests {
         assert!(named.contains("bo@x.org"), "{named}");
         let unknown = recipient_text(&["ana@example.com".into(), "bo@x.org".into()], "Recipient not found.");
         assert!(unknown.starts_with("One of these emails"), "{unknown}");
+    }
+
+    #[test]
+    fn a_link_more_open_than_asked_for_is_caught() {
+        let people = options("people");
+        assert!(link_as_asked(&people, &json!({"id": "sh1", "audience": "people", "people": ["ana@example.com"]})));
+        assert!(!link_as_asked(&people, &json!({"id": "sh1", "has_password": false})), "a server that ignored the audience");
+        assert!(!link_as_asked(&people, &json!({"id": "sh1", "audience": "public"})));
+        let password = options("password");
+        assert!(link_as_asked(&password, &json!({"id": "sh1", "has_password": true})), "a v1.1 password link is just as closed");
+        assert!(!link_as_asked(&password, &json!({"id": "sh1", "has_password": false})));
+        assert!(link_as_asked(&options("public"), &json!({"id": "sh1"})));
     }
 
     #[test]

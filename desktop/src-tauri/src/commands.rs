@@ -1259,10 +1259,19 @@ pub async fn share_link_create(state: State<'_, AppState>, kind: String, id: Str
     ensure_unlocked(&state)?;
     let target = crate::sharing::target_path(&kind)?;
     let body = options.body(chrono::Utc::now())?;
-    match state.api()?.create_link_share(target, &id, &body).await {
-        Err(e) if e.is_missing_route() => Err(needs_newer_server("Sharing a project")),
-        other => other,
+    let api = state.api()?;
+    let link = match api.create_link_share(target, &id, &body).await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("Sharing a project")),
+        other => other?,
+    };
+    // Never hand out a link more open than the one asked for: revoke it at once.
+    if !crate::sharing::link_as_asked(&options, &link) {
+        if let Some(made) = link["id"].as_str() {
+            let _ = api.revoke_share(made).await;
+        }
+        return Err(AppError::msg(crate::sharing::LINK_NOT_AS_ASKED));
     }
+    Ok(link)
 }
 
 /// The share links of a recording or a project, newest first, or `None` on a server older than v1.5 (the share
