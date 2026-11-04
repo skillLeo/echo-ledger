@@ -88,7 +88,6 @@ it('documents every endpoint the router serves, except the provider webhook whic
 
 /** The v1.5 Phase 2 contract came before the server: these land one part at a time (empty once all are served). */
 const NOT_YET_SERVED = [
-    'DELETE /api/clients/{}/rules/{}', 'GET /api/clients/{}/rules', 'POST /api/clients/{}/rules',
     'GET /api/shares', 'POST /api/clients/{}/shares',
     'POST /api/sessions/{}/send', 'POST /api/clients/{}/send', 'GET /api/shared-with-me', 'POST /api/shared-with-me/{}/save', 'DELETE /api/shared-with-me/{}',
     'GET /api/request-links', 'POST /api/request-links', 'DELETE /api/request-links/{}',

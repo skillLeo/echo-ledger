@@ -76,6 +76,15 @@ final class CallerMatcher
                 return ['contact' => $contact, 'client' => $contact->client];
             }
         }
+        // Since v1.5 a contact rule can name an email: a caller seen by an address (a calendar guest) matches it.
+        $email = collect([$number, $name])->map(fn (?string $v): string => mb_strtolower(trim((string) $v)))
+            ->first(fn (string $v): bool => filter_var($v, FILTER_VALIDATE_EMAIL) !== false);
+        if ($email !== null) {
+            $contact = ClientContact::query()->whereRaw('LOWER(email) = ?', [$email])->whereIn('client_id', (clone $clients)->select('id'))->oldest('id')->first();
+            if ($contact !== null) {
+                return ['contact' => $contact, 'client' => $contact->client];
+            }
+        }
         $wanted = self::normalName($name);
         if ($wanted === '') {
             return ['contact' => null, 'client' => null];

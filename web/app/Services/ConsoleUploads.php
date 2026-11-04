@@ -16,6 +16,7 @@ use App\Models\Client;
 use App\Models\Recording;
 use App\Models\User;
 use App\Services\Data\CompleteOutcome;
+use App\Services\Projects\FilingRules;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
@@ -174,6 +175,8 @@ final class ConsoleUploads
                 'status' => SessionStatus::Uploading,
                 'final_provider' => $this->providerFor($file['language'] ?? null, $client),
             ]);
+            // Since v1.5: a file uploaded without a project is filed by the title (its file name) and app rules.
+            app(FilingRules::class)->apply($session);
 
             return $this->uploads->createRecording($session, [
                 'role' => RecordingRole::Primary->value,

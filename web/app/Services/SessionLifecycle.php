@@ -12,6 +12,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
 use App\Services\Callers\CallerMatcher;
+use App\Services\Projects\FilingRules;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use Illuminate\Support\Carbon;
@@ -63,6 +64,8 @@ final class SessionLifecycle
                 $this->uploads->createRecording($session, $artifact, $chunkSize);
             }
             $this->annotate($session, $data);
+            // Since v1.5: a recording that ends without a project is filed by the title and app rules.
+            app(FilingRules::class)->apply($session);
 
             return $session;
         });
@@ -128,6 +131,8 @@ final class SessionLifecycle
             $locked->update($attributes);
             $this->annotate($locked, $data);
             app(CallerMatcher::class)->apply($locked, is_array($data['caller'] ?? null) ? $data['caller'] : null);
+            // Since v1.5: after the contact match, the title and app rules file a recording still in no project.
+            app(FilingRules::class)->apply($locked);
 
             return $locked;
         });

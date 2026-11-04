@@ -58,6 +58,12 @@ class Client extends Model
         return $this->hasMany(self::class, 'parent_id');
     }
 
+    /** @return HasMany<FilingRule, $this> recordings that end without a project are filed here by these (v1.5) */
+    public function filingRules(): HasMany
+    {
+        return $this->hasMany(FilingRule::class);
+    }
+
     /** @return HasMany<ClientFile, $this> */
     public function files(): HasMany
     {

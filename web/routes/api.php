@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ClientWorkspaceController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController;
+use App\Http\Controllers\Api\FilingRuleController;
 use App\Http\Controllers\Api\LibraryController;
 use App\Http\Controllers\Api\LiveTranslateTokenController;
 use App\Http\Controllers\Api\OrganiseController;
@@ -64,6 +65,9 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->name('api.clients.update');
             // Projects (v1.5): deleting one sends its recordings to the Inbox and its subfolders up a level.
             Route::delete('clients/{id}', [OrganiseController::class, 'destroyClient'])->name('api.clients.destroy');
+            // Filing rules (v1.5): title, app and contact rules that file a recording ending without a project.
+            Route::post('clients/{id}/rules', [FilingRuleController::class, 'store'])->name('api.clients.rules.store');
+            Route::delete('clients/{id}/rules/{rule}', [FilingRuleController::class, 'destroy'])->name('api.clients.rules.destroy');
             // Client workspaces (v1.4): brief, memory, files, notes and Ask.
             Route::put('clients/{id}/brief', [ClientWorkspaceController::class, 'updateBrief'])->name('api.clients.brief.update');
             Route::post('clients/{id}/brief/refresh', [ClientWorkspaceController::class, 'refreshBrief'])->name('api.clients.brief.refresh');
@@ -111,6 +115,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('vocabulary', [VocabularyController::class, 'show'])->name('api.vocabulary');
             Route::get('clients/{id}/workspace', [ClientWorkspaceController::class, 'show'])->name('api.clients.workspace');
             Route::get('clients/{id}/bundle', [ClientWorkspaceController::class, 'bundle'])->name('api.clients.bundle');
+            Route::get('clients/{id}/rules', [FilingRuleController::class, 'index'])->name('api.clients.rules');
             Route::get('sessions/{id}/notes', [ClientWorkspaceController::class, 'notes'])->name('api.sessions.notes');
         });
     });
