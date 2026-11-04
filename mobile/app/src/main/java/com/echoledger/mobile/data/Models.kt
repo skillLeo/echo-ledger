@@ -709,3 +709,16 @@ data class AccountExportDto(
     val url: String? = null,
     @SerialName("expires_at") val expiresAt: String? = null
 )
+
+/** The newest website build of the phone app (since v1.5, GET /downloads/android.json; the full flavor only). */
+@Serializable
+data class AndroidReleaseDto(
+    val version: String,
+    val code: Int,
+    val url: String,
+    val sha256: String,
+    val bytes: Long,
+    @SerialName("min_sdk") val minSdk: Int? = null,
+    val notes: String? = null,
+    @SerialName("published_at") val publishedAt: String? = null
+)

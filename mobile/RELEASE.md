@@ -1,12 +1,9 @@
 # Releasing EchoLedger for Android
 
-EchoLedger for Android is distributed as a signed APK that you sideload. Two of its features are not allowed on
-Google Play:
-
-- call capture through the shell-UID helper;
-- the special-use foreground service.
-
-So a Play listing would have to ship without them.
+EchoLedger for Android is distributed as a signed APK that you sideload (the website build, flavor `full`). Since
+v1.5 there is also a Google Play build (flavor `play`) without the features Play does not allow: call capture through
+the shell-UID helper, the special-use foreground services and the call log. See DISTRIBUTION.md for what each build
+has, the Play Console drafts and how the website build updates itself.
 
 ## Build
 
@@ -15,13 +12,14 @@ Prerequisites: JDK 21 (the one bundled with Android Studio works) and Android SD
 ```powershell
 # Windows
 $env:JAVA_HOME = "$env:LOCALAPPDATA\Android\Sdk\jdk"   # or Android Studio's jbr folder
-.\gradlew.bat assembleDebug                             # app/build/outputs/apk/debug/app-debug.apk
-.\gradlew.bat assembleRelease                           # needs signing, see below
+.\gradlew.bat assembleFullDebug                         # app/build/outputs/apk/full/debug/app-full-debug.apk
+.\gradlew.bat assembleFullRelease                       # needs signing, see below
+.\gradlew.bat bundlePlayRelease                         # the Google Play bundle (DISTRIBUTION.md)
 ```
 
 ```bash
 # macOS / Linux
-./gradlew assembleRelease
+./gradlew assembleFullRelease
 ```
 
 Release builds are minified with R8 and resource-shrunk. `proguard-rules.pro` keeps the classes that are reached
@@ -55,14 +53,14 @@ by reflection:
    - **Environment variables (CI):** `ECHOLEDGER_KEYSTORE`, `ECHOLEDGER_KEYSTORE_PASSWORD`,
      `ECHOLEDGER_KEY_ALIAS`, `ECHOLEDGER_KEY_PASSWORD`.
 
-3. Run `.\gradlew.bat assembleRelease`. The output is `app/build/outputs/apk/release/app-release.apk`. If no
+3. Run `.\gradlew.bat assembleFullRelease`. The output is `app/build/outputs/apk/full/release/app-full-release.apk`. If no
    keystore is configured, the build produces an unsigned APK, which Android will not install.
 
 4. Verify the signature and record the certificate digest. Publish the digest next to the download so users can
    check it:
 
    ```bash
-   apksigner verify --print-certs app-release.apk
+   apksigner verify --print-certs app-full-release.apk
    ```
 
 Always sign updates with the same key. Android refuses an update whose signing certificate does not match the
@@ -78,7 +76,7 @@ installed app.
    the code, or enter the server address and the code by hand. Scanning with the phone's own camera app only shows
    the QR text; use the scanner inside EchoLedger.
 
-ADB alternative: `adb install -r app-release.apk`.
+ADB alternative: `adb install -r app-full-release.apk`.
 
 ## Call capture setup (Android 14+)
 
@@ -117,7 +115,8 @@ every update.
 
 1. Bump `versionCode` (always increasing) and `versionName` in `app/build.gradle.kts`.
 2. Rebuild and re-sign with the same key.
-3. Install over the existing app. Local recordings stay in `noBackupFilesDir`, encrypted with the app's Keystore
+3. Publish it on the server (`php artisan echoledger:publish-release`): installed website builds offer it within
+   12 hours (DISTRIBUTION.md). Or install over the existing app. Local recordings stay in `noBackupFilesDir`, encrypted with the app's Keystore
    key, so they survive updates but not uninstalls.
 
 The Shizuku user service is versioned by `versionCode`. After an update, EchoLedger restarts the helper on the
@@ -125,9 +124,9 @@ next connect.
 
 ## Privacy checklist per release
 
-- **No analytics or telemetry SDKs.** `.\gradlew.bat :app:dependencies --configuration releaseRuntimeClasspath`
-  must not list Firebase, Crashlytics, Sentry or other analytics libraries.
-- **No provider keys in the APK.** `unzip -p app-release.apk classes*.dex | strings` must not contain `sk_`,
+- **No analytics or telemetry SDKs.** `.\gradlew.bat :app:dependencies --configuration fullReleaseRuntimeClasspath`
+  (and `playReleaseRuntimeClasspath`) must not list Firebase, Crashlytics, Sentry or other analytics libraries.
+- **No provider keys in the APK.** `unzip -p app-full-release.apk classes*.dex | strings` must not contain `sk_`,
   `xi-api-key` or AssemblyAI keys. The app receives only short-lived streaming tokens from the server.
 - **Cleartext traffic is off** in release builds (`network_security_config.xml`). Only the debug build allows
   `localhost` and `10.0.2.2`.

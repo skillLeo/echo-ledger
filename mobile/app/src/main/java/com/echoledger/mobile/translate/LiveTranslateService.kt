@@ -20,6 +20,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.provider.MediaStore
 import androidx.core.app.NotificationCompat
+import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.MainActivity
 import com.echoledger.mobile.R
@@ -109,6 +110,11 @@ class LiveTranslateService :
         } else {
             @Suppress("DEPRECATION")
             intent.getParcelableExtra(EXTRA_PROJECTION)
+        }
+        // The Google Play build has no helper (since v1.5): Android's screen-audio capture is its only way in.
+        if (projectionData == null && !BuildConfig.CAPTURE_HELPER) {
+            stopSelf()
+            return
         }
         val type = if (projectionData !=
             null

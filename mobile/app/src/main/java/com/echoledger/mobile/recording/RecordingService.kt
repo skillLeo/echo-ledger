@@ -19,6 +19,7 @@ import android.util.Log
 import androidx.core.app.ServiceCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
+import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.calls.CallEffect
 import com.echoledger.mobile.calls.CallEvent
@@ -347,7 +348,7 @@ class RecordingService : LifecycleService() {
         }
         val type = when {
             mic -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            Build.VERSION.SDK_INT >= 34 -> ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            Build.VERSION.SDK_INT >= 34 && BuildConfig.CAPTURE_HELPER -> ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             else -> ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         }
         return try {
@@ -390,8 +391,9 @@ class RecordingService : LifecycleService() {
      * says so and keeps trying to reconnect (Shizuku), instead of turning itself off without a word.
      */
     private fun arm() {
-        if (Build.VERSION.SDK_INT < 34) {
-            Log.w(TAG, "auto-record needs Android 14+")
+        // The Google Play build has no capture helper (since v1.5), so auto-record stays off there.
+        if (Build.VERSION.SDK_INT < 34 || !BuildConfig.CAPTURE_HELPER) {
+            Log.w(TAG, "auto-record needs Android 14+ and the capture helper")
             persistArmed(false)
             settle()
             return

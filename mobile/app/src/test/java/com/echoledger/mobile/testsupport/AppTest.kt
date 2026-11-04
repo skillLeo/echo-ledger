@@ -52,6 +52,7 @@ abstract class AppTest {
         bindSettingsDataStore(app)
         app.useTestCiphers()
         WorkManagerTestInitHelper.initializeTestWorkManager(app)
+        com.echoledger.mobile.update.SelfUpdate.reset()
         runBlocking { app.resetPersistedState() }
         server = FakeServer()
     }

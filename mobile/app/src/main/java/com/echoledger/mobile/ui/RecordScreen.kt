@@ -106,6 +106,7 @@ fun RecordSheet(capabilities: Capabilities, autoRecordOn: Boolean, onPick: (Reco
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.screen).padding(bottom = Space.s5)) {
             Text("New", style = LocalEchoType.current.titleM, color = Brand.Text, modifier = Modifier.padding(bottom = Space.s4))
             val calls = when {
+                !capabilities.helperInBuild -> "Calls: website version only"
                 !capabilities.callCaptureSupportedByOs -> "Calls: needs Android 14"
                 !capabilities.helperConnected -> "Calls: set up first"
                 autoRecordOn -> "Calls: auto-record on"
@@ -218,6 +219,8 @@ fun RecordScreen(
     if (picked.isNotEmpty()) ImportSheet(vm, picked, onDone = { picked = emptyList() })
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 96.dp)) {
         EchoTopBar(if (mode == RecordMode.CALLS && !live.active) "Calls & meetings" else "Voice note")
+        // Since v1.5: a newer website build of the app (the Google Play build never shows this).
+        UpdateBanner(vm, Modifier.padding(horizontal = Space.screen, vertical = Space.s1))
         if (mode == RecordMode.VOICE || live.active) {
             RecordStage(live) { action ->
                 if (action == RecordingService.ACTION_TOGGLE) {
@@ -253,12 +256,13 @@ fun RecordScreen(
                 Icons.Rounded.Call,
                 "Auto-record calls",
                 summary = when {
+                    !capabilities.helperInBuild -> Capabilities.NOT_IN_THIS_BUILD
                     !capabilities.callCaptureSupportedByOs -> "Requires Android 14 or later"
                     !capabilities.helperConnected -> "Enable call capture in Setup first"
                     settings.afterCall == PostCallPrompt.ASK -> "A small chip asks after each call; kept after 10 s"
                     else -> "Answered calls are kept automatically; unanswered and short ones are skipped"
                 },
-                onClick = if (capabilities.helperConnected) null else onSetup,
+                onClick = if (capabilities.helperConnected || !capabilities.helperInBuild) null else onSetup,
                 trailing = {
                     Switch(
                         checked = settings.autoRecordArmed,
@@ -272,13 +276,17 @@ fun RecordScreen(
                     )
                 }
             )
-            if (!capabilities.helperConnected) {
+            if (!capabilities.helperConnected && capabilities.helperInBuild) {
                 Box(Modifier.padding(horizontal = Space.screen)) { EchoButton("Open setup", onSetup, kind = ButtonKind.Secondary) }
             }
             // Calls waiting for a decision: one card, the list is one tap away (since 1.3.2).
             WaitingSummaryCard(waiting, onReview = onReviewWaiting)
             // The apps auto-record listens to, right under its switch (since 1.3.2).
-            Box(Modifier.padding(horizontal = Space.screen, vertical = Space.s2)) { AutoRecordSection(vm, settings) }
+            if (capabilities.helperInBuild) {
+                Box(Modifier.padding(horizontal = Space.screen, vertical = Space.s2)) {
+                    AutoRecordSection(vm, settings)
+                }
+            }
         }
         val queued = pending.filter { it.state in setOf("queued", "uploading") }
         if (queued.isNotEmpty()) {

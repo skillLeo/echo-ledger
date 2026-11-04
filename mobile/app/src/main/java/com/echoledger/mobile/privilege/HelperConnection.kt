@@ -157,6 +157,7 @@ class HelperConnection(private val context: Context) {
      * Shizuku restarts. Without it the helper kept running but this app no longer talked to it.
      */
     fun autoConnect() {
+        if (!BuildConfig.CAPTURE_HELPER) return
         runCatching {
             Shizuku.addBinderReceivedListenerSticky {
                 if (helper == null && shizukuPermissionGranted()) bindShizuku()
@@ -165,7 +166,7 @@ class HelperConnection(private val context: Context) {
     }
 
     fun bindShizuku(): Boolean {
-        if (!shizukuAvailable() || !shizukuPermissionGranted()) return false
+        if (!BuildConfig.CAPTURE_HELPER || !shizukuAvailable() || !shizukuPermissionGranted()) return false
         return runCatching { Shizuku.bindUserService(userServiceArgs, serviceConnection) }.isSuccess
     }
 

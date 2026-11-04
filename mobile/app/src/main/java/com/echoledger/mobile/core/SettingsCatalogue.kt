@@ -1,5 +1,6 @@
 package com.echoledger.mobile.core
 
+import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.CaptionStyle
 import com.echoledger.mobile.translate.GamePrefs
@@ -22,6 +23,9 @@ enum class SettingsGroup(val label: String, val summary: String) {
 data class SettingsEntry(val id: String, val group: SettingsGroup, val title: String, val keywords: String)
 
 object SettingsCatalogue {
+    /** Settings of call auto-record, which the Google Play build does not have (since v1.5). */
+    private val CALLS_ONLY = setOf("auto-apps", "after-call")
+
     val entries: List<SettingsEntry> = listOf(
         SettingsEntry("appearance", SettingsGroup.General, "Appearance", "theme dark light system colours wallpaper dynamic font typeface"),
         SettingsEntry("this-phone", SettingsGroup.General, "This phone", "account server unpair name certificate pinned setup guide"),
@@ -71,7 +75,7 @@ object SettingsCatalogue {
         SettingsEntry("game-more", SettingsGroup.Game, "Privacy and budget", "budget cost dollars month profanity save session text debug"),
         SettingsEntry("watch", SettingsGroup.Watch, "Apps and languages", "youtube netflix chrome vlc films videos urdu subtitles"),
         SettingsEntry("watch-style", SettingsGroup.Watch, "Subtitle style", "subtitles size lines box offset original srt save")
-    )
+    ).filter { BuildConfig.CAPTURE_HELPER || it.id !in CALLS_ONLY }
 
     fun inGroup(group: SettingsGroup): List<SettingsEntry> = entries.filter { it.group == group }
 

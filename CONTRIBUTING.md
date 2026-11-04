@@ -85,7 +85,7 @@ A visible recording indicator is mandatory whenever audio is captured.
 - Before pushing, run the checks for every app you touched:
   - Server: `php artisan test`, `vendor/bin/pint --test`, `vendor/bin/phpstan analyse`
   - Desktop: `npm run test`, `npm run build`, `cargo test`, `cargo clippy --all-targets -- -D warnings`
-  - Android: `./gradlew assembleDebug test ktlintCheck`
+  - Android: `./gradlew assembleFullDebug testFullDebugUnitTest testPlayDebugUnitTest ktlintCheck`
 - Never commit `.env` files, keystores, signing keys, recordings or real credentials.
 
 ## Local environment notes (Windows)

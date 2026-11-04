@@ -84,6 +84,6 @@ disabled, focused, selected, loading and error states where they apply. A debug-
 light and dark.
 
 ## Screenshots
-Laptop: Roborazzi on Robolectric (native graphics). `./gradlew recordRoborazziDebug` writes the PNGs to
-`docs/design/screens/`, `verifyRoborazziDebug` fails on any change, `compareRoborazziDebug` writes diffs. Before
+Laptop: Roborazzi on Robolectric (native graphics). `./gradlew recordRoborazziFullDebug` writes the PNGs to
+`docs/design/screens/`, `verifyRoborazziFullDebug` fails on any change, `compareRoborazziFullDebug` writes diffs. Before
 pictures of the old design: `docs/design/before/`. Real-phone screenshots are taken when the phone is free.

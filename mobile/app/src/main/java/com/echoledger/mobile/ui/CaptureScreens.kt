@@ -72,7 +72,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-import com.echoledger.mobile.calls.SamsungCallImport
+import com.echoledger.mobile.BuildConfig
+import com.echoledger.mobile.calls.PhoneCallLog
 import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.PhoneCalls
@@ -360,7 +361,7 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
             vm.updateSettings { it.copy(phoneCalls = mode) }
             if (mode != PhoneCalls.OFF) {
                 // The call log and contacts name the caller; audio files let the Phone app's own recordings be imported.
-                ask.launch(arrayOf(Manifest.permission.READ_CALL_LOG, Manifest.permission.READ_CONTACTS, SamsungCallImport.permission()))
+                ask.launch(PhoneCallLog.permissionsToAsk())
             }
         }
     }
@@ -515,10 +516,10 @@ fun CaptureHealthSection(vm: MainViewModel, settings: AppSettings, helperConnect
             notifications = Build.VERSION.SDK_INT < 33 || granted(context, Manifest.permission.POST_NOTIFICATIONS),
             overlay = Settings.canDrawOverlays(context),
             battery = CaptureHealth.ignoresBatteryOptimisation(context),
-            helper = helperConnected,
-            callerNames = CallerNameListener.allowed(context),
-            callLog = granted(context, Manifest.permission.READ_CALL_LOG).takeIf { phoneCalls },
-            contacts = granted(context, Manifest.permission.READ_CONTACTS).takeIf { phoneCalls }
+            helper = helperConnected.takeIf { BuildConfig.CAPTURE_HELPER },
+            callerNames = CallerNameListener.allowed(context).takeIf { BuildConfig.CAPTURE_HELPER },
+            callLog = granted(context, Manifest.permission.READ_CALL_LOG).takeIf { phoneCalls && PhoneCallLog.available },
+            contacts = granted(context, Manifest.permission.READ_CONTACTS).takeIf { phoneCalls && BuildConfig.CAPTURE_HELPER }
         )
     }
     SectionCard {

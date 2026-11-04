@@ -215,7 +215,7 @@ cd web && php artisan test && vendor/bin/pint --test && vendor/bin/phpstan analy
 # Desktop
 cd desktop && npm run test && npm run build && cd src-tauri && cargo test && cargo clippy --all-targets -- -D warnings
 # Android
-cd mobile && ./gradlew assembleDebug testDebugUnitTest ktlintCheck lintDebug
+cd mobile && ./gradlew assembleFullDebug testFullDebugUnitTest testPlayDebugUnitTest ktlintCheck lintFullDebug
 # Repository rules and shared design tokens
 node --test tools/repo-policy.test.mjs tools/design-tokens.test.mjs
 ```

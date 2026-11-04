@@ -50,8 +50,10 @@ Every addition below is marked **(since v1.1)**.
 | 403 | `budget_exceeded` | Monthly limit reached: the server cap (message `Monthly transcription limit reached`) or, since B20, the workspace plan's minutes (message `Monthly limit reached — raise it in Settings`) | Keep recording without captions; show the message; do not retry until `usage.limit_reached` is false |
 | 403 | `storage_limit_reached` | Since B20: a new recording would pass the workspace plan's storage (message `Storage limit reached — raise it in Settings`) | Permanent for this upload: keep the recording on the device, show the message |
 | 403 | `device_limit_reached` | Since B20: pairing would pass the workspace plan's devices (message `Device limit reached — raise it in Settings`) | Show the message; do not retry |
-| 403 | `not_allowed` | Since B20: the role does not allow it — a member deleting, restoring or erasing someone else's recording, or a non-admin device changing the shared vocabulary | Permanent; show the message |
-| 403 | `ai_budget_reached` | Since v1.4: the workspace's monthly AI budget for client workspaces (`client_ai.monthly_usd`, default $5) is used up | Show the message; client notes and Ask wait until next month or a higher budget |
+| 403 | `not_allowed` | Since B20: the role does not allow it — a member deleting, restoring or erasing someone else's recording, or a non-admin device changing the shared vocabulary; since v1.5 a viewer recording or uploading | Permanent; show the message |
+| 403 | `ai_budget_reached` | Since v1.4: the workspace's monthly AI budget for client workspaces (`client_ai.monthly_usd`, default $5) is used up; since v1.5 the plan's AI credits | Show the message; client notes and Ask wait until next month or a higher budget |
+| 403 | `feature_not_in_plan` | Since v1.5: the workspace's plan leaves the feature out (`feature`: `live_translate`, `screen_moments`, `ai_notes`, `connector`) | Hide the feature; show the message once |
+| 403 | `seat_limit_reached` | Since v1.5: an invitation would pass the plan's seats | Show the message |
 | 404 | `not_found` | Unknown route | Permanent |
 | 404 | `session_not_found` | Session unknown, deleted, or (finish, stt/token) not created by this device | finish: create a new session with a new `client_ref`; delete: treat as done |
 | 404 | `recording_not_found` | Recording unknown or its session was deleted | Drop the upload slot |
@@ -140,9 +142,10 @@ hint for `no_audio` (desktop: check the microphone and the audio device; Android
 
 Every device, client, recording and usage row belongs to one workspace; a device token acts for the workspace it was
 paired into (the console user's current workspace when the code was made). Everything a device reads or changes is
-limited to that workspace: an id from another workspace answers exactly like an unknown id (`404`). Members of a
-workspace share its library. A member deletes, restores and erases only recordings they made (`403 not_allowed`
-otherwise); owners may do this for any recording. Plan limits (minutes per month, storage, devices) answer
+limited to that workspace: an id from another workspace answers exactly like an unknown id (`404`). Until v1.5,
+members of a workspace shared its library (a member deleted, restored and erased only recordings they made, `403
+not_allowed` otherwise; owners any); since v1.5 each person's recordings and projects are private to them until they
+share them (see "Workspaces, roles and privacy"). Plan limits (minutes per month, storage, devices) answer
 `403 budget_exceeded`, `403 storage_limit_reached` and `403 device_limit_reached`. The shared vocabulary (no
 `client_id`) is server-wide and only a super admin's device may change it.
 
@@ -205,6 +208,71 @@ account in the console (Profile → Devices → "Sign in a device", the QR of `P
   /api/account/export/{id}` → `{"id", "status": "making" | "ready" | "failed", "url": "…" | null, "expires_at"}`:
   one ZIP with every recording's audio, transcripts (all views made), screens, project files and notes, and a
   `manifest.json`. The link works for 24 hours; the account's email gets it too.
+
+### Workspaces, roles and privacy (since v1.5)
+Every account has its own personal workspace (it is the owner). A team is a workspace with members; a person can
+belong to several and picks one in the console (Profile → Workspace). A device acts in the workspace it was signed in
+or paired to.
+
+**Private by default.** A recording (with its transcripts, views, screens, notes and bookmarks) and a project (with
+its files, notes, rules and memory) belong to the person who made them. Nobody else in the workspace sees them in the
+library, search, projects, activity, usage details or the API (`404`, as for another workspace's ids), owners and
+admins included, until that person shares: Send to a teammate (a copy in their library), or a share link. Data made
+before v1.5 belongs to the person who made it (on a single-person server: its owner).
+
+| Per workspace | Owner | Admin | Member | Viewer |
+|---|---|---|---|---|
+| Record, upload, import; pair or sign in devices | yes | yes | yes | no |
+| Their own recordings and projects: open, edit, organise, share, delete | yes | yes | yes | (has none) |
+| Shared with me: open; Save to my library | yes | yes | yes | open only |
+| Invite and remove people, change roles | yes | members and viewers | no | no |
+| Workspace usage: minutes and costs per person (never content) | yes | yes | their own | no |
+| Revoke another person's device | yes | yes | no | no |
+| Plan, workspace name, transfer ownership, delete the workspace | yes | no | no | no |
+
+The super admin (the server's operator) manages plans, sees every workspace's members and usage (never content),
+and the server settings and API credentials. A workspace always keeps one owner; leaving it needs a transfer first.
+
+- `GET /api/account` gives the role (`workspace.role`). A viewer's device gets `403 not_allowed` from recording and
+  upload routes (`POST /api/sessions`, uploads, `stt/token`, request uploads into their name); the apps show "You are
+  a viewer in <workspace>: you can open what is shared with you, not record."
+
+### Plans and features (since v1.5)
+Plans are made by the super admin: price (0 until billing comes), minutes per month, storage, retention days, seats,
+AI credits per month (US dollars of optional AI work), and the features `live_translate`, `screen_moments`,
+`ai_notes` (client notes, memory, Ask) and `connector` (Claude and ChatGPT). Roman Urdu and the other transcript views,
+suggested fixes and screen descriptions are never switched off by a plan.
+
+- `GET /api/config` gains `"plan": {"key": "personal", "name": "Personal", "features": {"live_translate": true,
+  "screen_moments": true, "ai_notes": false, "connector": true}, "limits": {"monthly_minutes": null,
+  "storage_bytes": null, "retention_days": null, "seats": null}, "used": {"minutes": 123, "storage_bytes": 456}}`
+  (`null` = no limit). Missing (an older server): every feature on, no limits. The apps hide what the plan leaves
+  out and show the limits next to the usage.
+- New errors: `403 feature_not_in_plan` with `"feature": "screen_moments"` ("Screen moments are not in your plan"),
+  `403 seat_limit_reached` (an invitation past the plan's seats), and `403 ai_budget_reached` now also when the
+  plan's AI credits for the month are used (it replaces the v1.4 `client_ai.monthly_usd` budget). The B20 errors (`budget_exceeded`, `storage_limit_reached`, `device_limit_reached`) stay.
+
+### Public pages and app downloads (since v1.5)
+No sign-in, throttled (60/min/IP). The apps open these pages in the browser.
+- `GET /terms`, `GET /privacy` (the processors that handle recordings are listed there), `GET /account/delete` (see
+  "Your account"), `GET /downloads` (the latest phone, Windows and Mac builds with version, size and SHA-256, and the
+  older versions).
+- `GET /downloads/android.json` — the newest phone build of the website ("full") flavor, `Cache-Control: public,
+  max-age=300`:
+  ```json
+  {"version": "1.5.0", "code": 16, "url": "https://<server>/downloads/files/EchoLedger-1.5.0.apk",
+   "sha256": "<64 lowercase hex>", "bytes": 41234567, "min_sdk": 29, "notes": "…", "published_at": "…"}
+  ```
+  `404 not_found` while no phone build is published. The full build looks at most every 12 hours (and when the
+  person taps Check for updates); a `code` above its own is offered, downloaded from `url` (same server only), checked
+  against `sha256` and `bytes`, and handed to Android's installer, which itself refuses a file not signed like the
+  installed app. The Google Play build never looks.
+- `GET /downloads/desktop.json` — the desktop updater's manifest (Tauri's static format): `{"version", "notes",
+  "pub_date", "platforms": {"windows-x86_64": {"url", "signature"}, "darwin-aarch64": {…}, "darwin-x86_64": {…}}}`,
+  each `signature` made with the updater key (the public half is built into the app). `404 not_found` while none.
+- Builds are published by the release step, not uploaded through the console: `php artisan echoledger:publish-release
+  <file> --platform=android|windows|macos-arm|macos-intel --app-version=1.5.0 [--code=16] [--notes=…]
+  [--signature=<file.sig>]` stores the file, measures it, computes the SHA-256 and keeps the older builds listed.
 
 ### `GET /api/config` — `config:read`
 ```json

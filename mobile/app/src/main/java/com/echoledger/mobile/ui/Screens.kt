@@ -109,6 +109,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.calls.SkippedCalls
 import com.echoledger.mobile.core.Bookmarks
@@ -926,7 +927,13 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
         }
         SectionCard {
             Text("2 · Call capture (Android 14+)", fontWeight = FontWeight.SemiBold)
-            if (!capabilities.callCaptureSupportedByOs) {
+            if (!capabilities.helperInBuild) {
+                Text(
+                    "${Capabilities.NOT_IN_THIS_BUILD} Call recordings from the Phone app or WhatsApp can still be shared to EchoLedger.",
+                    color = Brand.Muted,
+                    fontSize = 13.sp
+                )
+            } else if (!capabilities.callCaptureSupportedByOs) {
                 Text(
                     "This phone runs Android ${Build.VERSION.RELEASE}. Recording the other side of WhatsApp calls needs Android 14 or later.",
                     color = Brand.Muted,
@@ -1192,7 +1199,8 @@ fun Context.capabilities(helperConnected: Boolean): Capabilities = Capabilities(
     notificationPermission =
         Build.VERSION.SDK_INT < 33 ||
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED,
-    overlayPermission = Settings.canDrawOverlays(this)
+    overlayPermission = Settings.canDrawOverlays(this),
+    helperInBuild = BuildConfig.CAPTURE_HELPER
 )
 
 /** A speech engine by its product name ("assemblyai" → "AssemblyAI"); unknown ids as sent (C8). */

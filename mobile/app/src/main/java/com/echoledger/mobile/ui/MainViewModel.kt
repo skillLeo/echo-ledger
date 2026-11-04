@@ -12,6 +12,7 @@ import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.core.SettingsTransfer
 import com.echoledger.mobile.core.SignIn
+import com.echoledger.mobile.data.AndroidReleaseDto
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.BinItemDto
 import com.echoledger.mobile.data.ClientDto
@@ -29,6 +30,9 @@ import com.echoledger.mobile.net.ApiException
 import com.echoledger.mobile.net.NotPairedException
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.privilege.HelperConnection
+import com.echoledger.mobile.update.SelfUpdate
+import com.echoledger.mobile.update.UpdatePrefs
+import com.echoledger.mobile.update.UpdateStatus
 import com.echoledger.mobile.widget.WidgetStateStore
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +96,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 _pending.value = withContext(Dispatchers.IO) { graph.recordings.all().filter { it.state != "uploaded" } }
             }
         }
+        SelfUpdate.restore(app)
+    }
+
+    /** Since v1.5: the website build's own updates (the Google Play build always stays idle). */
+    val updateStatus: StateFlow<UpdateStatus> = SelfUpdate.status
+
+    private val _updateHiddenCode = MutableStateFlow(UpdatePrefs(app).hiddenCode)
+    val updateHiddenCode: StateFlow<Int> = _updateHiddenCode.asStateFlow()
+
+    fun checkForUpdates() = viewModelScope.launch { SelfUpdate.check(getApplication(), graph.api(), force = true) }
+
+    fun installUpdate(release: AndroidReleaseDto) = viewModelScope.launch {
+        val api = graph.api() ?: return@launch
+        SelfUpdate.install(getApplication(), api, release)
+    }
+
+    /** Closes the Record tab's banner for this version; Settings → About still offers it. */
+    fun hideUpdateBanner(release: AndroidReleaseDto) {
+        UpdatePrefs(getApplication()).hiddenCode = release.code
+        _updateHiddenCode.value = release.code
     }
 
     fun reloadLocal() {
@@ -291,6 +315,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 graph.library.refresh()
             }
             com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())
+            SelfUpdate.schedule(getApplication())
             _clients.value = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
             WidgetStateStore.refresh(getApplication())
             _offline.value = false

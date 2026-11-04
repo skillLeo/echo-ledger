@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Google Play build (since v1.5, mobile/DISTRIBUTION.md). Play allows the call log only for the default phone app,
+  and neither the shell-UID capture helper (Shizuku or ADB) nor the special-use foreground services that serve it, so
+  this build has none of them: no call auto-record; voice notes, imports, dictation and Live Translate through Android's
+  screen-audio capture stay.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.READ_CALL_LOG"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
+        tools:node="remove" />
+    <uses-permission
+        android:name="moe.shizuku.manager.permission.API_V23"
+        tools:node="remove" />
+    <!-- Only SIM call recording used these (the caller's name; the Phone app's own recordings). -->
+    <uses-permission
+        android:name="android.permission.READ_CONTACTS"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_AUDIO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        tools:node="remove" />
+
+    <application>
+        <!-- Caller names and the answer signal come from call notifications: only for call auto-record. -->
+        <service
+            android:name=".notify.CallerNameListener"
+            tools:node="remove" />
+        <service
+            android:name=".recording.RecordingService"
+            android:foregroundServiceType="microphone"
+            tools:replace="android:foregroundServiceType">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                tools:node="remove" />
+        </service>
+        <service
+            android:name=".translate.LiveTranslateService"
+            android:foregroundServiceType="mediaProjection"
+            tools:replace="android:foregroundServiceType">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                tools:node="remove" />
+        </service>
+
+        <provider
+            android:name=".capture.BinderHandoffProvider"
+            android:authorities="${applicationId}.handoff"
+            tools:node="remove" />
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            tools:node="remove" />
+    </application>
+</manifest>

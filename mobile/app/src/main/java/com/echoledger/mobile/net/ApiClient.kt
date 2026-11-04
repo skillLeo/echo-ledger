@@ -187,6 +187,21 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun exportStatus(id: String): com.echoledger.mobile.data.AccountExportDto =
         call(request("account/export/$id").get().build(), com.echoledger.mobile.data.AccountExportDto.serializer())!!
 
+    /** The newest website build of the phone app (since v1.5; a public page, so no token): null while none is published. */
+    suspend fun androidRelease(): com.echoledger.mobile.data.AndroidReleaseDto? = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url("$base/downloads/android.json").header("Accept", "application/json").get().build()
+        http.newCall(req).execute().use { resp ->
+            if (resp.code == 404) null else parse(resp, com.echoledger.mobile.data.AndroidReleaseDto.serializer())
+        }
+    }
+
+    /** Whether [url] is on this server (same scheme, host and port): updates are downloaded only from there. */
+    fun onServer(url: String): Boolean {
+        val server = runCatching { base.toHttpUrl() }.getOrNull() ?: return false
+        val other = runCatching { url.toHttpUrl() }.getOrNull() ?: return false
+        return other.scheme == server.scheme && other.host == server.host && other.port == server.port
+    }
+
     suspend fun register(code: String, name: String, appVersion: String, osVersion: String): RegisterResponse {
         val body = buildJsonObject {
             put("pairing_code", code)

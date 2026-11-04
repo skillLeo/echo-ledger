@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The website build (since v1.5, mobile/DISTRIBUTION.md): it updates itself from the server's downloads. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Hands a downloaded update (checked against the server's SHA-256) to Android's installer, which asks first. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application>
+        <receiver
+            android:name=".update.UpdateInstallReceiver"
+            android:exported="false" />
+    </application>
+</manifest>

@@ -41,6 +41,25 @@ android {
         testInstrumentationRunnerArguments["notAnnotation"] = "com.echoledger.mobile.e2e.support.ScriptDriven"
     }
 
+    // Since v1.5 (mobile/DISTRIBUTION.md): "full" is the website build with every feature and its own updates; "play" is
+    // the Google Play build, without the call log (Play allows it only for the default phone app) and without updating
+    // itself (Play does that). Same application id: one phone has one of them.
+    flavorDimensions += "store"
+    productFlavors {
+        create("full") {
+            dimension = "store"
+            isDefault = true
+            buildConfigField("boolean", "CALL_LOG", "true")
+            buildConfigField("boolean", "CAPTURE_HELPER", "true")
+        }
+        create("play") {
+            dimension = "store"
+            buildConfigField("boolean", "CALL_LOG", "false")
+            // Play allows neither a shell-UID capture helper nor the special-use foreground service it needs.
+            buildConfigField("boolean", "CAPTURE_HELPER", "false")
+        }
+    }
+
     signingConfigs {
         create("release") {
             signingValue("storeFile", "ECHOLEDGER_KEYSTORE")?.let { path ->
@@ -174,8 +193,8 @@ tasks.matching { it.name.startsWith("connected") && it.name.endsWith("AndroidTes
     }
 }
 
-// Design screenshots (docs/DESIGN_SYSTEM.md), rendered on the laptop by Robolectric: `recordRoborazziDebug` writes them
-// to docs/design/screens, `verifyRoborazziDebug` fails when a screen changed, `compareRoborazziDebug` writes the
+// Design screenshots (docs/DESIGN_SYSTEM.md), rendered on the laptop by Robolectric: `recordRoborazziFullDebug` writes
+// them to docs/design/screens, `verifyRoborazziFullDebug` fails when a screen changed, `compareRoborazziFullDebug` writes the
 // differences. A plain test run renders them too but writes nothing.
 val designScreens = rootProject.file("../docs/design/screens")
 roborazzi {

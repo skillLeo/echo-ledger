@@ -569,6 +569,7 @@ private fun AboutSection(vm: MainViewModel, settings: AppSettings) {
     SectionCard {
         Text("About", fontWeight = FontWeight.SemiBold)
         Text("EchoLedger ${BuildConfig.VERSION_NAME}", fontSize = 13.sp)
+        UpdateAbout(vm)
         settings.serverUrl?.let { url ->
             Text(
                 "Server ${url.removePrefix("https://").removePrefix("http://")}" +

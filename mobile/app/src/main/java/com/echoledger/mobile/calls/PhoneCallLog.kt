@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.CallLog
 import android.provider.ContactsContract
+import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.core.PhoneCalls
 import com.echoledger.mobile.data.CallerDto
 
@@ -18,8 +19,11 @@ object PhoneCallLog {
     private const val TRIES = 4
     private const val WAIT_MS = 750L
 
+    /** False in the Google Play build (since v1.5): it has no call log permission, so it never asks for it. */
+    val available: Boolean get() = BuildConfig.CALL_LOG
+
     fun find(context: Context, startMs: Long, endMs: Long): CallerDto? {
-        if (!granted(context, Manifest.permission.READ_CALL_LOG)) return null
+        if (!readable(context)) return null
         repeat(TRIES) { attempt ->
             val entry = PhoneCalls.pick(rows(context, startMs - PhoneCalls.BEFORE_MS), startMs, endMs)
             if (entry != null) {
@@ -36,7 +40,7 @@ object PhoneCallLog {
      * the answer; 0 = never answered); null without the permission or a matching row.
      */
     fun talkTimeMs(context: Context, startMs: Long, endMs: Long): Long? {
-        if (!granted(context, Manifest.permission.READ_CALL_LOG)) return null
+        if (!readable(context)) return null
         repeat(TRIES) { attempt ->
             PhoneCalls.pick(rows(context, startMs - PhoneCalls.BEFORE_MS), startMs, endMs)?.durationS?.let { return it * 1000 }
             if (attempt < TRIES - 1) Thread.sleep(WAIT_MS)
@@ -79,4 +83,14 @@ object PhoneCallLog {
 
     fun granted(context: Context, permission: String): Boolean =
         context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+    /** The call log may be read: this build has it and the person allowed it. */
+    fun readable(context: Context): Boolean = available && granted(context, Manifest.permission.READ_CALL_LOG)
+
+    /** What turning on phone calls asks for; nothing in the Google Play build, which records no calls. */
+    fun permissionsToAsk(): Array<String> = listOfNotNull(
+        Manifest.permission.READ_CALL_LOG.takeIf { available },
+        Manifest.permission.READ_CONTACTS.takeIf { BuildConfig.CAPTURE_HELPER },
+        SamsungCallImport.permission().takeIf { BuildConfig.CAPTURE_HELPER }
+    ).toTypedArray()
 }

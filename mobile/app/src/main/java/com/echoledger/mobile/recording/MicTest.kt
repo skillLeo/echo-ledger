@@ -115,13 +115,14 @@ object CaptureHealth {
         notifications: Boolean,
         overlay: Boolean,
         battery: Boolean,
-        helper: Boolean,
+        helper: Boolean?,
         callerNames: Boolean? = null,
         callLog: Boolean? = null,
         contacts: Boolean? = null
     ): List<PermissionItem> = listOfNotNull(
         PermissionItem("microphone", "Microphone", microphone, "Needed to record you."),
-        PermissionItem("helper", "Call capture helper", helper, "Needed to record the other side of calls."),
+        // Null in the Google Play build (since v1.5): it has no capture helper.
+        helper?.let { PermissionItem("helper", "Call capture helper", it, "Needed to record the other side of calls.") },
         PermissionItem(
             "notifications",
             "Notifications",
