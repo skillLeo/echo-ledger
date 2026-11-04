@@ -11,6 +11,7 @@ use App\Models\SessionMarker;
 use App\Models\ShareLink;
 use App\Models\User;
 use App\Services\ShareLinks;
+use App\Services\Sharing\RequestLinks;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -51,6 +52,10 @@ const ISO_WEB_BYPASS = [
     'share.project.session' => 'public project link: the token is the only key',
     'share.project.audio' => 'public project link: the token is the only key',
     'share.project.download' => 'public project link: the token is the only key',
+    'request.show' => 'public request link: the token is the only key',
+    'request.files.store' => 'public request link: the token is the only key',
+    'request.files.chunk' => 'public request link: the token is the only key',
+    'request.files.complete' => 'public request link: the token is the only key',
     'passkeys.login.options' => 'sign-in, before any workspace',
     'passkeys.login' => 'sign-in, before any workspace',
 ];
@@ -78,15 +83,16 @@ function isoWorld(): array
     $binned->delete();
     $uploading = Fx::session($bob, $device, ['title' => 'BOB-SECRET-TITLE uploading']);
     $upload = Fx::pendingRecording($uploading, str_repeat('b', 2048), 1024);
+    ['link' => $requestLink] = app(RequestLinks::class)->create($client->workspace_id, $bob->id, $client, 'BOB-SECRET-TITLE request', null, 20, 100);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload');
+    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
 function isoIds(array $b): array
 {
-    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id];
+    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id];
 }
 
 /**
@@ -151,6 +157,9 @@ function isoApiCases(array $b): array
         'api.shared' => ['GET', '/api/shared-with-me', [], 'list'],
         'api.shared.save' => ['POST', "/api/shared-with-me/{$s}/save", [], 404],
         'api.shared.destroy' => ['DELETE', "/api/shared-with-me/{$s}", [], 404],
+        'api.request-links.store' => ['POST', '/api/request-links', ['client_id' => $b['client']->id], 404],
+        'api.request-links' => ['GET', '/api/request-links', [], 'list'],
+        'api.request-links.destroy' => ['DELETE', "/api/request-links/{$b['requestLink']->id}", [], 404],
         'api.vocabulary.keyterms' => ['POST', '/api/vocabulary/keyterms', ['term' => 'Hijack', 'client_id' => $b['client']->id], 404],
         'api.vocabulary.replacements' => ['POST', '/api/vocabulary/replacements', ['from' => 'a', 'to' => 'b', 'client_id' => $b['client']->id], 404],
         'api.transcripts.update' => ['PATCH', "/api/transcripts/{$t}", ['edits' => [['index' => 0, 'text' => 'hijacked']]], 404],

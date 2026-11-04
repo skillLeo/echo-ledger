@@ -51,7 +51,7 @@
         {{-- Opens the page in the desktop app when it is installed (the phone opens these links itself). --}}
         <p class="open-app"><a href="echoledger://open?link={{ rawurlencode($pageUrl) }}">Open in EchoLedger</a></p>
     @endisset
-    <footer>Shared with EchoLedger · view only</footer>
+    <footer>@yield('footer', 'Shared with EchoLedger · view only')</footer>
 </main>
 </body>
 </html>

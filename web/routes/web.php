@@ -7,6 +7,7 @@ use App\Http\Controllers\AdminMediaController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
+use App\Http\Controllers\RequestLinkPageController;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
 
@@ -44,6 +45,14 @@ Route::middleware('throttle:share')->group(function (): void {
     Route::get('/p/{token}/{session}', [PublicShareController::class, 'projectSession'])->whereUlid('session')->name('share.project.session');
     Route::get('/p/{token}/{session}/audio', [PublicShareController::class, 'projectAudio'])->whereUlid('session')->name('share.project.audio');
     Route::get('/p/{token}/{session}/download', [PublicShareController::class, 'projectDownload'])->whereUlid('session')->name('share.project.download');
+});
+
+// Request links (v1.5): a public page where anyone with the link sends files (no account), chunked like Upload.
+Route::get('/r/{token}', [RequestLinkPageController::class, 'show'])->middleware('throttle:share')->name('request.show');
+Route::middleware('throttle:request-upload')->prefix('/r/{token}/files')->name('request.files.')->group(function (): void {
+    Route::post('/', [RequestLinkPageController::class, 'store'])->name('store');
+    Route::post('/{upload}/chunks/{index}', [RequestLinkPageController::class, 'chunk'])->whereNumber('index')->name('chunk');
+    Route::post('/{upload}/complete', [RequestLinkPageController::class, 'complete'])->name('complete');
 });
 
 // Passkey sign-in on the console login page (B16): a challenge, then the signed answer. Throttled per IP.

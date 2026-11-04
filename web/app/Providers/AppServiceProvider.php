@@ -105,6 +105,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('share', fn (Request $request) => Limit::perMinute(120)->by('share:'.$request->ip()));
         RateLimiter::for('share-password', fn (Request $request) => Limit::perMinute(10)->by('share-pw:'.$request->ip().'|'.(string) $request->route('token')));
+        // Request links (v1.5): no account, so every upload call is counted per address (chunks of a few MB each).
+        RateLimiter::for('request-upload', fn (Request $request) => Limit::perMinute(300)->by('request:'.$request->ip()));
         RateLimiter::for('pairing', fn (Request $request) => Limit::perMinute(5)->by('pair:'.$request->ip()));
         RateLimiter::for('passkey', fn (Request $request) => Limit::perMinute(20)->by('passkey:'.$request->ip()));
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by('hook:'.$request->ip()));

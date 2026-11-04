@@ -412,21 +412,34 @@ final class ClientWorkspace
         if ($mime === null) {
             throw new ApiError(422, 'validation_failed', 'Add a PDF, Word (.docx), text or Markdown file.', ['errors' => ['file' => ['Add a PDF, Word (.docx), text or Markdown file.']]]);
         }
+
+        return $this->storeFile($client, (string) $upload->getRealPath(), $upload->getClientOriginalName() ?: 'File', $mime, (int) $upload->getSize(), $userId);
+    }
+
+    /**
+     * Stores a file already on disk encrypted, and reads its text on the queue. Images (since v1.5, from request
+     * links) are kept as they are: there is no text to read.
+     */
+    public function storeFile(Client $client, string $plainPath, string $name, string $mime, int $size, int $userId): ClientFile
+    {
+        $image = str_starts_with($mime, 'image/');
         $file = ClientFile::query()->withoutGlobalScopes()->create([
             'workspace_id' => $client->workspace_id,
             'user_id' => $userId,
             'client_id' => $client->id,
-            'name' => mb_substr($upload->getClientOriginalName() ?: 'File', 0, 200),
+            'name' => mb_substr($name, 0, 200),
             'mime' => $mime,
-            'size_bytes' => (int) $upload->getSize(),
-            'status' => 'extracting',
+            'size_bytes' => $size,
+            'status' => $image ? 'ready' : 'extracting',
         ]);
         $relative = 'client-files/'.$client->id.'/'.$file->id.'.elr';
         $disk = Storage::disk('recordings');
         $disk->makeDirectory(dirname($relative));
-        app(RecordingCipher::class)->encryptFile((string) $upload->getRealPath(), $disk->path($relative), $file->id);
+        app(RecordingCipher::class)->encryptFile($plainPath, $disk->path($relative), $file->id);
         $file->forceFill(['path' => $relative])->save();
-        ExtractClientFileJob::dispatch($file->id);
+        if (! $image) {
+            ExtractClientFileJob::dispatch($file->id);
+        }
 
         return $file;
     }

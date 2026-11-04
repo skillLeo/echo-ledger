@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\LibraryController;
 use App\Http\Controllers\Api\LiveTranslateTokenController;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Http\Controllers\Api\RecordingController;
+use App\Http\Controllers\Api\RequestLinkController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SecurityController;
 use App\Http\Controllers\Api\SessionController;
@@ -96,6 +97,9 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('clients/{id}/send', [TeammateController::class, 'sendProject'])->name('api.clients.send');
             Route::post('shared-with-me/{id}/save', [TeammateController::class, 'save'])->name('api.shared.save');
             Route::delete('shared-with-me/{id}', [TeammateController::class, 'destroy'])->name('api.shared.destroy');
+            // Request links (v1.5): a public page others send files through.
+            Route::post('request-links', [RequestLinkController::class, 'store'])->name('api.request-links.store');
+            Route::delete('request-links/{id}', [RequestLinkController::class, 'destroy'])->name('api.request-links.destroy');
             Route::post('vocabulary/keyterms', [VocabularyController::class, 'addKeyterm'])->name('api.vocabulary.keyterms');
             Route::post('vocabulary/replacements', [VocabularyController::class, 'addReplacement'])->name('api.vocabulary.replacements');
             Route::patch('transcripts/{id}', [TranscriptEditController::class, 'update'])->name('api.transcripts.update');
@@ -122,6 +126,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->name('api.sessions.shares');
             Route::get('shares', [ShareController::class, 'all'])->name('api.shares');
             Route::get('shared-with-me', [TeammateController::class, 'index'])->name('api.shared');
+            Route::get('request-links', [RequestLinkController::class, 'index'])->name('api.request-links');
             Route::get('vocabulary', [VocabularyController::class, 'show'])->name('api.vocabulary');
             Route::get('clients/{id}/workspace', [ClientWorkspaceController::class, 'show'])->name('api.clients.workspace');
             Route::get('clients/{id}/bundle', [ClientWorkspaceController::class, 'bundle'])->name('api.clients.bundle');

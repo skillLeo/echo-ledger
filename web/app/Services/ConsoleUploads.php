@@ -324,14 +324,21 @@ final class ConsoleUploads
         ];
     }
 
-    /** Refuses (and deletes) an upload whose first bytes are not a sound or video container. */
-    private function assertMedia(Recording $recording): void
+    /** Whether the first chunk of an upload is a sound or video container, by its content (not its name). */
+    public static function firstChunkIsMedia(Recording $recording): bool
     {
         $path = Storage::disk('recordings')->path($recording->partsDirectory().'/0.part');
         $head = is_file($path) ? (string) file_get_contents($path, false, null, 0, self::SNIFF_BYTES) : '';
         $sniffed = strtolower((string) (new FinfoMimeTypeDetector)->detectMimeTypeFromBuffer($head));
         $accepted = [...array_map('strtolower', (array) config('echoledger.accepted_mimes')), ...self::VIDEO_CONTAINERS];
-        if ($head !== '' && in_array($sniffed, $accepted, true)) {
+
+        return $head !== '' && in_array($sniffed, $accepted, true);
+    }
+
+    /** Refuses (and deletes) an upload whose first bytes are not a sound or video container. */
+    private function assertMedia(Recording $recording): void
+    {
+        if (self::firstChunkIsMedia($recording)) {
             return;
         }
         $recording->captureSession->delete();
