@@ -4,22 +4,25 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\Clients;
 
+use App\Exceptions\ApiError;
 use App\Filament\Resources\Clients\Pages\CreateClient;
 use App\Filament\Resources\Clients\Pages\EditClient;
 use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Resources\Clients\RelationManagers\ContactsRelationManager;
 use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
+use App\Filament\Support\SharingActions;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Models\Client;
+use App\Services\Projects\ProjectTree;
 use App\Services\SettingsRepository;
 use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use BackedEnum;
+use Closure;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\CreateAction;
-use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\ColorPicker;
@@ -28,8 +31,10 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Resources\Pages\ListRecords;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
@@ -38,15 +43,25 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Validation\Rules\Unique;
 use UnitEnum;
 
-/** Client folders whose keyterms boost accuracy for live captions and final transcripts. */
+/**
+ * Projects (v1.5; the API and the database keep calling them clients): folders with subfolders whose recordings, files,
+ * notes and keyterms belong together. The list shows the top level; a search looks through every level.
+ */
 class ClientResource extends Resource
 {
     protected static ?string $model = Client::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
+    protected static ?string $modelLabel = 'project';
+
+    protected static ?string $navigationLabel = 'Projects';
+
+    protected static ?string $breadcrumb = 'Projects';
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedFolder;
+
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::Folder;
 
     protected static string|UnitEnum|null $navigationGroup = null;
 
@@ -56,7 +71,7 @@ class ClientResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->withCount(['keyterms', 'captureSessions'])
+        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->withCount(['keyterms', 'captureSessions', 'children'])
             ->withMax('captureSessions', 'started_at');
     }
 
@@ -65,7 +80,25 @@ class ClientResource extends Resource
         return $schema->components([
             Section::make()->columns(2)->schema([
                 TextInput::make('name')->required()->maxLength(120)
-                    ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule) => $rule->where('workspace_id', CurrentWorkspace::id())),
+                    // Unique among the projects of one folder (capitals ignored), like the API.
+                    ->rule(fn (Get $get, ?Client $record): Closure => function (string $attribute, mixed $value, Closure $fail) use ($get, $record): void {
+                        $parent = filled($get('parent_id')) ? (string) $get('parent_id') : null;
+                        if (is_string($value) && app(ProjectTree::class)->nameTaken((int) CurrentWorkspace::id(), $parent, $value, $record?->id)) {
+                            $fail(ProjectTree::NAME_TAKEN);
+                        }
+                    }),
+                Select::make('parent_id')->label('Inside')->placeholder('Top level (no folder)')->searchable()
+                    ->options(fn (?Client $record): array => SharingActions::folderOptions($record))
+                    ->default(fn (): ?string => is_string(request()->query('parent')) ? request()->query('parent') : null)
+                    // At most four levels, never inside itself (the same checks as the API).
+                    ->rule(fn (?Client $record): Closure => function (string $attribute, mixed $value, Closure $fail) use ($record): void {
+                        try {
+                            $tree = app(ProjectTree::class);
+                            $tree->assertCanPlace($record, $tree->parentFor((int) CurrentWorkspace::id(), $value));
+                        } catch (ApiError $e) {
+                            $fail($e->getMessage());
+                        }
+                    }),
                 // Devices parse this as #RRGGBB, so anything else is refused on the server too.
                 ColorPicker::make('color')->default('#8B5CF6')
                     ->regex('/^#[0-9A-Fa-f]{6}\z/')
@@ -102,7 +135,9 @@ class ClientResource extends Resource
     {
         return $table
             ->defaultSort('name')
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->orderByDesc('pinned'))
+            // The top level, like a file browser; a search looks through every level (rows then show their folder).
+            ->modifyQueryUsing(fn (Builder $query, ListRecords $livewire): Builder => $query->with('parent:id,name')->orderByDesc('pinned')
+                ->when(blank($livewire->getTableSearch()), fn (Builder $q): Builder => $q->whereNull('parent_id')))
             // The phone's client list: initials avatar, name, "2 recordings · Last call Oct 24"; a row opens the workspace.
             ->columns([
                 Split::make([
@@ -121,13 +156,15 @@ class ClientResource extends Resource
                 ActionGroup::make([
                     ViewAction::make()->label('Open'),
                     EditAction::make()->label('Settings'),
-                    DeleteAction::make(),
+                    SharingActions::renameProject(),
+                    SharingActions::moveProject(),
+                    SharingActions::deleteProject(),
                 ])->label('More')->tooltip('More')->color('gray'),
             ])
-            ->emptyStateIcon(Heroicon::OutlinedUsers)
-            ->emptyStateHeading('No clients yet')
-            ->emptyStateDescription('A client groups its recordings and teaches the engines its names and words.')
-            ->emptyStateActions([CreateAction::make()->label('Add a client')]);
+            ->emptyStateIcon(Heroicon::OutlinedFolder)
+            ->emptyStateHeading('No projects yet')
+            ->emptyStateDescription('A project groups its recordings, files and notes, and teaches the engines its names and words.')
+            ->emptyStateActions([CreateAction::make()->label('Add a project')]);
     }
 
     public static function getRelations(): array

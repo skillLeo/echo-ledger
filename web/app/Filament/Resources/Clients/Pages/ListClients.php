@@ -19,7 +19,7 @@ class ListClients extends ListRecords
 
     protected function getHeaderActions(): array
     {
-        return [CreateAction::make()->label('New client')->icon('heroicon-o-plus')];
+        return [CreateAction::make()->label('New project')->icon('heroicon-o-plus')];
     }
 
     /** The phone's flat list with its search pill, one column wide. */

@@ -32,6 +32,7 @@ use Filament\Tables\Table;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\URL;
+use UnitEnum;
 
 /**
  * Shared with me (v1.5): recordings and projects teammates sent the signed-in person, from any workspace. They can be
@@ -43,7 +44,9 @@ class SharedWithMe extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInboxArrowDown;
 
-    protected static ?int $navigationSort = 3;
+    protected static string|UnitEnum|null $navigationGroup = 'More';
+
+    protected static ?int $navigationSort = 2;
 
     protected static ?string $title = 'Shared with me';
 

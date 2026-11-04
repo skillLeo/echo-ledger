@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\Clients\Pages;
 
+use App\Enums\SourceApp;
 use App\Exceptions\ApiError;
 use App\Filament\Pages\ApiCredentials;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Support\RecordingRow;
+use App\Filament\Support\SharingActions;
 use App\Jobs\RefreshClientBriefJob;
 use App\Models\CallNote;
 use App\Models\CaptureSession;
@@ -16,10 +19,14 @@ use App\Models\Client;
 use App\Models\ClientBrief;
 use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
+use App\Models\FilingRule;
 use App\Services\ClientAi\ClientWorkspace;
+use App\Services\Projects\FilingRules;
+use App\Services\Projects\ProjectTree;
 use App\Services\SettingsRepository;
+use App\Support\UrduText;
 use Filament\Actions\Action;
-use Filament\Actions\DeleteAction;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -28,15 +35,17 @@ use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Livewire\Attributes\Url;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 
 /**
- * A client's workspace (v1.4, P4), as the apps show it: Overview (AI notes, the budget, the brief, the memory, the
- * latest call notes, Copy for AI), Recordings, Files (documents and pasted instructions) and Ask. Everything goes
- * through App\Services\ClientAi\ClientWorkspace, like the API.
+ * A project's page (v1.4 client workspace, a project since v1.5), as the apps show it: Overview (AI notes, the budget,
+ * the brief, the memory, the latest call notes, Copy for AI), Recordings (its subfolders, search and sort), Files
+ * (documents and pasted instructions), Ask and Rules (filing rules). Everything goes through the same services as the
+ * API: App\Services\ClientAi\ClientWorkspace, App\Services\Projects\ProjectTree and FilingRules.
  */
 class ViewClient extends ViewRecord
 {
@@ -44,7 +53,13 @@ class ViewClient extends ViewRecord
 
     protected static string $resource = ClientResource::class;
 
-    public const TABS = ['overview' => 'Overview', 'recordings' => 'Recordings', 'files' => 'Files', 'ask' => 'Ask'];
+    public const TABS = ['overview' => 'Overview', 'recordings' => 'Recordings', 'files' => 'Files', 'ask' => 'Ask', 'rules' => 'Rules'];
+
+    /** How the Recordings tab sorts (v1.5). */
+    public const SORTS = ['newest' => 'Newest first', 'oldest' => 'Oldest first', 'title' => 'By title', 'longest' => 'Longest first'];
+
+    /** Rule kinds as the Rules tab offers them. */
+    public const RULE_KINDS = ['title' => 'Title contains', 'app' => 'App is', 'contact' => 'Caller is (phone or email)'];
 
     /** The memory, grouped as the apps show it. */
     public const MEMORY_GROUPS = ['decision' => 'Decisions', 'question' => 'Open questions', 'change' => 'Changes', 'scope' => 'Scope'];
@@ -67,6 +82,17 @@ class ViewClient extends ViewRecord
     public string $memoryText = '';
 
     public string $question = '';
+
+    /** Search in the project's recordings (v1.5): title, caller or transcript words. */
+    #[Url(as: 'q')]
+    public string $search = '';
+
+    #[Url]
+    public string $sort = 'newest';
+
+    public string $ruleKind = 'title';
+
+    public string $ruleValue = '';
 
     public string $askLanguage = 'en';
 
@@ -103,8 +129,17 @@ class ViewClient extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            EditAction::make()->label('Settings')->icon(Heroicon::OutlinedCog6Tooth)->color('gray'),
-            DeleteAction::make()->iconButton()->icon(Heroicon::OutlinedTrash),
+            SharingActions::share(fn (): Client => $this->client(), fn (): array => []),
+            ActionGroup::make([
+                Action::make('newSubfolder')->label('New subfolder')->icon(Heroicon::OutlinedFolderPlus)
+                    ->url(fn (): string => ClientResource::getUrl('create', ['parent' => $this->client()->id]))
+                    ->visible(fn (): bool => $this->depth() < Client::MAX_DEPTH),
+                SharingActions::send(fn (): Client => $this->client()),
+                SharingActions::renameProject(),
+                SharingActions::moveProject(),
+                EditAction::make()->label('Settings')->icon(Heroicon::OutlinedCog6Tooth),
+                SharingActions::deleteProject(fn () => $this->redirect(ClientResource::getUrl('index'))),
+            ])->icon(Heroicon::OutlinedEllipsisVertical)->color('gray'),
         ];
     }
 
@@ -286,6 +321,33 @@ class ViewClient extends ViewRecord
         }
     }
 
+    // ---- Rules (v1.5) ------------------------------------------------------------------------------------------
+
+    public function addRule(): void
+    {
+        $this->validate([
+            'ruleKind' => ['required', 'in:'.implode(',', FilingRule::KINDS)],
+            'ruleValue' => ['required', 'string', 'max:120'],
+        ], [], ['ruleValue' => 'value', 'ruleKind' => 'kind']);
+        try {
+            ['created' => $created] = app(FilingRules::class)->add($this->client(), $this->ruleKind, $this->ruleValue);
+        } catch (ApiError $e) {
+            $this->addError('ruleValue', $e->getMessage());
+
+            return;
+        }
+        $this->ruleValue = '';
+        Notification::make()->title($created ? 'Rule added' : 'This project already has that rule')->success()->send();
+    }
+
+    public function removeRule(int $id): void
+    {
+        $rule = FilingRule::query()->where('client_id', $this->client()->id)->find($id);
+        if ($rule instanceof FilingRule) {
+            app(FilingRules::class)->remove($rule);
+        }
+    }
+
     // ---- State -------------------------------------------------------------------------------------------------
 
     /** The brief is being made, a file read or call notes written: the page refreshes until they are done. */
@@ -317,11 +379,14 @@ class ViewClient extends ViewRecord
         ];
 
         return $data + match ($this->tab) {
-            'recordings' => ['recordings' => CaptureSession::query()->where('client_id', $client->id)->with(['finalTranscript', 'client', 'labels', 'device'])
-                ->latest('started_at')->limit(100)->get()->map(fn (CaptureSession $s): array => RecordingRow::for($s) + [
-                    'url' => CaptureSessionResource::getUrl('view', ['record' => $s]),
-                ])->all(),
+            'recordings' => [
+                'recordings' => $this->recordings()->with(['finalTranscript', 'client', 'labels', 'device'])->limit(100)->get()
+                    ->map(fn (CaptureSession $s): array => RecordingRow::for($s) + ['url' => CaptureSessionResource::getUrl('view', ['record' => $s])])->all(),
+                'subfolders' => Client::query()->where('parent_id', $client->id)->withCount('captureSessions')->orderBy('name')->get(),
+                'sorts' => self::SORTS,
                 'libraryUrl' => CaptureSessionResource::getUrl('index', ['tableFilters' => ['client' => ['value' => $client->id]]])],
+            'rules' => ['rules' => FilingRule::query()->where('client_id', $client->id)->orderBy('id')->get(), 'kinds' => self::RULE_KINDS,
+                'apps' => collect(SourceApp::cases())->mapWithKeys(fn (SourceApp $a): array => [$a->value => $a->getLabel()])->all()],
             'files' => ['files' => ClientFile::query()->where('client_id', $client->id)->latest()->get()],
             'ask' => ['configured' => $service->configured(), 'credentialsUrl' => ApiCredentials::getUrl()],
             default => [
@@ -359,9 +424,47 @@ class ViewClient extends ViewRecord
         return $client;
     }
 
-    /** "Clients > Name", without a trailing "View". */
+    /**
+     * The Recordings tab's list: the project's own recordings, narrowed by the search and in the chosen order.
+     *
+     * @return Builder<CaptureSession>
+     */
+    private function recordings(): Builder
+    {
+        $query = CaptureSession::query()->where('workspace_id', $this->client()->workspace_id)->where('client_id', $this->client()->id);
+        $search = trim($this->search);
+        if ($search !== '') {
+            $pattern = '%'.strtr(mb_strtolower($search), ['!' => '!!', '%' => '!%', '_' => '!_']).'%';
+            $query->where(fn (Builder $q) => CaptureSessionsTable::searchDisplayedTitle($q, $search)
+                ->orWhereRaw("LOWER(caller_name) LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereHas('finalTranscript', fn (Builder $t) => $t->where('search_text', 'like', '%'.UrduText::fold($search).'%')));
+        }
+
+        return match ($this->sort) {
+            'oldest' => $query->oldest('started_at'),
+            'title' => $query->orderByRaw('LOWER(COALESCE(title, caller_name, source_app))'),
+            'longest' => $query->orderByDesc('duration_ms'),
+            default => $query->latest('started_at'),
+        };
+    }
+
+    /** Levels from the top down to this project: 1 at the top. */
+    private function depth(): int
+    {
+        return ProjectTree::depth($this->client()->id, app(ProjectTree::class)->parents($this->client()->workspace_id));
+    }
+
+    /** "Projects > Acme > Website > Name": the folders above it, each a link. */
     public function getBreadcrumbs(): array
     {
-        return $this->getResourceBreadcrumbs();
+        $client = $this->client();
+        $nodes = Client::query()->where('workspace_id', $client->workspace_id)->get(['id', 'parent_id', 'name'])
+            ->mapWithKeys(fn (Client $c): array => [$c->id => ['parent_id' => $c->parent_id, 'name' => $c->name]])->all();
+        $crumbs = [ClientResource::getUrl('index') => 'Projects'];
+        foreach (ProjectTree::pathOf($client->id, $nodes) as $ancestor) {
+            $crumbs[ClientResource::getUrl('view', ['record' => $ancestor['id']])] = $ancestor['name'];
+        }
+
+        return [...$crumbs, $client->name];
     }
 }

@@ -9,7 +9,6 @@ use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientKeyterm;
-use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -31,7 +30,7 @@ it('renders the clients list, create and edit pages', function () {
     $admin = $this->signInAsAdmin();
     $client = Client::factory()->create(['user_id' => $admin->id, 'name' => 'Acme Holdings']);
 
-    $this->get('/admin/clients')->assertOk()->assertSee('Clients');
+    $this->get('/admin/clients')->assertOk()->assertSee('Projects');
     $this->get('/admin/clients/create')->assertOk();
     $this->get('/admin/clients/'.$client->id.'/edit')->assertOk()->assertSee('Acme Holdings', false);
 });
@@ -136,7 +135,7 @@ it('rejects a duplicate client name for the same admin but allows it for another
     $this->panelComponent(CreateClient::class)
         ->fillForm(['name' => 'Acme Holdings'])
         ->call('create')
-        ->assertHasFormErrors(['name' => 'unique']);
+        ->assertHasFormErrors(['name']);
 
     $this->panelComponent(CreateClient::class)
         ->fillForm(['name' => 'Globex'])
@@ -192,7 +191,7 @@ it('refuses to rename a client to a name already in use', function () {
     $this->panelComponent(EditClient::class, ['record' => $client->id])
         ->fillForm(['name' => 'Taken'])
         ->call('save')
-        ->assertHasFormErrors(['name' => 'unique']);
+        ->assertHasFormErrors(['name']);
 });
 
 it('returns 404 when editing another admin\'s client', function () {
@@ -208,8 +207,9 @@ it('deletes a client from the list, keeping its sessions but detaching them', fu
     $client->keyterms()->create(['term' => 'Falcon']);
     $session = CaptureSession::factory()->create(['user_id' => $admin->id, 'client_id' => $client->id]);
 
+    // Since v1.5 a project's delete sends its recordings to the Inbox (ProjectTree::delete).
     $this->panelComponent(ListClients::class)
-        ->callAction(TestAction::make(DeleteAction::class)->table($client));
+        ->callAction(TestAction::make('deleteProject')->table($client));
 
     expect(Client::query()->find($client->id))->toBeNull()
         ->and(ClientKeyterm::query()->count())->toBe(0)
@@ -222,7 +222,7 @@ it('deletes a client from its edit page and returns to the list', function () {
     $client = Client::factory()->create(['user_id' => $admin->id]);
 
     $this->panelComponent(EditClient::class, ['record' => $client->id])
-        ->callAction(DeleteAction::class)
+        ->callAction('deleteProject')
         ->assertRedirect(ListClients::getUrl());
 
     expect(Client::query()->count())->toBe(0);

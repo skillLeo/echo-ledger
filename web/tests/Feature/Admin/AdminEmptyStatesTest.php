@@ -40,8 +40,8 @@ it('offers to add a client when there are none', function () {
     $this->signInAsAdmin();
 
     $this->panelComponent(ListClients::class)
-        ->assertSee('No clients yet')
-        ->assertSee('Add a client');
+        ->assertSee('No projects yet')
+        ->assertSee('Add a project');
 });
 
 it('shows an offline notice only while the browser is offline', function () {

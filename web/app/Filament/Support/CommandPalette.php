@@ -23,7 +23,7 @@ use Throwable;
 
 /**
  * The console's command palette (Ctrl / Cmd + K, v1.1): pages and actions to go to, recordings whose title or
- * transcript matches (opening at the moment that matched), and clients.
+ * transcript matches (opening at the moment that matched), and projects.
  */
 final class CommandPalette implements GlobalSearchProvider
 {
@@ -48,7 +48,7 @@ final class CommandPalette implements GlobalSearchProvider
             ->orderBy('name')->limit(5)->get()
             ->map(fn (Client $c): GlobalSearchResult => new GlobalSearchResult($c->name, ClientResource::getUrl('edit', ['record' => $c])))->all();
         if ($clients !== []) {
-            $results->category('Clients', $clients);
+            $results->category('Projects', $clients);
         }
 
         return $results;
@@ -61,7 +61,7 @@ final class CommandPalette implements GlobalSearchProvider
             ['Dashboard', Dashboard::getUrl(), 'home overview usage chart'],
             ['Search recordings', Search::getUrl(), 'find transcript text words'],
             ['Sessions', CaptureSessionResource::getUrl('index'), 'recordings calls library voice notes upload'],
-            ['Clients', ClientResource::getUrl('index'), 'customers keyterms vocabulary corrections'],
+            ['Projects', ClientResource::getUrl('index'), 'clients customers folders keyterms vocabulary corrections'],
             ['Devices', DeviceResource::getUrl('index'), 'phones computers pair unpair'],
             ['Settings', Settings::getUrl(), 'retention language vocabulary bookmarks limit engines'],
             ['API credentials', ApiCredentials::getUrl(), 'keys assemblyai elevenlabs azure whisper'],

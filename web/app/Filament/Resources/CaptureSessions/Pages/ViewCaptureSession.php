@@ -13,6 +13,7 @@ use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Support\RecordingRow;
+use App\Filament\Support\SharingActions;
 use App\Http\Controllers\AdminMediaController;
 use App\Jobs\MakeCallNotesJob;
 use App\Models\CallNote;
@@ -30,7 +31,6 @@ use App\Services\FinalTranscriptCoordinator;
 use App\Services\LibraryOrganiser;
 use App\Services\Retranscriber;
 use App\Services\SettingsRepository;
-use App\Services\ShareLinks;
 use App\Services\TextReplacements;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
@@ -389,6 +389,7 @@ class ViewCaptureSession extends ViewRecord
             $this->shareAction(),
             ActionGroup::make([
                 CaptureSessionsTable::renameAction(),
+                SharingActions::send(fn (): CaptureSession => $this->session()),
                 $this->retryAction(),
                 $this->retranscribeAsAction(),
                 $this->secondEngineAction(),
@@ -565,38 +566,12 @@ class ViewCaptureSession extends ViewRecord
             });
     }
 
+    /** Share (v1.5 dialog): anyone with the link, a password, or named people; downloads on or off; an expiry or none. */
     private function shareAction(): Action
     {
-        return Action::make('share')
-            ->label('Share')->labeledFrom('sm')
-            ->visible(fn (): bool => ! $this->session()->hasNoAudio())
-            ->icon(Heroicon::OutlinedLink)
-            ->color('gray')
-            ->button()
-            ->modalDescription('A view-only link. Anyone with the link can read the transcript until it expires or you revoke it.')
-            ->schema([
-                Select::make('expires_in')->label('Expires after')->required()->default(86_400)
-                    ->options([3_600 => '1 hour', 86_400 => '1 day', 604_800 => '7 days']),
-                TextInput::make('password')->label('Password (optional)')->password()->revealable()->minLength(6)->maxLength(100),
-                Toggle::make('include_audio')->label('Include the recording')
-                    ->visible(fn (): bool => $this->session()->primaryRecording?->isReady() === true),
-                // Show as: the page can open in a ready Roman Urdu or English view.
-                Select::make('view')->label('Show the transcript as')->placeholder('Original words')
-                    ->options(fn (): array => array_intersect_key(TranscriptViews::VIEWS, array_flip($this->readyViews())))
-                    ->visible(fn (): bool => $this->readyViews() !== []),
-            ])
-            ->action(function (array $data): void {
-                try {
-                    ['url' => $url] = app(ShareLinks::class)->create($this->session(), (int) $data['expires_in'],
-                        filled($data['password'] ?? null) ? (string) $data['password'] : null, (bool) ($data['include_audio'] ?? false), $this->author(),
-                        is_string($data['view'] ?? null) ? $data['view'] : null);
-                } catch (ApiError $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
-
-                    return;
-                }
-                Notification::make()->title('Share link ready. Copy it now: it is shown only once.')->body($url)->persistent()->success()->send();
-            });
+        return SharingActions::share(fn (): CaptureSession => $this->session(), fn (): array => $this->readyViews(),
+            fn (): bool => $this->session()->primaryRecording?->isReady() === true)
+            ->visible(fn (): bool => ! $this->session()->hasNoAudio());
     }
 
     /**
