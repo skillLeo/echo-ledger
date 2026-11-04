@@ -182,7 +182,8 @@ describe("the sidebar's smart folders", () => {
     respondWith("library_folder", ({ folder }) => (folder === "inbox" ? [ITEMS[1], ITEMS[2]] : []));
     render(<MainApp />);
     const folders = await screen.findByRole("list", { name: "Smart folders" });
-    expect(within(folders).getAllByRole("button").map((b) => b.textContent)).toEqual(["Inbox2", "WhatsApp1", "Imported1"]);
+    // Shared with me is listed with nothing counted in it: a project sent with no recordings counts none.
+    expect(within(folders).getAllByRole("button").map((b) => b.textContent)).toEqual(["Inbox2", "WhatsApp1", "Imported1", "Shared with me"]);
     expect(callsOf("library_views")[0].tz).toEqual(expect.any(String));
     fireEvent.click(within(folders).getByRole("button", { name: "Inbox" }));
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
@@ -191,6 +192,23 @@ describe("the sidebar's smart folders", () => {
     fireEvent.click(screen.getByRole("button", { name: "Library" }));
     expect(await screen.findByRole("heading", { name: "Library" })).toBeInTheDocument();
     await waitFor(() => expect(titles()).toEqual(["Zoom with Acme", "WhatsApp call", "Imported memo"]));
+  });
+
+  it("opens Shared with me from the command palette with the sidebar collapsed", async () => {
+    appBackend();
+    respond("library_views", { folders: { inbox: 0, shared: 0 } });
+    respond("shared_with_me", { data: SHARED });
+    window.localStorage.setItem("echoledger-sidebar", "collapsed");
+    render(<MainApp />);
+    await screen.findByRole("heading", { name: "Library" });
+    await flushAsync();
+    expect(screen.queryByRole("list", { name: "Smart folders" })).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const input = within(await screen.findByRole("dialog", { name: "Command palette" })).getByRole("combobox");
+    fireEvent.change(input, { target: { value: "shared with me" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await screen.findByRole("heading", { name: "Shared with me" })).toBeInTheDocument();
+    expect(await screen.findByText("Northwind")).toBeInTheDocument();
   });
 
   it("lists none on a server that counts no folders", async () => {

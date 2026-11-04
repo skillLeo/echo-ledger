@@ -1,6 +1,6 @@
 // Ctrl / Cmd + K (plan B9): run an action, go to a page, or jump into a recording found in any transcript.
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { api, type AppStatus, type SearchResult } from "../../lib/ipc";
+import { api, type AppStatus, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import type { MainTab } from "../../lib/mainView";
@@ -19,12 +19,22 @@ export function paletteMatches(query: string, command: Pick<PaletteCommand, "lab
   return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => haystack.includes(w));
 }
 
+/** A smart folder of the Library the palette can open (the ones the sidebar lists). */
+export interface PaletteFolder {
+  folder: SmartFolder;
+  label: string;
+}
+
 /** The commands that make sense right now (recording or not, captions on or off). */
 export function paletteCommands(status: AppStatus, actions: {
   go: (tab: MainTab) => void;
   run: (fn: () => Promise<unknown>, ok?: string) => void;
+  /** The smart folders (since v1.5), here too so they open with the sidebar collapsed. */
+  folders?: readonly PaletteFolder[];
+  openFolder?: (folder: SmartFolder) => void;
 }): PaletteCommand[] {
   const recording = !!status.recording;
+  const openFolder = actions.openFolder;
   const list: PaletteCommand[] = [
     recording
       ? { id: "stop", label: "Stop recording", keywords: "end finish save", run: () => actions.run(api.stopRecording) }
@@ -46,6 +56,9 @@ export function paletteCommands(status: AppStatus, actions: {
     { id: "copy", label: "Copy the last 2 minutes of captions", keywords: "clipboard", run: () => actions.run(() => api.copyLastMinutes(2)) },
     { id: "sync", label: "Sync the library", keywords: "refresh download", run: () => actions.run(api.refreshLibrary, "Library synced") },
     { id: "library", label: "Go to Library", keywords: "recordings transcripts", run: () => actions.go("library") },
+    ...(openFolder ? (actions.folders ?? []).map(({ folder, label }) => (
+      { id: `folder-${folder}`, label: `Go to ${label}`, keywords: "smart folder library recordings", run: () => openFolder(folder) }
+    )) : []),
     { id: "projects", label: "Go to Projects", keywords: "clients folders workspace brief notes files ask", run: () => actions.go("projects") },
     { id: "record", label: "Go to Record", keywords: "microphone detection", run: () => actions.go("record") },
     { id: "activity", label: "Go to Activity", keywords: "notifications bell", run: () => actions.go("activity") },
@@ -54,19 +67,22 @@ export function paletteCommands(status: AppStatus, actions: {
   return list;
 }
 
-export function CommandPalette({ status, onClose, onGo, run, onOpenRecording }: {
+export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, folders, onFolder }: {
   status: AppStatus;
   onClose: () => void;
   onGo: (tab: MainTab) => void;
   run: (fn: () => Promise<unknown>, ok?: string) => void;
   onOpenRecording: (id: string, ms: number) => void;
+  /** The Library's smart folders the sidebar lists, and what opens one. */
+  folders?: readonly PaletteFolder[];
+  onFolder?: (folder: SmartFolder) => void;
 }) {
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const [found, setFound] = useState<SearchResult["data"]>([]);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const commands = useMemo(() => paletteCommands(status, { go: onGo, run }), [status, onGo, run]);
+  const commands = useMemo(() => paletteCommands(status, { go: onGo, run, folders, openFolder: onFolder }), [status, onGo, run, folders, onFolder]);
 
   useEffect(() => {
     const q = query.trim();

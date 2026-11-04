@@ -48,12 +48,12 @@ export function inFolderHere(item: LibraryItem, folder: SmartFolder): boolean | 
 }
 
 /**
- * The folders the sidebar lists with their counts: the Inbox always (recordings can be dropped on it), the others while
- * they hold something or are open. Nothing at all when the server sent no folders (a server older than v1.5).
+ * The folders the sidebar lists with their counts: the Inbox always (recordings can be dropped on it), Shared with me
+ * whenever the server has it (it counts recordings, so a project sent with none counts 0), the others while they hold
+ * something or are open. Nothing at all when the server sent no folders (a server older than v1.5).
  */
 export function shownFolders(counts: Partial<Record<SmartFolder, number>> | null | undefined, open: SmartFolder | null): { folder: SmartFolder; label: string; count: number }[] {
   if (!counts) return [];
-  return SMART_FOLDERS.filter(([folder]) => folder === "inbox" || folder === open || (counts[folder] ?? 0) > 0)
-    .filter(([folder]) => folder !== "shared" || counts.shared !== undefined)
-    .map(([folder, label]) => ({ folder, label, count: Math.max(0, counts[folder] ?? 0) }));
+  const listed = (folder: SmartFolder) => (folder === "shared" ? counts.shared !== undefined : folder === "inbox" || folder === open || (counts[folder] ?? 0) > 0);
+  return SMART_FOLDERS.filter(([folder]) => listed(folder)).map(([folder, label]) => ({ folder, label, count: Math.max(0, counts[folder] ?? 0) }));
 }

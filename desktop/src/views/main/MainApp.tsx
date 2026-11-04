@@ -15,6 +15,7 @@ import { SettingsView } from "./SettingsView";
 import { ProjectsView, useExpandedProjects } from "./ProjectsView";
 import { ProjectTree } from "./ProjectTree";
 import { SmartFolderList } from "./SmartFolders";
+import { shownFolders } from "../../lib/folders";
 import { CommandPalette } from "./CommandPalette";
 import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
@@ -517,6 +518,7 @@ export default function MainApp() {
       </main>
       {palette && (
         <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo}
+          folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok) => void run(fn, ok)}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}

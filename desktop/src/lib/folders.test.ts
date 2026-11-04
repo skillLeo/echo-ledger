@@ -26,10 +26,10 @@ describe("smart folders", () => {
     expect(inFolderHere(makeItem("d", { deleted: true, client: null }), "inbox")).toBe(false);
   });
 
-  it("list the Inbox always and the others while they hold something or are open", () => {
+  it("list the Inbox and Shared with me always and the others while they hold something or are open", () => {
     const counts = { inbox: 0, whatsapp: 31, zoom: 0, imported: 2, shared: 0 };
-    expect(shownFolders(counts, null).map((f) => [f.folder, f.count])).toEqual([["inbox", 0], ["whatsapp", 31], ["imported", 2]]);
-    expect(shownFolders(counts, "zoom").map((f) => f.folder)).toEqual(["inbox", "whatsapp", "zoom", "imported"]);
+    expect(shownFolders(counts, null).map((f) => [f.folder, f.count])).toEqual([["inbox", 0], ["whatsapp", 31], ["imported", 2], ["shared", 0]]);
+    expect(shownFolders(counts, "zoom").map((f) => f.folder)).toEqual(["inbox", "whatsapp", "zoom", "imported", "shared"]);
     expect(shownFolders({ inbox: 4, shared: 1 }, null).map((f) => f.label)).toEqual(["Inbox", "Shared with me"]);
   });
 
