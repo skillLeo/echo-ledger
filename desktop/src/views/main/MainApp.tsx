@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type ClientFolder, type LockStatus } from "../../lib/ipc";
+import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type ClientFolder, type LibraryViews, type LockStatus, type SmartFolder } from "../../lib/ipc";
+import { SmartFolderList } from "./SmartFolders";
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityUnread } from "./ActivityCentre";
@@ -68,6 +69,10 @@ export default function MainApp() {
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [expanded, toggleExpanded] = useExpandedProjects();
+  // Smart folders (since v1.5): their counts for the sidebar and the one the Library shows (null: every recording).
+  const [views, setViews] = useState<LibraryViews | null>(null);
+  const [libraryFolder, setLibraryFolder] = useState<SmartFolder | null>(null);
+  const [sharedFocus, setSharedFocus] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
   const [focus, setFocus] = useState<PendingFocus | null>(null);
@@ -233,20 +238,38 @@ export default function MainApp() {
       setProjectsError(errorMessage(e));
     }
   }, []);
+  // The smart folders' counts; a server older than v1.5 sends none and the sidebar lists no smart folders.
+  const loadViews = useCallback(async () => {
+    let tz: string | null = null;
+    try {
+      tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+    } catch {
+      // No time zone: the server counts in its own.
+    }
+    try {
+      setViews(await api.libraryViews(tz));
+    } catch {
+      // Offline: the last counts stay; the folders still open from what is saved here.
+    }
+  }, []);
   const ready = paired && restored && unlocked;
   useEffect(() => {
     if (!ready) return;
     void loadProjects();
+    void loadViews();
     let timer = 0;
     const un = listen("library:updated", () => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => void loadProjects(), RELOAD_AFTER_CHANGE_MS);
+      timer = window.setTimeout(() => {
+        void loadProjects();
+        void loadViews();
+      }, RELOAD_AFTER_CHANGE_MS);
     });
     return () => {
       window.clearTimeout(timer);
       un.then((f) => f()).catch(() => undefined);
     };
-  }, [ready, loadProjects]);
+  }, [ready, loadProjects, loadViews]);
   const changeProjects = useCallback((change: (list: ClientFolder[]) => ClientFolder[]) => setProjects((list) => change(list ?? [])), []);
   useEffect(() => {
     const scroll = restoredScroll.current;
@@ -317,7 +340,14 @@ export default function MainApp() {
 
   const openRecording = (id: string, ms = 0) => {
     setTab("library");
+    setLibraryFolder(null);
     setOpenRequest({ id, ms, seq: ++navigations.current });
+  };
+  /** The Library on a smart folder (null: every recording). */
+  const openFolder = (folder: SmartFolder | null) => {
+    setTab("library");
+    setLibraryFolder(folder);
+    setSharedFocus(null);
   };
   /** Opens a project's page (null: the list of projects). */
   const openProject = (id: string | null) => {
@@ -340,11 +370,15 @@ export default function MainApp() {
           {NAV.map(([id, label, Icon]) => (
             <div key={id} className="nav-group">
               <button type="button" className={`nav-btn ${tab === id ? "active" : ""}`} aria-current={tab === id ? "page" : undefined}
-                title={collapsed ? label : undefined} onClick={() => (id === "projects" ? openProject(null) : setTab(id))}>
+                title={collapsed ? label : undefined} onClick={() => (id === "projects" ? openProject(null) : id === "library" ? openFolder(null) : setTab(id))}>
                 <Icon size={20} /><span className="nav-label">{label}</span>
                 {id === "record" && status.recording && <span className="status-dot live" aria-hidden="true" />}
                 {id === "activity" && unread > 0 && <><span className="nav-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</span><span className="sr-only">, {unread} unread</span></>}
               </button>
+              {/* The smart folders (since v1.5): views of the Library, each with its count; the Inbox takes dropped recordings. */}
+              {id === "library" && !collapsed && (
+                <SmartFolderList counts={views?.folders} open={tab === "library" ? libraryFolder : null} onOpen={(folder) => openFolder(folder)} />
+              )}
               {/* The project tree (since v1.5): each project opens its page; recordings dragged onto one move into it. */}
               {id === "projects" && !collapsed && projects && projects.length > 0 && (
                 <ProjectTree projects={projects} label="Projects in the sidebar" variant="sidebar" selectedId={tab === "projects" ? projectId : null}
@@ -387,7 +421,8 @@ export default function MainApp() {
         )}
         {tab === "library" && (
           <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
-            initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={() => void pickImport()} onOpenClient={(id) => openProject(id)} />
+            initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={() => void pickImport()} onOpenClient={(id) => openProject(id)}
+            smartFolder={libraryFolder} onSmartFolder={openFolder} sharedFocus={sharedFocus} />
         )}
         {tab === "projects" && (
           <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}

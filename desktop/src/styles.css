@@ -971,3 +971,12 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .pick-row.blocked svg { color: var(--text-faint); }
 .pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick-note { flex: none; font-size: var(--text-xs); color: var(--text-faint); }
+.project-tree.smart-folders { margin-bottom: var(--space-1); }
+.project-tree.smart-folders .tree-row { padding-left: 24px; }
+.btn.inline-link { height: auto; padding: 0 2px; vertical-align: baseline; font-size: inherit; }
+.shared-list { gap: var(--space-2); }
+.shared-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); display: grid; gap: var(--space-2); background: var(--surface); }
+.shared-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.shared-note { margin: 0; color: var(--text-muted); font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+.shared-actions { gap: var(--space-2); }
+.shared-banner { margin-top: var(--space-3); font-size: var(--text-sm); }
