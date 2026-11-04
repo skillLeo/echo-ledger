@@ -260,14 +260,17 @@ final class TranscribeFinalJob implements ShouldQueue
     {
         $transcript = Transcript::query()->find($this->transcriptId);
         if ($transcript !== null && ! $transcript->status->isTerminal()) {
-            // Since v1.5 an Urdu or Auto recording waits and its engine is tried again (EngineWait); after the wait it
-            // fails as before.
-            if (app(EngineWait::class)->hold($transcript, EngineWait::UNAVAILABLE)) {
+            $error = mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000);
+            // Since v1.5 a crashed run of an Urdu or Auto recording is an interrupted one: it waits and its engine is tried
+            // again (EngineWait), and once the wait is over the next engine takes it as a backup (EngineFallbackJob).
+            if ($transcript->kind === TranscriptKind::Final && EngineWait::forUrdu($transcript)) {
+                app(TranscriptStore::class)->fail($transcript, $error, TranscriptErrorCode::Interrupted);
+
                 return;
             }
             $transcript->update([
                 'status' => TranscriptStatus::Failed,
-                'error' => mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000),
+                'error' => $error,
                 'error_code' => TranscriptErrorCode::Interrupted->value,
             ]);
             if ($transcript->kind === TranscriptKind::Final) {

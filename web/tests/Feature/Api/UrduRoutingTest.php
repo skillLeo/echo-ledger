@@ -262,6 +262,27 @@ describe('waiting for the engine', function () {
         app(TranscriptStore::class)->failWith($transcript->refresh(), TranscriptErrorCode::ProviderUnreachable);
         expect($transcript->refresh()->status)->toBe(TranscriptStatus::Failed);
     });
+
+    it('hands a recording whose runs keep crashing to the next engine as a backup once the wait is over', function () {
+        Carbon::setTestNow('2026-11-04 17:00:00');
+        $transcript = engineWaitTranscript($this);
+        // It has waited for Groq since 10:00: the six hours are over.
+        $transcript->update(['status' => TranscriptStatus::Processing, 'meta' => ['route' => [
+            'used' => 'groq', 'wanted' => 'groq', 'wait_started_at' => '2026-11-04T10:00:00+00:00', 'waits' => 15,
+        ]]]);
+
+        (new TranscribeFinalJob($transcript->id))->failed(new RuntimeException('worker died'));
+        expect($transcript->refresh()->status)->toBe(TranscriptStatus::Failed)
+            ->and($transcript->error_code)->toBe('interrupted')
+            ->and(engineWaitFailureNotices($transcript))->toBe(0);
+        engineWaitFallback($transcript);
+
+        expect($transcript->provider)->toBe('assemblyai')
+            ->and($transcript->status)->toBe(TranscriptStatus::Pending)
+            ->and($transcript->meta['route']['backup'])->toBeTrue()
+            ->and($transcript->meta['route']['backup_reason'])->toBe('waited')
+            ->and($transcript->meta['route']['tried'][0])->toMatchArray(['engine' => 'groq', 'code' => 'interrupted', 'transient' => 'unavailable']);
+    });
 });
 
 describe('refusals and other languages', function () {
