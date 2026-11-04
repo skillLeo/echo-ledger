@@ -6,9 +6,14 @@ use App\Enums\SourceDevice;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientFile;
+use App\Models\Recording;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
 use App\Models\User;
+use App\Services\ChunkedUploadService;
+use App\Services\ClientAi\ClientWorkspace;
+use App\Services\Sharing\RequestLinks;
+use App\Services\TempFileSweeper;
 use App\Stt\Support\WavFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Route;
@@ -51,13 +56,13 @@ function wav(int $bytes = 300_000): string
     return WavFile::header(1, 16000, 16, $bytes - 44).random_bytes($bytes - 44);
 }
 
-function docx(bool $word = true): string
+function docx(bool $word = true, string $text = 'Scope'): string
 {
     $path = tempnam(sys_get_temp_dir(), 'el-test-docx-');
     $zip = new ZipArchive;
     $zip->open($path, ZipArchive::OVERWRITE);
     $zip->addFromString('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>');
-    $zip->addFromString($word ? 'word/document.xml' : 'other/thing.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Scope</w:t></w:r></w:p></w:body></w:document>');
+    $zip->addFromString($word ? 'word/document.xml' : 'other/thing.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>'.$text.'</w:t></w:r></w:p></w:body></w:document>');
     $zip->close();
     $bytes = (string) file_get_contents($path);
     @unlink($path);
@@ -210,6 +215,18 @@ describe('the page', function () {
             ->assertJsonPath('message', 'This link takes at most 1 file.');
     });
 
+    it('refuses a small Word file whose body would unpack into too much', function () {
+        $link = requestLink($this);
+        $bomb = docx(text: str_repeat('a', ClientWorkspace::MAX_WORD_BODY_BYTES));
+        expect(strlen($bomb))->toBeLessThan(1024 * 1024);
+
+        sendWhole($this, $link['url'], $bomb, 'huge.docx')->assertStatus(413)->assertJsonPath('code', 'too_large')
+            ->assertJsonPath('message', ClientWorkspace::WORD_TOO_LARGE);
+        expect(unscoped(fn () => ClientFile::query()->count()))->toBe(0)
+            ->and(RequestUpload::query()->sole()->status)->toBe('refused')
+            ->and(Storage::disk('recordings')->directories('request-parts'))->toBe([]);
+    });
+
     it('refuses documents over 20 MB even when the link takes more', function () {
         $link = requestLink($this, ['max_mb' => 100]);
 
@@ -225,6 +242,63 @@ describe('the page', function () {
 
         $again = startUpload($this, $link['url'], $bytes, 'call.wav', 'audio/wav')->assertOk();
         expect($again->json('upload_id'))->toBe($first->json('upload_id'))->and($again->json('missing_chunks'))->toBe([1, 2]);
+    });
+
+    it('ends uploads nobody finished after a day, with their recording and parts, and stops counting them', function () {
+        $link = requestLink($this, ['max_files' => 2]);
+        $sound = wav(600_000);
+        $call = startUpload($this, $link['url'], $sound, 'call.wav', 'audio/wav')->assertCreated();
+        sendChunk($this, $link['url'], $call->json('upload_id'), 0, $sound, $call->json('chunk_size'))->assertOk();
+        $pdf = "%PDF-1.4\n".str_repeat('x', 300_000);
+        $scope = startUpload($this, $link['url'], $pdf, 'scope.pdf', 'application/pdf')->assertCreated();
+        sendChunk($this, $link['url'], $scope->json('upload_id'), 0, $pdf, $scope->json('chunk_size'))->assertOk();
+        $recording = RequestUpload::query()->findOrFail($call->json('upload_id'))->recording_id;
+        startUpload($this, $link['url'], wav(), 'third.wav', 'audio/wav')->assertStatus(422)->assertJsonPath('code', 'too_many_files');
+
+        app(TempFileSweeper::class)->sweep();
+        expect(RequestUpload::query()->where('status', 'uploading')->count())->toBe(2);
+
+        $this->travel(RequestLinks::ABANDONED_HOURS + 1)->hours();
+        // Before any sweep, uploads a day old no longer take the link's places.
+        $third = startUpload($this, $link['url'], wav(), 'third.wav', 'audio/wav')->assertCreated()->json('upload_id');
+        app(TempFileSweeper::class)->sweep();
+
+        expect(RequestUpload::query()->whereKey([$call->json('upload_id'), $scope->json('upload_id')])->pluck('status')->all())->toBe(['failed', 'failed'])
+            ->and(RequestUpload::query()->findOrFail($third)->status)->toBe('uploading')
+            ->and(unscoped(fn () => CaptureSession::query()->pluck('title')->all()))->toBe(['third'])
+            ->and(Recording::query()->find($recording))->toBeNull()
+            ->and(Storage::disk('recordings')->directoryExists("parts/{$recording}"))->toBeFalse()
+            ->and(Storage::disk('recordings')->directories('request-parts'))->toBe([]);
+        // Coming back to one says it was not finished.
+        sendChunk($this, $link['url'], $scope->json('upload_id'), 1, $pdf, $scope->json('chunk_size'))->assertStatus(409)
+            ->assertJsonPath('code', 'upload_finished')->assertJsonPath('message', RequestLinks::ABANDONED);
+    });
+
+    it('ends an unfinished upload an hour after its link is revoked, and keeps one whose every chunk came in', function () {
+        $link = requestLink($this);
+        $pdf = "%PDF-1.4\n".str_repeat('x', 300_000);
+        $scope = startUpload($this, $link['url'], $pdf, 'scope.pdf', 'application/pdf')->assertCreated();
+        sendChunk($this, $link['url'], $scope->json('upload_id'), 0, $pdf, $scope->json('chunk_size'))->assertOk();
+        // A recording whose request died after every chunk was in and the file put together.
+        $sound = wav(200_000);
+        $call = startUpload($this, $link['url'], $sound, 'late.wav', 'audio/wav')->assertCreated();
+        foreach ($call->json('missing_chunks') as $index) {
+            sendChunk($this, $link['url'], $call->json('upload_id'), $index, $sound, $call->json('chunk_size'))->assertOk();
+        }
+        app(ChunkedUploadService::class)->markComplete(Recording::query()->findOrFail(RequestUpload::query()->findOrFail($call->json('upload_id'))->recording_id));
+        $this->asToken($this->token)->deleteJson('/api/request-links/'.$link['id'])->assertNoContent();
+
+        $this->travel(30)->minutes();
+        app(TempFileSweeper::class)->sweep();
+        expect(RequestUpload::query()->findOrFail($scope->json('upload_id'))->status)->toBe('uploading');
+
+        $this->travel(31)->minutes();
+        app(TempFileSweeper::class)->sweep();
+        expect(RequestUpload::query()->findOrFail($scope->json('upload_id')))->status->toBe('failed')->error->toBe(RequestLinks::ABANDONED)
+            ->and(RequestUpload::query()->findOrFail($call->json('upload_id'))->status)->toBe('ready')
+            ->and(unscoped(fn () => CaptureSession::query()->where('title', 'late')->sole()->primaryRecording->isReady()))->toBeTrue()
+            ->and(RequestLink::query()->withoutGlobalScopes()->findOrFail($link['id'])->received)->toBe(1)
+            ->and(Storage::disk('recordings')->directories('request-parts'))->toBe([]);
     });
 
     it('throttles the page and every upload call', function () {

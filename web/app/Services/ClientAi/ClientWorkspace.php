@@ -23,6 +23,7 @@ use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptEditor;
 use App\Stt\SttManager;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -50,6 +51,11 @@ final class ClientWorkspace
     ];
 
     public const MAX_FILE_BYTES = 20 * 1024 * 1024;
+
+    /** The most a Word file's body (`word/document.xml`) may unpack to: a small file can otherwise unpack into gigabytes. */
+    public const MAX_WORD_BODY_BYTES = self::MAX_FILE_BYTES;
+
+    public const WORD_TOO_LARGE = 'This Word file is too large to read.';
 
     /** How many passages one question carries (about 8 000 tokens). */
     private const PASSAGES = 12;
@@ -197,7 +203,7 @@ final class ClientWorkspace
         $note->fill(['status' => 'ready', 'error' => null, 'model' => $result['model'], 'sections' => self::cleanNotes($result['sections'], $segments)])->save();
         $this->remember($note, $session);
         $this->suggestFixes($transcript, $client);
-        if ($brief?->edited !== true && ! ClientFile::query()->withoutGlobalScopes()->where('client_id', $client->id)->exists()) {
+        if ($brief?->edited !== true && ! self::briefFiles($client->id)->exists()) {
             RefreshClientBriefJob::dispatch($client->id);
         }
 
@@ -344,7 +350,7 @@ final class ClientWorkspace
         if ($brief->exists && $brief->edited && ! $force) {
             return $brief;
         }
-        $files = ClientFile::query()->withoutGlobalScopes()->where('client_id', $client->id)->where('status', 'ready')->orderBy('created_at')->get();
+        $files = self::briefFiles($client->id)->where('status', 'ready')->orderBy('created_at')->get();
         $documents = [];
         foreach ($files as $file) {
             $pdf = $file->mime === 'application/pdf' && $file->path !== null ? $this->original($file) : null;
@@ -375,6 +381,17 @@ final class ClientWorkspace
         ])->save();
 
         return $brief;
+    }
+
+    /**
+     * The files a brief is made from: all but images (since v1.5 from request links), which have no text. A project
+     * with only images keeps its brief from the call notes.
+     *
+     * @return Builder<ClientFile>
+     */
+    private static function briefFiles(string $clientId): Builder
+    {
+        return ClientFile::query()->withoutGlobalScopes()->where('client_id', $clientId)->where('mime', 'not like', 'image/%');
     }
 
     /** @return list<string> the latest ready notes of a client as plain text, oldest first */
@@ -550,14 +567,30 @@ final class ClientWorkspace
             if ($zip->open($path) !== true) {
                 throw new RuntimeException('This Word file could not be opened.');
             }
-            $xml = (string) $zip->getFromName('word/document.xml');
-            $zip->close();
+            try {
+                $size = self::wordBodySize($zip);
+                if ($size !== null && $size > self::MAX_WORD_BODY_BYTES) {
+                    throw new RuntimeException(self::WORD_TOO_LARGE);
+                }
+                // Read no more than the size it says it has, so a file that understates it cannot unpack further.
+                $xml = $size !== null && $size > 0 ? (string) $zip->getFromName('word/document.xml', $size) : '';
+            } finally {
+                $zip->close();
+            }
         } finally {
             @unlink($path);
         }
         $xml = (string) preg_replace(['~</w:p>~', '~<w:tab/>~', '~<w:br/>~'], ["\n", "\t", "\n"], $xml);
 
         return trim(html_entity_decode(strip_tags($xml), ENT_QUOTES | ENT_XML1, 'UTF-8'));
+    }
+
+    /** How many bytes an open Word file's body unpacks to, as the file says; null when it has none. */
+    public static function wordBodySize(ZipArchive $zip): ?int
+    {
+        $stat = $zip->statName('word/document.xml');
+
+        return $stat === false ? null : (int) $stat['size'];
     }
 
     // ---- Ask and the bundle ----------------------------------------------------------------------------------------

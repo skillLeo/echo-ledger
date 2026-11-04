@@ -9,6 +9,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\SttUseCase;
+use App\Enums\UploadStatus;
 use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -59,6 +60,14 @@ final class RequestLinks
     public const REFUSED = 'This link takes sound and video files (and, for a project, PDF, Word, text and image files). This file is none of them.';
 
     public const NEEDS_PROJECT = 'This link takes sound and video files only.';
+
+    /**
+     * An upload that has received nothing for this long is abandoned: it no longer counts toward the link's files, and
+     * TempFileSweeper ends it (sooner once its link is revoked or expired, as nobody can resume it then).
+     */
+    public const ABANDONED_HOURS = 24;
+
+    public const ABANDONED = 'This file was not finished. Send it again.';
 
     /** Bytes of the first chunk looked at to tell what a file really is. */
     private const SNIFF_BYTES = 64 * 1024;
@@ -137,11 +146,15 @@ final class RequestLinks
     {
         $sha = strtolower($file['sha256']);
         $size = (int) $file['size'];
-        $unfinished = $link->uploads()->where('sha256', $sha)->where('size_bytes', $size)->where('status', 'uploading')->first();
+        $since = now()->subHours(self::ABANDONED_HOURS);
+        $unfinished = $link->uploads()->where('sha256', $sha)->where('size_bytes', $size)->where('status', 'uploading')
+            ->where('updated_at', '>=', $since)->first();
         if ($unfinished instanceof RequestUpload) {
             return $unfinished;
         }
-        if ($link->uploads()->whereIn('status', ['uploading', 'ready'])->count() >= $link->max_files) {
+        $taken = $link->uploads()->where(fn ($q) => $q->where('status', 'ready')
+            ->orWhere(fn ($q) => $q->where('status', 'uploading')->where('updated_at', '>=', $since)))->count();
+        if ($taken >= $link->max_files) {
             throw new ApiError(422, 'too_many_files', 'This link takes at most '.$link->max_files.($link->max_files === 1 ? ' file.' : ' files.'));
         }
         if ($size > $link->max_mb * 1024 * 1024) {
@@ -212,7 +225,9 @@ final class RequestLinks
     public function chunk(RequestUpload $upload, int $index, string $sha256, $body): RequestUpload
     {
         if ($upload->status !== 'uploading') {
-            throw new ApiError(409, 'upload_complete', 'This file is already sent.');
+            throw $upload->status === 'ready'
+                ? new ApiError(409, 'upload_complete', 'This file is already sent.')
+                : new ApiError(409, 'upload_finished', $upload->error ?? 'This file was not taken.');
         }
         if ($upload->kind === 'recording') {
             $recording = $this->recordingOf($upload);
@@ -220,6 +235,8 @@ final class RequestLinks
             if ($index === 0 && ! ConsoleUploads::firstChunkIsMedia($recording)) {
                 $this->refuse($upload, self::REFUSED);
             }
+            // The chunks are the recording's; the upload's own time says it is still alive (ABANDONED_HOURS).
+            $upload->touch();
 
             return $upload->refresh();
         }
@@ -238,7 +255,8 @@ final class RequestLinks
         }
         $received = array_values(array_unique([...($upload->received_chunks ?? []), $index]));
         sort($received);
-        $upload->update(['received_chunks' => $received]);
+        // A chunk sent again changes nothing but still keeps the upload alive (ABANDONED_HOURS).
+        $upload->fill(['received_chunks' => $received])->touch();
 
         return $upload;
     }
@@ -275,8 +293,12 @@ final class RequestLinks
         try {
             $this->assemble($upload, $plain);
             $mime = self::sniffDocument((string) file_get_contents($plain, false, null, 0, self::SNIFF_BYTES), $upload->name);
-            if ($mime === null || ($mime === self::DOCUMENTS['docx'] && ! self::isWordFile($plain))) {
+            $word = $mime === self::DOCUMENTS['docx'] ? self::wordBodySize($plain) : null;
+            if ($mime === null || ($mime === self::DOCUMENTS['docx'] && $word === null)) {
                 $this->refuse($upload, self::REFUSED);
+            }
+            if ($word !== null && $word > ClientWorkspace::MAX_WORD_BODY_BYTES) {
+                $this->refuse($upload, ClientWorkspace::WORD_TOO_LARGE, 413, 'too_large');
             }
             $project = $this->project($upload->link);
             if ($project === null) {
@@ -321,8 +343,33 @@ final class RequestLinks
         return ['status' => 'ready'];
     }
 
+    /**
+     * Ends an upload nobody finished (TempFileSweeper): a recording still uploading is deleted, which erases its parts
+     * at once (CaptureSession::booted), and a document's parts go. One whose every chunk came in, but whose request
+     * died before it said so, counts as received instead.
+     */
+    public function abandon(RequestUpload $upload): void
+    {
+        $recording = $upload->kind === 'recording' && $upload->recording_id !== null ? Recording::query()->find($upload->recording_id) : null;
+        if ($recording !== null && in_array($recording->upload_status, [UploadStatus::Assembling, UploadStatus::Ready], true)) {
+            // Assembling is finished by recordings:recover; a later sweep sees it ready.
+            if ($recording->upload_status === UploadStatus::Ready) {
+                $this->received($upload);
+            }
+
+            return;
+        }
+        $session = $recording === null ? null
+            : CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereKey($recording->capture_session_id)->first();
+        if ($session !== null && $session->status === SessionStatus::Uploading) {
+            $session->delete();
+        }
+        Storage::disk('recordings')->deleteDirectory($upload->partsDirectory());
+        $upload->update(['status' => 'failed', 'error' => self::ABANDONED]);
+    }
+
     /** Ends an upload that is not what the link takes: what was sent of it is deleted. */
-    private function refuse(RequestUpload $upload, string $message): never
+    private function refuse(RequestUpload $upload, string $message, int $status = 422, string $code = 'unsupported_type'): never
     {
         if ($upload->kind === 'recording' && $upload->recording_id !== null) {
             // Still uploading: deleting the session erases the parts at once (CaptureSession::booted).
@@ -331,7 +378,7 @@ final class RequestLinks
         Storage::disk('recordings')->deleteDirectory($upload->partsDirectory());
         $upload->update(['status' => 'refused', 'error' => $message]);
 
-        throw new ApiError(422, 'unsupported_type', $message);
+        throw new ApiError($status, $code, $message);
     }
 
     private function recordingOf(RequestUpload $upload): Recording
@@ -396,20 +443,23 @@ final class RequestLinks
         };
     }
 
-    /** A Word file is a ZIP with the document's body in `word/document.xml`. */
-    private static function isWordFile(string $path): bool
+    /**
+     * A Word file is a ZIP with the document's body in `word/document.xml`: how many bytes that body unpacks to, or
+     * null when the file is no Word file.
+     */
+    private static function wordBodySize(string $path): ?int
     {
         $zip = new ZipArchive;
         try {
             if ($zip->open($path, ZipArchive::RDONLY) !== true) {
-                return false;
+                return null;
             }
-            $found = $zip->locateName('word/document.xml') !== false;
+            $size = ClientWorkspace::wordBodySize($zip);
             $zip->close();
 
-            return $found;
+            return $size;
         } catch (Throwable) {
-            return false;
+            return null;
         }
     }
 
