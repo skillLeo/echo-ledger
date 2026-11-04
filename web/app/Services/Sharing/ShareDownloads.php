@@ -52,7 +52,10 @@ final class ShareDownloads
             $primary = $session->recordings()->where('role', RecordingRole::Primary->value)->first();
             if ($primary instanceof Recording && $primary->isReady()) {
                 $audio = $this->uploads->decryptToTemp($primary);
-                $zip->addFile($audio, $base.'.'.(self::EXTENSIONS[strtolower($primary->mime)] ?? 'audio'));
+                $entry = $base.'.'.(self::EXTENSIONS[strtolower($primary->mime)] ?? 'audio');
+                $zip->addFile($audio, $entry);
+                // Stored as it is: packing audio again gains little and would run inside the request on every download.
+                $zip->setCompressionName($entry, ZipArchive::CM_STORE);
                 $added++;
             }
             $transcript = $session->transcripts()->where('status', TranscriptStatus::Completed->value)->get()

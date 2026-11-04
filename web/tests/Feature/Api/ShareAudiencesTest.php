@@ -159,6 +159,20 @@ describe('downloads and expiry', function () {
             ->and($this->workFiles())->toBe([]);
     });
 
+    it('puts the audio in the ZIP as it is, without packing it again on every download', function () {
+        $silence = 'OggS'.str_repeat("\0", 200_000);
+        $this->session = sharedRecording($this, 'Quiet call', $silence);
+        $response = browser($this)->get(pathOf(shareOf($this, ['allow_download' => true])).'/download')->assertOk();
+
+        $zip = new ZipArchive;
+        $zip->open($response->baseResponse->getFile()->getPathname());
+        $audio = collect(range(0, $zip->numFiles - 1))->map(fn (int $i): array => (array) $zip->statIndex($i))
+            ->first(fn (array $entry): bool => str_ends_with((string) $entry['name'], '.ogg'));
+        $zip->close();
+        expect($audio)->toMatchArray(['comp_method' => ZipArchive::CM_STORE, 'comp_size' => strlen($silence)])
+            ->and(zipEntries($response)[$audio['name']])->toBe($silence);
+    });
+
     it('writes the transcript of the ZIP in the link view once that view is ready', function () {
         $final = $this->session->finalTranscript()->firstOrFail();
         $final->update(['meta' => ['views' => ['status' => 'ready', 'fingerprint' => TranscriptViews::fingerprint($final), 'urdu' => ['بجٹ کی باتیں']]]]);
