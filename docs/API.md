@@ -612,6 +612,13 @@ Share links can now be for a project too, and say who may open them.
 when it is installed; the desktop app registers `echoledger://open?link=<url>` and the share page offers "Open in
 EchoLedger". Without the app the web page opens as before.
 
+`GET /api/links/resolve?url=<a /s/, /p/ or /r/ link of this server>` — `library:read`: what the link is for the
+caller, so the app can open it in place: `200 {"kind": "session", "session_id": "…"}` (a recording of the caller's
+workspace, or one sent to the caller), `{"kind": "project", "client_id": "…"}`, `{"kind": "shared", "shared_id":
+"…"}` (an item in Shared with me) or `{"kind": "request", "request_link_id": "…"}` (one of the caller's request
+links). Anything else — someone else's link, revoked, expired, unknown — is `404 not_found`, and the app opens the
+web page instead. The token is checked like the page checks it; nothing about other workspaces is told.
+
 ### `GET /api/search` — `library:read`, throttled (60/min/device) (since v1.1)
 Searches titles and transcript text (final and live) of every device. Query: `q` (2–200 characters; every word
 must match, `"quoted phrases"` stay together, case does not matter), and the optional filters `client_id`,
