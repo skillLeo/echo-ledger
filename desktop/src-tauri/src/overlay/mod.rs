@@ -1,4 +1,5 @@
-//! Overlay-type windows: caption overlay, dictation box, recording pill and review card. Built on first use and
+//! Overlay-type windows: caption overlay, dictation box, recording pill and the after-call window (the "Saved · Undo"
+//! toast, the ask-me chip and the unknown-app chip, label `review`). Built on first use and
 //! destroyed after they have been hidden for a while (lifecycle.rs, C9), always visible, unfocused and unfocusable
 //! (never `show()` or `set_focus()` — tao ≥ 0.37.1 would steal focus; tao builds them with `WS_EX_NOACTIVATE` and
 //! `SW_SHOWNOACTIVATE`, so one built mid-call never takes focus either); "hidden" = the view renders nothing and
@@ -75,7 +76,7 @@ fn title(label: &str) -> &'static str {
         crate::translate::WINDOW => "EchoLedger Live Translate",
         DICTATION => "EchoLedger dictation",
         PILL => "EchoLedger recording controls",
-        REVIEW => "EchoLedger review",
+        REVIEW => "EchoLedger after a call",
         _ => "EchoLedger",
     }
 }
@@ -150,7 +151,8 @@ pub fn redock<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
     let _ = window.set_position(PhysicalPosition::new(x, y));
 }
 
-/// Docks a window into `corner` of the primary monitor's work area (the review card: bottom-right, 18 px).
+/// Docks a window into `corner` of the primary monitor's work area (the after-call window: bottom-right, near the
+/// tray, 18 px).
 fn dock_on_primary<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
     let monitor = window.primary_monitor().ok().flatten().or_else(|| window.current_monitor().ok().flatten());
     let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else { return };
@@ -297,18 +299,18 @@ pub fn set_pill_visible(app: &AppHandle, visible: bool) {
     }
 }
 
-/// The review card (A2.2): shown with the newest undecided recording, or hidden.
-pub fn show_review<S: serde::Serialize>(app: &AppHandle, payload: S) {
-    lifecycle::show(app, REVIEW, "review");
-    lifecycle::emit(app, REVIEW, "review:show", payload);
+/// The after-call toast and chip (v1.5): the window shows `state`; with nothing in it the window may go.
+pub fn show_after_call(app: &AppHandle, state: &crate::after_call::AfterCallState) {
+    if state.is_empty() {
+        lifecycle::emit(app, REVIEW, "aftercall:state", state);
+        lifecycle::hide(app, REVIEW, "after_call");
+    } else {
+        lifecycle::show(app, REVIEW, "after_call");
+        lifecycle::emit(app, REVIEW, "aftercall:state", state);
+    }
 }
 
-pub fn hide_review(app: &AppHandle) {
-    lifecycle::emit(app, REVIEW, "review:hide", ());
-    lifecycle::hide(app, REVIEW, "review");
-}
-
-/// The "ask" chip for an unrecognised call app shares the review card's window.
+/// The "ask" chip for an unrecognised call app shares the after-call window.
 pub fn show_ask<S: serde::Serialize>(app: &AppHandle, payload: S) {
     lifecycle::show(app, REVIEW, "ask");
     lifecycle::emit(app, REVIEW, "ask:show", payload);

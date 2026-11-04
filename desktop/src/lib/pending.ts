@@ -1,4 +1,4 @@
-// Helpers for the Library's "Waiting for your decision" and "Uploads that need you" sections (A2.5, A5.1).
+// Helpers for the Library's waiting line ("2 calls waiting · Review") and "Uploads that need you" (A2.5, A5.1, v1.5).
 import { formatDuration, sourceAppLabel } from "./format";
 import type { PendingItem, UploadItem } from "./ipc";
 
@@ -18,6 +18,16 @@ export const discardAllConfirm = (count: number): string =>
 export const bulkNotice = (verb: "Kept" | "Discarded", count: number): string => `${verb} ${recordings(count)}`;
 
 const isCall = (item: PendingItem) => item.mode === "call" && item.sourceApp !== "voice_note";
+
+/** Recordings that wait for the person: one whose after-call chip still counts down keeps itself and is not listed. */
+export const waitingItems = (items: readonly PendingItem[]): PendingItem[] => items.filter((i) => !i.deadlineAt);
+
+/** The Library's slim line, "3 calls waiting" ("recordings" once a voice note is among them); "" for none. */
+export function waitingLine(items: readonly PendingItem[]): string {
+  if (items.length === 0) return "";
+  const noun = items.every(isCall) ? "call" : "recording";
+  return `${items.length} ${noun}${items.length === 1 ? "" : "s"} waiting`;
+}
 
 /**
  * The one-line summary of the waiting recordings, as the phone shows it:
@@ -39,15 +49,18 @@ export function waitingSummary(items: readonly PendingItem[], timeZone?: string)
   return [count, when, total].filter(Boolean).join(" · ");
 }
 
-/** The title when set, else `<Label> call`; voice notes read `Voice note` (same wording as the review card). */
-export function recordingTitle(title: string | null | undefined, sourceApp: string, mode: PendingItem["mode"] = "call"): string {
+/** The title when set, else "Call with <name>" when the meeting app named the other side, else `<Label> call`; voice
+ * notes read `Voice note`. */
+export function recordingTitle(title: string | null | undefined, sourceApp: string, mode: PendingItem["mode"] = "call", callerName?: string | null): string {
   const own = title?.trim();
   if (own) return own;
   if (mode !== "call" || sourceApp === "voice_note") return "Voice note";
+  const caller = callerName?.trim();
+  if (caller) return `Call with ${caller}`;
   return `${sourceAppLabel(sourceApp)} call`;
 }
 
-export const pendingTitle = (item: PendingItem): string => recordingTitle(item.title, item.sourceApp, item.mode);
+export const pendingTitle = (item: PendingItem): string => recordingTitle(item.title, item.sourceApp, item.mode, item.callerName);
 export const uploadTitle = (item: UploadItem): string => recordingTitle(item.title, item.sourceApp);
 
 /** Uploads that stopped for good and wait for Retry or Discard, oldest first (the queue order). */

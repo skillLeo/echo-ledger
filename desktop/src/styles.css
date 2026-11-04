@@ -426,14 +426,13 @@ button.segment.active { background: var(--accent-soft); }
 .queue-learn { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
 .queue-learn > span { flex: 1 1 auto; min-width: 0; }
 .queue-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-muted); flex: none; }
-/* The waiting recordings sit behind one summary card (the phone's "Keep or discard?" card); Review opens the list. */
-.queue-card { display: flex; align-items: center; gap: var(--space-3); min-width: 0; border: 0; background: var(--accent-soft); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); }
-.queue-card-icon { flex: none; width: 36px; height: 36px; display: grid; place-items: center; color: var(--accent-text); }
-.queue-card-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.queue-card .queue-head { padding: 0; }
-.queue-card .queue-label { color: var(--text); font-size: 16px; font-weight: 500; }
-.queue-card .queue-meta { color: var(--text-muted); font-size: var(--text-sm); }
-.queue-card > .btn { flex: none; }
+/* Recordings still waiting for Keep or Discard (left from before v1.5, or opened from the after-call chip) sit behind
+   one slim line, "2 calls waiting · Review"; Review opens the list. */
+.queue-slim { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 32px; padding: 0 var(--space-1) 0 var(--space-3); border-radius: var(--radius-field); background: var(--surface-3); color: var(--text-muted); font-size: var(--text-sm); }
+.queue-slim svg { flex: none; }
+.queue-slim-label { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); font-weight: 500; color: var(--text); }
+.queue-slim-sep { flex: none; }
+.queue-slim > .btn { flex: none; height: 28px; }
 .queue-list { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .queue-bulk { justify-content: flex-start; }
 .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent); animation: spin 0.9s linear infinite; flex: none; }

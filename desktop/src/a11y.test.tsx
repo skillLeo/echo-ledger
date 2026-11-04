@@ -9,7 +9,7 @@ import PillApp from "./views/pill/PillApp";
 import ReviewApp from "./views/review/ReviewApp";
 import DictationApp from "./views/dictation/DictationApp";
 import { emitEvent, flushAsync, pushChannelMessage, resetTauriMock, respondAll, setWindowLabel } from "./test/tauri";
-import { makeItem, makePendingItem, makeRecordingState, makeReviewPayload, makeSettings, makeStatus, makeTranscript, makeUploadItem } from "./test/fixtures";
+import { makeAfterCallState, makeChipItem, makeItem, makePendingItem, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeTranscript, makeUploadItem } from "./test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("./test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("./test/tauri")).eventModule);
@@ -47,7 +47,7 @@ beforeEach(() => {
     share_list: { data: [] },
     transcript_revisions: { data: [] },
     recording_state: makeRecordingState({ active: true, captions: true }),
-    review_state: makeReviewPayload(),
+    after_call_state: makeAfterCallState({ saved: makeSavedToast(), ask: makeChipItem("p1") }),
     overlay_set_hit_regions: null,
     subscribe_captions: null,
   });
@@ -76,7 +76,7 @@ describe("screen-reader names (C7)", () => {
     expect(unnamed()).toEqual([]);
   });
 
-  it("names every control of the caption overlay, the pill, the review card and the dictation bar", async () => {
+  it("names every control of the caption overlay, the pill, the after-call toast and chip and the dictation bar", async () => {
     for (const [label, View] of [["overlay", OverlayApp], ["pill", PillApp], ["review", ReviewApp], ["dictation", DictationApp]] as const) {
       setWindowLabel(label);
       render(<View />);
@@ -85,7 +85,7 @@ describe("screen-reader names (C7)", () => {
         await pushChannelMessage({ kind: "status", live: true, recording: true, provider: "assemblyai", message: null });
         await emitEvent("overlay:visibility", true);
       }
-      if (label === "review") await emitEvent("review:show", makeReviewPayload());
+      if (label === "review") await emitEvent("aftercall:state", makeAfterCallState({ saved: makeSavedToast(), ask: makeChipItem("p1") }));
       await act(async () => undefined);
       expect(unnamed(), label).toEqual([]);
       cleanup();

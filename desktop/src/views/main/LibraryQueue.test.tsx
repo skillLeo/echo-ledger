@@ -1,5 +1,5 @@
-// The Library's "Waiting for your decision" and "Uploads that need you" sections (contract 5.3 item 1), driven
-// through the Library screen with the same commands and events the Rust core uses.
+// The Library's waiting line ("2 calls waiting · Review", v1.5) with its list, and "Uploads that need you" (contract
+// 5.3 item 1), driven through the Library screen with the same commands and events the Rust core uses.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { LibraryView } from "./LibraryView";
@@ -33,6 +33,8 @@ function mockBackend(pending: PendingItem[] = [], uploads: UploadItem[] = []) {
 }
 
 const reviewButton = () => screen.getByRole("button", { name: /^(Review|Hide)$/ });
+/** The slim "N calls waiting · Review" line (the large waiting card is gone since v1.5). */
+const waitingLine = () => screen.queryByTestId("waiting-line");
 
 /**
  * Renders the Library and, unless `open: false`, opens the waiting list with Review (a focus request may already
@@ -63,21 +65,31 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-describe("Waiting for your decision", () => {
+describe("Waiting recordings", () => {
   it("is absent when nothing waits", async () => {
     await renderLibrary();
-    expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument();
+    expect(waitingLine()).not.toBeInTheDocument();
     expect(callsOf("pending_list")).toHaveLength(1);
     expect(callsOf("upload_list")).toHaveLength(1);
   });
 
-  it("sits above the recordings in the list, with a count", async () => {
+  it("sits above the recordings in the list as one slim line with a count", async () => {
     await renderLibrary([makePendingItem("p1"), makePendingItem("p2")]);
     const list = screen.getByTestId("library-list");
-    const heading = within(list).getByRole("heading", { name: "Waiting for your decision" });
-    expect(heading.closest(".queue-head")).toHaveTextContent("2");
+    const heading = within(list).getByRole("heading", { name: "2 calls waiting" });
+    expect(heading.closest("[data-testid='waiting-line']")).toBe(waitingLine());
     const recording = await within(list).findByText("Zoom with Acme");
     expect(heading.compareDocumentPosition(recording) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("leaves out a recording whose after-call chip still counts down (it keeps itself)", async () => {
+    await renderLibrary([makePendingItem("p1", { deadlineAt: "2026-10-24T12:00:10Z" })], [], null, { open: false });
+    expect(waitingLine()).not.toBeInTheDocument();
+    await emitEvent("pending:changed", [makePendingItem("p1", { deadlineAt: "2026-10-24T12:00:10Z" }), makePendingItem("p2")]);
+    expect(waitingLine()).toHaveTextContent("1 call waiting·Review");
+    fireEvent.click(reviewButton());
+    expect(row("p2")).toBeInTheDocument();
+    expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument();
   });
 
   it("shows source, title, start time, duration, client and the first caption line", async () => {
@@ -126,7 +138,7 @@ describe("Waiting for your decision", () => {
     expect(row("p1")).toBeInTheDocument();
     fireEvent.click(within(row("p1")).getByRole("button", { name: "Discard" }));
     await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p1" }]));
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument());
+    await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
     expect(notify).toHaveBeenCalledWith("Discarded");
     expect(callsOf("pending_keep")).toHaveLength(0);
   });
@@ -147,7 +159,7 @@ describe("Waiting for your decision", () => {
     expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument();
     expect(within(row("p9")).getByText("New call")).toBeInTheDocument();
     await emitEvent("pending:changed", []);
-    expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument();
+    expect(waitingLine()).not.toBeInTheDocument();
     expect(listenerCount("pending:changed")).toBe(1);
     expect(listenerCount("uploads:changed")).toBe(1);
     unmount();
@@ -161,20 +173,21 @@ describe("Waiting for your decision", () => {
     fail("upload_list", "state not ready");
     render(<LibraryView notify={vi.fn()} />);
     expect(await screen.findByText("Zoom with Acme")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument();
+    expect(waitingLine()).not.toBeInTheDocument();
   });
 });
 
-describe("Waiting for your decision: summary card", () => {
+describe("Waiting recordings: slim line", () => {
   const items = () => [
     makePendingItem("p1", { startedAt: local(9, 30), durationMs: 36_000 }),
     makePendingItem("p2", { startedAt: local(8), durationMs: 102_000 }),
   ];
 
-  it("shows one summary card, collapsed, with no rows", async () => {
+  it("shows one slim line, collapsed, with no rows", async () => {
     await renderLibrary(items(), [], null, { open: false });
-    expect(screen.getByTestId("waiting-summary")).toHaveTextContent("2 calls waiting · oldest Oct 24 · 2:18 total");
-    expect(screen.getByRole("heading", { name: "Waiting for your decision" }).closest(".queue-head")).toHaveTextContent("2");
+    expect(waitingLine()).toHaveTextContent("2 calls waiting·Review");
+    expect(waitingLine()).toHaveAttribute("title", "2 calls waiting · oldest Oct 24 · 2:18 total");
+    expect(screen.queryByText("Waiting for your decision")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("pending-p2")).not.toBeInTheDocument();
@@ -194,20 +207,23 @@ describe("Waiting for your decision: summary card", () => {
     fireEvent.click(hide);
     expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument();
-    expect(screen.getByTestId("waiting-summary")).toBeInTheDocument();
+    expect(waitingLine()).toBeInTheDocument();
   });
 
-  it("follows the list in the summary and says recordings once a voice note waits", async () => {
+  it("follows the list in the line and says recordings once a voice note waits", async () => {
     await renderLibrary(items(), [], null, { open: false });
     await emitEvent("pending:changed", [...items(), makePendingItem("p3", { mode: "mic_note", sourceApp: "voice_note", startedAt: local(7), durationMs: 0 })]);
-    expect(screen.getByTestId("waiting-summary")).toHaveTextContent("3 recordings waiting · oldest Oct 24 · 2:18 total");
+    expect(screen.getByRole("heading", { name: "3 recordings waiting" })).toBeInTheDocument();
+    expect(waitingLine()).toHaveAttribute("title", "3 recordings waiting · oldest Oct 24 · 2:18 total");
+    await emitEvent("pending:changed", [makePendingItem("p1")]);
+    expect(screen.getByRole("heading", { name: "1 call waiting" })).toBeInTheDocument();
   });
 
   it("keeps every recording with Keep all", async () => {
     const { notify } = await renderLibrary(items());
     fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]));
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument());
+    await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
     expect(notify).toHaveBeenCalledWith("Kept 2 recordings");
     expect(callsOf("pending_discard")).toHaveLength(0);
   });
@@ -229,7 +245,7 @@ describe("Waiting for your decision: summary card", () => {
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(confirm).toHaveBeenCalledWith("Discard all 2 recordings? It can't be undone.");
     await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p1" }, { id: "p2" }]));
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument());
+    await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(notify).toHaveBeenCalledWith("Discarded 2 recordings");
     expect(callsOf("pending_keep")).toHaveLength(0);
@@ -257,7 +273,7 @@ describe("Waiting for your decision: summary card", () => {
     expect(within(row("p2")).getByRole("button", { name: "Keep" })).toBeDisabled();
     await act(async () => release(undefined));
     await act(async () => release(undefined));
-    await waitFor(() => expect(screen.queryByRole("heading", { name: "Waiting for your decision" })).not.toBeInTheDocument());
+    await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
   });
 
   it("starts collapsed again once the list empties and a new recording arrives", async () => {
@@ -269,7 +285,7 @@ describe("Waiting for your decision: summary card", () => {
   });
 });
 
-describe("Waiting for your decision: rename", () => {
+describe("Waiting recordings: rename", () => {
   const titleBox = (id: string) => within(row(id)).getByRole("textbox", { name: "Title" });
 
   it("opens the title for editing with the current title, focused", async () => {
@@ -337,7 +353,7 @@ describe("Waiting for your decision: rename", () => {
   });
 });
 
-describe("Waiting for your decision: assign client", () => {
+describe("Waiting recordings: assign client", () => {
   const clientSelect = (id: string) => within(row(id)).getByRole("combobox", { name: "Client" });
 
   it("loads the clients once and offers No client first", async () => {
@@ -407,7 +423,7 @@ describe("Waiting for your decision: assign client", () => {
   });
 });
 
-describe("Waiting for your decision: opened from the review card or the tray", () => {
+describe("Waiting recordings: opened from the after-call chip or the tray", () => {
   it("highlights the requested row, scrolls to it and opens its title when asked", async () => {
     await renderLibrary([makePendingItem("p1"), makePendingItem("p2")], [], { id: "p2", rename: true, seq: 1 });
     await waitFor(() => expect(row("p2")).toHaveClass("highlight"));

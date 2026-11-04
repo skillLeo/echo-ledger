@@ -19,7 +19,7 @@ type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark" | "lang
 
 /**
  * Loom-style recording controls in the 352 x 84 `pill` window: REC + timer, source, Me/Client levels, Pause/Resume,
- * Stop (the review card follows), Cancel with an inline confirm, Mark, the language chip, Captions on/off and Hide. Under the pill, a
+ * Stop ("After a call" decides what follows), Cancel with an inline confirm, Mark, the language chip, Captions on/off and Hide. Under the pill, a
  * bookmark (from here or the shortcut) shows its tag presets and Undo for a few seconds, and a call that has not
  * heard the other side for 30 s shows a warning. The window never takes
  * focus: every control works on click, and only the pill itself is reported as a hit region.
@@ -261,7 +261,7 @@ export default function PillApp() {
             <PillButton label={paused ? "Resume recording" : "Pause recording"} onClick={togglePause}>
               {paused ? <PlayIcon size={14} /> : <PauseIcon size={14} />}
             </PillButton>
-            <PillButton label="Stop and review" className="stop" onClick={stop}><StopIcon size={14} /></PillButton>
+            <PillButton label="Stop recording" className="stop" onClick={stop}><StopIcon size={14} /></PillButton>
             <PillButton label="Cancel recording" onClick={() => setConfirming(true)}><TrashIcon size={15} /></PillButton>
             <PillButton label="Bookmark this moment" onClick={markNow}><BookmarkIcon size={15} /></PillButton>
             <button type="button" className="rec-lang" data-testid="pill-language" onClick={cycleLanguage}

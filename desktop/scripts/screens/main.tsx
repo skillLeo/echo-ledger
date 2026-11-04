@@ -5,7 +5,7 @@ import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeMicUser, makeRecordingState, makeSettings, makeStatus } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeMicUser, makeRecordingState, makeSavedToast, makeSettings, makeStatus } from "../../src/test/fixtures";
 import { ACTIVITY, ANSWER, CLIENTS, ITEMS, NOTES_R5, PENDING, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 
 const params = new URLSearchParams(location.search);
@@ -63,7 +63,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   dictation_history: () => [],
   marker_tags: () => ["Budget", "Decision", "Follow up"],
   recording_state: () => makeRecordingState({ elapsedMs: 134_000, sourceApp: "whatsapp", language: "ur" }),
-  review_state: () => ({ item: { ...PENDING[0], durationMs: 272_000 }, timeout: "keep", queueLength: 1 }),
+  // The after-call window: "Saved · … · Undo" over the Ask-me chip (its line at 6 of 10 s); both stay for the picture.
+  after_call_state: () =>
+    makeAfterCallState({
+      saved: makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
+      ask: makeChipItem(PENDING[1].id, { ...PENDING[1], deadlineAt: new Date(Date.now() + 6_000).toISOString() }),
+    }),
   subscribe_captions: ({ onEvent }) => {
     captions = onEvent as typeof captions;
   },
@@ -81,7 +86,7 @@ async function render() {
     root.render(<React.StrictMode><MainApp /></React.StrictMode>);
     return;
   }
-  // The floating windows side by side on one canvas: the recording pill, the save card and the captions.
+  // The floating windows side by side on one canvas: the recording pill, the after-call toast and chip, and the captions.
   const [{ default: PillApp }, { default: ReviewApp }, { default: OverlayApp }] = await Promise.all([
     import("../../src/views/pill/PillApp"), import("../../src/views/review/ReviewApp"), import("../../src/views/overlay/OverlayApp"),
   ]);

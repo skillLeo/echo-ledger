@@ -3,7 +3,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::settings::{AskBeforeSaving, DecisionTimeout};
+use crate::settings::AfterCall;
 
 fn patch(value: serde_json::Value) -> SettingsPatch {
     serde_json::from_value(value).expect("the UI's patch shape")
@@ -47,10 +47,20 @@ fn an_empty_patch_changes_nothing() {
 }
 
 #[test]
-fn the_v1_1_keys_are_applied() {
+fn after_a_call_and_the_caption_lines_are_applied() {
     let mut s = Settings::default();
-    patch(json!({"askBeforeSaving": "never", "decisionTimeout": "discard", "captionLines": 2})).apply(&mut s);
-    assert_eq!((s.ask_before_saving, s.decision_timeout, s.caption_lines), (AskBeforeSaving::Never, DecisionTimeout::Discard, 2));
+    patch(json!({"afterCall": "ask", "captionLines": 2})).apply(&mut s);
+    assert_eq!((s.after_call, s.caption_lines), (AfterCall::Ask, 2));
+    patch(json!({"afterCall": "keep"})).apply(&mut s);
+    assert_eq!(s.after_call, AfterCall::Keep);
+}
+
+#[test]
+fn a_patch_with_the_keys_from_before_v1_5_changes_nothing_and_is_not_refused() {
+    // An exported settings file from v1.4 still carries askBeforeSaving / decisionTimeout.
+    let mut s = Settings { after_call: AfterCall::Ask, ..Settings::default() };
+    patch(json!({"askBeforeSaving": "never", "decisionTimeout": "discard"})).apply(&mut s);
+    assert_eq!(s, Settings { after_call: AfterCall::Ask, ..Settings::default() });
 }
 
 #[test]

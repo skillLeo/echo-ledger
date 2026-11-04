@@ -9,6 +9,8 @@ import {
   recordingTitle,
   uploadTitle,
   verifyingUploads,
+  waitingItems,
+  waitingLine,
   waitingSummary,
 } from "./pending";
 import { makePendingItem, makeUploadItem } from "../test/fixtures";
@@ -93,6 +95,29 @@ describe("recordingTitle", () => {
     expect(pendingTitle(makePendingItem("p", { mode: "mic_note", sourceApp: "voice_note" }))).toBe("Voice note");
     expect(uploadTitle(makeUploadItem("u", { title: "Board" }))).toBe("Board");
     expect(uploadTitle(makeUploadItem("u", { sourceApp: "whatsapp" }))).toBe("WhatsApp call");
+  });
+
+  it("names the other side of an untitled call when the meeting app did (v1.5)", () => {
+    expect(pendingTitle(makePendingItem("p", { callerName: " Omar Khan " }))).toBe("Call with Omar Khan");
+    expect(pendingTitle(makePendingItem("p", { callerName: "  " }))).toBe("Zoom call");
+    expect(pendingTitle(makePendingItem("p", { title: "Budget", callerName: "Omar" }))).toBe("Budget");
+    expect(pendingTitle(makePendingItem("p", { mode: "mic_note", sourceApp: "voice_note", callerName: "Omar" }))).toBe("Voice note");
+  });
+});
+
+describe("waiting line (v1.5)", () => {
+  it("lists only recordings that wait for the person, not one whose after-call chip counts down", () => {
+    const items = [makePendingItem("a"), makePendingItem("b", { deadlineAt: "2026-11-04T10:00:10Z" }), makePendingItem("c")];
+    expect(waitingItems(items).map((i) => i.id)).toEqual(["a", "c"]);
+    expect(waitingItems([])).toEqual([]);
+  });
+
+  it("counts calls, and says recordings once a voice note is among them", () => {
+    expect(waitingLine([])).toBe("");
+    expect(waitingLine([makePendingItem("a")])).toBe("1 call waiting");
+    expect(waitingLine([makePendingItem("a"), makePendingItem("b")])).toBe("2 calls waiting");
+    expect(waitingLine([makePendingItem("a"), makePendingItem("v", { mode: "mic_note", sourceApp: "voice_note" })])).toBe("2 recordings waiting");
+    expect(waitingLine([makePendingItem("v", { mode: "mic_note", sourceApp: "voice_note" })])).toBe("1 recording waiting");
   });
 });
 

@@ -29,8 +29,7 @@ fn customised() -> Settings {
         dictation_output: "clipboard".into(),
         client_id: Some("01JB8Q4C1D2E3F4G5H6J7K8M9N".into()),
         consent_acknowledged: true,
-        ask_before_saving: AskBeforeSaving::AutoOnly,
-        decision_timeout: DecisionTimeout::Wait,
+        after_call: AfterCall::Ask,
         caption_lines: 5,
         pill_position: Some(PillPosition { x: -1_520, y: 64 }),
         ask_unknown_apps: true,
@@ -97,8 +96,7 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert!(!s.ask_unknown_apps, "the unknown-app chip is off by default");
     assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
     assert!(!s.browser_automation, "reading browser tabs is opt-in");
-    assert_eq!(s.ask_before_saving, AskBeforeSaving::Always);
-    assert_eq!(s.decision_timeout, DecisionTimeout::Keep);
+    assert_eq!(s.after_call, AfterCall::Keep, "a call is kept at once, with Undo");
     assert_eq!(s.caption_lines, 3);
     assert_eq!(s.pill_position, None, "the pill starts at the top centre");
     assert!(s.auto_record_apps.is_empty(), "every call app records automatically");
@@ -131,8 +129,8 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
         keys,
         [
             "activityNotifications",
+            "afterCall",
             "appLock",
-            "askBeforeSaving",
             "askUnknownApps",
             "autoMode",
             "autoRecordApps",
@@ -144,7 +142,6 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "clientId",
             "consentAcknowledged",
             "contentProtection",
-            "decisionTimeout",
             "deviceId",
             "deviceName",
             "dictationCleanup",
@@ -169,7 +166,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 37, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 36, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");
@@ -178,8 +175,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
         v["captionStyle"],
         json!({"size": "large", "width": "wide", "opacity": 60, "compact": true, "autoHideSeconds": 10, "meColor": "#22c55e", "clientColor": null})
     );
-    assert_eq!(v["askBeforeSaving"], "auto_only");
-    assert_eq!(v["decisionTimeout"], "wait");
+    assert_eq!(v["afterCall"], "ask");
     assert_eq!(v["captionLines"], 5);
     assert_eq!(v["pillPosition"], json!({"x": -1_520, "y": 64}));
     assert_eq!(v["siteRules"][0]["titleContains"], "Private notes");
@@ -398,15 +394,13 @@ fn one_bad_value_costs_only_its_own_key() {
     let s = Settings::from_value(json!({
         "serverUrl": "https://ledger.example.com",
         "autoMode": "sometimes",
-        "askBeforeSaving": "on_tuesdays",
-        "decisionTimeout": "discard",
+        "afterCall": "on_tuesdays",
         "pillPosition": {"x": "left", "y": 3},
         "contentProtection": false
     }));
     assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"));
     assert!(s.auto_mode, "an invalid value falls back to the default");
-    assert_eq!(s.ask_before_saving, AskBeforeSaving::Always);
-    assert_eq!(s.decision_timeout, DecisionTimeout::Discard);
+    assert_eq!(s.after_call, AfterCall::Keep);
     assert_eq!(s.pill_position, None);
     assert!(!s.content_protection);
 }
@@ -464,9 +458,42 @@ fn a_settings_file_from_version_one_loads_with_the_new_defaults() {
     assert_eq!(s.device_name.as_deref(), Some("Office"));
     assert_eq!(s.overlay_corner, Corner::TopRight);
     assert_eq!(
-        (s.ask_before_saving, s.decision_timeout, s.caption_lines, s.pill_position),
-        (AskBeforeSaving::Always, DecisionTimeout::Keep, 3, None)
+        (s.after_call, s.caption_lines, s.pill_position),
+        (AfterCall::Keep, 3, None)
     );
+}
+
+#[test]
+fn a_file_from_before_after_call_loads_as_keep_whatever_it_asked_before() {
+    // v1.5: "Ask before saving: Always" with "Keep waiting" piled calls up in the waiting list; the user asked for
+    // Keep automatically as the new default, so every older file becomes Keep. The old keys still read cleanly.
+    let d = dir();
+    let path = d.path().join("settings.json");
+    for (ask, timeout) in [("always", "wait"), ("auto_only", "discard"), ("never", "keep"), ("sometimes", "later")] {
+        std::fs::write(
+            &path,
+            format!(r#"{{"serverUrl": "https://ledger.example.com", "deviceId": "01JB8Q3R0Z5V1K7M9N2P4S6T8W", "askBeforeSaving": "{ask}", "decisionTimeout": "{timeout}", "autoMode": false}}"#),
+        )
+        .unwrap();
+        let s = Settings::load(&path);
+        assert_eq!(s.after_call, AfterCall::Keep, "{ask} + {timeout}");
+        assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"), "the pairing is kept");
+        assert!(!s.auto_mode, "the other settings are kept");
+    }
+    let s = Settings::load(&path);
+    s.save(&path).unwrap();
+    let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(written["afterCall"], "keep");
+    assert!(written.get("askBeforeSaving").is_none() && written.get("decisionTimeout").is_none(), "the next save drops the old keys");
+}
+
+#[test]
+fn ask_me_survives_a_save_and_load() {
+    let d = dir();
+    let path = d.path().join("settings.json");
+    Settings { after_call: AfterCall::Ask, ..Settings::default() }.save(&path).unwrap();
+    assert_eq!(Settings::load(&path).after_call, AfterCall::Ask);
+    assert_eq!(Settings::from_value(json!({"afterCall": "keep"})).after_call, AfterCall::Keep);
 }
 
 #[test]

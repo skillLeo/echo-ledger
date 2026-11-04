@@ -52,7 +52,8 @@ const SCREENS = [
   }],
   ["controls", "controls", async (page) => {
     await page.waitForSelector(".rec-pill");
-    await page.waitForSelector(".review-card");
+    await page.waitForSelector(".after-pill.saved");
+    await page.waitForSelector(".after-pill.chip");
     await page.waitForSelector(".overlay-card .caption-line");
   }],
 ];

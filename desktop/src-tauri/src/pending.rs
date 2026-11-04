@@ -1,8 +1,10 @@
-//! Keep / Discard after a recording ends (A2.1-A2.6). A finished recording that needs a decision stays on this
-//! computer as a `PendingDecision` in `pending.json` (atomic writes, tolerant loading, restored at start) and is
-//! not uploaded. Keep moves it to the upload queue; Discard deletes its files, uploads nothing, requests no
-//! transcript and queues its server session (if captions opened one) for deletion. The functions here touch only
-//! files, so the whole flow is unit-tested; `actions` adds locking, events and the review card.
+//! Keep / Discard after a recording ends (A2.1-A2.6, v1.5 "After a call"). A finished recording that is not kept at
+//! once stays on this computer as a `PendingDecision` in `pending.json` (atomic writes, tolerant loading, restored at
+//! start) and is not uploaded. With "Ask me" the after-call chip shows it and it keeps itself at `keep_at`, 10 s later;
+//! one without `keep_at` (the chip was never shown, it was opened in the main window, or it is left from before v1.5)
+//! waits in the Library's waiting list. Keep moves it to the upload queue; Discard deletes its files, uploads nothing,
+//! requests no transcript and queues its server session (if captions opened one) for deletion. The functions here
+//! touch only files, so the whole flow is unit-tested; `actions` adds locking, events and the after-call window.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -16,47 +18,22 @@ use crate::error::{AppError, AppResult};
 use crate::net::models::{CallerDto, LanguageMarkDto, MarkerDto, PauseDto, SegmentDto};
 use crate::net::sync::paths;
 use crate::net::uploader::{DiscardQueue, PendingUpload, UploadQueue};
-use crate::settings::{AskBeforeSaving, DecisionTimeout};
+use crate::settings::AfterCall;
 
 /// Every `pending_*` command answers this when the id is not (or no longer) waiting.
 pub const NOT_WAITING: &str = "This recording is no longer waiting.";
 pub const TITLE_TOO_LONG: &str = "Use 200 characters or fewer.";
-/// "If I don't choose within 60 s".
-pub const DECISION_WINDOW_SECS: i64 = 60;
+/// "Ask me": the chip keeps the recording by itself this long after the call ended.
+pub const CHIP_SECONDS: i64 = 10;
 const MAX_TITLE_CHARS: usize = 200;
 const MAX_FIRST_LINE_CHARS: usize = 140;
 /// The title of a recording recovered after a restart (since v1.3).
 pub const RECOVERED_TITLE: &str = "Recovered recording";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Decision {
-    Keep,
-    Discard,
-}
-
-/// Whether a finished recording waits for Keep / Discard (A2.6): Always → yes; Only automatic calls → only
-/// recordings auto mode started; Never → no. Voice notes come here with `auto = false`; imports and dictation never.
-pub fn should_ask(policy: AskBeforeSaving, auto: bool, mode: RecordingMode) -> bool {
-    let _ = mode; // every recording mode follows the same rule
-    match policy {
-        AskBeforeSaving::Always => true,
-        AskBeforeSaving::AutoOnly => auto,
-        AskBeforeSaving::Never => false,
-    }
-}
-
-/// What happens to an undecided recording when its time is up (A2.5); `None` = keep waiting.
-pub fn timeout_action(policy: DecisionTimeout) -> Option<Decision> {
-    match policy {
-        DecisionTimeout::Keep => Some(Decision::Keep),
-        DecisionTimeout::Discard => Some(Decision::Discard),
-        DecisionTimeout::Wait => None,
-    }
-}
-
-/// When the timeout applies: 60 s after the recording ended, or never for "Keep waiting".
-pub fn deadline(created_at: DateTime<Utc>, policy: DecisionTimeout) -> Option<DateTime<Utc>> {
-    timeout_action(policy).map(|_| created_at + chrono::Duration::seconds(DECISION_WINDOW_SECS))
+/// What "After a call" means for a finished recording: calls (automatic or by hand) follow the setting; voice notes
+/// were stopped on purpose and are always kept, with the same Undo.
+pub fn after_call(setting: AfterCall, mode: RecordingMode) -> AfterCall {
+    if mode == RecordingMode::Call { setting } else { AfterCall::Keep }
 }
 
 /// The review card's preview: the first final caption turn as `Me: …` / `Client: …`, at most 140 characters.
@@ -80,8 +57,8 @@ pub fn normalize_title(title: &str) -> AppResult<Option<String>> {
     Ok((!title.is_empty()).then(|| title.to_string()))
 }
 
-/// A recording waiting for Keep / Discard, as the UI sees it (section 4.3). Times are RFC 3339 UTC;
-/// `deadlineAt` is `null` for "Keep waiting".
+/// A recording waiting for Keep / Discard, as the UI sees it (section 4.3). Times are RFC 3339 UTC; `deadlineAt` is
+/// when the after-call chip keeps it by itself, `null` while it waits for the person.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingItem {
@@ -99,6 +76,8 @@ pub struct PendingItem {
     pub deadline_at: Option<String>,
     /// The language the final transcript will use (none = automatic: the client's or the console default).
     pub language: Option<String>,
+    /// Who the call was with (a meeting window's title), for "Call with <name>" while it has no title.
+    pub caller_name: Option<String>,
 }
 
 /// What `from_recording` needs besides the finished files.
@@ -163,6 +142,9 @@ pub struct PendingDecision {
     language_marks: Vec<LanguageMarkDto>,
     #[serde(default)]
     caller: Option<CallerDto>,
+    /// When the after-call chip keeps it by itself ("Ask me", v1.5); none = it waits for Keep or Discard.
+    #[serde(default)]
+    keep_at: Option<DateTime<Utc>>,
 }
 
 impl PendingDecision {
@@ -199,7 +181,34 @@ impl PendingDecision {
             language: input.language,
             language_marks: input.language_marks,
             caller: input.caller,
+            keep_at: None,
         }
+    }
+
+    /// The same decision, kept by itself at `at` unless the person answers the chip first.
+    pub fn keeping_at(mut self, at: DateTime<Utc>) -> Self {
+        self.keep_at = Some(at);
+        self
+    }
+
+    /// When it keeps itself; none while it waits for the person.
+    pub fn keep_at(&self) -> Option<DateTime<Utc>> {
+        self.keep_at
+    }
+
+    /// Waits for Keep or Discard (no chip counts down for it).
+    pub fn waits(&self) -> bool {
+        self.keep_at.is_none()
+    }
+
+    /// The caller's name from the meeting app, when there was one.
+    pub fn caller_name(&self) -> Option<&str> {
+        self.caller.as_ref().and_then(|c| c.name.as_deref()).map(str::trim).filter(|n| !n.is_empty())
+    }
+
+    /// Takes the open server session captions created (a skipped recording deletes it at once).
+    pub fn take_server_session(&mut self) -> Option<String> {
+        self.server_session_id.take()
     }
 
     /**
@@ -245,10 +254,11 @@ impl PendingDecision {
             language: None,
             language_marks: Vec::new(),
             caller: None,
+            keep_at: None,
         }
     }
 
-    pub fn item(&self, policy: DecisionTimeout) -> PendingItem {
+    pub fn item(&self) -> PendingItem {
         PendingItem {
             id: self.id.clone(),
             source_app: self.source_app.clone(),
@@ -261,8 +271,9 @@ impl PendingDecision {
             ended_at: self.ended_at.clone(),
             duration_ms: self.duration_ms,
             first_line: self.first_line.clone(),
-            deadline_at: deadline(self.created_at, policy).map(|d| d.to_rfc3339()),
+            deadline_at: self.keep_at.map(|d| d.to_rfc3339()),
             language: self.language.clone(),
+            caller_name: self.caller_name().map(str::to_string),
         }
     }
 
@@ -335,15 +346,20 @@ impl PendingStore {
     }
 
     /// The UI list, newest first.
-    pub fn ui_items(&self, policy: DecisionTimeout) -> Vec<PendingItem> {
+    pub fn ui_items(&self) -> Vec<PendingItem> {
         let mut items: Vec<&PendingDecision> = self.items.iter().collect();
         items.sort_by_key(|d| std::cmp::Reverse(d.created_at));
-        items.into_iter().map(|d| d.item(policy)).collect()
+        items.into_iter().map(PendingDecision::item).collect()
     }
 
-    /// The earliest moment a timeout applies under `policy`.
-    pub fn next_deadline(&self, policy: DecisionTimeout) -> Option<DateTime<Utc>> {
-        self.items.iter().filter_map(|d| deadline(d.created_at, policy)).min()
+    /// Recordings that wait for the person (the tray, the sidebar and the Library's waiting line count these).
+    pub fn waiting(&self) -> usize {
+        self.items.iter().filter(|d| d.waits()).count()
+    }
+
+    /// The earliest moment a chip keeps its recording.
+    pub fn next_keep_at(&self) -> Option<DateTime<Utc>> {
+        self.items.iter().filter_map(|d| d.keep_at).min()
     }
 }
 
@@ -457,20 +473,19 @@ impl DecisionFiles {
         }
     }
 
-    /// Applies `policy` to every entry whose deadline has passed at `now` (the policy in force now, A2.5) and
-    /// returns what was done to which id. "Keep waiting" does nothing.
-    pub fn apply_timeouts(&self, now: DateTime<Utc>, policy: DecisionTimeout) -> AppResult<Vec<(String, Decision)>> {
-        let Some(action) = timeout_action(policy) else { return Ok(Vec::new()) };
-        let due: Vec<String> = self.load().items.iter().filter(|d| deadline(d.created_at, policy).is_some_and(|at| at <= now)).map(|d| d.id.clone()).collect();
-        let mut done = Vec::new();
-        for id in due {
-            match action {
-                Decision::Keep => self.keep(&id).map(|_| ())?,
-                Decision::Discard => self.discard(&id).map(|_| ())?,
-            }
-            done.push((id, action));
+    /// Keeps every recording whose chip time is over at `now` (also one whose time ran out while the app was closed)
+    /// and returns their ids. Recordings that wait for the person are left alone.
+    pub fn keep_due(&self, now: DateTime<Utc>) -> AppResult<Vec<String>> {
+        let due: Vec<String> = self.load().items.iter().filter(|d| d.keep_at.is_some_and(|at| at <= now)).map(|d| d.id.clone()).collect();
+        for id in &due {
+            self.keep(id)?;
         }
-        Ok(done)
+        Ok(due)
+    }
+
+    /// The person opened the recording in the main window: no chip keeps it now, it waits for Keep or Discard.
+    pub fn stop_countdown(&self, id: &str) -> AppResult<PendingDecision> {
+        self.update(id, |d| d.keep_at = None)
     }
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { api, listenTo, type AppStatus, type AskBeforeSaving, type Corner, type DecisionTimeout, type Settings, type ShortcutAction, type SiteRule, type TranscriptionLanguage } from "../../lib/ipc";
+import { api, listenTo, type AfterCall, type AppStatus, type Corner, type Settings, type ShortcutAction, type SiteRule, type TranscriptionLanguage } from "../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut, sourceAppLabel } from "../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
 import { CallIcon, ChevronRightIcon, KeyboardIcon, MicIcon, SearchIcon, SettingsIcon, SourceAppIcon, TuneIcon } from "../../components/Icons";
@@ -45,8 +45,11 @@ const APP_KEYS: readonly [string, string][] = [
 ];
 interface SettingsSection { id: string; group: Group; title: string; keywords: string; node: ReactNode }
 
-const ASK_BEFORE_SAVING: readonly (readonly [AskBeforeSaving, string])[] = [["always", "Always"], ["auto_only", "Only automatic calls"], ["never", "Never"]];
-const DECISION_TIMEOUT: readonly (readonly [DecisionTimeout, string])[] = [["keep", "Keep the recording"], ["discard", "Discard it"], ["wait", "Keep waiting"]];
+const AFTER_CALL: readonly (readonly [AfterCall, string])[] = [["keep", "Keep automatically"], ["ask", "Ask me"]];
+const AFTER_CALL_HINT: Record<AfterCall, string> = {
+  keep: "Each call is saved at once. A small “Saved · Undo” shows near the tray for a few seconds.",
+  ask: "A small prompt near the tray asks Keep or Discard, and keeps the call by itself after 10 seconds.",
+};
 const CAPTION_LINES = [["2", "2"], ["3", "3"], ["5", "5"]] as const;
 /** Automatic uses the client's language or the console default, else detects it. */
 // Auto, English, Urdu, Arabic, then the More languages (lib/languages); Urdu and Arabic allow English words inside.
@@ -214,7 +217,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
         <Toggle label="I understand and will obtain consent where required" on={settings.consentAcknowledged} onChange={(v) => patch({ consentAcknowledged: v })} />
       </div>
     ) },
-    { id: "recording", group: "calls", title: "Recording", keywords: "auto record calls unknown apps ask before saving decision timeout browser tab", node: (
+    { id: "recording", group: "calls", title: "Recording", keywords: "auto record calls unknown apps after a call keep ask undo saved browser tab", node: (
       <div className="card">
         <b>Recording</b>
         <Toggle label="Auto-record calls" hint="Records a call when an app both uses your microphone and plays audio. Dictation and voice typing are never recorded." on={settings.autoMode} onChange={(v) => patch({ autoMode: v })} />
@@ -222,8 +225,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
         {status.platform === "macos" && (
           <Toggle label="Read browser tab addresses" hint="Lets EchoLedger tell a Google Meet call from dictation. macOS asks for permission once." on={settings.browserAutomation} onChange={(v) => patch({ browserAutomation: v })} />
         )}
-        <SelectRow label="Ask before saving" value={settings.askBeforeSaving} options={ASK_BEFORE_SAVING} onChange={(v) => patch({ askBeforeSaving: v })} />
-        <SelectRow label="If I don't choose within 60 s" value={settings.decisionTimeout} options={DECISION_TIMEOUT} onChange={(v) => patch({ decisionTimeout: v })} />
+        <SelectRow label="After a call" value={settings.afterCall} options={AFTER_CALL} hint={AFTER_CALL_HINT[settings.afterCall]} onChange={(v) => patch({ afterCall: v })} />
       </div>
     ) },
     { id: "auto-apps", group: "calls", title: "Auto-record apps", keywords: "whatsapp zoom teams meet apps", node: <AutoRecordApps settings={settings} patch={patch} /> },

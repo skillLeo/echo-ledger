@@ -367,28 +367,23 @@ describe("SettingsView decisions and captions (A2.5, A2.6, A3.2)", () => {
 
   const optionsOf = (select: HTMLElement) => [...(select as HTMLSelectElement).options].map((o) => [o.value, o.text]);
 
-  it("offers the three ask-before-saving policies and saves the choice", async () => {
-    await setup({ askBeforeSaving: "always" });
-    const select = screen.getByRole("combobox", { name: "Ask before saving" });
-    expect(select).toHaveValue("always");
-    expect(optionsOf(select)).toEqual([["always", "Always"], ["auto_only", "Only automatic calls"], ["never", "Never"]]);
-    fireEvent.change(select, { target: { value: "auto_only" } });
-    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { askBeforeSaving: "auto_only" } }]));
-  });
-
-  it("offers the three timeout policies and saves the choice", async () => {
-    await setup({ decisionTimeout: "keep" });
-    const select = screen.getByRole("combobox", { name: "If I don't choose within 60 s" });
+  it("offers Keep automatically and Ask me after a call and saves the choice", async () => {
+    await setup({ afterCall: "keep" });
+    const select = screen.getByRole("combobox", { name: "After a call" });
     expect(select).toHaveValue("keep");
-    expect(optionsOf(select)).toEqual([["keep", "Keep the recording"], ["discard", "Discard it"], ["wait", "Keep waiting"]]);
-    fireEvent.change(select, { target: { value: "wait" } });
-    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { decisionTimeout: "wait" } }]));
+    expect(optionsOf(select)).toEqual([["keep", "Keep automatically"], ["ask", "Ask me"]]);
+    expect(select).toHaveAccessibleDescription("Each call is saved at once. A small “Saved · Undo” shows near the tray for a few seconds.");
+    fireEvent.change(select, { target: { value: "ask" } });
+    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { afterCall: "ask" } }]));
   });
 
-  it("shows the stored timeout policy", async () => {
-    await setup({ decisionTimeout: "discard", askBeforeSaving: "never" });
-    expect(screen.getByRole("combobox", { name: "If I don't choose within 60 s" })).toHaveValue("discard");
-    expect(screen.getByRole("combobox", { name: "Ask before saving" })).toHaveValue("never");
+  it("shows the stored choice and says what Ask me does", async () => {
+    await setup({ afterCall: "ask" });
+    const select = screen.getByRole("combobox", { name: "After a call" });
+    expect(select).toHaveValue("ask");
+    expect(select).toHaveAccessibleDescription("A small prompt near the tray asks Keep or Discard, and keeps the call by itself after 10 seconds.");
+    expect(screen.queryByRole("combobox", { name: "Ask before saving" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "If I don't choose within 60 s" })).not.toBeInTheDocument();
   });
 
   it("sends caption lines as a number (2, 3 or 5)", async () => {
@@ -429,10 +424,10 @@ describe("SettingsView decisions and captions (A2.5, A2.6, A3.2)", () => {
   });
 
   it("follows settings:changed from the core while open and stops listening on unmount", async () => {
-    const { unmount } = await setup({ decisionTimeout: "keep" });
+    const { unmount } = await setup({ afterCall: "keep" });
     await waitFor(() => expect(listenerCount("settings:changed")).toBe(1));
-    await emitEvent("settings:changed", makeSettings({ decisionTimeout: "discard" }));
-    expect(screen.getByRole("combobox", { name: "If I don't choose within 60 s" })).toHaveValue("discard");
+    await emitEvent("settings:changed", makeSettings({ afterCall: "ask" }));
+    expect(screen.getByRole("combobox", { name: "After a call" })).toHaveValue("ask");
     unmount();
     await waitFor(() => expect(listenerCount("settings:changed")).toBe(0));
   });

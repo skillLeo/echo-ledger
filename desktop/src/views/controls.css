@@ -1,7 +1,7 @@
-/* Recording pill (352 x 84 window: the pill on top, the bookmark tray or a warning below) and review card / ask chip
-   (360 x 168 window). Both windows are transparent and never focused; only the visible surface is a hit region.
-   They share the caption overlay's glass tokens (styles.css), so the overlay, pill, review card and dictation bar
-   read as one set in the light and the dark theme. */
+/* Recording pill (352 x 84 window: the pill on top, the bookmark tray or a warning below) and the after-call window
+   (360 x 168: the Saved toast, the Ask-me chip, the unknown-app chip). Both windows are transparent and never focused;
+   only the visible surface is a hit region. They share the caption overlay's glass tokens (styles.css), so the
+   overlay, pill, after-call surfaces and dictation bar read as one set in the light and the dark theme. */
 
 .pill-root,
 .review-root {
@@ -199,10 +199,11 @@
 .mark-tag:hover { color: var(--ctl-text); background: var(--ctl-hover); }
 .mark-tag[aria-pressed="true"] { color: var(--accent-text); background: var(--accent-soft); }
 
-/* ---------- review card and ask chip ---------- */
+/* ---------- after a call (v1.5) and the ask chip ---------- */
+/* One 360 x 168 window bottom-right, near the tray: the "Saved · … · Undo" toast and the Ask-me chip are pill-size
+   rows in the recording pill's dark look (both themes); the unknown-app chip is a card in the theme's glass. */
 .review-root { display: flex; align-items: flex-end; justify-content: flex-end; padding: 10px; font-size: var(--text-sm); }
 
-.review-card,
 .ask-chip {
   position: relative;
   width: 340px;
@@ -227,50 +228,80 @@
   to { transform: none; opacity: 1; }
 }
 
-.review-card { height: 148px; padding: var(--space-4) var(--space-3) var(--space-3) var(--space-4); display: flex; flex-direction: column; }
-
-.review-head { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.review-tile { width: 32px; height: 32px; border-radius: var(--radius-sm); display: grid; place-items: center; flex: none; background: var(--ctl-hover); color: var(--ctl-text); }
-.review-heading { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.review-title { font-size: var(--text-md); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.review-meta { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--ctl-muted); font-size: var(--text-xs); }
-.review-duration { flex: none; font-variant-numeric: tabular-nums; }
-.review-sep { flex: none; color: var(--ctl-muted); opacity: 0.6; }
-.review-count { align-self: flex-start; flex: none; font-size: 11px; font-weight: 600; color: var(--ctl-muted); height: 20px; display: inline-grid; place-items: center; padding: 0 var(--space-2); border-radius: var(--radius-full); background: var(--ctl-hover); font-variant-numeric: tabular-nums; }
-
-.client-chip {
-  display: inline-flex;
+.after-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; max-width: 100%; }
+.after-pill {
+  --ctl-surface: var(--pill-bg);
+  --ctl-hairline: var(--pill-border);
+  --ctl-text: var(--pill-text);
+  --ctl-muted: var(--pill-muted);
+  --ctl-hover: var(--pill-hover);
+  --ctl-press: var(--pill-press);
+  --after-ok: #3dd68c;
+  --accent-text: #9eb1ff;
+  --accent-soft: #182449;
+  --danger: #ff9592;
+  position: relative;
+  display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: 6px;
+  width: max-content;
   min-width: 0;
-  max-width: 190px;
-  height: 20px;
+  max-width: 340px;
+  height: 36px;
+  padding: 0 4px 0 10px;
+  border-radius: 18px;
+  background: var(--ctl-surface);
+  color: var(--ctl-text);
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--ctl-hairline);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  overflow: hidden;
+  font-size: var(--text-xs);
+  animation-name: ctl-slide-in;
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+.after-icon { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
+.after-icon.ok { background: rgba(61, 214, 140, 0.16); color: var(--after-ok); }
+.after-icon.app { color: var(--ctl-muted); }
+.after-text { display: flex; align-items: center; gap: 5px; flex: 1 1 auto; min-width: 0; white-space: nowrap; }
+.after-text.error { display: block; color: var(--danger); overflow: hidden; text-overflow: ellipsis; }
+.after-word { flex: none; font-weight: 600; }
+.after-sep { flex: none; color: var(--ctl-muted); }
+.after-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.after-duration { flex: none; color: var(--ctl-muted); font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.after-undo { flex: none; height: 26px; }
+/* The chip's title opens the recording in the main window to rename it or choose a client. */
+.after-title-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  margin-left: -4px;
   padding: 0 6px;
-  border-radius: 10px;
   border: 0;
-  background: var(--ctl-hover);
+  border-radius: 14px;
+  background: transparent;
   color: var(--ctl-text);
   font: inherit;
-  font-size: var(--text-xs);
-  font-weight: 500;
+  text-align: start;
   cursor: pointer;
   transition: background-color var(--motion-fast) var(--ease-out);
 }
-.client-chip:hover { background: var(--ctl-press); }
-.client-chip.empty { color: var(--ctl-muted); }
-.client-chip svg { flex: none; opacity: 0.75; }
-.client-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.client-chip.lang { flex: none; font-weight: 600; letter-spacing: 0.02em; }
-/* "Use Urdu for Acme from now on?" after a language change on the card. */
-.review-learn { display: flex; align-items: center; gap: var(--space-1); min-height: 28px; font-size: var(--text-xs); color: var(--ctl-text); }
-.review-learn-q { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.review-line { margin-top: var(--space-3); font-size: var(--text-sm); line-height: 18px; color: var(--ctl-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.review-line.none { opacity: 0.8; }
-
-.review-foot { margin-top: auto; display: flex; align-items: center; gap: 6px; min-width: 0; }
-.review-status { flex: 1; min-width: 0; padding-left: var(--space-1); font-size: var(--text-xs); color: var(--ctl-muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
-.review-status.error { color: var(--danger); }
+.after-title-btn:hover { background: var(--ctl-hover); }
+.after-actions { display: inline-flex; align-items: center; flex: none; }
+.rec-btn.after-keep { color: var(--after-ok); }
+.rec-btn.after-discard:hover { color: var(--danger); }
+/* Thin timer line: the chip keeps the recording when it reaches the left. */
+.after-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--ctl-hover); }
+.after-progress > span { display: block; height: 100%; background: var(--accent-text); transform-origin: left center; animation-name: after-countdown; animation-timing-function: linear; animation-fill-mode: forwards; }
+@keyframes after-countdown { from { transform: scaleX(var(--from, 1)); } to { transform: scaleX(0); } }
 
 .ctl-btn {
   display: inline-flex;
@@ -295,70 +326,6 @@
 .ctl-btn.primary { background: var(--accent-strong); border-color: transparent; color: var(--on-accent); }
 .ctl-btn.primary:hover { background: var(--accent-pressed); }
 .ctl-btn.primary:active { background: var(--accent-pressed); }
-.ctl-btn.icon { width: 32px; padding: 0; color: var(--ctl-muted); background: transparent; border-color: transparent; }
-.ctl-btn.icon:hover { background: var(--ctl-hover); color: var(--ctl-text); }
-.ctl-btn.icon.small { width: 26px; height: 26px; border-radius: 6px; }
-.review-learn .ctl-btn { height: 24px; padding: 0 var(--space-2); }
-
-.review-menu {
-  position: absolute;
-  right: 10px;
-  bottom: 48px;
-  z-index: 2;
-  min-width: 156px;
-  padding: var(--space-1);
-  display: grid;
-  gap: 1px;
-  border-radius: var(--radius-field);
-  background: var(--glass-solid);
-  border: 1px solid var(--ctl-hairline);
-  box-shadow: var(--shadow-2);
-  animation: ctl-pop-in var(--motion-fast) ease-out both;
-}
-@keyframes ctl-pop-in {
-  from { transform: translateY(4px) scale(0.98); opacity: 0; }
-  to { transform: none; opacity: 1; }
-}
-.review-menu button,
-.review-option {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-  height: 30px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ctl-text);
-  font: inherit;
-  font-size: var(--text-sm);
-  text-align: left;
-  cursor: pointer;
-}
-.review-menu button svg { color: var(--ctl-muted); flex: none; }
-.review-menu button:hover,
-.review-option:hover { background: var(--ctl-hover); }
-.review-menu button:hover svg { color: var(--ctl-text); }
-
-.review-panel {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-2) var(--space-2) 6px;
-  background: var(--glass-solid);
-  animation: ctl-fade-in var(--motion-fast) ease-out both;
-}
-@keyframes ctl-fade-in { from { opacity: 0; } to { opacity: 1; } }
-.review-panel-head { flex: none; display: flex; align-items: center; gap: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--ctl-hairline); font-size: var(--text-sm); font-weight: 600; }
-.review-panel-list { flex: 1; min-height: 0; margin-top: var(--space-1); overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 1px; align-content: start; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-.review-option[aria-checked="true"] { color: var(--accent-text); background: var(--accent-soft); }
-.review-option svg { color: var(--accent-text); flex: none; margin-left: auto; }
-.review-option-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.review-panel-note { padding: 6px 10px; font-size: var(--text-xs); color: var(--ctl-muted); }
-.review-panel-note.error { color: var(--danger); }
 
 .ask-chip { padding: var(--space-3) var(--space-3) 14px var(--space-4); display: grid; gap: 10px; }
 .ask-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
@@ -377,9 +344,7 @@
 .rec-btn:focus-visible,
 .rec-text-btn:focus-visible,
 .ctl-btn:focus-visible,
-.client-chip:focus-visible,
-.review-menu button:focus-visible,
-.review-option:focus-visible {
+.after-title-btn:focus-visible {
   outline: 2px solid var(--ctl-focus);
   outline-offset: 2px;
 }
@@ -389,9 +354,8 @@
   .rec-pill.paused .rec-dot { box-shadow: none; }
   .rec-meter > span { transition: none; }
   .mark-tray { animation: none; }
-  .review-card,
-  .ask-chip,
-  .review-menu,
-  .review-panel { animation: none; }
-  .ask-progress { display: none; }
+  .after-pill,
+  .ask-chip { animation: none; }
+  .ask-progress,
+  .after-progress { display: none; }
 }

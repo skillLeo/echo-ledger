@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type PendingItem } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { dayGroup } from "../../lib/library";
-import { waitingSummary } from "../../lib/pending";
+import { waitingItems, waitingSummary } from "../../lib/pending";
 import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon } from "../../components/Icons";
 import { CheckIcon } from "../../components/ControlIcons";
 
@@ -47,7 +47,9 @@ export function ActivityView({ status, onOpenRecording, onReview, onUnread }: {
 }) {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<PendingItem[]>([]);
+  const [all, setPending] = useState<PendingItem[]>([]);
+  // A recording whose after-call chip still counts down keeps itself: only the ones left waiting need the person.
+  const pending = waitingItems(all);
 
   const load = () =>
     api.activity().then((r) => {

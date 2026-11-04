@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  afterCallTitle,
   alwaysIgnoreLabel,
   askSeconds,
   askSubject,
-  countdownText,
   elapsedAt,
   formatTimer,
   isTwoChannel,
   meterLevel,
   nextAnchor,
   reviewDuration,
-  reviewTitle,
   secondsLeft,
   sourceLabel,
 } from "./controls";
@@ -90,41 +89,34 @@ describe("labels", () => {
     expect(sourceLabel("some_new_app")).toBe("Some new app");
   });
 
-  it("titles a review item by its title, else '<Label> call', and voice notes 'Voice note'", () => {
-    expect(reviewTitle(makePendingItem("p", { title: "Budget review" }))).toBe("Budget review");
-    expect(reviewTitle(makePendingItem("p", { title: "   " }))).toBe("Zoom call");
-    expect(reviewTitle(makePendingItem("p"))).toBe("Zoom call");
-    expect(reviewTitle(makePendingItem("p", { sourceApp: "whatsapp" }))).toBe("WhatsApp call");
-    expect(reviewTitle(makePendingItem("p", { sourceApp: "voice_note", mode: "voice_note" }))).toBe("Voice note");
-    expect(reviewTitle(makePendingItem("p", { sourceApp: "voice_note", mode: "mic_note" }))).toBe("Voice note");
+  it("names a recording after a call by its title, the caller, the app, or 'Voice note'", () => {
+    expect(afterCallTitle(makePendingItem("p", { title: "Budget review", callerName: "Omar" }))).toBe("Budget review");
+    expect(afterCallTitle(makePendingItem("p", { title: "   ", callerName: " Omar Khan " }))).toBe("Call with Omar Khan");
+    expect(afterCallTitle(makePendingItem("p"))).toBe("Zoom");
+    expect(afterCallTitle(makePendingItem("p", { sourceApp: "whatsapp", callerName: "" }))).toBe("WhatsApp");
+    expect(afterCallTitle(makePendingItem("p", { sourceApp: "other" }))).toBe("Call");
+    expect(afterCallTitle(makePendingItem("p", { sourceApp: "voice_note", mode: "voice_note", callerName: "Omar" }))).toBe("Voice note");
+    expect(afterCallTitle(makePendingItem("p", { sourceApp: "voice_note", mode: "mic_note" }))).toBe("Voice note");
+    expect(afterCallTitle({ title: "کال اسلم کے ساتھ", sourceApp: "whatsapp", mode: "call" })).toBe("کال اسلم کے ساتھ");
   });
 
-  it("formats the review duration, with 0:00 for an empty recording", () => {
+  it("formats the length, with 0:00 for an empty recording", () => {
     expect(reviewDuration(750_000)).toBe("12:30");
     expect(reviewDuration(3_725_000)).toBe("1:02:05");
     expect(reviewDuration(0)).toBe("0:00");
   });
 });
 
-describe("review countdown", () => {
+describe("chip countdown", () => {
   const deadline = "2026-10-24T09:13:30Z";
   const at = (iso: string) => Date.parse(iso);
 
-  it("counts whole seconds down to zero", () => {
-    expect(secondsLeft(deadline, at("2026-10-24T09:12:48Z"))).toBe(42);
-    expect(secondsLeft(deadline, at("2026-10-24T09:12:48Z") + 1)).toBe(42);
-    expect(secondsLeft(deadline, at("2026-10-24T09:13:29.5Z"))).toBe(1);
+  it("counts the seconds left down to zero, fractions included", () => {
+    expect(secondsLeft(deadline, at("2026-10-24T09:13:20Z"))).toBe(10);
+    expect(secondsLeft(deadline, at("2026-10-24T09:13:27.5Z"))).toBe(2.5);
     expect(secondsLeft(deadline, at("2026-10-24T09:14:00Z"))).toBe(0);
     expect(secondsLeft(null, 0)).toBeNull();
     expect(secondsLeft("not a date", 0)).toBeNull();
-  });
-
-  it("says what happens when the time runs out, per policy", () => {
-    const now = at("2026-10-24T09:12:48Z");
-    expect(countdownText("keep", deadline, now)).toBe("Keeping in 42 s");
-    expect(countdownText("discard", deadline, now)).toBe("Discarding in 42 s");
-    expect(countdownText("wait", deadline, now)).toBeNull();
-    expect(countdownText("keep", null, now)).toBeNull();
   });
 });
 

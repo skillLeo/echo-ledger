@@ -2,6 +2,7 @@
 
 mod actions;
 pub mod activity;
+pub mod after_call;
 pub mod audio;
 mod commands;
 pub mod detect;
@@ -67,8 +68,8 @@ pub struct AppState {
     pub pill_hidden: AtomicBool,
     /// Captions were on when the recording was paused, so resume reopens them (sockets close on pause, A5.3).
     pub captions_on_resume: AtomicBool,
-    /// Pending ids created by this run, oldest first: the review card shows the newest undecided one.
-    pub review_run: Mutex<Vec<String>>,
+    /// The after-call window (v1.5): the Saved toast, the chip, and what Undo needs.
+    pub after_call: Mutex<after_call::Surfaces>,
     /// The once-a-second `recording:state` task is running.
     pub ticker_running: AtomicBool,
     /// A test recording (B5) is running.
@@ -120,7 +121,7 @@ impl AppState {
             session_link: Mutex::new(pending::SessionLink::default()),
             pill_hidden: AtomicBool::new(false),
             captions_on_resume: AtomicBool::new(false),
-            review_run: Mutex::new(Vec::new()),
+            after_call: Mutex::new(after_call::Surfaces::default()),
             ticker_running: AtomicBool::new(false),
             capture_test: AtomicBool::new(false),
             lock: lock::Lock::new(settings_locked),
@@ -223,13 +224,14 @@ pub fn run() {
             detect::spawn_auto_mode(handle.clone());
             actions::spawn_upload_worker(handle.clone());
             actions::restore_pending(&handle);
-            // Recordings cut short by a crash or a forced quit come back as "Recovered recording" (since v1.3);
-            // encoding takes a moment, so it runs beside the start-up.
+            // Recordings cut short by a crash or a forced quit come back as "Recovered recording" (since v1.3) and
+            // follow "After a call"; encoding takes a moment, so it runs beside the start-up.
             let recovering = handle.clone();
             std::thread::spawn(move || {
                 let data_dir = recovering.state::<AppState>().data_dir.clone();
-                if !recovery::recover(&data_dir, chrono::Utc::now()).recovered.is_empty() {
-                    actions::emit_pending(&recovering);
+                let recovered = recovery::recover(&data_dir, chrono::Utc::now()).recovered;
+                if !recovered.is_empty() {
+                    actions::after_recovery(&recovering, &recovered);
                 }
             });
             commands::spawn_idle_lock(handle.clone());
@@ -380,7 +382,8 @@ pub fn run() {
             commands::transcript_views_make,
             commands::set_recording_language,
             commands::pending_open,
-            commands::review_state,
+            commands::after_call_state,
+            commands::saved_undo,
             commands::window_ready,
             commands::main_view_get,
             commands::main_view_set,
