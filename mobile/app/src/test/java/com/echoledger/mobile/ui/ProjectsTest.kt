@@ -86,6 +86,20 @@ class ProjectsTest : AppTest() {
     }
 
     @Test
+    fun `the tab lists the Inbox always, Shared with me when the server has it, the others once they hold something`() {
+        val local = mapOf(SmartFolder.WHATSAPP to 3, SmartFolder.ZOOM to 0)
+        // An older or unreachable server: this phone's own counts; nothing only the server knows.
+        val offline = SmartFolder.listed(null) { local[it] ?: 0 }
+        assertEquals(listOf(SmartFolder.INBOX to 0, SmartFolder.WHATSAPP to 3), offline)
+        // The server's counts win, and its Shared with me is listed even while empty.
+        val online = SmartFolder.listed(mapOf("inbox" to 4, "whatsapp" to 31, "imported" to 2, "shared" to 0)) { local[it] ?: 0 }
+        assertEquals(
+            listOf(SmartFolder.INBOX to 4, SmartFolder.WHATSAPP to 31, SmartFolder.IMPORTED to 2, SmartFolder.SHARED to 0),
+            online
+        )
+    }
+
+    @Test
     fun `only share, project and request links of https open in the app`() {
         val view = android.content.Intent.ACTION_VIEW
         assertEquals(

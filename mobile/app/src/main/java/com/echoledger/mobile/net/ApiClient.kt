@@ -311,6 +311,10 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun screens(sessionId: String): List<com.echoledger.mobile.data.ScreenDto> =
         call(request("sessions/$sessionId/screens").get().build(), com.echoledger.mobile.data.ScreensResponse.serializer())!!.data
 
+    /** The smart folders' counts on the server (since v1.5); null from an older server. */
+    suspend fun libraryFolderCounts(): Map<String, Int>? =
+        call(request("library/views").get().build(), com.echoledger.mobile.data.LibraryViewsDto.serializer())!!.folders
+
     /** `GET /api/clients/{id}/screens` (since v1.5): a project's screens, newest recording first, 60 per page. */
     suspend fun projectScreens(
         clientId: String,

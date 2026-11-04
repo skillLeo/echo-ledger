@@ -29,11 +29,11 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.FolderShared
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Mic
-import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.VideoCall
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -175,7 +175,7 @@ enum class SmartFolder(val key: String, val label: String, val icon: ImageVector
     PHONE("phone", "Phone", Icons.Rounded.Call),
     VOICE_NOTES("voice_notes", "Voice notes", Icons.Rounded.Mic),
     IMPORTED("imported", "Imported", Icons.Rounded.FileDownload, server = true),
-    SHARED("shared", "Shared with me", Icons.Rounded.People, server = true);
+    SHARED("shared", "Shared with me", Icons.Rounded.FolderShared, server = true);
 
     fun matches(item: LibraryItem): Boolean = !item.deleted &&
         when (this) {
@@ -192,6 +192,21 @@ enum class SmartFolder(val key: String, val label: String, val icon: ImageVector
 
     companion object {
         fun of(key: String?): SmartFolder? = entries.firstOrNull { it.key == key }
+
+        /**
+         * The folders the Projects tab lists, with their counts (the desktop's rule): the Inbox always, Shared with me
+         * when the server has it, the others once they hold something. [server] are the server's counts (null: offline or
+         * an older server), [local] this phone's own count of a folder it can work out.
+         */
+        fun listed(server: Map<String, Int>?, local: (SmartFolder) -> Int?): List<Pair<SmartFolder, Int?>> = entries.mapNotNull { folder ->
+            val count = server?.get(folder.key) ?: if (folder.server) null else local(folder)
+            val shown = when (folder) {
+                INBOX -> true
+                SHARED -> server?.containsKey(folder.key) == true
+                else -> (count ?: 0) > 0
+            }
+            if (shown) folder to count else null
+        }
     }
 }
 
@@ -221,6 +236,9 @@ fun ProjectsScreen(
     var naming by remember { mutableStateOf<String?>(null) } // a parent id ("" = top level) while the new-project dialog is open
     val scope = rememberCoroutineScope()
     val list = rememberLazyListState()
+    // The server's folder counts (since v1.5), looked up again whenever the library changes.
+    var serverCounts by remember { mutableStateOf<Map<String, Int>?>(null) }
+    LaunchedEffect(library) { vm.folderCounts()?.let { serverCounts = it } }
     val target by vm.projectsTarget.collectAsState()
     LaunchedEffect(target) {
         when (val t = target ?: return@LaunchedEffect) {
@@ -271,8 +289,8 @@ fun ProjectsScreen(
             })
         }
         item(key = "h-folders") { SectionHeader("Folders") }
-        itemsIndexed(SmartFolder.entries, key = { _, it -> "f-${it.key}" }) { i, folder ->
-            val count = if (folder.server) null else live.count(folder::matches)
+        val folders = SmartFolder.listed(serverCounts) { folder -> live.count(folder::matches) }
+        itemsIndexed(folders, key = { _, it -> "f-${it.first.key}" }) { i, (folder, count) ->
             RecordingRow(
                 title = folder.label,
                 time = "",
@@ -280,7 +298,7 @@ fun ProjectsScreen(
                 tile = { IconTile(folder.icon, Brand.AccentText) },
                 onClick = { folderKey = folder.key },
                 onLongClick = { folderKey = folder.key },
-                divider = i < SmartFolder.entries.lastIndex
+                divider = i < folders.lastIndex
             )
         }
         item(key = "h-projects") { SectionHeader("Projects") }

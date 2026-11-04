@@ -20,6 +20,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 | N11 | Paid accounts before a public release | Store and signing | Google Play $25 once; Apple Developer $99/year; Windows code-signing certificate; a VPS (about $10–20/month). |
 | N12 | Keystore (optional) | Signed APK | Path, alias and passwords at build time, or keep debug builds. |
 | N13 | Soniox credit | Live Translate | soniox.com → Billing → add funds. |
+| N14 | Back up the desktop updater key | Installed desktop apps only take updates signed with it; losing it means reinstalling by hand | Copy C:echoledger-keysdesktop-updater.key (made 2026-11-04, no password yet) to your password manager or an offline drive. Say if you want a password on it before the public release. |
 
 ## Step 0
 

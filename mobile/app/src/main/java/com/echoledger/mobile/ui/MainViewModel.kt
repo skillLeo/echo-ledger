@@ -582,6 +582,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { graph.api()?.libraryFolder(folder)?.data }.getOrNull()
     }
 
+    /** The smart folders' counts on the server (since v1.5); null offline or from an older server. */
+    suspend fun folderCounts(): Map<String, Int>? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.libraryFolderCounts() }.getOrNull()
+    }
+
     /** A project's screens (since v1.5), one page; null when they could not be loaded. */
     suspend fun projectScreens(
         clientId: String,

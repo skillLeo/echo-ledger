@@ -781,3 +781,7 @@ data class PlanUsedDto(val minutes: Long? = null, @SerialName("storage_bytes") v
 /** The device's workspace and its person's role there, in `GET /api/config` (since v1.5). */
 @Serializable
 data class ConfigWorkspaceDto(val id: String? = null, val name: String? = null, val role: String? = null)
+
+/** `GET /api/library/views` (since v1.5 its `folders`): how many recordings each smart folder lists on the server. */
+@Serializable
+data class LibraryViewsDto(val folders: Map<String, Int>? = null)
