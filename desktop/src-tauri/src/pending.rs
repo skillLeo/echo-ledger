@@ -361,6 +361,12 @@ impl PendingStore {
     pub fn next_keep_at(&self) -> Option<DateTime<Utc>> {
         self.items.iter().filter_map(|d| d.keep_at).min()
     }
+
+    /// When the chip timer wakes next, after keeping what was due at `now`: at the earliest chip's time; a time that
+    /// has already passed (its recording could not be kept just now) is tried again in a minute, not straight away.
+    pub fn next_wake(&self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        self.next_keep_at().map(|at| if at <= now { now + chrono::Duration::minutes(1) } else { at })
+    }
 }
 
 /// The queue files a decision touches, all in the app data dir. The caller holds the queue lock.

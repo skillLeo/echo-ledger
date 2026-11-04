@@ -627,13 +627,22 @@ pub async fn undo_saved(app: &AppHandle, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-/// Keeps every recording whose chip time is over ("Ask me"), also one whose time ran out while the app was closed.
+/// Keeps every recording whose chip time is over ("Ask me"), also one whose time ran out while the app was closed,
+/// and sets the timer for the next chip still counting. That chip may have no timer of its own: a restart sets one
+/// timer for all of them, and a timer that wakes early (the clock was set back) keeps nothing. Without this its
+/// recording would count for ever, hidden from the Library and every count until the next start.
 pub fn keep_due(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
-    let done = {
+    let now = Utc::now();
+    let (done, next) = {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        DecisionFiles::in_dir(&state.data_dir).keep_due(Utc::now())
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        let done = files.keep_due(now);
+        (done, files.load().next_wake(now))
     };
+    if let Some(at) = next {
+        schedule_keep(app, at);
+    }
     match done {
         Ok(done) if !done.is_empty() => {
             {
@@ -663,14 +672,11 @@ fn schedule_keep(app: &AppHandle, at: chrono::DateTime<Utc>) {
 }
 
 /// At start: a recording whose chip time ran out while the app was closed is kept, one whose chip still counts (a
-/// restart within 10 s) gets its timer. Recordings that wait for the person stay as they are, whatever the setting.
-/// Skipped calls past their 24 hours are deleted; the others get their timers.
+/// restart within 10 s) gets its timer (`keep_due`). Recordings that wait for the person stay as they are, whatever
+/// the setting. Skipped calls past their 24 hours are deleted; the others get their timers.
 pub fn restore_pending(app: &AppHandle) {
     keep_due(app);
     let state = app.state::<crate::AppState>();
-    if let Some(at) = DecisionFiles::in_dir(&state.data_dir).load().next_keep_at() {
-        schedule_keep(app, at);
-    }
     purge_skipped(app);
     for call in SkippedFiles::in_dir(&state.data_dir).load().items {
         schedule_purge(app, call.expires_at());

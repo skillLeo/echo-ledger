@@ -382,6 +382,36 @@ fn the_chip_keeps_only_recordings_whose_time_is_up_and_never_one_that_waits() {
 }
 
 #[test]
+fn every_chip_still_counting_after_a_restart_gets_its_wake_up_in_turn() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    let secs = chrono::Duration::seconds;
+    files.add(decision(root.path(), "first", None, now).keeping_at(now + secs(3))).unwrap();
+    files.add(decision(root.path(), "second", None, now).keeping_at(now + secs(8))).unwrap();
+    files.add(decision(root.path(), "waiting", None, now)).unwrap();
+    assert_eq!(files.load().next_wake(now), Some(now + secs(3)), "the start sets one timer, for the earliest chip");
+
+    assert_eq!(files.keep_due(now + secs(3)).unwrap(), vec!["first".to_string()]);
+    assert_eq!(files.load().next_wake(now + secs(3)), Some(now + secs(8)), "the next chip gets its wake-up from the one that kept");
+    assert!(files.keep_due(now + secs(5)).unwrap().is_empty(), "a timer that woke early (the clock set back) keeps nothing");
+    assert_eq!(files.load().next_wake(now + secs(5)), Some(now + secs(8)), "and it sets the same time again");
+
+    assert_eq!(files.keep_due(now + secs(8)).unwrap(), vec!["second".to_string()]);
+    assert_eq!(files.load().next_wake(now + secs(8)), None, "a recording that waits for the person needs no timer");
+}
+
+#[test]
+fn a_chip_time_that_has_passed_is_tried_again_in_a_minute_not_straight_away() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    // Kept would have removed it: still here at its time means keeping it failed just now (a full disk, say).
+    files.add(decision(root.path(), "stuck", None, now).keeping_at(now - chrono::Duration::seconds(1))).unwrap();
+    assert_eq!(files.load().next_wake(now), Some(now + chrono::Duration::minutes(1)));
+}
+
+#[test]
 fn opening_a_recording_from_its_chip_stops_the_countdown() {
     let root = tempfile::tempdir().unwrap();
     let files = DecisionFiles::in_dir(root.path());
