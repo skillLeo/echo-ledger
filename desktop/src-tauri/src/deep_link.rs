@@ -12,6 +12,13 @@ pub const SCHEME: &str = "echoledger";
 const MAX_LINK_CHARS: usize = 2048;
 /// The pages a link may open: a recording's share, a project's share, a request link.
 const PAGES: [&str; 3] = ["s", "p", "r"];
+/// A recording opened from a project's page keeps its id after the project's token (`/p/<token>/<recording>`).
+const RECORDING_ID_CHARS: usize = 26;
+
+/// A recording's id as the server writes it in a page link (a ULID: 26 letters and digits).
+fn is_recording_id(segment: &str) -> bool {
+    segment.len() == RECORDING_ID_CHARS && segment.chars().all(|c| c.is_ascii_alphanumeric())
+}
 
 /// The server link inside `echoledger://open?link=<url>` (also `echoledger:open?link=…`), checked with [`app_link`].
 pub fn open_link(arg: &str) -> Option<String> {
@@ -38,7 +45,8 @@ pub fn find_open_link<S: AsRef<str>>(args: &[S]) -> Option<String> {
 }
 
 /// A share, project or request page of an EchoLedger server (`…/s/<token>`, `…/p/<token>`, `…/r/<token>`, under any
-/// path the server lives at), without its query or fragment; none for anything else.
+/// path the server lives at), or a recording on a project's page (`…/p/<token>/<recording>`), without its query or
+/// fragment; none for anything else.
 pub fn app_link(link: &str) -> Option<String> {
     let link = link.trim();
     if link.len() > MAX_LINK_CHARS {
@@ -50,7 +58,11 @@ pub fn app_link(link: &str) -> Option<String> {
         return None;
     }
     let segments: Vec<String> = url.path_segments()?.filter(|s| !s.is_empty()).map(str::to_string).collect();
-    let [.., page, token] = segments.as_slice() else { return None };
+    let (page, token) = match segments.as_slice() {
+        [.., page, token, recording] if page == "p" && is_recording_id(recording) => (page, token),
+        [.., page, token] => (page, token),
+        _ => return None,
+    };
     let plain_token = !token.is_empty() && token.len() <= 128 && token.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
     if !PAGES.contains(&page.as_str()) || !plain_token {
         return None;
@@ -84,6 +96,11 @@ mod tests {
         assert_eq!(open_link("echoledger://open/?link=https://ledger.example.test/p/proj01").as_deref(), Some("https://ledger.example.test/p/proj01"));
         assert_eq!(open_link("\"echoledger://open?link=https://ledger.example.test/r/req9\"").as_deref(), Some("https://ledger.example.test/r/req9"));
         assert_eq!(open_link("ECHOLEDGER://OPEN?link=https://ledger.example.test/s/t1").as_deref(), Some("https://ledger.example.test/s/t1"));
+        // "Open in EchoLedger" on a recording of a project's page (the web page encodes its link).
+        assert_eq!(
+            open_link("echoledger://open?link=https%3A%2F%2Fledger.example.test%2Fp%2Fproj01%2F01JB8Q4C1D2E3F4G5H6J7K8M9N").as_deref(),
+            Some("https://ledger.example.test/p/proj01/01JB8Q4C1D2E3F4G5H6J7K8M9N")
+        );
     }
 
     #[test]
@@ -119,6 +136,23 @@ mod tests {
             assert_eq!(app_link(bad), None, "{bad}");
         }
         assert_eq!(app_link(&format!("https://ledger.example.test/s/{}", "a".repeat(129))), None);
+    }
+
+    #[test]
+    fn a_recording_on_a_project_s_page_keeps_its_id() {
+        const RECORDING: &str = "01JB8Q4C1D2E3F4G5H6J7K8M9N";
+        assert_eq!(app_link(&format!("https://ledger.example.test/p/tok/{RECORDING}/?x=1")), Some(format!("https://ledger.example.test/p/tok/{RECORDING}")));
+        assert_eq!(app_link(&format!("https://example.test/echoledger/p/tok/{RECORDING}")), Some(format!("https://example.test/echoledger/p/tok/{RECORDING}")));
+        // Only a project's page lists recordings, and only by their id.
+        for bad in [
+            format!("https://ledger.example.test/s/tok/{RECORDING}"),
+            format!("https://ledger.example.test/r/tok/{RECORDING}"),
+            format!("https://ledger.example.test/p/tok/{RECORDING}/audio"),
+            format!("https://ledger.example.test/p/tok/{}", &RECORDING[1..]),
+            "https://ledger.example.test/p/tok/01JB8Q4C1D2E3F4G5H6J7K8M9-".to_string(),
+        ] {
+            assert_eq!(app_link(&bad), None, "{bad}");
+        }
     }
 
     #[test]
