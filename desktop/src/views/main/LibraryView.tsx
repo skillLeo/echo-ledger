@@ -1068,7 +1068,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   )}
                   {readOnly && sharedOpen && (
                     <div className="notice shared-banner" role="note" data-testid="shared-banner">
-                      {sentLine(sharedOpen)}{sharedOpen.note ? ` · “${sharedOpen.note}”` : ""}. You can play and read it; Save to my library makes a copy you can change.
+                      <div>{sentLine(sharedOpen)}{sharedOpen.note ? ` · “${sharedOpen.note}”` : ""}</div>
+                      <div className="muted">You can play and read it. Save to my library makes a copy you can change.</div>
                     </div>
                   )}
                   {!readOnly && <OrganisePanel item={current} clients={folders} knownLabels={labels} notify={notify} onClientCreated={addClient}>

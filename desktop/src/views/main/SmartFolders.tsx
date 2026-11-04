@@ -22,7 +22,7 @@ export function SmartFolderList({ counts, open, onOpen }: {
   const folders = shownFolders(counts, open);
   if (folders.length === 0) return null;
   return (
-    <ul className="project-tree sidebar smart-folders" aria-label="Smart folders">
+    <ul className="project-tree in-sidebar smart-folders" aria-label="Smart folders">
       {folders.map(({ folder, label, count }) => (
         <li key={folder} className={`tree-row nav-sub ${open === folder ? "selected" : ""}`} {...(folder === "inbox" ? { [DROP_ATTRIBUTE]: "" } : {})}>
           <button type="button" className="tree-open" aria-current={open === folder ? "true" : undefined} onClick={() => onOpen(folder)}>

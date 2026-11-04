@@ -1,13 +1,17 @@
 // A fixture mode for screenshots: the real views in a plain browser, with Tauri's own IPC mock answering every command
-// from sample data (data.ts). `?screen=library|library-empty|library-backup|clients|record|record-bluetooth|activity|settings|controls|
-// controls-bluetooth&theme=light|dark` (v1.5: "-bluetooth" records from AirPods, "library-backup" opens the backup-engine call).
+// from sample data (data.ts). `?screen=library|library-empty|library-backup|projects|project|shared|share|move|request-files|record|
+// record-bluetooth|activity|settings|controls|controls-bluetooth&theme=light|dark` (v1.5: "-bluetooth" records from AirPods,
+// "library-backup" opens the backup-engine call; projects, shared, share, move and request-files open on the Projects page
+// or the Library, where scripts/screenshots.mjs clicks its way to the dialog).
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
 import { makeAfterCallState, makeChipItem, makeMicUser, makeRecordingState, makeSavedToast, makeSettings, makeStatus } from "../../src/test/fixtures";
-import { ACTIVITY, ANSWER, CLIENTS, ITEMS, NOTES_R5, PENDING, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
+import { ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
+import { inFolderHere } from "../../src/lib/folders";
+import type { SmartFolder } from "../../src/lib/ipc";
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
@@ -33,8 +37,15 @@ const audioUrl = silentWav();
 
 const empty = screen === "library-empty";
 const bluetooth = screen.endsWith("-bluetooth");
-const tab = screen.startsWith("library") ? "library" : screen.startsWith("client") ? "clients" : screen.startsWith("record") ? "record" : screen;
+// v1.5: projects, the Library's smart folders, sharing and moving open from the Library or the Projects page.
+const LIBRARY_SCREENS = ["shared", "share", "move"];
+const tab = screen.startsWith("library") || LIBRARY_SCREENS.includes(screen) ? "library"
+  : screen.startsWith("client") || screen.startsWith("project") || screen === "request-files" ? "projects"
+    : screen.startsWith("record") ? "record" : screen;
 const opened = screen === "library-backup" ? "r2" : "r5";
+// Acme Holdings shows its folders in the trees.
+localStorage.setItem("echoledger-projects-open", JSON.stringify(["c-acme"]));
+const SERVER_FOLDERS: Partial<Record<SmartFolder, string[]>> = { imported: ["r3"] };
 type Args = Record<string, unknown>;
 let captions: { onmessage: (e: unknown) => void } | null = null;
 
@@ -46,6 +57,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   library_list: () => (empty ? [] : ITEMS),
   library_refresh: () => (empty ? [] : ITEMS),
   list_clients: () => ({ data: CLIENTS }),
+  library_views: () => (empty ? { views: {}, labels: [], folders: { inbox: 0 } } : LIBRARY_VIEWS),
+  library_folder: ({ folder }) => ITEMS.filter((i) => SERVER_FOLDERS[folder as SmartFolder]?.includes(i.id) ?? inFolderHere(i, folder as SmartFolder) === true),
+  client_rules: ({ id }) => ({ data: RULES[id as string] ?? [] }),
+  shares_of: () => ({ data: SHARES }),
+  shared_with_me: () => ({ data: SHARED }),
+  request_links: () => ({ data: REQUESTS }),
   session_detail: ({ id }) => ({ id, playback_url: audioUrl, markers: id === "r5" ? [{ id: "mk1", at_ms: 95_000, tag: "Budget", note: "Phase one estimate" }] : [], speaker_names: { Me: "You", Client: "Sara (Acme)" } }),
   transcript_detail: ({ id }) => TRANSCRIPTS[id as string] ?? { ...TRANSCRIPTS["t-r5"], id, suggestions: [], views: null },
   transcript_views: () => VIEWS,

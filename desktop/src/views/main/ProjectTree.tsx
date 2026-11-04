@@ -25,7 +25,7 @@ export function ProjectTree({ projects, label, variant, selectedId = null, expan
   const tree = useMemo(() => projectTree(projects), [projects]);
   const rows = visibleRows(tree, expanded);
   return (
-    <ul className={`project-tree ${variant}`} aria-label={label}>
+    <ul className={`project-tree ${variant === "sidebar" ? "in-sidebar" : "on-page"}`} aria-label={label}>
       {rows.map(({ project, depth, children }) => {
         const open = expanded.has(project.id);
         const count = nestedCount(project, items, projects);

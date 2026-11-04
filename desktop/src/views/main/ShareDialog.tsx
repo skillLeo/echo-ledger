@@ -170,13 +170,13 @@ function LinkPart({ target, links, view, notify, onMade }: {
           </>
         )}
       </fieldset>
-      <label className="toggle-row">
+      <div className="toggle-row">
         <span>
           Allow downloads
           <span className="small muted" style={{ display: "block" }}>{download ? "The audio and the transcript can be downloaded." : "People can read and listen, not download."}</span>
         </span>
-        <input type="checkbox" role="switch" checked={download} onChange={(e) => setDownload(e.target.checked)} aria-label="Allow downloads" />
-      </label>
+        <button type="button" role="switch" aria-checked={download} aria-label="Allow downloads" className={`switch ${download ? "on" : ""}`} onClick={() => setDownload(!download)} />
+      </div>
       <div className="row organise-field">
         <label htmlFor={expiryId} className="small muted">Stops working</label>
         <select id={expiryId} className="select" value={expiry} onChange={(e) => setExpiry(e.target.value as ExpiryChoice)}>

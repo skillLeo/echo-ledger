@@ -31,16 +31,54 @@ const SCREENS = [
   ["library-empty", "library-empty", async (page) => page.waitForSelector(".empty-state")],
   // v1.5: a call a backup engine transcribed.
   ["library-backup", "library-backup", async (page) => page.waitForSelector("[data-testid=backup-engine]")],
-  ["clients", "clients", async (page) => page.waitForSelector(".brief-grid")],
-  ["client-files", "clients", async (page) => {
-    await page.getByRole("tab", { name: "Files" }).click();
-    await page.waitForSelector(".file-row");
+  // v1.5: Projects with subfolders, the Library's smart folders, moving, sharing and request links.
+  ["projects", "projects", async (page) => page.waitForSelector(".project-tree.on-page")],
+  ["project", "project", async (page) => {
+    await openAcme(page);
+    await page.getByRole("button", { name: "Edit rules" }).click();
+    await page.waitForSelector(".rules-list");
   }],
-  ["client-ask", "clients", async (page) => {
-    await page.getByRole("tab", { name: "Ask" }).click();
+  ["project-notes", "project", async (page) => {
+    await openAcme(page);
+    await page.getByRole("tab", { name: "Notes" }).click();
     await page.getByLabel("Question").fill("When do we launch?");
     await page.getByRole("button", { name: "Ask", exact: true }).click();
     await page.waitForSelector(".ask-answer");
+  }],
+  ["project-files", "project", async (page) => {
+    await openAcme(page);
+    await page.getByRole("tab", { name: "Files" }).click();
+    await page.waitForSelector(".file-row");
+  }],
+  ["project-delete", "project", async (page) => {
+    await openAcme(page);
+    await page.getByRole("button", { name: "Project menu" }).click();
+    await page.getByRole("menuitem", { name: "Delete project…" }).click();
+    await page.waitForSelector(".sheet");
+  }],
+  ["library-inbox", "library", async (page) => {
+    await page.getByRole("list", { name: "Smart folders" }).getByRole("button", { name: "Inbox" }).click();
+    await page.waitForSelector("h1:text('Inbox')");
+    await page.waitForSelector(".list .item-title");
+  }],
+  ["shared", "shared", async (page) => {
+    await page.getByRole("list", { name: "Smart folders" }).getByRole("button", { name: "Shared with me" }).click();
+    await page.getByRole("button", { name: "Open" }).first().click();
+    await page.waitForSelector("[data-testid=shared-banner]");
+  }],
+  ["share", "share", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await page.waitForSelector(".share-sheet .links-list");
+  }],
+  ["move", "move", async (page) => {
+    await page.getByRole("button", { name: "More for Budget review with Acme" }).click();
+    await page.getByRole("menuitem", { name: "Move to…" }).click();
+    await page.waitForSelector(".pick-list");
+  }],
+  ["request-files", "request-files", async (page) => {
+    await page.getByRole("button", { name: "Request files" }).click();
+    await page.waitForSelector(".share-sheet .links-list");
   }],
   ["record", "record", async (page) => page.waitForSelector(".record-btn")],
   ["record-bluetooth", "record-bluetooth", async (page) => page.waitForSelector("[data-testid=bluetooth-note]")],
@@ -72,6 +110,12 @@ const SCREENS = [
     await page.waitForSelector(".after-pill.chip");
   }],
 ];
+
+/** Opens Acme Holdings from the sidebar's project tree. */
+async function openAcme(page) {
+  await page.getByRole("list", { name: "Projects in the sidebar" }).getByRole("button", { name: "Acme Holdings" }).click();
+  await page.waitForSelector(".crumbs");
+}
 
 async function launch() {
   try {

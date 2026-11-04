@@ -930,14 +930,14 @@ button.tree-toggle:hover { background: var(--surface-3); color: var(--text); }
 .tree-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius-sm); }
 .tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree-count { flex: none; font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
-.project-tree.sidebar { margin: 0 0 var(--space-1) var(--space-3); }
-.project-tree.sidebar .tree-open { height: 30px; padding: 0 var(--space-2); color: var(--text-muted); font-size: var(--text-sm); }
-.project-tree.sidebar .tree-open svg { flex: none; }
-.project-tree.sidebar .tree-open:hover { background: var(--surface-3); color: var(--text); }
-.project-tree.sidebar .tree-row.selected .tree-open { color: var(--accent-text); font-weight: 600; background: var(--accent-soft); }
-.project-tree.page .tree-row { padding-left: calc(var(--depth, 0) * 28px); }
-.project-tree.page .tree-open { padding: 10px var(--space-3); gap: var(--space-3); border-radius: var(--radius-field); }
-.project-tree.page .tree-open:hover { background: var(--surface-3); }
+.project-tree.in-sidebar { margin: 0 0 var(--space-1) var(--space-3); }
+.project-tree.in-sidebar .tree-open { height: 30px; padding: 0 var(--space-2); color: var(--text-muted); font-size: var(--text-sm); }
+.project-tree.in-sidebar .tree-open svg { flex: none; }
+.project-tree.in-sidebar .tree-open:hover { background: var(--surface-3); color: var(--text); }
+.project-tree.in-sidebar .tree-row.selected .tree-open { color: var(--accent-text); font-weight: 600; background: var(--accent-soft); }
+.project-tree.on-page .tree-row { padding-left: calc(var(--depth, 0) * 28px); }
+.project-tree.on-page .tree-open { padding: 10px var(--space-3); gap: var(--space-3); border-radius: var(--radius-field); }
+.project-tree.on-page .tree-open:hover { background: var(--surface-3); }
 /* Recordings dragged onto a project or the Inbox in the sidebar. */
 .tree-row.drop-over, .nav-sub.drop-over { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
 .drag-ghost { position: fixed; left: 0; top: 0; z-index: 40; pointer-events: none; max-width: 320px; padding: 6px var(--space-3); border-radius: var(--radius-full); background: var(--accent-strong); color: var(--on-accent); font-size: var(--text-sm); font-weight: 600; box-shadow: var(--shadow-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -996,7 +996,7 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .share-field legend { padding: 0; margin-bottom: var(--space-1); }
 .radio-row { display: flex; align-items: center; gap: var(--space-2); min-height: 28px; cursor: pointer; }
 .radio-row input { margin: 0; flex: none; }
-.toggle-row { display: flex; align-items: center; gap: var(--space-3); justify-content: space-between; cursor: pointer; }
+.toggle-row { display: flex; align-items: center; gap: var(--space-3); justify-content: space-between; }
 .share-sheet .share-made { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
 .share-sheet .share-made .btn { justify-self: start; }
 .share-sheet .share-url { display: block; padding: 6px var(--space-2); border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: var(--text-sm); overflow-wrap: anywhere; user-select: all; }
