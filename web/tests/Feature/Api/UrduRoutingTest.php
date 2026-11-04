@@ -366,3 +366,49 @@ describe('finishing and duplicates', function () {
         expect($this->groqCalls)->toBe(2);
     });
 });
+
+describe('the API', function () {
+    it('shows when a waiting Urdu transcript is tried again, and why', function () {
+        Carbon::setTestNow('2026-11-04 10:00:00');
+        $transcript = engineWaitTranscript($this);
+        $this->groq = [engineWaitRateLimited()];
+        engineWaitRun($transcript);
+
+        $one = $this->asToken($this->token)->getJson('/api/transcripts/'.$transcript->id)->assertOk();
+        $session = $this->getJson('/api/sessions/'.$transcript->capture_session_id)->assertOk();
+
+        expect($one->json('status'))->toBe('pending')
+            ->and($one->json('retry_at'))->toBe('2026-11-04T10:02:00+00:00')
+            ->and($one->json('retry_reason'))->toBe('rate_limited')
+            ->and($one->json('backup_engine'))->toBeFalse()
+            ->and($one->json('backup_reason'))->toBeNull()
+            ->and($one->json('error'))->toBeNull()
+            ->and($session->json('status'))->toBe('processing')
+            ->and($session->json('transcripts.0.retry_at'))->toBe('2026-11-04T10:02:00+00:00')
+            ->and($session->json('transcripts.0.retry_reason'))->toBe('rate_limited');
+    });
+
+    it('says when a backup engine wrote the transcript, and never shows a stale retry time', function () {
+        $transcript = engineWaitTranscript($this);
+        $transcript->update(['status' => TranscriptStatus::Completed, 'provider' => 'assemblyai', 'text' => 'done', 'meta' => ['route' => [
+            'used' => 'assemblyai', 'wanted' => 'groq', 'fallback' => true, 'backup' => true, 'backup_reason' => 'waited', 'retry_at' => '2026-11-04T10:02:00+00:00', 'retry_reason' => 'rate_limited',
+        ]]]);
+
+        $response = $this->asToken($this->token)->getJson('/api/transcripts/'.$transcript->id)->assertOk();
+
+        expect($response->json('backup_engine'))->toBeTrue()
+            ->and($response->json('backup_reason'))->toBe('waited')
+            ->and($response->json('retry_at'))->toBeNull()
+            ->and($response->json('retry_reason'))->toBeNull();
+    });
+
+    it('sends the four fields for every transcript, also an English one that never waits', function () {
+        $transcript = engineWaitTranscript($this, 'en');
+
+        $response = $this->asToken($this->token)->getJson('/api/transcripts/'.$transcript->id)->assertOk();
+
+        expect($response->json())->toHaveKeys(['backup_engine', 'backup_reason', 'retry_at', 'retry_reason'])
+            ->and($response->json('backup_engine'))->toBeFalse()
+            ->and($response->json('retry_at'))->toBeNull();
+    });
+});

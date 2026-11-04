@@ -109,6 +109,8 @@ function transcriptShape(): array
             'channel' => 'int', 'speaker' => 'string', 'start_ms' => 'int', 'end_ms' => 'int', 'text' => 'string', 'words' => Shape::list('any'),
         ])),
         'error' => 'string?', 'error_code' => 'string?', 'created_at' => 'string', 'completed_at' => 'string?',
+        // Since v1.5 (the apps read a missing field as false / null).
+        'backup_engine' => 'bool?', 'backup_reason' => 'string?', 'retry_at' => 'string?', 'retry_reason' => 'string?',
     ]);
 }
 

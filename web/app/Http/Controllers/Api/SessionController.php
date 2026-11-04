@@ -24,6 +24,7 @@ use App\Models\SessionOpen;
 use App\Models\Transcript;
 use App\Services\Callers\CallerMatcher;
 use App\Services\ChunkedUploadService;
+use App\Services\EngineWait;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\Retranscriber;
 use App\Services\SessionLifecycle;
@@ -295,6 +296,8 @@ final class SessionController extends Controller
             'transcripts' => $session->transcripts->map(fn (Transcript $t): array => [
                 'id' => $t->id, 'kind' => $t->kind->value, 'provider' => $t->provider, 'status' => $t->status->value, 'language' => $t->language,
                 ...TranscriptResource::failure($t),
+                // Since v1.5, as in GET /api/transcripts/{id}.
+                ...EngineWait::fields($t),
             ])->values(),
             'markers' => $session->markers->map(fn (SessionMarker $m): array => $m->toApi())->values(),
             'pauses' => $session->pauses ?? [],

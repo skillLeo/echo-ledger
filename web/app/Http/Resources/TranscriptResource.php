@@ -6,6 +6,7 @@ namespace App\Http\Resources;
 
 use App\Enums\TranscriptStatus;
 use App\Models\Transcript;
+use App\Services\EngineWait;
 use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
@@ -35,6 +36,10 @@ final class TranscriptResource extends JsonResource
             'provider_label' => $transcript->providerKey()?->getLabel(),
             'script_warning' => $transcript->meta['script_warning'] ?? null,
             'fallback' => (bool) ($transcript->meta['route']['fallback'] ?? false),
+            // Since v1.5: an Urdu or Auto recording written by a lower engine of the routing table (backup_engine,
+            // backup_reason) and, while it waits for its preferred engine, when that one is tried again (retry_at,
+            // retry_reason).
+            ...EngineWait::fields($transcript),
             'text' => $transcript->text,
             'segments' => $transcript->segments ?? [],
             ...self::failure($transcript),
