@@ -27,6 +27,7 @@ final class SettingsTransfer
         'provider.final_transcript',
         'provider.voice_note',
         'routing.final',
+        'routing.urdu_wait_hours',
         'captions.channels',
         'default_language',
         'languages.auto_more',

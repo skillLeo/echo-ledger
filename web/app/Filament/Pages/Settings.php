@@ -10,6 +10,7 @@ use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\User;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
+use App\Services\EngineWait;
 use App\Services\RetentionPolicy;
 use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
@@ -116,6 +117,7 @@ class Settings extends Page
             'provider_final_transcript' => $all['provider.final_transcript'],
             'provider_voice_note' => $all['provider.voice_note'],
             ...self::routingFormState($all['routing.final'] ?? null),
+            'urdu_wait_hours' => EngineWait::clampHours($all['routing.urdu_wait_hours'] ?? null),
             'captions_channels' => $all['captions.channels'],
             'default_language' => LanguageChoice::normalize($all['default_language']) ?? '',
             'languages_auto_more' => array_values(array_intersect(array_keys(LanguageChoice::MORE), (array) ($all['languages.auto_more'] ?? []))),
@@ -286,6 +288,9 @@ class Settings extends Page
                         ->description('Which engine writes each language, in order: the first one with a key on API Credentials is used, the next ones are the fallback. Other covers the More languages; Auto is for recordings whose language is not chosen. Run “Compare engines” on a recording to choose.')
                         ->collapsible()->columns(4)->schema([
                             ...self::routingFields(),
+                            TextInput::make('urdu_wait_hours')->label('Urdu waits for its best engine up to (hours)')->numeric()
+                                ->minValue(0)->maxValue(EngineWait::MAX_HOURS)->step(0.5)->required()->columnSpan(2)
+                                ->helperText('When the first engine of the Urdu or Auto list is busy (rate limited) or down, the recording waits for it and it is tried again (after 2, 4, 8, 16, then every 30 minutes) instead of going to a weaker engine. After this long the next engine writes it, marked "Backup engine". 0 hands it on at once, like the other languages. Default 6.'),
                             Toggle::make('double_check')->label('Double-check unsure lines with a second engine')->columnSpanFull()
                                 ->helperText('Whisper on Groq (or ElevenLabs Scribe when Whisper wrote the transcript) listens again to up to 12 lines the first engine was not sure of. When they disagree, both are shown; the transcript is never changed. Each line is billed (Groq: at least 10 seconds).'),
                             Toggle::make('double_check_clients')->label('Always double-check recordings filed under a client')->columnSpan(2)
@@ -643,6 +648,7 @@ class Settings extends Page
             'live_translate.watch_target' => array_key_exists($state['live_translate_watch_target'] ?? '', self::LIVE_TRANSLATE_LANGUAGES) ? $state['live_translate_watch_target'] : 'ur',
             'live_translate.watch_speed' => array_key_exists($state['live_translate_watch_speed'] ?? '', self::LIVE_TRANSLATE_SPEEDS) ? $state['live_translate_watch_speed'] : 'balanced',
             'routing.final' => self::routingFromState($state),
+            'routing.urdu_wait_hours' => EngineWait::clampHours($state['urdu_wait_hours'] ?? null),
         ]);
         // Plan limits live on the plan of the current workspace, not in settings (never exported).
         $limit = fn (string $key): ?int => filled($state[$key] ?? null) ? (int) $state[$key] : null;

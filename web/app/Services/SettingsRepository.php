@@ -62,6 +62,8 @@ final class SettingsRepository
         // (App\Stt\LanguageRouter). Automatic uses provider.final_transcript / provider.voice_note.
         'routing.final' => LanguageRouter::DEFAULT_FINAL_ROUTES,
         'routing.live' => LanguageRouter::DEFAULT_LIVE_ROUTES,
+        // Since v1.5: an Urdu or Auto recording waits this long for its engine before a lower one takes it (EngineWait).
+        'routing.urdu_wait_hours' => EngineWait::DEFAULT_HOURS,
         'azure.region' => null,
         'azure.endpoint' => null,
         'azure.model' => 'MAI-Transcribe-2',         // MAI-Transcribe-2 | standard

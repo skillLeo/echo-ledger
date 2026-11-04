@@ -605,7 +605,8 @@ describe('reconciliation', function () {
     });
 
     it('fails a job the provider never finishes after six hours', function () {
-        $stale = submittedTranscript('assemblyai', 'job_1', ['submitted_at' => now()->subHours(7)]);
+        // English: an Urdu or Auto recording waits for its engine instead (UrduRoutingTest).
+        $stale = submittedTranscript('assemblyai', 'job_1', ['submitted_at' => now()->subHours(7), 'language' => 'en']);
         $calls = [];
         $this->fakeAssemblyAi('job_1', ['id' => 'job_1', 'status' => 'processing'], $calls);
 

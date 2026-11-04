@@ -10,6 +10,7 @@ use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptStatus;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\Transcript;
+use App\Services\EngineWait;
 use App\Services\ProviderCopyEraser;
 use App\Services\TempFileSweeper;
 use App\Services\TranscriptStore;
@@ -67,12 +68,14 @@ final class ReconcileTranscripts extends Command
                 }
             });
 
-        // 2. Pending transcripts whose job was lost (e.g. queue table cleared).
+        // 2. Pending transcripts whose job was lost (e.g. queue table cleared). One that waits for its engine (EngineWait)
+        //    has its run queued for later: it is queued again only when that run is well overdue.
         Transcript::query()
             ->where('status', TranscriptStatus::Pending->value)
             ->whereNull('provider_job_id')
             ->where('updated_at', '<', now()->subMinutes(30))
             ->limit($limit)->get()
+            ->filter(fn (Transcript $t): bool => EngineWait::due($t))
             ->each(fn (Transcript $t) => TranscribeFinalJob::dispatch($t->id));
 
         // 3. Completed transcripts whose provider copy could not be deleted yet.

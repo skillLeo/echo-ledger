@@ -29,7 +29,7 @@ final class SettingsSearch
         'language' => ['general', 'Language & time', 'default language time zone timezone english urdu hindi automatic'],
         'vocabulary' => ['general', 'Vocabulary', 'keyterms names jargon corrections replace always write words'],
         'engine' => ['recording', 'Transcription engine', 'final transcript voice notes provider assemblyai elevenlabs azure whisper soniox accuracy'],
-        'routing' => ['recording', 'Engine per language', 'language urdu arabic english auto other engine routing order fallback groq whisper soniox elevenlabs assemblyai script'],
+        'routing' => ['recording', 'Engine per language', 'language urdu arabic english auto other engine routing order fallback backup wait hours busy retry groq whisper soniox elevenlabs assemblyai script'],
         'bookmarks' => ['recording', 'Bookmarks', 'tags markers one tap during a call'],
         'assemblyai' => ['recording', 'AssemblyAI', 'region eu us streaming model final transcript models'],
         'elevenlabs' => ['recording', 'ElevenLabs', 'scribe base url batch model'],
