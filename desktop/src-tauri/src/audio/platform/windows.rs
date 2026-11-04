@@ -358,7 +358,7 @@ pub fn resolve_root_with(pid: u32, parents: &HashMap<u32, u32>, identity: impl F
 
 /// Is `pid` the process `ancestor` or one of its descendants within 8 levels (EchoLedger's own WebView2
 /// processes; windows of a browser tree)?
-fn descends_from(pid: u32, ancestor: u32, parents: &HashMap<u32, u32>) -> bool {
+pub(crate) fn descends_from(pid: u32, ancestor: u32, parents: &HashMap<u32, u32>) -> bool {
     let mut current = pid;
     for _ in 0..=MAX_ANCESTORS {
         if current == ancestor {
@@ -497,7 +497,7 @@ pub fn ancestor_app_with(
 }
 
 /// pid → parent pid for every running process (a single toolhelp snapshot).
-fn parent_map() -> std::collections::HashMap<u32, u32> {
+pub(crate) fn parent_map() -> std::collections::HashMap<u32, u32> {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Diagnostics::ToolHelp::{CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS};
 
@@ -516,7 +516,7 @@ fn parent_map() -> std::collections::HashMap<u32, u32> {
     map
 }
 
-fn process_identity(pid: u32) -> (String, Option<String>) {
+pub(crate) fn process_identity(pid: u32) -> (String, Option<String>) {
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::Storage::Packaging::Appx::GetPackageFamilyName;
     use windows::Win32::System::Threading::{OpenProcess, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};

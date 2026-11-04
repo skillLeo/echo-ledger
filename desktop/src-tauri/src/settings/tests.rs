@@ -70,6 +70,9 @@ fn customised() -> Settings {
         quiet_from: "23:30".into(),
         quiet_to: "06:15".into(),
         onboarding_done: true,
+        screen_moments: false,
+        screen_target: "whole_screen".into(),
+        screen_excluded_apps: vec!["Signal.exe".into()],
     }
 }
 // ---- Defaults --------------------------------------------------------------------------------------------------
@@ -110,6 +113,20 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert_eq!(s.transcription_language, None, "the client's or the console's language, else automatic");
     assert_eq!((s.dictation_mode.as_str(), s.dictation_cleanup, s.dictation_sounds), ("toggle", true, true));
     assert!(s.dictation_replacements.is_empty() && s.dictation_snippets.is_empty());
+    assert!(s.screen_moments, "screen moments are on, shown in the pill with one-tap pause");
+    assert_eq!(s.screen_target, "meeting_window", "the meeting window, not the whole screen");
+    assert!(s.screen_excluded_apps.iter().any(|a| a == "1Password") && s.screen_excluded_apps.iter().any(|a| a == "Bitwarden"), "password managers are excluded");
+}
+
+#[test]
+fn screen_moments_settings_load_tolerantly() {
+    let s = Settings::from_value(json!({"screenTarget": "everything", "screenExcludedApps": ["  Signal.exe ", "", "signal", 7, "x".repeat(101)], "screenMoments": "yes"}));
+    assert_eq!(s.screen_target, "meeting_window", "an unknown target is the meeting window");
+    assert_eq!(s.screen_excluded_apps, vec!["Signal.exe".to_string()], "trimmed, no repeats, nothing too long or not a name");
+    assert!(s.screen_moments, "a value of the wrong type keeps the default");
+    let whole = Settings::from_value(json!({"screenTarget": "whole_screen", "screenExcludedApps": []}));
+    assert_eq!(whole.screen_target, "whole_screen");
+    assert!(whole.screen_excluded_apps.is_empty(), "the person may take every app off the list");
 }
 
 #[test]
@@ -162,6 +179,9 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "quietFrom",
             "quietHours",
             "quietTo",
+            "screenExcludedApps",
+            "screenMoments",
+            "screenTarget",
             "serverUrl",
             "shortcuts",
             "siteRules",
@@ -169,7 +189,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 37, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 40, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");

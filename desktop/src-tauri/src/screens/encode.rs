@@ -40,7 +40,7 @@ pub fn bgra_to_rgb(pixels: &[u8], width: u32, height: u32, stride: usize, out_w:
     if ow == w && oh == h {
         for y in 0..h {
             let row = &pixels[y * stride..y * stride + w * 4];
-            for (x, px) in row.chunks_exact(4).enumerate() {
+            for (x, px) in row.as_chunks::<4>().0.iter().enumerate() {
                 let o = (y * w + x) * 3;
                 out[o] = px[2];
                 out[o + 1] = px[1];

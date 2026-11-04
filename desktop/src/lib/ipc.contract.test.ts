@@ -229,7 +229,17 @@ describe("wire types", () => {
     expect(sorted(tsInterfaceKeys("SettingsPatch"))).toEqual(sorted(settingsPatchKeys));
   });
 
-  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "SavedToast", "AfterCallState", "SkippedItem", "InputDevice", "AskPayload", "NavigatePayload", "ShareOptions", "RequestLinkOptions"])(
+  it("screen hold reasons match the serde names of the Rust enum", () => {
+    expect(sorted(tsUnionValues("ScreenHoldReason"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "HoldReason"), "HoldReason")));
+  });
+
+  it("the screen targets are the ones the Rust privacy rules know", () => {
+    const privacy = rustSourceDeclaring("enum", "HoldReason");
+    const consts = [...privacy.matchAll(/pub const (?:MEETING_WINDOW|WHOLE_SCREEN): &str = "(\w+)";/g)].map((m) => m[1]);
+    expect(sorted(tsUnionValues("ScreenTarget"))).toEqual(sorted(consts));
+  });
+
+  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "SavedToast", "AfterCallState", "SkippedItem", "InputDevice", "AskPayload", "NavigatePayload", "ShareOptions", "RequestLinkOptions", "ScreensPill", "ScreensStatus"])(
     "%s fields match the Rust struct",
     (name) => {
       expect(sorted(tsInterfaceKeys(name))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", name), name)));

@@ -262,6 +262,10 @@ fn on_stt_event(app: &AppHandle, channel: Channel, targets: &[&str], record_turn
     let hub = app.state::<CaptionHub>();
     let speaker = channel.speaker().to_string();
     let index = (channel.index() + 1) as u8;
+    // Screen moments: "look at this page" in a recording's captions takes a screen (since v1.5).
+    if record_turns && let SttEvent::Partial { text } | SttEvent::Final { text, .. } = &event {
+        app.state::<crate::AppState>().screens.heard(text);
+    }
     match event {
         SttEvent::Partial { text } => hub.send(targets, CaptionEvent::Partial { speaker, channel: index, text }),
         SttEvent::Final { text, start_ms, end_ms } => {

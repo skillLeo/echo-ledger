@@ -360,3 +360,15 @@ fn only_time_zone_names_go_into_the_views_query() {
         assert!(!is_time_zone(zone), "{zone}");
     }
 }
+
+#[test]
+fn a_projects_screens_switch_goes_through_the_patch() {
+    let patch = json!({"screens": false, "screen_count": 3}).as_object().unwrap().clone();
+    assert_eq!(serde_json::Value::Object(allowed_patch(&patch, &CLIENT_PATCH_KEYS)), json!({"screens": false}));
+}
+
+#[test]
+fn the_screen_settings_page_opens_where_each_system_keeps_it() {
+    assert_eq!(privacy_settings_url("screen", true), Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"));
+    assert_eq!(privacy_settings_url("screen", false), Some("ms-settings:privacy-graphicscapturewithoutborder"));
+}

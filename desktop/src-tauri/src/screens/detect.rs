@@ -306,7 +306,7 @@ mod tests {
             }
         }
         let luma = Luma::from_bgra(&px, w, h, stride).unwrap();
-        assert_eq!(luma.cell(10, 10), (150 * 255 >> 8) as u8);
+        assert_eq!(luma.cell(10, 10), ((150 * 255) >> 8) as u8);
     }
 
     #[test]
@@ -387,7 +387,7 @@ mod tests {
         // A screen that differs by less than the change bar but more than the words bar (a grey box over 80 cells).
         let edited = Luma::from_fn(|x, y| if (20..22).contains(&y) && (8..48).contains(&x) { 120 } else { a.cell(x, y) });
         let share = a.changed_share(&edited);
-        assert!(share >= WORDS_SHARE && share < CHANGE_SHARE, "share {share}");
+        assert!((WORDS_SHARE..CHANGE_SHARE).contains(&share), "share {share}");
         if hamming(a.hash(), edited.hash()) >= NEAR_BITS {
             assert_eq!(d.observe(2_000, &edited, true), Some(Trigger::Words));
         }

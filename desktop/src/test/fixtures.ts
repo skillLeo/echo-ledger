@@ -101,6 +101,9 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     quietFrom: "22:00",
     quietTo: "07:00",
     onboardingDone: true,
+    screenMoments: true,
+    screenTarget: "meeting_window",
+    screenExcludedApps: ["1Password", "Bitwarden", "KeePass"],
     ...overrides,
   };
 }
@@ -145,6 +148,7 @@ export function makeRecordingState(overrides: Partial<RecordingState> = {}): Rec
     auto: true,
     hidden: false,
     bluetoothMic: false,
+    screens: null,
     ...overrides,
   };
 }

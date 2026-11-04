@@ -288,6 +288,7 @@ fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     emit_status(app);
     emit_recording_state(app);
     check_bluetooth_mic(app, info);
+    crate::screens::on_recording_started(app, info);
 }
 
 /// Whether the recording's microphone is Bluetooth (v1.5), asked of the system beside the start so the start does not
@@ -325,6 +326,8 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     }
     state.captions_on_resume.store(false, Ordering::SeqCst);
     let session = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).begin_stop();
+    // Screens first, while the recording's clock still runs (a screen being written keeps its moment).
+    crate::screens::on_recording_ended(app).await;
     let finished = state.capture.stop()?;
     state.bluetooth_mic.store(false, Ordering::SeqCst);
     set_overlay_visible(app, OVERLAY, false);
@@ -370,6 +373,7 @@ pub async fn cancel_recording(app: &AppHandle) -> AppResult<()> {
     if let Some((finished, session, _)) = end_capture(app).await? {
         let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&finished.info.client_ref);
         crate::recovery::delete_recording_folder(&finished.output.dir);
+        crate::screens::forget(app, &finished.info.client_ref);
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
@@ -392,6 +396,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     let silent = std::fs::metadata(&finished.output.primary).map(|m| m.len() < MIN_AUDIO_BYTES).unwrap_or(true);
     if silent {
         crate::recovery::delete_recording_folder(&finished.output.dir);
+        crate::screens::forget(app, &client_ref);
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
@@ -509,7 +514,12 @@ pub fn purge_skipped(app: &AppHandle) {
         SkippedFiles::in_dir(&state.data_dir).purge(Utc::now())
     };
     match done {
-        Ok(ids) if !ids.is_empty() => emit_skipped(app),
+        Ok(ids) if !ids.is_empty() => {
+            for id in &ids {
+                crate::screens::forget(app, id);
+            }
+            emit_skipped(app);
+        }
         Ok(_) => {}
         Err(e) => eprintln!("[echoledger] removing skipped calls: {e}"),
     }
@@ -545,6 +555,7 @@ pub fn discard_decision(app: &AppHandle, id: &str) -> AppResult<()> {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
         DecisionFiles::in_dir(&state.data_dir).discard(id)?;
     }
+    crate::screens::forget(app, id);
     state.upload_notify.notify_one(); // the worker deletes a queued server session
     after_decision(app, id);
     Ok(())
@@ -608,6 +619,7 @@ pub async fn undo_saved(app: &AppHandle, id: &str) -> AppResult<()> {
         session
     };
     refresh_after_call(app);
+    crate::screens::forget(app, id);
     if discard_upload(app, id).is_ok() {
         return Ok(());
     }
@@ -1010,6 +1022,7 @@ pub fn discard_upload(app: &AppHandle, id: &str) -> AppResult<()> {
         queue_discard(app, session_id)?;
     }
     delete_local_audio(&item);
+    crate::screens::forget(app, &item.id());
     emit_uploads(app);
     emit_status(app);
     Ok(())
@@ -1201,19 +1214,24 @@ pub fn spawn_upload_worker(app: AppHandle) {
 async fn run_upload_cycle(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
     let data_dir = state.data_dir.clone();
-    let (usage, discards, uploads) = {
+    let (usage, discards, uploads, waiting) = {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        (
-            UsageQueue::load(&paths::usage(&data_dir)).items,
-            DiscardQueue::load(&paths::discards(&data_dir)).items,
-            UploadQueue::load(&paths::uploads(&data_dir)).items,
-        )
+        let uploads = UploadQueue::load(&paths::uploads(&data_dir)).items;
+        // Every recording still deciding, queued or skipped keeps its screens.
+        let waiting: std::collections::HashSet<String> = uploads
+            .iter()
+            .map(PendingUpload::id)
+            .chain(DecisionFiles::in_dir(&data_dir).load().items.into_iter().map(|d| d.id))
+            .chain(SkippedFiles::in_dir(&data_dir).load().items.into_iter().map(|c| c.decision.id))
+            .collect();
+        (UsageQueue::load(&paths::usage(&data_dir)).items, DiscardQueue::load(&paths::discards(&data_dir)).items, uploads, waiting)
     };
+    crate::screens::sweep(app, waiting);
     // Failed items wait for Retry; v1 servers get no usage reports (kept until the server is upgraded).
     let pending_uploads: Vec<String> = uploads.iter().filter(|i| !i.is_failed()).map(PendingUpload::id).collect();
     let known_v1 = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().is_some_and(|c| !c.is_v1_1());
     let usage_to_send = !usage.is_empty() && !known_v1;
-    if pending_uploads.is_empty() && discards.is_empty() && !usage_to_send {
+    if pending_uploads.is_empty() && discards.is_empty() && !usage_to_send && !crate::screens::due(app) {
         return;
     }
     let Ok(api) = state.api() else { return };
@@ -1297,6 +1315,12 @@ async fn run_upload_cycle(app: &AppHandle) {
             AfterAttempt::Remove => finish_item(app, &item),
             AfterAttempt::Keep => store_item(app, &item),
         }
+        // Screen moments go once the recording is on the server; one deleted there (or a file it already had) has none.
+        match &result {
+            Ok(UploadOutcome::Ready { session_id } | UploadOutcome::Verifying { session_id }) => crate::screens::link(app, &id, session_id),
+            Ok(UploadOutcome::Deleted { .. } | UploadOutcome::Duplicate) => crate::screens::forget(app, &id),
+            _ => {}
+        }
         emit_uploads(app);
         // Undo on the Saved toast while this attempt ran: what reached the server is deleted again (v1.5). Checked
         // under the same lock Undo takes, so a recording is either found uploaded by Undo or deleted here.
@@ -1313,6 +1337,7 @@ async fn run_upload_cycle(app: &AppHandle) {
             if let Some(session) = reached {
                 let _ = queue_discard(app, session);
             }
+            crate::screens::forget(app, &id);
             continue;
         }
         match result {
@@ -1329,10 +1354,14 @@ async fn run_upload_cycle(app: &AppHandle) {
             _ => {}
         }
     }
+    // Screen moments of the recordings that reached the server (this cycle or before).
+    let screens_sent = crate::screens::send(app, &api).await;
     // One notice for the cycle (a second toast would replace the first).
     let mut notices = Vec::new();
-    if uploaded > 0 {
+    if uploaded > 0 || screens_sent > 0 {
         let _ = crate::commands::refresh_library_inner(app).await;
+    }
+    if uploaded > 0 {
         notices.push(format!("Uploaded {uploaded} recording(s) for transcription"));
     }
     if duplicates > 0 {

@@ -89,7 +89,13 @@ export interface Settings {
   quietFrom: string;
   quietTo: string;
   onboardingDone: boolean;
+  screenMoments: boolean;
+  screenTarget: ScreenTarget;
+  screenExcludedApps: string[];
 }
+
+/** What screen moments capture (since v1.5): the meeting app's window, or the whole screen it is on. */
+export type ScreenTarget = "meeting_window" | "whole_screen";
 
 /** One notification of the activity centre (B18). */
 export interface ActivityItem {
@@ -206,6 +212,9 @@ export interface SettingsPatch {
   quietFrom?: string;
   quietTo?: string;
   onboardingDone?: boolean;
+  screenMoments?: boolean;
+  screenTarget?: ScreenTarget;
+  screenExcludedApps?: string[];
 }
 
 /** A bookmark just made on the current recording (`recording:marked`); `count` is how many it has now. */
@@ -288,6 +297,8 @@ export interface LibraryItem {
   /** The recording's language (null = automatic) and its chip, "UR+EN" (since v1.1.2). */
   language?: TranscriptionLanguage | null;
   language_chip?: string;
+  /** Screen moments of the recording (since v1.5); missing on a server without them. */
+  screen_count?: number;
   transcript?: {
     final_status: string | null;
     final_transcript_id: string | null;
@@ -338,6 +349,8 @@ export interface ClientFolder {
   children_count?: number;
   /** Recordings in it and in its subfolders (since v1.5). */
   nested_session_count?: number;
+  /** Screen moments are kept for its meetings (since v1.5, default on); missing on a server without them. */
+  screens?: boolean;
 }
 
 /** The smart folders of the Library (since v1.5): views the server computes, never copies. */
@@ -788,7 +801,69 @@ export interface RecordingState {
   language?: TranscriptionLanguage | null;
   /** The recording's microphone is Bluetooth (v1.5): the pill says so when it starts. */
   bluetoothMic: boolean;
+  /** Screen moments of the recording (v1.5); null while they are off for it. */
+  screens: ScreensPill | null;
 }
+
+/** Why screen moments are paused (since v1.5): by the person, the recording paused, the meeting window minimised or
+ * hidden, no meeting window, an excluded app showing, macOS permission missing, 120 this hour, or the project being read. */
+export type ScreenHoldReason = "you" | "recording_paused" | "minimised" | "no_window" | "excluded_app" | "permission" | "hour_cap" | "starting";
+
+/** The recording pill's Screens chip: on, or paused and why, and how many screens were kept. */
+export interface ScreensPill {
+  on: boolean;
+  reason: ScreenHoldReason | null;
+  count: number;
+}
+
+/** What Settings → Screen moments says about this computer and the server (`screens_status`). */
+export interface ScreensStatus {
+  supported: boolean;
+  platform: "windows" | "macos" | "other";
+  /** No border around what is captured (Windows 11); Windows 10 draws a yellow one. */
+  borderless: boolean;
+  /** macOS Screen Recording is allowed (always true on Windows). */
+  permission: boolean;
+  inPlan: boolean;
+  onServer: boolean;
+}
+
+/** One screen moment of a recording (docs/API.md "Screen moments"); the image links are signed for 30 minutes. */
+export interface ScreenMoment {
+  id: string;
+  /** "Screen 7": the recording's screens in time order from 1. */
+  index: number;
+  at_ms: number;
+  width: number;
+  height: number;
+  trigger: "change" | "words" | "manual";
+  ocr_text: string | null;
+  description: string | null;
+  image_url: string;
+  thumb_url: string;
+  created_at?: string;
+}
+
+/** `GET /api/sessions/{id}/screens`. */
+export interface SessionScreens {
+  data: ScreenMoment[];
+}
+
+/** A screen of a project's Screens tab, with its recording. */
+export interface ProjectScreen extends ScreenMoment {
+  session_id: string;
+  session_title: string | null;
+  session_started_at: string | null;
+}
+
+/** One page of `GET /api/clients/{id}/screens` (60 a page, newest recording first). */
+export interface ProjectScreensPage {
+  data: ProjectScreen[];
+  next_cursor: string | null;
+}
+
+/** Export → Meeting pack: the print page (Save as PDF in the browser) or a ZIP with the pictures. */
+export type MeetingPackFormat = "pdf" | "zip";
 
 /** "Saved · Call with Omar · 4:12 · Undo": a recording kept at once after a call; `until` is when the toast goes. */
 export interface SavedToast {
@@ -1001,7 +1076,7 @@ export const api = {
   inputDevices: () => invoke<InputDevice[]>("input_devices"),
   testCapture: (seconds?: number) => invoke<TestResult>("test_capture", { seconds: seconds ?? null }),
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
-  openPrivacySettings: (kind: "microphone" | "system_audio" | "automation") => invoke<void>("open_privacy_settings", { kind }),
+  openPrivacySettings: (kind: "microphone" | "system_audio" | "automation" | "screen") => invoke<void>("open_privacy_settings", { kind }),
   searchLibrary: (query: SearchQuery) => invoke<SearchResult>("search_library", { query }),
   /** The edited transcript; for a client's recording `learn` lists words to offer "Always write X as Y" for (v1.4). */
   editTranscript: (id: string, index: number, text: string) => invoke<TranscriptDetail & { learn?: LearnOffer[] }>("transcript_edit", { id, index, text }),
@@ -1045,6 +1120,25 @@ export const api = {
   windowReady: () => invoke<void>("window_ready"),
   mainView: () => invoke<string | null>("main_view_get"),
   saveMainView: (view: string) => invoke<void>("main_view_set", { view }),
+  // Screen moments and the meeting pack (since v1.5).
+  /** Settings → Screen moments: capture support, the border, the macOS permission, the plan and the server. */
+  screensStatus: () => invoke<ScreensStatus>("screens_status"),
+  /** The pill's Screens chip: pause or resume screens of the running recording (the recording goes on). */
+  screensPause: (paused: boolean) => invoke<RecordingState>("screens_pause", { paused }),
+  /** macOS: asks for Screen Recording, or opens System Settings once it was refused; true when allowed. */
+  screensPermission: () => invoke<boolean>("screens_permission"),
+  /** A recording's screens in time order; null on a server without screen moments. */
+  sessionScreens: (id: string) => invoke<SessionScreens | null>("session_screens", { id }),
+  /** A page of a project's screens; null on a server without screen moments. */
+  clientScreens: (id: string, includeSubfolders: boolean, cursor: string | null = null) =>
+    invoke<ProjectScreensPage | null>("client_screens", { id, includeSubfolders, cursor }),
+  deleteScreen: (sessionId: string, screen: string) => invoke<void>("screen_delete", { sessionId, screen }),
+  /** A screen's picture from its signed link, as a data: URL (fetched by the core, pinned to the server). */
+  screenImage: (url: string) => invoke<string>("screen_image", { url }),
+  /** Export → Meeting pack in the view on screen: `pdf` opens the print page in the browser, `zip` is saved where
+   * the person chooses (null when they cancel). */
+  meetingPack: (id: string, format: MeetingPackFormat, view: TranscriptView | null, includeAudio = false) =>
+    invoke<string | null>("meeting_pack", { id, format, view, includeAudio }),
 };
 
 /**
