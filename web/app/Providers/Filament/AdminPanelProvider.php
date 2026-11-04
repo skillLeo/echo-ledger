@@ -38,6 +38,10 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->brandName('EchoLedger')
+            // The brand mark (since v1.5, docs/design/brand) next to the name, and as the tab's icon.
+            ->brandLogo(fn (): View => view('filament.brand'))
+            ->brandLogoHeight('1.75rem')
+            ->favicon(asset('favicon.svg'))
             ->login()
             // The activity centre (B18): the bell shows transcript, upload, device and budget notifications.
             ->databaseNotifications()

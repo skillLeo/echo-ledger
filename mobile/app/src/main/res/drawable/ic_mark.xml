@@ -1,12 +1,24 @@
-<!-- The app mark for in-app use (lock screen, onboarding): the launcher's sound-wave "E", centred in 24 dp. -->
+<!-- The app mark for in-app use (lock screen, onboarding): the launcher's wave-into-lines, white, centred in 24 dp. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="56"
-    android:viewportHeight="56">
-    <group android:translateX="-34.5" android:translateY="-26.5">
-        <path android:fillColor="#FFFFFFFF" android:pathData="M38,36h32v7H45v8h22v7H45v8h25v7H38z" />
-        <path android:fillColor="#B3FFFFFF" android:pathData="M76,44h4v20h-4z" />
-        <path android:fillColor="#80FFFFFF" android:pathData="M83,48h4v12h-4z" />
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <group
+        android:translateX="-8"
+        android:translateY="-8">
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M13.00 24.00C13.25 23.07 14.00 19.82 14.50 18.43C15.00 17.04 15.50 16.09 16.00 15.66C16.50 15.22 17.00 15.39 17.50 15.82C18.00 16.25 18.50 17.24 19.00 18.22C19.50 19.20 20.00 20.56 20.50 21.70C21.00 22.83 21.50 24.09 22.00 25.03C22.50 25.97 23.00 26.81 23.50 27.34C24.00 27.87 24.50 28.14 25.00 28.20C25.50 28.26 26.00 28.02 26.50 27.70C27.00 27.38 27.50 26.81 28.00 26.28C28.50 25.76 29.00 25.09 29.50 24.55C30.00 24.01 30.50 23.45 31.00 23.05C31.50 22.65 32.00 22.33 32.50 22.15C33.00 21.97 33.50 21.92 34.00 21.96C34.50 22.00 35.00 22.19 35.50 22.39C36.00 22.59 36.50 22.89 37.00 23.16C37.50 23.43 38.25 23.86 38.50 24.00H51"
+            android:strokeWidth="5.5"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M13,38h38M13,49h22"
+            android:strokeWidth="5.5"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeLineCap="round" />
     </group>
 </vector>

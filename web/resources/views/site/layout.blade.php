@@ -7,11 +7,13 @@
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <meta name="description" content="EchoLedger records calls and meetings on your phone and computer and turns them into accurate transcripts, including Urdu and Roman Urdu.">
     <title>@yield('title', 'EchoLedger')</title>
-    <link rel="icon" href="{{ asset('favicon.ico') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    <link rel="alternate icon" href="{{ asset('favicon.ico') }}">
     <style>
-        :root { --text: #0f172a; --muted: #64748b; --line: #e2e8f0; --bg: #f8fafc; --card: #ffffff; --accent: #4f46e5; --accent-soft: #eef2ff; --on-accent: #ffffff; }
+        /* The apps' design system (docs/DESIGN_SYSTEM.md): Radix slate and indigo. */
+        :root { --text: #1C2024; --muted: #60646C; --line: #D9D9E0; --bg: #F9F9FB; --card: #FFFFFF; --brand: #3E63DD; --accent: #3A5BC7; --accent-soft: #EDF2FE; --on-accent: #FFFFFF; }
         @media (prefers-color-scheme: dark) {
-            :root { --text: #f1f5f9; --muted: #94a3b8; --line: #1e293b; --bg: #0b1020; --card: #111827; --accent: #818cf8; --accent-soft: #1e1b4b; --on-accent: #0b1020; }
+            :root { --text: #EDEEF0; --muted: #B0B4BA; --line: #363A3F; --bg: #111113; --card: #18191B; --brand: #3E63DD; --accent: #9EB1FF; --accent-soft: #182449; --on-accent: #FFFFFF; }
         }
         * { box-sizing: border-box; }
         body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif; }
@@ -19,11 +21,10 @@
         header.site, main, footer.site { max-width: 960px; margin: 0 auto; padding: 0 16px; }
         header.site { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 20px; padding-bottom: 20px; }
         .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); text-decoration: none; }
-        .brand-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); display: grid; place-items: center; color: var(--on-accent); font-weight: 800; }
         nav.site { display: flex; gap: 16px; flex-wrap: wrap; font-size: 15px; }
         nav.site a { color: var(--muted); text-decoration: none; }
         nav.site a:hover, nav.site a:focus-visible { color: var(--text); }
-        .button { display: inline-block; padding: 10px 18px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 600; text-decoration: none; }
+        .button { display: inline-block; padding: 10px 18px; border-radius: 999px; background: var(--brand); color: var(--on-accent); font-weight: 600; text-decoration: none; }
         .button.secondary { background: var(--accent-soft); color: var(--accent); }
         .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
         .muted { color: var(--muted); }
@@ -38,7 +39,7 @@
 </head>
 <body>
 <header class="site">
-    <a class="brand" href="{{ route('site.home') }}"><span class="brand-mark" aria-hidden="true">E</span>EchoLedger</a>
+    <a class="brand" href="{{ route('site.home') }}"><img src="{{ asset('favicon.svg') }}" width="28" height="28" alt="">EchoLedger</a>
     <nav class="site" aria-label="Site">
         <a href="{{ route('downloads') }}">Downloads</a>
         <a href="{{ url('/admin') }}">Sign in</a>

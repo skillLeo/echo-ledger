@@ -77,7 +77,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## Phase 7 — Brand, icons, motion, consistency
 
-- [ ] Original logo (mark + wordmark, 16 px, light/dark), app icons (Android adaptive + themed, Windows, Mac), splash, docs/design/brand page.
+- [x] Original logo (mark + wordmark, 16 px, light/dark), app icons (Android adaptive + themed, Windows, Mac), splash, docs/design/brand page. **Done** 2026-11-04 (docs/design/brand/README.md); phone screenshots re-recorded and the Mac icon looked at in the consistency pass.
 - [ ] One icon family across the apps.
 - [ ] Motion (tabs, list → detail, record button, after-call chip, success), 60/120 fps, reduced motion respected.
 - [ ] Consistency pass with light/dark screenshots on phone, desktop and web.
