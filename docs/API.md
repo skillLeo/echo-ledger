@@ -246,8 +246,10 @@ suggested fixes and screen descriptions are never switched off by a plan.
 - `GET /api/config` gains `"plan": {"key": "personal", "name": "Personal", "features": {"live_translate": true,
   "screen_moments": true, "ai_notes": false, "connector": true}, "limits": {"monthly_minutes": null,
   "storage_bytes": null, "retention_days": null, "seats": null}, "used": {"minutes": 123, "storage_bytes": 456}}`
-  (`null` = no limit). Missing (an older server): every feature on, no limits. The apps hide what the plan leaves
-  out and show the limits next to the usage.
+  (`null` = no limit), and `"workspace": {"id": "01J…", "name": "Acme team", "role": "owner" | "admin" | "member" |
+  "viewer"}` (the device's workspace and its person's role there). Missing (an older server): every feature on, no
+  limits, role unknown (act as a member). The apps hide what the plan leaves out, show the limits next to the usage,
+  and a viewer's app offers no recording.
 - New errors: `403 feature_not_in_plan` with `"feature": "screen_moments"` ("Screen moments are not in your plan"),
   `403 seat_limit_reached` (an invitation past the plan's seats), and `403 ai_budget_reached` now also when the
   plan's AI credits for the month are used (it replaces the v1.4 `client_ai.monthly_usd` budget). The B20 errors (`budget_exceeded`, `storage_limit_reached`, `device_limit_reached`) stay.
@@ -758,6 +760,9 @@ unless a share link of the recording allows downloads.
 - Text and a one-line description per screen (`ocr_text`, `description`) are made on the server with Claude Haiku
   5.5 when Settings → Screen moments → "Describe screens" is on (the default); they make screens searchable
   (`GET /api/search` also finds screen text) and are billed to the workspace's AI usage. Off: both stay `null`.
+- `GET /api/clients/{id}/screens?include_subfolders=0|1&cursor=` — `library:read` → `200 {"data": [<screen> +
+  "session_id", "session_title", "session_started_at"], "next_cursor": "…" | null}`: the project's Screens tab, newest
+  recording first and each recording's screens in time order, 60 per page.
 - Library items and `GET /api/sessions/{id}` gain `screen_count`.
 - Projects (client objects) gain `screens` (bool, default `true`): `false` = the desktop does not capture screens for
   meetings filed under that project. `PATCH /api/clients/{id}` accepts it.
@@ -1204,6 +1209,34 @@ the usage ledger:
   yet is not submitted and fails with `error_code` `budget_exceeded` (it can be retried from the console after the
   limit is raised); sockets already open are not cut. Devices read `usage` from `GET /api/config` (and from the
   `POST /api/usage` answer) to show the limit on every screen.
+
+---
+
+## Claude and ChatGPT connector (since v1.5)
+An MCP server, so that Claude (Customize → Connectors → Add custom connector) and ChatGPT read a person's recordings
+the way the person can in the apps. It only reads: it never records, edits, shares or deletes.
+
+- **Endpoint:** `https://<server>/mcp` (MCP over Streamable HTTP, the official `laravel/mcp` package).
+- **Sign-in:** OAuth 2.1 through Laravel Passport: discovery at `/.well-known/oauth-protected-resource` and
+  `/.well-known/oauth-authorization-server`, dynamic client registration, the authorization-code flow with PKCE
+  (S256 only), scope `mcp:use`. The person signs in on the console (with two-factor sign-in when it is on) and
+  approves "Allow Claude to read your EchoLedger recordings?". Access tokens last 1 hour, refresh tokens 30 days.
+  Profile → Connected apps lists each connection with its last use and Disconnect.
+- **What it sees:** exactly what the person can open in the apps: their own recordings and projects and what was
+  shared with them, in their current workspace. The plan's `connector` feature must be on; otherwise every tool
+  answers "The connector is not in your plan."
+- **Limits and records:** 60 tool calls a minute per person; every call goes into the audit log (tool, arguments
+  without content, result size).
+
+| Tool | Input | Output |
+|---|---|---|
+| `list_projects` | `parent_id` (optional) | Projects with id, name, path, recording count and last recording date. |
+| `search` | `query` (2–200 characters), `project_id` (optional), `limit` (1–25, default 10) | Matches in titles, transcript text and screen text: recording id, title, date, project, the matching line and its time. |
+| `get_recording` | `id`, `view` (`original`, `roman`, `english`, `urdu`; default: the console's default view when it is made), `include_screens` (default true) | Title, date, length, people, project, then the transcript as `[mm:ss] Speaker: text` lines with `[Screen N at mm:ss: description]` lines at the screens' moments, and each screen's text and a signed image link (30 minutes). |
+| `get_project_brief` | `project_id` | The project's brief, notes and instructions, contacts, file names, memory and the latest call notes (memory and call notes only when AI notes are in the plan). |
+| `list_recent` | `n` (1–50, default 10), `project_id` (optional) | The latest recordings: id, title, date, length, project and app. |
+
+Errors come back as tool errors in plain words ("No recording with that id", "The connector is not in your plan").
 
 ---
 

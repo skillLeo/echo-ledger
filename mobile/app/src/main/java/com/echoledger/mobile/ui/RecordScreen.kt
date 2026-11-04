@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.calls.PostCallPrompt
+import com.echoledger.mobile.core.PlanState
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.notify.Notifications
@@ -101,7 +102,13 @@ enum class RecordMode { VOICE, CALLS, GAME, WATCH }
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecordSheet(capabilities: Capabilities, autoRecordOn: Boolean, onPick: (RecordMode) -> Unit, onDismiss: () -> Unit) {
+fun RecordSheet(
+    capabilities: Capabilities,
+    autoRecordOn: Boolean,
+    onPick: (RecordMode) -> Unit,
+    onDismiss: () -> Unit,
+    liveTranslate: Boolean = true
+) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Surface) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.screen).padding(bottom = Space.s5)) {
             Text("New", style = LocalEchoType.current.titleM, color = Brand.Text, modifier = Modifier.padding(bottom = Space.s4))
@@ -116,31 +123,34 @@ fun RecordSheet(capabilities: Capabilities, autoRecordOn: Boolean, onPick: (Reco
                 ModeTile(Icons.Rounded.Mic, "Voice & files", "Record or import", Modifier.weight(1f)) { onPick(RecordMode.VOICE) }
                 ModeTile(Icons.Rounded.Call, "Calls & meetings", calls, Modifier.weight(1f)) { onPick(RecordMode.CALLS) }
             }
-            Spacer(Modifier.height(Space.s3))
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
-                val translating by com.echoledger.mobile.translate.LiveTranslateService.state.collectAsState()
-                // What Soniox said last time it refused ("Needs Soniox credit"), until a session runs again.
-                val blocked = com.echoledger.mobile.translate.TranslateStatus.blocked(androidx.compose.ui.platform.LocalContext.current)
-                ModeTile(
-                    Icons.Rounded.SportsEsports,
-                    "Game translate",
-                    when {
-                        translating == com.echoledger.mobile.translate.TranslateMode.GAME -> "Game: on"
-                        blocked != null -> blocked
-                        else -> "Game: off"
-                    },
-                    Modifier.weight(1f)
-                ) { onPick(RecordMode.GAME) }
-                ModeTile(
-                    Icons.Rounded.Tv,
-                    "Watch translate",
-                    when {
-                        translating == com.echoledger.mobile.translate.TranslateMode.WATCH -> "Watch: on"
-                        blocked != null -> blocked
-                        else -> "Watch: off"
-                    },
-                    Modifier.weight(1f)
-                ) { onPick(RecordMode.WATCH) }
+            // Since v1.5: a plan without Live Translate shows neither mode.
+            if (liveTranslate) Spacer(Modifier.height(Space.s3))
+            if (liveTranslate) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+                    val translating by com.echoledger.mobile.translate.LiveTranslateService.state.collectAsState()
+                    // What Soniox said last time it refused ("Needs Soniox credit"), until a session runs again.
+                    val blocked = com.echoledger.mobile.translate.TranslateStatus.blocked(androidx.compose.ui.platform.LocalContext.current)
+                    ModeTile(
+                        Icons.Rounded.SportsEsports,
+                        "Game translate",
+                        when {
+                            translating == com.echoledger.mobile.translate.TranslateMode.GAME -> "Game: on"
+                            blocked != null -> blocked
+                            else -> "Game: off"
+                        },
+                        Modifier.weight(1f)
+                    ) { onPick(RecordMode.GAME) }
+                    ModeTile(
+                        Icons.Rounded.Tv,
+                        "Watch translate",
+                        when {
+                            translating == com.echoledger.mobile.translate.TranslateMode.WATCH -> "Watch: on"
+                            blocked != null -> blocked
+                            else -> "Watch: off"
+                        },
+                        Modifier.weight(1f)
+                    ) { onPick(RecordMode.WATCH) }
+                }
             }
         }
     }
@@ -221,6 +231,11 @@ fun RecordScreen(
         EchoTopBar(if (mode == RecordMode.CALLS && !live.active) "Calls & meetings" else "Voice note")
         // Since v1.5: a newer website build of the app (the Google Play build never shows this).
         UpdateBanner(vm, Modifier.padding(horizontal = Space.screen, vertical = Space.s1))
+        // Since v1.5: a viewer opens what is shared with them and records nothing.
+        if (settings.plan.viewer) {
+            InlineBanner(PlanState.viewerText(settings.plan.workspace), Modifier.padding(horizontal = Space.screen, vertical = Space.s2))
+            return@Column
+        }
         if (mode == RecordMode.VOICE || live.active) {
             RecordStage(live) { action ->
                 if (action == RecordingService.ACTION_TOGGLE) {

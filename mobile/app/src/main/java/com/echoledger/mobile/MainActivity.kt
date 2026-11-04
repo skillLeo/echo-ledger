@@ -387,7 +387,7 @@ class MainActivity : FragmentActivity() {
                     recordMode = it
                     tab = TAB_RECORD
                     recordSheet = false
-                }, onDismiss = { recordSheet = false })
+                }, onDismiss = { recordSheet = false }, liveTranslate = settings.plan.liveTranslate)
             }
             Scaffold(
                 containerColor = Brand.Background,

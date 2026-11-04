@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.echoledger.mobile.core.ScreenMoments
+import com.echoledger.mobile.data.ProjectScreenDto
 import com.echoledger.mobile.data.ScreenDto
 import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
@@ -102,6 +103,23 @@ internal fun ScreenMomentRow(vm: MainViewModel, screen: ScreenDto, onOpen: () ->
         ScreenPicture(vm, screen, full = false)
         Text(ScreenMoments.label(screen), style = type.labelM.tabular(), color = Brand.Muted)
         screen.description?.takeIf { it.isNotBlank() }?.let { Text(it, style = type.caption, color = Brand.Muted, maxLines = 2) }
+    }
+}
+
+/** A screen on a project's Screens tab (since v1.5): the picture, "Screen 7 · 14:32" and the recording it is from. */
+@Composable
+internal fun ProjectScreenTile(vm: MainViewModel, screen: ProjectScreenDto, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+    val type = LocalEchoType.current
+    val shown = screen.screen()
+    Column(
+        modifier.padding(vertical = Space.s2)
+            .clickable(role = Role.Button, onClickLabel = "Open the screen") { onOpen() }
+            .semantics { contentDescription = "${ScreenMoments.label(shown)}, ${screen.sessionTitle ?: "a recording"}" },
+        verticalArrangement = Arrangement.spacedBy(Space.s1)
+    ) {
+        ScreenPicture(vm, shown, full = false)
+        Text(ScreenMoments.label(shown), style = type.labelM.tabular(), color = Brand.Text)
+        screen.sessionTitle?.takeIf { it.isNotBlank() }?.let { Text(it, style = type.caption, color = Brand.Muted, maxLines = 1) }
     }
 }
 

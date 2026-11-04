@@ -16,6 +16,7 @@ import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.core.app.ServiceCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
@@ -391,8 +392,8 @@ class RecordingService : LifecycleService() {
      * says so and keeps trying to reconnect (Shizuku), instead of turning itself off without a word.
      */
     private fun arm() {
-        // The Google Play build has no capture helper (since v1.5), so auto-record stays off there.
-        if (Build.VERSION.SDK_INT < 34 || !BuildConfig.CAPTURE_HELPER) {
+        // The Google Play build has no capture helper (since v1.5), so auto-record stays off there; a viewer records nothing.
+        if (Build.VERSION.SDK_INT < 34 || !BuildConfig.CAPTURE_HELPER || settings.plan.viewer) {
             Log.w(TAG, "auto-record needs Android 14+ and the capture helper")
             persistArmed(false)
             settle()
@@ -577,6 +578,12 @@ class RecordingService : LifecycleService() {
      * other side, so the timer stayed at 0:00, the voice was quiet and the note was filed as "other").
      */
     private fun startManual() {
+        // Since v1.5: a viewer records nothing (the server would refuse the upload too).
+        if (settings.plan.viewer) {
+            Toast.makeText(this, com.echoledger.mobile.core.PlanState.viewerText(settings.plan.workspace), Toast.LENGTH_LONG).show()
+            settle()
+            return
+        }
         val id = UUID.randomUUID().toString()
         if (Build.VERSION.SDK_INT >= 34 && graph.helper.helper != null && inCallNow()) {
             startHelperCapture(SourceApp.OTHER.wire, id, fromCall = false)

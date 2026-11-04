@@ -311,6 +311,21 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun screens(sessionId: String): List<com.echoledger.mobile.data.ScreenDto> =
         call(request("sessions/$sessionId/screens").get().build(), com.echoledger.mobile.data.ScreensResponse.serializer())!!.data
 
+    /** `GET /api/clients/{id}/screens` (since v1.5): a project's screens, newest recording first, 60 per page. */
+    suspend fun projectScreens(
+        clientId: String,
+        includeSubfolders: Boolean,
+        cursor: String?
+    ): com.echoledger.mobile.data.ProjectScreensResponse {
+        val target = "$base/api/clients/$clientId/screens".toHttpUrl().newBuilder()
+            .addQueryParameter("include_subfolders", if (includeSubfolders) "1" else "0")
+            .apply { cursor?.let { addQueryParameter("cursor", it) } }
+            .build()
+        val req = Request.Builder().url(target).header("Accept", "application/json")
+            .apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
+        return call(req, com.echoledger.mobile.data.ProjectScreensResponse.serializer())!!
+    }
+
     suspend fun deleteScreen(sessionId: String, screenId: String) {
         call(request("sessions/$sessionId/screens/$screenId").delete().build(), null as KSerializer<Unit>?)
     }

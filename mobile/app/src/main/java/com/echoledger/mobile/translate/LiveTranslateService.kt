@@ -133,6 +133,11 @@ class LiveTranslateService :
         scope.launch {
             val settings = graph.settings.current()
             prefs = settings.liveTranslate
+            // Since v1.5: the workspace's plan may leave Live Translate out (tiles and shortcuts still lead here).
+            if (!settings.plan.liveTranslate) {
+                problem(com.echoledger.mobile.core.PlanState.NO_LIVE_TRANSLATE)
+                return@launch
+            }
             val usage = TranslateUsage(this@LiveTranslateService)
             val budget = TranslateBudgetGuard.state(usage.spentUsd(), prefs.monthlyBudgetUsd, prefs.budgetOverrideMonth, usage.month())
             if (budget == BudgetState.PAUSED) {

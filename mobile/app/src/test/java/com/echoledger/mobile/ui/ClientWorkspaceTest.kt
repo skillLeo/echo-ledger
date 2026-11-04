@@ -1,5 +1,6 @@
 package com.echoledger.mobile.ui
 
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -49,6 +50,42 @@ class ClientWorkspaceTest : ScreenTest() {
             }, onBack = {})
         }
         pumpUntil("the workspace") { runCatching { compose.onNodeWithText("An online shop").assertExists() }.isSuccess }
+    }
+
+    @Test
+    fun `a plan without AI notes has no Ask tab, no AI switch and no Make again, and the brief stays`() {
+        runBlocking { app.graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState(aiNotes = false)) } }
+        showWorkspace()
+
+        compose.onNodeWithText(com.echoledger.mobile.core.PlanState.NO_AI_NOTES).assertExists()
+        assertTrue(compose.onAllNodesWithText("Ask").fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("Make again").fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithContentDescription("AI notes").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("• Login").assertExists()
+    }
+
+    @Test
+    fun `the Screens tab lists the project's screens and one plays its recording from there`() {
+        server.on(
+            "GET",
+            "/api/clients/${client.id}/screens",
+            FakeServer.json(
+                200,
+                """{"data":[{"id":"sc1","index":7,"at_ms":872000,"width":1920,"height":1080,"trigger":"change",
+                "description":"The invoice page with the Pay button","image_url":"${server.baseUrl}/img/full","thumb_url":"${server.baseUrl}/img/thumb",
+                "session_id":"s2","session_title":"Call with Omar","session_started_at":"2026-11-03T10:00:00Z"}],"next_cursor":null}"""
+            )
+        )
+        showWorkspace()
+
+        compose.onNodeWithText("Screens").performClick()
+        pumpUntil("the screens") { runCatching { compose.onNodeWithText("Call with Omar").assertExists() }.isSuccess }
+        assertTrue(server.requestsTo("GET", "/api/clients/${client.id}/screens").single().url.queryParameter("include_subfolders") == "0")
+        compose.onNodeWithText("Screen 7 · 14:32").performClick()
+        pumpUntil("the viewer") { runCatching { compose.onNodeWithText("Play from here").assertExists() }.isSuccess }
+        compose.onNodeWithText("The invoice page with the Pay button").assertExists()
+        compose.onNodeWithText("Play from here").performClick()
+        assertEquals(listOf("s2" to 872_000L), opened)
     }
 
     @Test

@@ -172,7 +172,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 markerTags = response.config.markers?.tags.orEmpty(),
                 unsureStyle = response.config.unsure?.style ?: "brackets",
                 unsureThreshold = response.config.unsure?.threshold ?: 0.5,
-                unsureNote = response.config.unsure?.note ?: true
+                unsureNote = response.config.unsure?.note ?: true,
+                plan = com.echoledger.mobile.core.PlanState.from(response.config.plan, response.config.workspace)
             )
         }
         graph.invalidateApi()
@@ -305,7 +306,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                 liveTranslate = com.echoledger.mobile.translate.ConsoleDefaults.apply(
                                     it.liveTranslate,
                                     config.liveTranslate
-                                )
+                                ),
+                                plan = com.echoledger.mobile.core.PlanState.from(config.plan, config.workspace)
                             )
                         }
                     }
@@ -579,6 +581,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun libraryFolder(folder: String): List<LibraryItem>? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.libraryFolder(folder)?.data }.getOrNull()
     }
+
+    /** A project's screens (since v1.5), one page; null when they could not be loaded. */
+    suspend fun projectScreens(
+        clientId: String,
+        includeSubfolders: Boolean,
+        cursor: String?
+    ): com.echoledger.mobile.data.ProjectScreensResponse? =
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.projectScreens(clientId, includeSubfolders, cursor) }.getOrNull() }
 
     /** A recording's screen moments (since v1.5); empty when there are none or they could not be loaded. */
     suspend fun screens(sessionId: String): List<com.echoledger.mobile.data.ScreenDto> = withContext(Dispatchers.IO) {

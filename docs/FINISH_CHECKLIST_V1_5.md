@@ -56,7 +56,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 - [ ] 4.1 Accounts: email + password (verified, reset), Google sign-in, 2FA (TOTP + recovery codes); phone/desktop sign in with the account (browser OAuth with PKCE) + biometric unlock; "Sign in with QR" instead of pairing codes; sessions & devices with revoke, sign out everywhere, login alerts; rate limits, lockout, CSRF, audit log. *Accept:* auth tests per route.
 - [ ] 4.2 Workspaces and roles (Super admin, Owner, Admin, Member, Viewer) with a tested permission matrix; private by default; email invitations; join/leave; transfer ownership; existing data migrated into Hassam's workspace. *Accept:* policy matrix tests; migration on a production copy.
-- [ ] 4.3 Plans: price (0), minutes, storage, retention, seats, AI credits, feature flags; limits enforced with friendly messages. *Accept:* tests.
+- [ ] 4.3 Plans: price (0), minutes, storage, retention, seats, AI credits, feature flags; limits enforced with friendly messages. *Accept:* tests. Phone done (`PlanStateTest`, plan/viewer screen tests); server and desktop with the Phase 4 helpers.
 - [ ] 4.4 Usage and costs per user, workspace and provider ($ from an editable price table, % of plan, trends, date filters, CSV, 80 %/100 % alerts). *Accept:* tests.
 - [ ] 4.5 Console for super admin and workspace admins; members read-only (toggle). *Accept:* tests.
 - [ ] 4.6 Account deletion in the apps and on a public web page; data export ZIP. *Accept:* tests; **(phone)** deletion of a test account.
@@ -89,4 +89,4 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 - [ ] **(phone)** unanswered WhatsApp call skipped; connected call starts at pick-up; after-call chip; Projects auto-filing; teammate share; Google sign-in; test-account deletion.
 - [ ] **(mac)** screen moments in a Meet call with screen share; the meeting pack PDF in Claude.
 - [ ] Docs: USER_GUIDE, ADMIN_GUIDE, MANUAL_QA, HANDOFF; tag v1.5.0; push; final report.
-- [ ] Infrastructure: configurable queue/storage/cache drivers and docs/DEPLOY_VPS.md (nothing moved).
+- [ ] Infrastructure: configurable queue/storage/cache drivers and docs/DEPLOY_VPS.md (nothing moved). **docs/DEPLOY_VPS.md written** (2026-11-04); the code switches it names (`QUEUE_VIA_SCHEDULER`, `RECORDINGS_DRIVER=s3`) come with web Phase 5.

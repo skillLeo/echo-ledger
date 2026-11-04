@@ -84,7 +84,9 @@ object SettingsTransfer {
         "themeMode",
         "dynamicColour",
         "phoneFont",
-        "recentSearches"
+        "recentSearches",
+        // The server says what the plan allows and the role (since v1.5).
+        "plan"
     )
 
     sealed interface Result {

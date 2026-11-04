@@ -80,6 +80,27 @@ class RecordScreenTest : ScreenTest() {
     // ---- recorder ---------------------------------------------------------------------------------------------------------
 
     @Test
+    fun `a viewer is told why there is no recorder`() {
+        runBlocking {
+            app.graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState(workspace = "Acme team", role = "viewer")) }
+        }
+        show { RecordScreen(vm, caps(), onSetup = {}, mode = RecordMode.VOICE) }
+        awaitText("You are a viewer in Acme team")
+
+        assertFalse(present("Not recording"))
+        assertFalse(present("Import files"))
+    }
+
+    @Test
+    fun `a plan without Live Translate offers neither Game nor Watch translate`() {
+        show { RecordSheet(caps(), autoRecordOn = false, onPick = {}, onDismiss = {}, liveTranslate = false) }
+        awaitText("Voice & files")
+
+        assertFalse(present("Game translate"))
+        assertFalse(present("Watch translate"))
+    }
+
+    @Test
     fun `an idle recorder offers Record and says it is not recording`() {
         showRecord(caps(helper = false))
 

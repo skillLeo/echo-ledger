@@ -218,6 +218,9 @@ private fun ProfileCard(settings: AppSettings) {
         Column(Modifier.padding(start = Space.s3).weight(1f)) {
             Text(name, style = type.titleS, color = Brand.Text)
             Text(server?.let { "Paired with $it" } ?: "Not paired", style = type.labelM, color = Brand.Muted)
+            // Since v1.5: the workspace, this person's role there and the plan's minutes.
+            settings.plan.membership()?.let { Text(it, style = type.labelM, color = Brand.Muted) }
+            settings.plan.summary()?.let { Text(it, style = type.labelM, color = Brand.Muted) }
         }
     }
 }

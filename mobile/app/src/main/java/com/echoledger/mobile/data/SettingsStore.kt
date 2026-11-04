@@ -101,7 +101,9 @@ data class AppSettings(
     /** The last five Library searches (since v1.3), newest first; this phone only. */
     val recentSearches: List<String> = emptyList(),
     /** Game and Watch translate (since v1.3, Phase B). */
-    val liveTranslate: com.echoledger.mobile.translate.LiveTranslatePrefs = com.echoledger.mobile.translate.LiveTranslatePrefs()
+    val liveTranslate: com.echoledger.mobile.translate.LiveTranslatePrefs = com.echoledger.mobile.translate.LiveTranslatePrefs(),
+    /** The workspace plan's features and this person's role (since v1.5, from the server's config; this phone only). */
+    val plan: com.echoledger.mobile.core.PlanState = com.echoledger.mobile.core.PlanState()
 ) {
     /** What happens to an undecided recording: "keep", "discard" or "wait" (the default; nothing is uploaded or paid for). */
     val afterCallTimeout: String get() = if (decisionTimeoutChosen) decisionTimeout else "wait"

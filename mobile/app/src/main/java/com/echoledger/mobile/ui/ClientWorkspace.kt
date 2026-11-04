@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -41,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +57,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.echoledger.mobile.core.PlanState
 import com.echoledger.mobile.data.AskAnswerDto
 import com.echoledger.mobile.data.BriefSections
 import com.echoledger.mobile.data.CallNotesDto
@@ -62,6 +65,7 @@ import com.echoledger.mobile.data.CitationDto
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.MemoryItemDto
+import com.echoledger.mobile.data.ProjectScreenDto
 import com.echoledger.mobile.data.WorkspaceDto
 import com.echoledger.mobile.ui.design.Avatar
 import com.echoledger.mobile.ui.design.BannerKind
@@ -138,7 +142,7 @@ internal val PROJECT_MENU = listOf(
 
 /**
  * A project's page (since 1.4 as a client's; since v1.5 with subfolders): Notes (AI notes switch, brief, memory,
- * latest call notes, Copy for AI), Recordings, Files, Screens (screen moments, a later update) and Ask, with the
+ * latest call notes, Copy for AI), Recordings, Files, Screens (the project's screen moments) and Ask, with the
  * breadcrumbs ([path]), its [subfolders] and the project menu ([onMenu] gets a [PROJECT_MENU] key). [onOpenAt] opens
  * a recording at a moment (a note's or an answer's citation).
  */
@@ -177,6 +181,31 @@ fun ClientWorkspaceScreen(
         }
     }
     var menuOpen by remember { mutableStateOf(false) }
+    // Since v1.5: a plan without AI notes has no Ask tab (and no AI parts on Notes).
+    val settings by vm.settings.collectAsState()
+    val aiNotesInPlan = settings.plan.aiNotes
+    val tabs = if (aiNotesInPlan) TABS else TABS.dropLast(1)
+    val shownTab = tab.coerceAtMost(tabs.lastIndex)
+    // The project's screens (since v1.5), loaded when the Screens tab is first opened, 60 a page.
+    val scope = rememberCoroutineScope()
+    var screens by remember(client.id, nested) { mutableStateOf<List<ProjectScreenDto>?>(null) }
+    var screensCursor by remember(client.id, nested) { mutableStateOf<String?>(null) }
+    var screensFailed by remember(client.id, nested) { mutableStateOf(false) }
+    var screensReload by remember { mutableIntStateOf(0) }
+    var openScreen by remember { mutableStateOf<ProjectScreenDto?>(null) }
+    LaunchedEffect(client.id, nested, shownTab == 3, screensReload) {
+        if (shownTab != 3 || screens != null) return@LaunchedEffect
+        val page = vm.projectScreens(client.id, nested, null)
+        screensFailed = page == null
+        screens = page?.data.orEmpty()
+        screensCursor = page?.nextCursor
+    }
+    openScreen?.let { shown ->
+        ScreenViewer(vm, shown.screen(), onPlay = {
+            openScreen = null
+            onOpenAt(shown.sessionId, shown.atMs)
+        }, onDismiss = { openScreen = null })
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = ListPadding) {
         item(key = "top") {
             EchoTopBar(client.name, large = false, navigation = {
@@ -244,18 +273,66 @@ fun ClientWorkspaceScreen(
                 )
             }
         }
-        item(key = "tabs") { SegmentedControl(TABS, tab, { tab = it }, Modifier.padding(horizontal = Space.screen, vertical = Space.s2)) }
+        item(key = "tabs") {
+            SegmentedControl(tabs, shownTab, { tab = it }, Modifier.padding(horizontal = Space.screen, vertical = Space.s2))
+        }
         val w = workspace
         when {
-            tab == 3 -> item(key = "screens") {
-                EchoEmptyState(
-                    Icons.Rounded.Monitor,
-                    "Screen moments arrive in a later update",
-                    body = "What was on a shared screen during a meeting will show here, linked to the transcript."
-                )
+            shownTab == 3 -> {
+                val list = screens
+                when {
+                    list == null -> items(2, key = { "screens-skeleton-$it" }) { SkeletonRow() }
+
+                    screensFailed -> item(key = "screens-error") {
+                        InlineBanner(
+                            "The screens could not be loaded.",
+                            Modifier.padding(horizontal = Space.screen),
+                            kind = BannerKind.Error,
+                            action = "Retry",
+                            onAction = {
+                                screens = null
+                                screensFailed = false
+                                screensReload++
+                            }
+                        )
+                    }
+
+                    list.isEmpty() -> item(key = "screens-empty") {
+                        EchoEmptyState(
+                            Icons.Rounded.Monitor,
+                            "No screens yet",
+                            body = "When a screen is shared in a meeting recorded on the computer, what was on it shows here, " +
+                                "linked to the transcript."
+                        )
+                    }
+
+                    else -> {
+                        items(list.chunked(2), key = { "screens-${it.first().id}" }) { row ->
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = Space.screen),
+                                horizontalArrangement = Arrangement.spacedBy(Space.s3)
+                            ) {
+                                row.forEach { s -> ProjectScreenTile(vm, s, Modifier.weight(1f)) { openScreen = s } }
+                                if (row.size == 1) Spacer(Modifier.weight(1f))
+                            }
+                        }
+                        screensCursor?.let { cursor ->
+                            item(key = "screens-more") {
+                                EchoButton("Show more", {
+                                    scope.launch {
+                                        vm.projectScreens(client.id, nested, cursor)?.let { page ->
+                                            screens = list + page.data
+                                            screensCursor = page.nextCursor
+                                        }
+                                    }
+                                }, kind = ButtonKind.Text)
+                            }
+                        }
+                    }
+                }
             }
 
-            tab == 1 -> {
+            shownTab == 1 -> {
                 if (subfolders.isNotEmpty()) {
                     item(key = "nested") {
                         Row(Modifier.fillMaxWidth().padding(horizontal = Space.screen), verticalAlignment = Alignment.CenterVertically) {
@@ -285,11 +362,13 @@ fun ClientWorkspaceScreen(
 
             w == null -> items(3, key = { "skeleton-$it" }) { SkeletonRow() }
 
-            tab == 0 -> item(key = "overview") {
-                OverviewTab(vm, client, w, onOpenAt, onChanged = { reload++ }, onWorkspace = { workspace = it })
+            shownTab == 0 -> item(key = "overview") {
+                OverviewTab(vm, client, w, onOpenAt, onChanged = {
+                    reload++
+                }, onWorkspace = { workspace = it }, aiNotesInPlan = aiNotesInPlan)
             }
 
-            tab == 2 -> item(key = "files") { FilesTab(vm, client, w, onChanged = { reload++ }) }
+            shownTab == 2 -> item(key = "files") { FilesTab(vm, client, w, onChanged = { reload++ }) }
 
             else -> item(key = "ask") { AskTab(vm, client, onOpenAt) }
         }
@@ -303,7 +382,8 @@ private fun OverviewTab(
     w: WorkspaceDto,
     onOpenAt: (String, Long) -> Unit,
     onChanged: () -> Unit,
-    onWorkspace: (WorkspaceDto) -> Unit
+    onWorkspace: (WorkspaceDto) -> Unit,
+    aiNotesInPlan: Boolean = true
 ) {
     val type = LocalEchoType.current
     val c = LocalEchoColors.current
@@ -312,28 +392,32 @@ private fun OverviewTab(
     var editing by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf<String?>(null) }
     Column(Modifier.padding(horizontal = Space.screen), verticalArrangement = Arrangement.spacedBy(Space.s3)) {
-        if (!w.ai.configured) {
+        if (!aiNotesInPlan) {
+            InlineBanner(PlanState.NO_AI_NOTES, kind = BannerKind.Info)
+        } else if (!w.ai.configured) {
             InlineBanner(
                 "Add your Anthropic key in the console's API Credentials to get call notes, the brief and Ask.",
                 kind = BannerKind.Warning
             )
         }
-        SectionCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("AI notes", style = type.bodyL, color = c.text)
-                    Text("Notes and memory after every call with ${client.name}", style = type.labelM, color = c.textMuted)
+        if (aiNotesInPlan) {
+            SectionCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("AI notes", style = type.bodyL, color = c.text)
+                        Text("Notes and memory after every call with ${client.name}", style = type.labelM, color = c.textMuted)
+                    }
+                    Switch(
+                        checked = w.client.aiNotes,
+                        onCheckedChange = { on ->
+                            onWorkspace(w.copy(client = w.client.copy(aiNotes = on)))
+                            scope.launch { vm.setAiNotes(client.id, on) }
+                        },
+                        modifier = Modifier.semantics { contentDescription = "AI notes" }
+                    )
                 }
-                Switch(
-                    checked = w.client.aiNotes,
-                    onCheckedChange = { on ->
-                        onWorkspace(w.copy(client = w.client.copy(aiNotes = on)))
-                        scope.launch { vm.setAiNotes(client.id, on) }
-                    },
-                    modifier = Modifier.semantics { contentDescription = "AI notes" }
-                )
+                Text(ClientFiles.budget(w.ai.spentUsd, w.ai.budgetUsd, w.ai.clientSpentUsd), style = type.caption, color = c.textMuted)
             }
-            Text(ClientFiles.budget(w.ai.spentUsd, w.ai.budgetUsd, w.ai.clientSpentUsd), style = type.caption, color = c.textMuted)
         }
         // The brief: one page, made from the files (or the calls); a person's edit is kept.
         SectionCard {
@@ -341,7 +425,17 @@ private fun OverviewTab(
                 Text("Brief", style = type.titleM, color = c.text, modifier = Modifier.weight(1f))
                 if (w.brief.status == "working") Spinner(16.dp)
                 EchoButton("Edit", { editing = true }, kind = ButtonKind.Text)
-                EchoButton("Make again", { scope.launch { if (vm.refreshBrief(client.id) != null) onChanged() } }, kind = ButtonKind.Text)
+                if (aiNotesInPlan) {
+                    EchoButton("Make again", {
+                        scope.launch {
+                            if (vm.refreshBrief(client.id) !=
+                                null
+                            ) {
+                                onChanged()
+                            }
+                        }
+                    }, kind = ButtonKind.Text)
+                }
             }
             w.brief.error?.let { Text(it, style = type.labelM, color = c.danger) }
             if (w.brief.sections.isEmpty) {

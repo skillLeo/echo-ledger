@@ -52,7 +52,10 @@ data class ServerConfig(
     /** How unsure words appear in copied text (since v1.3, plan A4). */
     val unsure: UnsureConfig? = null,
     /** The console's Live Translate defaults and this month's spending (since v1.3, Phase B). */
-    @SerialName("live_translate") val liveTranslate: LiveTranslateConfig? = null
+    @SerialName("live_translate") val liveTranslate: LiveTranslateConfig? = null,
+    /** The workspace plan and this person's role there (since v1.5); null on older servers. */
+    val plan: PlanDto? = null,
+    val workspace: ConfigWorkspaceDto? = null
 )
 
 @Serializable
@@ -722,3 +725,59 @@ data class AndroidReleaseDto(
     val notes: String? = null,
     @SerialName("published_at") val publishedAt: String? = null
 )
+
+/** A screen on a project's Screens tab (since v1.5): the screen and the recording it belongs to. */
+@Serializable
+data class ProjectScreenDto(
+    val id: String,
+    val index: Int = 0,
+    @SerialName("at_ms") val atMs: Long = 0,
+    val width: Int = 0,
+    val height: Int = 0,
+    val trigger: String? = null,
+    @SerialName("ocr_text") val ocrText: String? = null,
+    val description: String? = null,
+    @SerialName("image_url") val imageUrl: String? = null,
+    @SerialName("thumb_url") val thumbUrl: String? = null,
+    @SerialName("session_id") val sessionId: String,
+    @SerialName("session_title") val sessionTitle: String? = null,
+    @SerialName("session_started_at") val sessionStartedAt: String? = null
+) {
+    fun screen() = ScreenDto(id, index, atMs, width, height, trigger, ocrText, description, imageUrl, thumbUrl)
+}
+
+@Serializable
+data class ProjectScreensResponse(val data: List<ProjectScreenDto> = emptyList(), @SerialName("next_cursor") val nextCursor: String? = null)
+
+/** The workspace's plan in `GET /api/config` (since v1.5); a missing feature counts as on, a null limit as none. */
+@Serializable
+data class PlanDto(
+    val key: String? = null,
+    val name: String? = null,
+    val features: PlanFeaturesDto = PlanFeaturesDto(),
+    val limits: PlanLimitsDto? = null,
+    val used: PlanUsedDto? = null
+)
+
+@Serializable
+data class PlanFeaturesDto(
+    @SerialName("live_translate") val liveTranslate: Boolean = true,
+    @SerialName("screen_moments") val screenMoments: Boolean = true,
+    @SerialName("ai_notes") val aiNotes: Boolean = true,
+    val connector: Boolean = true
+)
+
+@Serializable
+data class PlanLimitsDto(
+    @SerialName("monthly_minutes") val monthlyMinutes: Long? = null,
+    @SerialName("storage_bytes") val storageBytes: Long? = null,
+    @SerialName("retention_days") val retentionDays: Int? = null,
+    val seats: Int? = null
+)
+
+@Serializable
+data class PlanUsedDto(val minutes: Long? = null, @SerialName("storage_bytes") val storageBytes: Long? = null)
+
+/** The device's workspace and its person's role there, in `GET /api/config` (since v1.5). */
+@Serializable
+data class ConfigWorkspaceDto(val id: String? = null, val name: String? = null, val role: String? = null)
