@@ -495,6 +495,24 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 | MAC-9 | Live captions overlay during MAC-4. | Captions show over the call; ⌘ shortcuts from Settings → Shortcuts work. |
 | MAC-10 | Quit from the menu-bar icon during a recording. | It asks first; after quitting, no audio device is left behind (Audio MIDI Setup shows no extra device). |
 
+### Phone v1.5 (phone windows; the S25, installed with `pm install -r`, data kept)
+
+| # | Check | Expected |
+|---|---|---|
+| P15-1 | Auto-record on. A WhatsApp call that rings and is never answered. | Nothing is saved; no chip, no notification. The capture log says "waiting for the answer" and "not answered". |
+| P15-2 | A WhatsApp call answered after a few rings; talk 20 s. | The recording starts at the answer (no ringing at the start); the chip "Saved · Call with … · 0:2x · Undo" rises in for 6 s. The capture log names the answer signal. |
+| P15-3 | A SIM call answered; talk 20 s. | Starts at pick-up; kept as in P15-2. |
+| P15-4 | An answered call of 5 s. | Skipped silently; Activity shows "Skipped 1 short call" with Restore for 24 h; Restore uploads it. |
+| P15-5 | Settings → After a call → Ask me; another answered call. | The chip asks with ✓ and ✕; the title opens the call to rename it or pick a project; nothing chosen = kept after 10 s. |
+| P15-6 | Projects tab: make a project with a subfolder, a title filing rule, then a recording whose title matches. | The recording files itself into the project; Move to another project and back works; deleting the subfolder keeps its recordings (Inbox). |
+| P15-7 | A recording's Share: people only, one email; Send to a teammate (the test account). | The link opens only for that email; the teammate sees it in Shared with me and can Save to my library. |
+| P15-8 | Open a share link of this server on the phone (in a message). | It opens in EchoLedger (App Links, when the build has the host), else the browser. |
+| P15-9 | Sign out of the app (Account → Sign out everywhere), then Sign in with email, password and the 2FA code. | Signed in; the Library is back; uploads waiting on the phone were kept. |
+| P15-10 | Sign in in the browser (Google or a passkey). | The browser comes back to EchoLedger and the phone is signed in. |
+| P15-11 | Publish a newer APK on the server (`echoledger:publish-release`), then You → About → Check for updates. | "EchoLedger x.y.z is ready to install"; Update downloads it, Android asks once to allow installs, then installs it; recordings and settings stay. |
+| P15-12 | A recording with screen moments (from the desktop). | "Screen 7 · 14:32" rows between the lines; tap opens the screen with Play from here; Export → Meeting pack (PDF) prints with the screens. |
+| P15-13 | With Remove animations on (Accessibility), keep a call. | The chip and its check appear without moving. |
+
 ## Appendix B — Accessibility
 
 | # | Check | Expected |
