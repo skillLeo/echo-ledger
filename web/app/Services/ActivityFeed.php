@@ -127,8 +127,7 @@ final class ActivityFeed
     public function post(User $user, string $kind, string $title, string $body, ?CaptureSession $session, string $icon): void
     {
         try {
-            $notification = Notification::make()->title($title)->body($body)->icon($icon)
-                ->viewData(['kind' => $kind, 'session_id' => $session?->id]);
+            $notification = self::make($title, $body, $kind, $session?->id)->icon($icon);
             if ($session !== null) {
                 $notification->actions([Action::make('open')->label('Open')->url(CaptureSessionResource::getUrl('view', ['record' => $session]), shouldOpenInNewTab: false)->markAsRead()]);
             }
@@ -146,8 +145,7 @@ final class ActivityFeed
     public function sharedWithYou(User $recipient, string $title, string $body, ?string $sessionId): void
     {
         try {
-            $notification = Notification::make()->title($title)->body($body)->icon('heroicon-o-inbox-arrow-down')
-                ->viewData(['kind' => 'shared_with_you', 'session_id' => $sessionId])
+            $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-inbox-arrow-down')
                 ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'admin'), shouldOpenInNewTab: false)->markAsRead()]);
             $recipient->notifyNow($notification->toDatabase());
         } catch (Throwable $e) {
@@ -162,16 +160,29 @@ final class ActivityFeed
         return is_string($kind) ? $kind : null;
     }
 
+    /**
+     * The bell renders a notification's title and body as HTML (sanitised, but links and styles stay), and they hold
+     * what people typed (titles, notes, names; since v1.5 from anyone on the server): they are stored escaped, so the
+     * bell shows them as text. `escaped` tells payload() to give the apps the words as they were typed.
+     */
+    private static function make(string $title, string $body, string $kind, ?string $sessionId): Notification
+    {
+        return Notification::make()->title(e($title))->body(e($body))
+            ->viewData(['kind' => $kind, 'session_id' => $sessionId, 'escaped' => true]);
+    }
+
     /** @return array<string, mixed> */
     public static function payload(DatabaseNotification $n): array
     {
         $session = $n->data['viewData']['session_id'] ?? null;
+        $text = fn (mixed $value): string => ($n->data['viewData']['escaped'] ?? false) === true
+            ? htmlspecialchars_decode((string) $value, ENT_QUOTES) : (string) $value;
 
         return [
             'id' => $n->id,
             'kind' => self::kindOf($n),
-            'title' => (string) ($n->data['title'] ?? ''),
-            'body' => (string) ($n->data['body'] ?? ''),
+            'title' => $text($n->data['title'] ?? ''),
+            'body' => $text($n->data['body'] ?? ''),
             'session_id' => is_string($session) ? $session : null,
             'read' => $n->read_at !== null,
             'at' => $n->created_at?->toAtomString(),

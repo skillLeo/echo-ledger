@@ -16,6 +16,7 @@ use App\Models\Workspace;
 use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
 use App\Services\Views\TranscriptViews;
+use Filament\Notifications\Notification;
 use Illuminate\Notifications\DatabaseNotification;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
@@ -71,6 +72,24 @@ describe('sending', function () {
             ->and($items[0]['session'])->toMatchArray(['id' => $this->call->id, 'title' => 'Call with Omar', 'client' => null, 'device' => null, 'filed_by' => null]);
         $note = DatabaseNotification::query()->where('notifiable_id', $this->omar->id)->get()->sole(fn ($n): bool => ActivityFeed::kindOf($n) === 'shared_with_you');
         expect(ActivityFeed::payload($note))->toMatchArray(['kind' => 'shared_with_you', 'title' => 'Ana sent you Call with Omar', 'body' => 'for tomorrow', 'session_id' => $this->call->id]);
+    });
+
+    it('puts a title, note and name with markup into the recipient\'s bell as text, and into the apps as typed', function () {
+        // Anyone on the server can send to anyone: the bell renders its texts as HTML, so markup must stay text there.
+        $this->ana->forceFill(['name' => 'Ana <b>Boss</b>'])->save();
+        $title = '<a href="https://evil.example/login" style="position:fixed;inset:0">Your session ended, sign in again</a>';
+        $trap = sentRecording($this, $title, Fixtures::audio(5050));
+        $note = '<div style="position:fixed;inset:0;background:#fff">Sign in at <a href="https://evil.example">here</a> & <i>soon</i></div>';
+        $this->postJson("/api/sessions/{$trap->id}/send", ['to' => ['omar@example.com'], 'note' => $note])->assertCreated();
+
+        $stored = DatabaseNotification::query()->where('notifiable_id', $this->omar->id)->get()->sole(fn ($n): bool => ActivityFeed::kindOf($n) === 'shared_with_you');
+        $bell = Notification::fromDatabase($stored)->inline()->toEmbeddedHtml();
+        expect($bell)->not->toContain('href="https://evil.example')->not->toContain('style="position:fixed')->not->toContain('<b>Boss</b>')
+            ->toContain('&lt;a href')->toContain('&lt;b&gt;Boss&lt;/b&gt;');
+        // The apps and the console's Activity page get the words as they were typed (they show text, never HTML).
+        expect(ActivityFeed::payload($stored))->toMatchArray(['title' => "Ana <b>Boss</b> sent you {$title}", 'body' => $note]);
+        $activity = $this->asToken($this->omarToken)->getJson('/api/activity')->assertOk()->json('data');
+        expect(collect($activity)->firstWhere('kind', 'shared_with_you'))->toMatchArray(['title' => "Ana <b>Boss</b> sent you {$title}", 'body' => $note]);
     });
 
     it('sends nothing when one email has no account', function () {

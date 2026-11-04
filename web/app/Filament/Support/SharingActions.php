@@ -156,7 +156,8 @@ final class SharingActions
                     $action->halt();
                 }
                 $record->update(['name' => $name]);
-                Notification::make()->title('Renamed to “'.$name.'”')->success()->send();
+                // Toasts render their title as HTML: a name is text.
+                Notification::make()->title('Renamed to “'.e($name).'”')->success()->send();
             });
     }
 
@@ -187,7 +188,7 @@ final class SharingActions
                     return;
                 }
                 $record->update(['parent_id' => $parent?->id]);
-                Notification::make()->title($parent === null ? 'Moved to the top level' : 'Moved into “'.$parent->name.'”')->success()->send();
+                Notification::make()->title($parent === null ? 'Moved to the top level' : 'Moved into “'.e($parent->name).'”')->success()->send();
             });
     }
 
