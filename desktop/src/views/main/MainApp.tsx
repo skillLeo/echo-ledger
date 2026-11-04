@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type ClientFolder, type LibraryViews, type LockStatus, type SmartFolder } from "../../lib/ipc";
+import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type ClientFolder, type LibraryItem, type LibraryViews, type LockStatus, type SmartFolder } from "../../lib/ipc";
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityUnread } from "./ActivityCentre";
@@ -36,6 +36,19 @@ const BUDGET_REACHED = "Monthly transcription limit reached. Recordings are kept
 const BUDGET_WARN = "You have used 80% of this month's transcription limit.";
 /** Whether the sidebar shows icons only; kept on this computer like the theme. */
 const SIDEBAR_KEY = "echoledger-sidebar";
+
+/**
+ * Where a recording an app link stands for opens (the server answers `session` for this workspace's recordings and for
+ * one a teammate sent): the Library when it is saved here (or after a sync, when it is new), Shared with me read-only
+ * when it was sent, else nowhere in the app (a recording of a project a teammate sent): its web page opens instead.
+ */
+async function placeOfRecording(id: string): Promise<{ in: "library" } | { in: "shared"; itemId: string } | null> {
+  const saved = (items: LibraryItem[]) => items.some((i) => i.id === id && !i.deleted);
+  if (saved(await api.library().catch(() => []))) return { in: "library" };
+  const sent = (await api.sharedWithMe().catch(() => null))?.data.find((i) => i.kind === "session" && i.session?.id === id);
+  if (sent) return { in: "shared", itemId: sent.id };
+  return saved(await api.refreshLibrary().catch(() => [])) ? { in: "library" } : null;
+}
 
 /** A key typed into a field, a select or editable text is the field's, never a shortcut. */
 export function typingIn(target: EventTarget | null): boolean {
@@ -177,6 +190,7 @@ export default function MainApp() {
   const cycleTheme = () => chooseTheme(nextThemeChoice(theme));
 
   const clearFocus = useCallback(() => setFocus(null), []);
+  const clearRequestFocus = useCallback(() => setRequestFocus(null), []);
 
   const refreshStatus = useCallback(() => {
     api.status().then(setStatus).catch(() => undefined);
@@ -215,6 +229,11 @@ export default function MainApp() {
         }
         if (!nav || !TABS.includes(nav.view)) return;
         setTab(nav.view);
+        // The waiting recordings and a clicked notification's recording are in the whole Library, not a smart folder.
+        if (nav.view === "library") {
+          setLibraryFolder(null);
+          setSharedFocus(null);
+        }
         const id = nav.pendingId;
         if (id) setFocus({ id, rename: !!nav.rename, seq: ++navigations.current });
         if (nav.recordingId) setOpenRequest({ id: nav.recordingId, ms: 0, seq: ++navigations.current });
@@ -287,18 +306,32 @@ export default function MainApp() {
     if (!linkRequest || !ready) return;
     const { url } = linkRequest;
     setLinkRequest(null);
+    const inBrowser = async (why: string) => {
+      await api.openLink(url);
+      setToast({ text: `Opened in your browser: ${why}` });
+    };
     api.resolveLink(url).then(async (target) => {
       if (!target) {
-        await api.openLink(url);
-        setToast({ text: "Opened in your browser: this link is not one of your workspace's, or it no longer works." });
+        await inBrowser("this link is not one of your workspace's, or it no longer works.");
         return;
       }
       switch (target.kind) {
-        case "session":
-          setTab("library");
-          setLibraryFolder(null);
-          setOpenRequest({ id: target.session_id, ms: 0, seq: ++navigations.current });
+        case "session": {
+          const place = await placeOfRecording(target.session_id);
+          if (!place) {
+            await inBrowser("this recording is not in your Library or in Shared with me.");
+          } else if (place.in === "shared") {
+            setTab("library");
+            setLibraryFolder("shared");
+            setSharedFocus(place.itemId);
+          } else {
+            setTab("library");
+            setLibraryFolder(null);
+            setSharedFocus(null);
+            setOpenRequest({ id: target.session_id, ms: 0, seq: ++navigations.current });
+          }
           break;
+        }
         case "project":
           setTab("projects");
           setProjectId(target.client_id);
@@ -383,22 +416,23 @@ export default function MainApp() {
     );
   }
 
-  const openRecording = (id: string, ms = 0) => {
-    setTab("library");
-    setLibraryFolder(null);
-    setOpenRequest({ id, ms, seq: ++navigations.current });
-  };
   /** The Library on a smart folder (null: every recording). */
   const openFolder = (folder: SmartFolder | null) => {
     setTab("library");
     setLibraryFolder(folder);
     setSharedFocus(null);
   };
+  const openRecording = (id: string, ms = 0) => {
+    openFolder(null);
+    setOpenRequest({ id, ms, seq: ++navigations.current });
+  };
   /** Opens a project's page (null: the list of projects). */
   const openProject = (id: string | null) => {
     setTab("projects");
     setProjectId(id);
   };
+  /** A page from the sidebar or the command palette: the whole Library, the list of projects, or another page. */
+  const goTo = (id: Tab) => (id === "projects" ? openProject(null) : id === "library" ? openFolder(null) : setTab(id));
 
   return (
     <div className={`app ${collapsed ? "collapsed" : ""}`}>
@@ -415,7 +449,7 @@ export default function MainApp() {
           {NAV.map(([id, label, Icon]) => (
             <div key={id} className="nav-group">
               <button type="button" className={`nav-btn ${tab === id ? "active" : ""}`} aria-current={tab === id ? "page" : undefined}
-                title={collapsed ? label : undefined} onClick={() => (id === "projects" ? openProject(null) : id === "library" ? openFolder(null) : setTab(id))}>
+                title={collapsed ? label : undefined} onClick={() => goTo(id)}>
                 <Icon size={20} /><span className="nav-label">{label}</span>
                 {id === "record" && status.recording && <span className="status-dot live" aria-hidden="true" />}
                 {id === "activity" && unread > 0 && <><span className="nav-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</span><span className="sr-only">, {unread} unread</span></>}
@@ -440,12 +474,12 @@ export default function MainApp() {
           {/* Mirrors the tray icon (A3.4): paused, decisions waiting, uploads stopped, uploading. */}
           {status.recording && status.paused && <div className="row footer-state"><span className="status-dot paused" />Paused</div>}
           {status.pendingDecisions > 0 && (
-            <button type="button" className="footer-link" onClick={() => setTab("library")}>
+            <button type="button" className="footer-link" onClick={() => openFolder(null)}>
               <span className="status-dot attention" />{status.pendingDecisions} waiting for your decision
             </button>
           )}
           {status.failedUploads > 0 && (
-            <button type="button" className="footer-link" onClick={() => setTab("library")}>
+            <button type="button" className="footer-link" onClick={() => openFolder(null)}>
               <span className="status-dot failed" />Uploads that need you
             </button>
           )}
@@ -471,17 +505,18 @@ export default function MainApp() {
         )}
         {tab === "projects" && (
           <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
-            projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded} requestFocus={requestFocus} />
+            projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
+            requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} />
         )}
         {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
         {tab === "activity" && (
           <ActivityView status={status} notify={notify} onUnread={setUnread} onOpenRecording={(id) => openRecording(id)}
-            onReview={(id) => { setTab("library"); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
+            onReview={(id) => { openFolder(null); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
         )}
         {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />}
       </main>
       {palette && (
-        <CommandPalette status={status} onClose={() => setPalette(false)} onGo={setTab}
+        <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo}
           run={(fn, ok) => void run(fn, ok)}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}

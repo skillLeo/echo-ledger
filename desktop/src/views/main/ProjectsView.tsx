@@ -31,7 +31,7 @@ export function deletedText(name: string, answer: { moved_sessions?: number; mov
   return parts.join(" · ");
 }
 
-export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null }: {
+export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled }: {
   notify: Notify;
   /** Every project; null while they load. */
   projects: ClientFolder[] | null;
@@ -49,6 +49,8 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   onToggle: (id: string) => void;
   /** A request link to show (an echoledger link to it was opened). */
   requestFocus?: { id: string; seq: number } | null;
+  /** The request link is shown: coming back to Projects later does not show it again. */
+  onRequestFocusHandled?: () => void;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -62,7 +64,9 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
     };
   }, []);
   useEffect(() => {
-    if (requestFocus) setDialog({ kind: "requests", projectId: null, focusId: requestFocus.id });
+    if (!requestFocus) return;
+    setDialog({ kind: "requests", projectId: null, focusId: requestFocus.id });
+    onRequestFocusHandled?.();
   }, [requestFocus?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // The saved library says how many recordings each project has and when the last call was, without a server trip.

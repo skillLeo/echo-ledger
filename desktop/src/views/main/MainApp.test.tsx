@@ -581,6 +581,51 @@ describe("MainApp main:navigate", () => {
     await emitEvent("main:navigate", makeNavigate({ view: "library", pendingId: "pend-1", rename: false }));
     await waitFor(() => expect(screen.getByTestId("pending-pend-1")).toHaveClass("highlight"));
   });
+
+  async function renderOnSmartFolder(folder: string, status: Partial<AppStatus> = {}) {
+    mockBackend(status);
+    respond("library_views", { folders: { inbox: 1, shared: 1 } });
+    respond("library_folder", []);
+    respond("shared_with_me", { data: [] });
+    render(<MainApp />);
+    const folders = await screen.findByRole("list", { name: "Smart folders" });
+    fireEvent.click(within(folders).getByRole("button", { name: folder }));
+    expect(await screen.findByRole("heading", { name: folder })).toBeInTheDocument();
+    await flushAsync();
+  }
+
+  it("opens the after-call title field from a smart folder too (the waiting recordings are in the whole Library)", async () => {
+    await renderOnSmartFolder("Inbox");
+    respond("pending_list", [makePendingItem("pend-1")]);
+    await emitEvent("main:navigate", makeNavigate({ view: "library", pendingId: "pend-1", rename: true }));
+    expect(await screen.findByRole("heading", { name: "Library" })).toBeInTheDocument();
+    const row = await screen.findByTestId("pending-pend-1");
+    await waitFor(() => expect(within(row).getByRole("textbox", { name: "Title" })).toHaveFocus());
+  });
+
+  it("opens a clicked notification's recording from Shared with me", async () => {
+    await renderOnSmartFolder("Shared with me");
+    await emitEvent("main:navigate", makeNavigate({ view: "library", recordingId: "a" }));
+    expect(await screen.findByRole("heading", { name: "Library" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Zoom with Acme" })).toBeInTheDocument();
+  });
+
+  it("goes to the whole Library from the command palette", async () => {
+    await renderOnSmartFolder("Inbox");
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const input = within(await screen.findByRole("dialog", { name: "Command palette" })).getByRole("combobox");
+    fireEvent.change(input, { target: { value: "go to library" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await screen.findByRole("heading", { name: "Library" })).toBeInTheDocument();
+  });
+
+  it("shows the waiting recordings from the sidebar's footer while a smart folder is open", async () => {
+    await renderOnSmartFolder("Inbox", { pendingDecisions: 1 });
+    respond("pending_list", [makePendingItem("pend-1")]);
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /1 waiting for your decision/ }));
+    expect(await screen.findByRole("heading", { name: "Library" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Review" })).toBeInTheDocument();
+  });
 });
 
 describe("command palette (B9)", () => {
