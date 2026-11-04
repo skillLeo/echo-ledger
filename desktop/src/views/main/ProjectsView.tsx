@@ -8,6 +8,7 @@ import { FolderIcon, PlusIcon } from "../../components/Icons";
 import { ClientWorkspace } from "./ClientWorkspace";
 import { ProjectTree } from "./ProjectTree";
 import { DeleteProjectDialog, MoveProjectDialog, moveRecordings, movedText, NameDialog } from "./ProjectDialogs";
+import { RulesSection } from "./FilingRules";
 
 type Notify = (text: string, error?: boolean) => void;
 type Dialog =
@@ -157,7 +158,8 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       <div className="project-page">
         <ClientWorkspace key={project.id} client={project} projects={list} items={items} notify={notify} onOpenRecording={onOpenRecording}
           onClientChanged={(next) => onChanged((all) => all.map((c) => (c.id === next.id ? { ...c, ...next } : c)))}
-          onOpenProject={onOpenProject} menu={menu} onMoveRecordings={(ids, target) => void dropMove(ids, target)} />
+          onOpenProject={onOpenProject} menu={menu} onMoveRecordings={(ids, target) => void dropMove(ids, target)}
+          rules={nested ? <RulesSection project={project} notify={notify} /> : null} />
         {dialogs}
       </div>
     );

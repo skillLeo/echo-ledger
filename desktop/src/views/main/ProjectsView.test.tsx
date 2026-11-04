@@ -221,6 +221,15 @@ describe("Recordings", () => {
     expect(screen.getByText(/in Invoices/)).toBeInTheDocument();
   });
 
+  it("shows the project's filing rules above its recordings", async () => {
+    respond("client_rules", { data: [{ id: 7, kind: "title", value: "Acme" }] });
+    await renderProjects();
+    await flushAsync();
+    expect(screen.getByText("Filing rules")).toBeInTheDocument();
+    expect(screen.getByText("Title contains “Acme”")).toBeInTheDocument();
+    expect(callsOf("client_rules")).toEqual([{ id: "c1" }]);
+  });
+
   it("finds recordings by their words, and what was said in them", async () => {
     respond("search_library", { data: [{ session: RECORDINGS[0], hits: [{ transcript_id: "t1", kind: "final", segment_index: 4, start_ms: 65_000, end_ms: 66_000, speaker: "Client", snippet: "the budget is fine", highlights: [[4, 6]] }], hit_count: 1 }], next_page: null });
     await renderProjects();
