@@ -6,10 +6,12 @@ use App\Enums\SourceDevice;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientFile;
+use App\Models\Plan;
 use App\Models\Recording;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\ChunkedUploadService;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Sharing\RequestLinks;
@@ -213,6 +215,53 @@ describe('the page', function () {
         sendWhole($this, $link['url'], wav(), 'first.wav', 'audio/wav')->assertOk();
         startUpload($this, $link['url'], wav(), 'second.wav', 'audio/wav')->assertStatus(422)->assertJsonPath('code', 'too_many_files')
             ->assertJsonPath('message', 'This link takes at most 1 file.');
+    });
+
+    it('counts files still being sent against the plan\'s storage, so unfinished uploads cannot pass it', function () {
+        $small = Plan::query()->create(['key' => 'small', 'name' => 'Small', 'storage_bytes' => 1_000_000]);
+        Workspace::query()->whereKey($this->device->workspace_id)->update(['plan_id' => $small->id]);
+        $link = requestLink($this);
+
+        startUpload($this, $link['url'], wav(600_000), 'first.wav', 'audio/wav')->assertCreated();
+        // The first is not finished, but its 600 KB are taken: a second one of that size does not fit.
+        startUpload($this, $link['url'], wav(600_000), 'second.wav', 'audio/wav')->assertForbidden()
+            ->assertJsonPath('code', 'storage_limit_reached')->assertJsonPath('message', 'This link cannot take more files right now.');
+        startUpload($this, $link['url'], wav(300_000), 'small.wav', 'audio/wav')->assertCreated();
+        expect(RequestUpload::query()->count())->toBe(2);
+    });
+
+    it('takes no more files than the link allows when another start lands at the same time', function () {
+        $link = requestLink($this, ['max_files' => 1]);
+        // Another sender's start that slipped in while this one was being made (two requests at once).
+        $raced = false;
+        RequestUpload::created(function (RequestUpload $upload) use (&$raced): void {
+            if (! $raced) {
+                $raced = true;
+                RequestUpload::query()->create(['request_link_id' => $upload->request_link_id, 'kind' => 'file', 'name' => 'other.pdf', 'size_bytes' => 10,
+                    'sha256' => str_repeat('b', 64), 'status' => 'uploading', 'chunk_size_bytes' => 10, 'total_chunks' => 1, 'received_chunks' => []]);
+            }
+        });
+
+        startUpload($this, $link['url'], wav(), 'mine.wav', 'audio/wav')->assertStatus(422)->assertJsonPath('code', 'too_many_files');
+        expect(RequestUpload::query()->count())->toBeLessThanOrEqual(1)
+            ->and(unscoped(fn () => CaptureSession::query()->count()))->toBe(0);
+    });
+
+    it('keeps every chunk of a document when two of them arrive at once', function () {
+        $link = requestLink($this);
+        $pdf = "%PDF-1.4\n".str_repeat('x', 600_000);
+        $start = startUpload($this, $link['url'], $pdf, 'scope.pdf', 'application/pdf')->assertCreated();
+        [$id, $size] = [$start->json('upload_id'), $start->json('chunk_size')];
+        // This request read the upload before the other one stored chunk 1.
+        $stale = RequestUpload::query()->findOrFail($id);
+        sendChunk($this, $link['url'], $id, 1, $pdf, $size)->assertOk();
+
+        $chunk = substr($pdf, 0, $size);
+        $body = fopen('php://memory', 'r+');
+        fwrite($body, $chunk);
+        rewind($body);
+        app(RequestLinks::class)->chunk($stale, 0, hash('sha256', $chunk), $body);
+        expect(RequestUpload::query()->findOrFail($id)->received_chunks)->toBe([0, 1]);
     });
 
     it('refuses a small Word file whose body would unpack into too much', function () {
