@@ -37,7 +37,10 @@ const ENVELOPE_PENDING_CODES = ['budget_exceeded'];
 function documentedErrorCodes(): array
 {
     $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md');
-    $section = substr($doc, (int) strpos($doc, '### Error codes'), 6000);
+    // The table runs up to the next section; it outgrew a fixed window when v1.5 added its codes.
+    $start = (int) strpos($doc, '### Error codes');
+    $end = strpos($doc, "\n## ", $start);
+    $section = substr($doc, $start, $end === false ? null : $end - $start);
     preg_match_all('/^\| (\d{3}) \| `([a-z_]+)` \|/m', $section, $m, PREG_SET_ORDER);
     $codes = [];
     foreach ($m as [, $status, $code]) {
@@ -146,6 +149,25 @@ function produceError(object $test, string $code): TestResponse
             $test->createSession($test->bytes)->assertCreated();
 
             return $test->createSession($test->bytes, ['skip_duplicate' => true]);
+        case 'rule_not_found':
+            return $test->deleteJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/rules/999');
+        case 'rule_exists':
+            $test->postJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/rules', ['kind' => 'app', 'value' => 'zoom'])->assertCreated();
+
+            return $test->postJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/rules', ['kind' => 'app', 'value' => 'zoom']);
+        case 'recipient_not_found':
+            return $test->postJson('/api/sessions/'.$test->makeReadySession($test->device, $test->bytes)->id.'/send', ['to' => ['nobody@example.com']]);
+        case 'invalid_parent':
+            $project = Client::factory()->create(['user_id' => $test->device->user_id]);
+
+            return $test->patchJson("/api/clients/{$project->id}", ['parent_id' => $project->id]);
+        case 'too_deep':
+            $parent = null;
+            foreach (range(1, 4) as $level) {
+                $parent = Client::factory()->create(['user_id' => $test->device->user_id, 'parent_id' => $parent?->id]);
+            }
+
+            return $test->postJson('/api/clients', ['name' => 'Fifth', 'parent_id' => $parent?->id]);
         case 'nothing_to_export':
             return $test->postJson('/api/sessions/export', ['ids' => [ENVELOPE_MISSING_ID], 'format' => 'txt']);
         case 'views_unavailable':
@@ -213,13 +235,14 @@ it('produces each documented code with its status, a message and nothing interna
 
     $response->assertStatus($status)->assertJsonPath('code', $code);
     expect($response->json('message'))->toBeString()->not->toBe('');
-    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id']))->toBe([]);
+    // Since v1.5 rule_exists names the project that has the rule and recipient_not_found the emails with no account.
+    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id', 'client_id', 'client_name', 'emails']))->toBe([]);
     expectNoInternals($response);
 })->with(array_diff_key(documentedErrorCodes(), array_flip(ENVELOPE_PENDING_CODES)));
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(40);
+        ->and(count(documentedErrorCodes()))->toBe(45);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

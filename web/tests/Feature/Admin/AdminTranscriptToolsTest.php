@@ -106,7 +106,7 @@ describe('exports', function () {
 
 describe('share links', function () {
     it('makes a link and shows it once in a lasting notification', function () {
-        toolsPage($this)->callAction('share', data: ['expires_in' => 86_400, 'password' => 'secret12'])->assertHasNoActionErrors();
+        toolsPage($this)->callAction('share', data: ['audience' => 'password', 'password' => 'secret12', 'expires' => '86400'])->assertHasNoActionErrors();
 
         $link = ShareLink::query()->sole();
         expect($link->password_hash)->not->toBeNull()->and($link->created_by)->toBe('Sam Admin')
@@ -224,7 +224,7 @@ describe('search and the command palette', function () {
         expect($found['Recordings'][0]->title)->toBe('Acme kickoff')
             ->and($found['Recordings'][0]->url)->toEndWith('?t=3000');
 
-        expect($palette->getResults('acme')->getCategories()['Clients'][0]->title)->toBe('Acme');
+        expect($palette->getResults('acme')->getCategories()['Projects'][0]->title)->toBe('Acme');
     });
 
     it('opens the palette with Ctrl or Cmd + K', function () {

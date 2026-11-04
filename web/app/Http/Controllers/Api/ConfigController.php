@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Device;
 use App\Services\DeviceConfigPayload;
+use App\Services\Projects\ProjectTree;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,19 +24,17 @@ final class ConfigController extends Controller
         return response()->json($config->build($device));
     }
 
-    /** GET /api/clients */
-    public function clients(Request $request): JsonResponse
+    /** GET /api/clients: every project, with its place in the tree (since v1.5). */
+    public function clients(Request $request, ProjectTree $projects): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
-        $clients = Client::query()->where('workspace_id', $device->workspace_id)->withCount(['keyterms', 'captureSessions'])
-            ->orderByDesc('pinned')->orderBy('name')->get();
 
-        return response()->json(['data' => $clients->map(fn (Client $c): array => self::clientPayload($c))->values()]);
+        return response()->json(['data' => $projects->payloads($device->workspace_id)]);
     }
 
     /**
-     * One client folder as devices see it (the counts come from `withCount`).
+     * One client folder as devices see it (the counts come from `withCount`); ProjectTree adds the tree fields.
      *
      * @return array<string, mixed>
      */

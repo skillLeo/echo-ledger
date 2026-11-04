@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Services\Callers\CallerMatcher;
+use App\Services\Projects\FilingRules;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -36,6 +37,18 @@ class ClientContact extends Model
             $contact->phone_digits = CallerMatcher::digits($contact->phone);
         });
         static::saved(fn (ClientContact $c) => $c->client?->touch());
-        static::deleted(fn (ClientContact $c) => $c->client?->touch());
+        // A contact rule (v1.5) files through its contact: once no contact of the project has its number or email,
+        // the rule goes too.
+        static::updated(function (ClientContact $contact): void {
+            if ($contact->wasChanged(['phone_digits', 'email', 'client_id'])) {
+                foreach (array_unique([(string) $contact->getOriginal('client_id'), $contact->client_id]) as $project) {
+                    FilingRules::forgetUncarried($project);
+                }
+            }
+        });
+        static::deleted(function (ClientContact $contact): void {
+            FilingRules::forgetUncarried($contact->client_id);
+            $contact->client?->touch();
+        });
     }
 }

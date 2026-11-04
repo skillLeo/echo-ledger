@@ -29,6 +29,7 @@ use App\Services\FinalTranscriptCoordinator;
 use App\Services\Retranscriber;
 use App\Services\SessionLifecycle;
 use App\Services\SessionMarkers;
+use App\Services\Sharing\Teammates;
 use App\Services\TranscriptEditor;
 use App\Services\TranscriptStore;
 use App\Services\Workspaces\Workspaces;
@@ -38,6 +39,7 @@ use App\Stt\SttManager;
 use App\Stt\TranscriptNormalizer;
 use Closure;
 use DateTimeInterface;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -276,14 +278,14 @@ final class SessionController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        SessionOpen::mark($this->findSession($request, $id)->id, $device->user_id);
+        SessionOpen::mark($this->readableSession($request, $id)->id, $device->user_id);
 
         return response()->noContent();
     }
 
     public function show(Request $request, string $id): JsonResponse
     {
-        $session = $this->findSession($request, $id)->load(['device', 'client', 'transcripts', 'recordings', 'markers']);
+        $session = $this->readableSession($request, $id)->loadMissing(['device', 'client'])->load(['transcripts', 'recordings', 'markers']);
         $item = (new LibraryItemResource($session))->toArray($request);
         $primary = $session->recordings->first(fn (Recording $r) => $r->role === RecordingRole::Primary);
 
@@ -542,5 +544,21 @@ final class SessionController extends Controller
         $device = $request->user();
 
         return CaptureSession::query()->where('workspace_id', $device->workspace_id)->findOrFail($id);
+    }
+
+    /**
+     * A recording of the workspace, or (since v1.5) one a teammate sent this person: read-only, shown in no project and
+     * from no device. Anything else is the same 404 as an unknown id.
+     */
+    private function readableSession(Request $request, string $id): CaptureSession
+    {
+        /** @var Device $device */
+        $device = $request->user();
+        $own = CaptureSession::query()->where('workspace_id', $device->workspace_id)->find($id);
+        if ($own instanceof CaptureSession) {
+            return $own;
+        }
+
+        return app(Teammates::class)->readable($device->user, $id) ?? throw (new ModelNotFoundException)->setModel(CaptureSession::class, [$id]);
     }
 }

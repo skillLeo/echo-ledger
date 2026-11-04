@@ -36,7 +36,7 @@ describe('navigation', function () {
 
         expect($nav)->not->toBeNull()->and($nav->getAttribute('aria-label'))->toBe('Main');
         $labels = array_map(fn (DOMNode $n): string => trim(preg_replace('/\s+/', ' ', $n->textContent)), iterator_to_array($nav->childNodes));
-        expect(implode('|', array_values(array_filter($labels))))->toBe('Library|Clients|Upload|Activity|More');
+        expect(implode('|', array_values(array_filter($labels))))->toBe('Library|Projects|Upload|Activity|More');
         $current = (new DOMXPath($dom))->query('.//*[@aria-current="page"]', $nav);
         expect($current->length)->toBe(1)->and(trim($current->item(0)->textContent))->toBe('Library');
         expect($html)->toContain('$store.sidebar.open()');

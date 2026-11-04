@@ -3,6 +3,9 @@
 @section('title', $session->displayTitle())
 
 @section('content')
+    @if ($backUrl ?? null)
+        <p class="crumbs"><a href="{{ $backUrl }}">← All recordings</a></p>
+    @endif
     <div class="card" @if ($languageCode ?? null) lang="{{ $languageCode }}" @endif>
         <h1 dir="auto">{{ $session->displayTitle() }}</h1>
         <p class="facts">
@@ -10,8 +13,11 @@
             @if ($session->duration_ms) · {{ \App\Services\TranscriptExporter::clock($session->duration_ms) }} @endif
             @if ($expiresAt) · link expires {{ $expiresAt->copy()->setTimezone(app(\App\Services\SettingsRepository::class)->displayTimezone())->format('j M Y, H:i T') }} @endif
         </p>
-        @if ($audio)
-            <audio controls preload="metadata" src="{{ url('/s/'.$token.'/audio') }}"></audio>
+        @if ($audioUrl ?? null)
+            <audio controls preload="metadata" src="{{ $audioUrl }}"></audio>
+        @endif
+        @if ($downloadUrl ?? null)
+            <p class="actions"><a class="button" href="{{ $downloadUrl }}" download>Download audio and transcript</a></p>
         @endif
         @if ($transcribing)
             <p class="muted">The transcript is not ready yet. Open this link again later.</p>

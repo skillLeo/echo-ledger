@@ -33,12 +33,25 @@
         button { font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
         .error { color: #e11d48; margin: 0; }
         footer { margin-top: 18px; font-size: 13px; color: var(--muted); text-align: center; }
+        a { color: var(--accent); }
+        .button { display: inline-block; font-weight: 600; padding: 10px 14px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; }
+        .actions { margin: 0 0 18px; }
+        .crumbs { margin: 0 0 12px; font-size: 14px; }
+        .list { list-style: none; margin: 0; padding: 0; }
+        .list li { display: grid; gap: 2px; padding: 12px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+        .list li:first-child { border-top: 0; }
+        .list .muted { font-size: 13px; }
+        .open-app { margin: 14px 0 0; text-align: center; font-size: 14px; }
     </style>
 </head>
 <body>
 <main>
     @yield('content')
-    <footer>Shared with EchoLedger · view only</footer>
+    @isset($pageUrl)
+        {{-- Opens the page in the desktop app when it is installed (the phone opens these links itself). --}}
+        <p class="open-app"><a href="echoledger://open?link={{ rawurlencode($pageUrl) }}">Open in EchoLedger</a></p>
+    @endisset
+    <footer>@yield('footer', 'Shared with EchoLedger · view only')</footer>
 </main>
 </body>
 </html>

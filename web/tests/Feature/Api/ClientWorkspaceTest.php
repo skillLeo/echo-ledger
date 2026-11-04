@@ -229,6 +229,39 @@ describe('files', function () {
         $this->post("/api/clients/{$this->client->id}/files", ['file' => UploadedFile::fake()->createWithContent('setup.exe', 'MZ')], ['Accept' => 'application/json'])
             ->assertUnprocessable();
     });
+
+    it('leaves images (from request links) out of the brief, which keeps coming from the call notes', function () {
+        Queue::fake();
+        $png = (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+        $path = (string) tempnam(sys_get_temp_dir(), 'el-png-');
+        file_put_contents($path, $png);
+        app(ClientWorkspace::class)->storeFile($this->client, $path, 'photo.png', 'image/png', strlen($png), $this->device->user_id);
+        @unlink($path);
+
+        // New call notes still bring a new brief: a photo is not a document the brief reads.
+        app(ClientWorkspace::class)->makeNotes(clientCall($this, $this->client));
+        Queue::assertPushed(RefreshClientBriefJob::class);
+        app(ClientWorkspace::class)->refreshBrief($this->client, true);
+        $brief = collect($this->ai->calls)->last(fn (array $call): bool => $call[0] === 'brief')[1];
+        expect($brief['documents'])->toBe([])->and($brief['notes'][0])->toContain('### Kick-off');
+    });
+
+    it('marks a Word file failed when its body would unpack into too much, without reading it', function () {
+        Queue::fake();
+        $path = (string) tempnam(sys_get_temp_dir(), 'docx');
+        $zip = new ZipArchive;
+        $zip->open($path, ZipArchive::OVERWRITE);
+        $zip->addFromString('word/document.xml', '<w:document><w:body><w:p><w:r><w:t>'.str_repeat('a', ClientWorkspace::MAX_WORD_BODY_BYTES).'</w:t></w:r></w:p></w:body></w:document>');
+        $zip->close();
+        $bytes = (string) file_get_contents($path);
+        @unlink($path);
+        expect(strlen($bytes))->toBeLessThan(1024 * 1024);
+
+        expect(fn () => ClientWorkspace::docxText($bytes))->toThrow(RuntimeException::class, ClientWorkspace::WORD_TOO_LARGE);
+        $file = app(ClientWorkspace::class)->addFile($this->client, UploadedFile::fake()->createWithContent('bomb.docx', $bytes), $this->device->user_id);
+        app(ClientWorkspace::class)->extract($file);
+        expect($file->refresh())->status->toBe('failed')->error->toBe(ClientWorkspace::WORD_TOO_LARGE);
+    });
 });
 
 describe('Ask and Copy for AI', function () {

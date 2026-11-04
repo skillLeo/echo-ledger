@@ -11,6 +11,7 @@ use App\Models\SessionMarker;
 use App\Models\ShareLink;
 use App\Models\User;
 use App\Services\ShareLinks;
+use App\Services\Sharing\RequestLinks;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -45,6 +46,17 @@ const ISO_WEB_BYPASS = [
     'share.show' => 'public share link: the token is the only key',
     'share.unlock' => 'public share link: the token is the only key',
     'share.audio' => 'public share link: the token is the only key',
+    'share.download' => 'public share link: the token is the only key',
+    'share.project' => 'public project link: the token is the only key',
+    'share.project.unlock' => 'public project link: the token is the only key',
+    'share.project.session' => 'public project link: the token is the only key',
+    'share.project.audio' => 'public project link: the token is the only key',
+    'share.project.download' => 'public project link: the token is the only key',
+    'request.show' => 'public request link: the token is the only key',
+    'request.files.store' => 'public request link: the token is the only key',
+    'request.files.chunk' => 'public request link: the token is the only key',
+    'request.files.complete' => 'public request link: the token is the only key',
+    'app-links' => 'Android App Links statement: the app package and signing keys, no workspace data',
     'passkeys.login.options' => 'sign-in, before any workspace',
     'passkeys.login' => 'sign-in, before any workspace',
 ];
@@ -67,20 +79,21 @@ function isoWorld(): array
     $transcript = Fx::transcript($session, 'BOBSECRETTRANSCRIPT spoken here');
     $marker = SessionMarker::query()->create(['capture_session_id' => $session->id, 'at_ms' => 1000, 'note' => 'BOBSECRETNOTE', 'source' => 'device']);
     SessionLabel::query()->create(['capture_session_id' => $session->id, 'label' => 'bobsecretlabel']);
-    ['link' => $share] = app(ShareLinks::class)->create($session, 3600, null, false, 'Bob');
+    ['link' => $share, 'url' => $shareUrl] = app(ShareLinks::class)->create($session, 3600, null, false, 'Bob');
     $binned = Fx::session($bob, $device, ['title' => 'BOB-SECRET-TITLE binned']);
     $binned->delete();
     $uploading = Fx::session($bob, $device, ['title' => 'BOB-SECRET-TITLE uploading']);
     $upload = Fx::pendingRecording($uploading, str_repeat('b', 2048), 1024);
+    ['link' => $requestLink] = app(RequestLinks::class)->create($client->workspace_id, $bob->id, $client, 'BOB-SECRET-TITLE request', null, 20, 100);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload');
+    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
 function isoIds(array $b): array
 {
-    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id];
+    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id];
 }
 
 /**
@@ -111,6 +124,10 @@ function isoApiCases(array $b): array
         'api.sessions.bulk' => ['POST', '/api/sessions/bulk', ['ids' => [$s], 'action' => 'delete'], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('changed') === 0],
         'api.clients.store' => ['POST', '/api/clients', ['name' => 'Alice new client'], fn (TestResponse $r): bool => $r->status() === 201],
         'api.clients.update' => ['PATCH', "/api/clients/{$b['client']->id}", ['name' => 'hijacked'], 404],
+        'api.clients.destroy' => ['DELETE', "/api/clients/{$b['client']->id}", [], 404],
+        'api.clients.rules' => ['GET', "/api/clients/{$b['client']->id}/rules", [], 404],
+        'api.clients.rules.store' => ['POST', "/api/clients/{$b['client']->id}/rules", ['kind' => 'title', 'value' => 'hijack'], 404],
+        'api.clients.rules.destroy' => ['DELETE', "/api/clients/{$b['client']->id}/rules/1", [], 404],
         'api.clients.workspace' => ['GET', "/api/clients/{$b['client']->id}/workspace", [], 404],
         'api.clients.bundle' => ['GET', "/api/clients/{$b['client']->id}/bundle", [], 404],
         'api.clients.brief.update' => ['PUT', "/api/clients/{$b['client']->id}/brief", ['sections' => ['goal' => 'hijacked']], 404],
@@ -133,6 +150,19 @@ function isoApiCases(array $b): array
         'api.sessions.speakers' => ['PUT', "/api/sessions/{$s}/speakers", ['names' => ['A' => 'X']], 404],
         'api.sessions.shares.store' => ['POST', "/api/sessions/{$s}/shares", ['expires_in' => 3600], 404],
         'api.shares.destroy' => ['DELETE', "/api/shares/{$b['share']->id}", [], 404],
+        'api.clients.shares.store' => ['POST', "/api/clients/{$b['client']->id}/shares", ['audience' => 'public'], 404],
+        'api.shares' => ['GET', '/api/shares', [], 'list'],
+        'api.sessions.send' => ['POST', "/api/sessions/{$s}/send", ['to' => [$b['bob']->email]], 404],
+        'api.clients.send' => ['POST', "/api/clients/{$b['client']->id}/send", ['to' => [$b['bob']->email]], 404],
+        // Shared with me is the person's own list: nothing of B was sent to A.
+        'api.shared' => ['GET', '/api/shared-with-me', [], 'list'],
+        'api.shared.save' => ['POST', "/api/shared-with-me/{$s}/save", [], 404],
+        'api.shared.destroy' => ['DELETE', "/api/shared-with-me/{$s}", [], 404],
+        'api.request-links.store' => ['POST', '/api/request-links', ['client_id' => $b['client']->id], 404],
+        'api.request-links' => ['GET', '/api/request-links', [], 'list'],
+        'api.request-links.destroy' => ['DELETE', "/api/request-links/{$b['requestLink']->id}", [], 404],
+        // B's own share link is not A's to open in the app: the same 404 as an unknown link.
+        'api.links.resolve' => ['GET', '/api/links/resolve?url='.rawurlencode($b['shareUrl']), [], 404],
         'api.vocabulary.keyterms' => ['POST', '/api/vocabulary/keyterms', ['term' => 'Hijack', 'client_id' => $b['client']->id], 404],
         'api.vocabulary.replacements' => ['POST', '/api/vocabulary/replacements', ['from' => 'a', 'to' => 'b', 'client_id' => $b['client']->id], 404],
         'api.transcripts.update' => ['PATCH', "/api/transcripts/{$t}", ['edits' => [['index' => 0, 'text' => 'hijacked']]], 404],

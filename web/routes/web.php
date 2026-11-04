@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
+use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
+use App\Http\Controllers\RequestLinkPageController;
 use App\Http\Controllers\SiteController;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +25,9 @@ Route::middleware('throttle:site')->group(function (): void {
         ->where('name', '[A-Za-z0-9][A-Za-z0-9._-]{0,119}')
         ->name('downloads.file');
 });
+
+// Android App Links (v1.5): the phone app opens this server's /s/, /p/ and /r/ links itself when it is installed.
+Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app-links');
 
 // Decrypted playback for the admin transcript player (HTTP Range supported).
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
@@ -49,6 +54,21 @@ Route::middleware('throttle:share')->group(function (): void {
     Route::get('/s/{token}', [PublicShareController::class, 'show'])->name('share.show');
     Route::post('/s/{token}', [PublicShareController::class, 'unlock'])->middleware('throttle:share-password')->name('share.unlock');
     Route::get('/s/{token}/audio', [PublicShareController::class, 'audio'])->name('share.audio');
+    Route::get('/s/{token}/download', [PublicShareController::class, 'download'])->name('share.download');
+    // A project's link (v1.5): its recordings, each opening as /s/ would.
+    Route::get('/p/{token}', [PublicShareController::class, 'project'])->name('share.project');
+    Route::post('/p/{token}', [PublicShareController::class, 'unlockProject'])->middleware('throttle:share-password')->name('share.project.unlock');
+    Route::get('/p/{token}/{session}', [PublicShareController::class, 'projectSession'])->whereUlid('session')->name('share.project.session');
+    Route::get('/p/{token}/{session}/audio', [PublicShareController::class, 'projectAudio'])->whereUlid('session')->name('share.project.audio');
+    Route::get('/p/{token}/{session}/download', [PublicShareController::class, 'projectDownload'])->whereUlid('session')->name('share.project.download');
+});
+
+// Request links (v1.5): a public page where anyone with the link sends files (no account), chunked like Upload.
+Route::get('/r/{token}', [RequestLinkPageController::class, 'show'])->middleware('throttle:share')->name('request.show');
+Route::middleware('throttle:request-upload')->prefix('/r/{token}/files')->name('request.files.')->group(function (): void {
+    Route::post('/', [RequestLinkPageController::class, 'store'])->name('store');
+    Route::post('/{upload}/chunks/{index}', [RequestLinkPageController::class, 'chunk'])->whereNumber('index')->name('chunk');
+    Route::post('/{upload}/complete', [RequestLinkPageController::class, 'complete'])->name('complete');
 });
 
 // Passkey sign-in on the console login page (B16): a challenge, then the signed answer. Throttled per IP.

@@ -16,6 +16,7 @@ use App\Models\Client;
 use App\Models\Recording;
 use App\Models\User;
 use App\Services\Data\CompleteOutcome;
+use App\Services\Projects\FilingRules;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
@@ -162,6 +163,7 @@ final class ConsoleUploads
                 'device_id' => null,
                 'client_id' => $client?->id,
                 'client_ref' => (string) Str::uuid(),
+                'origin' => CaptureSession::ORIGIN_IMPORTED,
                 'source_device' => SourceDevice::Web,
                 // Imported files are filed like the phone's imports and voice notes.
                 'source_app' => SourceApp::VoiceNote,
@@ -173,6 +175,8 @@ final class ConsoleUploads
                 'status' => SessionStatus::Uploading,
                 'final_provider' => $this->providerFor($file['language'] ?? null, $client),
             ]);
+            // Since v1.5: a file uploaded without a project is filed by the title (its file name) and app rules.
+            app(FilingRules::class)->apply($session);
 
             return $this->uploads->createRecording($session, [
                 'role' => RecordingRole::Primary->value,
@@ -320,14 +324,21 @@ final class ConsoleUploads
         ];
     }
 
-    /** Refuses (and deletes) an upload whose first bytes are not a sound or video container. */
-    private function assertMedia(Recording $recording): void
+    /** Whether the first chunk of an upload is a sound or video container, by its content (not its name). */
+    public static function firstChunkIsMedia(Recording $recording): bool
     {
         $path = Storage::disk('recordings')->path($recording->partsDirectory().'/0.part');
         $head = is_file($path) ? (string) file_get_contents($path, false, null, 0, self::SNIFF_BYTES) : '';
         $sniffed = strtolower((string) (new FinfoMimeTypeDetector)->detectMimeTypeFromBuffer($head));
         $accepted = [...array_map('strtolower', (array) config('echoledger.accepted_mimes')), ...self::VIDEO_CONTAINERS];
-        if ($head !== '' && in_array($sniffed, $accepted, true)) {
+
+        return $head !== '' && in_array($sniffed, $accepted, true);
+    }
+
+    /** Refuses (and deletes) an upload whose first bytes are not a sound or video container. */
+    private function assertMedia(Recording $recording): void
+    {
+        if (self::firstChunkIsMedia($recording)) {
             return;
         }
         $recording->captureSession->delete();

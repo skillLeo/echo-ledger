@@ -9,6 +9,7 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Enums\UploadStatus;
 use App\Enums\WorkspaceRole;
+use App\Filament\Pages\SharedWithMe;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\CaptureSession;
 use App\Models\Device;
@@ -31,7 +32,7 @@ use Throwable;
  */
 final class ActivityFeed
 {
-    public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached'];
+    public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you'];
 
     /** Read notifications are kept this long, unread ones twice as long. */
     public const KEEP_DAYS = 90;
@@ -133,6 +134,22 @@ final class ActivityFeed
             }
             // Written at once, not queued: the bell, the device poll and the once-a-month checks see it immediately.
             $user->notifyNow($notification->toDatabase());
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * "Ana sent you Call with Omar" (since v1.5). The recording is in the sender's workspace: the apps open it by
+     * `session_id` (they may read what was sent to them), the console's Open goes to Shared with me.
+     */
+    public function sharedWithYou(User $recipient, string $title, string $body, ?string $sessionId): void
+    {
+        try {
+            $notification = Notification::make()->title($title)->body($body)->icon('heroicon-o-inbox-arrow-down')
+                ->viewData(['kind' => 'shared_with_you', 'session_id' => $sessionId])
+                ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'admin'), shouldOpenInNewTab: false)->markAsRead()]);
+            $recipient->notifyNow($notification->toDatabase());
         } catch (Throwable $e) {
             report($e);
         }

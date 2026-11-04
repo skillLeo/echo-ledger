@@ -8,7 +8,7 @@
         'failed' => ['label' => 'Failed', 'tone' => 'danger', 'icon' => 'heroicon-o-exclamation-circle', 'spin' => false],
         default => null,
     };
-    $type = fn (\App\Models\ClientFile $f): string => $f->path === null ? 'Instructions' : strtoupper(\App\Services\ClientAi\ClientWorkspace::FILE_TYPES[$f->mime] ?? 'file');
+    $type = fn (\App\Models\ClientFile $f): string => $f->path === null ? 'Instructions' : strtoupper(\App\Services\ClientAi\ClientWorkspace::FILE_TYPES[$f->mime] ?? (str_starts_with($f->mime, 'image/') ? 'image' : 'file'));
     $size = fn (int $bytes): string => $bytes >= 1048576 ? number_format($bytes / 1048576, 1).' MB' : max(1, (int) round($bytes / 1024)).' KB';
 @endphp
 <div style="display: flex; flex-direction: column; gap: var(--space-5); max-width: 880px">

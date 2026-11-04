@@ -35,6 +35,8 @@ use Illuminate\Support\Carbon;
  * @property int $user_id
  * @property string|null $device_id
  * @property string|null $client_id
+ * @property string|null $filed_by how it got into its project (v1.5): user, contact or rule; null in the Inbox
+ * @property string|null $origin where a file came from (v1.5): imported (device import, console upload), requested (a request link), saved (a teammate's copy)
  * @property string|null $client_ref
  * @property SourceDevice $source_device
  * @property SourceApp $source_app
@@ -72,8 +74,22 @@ class CaptureSession extends Model
     /** @use HasFactory<CaptureSessionFactory> */
     use BelongsToWorkspace, HasFactory, HasUlids, Prunable, SoftDeletes;
 
+    /** `filed_by` values (v1.5): moved by hand or chosen when recording, a contact of the project, a filing rule. */
+    public const FILED_BY_USER = 'user';
+
+    public const FILED_BY_CONTACT = 'contact';
+
+    public const FILED_BY_RULE = 'rule';
+
+    /** `origin` values (v1.5): files imported on a device or uploaded on the console, sent through a request link, saved from a teammate. */
+    public const ORIGIN_IMPORTED = 'imported';
+
+    public const ORIGIN_REQUESTED = 'requested';
+
+    public const ORIGIN_SAVED = 'saved';
+
     protected $fillable = [
-        'workspace_id', 'user_id', 'device_id', 'client_id', 'client_ref', 'source_device', 'source_app', 'title', 'language',
+        'workspace_id', 'user_id', 'device_id', 'client_id', 'filed_by', 'origin', 'client_ref', 'source_device', 'source_app', 'title', 'language',
         'started_at', 'ended_at', 'duration_ms', 'pauses', 'language_marks', 'speaker_names', 'status', 'pinned', 'keep_forever', 'final_provider',
     ];
 
@@ -288,6 +304,15 @@ class CaptureSession extends Model
 
     protected static function booted(): void
     {
+        // How it was filed (v1.5): a recording in no project is in the Inbox; a project set without saying how was
+        // chosen by a person (moved, picked when recording or uploading). Contact matches and rules say so themselves.
+        static::saving(function (CaptureSession $session): void {
+            if ($session->client_id === null) {
+                $session->filed_by = null;
+            } elseif ($session->isDirty('client_id') && ! $session->isDirty('filed_by')) {
+                $session->filed_by = self::FILED_BY_USER;
+            }
+        });
         // A delete (tombstone) erases the provider's copy at once; our own encrypted copy waits 48 hours in the undo
         // bin (B17), then RetentionPolicy::emptyBin() erases it.
         static::deleting(function (CaptureSession $session): void {

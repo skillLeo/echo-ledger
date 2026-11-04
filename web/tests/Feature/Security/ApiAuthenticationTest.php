@@ -23,6 +23,10 @@ function secDeviceGuardedRoutes(): array
         'POST devices/rotate-token' => ['POST', '/api/devices/rotate-token', null],
         'GET config' => ['GET', '/api/config', 'config:read'],
         'GET clients' => ['GET', '/api/clients', 'library:read'],
+        'DELETE clients/{id}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID, 'sessions:write'],
+        'GET clients/{id}/rules' => ['GET', '/api/clients/'.Fx::MISSING_ID.'/rules', 'library:read'],
+        'POST clients/{id}/rules' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/rules', 'sessions:write'],
+        'DELETE clients/{id}/rules/{rule}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID.'/rules/1', 'sessions:write'],
         'GET clients/{id}/workspace' => ['GET', '/api/clients/'.Fx::MISSING_ID.'/workspace', 'library:read'],
         'GET clients/{id}/bundle' => ['GET', '/api/clients/'.Fx::MISSING_ID.'/bundle', 'library:read'],
         'PUT clients/{id}/brief' => ['PUT', '/api/clients/'.Fx::MISSING_ID.'/brief', 'sessions:write'],
@@ -57,6 +61,17 @@ function secDeviceGuardedRoutes(): array
         'GET sessions/{id}/shares' => ['GET', '/api/sessions/'.Fx::MISSING_ID.'/shares', 'library:read'],
         'POST sessions/{id}/shares' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/shares', 'sessions:write'],
         'DELETE shares/{id}' => ['DELETE', '/api/shares/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST clients/{id}/shares' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/shares', 'sessions:write'],
+        'GET shares' => ['GET', '/api/shares', 'library:read'],
+        'POST sessions/{id}/send' => ['POST', '/api/sessions/'.Fx::MISSING_ID.'/send', 'sessions:write'],
+        'POST clients/{id}/send' => ['POST', '/api/clients/'.Fx::MISSING_ID.'/send', 'sessions:write'],
+        'GET shared-with-me' => ['GET', '/api/shared-with-me', 'library:read'],
+        'POST shared-with-me/{id}/save' => ['POST', '/api/shared-with-me/'.Fx::MISSING_ID.'/save', 'sessions:write'],
+        'DELETE shared-with-me/{id}' => ['DELETE', '/api/shared-with-me/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST request-links' => ['POST', '/api/request-links', 'sessions:write'],
+        'GET request-links' => ['GET', '/api/request-links', 'library:read'],
+        'DELETE request-links/{id}' => ['DELETE', '/api/request-links/'.Fx::MISSING_ID, 'sessions:write'],
+        'GET links/resolve' => ['GET', '/api/links/resolve?url=https%3A%2F%2Fecholedger.test%2Fs%2Fx', 'library:read'],
         'GET vocabulary' => ['GET', '/api/vocabulary', 'library:read'],
         'POST vocabulary/keyterms' => ['POST', '/api/vocabulary/keyterms', 'sessions:write'],
         'POST vocabulary/replacements' => ['POST', '/api/vocabulary/replacements', 'sessions:write'],
@@ -120,7 +135,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(63);
+    expect($guarded)->toBe(78);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

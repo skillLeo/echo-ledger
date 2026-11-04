@@ -12,6 +12,7 @@ use App\Services\SettingsRepository;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Notifications\DatabaseNotification;
@@ -66,9 +67,22 @@ class Activity extends Page
             return;
         }
         $notification->markAsRead();
-        $session = ActivityFeed::payload($notification)['session_id'];
-        if ($session !== null) {
+        $item = ActivityFeed::payload($notification);
+        // What a teammate sent (v1.5) is in their workspace: it opens in Shared with me, as the bell's Open does.
+        if ($item['kind'] === 'shared_with_you') {
+            $this->redirect(SharedWithMe::getUrl(), navigate: true);
+
+            return;
+        }
+        $session = $item['session_id'];
+        if ($session === null) {
+            return;
+        }
+        // The recording page finds only this workspace's recordings that are not deleted; anything else would be a 404.
+        if (CaptureSessionResource::getEloquentQuery()->whereKey($session)->exists()) {
             $this->redirect(CaptureSessionResource::getUrl('view', ['record' => $session]), navigate: true);
+        } else {
+            Notification::make()->title('This recording is no longer in this workspace\'s library.')->warning()->send();
         }
     }
 
@@ -118,6 +132,7 @@ class Activity extends Page
             'upload_failed' => 'heroicon-o-arrow-up-tray',
             'device_paired' => 'heroicon-o-device-phone-mobile',
             'budget_warn', 'budget_reached' => 'heroicon-o-chart-bar',
+            'shared_with_you' => 'heroicon-o-inbox-arrow-down',
             default => 'heroicon-o-bell',
         };
     }

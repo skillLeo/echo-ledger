@@ -76,6 +76,15 @@ final class CallerMatcher
                 return ['contact' => $contact, 'client' => $contact->client];
             }
         }
+        // Since v1.5 a contact rule can name an email: a caller seen by an address (a calendar guest) matches it.
+        $email = collect([$number, $name])->map(fn (?string $v): string => mb_strtolower(trim((string) $v)))
+            ->first(fn (string $v): bool => filter_var($v, FILTER_VALIDATE_EMAIL) !== false);
+        if ($email !== null) {
+            $contact = ClientContact::query()->whereRaw('LOWER(email) = ?', [$email])->whereIn('client_id', (clone $clients)->select('id'))->oldest('id')->first();
+            if ($contact !== null) {
+                return ['contact' => $contact, 'client' => $contact->client];
+            }
+        }
         $wanted = self::normalName($name);
         if ($wanted === '') {
             return ['contact' => null, 'client' => null];
@@ -118,6 +127,7 @@ final class CallerMatcher
         ]);
         if ($session->client_id === null && $match['client'] !== null) {
             $session->client_id = $match['client']->id;
+            $session->filed_by = CaptureSession::FILED_BY_CONTACT;
         }
         // Since v1.4 the far side of a call is the person, not "Client" (a meeting title names no one; a name the
         // person already gave the speaker stays).

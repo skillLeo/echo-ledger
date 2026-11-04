@@ -6,12 +6,18 @@ namespace App\Services;
 
 use App\Enums\UploadStatus;
 use App\Models\Recording;
+use App\Models\RequestLink;
+use App\Models\RequestUpload;
+use App\Models\Scopes\WorkspaceScope;
+use App\Services\Sharing\RequestLinks;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
  * Removes plaintext audio that a crashed request or worker left behind: decrypted and assembly copies in the temp
- * directory, half-written chunk files, and the upload parts of recordings that are gone or failed.
+ * directory, half-written chunk files, and the upload parts of recordings that are gone or failed. Since v1.5 it also
+ * ends uploads through request links that nobody finished, with what they left behind.
  * Runs as the last step of `stt:reconcile`.
  */
 final class TempFileSweeper
@@ -19,12 +25,56 @@ final class TempFileSweeper
     /** Upload parts of a deleted or failed recording are kept this long before they are removed. */
     public const ORPHANED_PARTS_HOURS = 24;
 
-    /** @return int files and part directories removed */
+    /** How many abandoned request-link uploads one run ends; the next run takes the rest. */
+    private const REQUEST_UPLOADS_PER_RUN = 200;
+
+    /** @return int files and part directories removed, and request-link uploads ended */
     public function sweep(int $olderThanMinutes = 60): int
     {
-        $cutoff = now()->subMinutes(max(1, $olderThanMinutes))->getTimestamp();
+        $cutoffAt = now()->subMinutes(max(1, $olderThanMinutes));
+        $cutoff = $cutoffAt->getTimestamp();
 
-        return $this->sweepTempDirectory($cutoff) + $this->sweepParts($cutoff, now()->subHours(self::ORPHANED_PARTS_HOURS)->getTimestamp());
+        return $this->sweepTempDirectory($cutoff) + $this->sweepParts($cutoff, now()->subHours(self::ORPHANED_PARTS_HOURS)->getTimestamp())
+            + $this->sweepRequestUploads($cutoffAt);
+    }
+
+    /**
+     * Request links (v1.5): an upload is ended once it has received nothing for RequestLinks::ABANDONED_HOURS, or an
+     * hour after its link was revoked or expired (nobody can resume it then). Then the document parts of uploads that
+     * no longer run are removed (a refused or finished upload removes its own; this catches a request that died).
+     */
+    private function sweepRequestUploads(Carbon $cutoff): int
+    {
+        $ended = RequestLink::query()->withoutGlobalScope(WorkspaceScope::class)
+            ->where(fn ($q) => $q->whereNotNull('revoked_at')->orWhere('expires_at', '<=', now()))->select('id');
+        $abandoned = RequestUpload::query()->where('status', 'uploading')
+            ->where(fn ($q) => $q->where('updated_at', '<', now()->subHours(RequestLinks::ABANDONED_HOURS))
+                ->orWhere(fn ($q) => $q->where('updated_at', '<', $cutoff)->whereIn('request_link_id', $ended)))
+            ->orderBy('updated_at')->limit(self::REQUEST_UPLOADS_PER_RUN)->get();
+
+        $removed = 0;
+        foreach ($abandoned as $upload) {
+            try {
+                app(RequestLinks::class)->abandon($upload);
+                $removed++;
+            } catch (Throwable $e) {
+                report($e); // the next run tries again
+            }
+        }
+
+        $disk = Storage::disk('recordings');
+        if (! $disk->directoryExists('request-parts')) {
+            return $removed;
+        }
+        foreach ($disk->directories('request-parts') as $relative) {
+            $upload = RequestUpload::query()->find(basename($relative), ['id', 'status']);
+            if (($upload === null || $upload->status !== 'uploading') && $this->newestChange($disk->path($relative)) < $cutoff->getTimestamp()) {
+                $disk->deleteDirectory($relative);
+                $removed++;
+            }
+        }
+
+        return $removed;
     }
 
     private function sweepTempDirectory(int $cutoff): int

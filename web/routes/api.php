@@ -8,16 +8,20 @@ use App\Http\Controllers\Api\ClientWorkspaceController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\ExportController;
+use App\Http\Controllers\Api\FilingRuleController;
 use App\Http\Controllers\Api\LibraryController;
+use App\Http\Controllers\Api\LinkController;
 use App\Http\Controllers\Api\LiveTranslateTokenController;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Http\Controllers\Api\RecordingController;
+use App\Http\Controllers\Api\RequestLinkController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SecurityController;
 use App\Http\Controllers\Api\SessionController;
 use App\Http\Controllers\Api\ShareController;
 use App\Http\Controllers\Api\SttTokenController;
 use App\Http\Controllers\Api\SttWebhookController;
+use App\Http\Controllers\Api\TeammateController;
 use App\Http\Controllers\Api\TranscriptEditController;
 use App\Http\Controllers\Api\TranscriptViewsController;
 use App\Http\Controllers\Api\UsageController;
@@ -62,6 +66,11 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->name('api.sessions.bulk');
             Route::post('clients', [OrganiseController::class, 'storeClient'])->name('api.clients.store');
             Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->name('api.clients.update');
+            // Projects (v1.5): deleting one sends its recordings to the Inbox and its subfolders up a level.
+            Route::delete('clients/{id}', [OrganiseController::class, 'destroyClient'])->name('api.clients.destroy');
+            // Filing rules (v1.5): title, app and contact rules that file a recording ending without a project.
+            Route::post('clients/{id}/rules', [FilingRuleController::class, 'store'])->name('api.clients.rules.store');
+            Route::delete('clients/{id}/rules/{rule}', [FilingRuleController::class, 'destroy'])->name('api.clients.rules.destroy');
             // Client workspaces (v1.4): brief, memory, files, notes and Ask.
             Route::put('clients/{id}/brief', [ClientWorkspaceController::class, 'updateBrief'])->name('api.clients.brief.update');
             Route::post('clients/{id}/brief/refresh', [ClientWorkspaceController::class, 'refreshBrief'])->name('api.clients.brief.refresh');
@@ -82,6 +91,16 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');
             Route::post('sessions/{id}/shares', [ShareController::class, 'store'])->name('api.sessions.shares.store');
             Route::delete('shares/{id}', [ShareController::class, 'destroy'])->name('api.shares.destroy');
+            // Share links for a project (v1.5): its recordings behind one link.
+            Route::post('clients/{id}/shares', [ShareController::class, 'storeForProject'])->name('api.clients.shares.store');
+            // Sending to a teammate (v1.5): a recording or project to accounts on this server; save a copy of one sent to you.
+            Route::post('sessions/{id}/send', [TeammateController::class, 'sendSession'])->name('api.sessions.send');
+            Route::post('clients/{id}/send', [TeammateController::class, 'sendProject'])->name('api.clients.send');
+            Route::post('shared-with-me/{id}/save', [TeammateController::class, 'save'])->name('api.shared.save');
+            Route::delete('shared-with-me/{id}', [TeammateController::class, 'destroy'])->name('api.shared.destroy');
+            // Request links (v1.5): a public page others send files through.
+            Route::post('request-links', [RequestLinkController::class, 'store'])->name('api.request-links.store');
+            Route::delete('request-links/{id}', [RequestLinkController::class, 'destroy'])->name('api.request-links.destroy');
             Route::post('vocabulary/keyterms', [VocabularyController::class, 'addKeyterm'])->name('api.vocabulary.keyterms');
             Route::post('vocabulary/replacements', [VocabularyController::class, 'addReplacement'])->name('api.vocabulary.replacements');
             Route::patch('transcripts/{id}', [TranscriptEditController::class, 'update'])->name('api.transcripts.update');
@@ -106,9 +125,15 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('transcripts/{id}/export', [ExportController::class, 'show'])->name('api.transcripts.export');
             Route::get('transcripts/{id}/views', [TranscriptViewsController::class, 'show'])->name('api.transcripts.views');
             Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->name('api.sessions.shares');
+            Route::get('shares', [ShareController::class, 'all'])->name('api.shares');
+            Route::get('shared-with-me', [TeammateController::class, 'index'])->name('api.shared');
+            Route::get('request-links', [RequestLinkController::class, 'index'])->name('api.request-links');
+            // Links in the apps (v1.5): what a /s/, /p/ or /r/ link is for this device, to open it in place.
+            Route::get('links/resolve', [LinkController::class, 'resolve'])->name('api.links.resolve');
             Route::get('vocabulary', [VocabularyController::class, 'show'])->name('api.vocabulary');
             Route::get('clients/{id}/workspace', [ClientWorkspaceController::class, 'show'])->name('api.clients.workspace');
             Route::get('clients/{id}/bundle', [ClientWorkspaceController::class, 'bundle'])->name('api.clients.bundle');
+            Route::get('clients/{id}/rules', [FilingRuleController::class, 'index'])->name('api.clients.rules');
             Route::get('sessions/{id}/notes', [ClientWorkspaceController::class, 'notes'])->name('api.sessions.notes');
         });
     });

@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\Pages;
 
+use App\Filament\Pages\SharedWithMe;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\User;
 use App\Services\ConsoleUploads;
 use App\Services\LibraryOrganiser;
+use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use Filament\Actions\Action;
@@ -49,6 +52,24 @@ class ListCaptureSessions extends ListRecords
         'pinned' => 'Pinned',
     ];
 
+    /** Smart folders (v1.5), in the order the chips show; Shared with me opens its own page. */
+    public const FOLDER_LABELS = [
+        'inbox' => 'Inbox',
+        'whatsapp' => 'WhatsApp',
+        'whatsapp_business' => 'WhatsApp Business',
+        'google_meet' => 'Google Meet',
+        'zoom' => 'Zoom',
+        'teams' => 'Teams',
+        'phone' => 'Phone',
+        'voice_notes' => 'Voice notes',
+        'imported' => 'Imported',
+        'shared' => 'Shared with me',
+    ];
+
+    /** The smart folder the list is narrowed to (v1.5), kept in the address. */
+    #[Url]
+    public ?string $folder = null;
+
     /** Files up to this size are hashed by the browser's own SHA-256 (it needs the whole file in memory). */
     public const NATIVE_HASH_MAX_BYTES = 100 * 1024 * 1024;
 
@@ -65,6 +86,47 @@ class ListCaptureSessions extends ListRecords
         }
 
         return $tabs;
+    }
+
+    /**
+     * The smart folders as chips (v1.5): each one's label, how many recordings it holds and whether it is chosen.
+     *
+     * @return array<string, array{label: string, count: int, url: string|null}>
+     */
+    public function folders(): array
+    {
+        $counts = app(LibraryOrganiser::class)->folderCounts((int) CurrentWorkspace::id());
+        $user = auth()->user();
+        $counts['shared'] = $user instanceof User ? app(Teammates::class)->sharedCount($user) : 0;
+        $folders = [];
+        foreach (self::FOLDER_LABELS as $key => $label) {
+            $folders[$key] = ['label' => $label, 'count' => $counts[$key] ?? 0, 'url' => $key === 'shared' ? SharedWithMe::getUrl() : null];
+        }
+
+        return $folders;
+    }
+
+    /** Picks a smart folder, or clears it when it is picked again. */
+    public function setFolder(?string $folder): void
+    {
+        $this->folder = $folder !== null && $folder !== $this->folder && array_key_exists($folder, self::FOLDER_LABELS) && $folder !== 'shared' ? $folder : null;
+        $this->resetPage();
+    }
+
+    /**
+     * The smart view's tab, then the chosen smart folder.
+     *
+     * @param  Builder<CaptureSession>  $query
+     * @return Builder<CaptureSession>
+     */
+    protected function modifyQueryWithActiveTab(Builder $query, bool $isResolvingRecord = false): Builder
+    {
+        $query = parent::modifyQueryWithActiveTab($query, $isResolvingRecord);
+        if ($isResolvingRecord || $this->folder === null || $this->folder === 'shared' || ! array_key_exists($this->folder, self::FOLDER_LABELS)) {
+            return $query;
+        }
+
+        return app(LibraryOrganiser::class)->applyFolder($query, $this->folder);
     }
 
     /** The "4 calls waiting · Review" line, only while recordings wait for a decision. */

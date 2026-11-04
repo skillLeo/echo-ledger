@@ -127,7 +127,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 11;
+const LATER_MIGRATIONS = 16;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
@@ -192,6 +192,102 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
         ->toThrow(RuntimeException::class, 'have no workspace_id');
     expect(collect(Schema::connection('cycle')->getColumns('clients'))->firstWhere('name', 'workspace_id')['nullable'])->toBeTrue()
         ->and($db->table('migrations')->where('migration', '2026_11_01_000003_require_workspace_id')->exists())->toBeFalse();
+})->after(function () {
+    if (config('database.connections.cycle.driver') === 'sqlite') {
+        DB::disconnect('cycle');
+        @unlink((string) config('database.connections.cycle.database'));
+    }
+});
+
+/** The v1.5 Phase 2 migrations (projects, filing rules, share audiences, sent items, request links). */
+const PHASE2_STEPS = 5;
+
+/** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
+function seedPhase2Library(Connection $db): array
+{
+    $now = now();
+    $userId = $db->table('users')->insertGetId(['name' => 'Owner', 'email' => 'owner@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    $friend = $db->table('users')->insertGetId(['name' => 'Friend', 'email' => 'friend@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    $planId = (int) $db->table('plans')->value('id');
+    $workspace = $db->table('workspaces')->insertGetId(['name' => 'Personal', 'plan_id' => $planId, 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('workspace_user')->insert(['workspace_id' => $workspace, 'user_id' => $userId, 'role' => 'owner', 'created_at' => $now, 'updated_at' => $now]);
+    [$acme, $site] = [(string) Str::ulid(), (string) Str::ulid()];
+    $db->table('clients')->insert(['id' => $acme, 'workspace_id' => $workspace, 'user_id' => $userId, 'name' => 'Acme', 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('clients')->insert(['id' => $site, 'workspace_id' => $workspace, 'user_id' => $userId, 'parent_id' => $acme, 'name' => 'Website', 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('client_keyterms')->insert(['client_id' => $site, 'term' => 'Falcon', 'created_at' => $now, 'updated_at' => $now]);
+    $session = (string) Str::ulid();
+    $db->table('capture_sessions')->insert(['id' => $session, 'workspace_id' => $workspace, 'user_id' => $userId, 'client_id' => $site, 'filed_by' => 'rule',
+        'origin' => 'requested', 'client_ref' => (string) Str::uuid(), 'source_device' => 'web', 'source_app' => 'voice_note', 'started_at' => $now, 'status' => 'completed',
+        'created_at' => $now, 'updated_at' => $now]);
+    $db->table('filing_rules')->insert(['workspace_id' => $workspace, 'client_id' => $site, 'kind' => 'app', 'value' => 'zoom', 'match_value' => 'zoom', 'created_at' => $now, 'updated_at' => $now]);
+    $links = ['session' => (string) Str::ulid(), 'people' => (string) Str::ulid(), 'project' => (string) Str::ulid()];
+    $db->table('share_links')->insert(['id' => $links['session'], 'capture_session_id' => $session, 'token_hash' => hash('sha256', 'a'), 'audience' => 'password', 'password_hash' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('share_links')->insert(['id' => $links['people'], 'capture_session_id' => $session, 'token_hash' => hash('sha256', 'b'), 'audience' => 'people', 'people' => '["ana@example.test"]', 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('share_links')->insert(['id' => $links['project'], 'client_id' => $acme, 'token_hash' => hash('sha256', 'c'), 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('share_link_views')->insert(['share_link_id' => $links['project'], 'outcome' => 'viewed', 'viewed_at' => $now]);
+    $db->table('sent_items')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $workspace, 'from_user_id' => $userId, 'to_user_id' => $friend, 'kind' => 'session',
+        'capture_session_id' => $session, 'title' => 'Call', 'sent_at' => $now, 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('request_links')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $workspace, 'user_id' => $userId, 'client_id' => $site, 'token_hash' => hash('sha256', 'd'),
+        'title' => 'Files', 'created_at' => $now, 'updated_at' => $now]);
+
+    return ['user' => $userId, 'acme' => $acme, 'site' => $site, 'session' => $session, 'links' => $links];
+}
+
+it('runs the v1.5 Phase 2 migrations down and up again on a library that uses them', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    $seeded = seedPhase2Library($db);
+
+    cycleArtisan('migrate:rollback', ['--step' => PHASE2_STEPS]);
+    $schema = $db->getSchemaBuilder();
+    expect($schema->hasColumn('clients', 'parent_id'))->toBeFalse()
+        ->and($schema->hasColumn('capture_sessions', 'filed_by'))->toBeFalse()
+        ->and($schema->hasColumn('share_links', 'audience'))->toBeFalse()
+        ->and($schema->hasTable('filing_rules'))->toBeFalse()
+        ->and($schema->hasTable('sent_items'))->toBeFalse()
+        ->and($schema->hasTable('request_links'))->toBeFalse()
+        // Nothing of the library is lost: the subfolder is a top-level project, the recording stays in it.
+        ->and($db->table('clients')->count())->toBe(2)
+        ->and($db->table('client_keyterms')->count())->toBe(1)
+        ->and($db->table('capture_sessions')->where('id', $seeded['session'])->value('client_id'))->toBe($seeded['site'])
+        // A project link cannot live in the old table; a people-only link would open for anyone, so it is revoked.
+        ->and($db->table('share_links')->pluck('id')->sort()->values()->all())->toBe(collect([$seeded['links']['session'], $seeded['links']['people']])->sort()->values()->all())
+        ->and($db->table('share_links')->where('id', $seeded['links']['people'])->value('revoked_at'))->not->toBeNull()
+        ->and($db->table('share_links')->where('id', $seeded['links']['session'])->value('password_hash'))->toBe('x')
+        ->and($db->table('share_link_views')->count())->toBe(0);
+    expect(collect(Schema::connection('cycle')->getColumns('share_links'))->firstWhere('name', 'capture_session_id')['nullable'])->toBeFalse();
+
+    cycleArtisan('migrate');
+    expect($schema->hasColumn('clients', 'parent_id'))->toBeTrue()
+        ->and($schema->hasTable('request_links'))->toBeTrue()
+        ->and($db->table('capture_sessions')->where('id', $seeded['session'])->value('filed_by'))->toBe('user')
+        ->and($db->table('share_links')->where('id', $seeded['links']['session'])->value('audience'))->toBe('password');
+    // Names are unique per folder again: the same name under two parents is fine, twice in one folder is not.
+    $now = now();
+    $db->table('clients')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $db->table('clients')->value('workspace_id'), 'user_id' => $seeded['user'], 'parent_id' => $seeded['acme'], 'name' => 'Notes', 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('clients')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $db->table('clients')->value('workspace_id'), 'user_id' => $seeded['user'], 'parent_id' => $seeded['site'], 'name' => 'Notes', 'created_at' => $now, 'updated_at' => $now]);
+    expect(fn () => $db->table('clients')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $db->table('clients')->value('workspace_id'), 'user_id' => $seeded['user'], 'parent_id' => $seeded['site'], 'name' => 'Notes', 'created_at' => $now, 'updated_at' => $now]))
+        ->toThrow(QueryException::class);
+})->after(function () {
+    if (config('database.connections.cycle.driver') === 'sqlite') {
+        DB::disconnect('cycle');
+        @unlink((string) config('database.connections.cycle.database'));
+    }
+});
+
+it('refuses to roll projects back while one person has two projects of the same name, and changes nothing', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    $seeded = seedPhase2Library($db);
+    $now = now();
+    // "Website" twice: once under Acme (seeded), once at the top. The old unique index could not hold both.
+    $db->table('clients')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $db->table('clients')->value('workspace_id'), 'user_id' => $seeded['user'], 'name' => 'Website', 'created_at' => $now, 'updated_at' => $now]);
+    cycleArtisan('migrate:rollback', ['--step' => PHASE2_STEPS - 1]);
+
+    expect(fn () => Artisan::call('migrate:rollback', ['--database' => 'cycle', '--force' => true, '--step' => 1]))
+        ->toThrow(RuntimeException::class, 'rename one of them before rolling back');
+    expect($db->getSchemaBuilder()->hasColumn('clients', 'parent_id'))->toBeTrue()
+        ->and($db->table('migrations')->where('migration', '2026_11_14_000001_add_projects_to_clients')->exists())->toBeTrue();
 })->after(function () {
     if (config('database.connections.cycle.driver') === 'sqlite') {
         DB::disconnect('cycle');

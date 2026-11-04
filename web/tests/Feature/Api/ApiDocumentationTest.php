@@ -14,18 +14,48 @@ use Illuminate\Support\Facades\Route;
  * file and compare it with the router so drift is caught by the build rather than by a device in the field.
  */
 
-/** @return list<array{method: string, uri: string, rest: string}> headings of the form ### `METHOD /api/...` */
+/**
+ * Headings of the form ### `METHOD /api/...`, and (since v1.5) endpoints defined in a list item or a paragraph:
+ * `METHOD /api/...` followed by "— `ability`", or joined to the next one with "and" ("`POST /a` and `POST /b` —
+ * `sessions:write`"), or a later sentence naming only the route ("`GET /api/x` lists them"). `rest` carries the
+ * ability (and, for headings, the throttle) the text gives it.
+ *
+ * @return list<array{method: string, uri: string, rest: string}>
+ */
 function documentedEndpoints(): array
 {
     $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md');
     $endpoints = [];
     foreach (explode("\n", $doc) as $line) {
         if (preg_match('/^### `(GET|POST|PUT|PATCH|DELETE) (\/api\/[^`?]*)(?:\?[^`]*)?`(.*)$/', $line, $m) === 1) {
-            $endpoints[] = ['method' => $m[1], 'uri' => $m[2], 'rest' => $m[3]];
+            $endpoints[$m[1].' '.shapeOf($m[2])] = ['method' => $m[1], 'uri' => $m[2], 'rest' => $m[3]];
+        }
+    }
+    // Mentions anywhere else; a line break may sit between the method and the path.
+    preg_match_all('/`(GET|POST|PUT|PATCH|DELETE)\s+(\/api\/[A-Za-z0-9_\/{}-]*)(?:\?[^`]*)?`/', $doc, $mentions, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+    $abilities = [];
+    for ($i = count($mentions) - 1; $i >= 0; $i--) {
+        $end = $mentions[$i][0][1] + strlen($mentions[$i][0][0]);
+        $after = substr($doc, $end, 80);
+        $ability = null;
+        if (preg_match('/^\s*—\s*`([a-z]+:[a-z]+)`/', $after, $a) === 1) {
+            $ability = $a[1];
+        } elseif (preg_match('/^\s+and\s+(?:the new\s+)?`/', $after) === 1 && isset($abilities[$i + 1])) {
+            $ability = $abilities[$i + 1];
+        }
+        $abilities[$i] = $ability;
+    }
+    foreach ($mentions as $i => $mention) {
+        $key = $mention[1][0].' '.shapeOf($mention[2][0]);
+        if (str_contains($mention[2][0], '/webhooks/') || (isset($endpoints[$key]) && $abilities[$i] === null)) {
+            continue;
+        }
+        if (! isset($endpoints[$key]) || ! str_contains($endpoints[$key]['rest'], '— `')) {
+            $endpoints[$key] = ['method' => $mention[1][0], 'uri' => $mention[2][0], 'rest' => $abilities[$i] !== null ? " — `{$abilities[$i]}`" : ''];
         }
     }
 
-    return $endpoints;
+    return array_values($endpoints);
 }
 
 /** Route placeholders all look the same for comparison purposes. */
@@ -52,7 +82,8 @@ it('documents every endpoint the router serves, except the provider webhook whic
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();
     $served = collect(array_keys(registeredApiRoutes()))->reject(fn (string $key) => str_contains($key, '/webhooks/'))->sort()->values()->all();
 
-    expect($documented)->toBe($served);
+    expect(array_values(array_diff($served, $documented)))->toBe([], 'served but not documented')
+        ->and(array_values(array_diff($documented, $served)))->toBe([], 'documented but not served');
 });
 
 it('documents the provider webhook', function () {

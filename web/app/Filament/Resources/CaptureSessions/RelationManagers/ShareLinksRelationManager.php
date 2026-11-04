@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\RelationManagers;
 
+use App\Filament\Support\SharingActions;
 use App\Models\CaptureSession;
 use App\Models\ShareLink;
 use App\Services\SettingsRepository;
@@ -17,7 +18,7 @@ use Filament\Tables\Table;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 
-/** The recording's share links (v1.1): when they expire, how often they were opened, and Revoke. */
+/** The recording's share links (v1.1; audiences and downloads since v1.5): when they expire, how often they were opened, and Revoke. */
 class ShareLinksRelationManager extends RelationManager
 {
     /** A recording without sound has nothing to share: no share links section. */
@@ -47,9 +48,10 @@ class ShareLinksRelationManager extends RelationManager
                 TextColumn::make('state')->label('Status')->badge()
                     ->state(fn (ShareLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isActive() ? 'Active' : 'Expired'))
                     ->color(fn (string $state): string => $state === 'Active' ? 'success' : 'gray'),
-                TextColumn::make('expires_at')->label('Expires')->dateTime('M j, Y · g:i A', $tz),
-                IconColumn::make('password_hash')->label('Password')->boolean()->state(fn (ShareLink $link): bool => $link->password_hash !== null),
-                IconColumn::make('include_audio')->label('Audio')->boolean(),
+                TextColumn::make('expires_at')->label('Expires')->dateTime('M j, Y · g:i A', $tz)->placeholder('Never'),
+                // Since v1.5: who may open it (anyone, a password, named people) and whether files can be downloaded.
+                TextColumn::make('audience')->label('Who can open it')->wrap()->state(fn (ShareLink $link): string => SharingActions::audienceLabel($link)),
+                IconColumn::make('allow_download')->label('Downloads')->boolean(),
                 TextColumn::make('view_count')->label('Views')->numeric(),
                 TextColumn::make('last_viewed_at')->label('Last opened')->since()->placeholder('Never'),
                 TextColumn::make('created_by')->label('Made by')->placeholder('—'),

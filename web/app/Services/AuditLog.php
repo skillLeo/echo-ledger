@@ -121,10 +121,18 @@ final class AuditLog
         CaptureSession::deleted(fn (CaptureSession $s) => $log()->record('session_deleted', $s->user_id, $s, 'Recording deleted: '.$s->displayTitle()));
         Device::created(fn (Device $d) => $log()->record('device_paired', $d->user_id, $d, "Device paired: {$d->name}"));
         Device::deleted(fn (Device $d) => $log()->record('device_revoked', $d->user_id, $d, "Device revoked: {$d->name}"));
-        ShareLink::created(fn (ShareLink $l) => $log()->record('share_created', $l->captureSession->user_id, $l->captureSession, 'Share link made for '.$l->captureSession->displayTitle()));
-        ShareLink::updated(function (ShareLink $l) use ($log): void {
+        // A link opens a recording or (since v1.5) a project: the log names whichever it is.
+        $shared = fn (ShareLink $l): array => $l->client_id !== null
+            ? [$l->client?->user_id, $l->client, 'project '.$l->client?->name]
+            : [$l->captureSession?->user_id, $l->captureSession, (string) $l->captureSession?->displayTitle()];
+        ShareLink::created(function (ShareLink $l) use ($log, $shared): void {
+            [$owner, $subject, $what] = $shared($l);
+            $log()->record('share_created', $owner, $subject, 'Share link made for '.$what);
+        });
+        ShareLink::updated(function (ShareLink $l) use ($log, $shared): void {
             if ($l->wasChanged('revoked_at') && $l->revoked_at !== null) {
-                $log()->record('share_revoked', $l->captureSession->user_id, $l->captureSession, 'Share link revoked for '.$l->captureSession->displayTitle());
+                [$owner, $subject, $what] = $shared($l);
+                $log()->record('share_revoked', $owner, $subject, 'Share link revoked for '.$what);
             }
         });
         User::updated(function (User $u) use ($log): void {
