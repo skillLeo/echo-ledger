@@ -1,5 +1,5 @@
 // Light / dark / system theme for every window. The choice is stored locally (never sent anywhere) and shared by the
-// windows of the app (same origin), so the caption overlay, pill, review card and dictation bar follow the main window.
+// windows of the app (same origin), so the caption overlay, pill, after-call window and dictation bar follow the main window.
 
 import { applyAccent } from "./accent";
 

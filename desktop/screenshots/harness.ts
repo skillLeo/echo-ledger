@@ -1,14 +1,17 @@
 // Screenshot harness: renders any EchoLedger window in a plain browser with the Tauri IPC mocked, so the views can be
 // captured by a browser driver against `npm run dev`. Open /screenshots/harness.html?w=<window>&theme=<dark|light>
-// [&view=library|record|settings|onboarding|lock|pairing]. Nothing here ships: it is not part of the app build.
+// [&view=library|record|settings|onboarding|lock|pairing] [&after=saved|ask|both for w=review]. Nothing here ships: it
+// is not part of the app build.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 import {
   CALL_SEGMENTS,
+  makeAfterCallState,
+  makeChipItem,
   makeItem,
   makePendingItem,
   makeRecordingState,
-  makeReviewPayload,
+  makeSavedToast,
   makeSettings,
   makeStatus,
   makeTranscript,
@@ -21,6 +24,8 @@ const win = params.get("w") ?? "main";
 const theme = params.get("theme") === "light" ? "light" : "dark";
 const view = params.get("view") ?? "library";
 const empty = params.get("empty") === "1";
+/** The after-call window (w=review): the Saved toast, the Ask-me chip, or both. */
+const after = params.get("after") ?? "both";
 
 try {
   localStorage.setItem("echoledger-theme", theme);
@@ -91,8 +96,14 @@ function respond(cmd: string, args: Record<string, unknown> | undefined): unknow
       return [];
     case "recording_state":
       return makeRecordingState({ active: win === "pill", elapsedMs: 754_000, sourceApp: "google_meet", captions: true, levels: [0.55, 0.3] });
-    case "review_state":
-      return win === "review" ? makeReviewPayload({ item: makePendingItem("pend-1", { sourceApp: "google_meet", clientName: "Northwind", firstLine: "Thanks for joining. Let us start with the budget.", deadlineAt: new Date(Date.now() + 45_000).toISOString() }) }) : null;
+    case "after_call_state":
+      // The toast stays for the picture (an hour); the chip line starts at 6 of its 10 seconds.
+      return win === "review"
+        ? makeAfterCallState({
+            saved: after === "ask" ? null : makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
+            ask: after === "saved" ? null : makeChipItem("pend-1", { sourceApp: "google_meet", title: "Weekly sync with Northwind", durationMs: 1_845_000, deadlineAt: new Date(Date.now() + 6_000).toISOString() }),
+          })
+        : makeAfterCallState();
     case "subscribe_captions":
       channelId = (args?.onEvent as { id: number } | undefined)?.id ?? null;
       return null;
@@ -141,5 +152,5 @@ if (win === "overlay" || win === "dictation") {
     caption({ kind: "partial", speaker: "Me", channel: 1, text: "Please send the second draft by Thursday" });
   }
 }
-if (win === "review") await emit("review:show", respond("review_state", undefined));
+if (win === "review") await emit("aftercall:state", respond("after_call_state", undefined));
 document.documentElement.dataset.shotReady = "1";

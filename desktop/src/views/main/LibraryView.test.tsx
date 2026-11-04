@@ -460,8 +460,10 @@ describe("LibraryView transcript", () => {
     const both = makeItem("b2", { title: "Both", status: "processing", transcript: { final_status: "submitted", final_transcript_id: "tr-wip", live_available: true, live_transcript_id: "tr-live", preview: null } });
     await renderLibrary([both]);
     await selectItem("Both", "Live words.");
-    expect(callsOf("transcript_detail")).toEqual([{ id: "tr-live" }]);
+    // The live captions are shown; the final one is read too, for "Waiting for Groq — retrying at …" (v1.5).
+    expect(callsOf("transcript_detail")).toEqual([{ id: "tr-live" }, { id: "tr-wip" }]);
     expect(within(detail()).getByText("Live captions (final transcript pending)")).toBeInTheDocument();
+    expect(within(detail()).queryByTestId("retry-line")).not.toBeInTheDocument();
   });
 
   it("loads the finished transcript once a sync reports it completed", async () => {
@@ -1236,5 +1238,117 @@ describe("LibraryView Show as", () => {
     expect(within(detail()).queryByRole("button", { name: "English" })).not.toBeInTheDocument();
     fireEvent.click(within(detail()).getByRole("button", { name: "Original" }));
     expect(within(detail()).getByText("I will send the invoice")).toBeInTheDocument();
+  });
+});
+
+describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
+  const segments = (text: string): Segment[] => [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text }];
+  const urduCall = (transcript: Partial<NonNullable<LibraryItem["transcript"]>> = {}, language: string | null = "ur") =>
+    makeItem("u", { title: "Urdu call", language: language as LibraryItem["language"], transcript: { final_status: "completed", final_transcript_id: "tr-u", live_available: false, preview: null, ...transcript } });
+
+  it("says a backup engine made the transcript and re-transcribes in the same language", async () => {
+    respond("session_retranscribe", {});
+    TRANSCRIPTS["tr-u"] = makeTranscript({ id: "tr-u", language: "ur", provider: "assemblyai", segments: segments("invoice bhej dein"), backup_engine: true, backup_reason: "waited" });
+    const { notify } = await renderLibrary([urduCall(), ...ITEMS]);
+    await selectItem("Urdu call", "invoice bhej dein");
+    const line = within(detail()).getByTestId("backup-engine");
+    expect(line).toHaveTextContent("Backup engine — Re-transcribe?");
+    fireEvent.click(within(line).getByRole("button", { name: "Re-transcribe" }));
+    await flushAsync();
+    expect(callsOf("session_retranscribe")).toEqual([{ id: "u", language: "ur" }]);
+    expect(notify).toHaveBeenCalledWith("Re-transcribing in Urdu. The current transcript stays until the new one is ready.");
+  });
+
+  it("sends no language for an Auto recording", async () => {
+    respond("session_retranscribe", {});
+    TRANSCRIPTS["tr-u"] = makeTranscript({ id: "tr-u", segments: segments("salaam"), backup_engine: true, backup_reason: "rejected" });
+    await renderLibrary([urduCall({}, null), ...ITEMS]);
+    await selectItem("Urdu call", "salaam");
+    fireEvent.click(within(within(detail()).getByTestId("backup-engine")).getByRole("button", { name: "Re-transcribe" }));
+    await flushAsync();
+    expect(callsOf("session_retranscribe")).toEqual([{ id: "u", language: null }]);
+  });
+
+  it("says nothing for the preferred engine, nor on an older server without the new fields", async () => {
+    TRANSCRIPTS["tr-u"] = makeTranscript({ id: "tr-u", segments: segments("salaam"), backup_engine: false });
+    await renderLibrary([urduCall(), ...ITEMS]);
+    await selectItem("Urdu call", "salaam");
+    expect(within(detail()).queryByTestId("backup-engine")).not.toBeInTheDocument();
+    await selectItem("Zoom with Acme", "Hello, this is Sam.");
+    expect(within(detail()).queryByTestId("backup-engine")).not.toBeInTheDocument();
+    expect(within(detail()).queryByTestId("retry-line")).not.toBeInTheDocument();
+  });
+
+  it("says when a waiting transcript tries its engine again, also while the live captions show", async () => {
+    TRANSCRIPTS["tr-live"] = makeTranscript({ id: "tr-live", kind: "live", segments: segments("Assalam o alaikum") });
+    TRANSCRIPTS["tr-w"] = makeTranscript({ id: "tr-w", status: "pending", provider: "groq", segments: [], retry_at: new Date(2026, 9, 24, 14, 5).toISOString(), retry_reason: "rate_limited" });
+    await renderLibrary([urduCall({ final_status: "pending", final_transcript_id: "tr-w", live_transcript_id: "tr-live", live_available: true }), ...ITEMS]);
+    await selectItem("Urdu call", "Assalam o alaikum");
+    const line = await within(detail()).findByTestId("retry-line");
+    expect(line).toHaveTextContent("Waiting for Groq — retrying at 2:05 pm");
+    expect(line).toHaveAttribute("title", "Groq has reached its limit for now. The transcript waits for it instead of using a less accurate engine.");
+    expect(within(detail()).queryByTestId("backup-engine")).not.toBeInTheDocument();
+  });
+
+  it("follows a waiting transcript through a try to the next retry time a sync brings, behind the live captions", async () => {
+    TRANSCRIPTS["tr-live"] = makeTranscript({ id: "tr-live", kind: "live", segments: segments("Assalam o alaikum") });
+    TRANSCRIPTS["tr-w"] = makeTranscript({ id: "tr-w", status: "pending", provider: "groq", segments: [], retry_at: new Date(2026, 9, 24, 14, 5).toISOString(), retry_reason: "unavailable" });
+    const call = urduCall({ final_status: "pending", final_transcript_id: "tr-w", live_transcript_id: "tr-live", live_available: true });
+    await renderLibrary([call, ...ITEMS]);
+    await selectItem("Urdu call", "Assalam o alaikum");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 2:05 pm");
+
+    // The try runs: no retry time while it does.
+    TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], status: "processing", retry_at: null, retry_reason: null };
+    respond("library_list", [{ ...call, updated_at: "2026-10-24T13:05:00Z", transcript: { ...call.transcript!, final_status: "processing" } }, ...ITEMS]);
+    await emitEvent("library:updated", 1);
+    await waitFor(() => expect(within(detail()).queryByTestId("retry-line")).not.toBeInTheDocument());
+
+    // It failed again: the server set the next retry time and touched the recording.
+    TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], status: "pending", retry_at: new Date(2026, 9, 24, 14, 13).toISOString(), retry_reason: "unavailable" };
+    respond("library_list", [{ ...call, updated_at: "2026-10-24T13:07:00Z" }, ...ITEMS]);
+    await emitEvent("library:updated", 1);
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 2:13 pm");
+    expect(within(detail()).getByText("Assalam o alaikum")).toBeInTheDocument();
+  });
+
+  it("reads the transcript on screen again when a sync says the recording changed, though its status did not", async () => {
+    TRANSCRIPTS["tr-w"] = makeTranscript({ id: "tr-w", status: "pending", provider: "groq", segments: [], retry_at: new Date(2026, 9, 24, 14, 5).toISOString(), retry_reason: "rate_limited" });
+    const call = urduCall({ final_status: "pending", final_transcript_id: "tr-w" });
+    await renderLibrary([call, ...ITEMS]);
+    await selectItem("Urdu call");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 2:05 pm");
+    expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w")).toHaveLength(1);
+
+    TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], retry_at: new Date(2026, 9, 24, 14, 13).toISOString() };
+    respond("library_list", [{ ...call, updated_at: "2026-10-24T11:07:00Z" }, ...ITEMS]);
+    await emitEvent("library:updated", 1);
+    expect(await within(detail()).findByText("Waiting for Groq — retrying at 2:13 pm")).toBeInTheDocument();
+    expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w")).toHaveLength(2);
+  });
+
+  it("asks again every minute once the retry time has passed", async () => {
+    const timeouts = vi.spyOn(window, "setTimeout");
+    TRANSCRIPTS["tr-w"] = makeTranscript({ id: "tr-w", status: "pending", provider: "groq", segments: [], retry_at: new Date(2026, 9, 24, 11, 58).toISOString(), retry_reason: "rate_limited" });
+    await renderLibrary([urduCall({ final_status: "pending", final_transcript_id: "tr-w" }), ...ITEMS]);
+    await selectItem("Urdu call");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying now");
+    const minute = timeouts.mock.calls.filter(([, ms]) => ms === 60_000).at(-1)?.[0];
+    expect(minute).toBeTypeOf("function");
+
+    TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], retry_at: new Date(2026, 9, 24, 12, 4).toISOString() };
+    await act(async () => (minute as () => void)());
+    await flushAsync();
+    expect(within(detail()).getByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 12:04 pm");
+    expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w")).toHaveLength(2);
+  });
+
+  it("shows no waiting line once the transcript is no longer waiting", async () => {
+    TRANSCRIPTS["tr-w"] = makeTranscript({ id: "tr-w", status: "processing", provider: "groq", segments: [], retry_at: null, retry_reason: null });
+    await renderLibrary([urduCall({ final_status: "processing", final_transcript_id: "tr-w" }), ...ITEMS]);
+    fireEvent.click(itemButton("Urdu call"));
+    await flushAsync();
+    await waitFor(() => expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w").length).toBeGreaterThan(0));
+    expect(within(detail()).queryByTestId("retry-line")).not.toBeInTheDocument();
   });
 });

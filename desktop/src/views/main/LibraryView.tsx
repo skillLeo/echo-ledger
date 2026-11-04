@@ -14,7 +14,7 @@ import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, lib
 import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./LibraryOrganise";
 import { useWindowShown } from "../../lib/visibility";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, scriptWarning, transcribingText } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcribingText, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
@@ -37,6 +37,8 @@ const STATE_LABEL = { ready: "Ready", processing: "Transcribing", failed: "Trans
 /** Transcript states in which the provider is still working: never shown as an empty transcript (A6.DU3). */
 const IN_FLIGHT = new Set(["pending", "submitted", "processing"]);
 const isTranscribing = (status?: string | null): boolean => !!status && IN_FLIGHT.has(status);
+/** What a read of a transcript was for: the transcript, the recording as the server last changed it, the re-reads. */
+const readKey = (id: string, changed: string | null, recheck: number): string => `${id}|${changed ?? ""}|${recheck}`;
 
 const PLAYBACK_EXPIRED = "Playback link expired. Open the recording again.";
 const playbackUrlOf = (detail: Record<string, unknown>): string | null => (typeof detail.playback_url === "string" ? detail.playback_url : null);
@@ -244,6 +246,30 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       notify(errorMessage(e), true);
     }
   };
+  /** "Backup engine — Re-transcribe?" (v1.5): the same language again, so the preferred engine gets another try. */
+  const retranscribeSame = async () => {
+    if (!current) return;
+    const language = (current.language ?? null) as TranscriptionLanguage | null;
+    try {
+      await api.retranscribe(current.id, language);
+      notify(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`);
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+  // The final transcript while it is still being made (v1.5): an Urdu or Auto one that waits for its preferred engine
+  // says when it tries again. When it is the transcript shown (no live captions) its detail says so and a fresh read
+  // replaces it; behind the live captions it is read on its own. Either way it is read again whenever the recording
+  // changes on the server (every new retry time touches it), shortly after the retry time, and every minute once that
+  // time has passed.
+  const transcribingFinalId = isTranscribing(finalStatus) ? current?.transcript?.final_transcript_id ?? null : null;
+  const finalShown = transcribingFinalId !== null && ((isTranscribing(finalStatus) && liveId) || finalId || liveId) === transcribingFinalId;
+  const sessionChanged = current?.updated_at ?? null;
+  const [finalRead, setFinalRead] = useState<{ id: string; detail: TranscriptDetail } | null>(null);
+  // The reads after a retry time, counted per transcript, and what the transcript on screen was last read for.
+  const [rechecks, setRechecks] = useState<{ id: string | null; n: number }>({ id: null, n: 0 });
+  const recheck = rechecks.id === transcribingFinalId ? rechecks.n : 0;
+  const shownRead = useRef<string | null>(null);
   useEffect(() => {
     const token = ++selection.current;
     const latest = () => token === selection.current;
@@ -265,6 +291,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     playbackRefreshed.current = false;
     // While the final transcript is still being made, the live captions (when there are any) are worth reading.
     const id = (isTranscribing(finalStatus) && liveId) || finalId || liveId;
+    shownRead.current = id ? readKey(id, sessionChanged, recheck) : null;
     if (id) {
       api.transcript(id).then((t) => latest() && setTranscript(t)).catch(() => {
         if (!latest()) return;
@@ -287,6 +314,37 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id, finalId, liveId, finalStatus, transcriptAttempt]);
+  useEffect(() => {
+    if (!transcribingFinalId) return;
+    // The transcript on screen was read for this very state of the recording a moment ago.
+    if (finalShown && shownRead.current === readKey(transcribingFinalId, sessionChanged, recheck)) return;
+    let alive = true;
+    const token = selection.current;
+    api.transcript(transcribingFinalId).then((t) => {
+      if (!alive) return;
+      if (!finalShown) setFinalRead({ id: transcribingFinalId, detail: t });
+      else if (token === selection.current) setTranscript((shown) => (shown?.id === t.id ? t : shown));
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [transcribingFinalId, finalShown, recheck, sessionChanged]);
+  const waitingFinal = !transcribingFinalId ? null
+    : finalShown ? (transcript?.id === transcribingFinalId ? transcript : null)
+      : finalRead?.id === transcribingFinalId ? finalRead.detail : null;
+  const retryAt = waitingFinal?.retry_at ? Date.parse(waitingFinal.retry_at) : NaN;
+  useEffect(() => {
+    if (!transcribingFinalId || Number.isNaN(retryAt)) return;
+    // A little after the retry time (at least every 6 hours, the longest wait); once it has passed, every minute until
+    // the transcript says what came of it.
+    const due = retryAt + 15_000 - Date.now();
+    const timer = window.setTimeout(
+      () => setRechecks((r) => ({ id: transcribingFinalId, n: (r.id === transcribingFinalId ? r.n : 0) + 1 })),
+      due > 0 ? Math.min(due, 6 * 3_600_000) : 60_000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [transcribingFinalId, retryAt, recheck]);
+  const retrying = retryLine(waitingFinal);
   // Find starts over for every recording.
   useEffect(() => {
     setFindOpen(false);
@@ -898,6 +956,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {current.client ? <> · {onOpenClient ? <button type="button" className="btn text compact" style={{ height: 22, padding: "0 4px" }} onClick={() => onOpenClient(current.client!.id)}>{current.client.name}</button> : current.client.name}</> : null}
                   </div>
                   {engineLine(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {engineLine(current.transcript)}</div>}
+                  {retrying && (
+                    <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason, providerName(waitingFinal?.provider) || "The engine") ?? undefined}>{retrying}</div>
+                  )}
+                  {transcript?.kind === "final" && transcript.status === "completed" && usedBackupEngine(transcript) && !isTranscribing(finalStatus) && (
+                    <div className="backup-line" role="status" data-testid="backup-engine">
+                      <span className="small">Backup engine — Re-transcribe?</span>
+                      <button type="button" className="btn ghost compact" title="Tries the preferred engine again, in the same language" onClick={() => void retranscribeSame()}>Re-transcribe</button>
+                    </div>
+                  )}
                   <OrganisePanel item={current} clients={folders} knownLabels={labels} notify={notify} onClientCreated={addClient}>
                     {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
                       <span className="head-chip retranscribe-row">

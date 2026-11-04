@@ -43,7 +43,7 @@ describe("api wrappers", () => {
     ["clients", () => api.clients(), "list_clients", undefined],
     ["setHitRegions", () => api.setHitRegions([{ x: 1, y: 2, w: 3, h: 4 }]), "overlay_set_hit_regions", { regions: [{ x: 1, y: 2, w: 3, h: 4 }] }],
     ["snapOverlay", () => api.snapOverlay(), "overlay_snap", undefined],
-    ["updateSettings (v1.1 keys)", () => api.updateSettings({ askBeforeSaving: "auto_only", decisionTimeout: "wait", captionLines: 5 }), "update_settings", { patch: { askBeforeSaving: "auto_only", decisionTimeout: "wait", captionLines: 5 } }],
+    ["updateSettings (after a call)", () => api.updateSettings({ afterCall: "ask", captionLines: 5 }), "update_settings", { patch: { afterCall: "ask", captionLines: 5 } }],
     ["pauseRecording", () => api.pauseRecording(), "pause_recording", undefined],
     ["resumeRecording", () => api.resumeRecording(), "resume_recording", undefined],
     ["cancelRecording", () => api.cancelRecording(), "cancel_recording", undefined],
@@ -64,7 +64,10 @@ describe("api wrappers", () => {
     ["makeTranscriptViews", () => api.makeTranscriptViews("t1"), "transcript_views_make", { id: "t1" }],
     ["pendingOpen", () => api.pendingOpen("p1", false), "pending_open", { id: "p1", rename: false }],
     ["pendingOpen (rename)", () => api.pendingOpen("p1", true), "pending_open", { id: "p1", rename: true }],
-    ["reviewState", () => api.reviewState(), "review_state", undefined],
+    ["afterCallState", () => api.afterCallState(), "after_call_state", undefined],
+    ["savedUndo", () => api.savedUndo("rec-1"), "saved_undo", { id: "rec-1" }],
+    ["skippedList", () => api.skippedList(), "skipped_list", undefined],
+    ["skippedRestore", () => api.skippedRestore("skip-1"), "skipped_restore", { id: "skip-1" }],
     ["uploadList", () => api.uploadList(), "upload_list", undefined],
     ["uploadRetry", () => api.uploadRetry("u1"), "upload_retry", { id: "u1" }],
     ["uploadDiscard", () => api.uploadDiscard("u1"), "upload_discard", { id: "u1" }],
@@ -144,5 +147,13 @@ describe("errorMessage", () => {
     expect(errorMessage({ code: 500 })).toBe("Something went wrong");
     expect(errorMessage(undefined)).toBe("Something went wrong");
     expect(errorMessage(null)).toBe("Something went wrong");
+  });
+
+  it("never gives an empty message: an empty or blank rejection, or an Error without one, reads as the generic text", () => {
+    expect(errorMessage("")).toBe("Something went wrong");
+    expect(errorMessage("   ")).toBe("Something went wrong");
+    expect(errorMessage(new Error(""))).toBe("Something went wrong");
+    expect(errorMessage({ message: "Not allowed" })).toBe("Not allowed");
+    expect(errorMessage({ message: "" })).toBe("Something went wrong");
   });
 });

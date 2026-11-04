@@ -192,7 +192,7 @@ export default function MainApp() {
       listen<AppStatus>("app:status", (e) => setStatus(e.payload)),
       listen<string>("app:error", (e) => setToast({ text: e.payload, error: true })),
       listen<string>("app:toast", (e) => setToast({ text: e.payload })),
-      // Tray "Review recordings (N)" and the review card's Open / Rename (contract 4.5).
+      // Tray "Review recordings (N)" and the after-call chip's title, which opens its title field (contract 4.5).
       listenTo("main:navigate", (nav) => {
         if (!nav || !TABS.includes(nav.view)) return;
         setTab(nav.view);
@@ -351,7 +351,7 @@ export default function MainApp() {
         {tab === "clients" && <ClientsView notify={notify} openRequest={clientRequest} onOpenRecording={openRecording} />}
         {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
         {tab === "activity" && (
-          <ActivityView status={status} onUnread={setUnread} onOpenRecording={(id) => openRecording(id)}
+          <ActivityView status={status} notify={notify} onUnread={setUnread} onOpenRecording={(id) => openRecording(id)}
             onReview={(id) => { setTab("library"); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
         )}
         {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />}

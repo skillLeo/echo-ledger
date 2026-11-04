@@ -7,7 +7,7 @@ use desktop_lib::audio::health::{
     FAR_SIDE_SILENT_MS, FarSideMonitor, FarSidePayload, HEARD_LEVEL, consent_from, peak_level, rms, stereo_wav, summarize,
 };
 use desktop_lib::audio::notes::{DEFAULT_TAGS, MAX_MARKERS, MAX_PAUSES, RecordingNotes, clean, tag_presets};
-use desktop_lib::audio::platform::{InputDevice, choose_mic, sort_devices};
+use desktop_lib::audio::platform::{InputDevice, MicBus, bus_of_instance_id, choose_mic, is_bluetooth_mic, mic_in_use, sort_devices};
 use desktop_lib::detect::classify::SourceApp;
 use desktop_lib::detect::decide::{IgnoreReason, TreeAudio, Verdict, apply_app_switches, decide};
 use desktop_lib::detect::explain;
@@ -232,7 +232,7 @@ fn width_and_text_size_change_the_overlay() {
 // ---- B5 capture health -----------------------------------------------------------------------------------------
 
 fn device(id: &str, name: &str, default: bool) -> InputDevice {
-    InputDevice { id: id.into(), name: name.into(), is_default: default }
+    InputDevice { id: id.into(), name: name.into(), is_default: default, bluetooth: false }
 }
 
 #[test]
@@ -248,7 +248,54 @@ fn the_default_microphone_is_listed_first() {
     let mut devices = vec![device("c", "zoom H1", false), device("b", "Array", false), device("a", "Headset", true)];
     sort_devices(&mut devices);
     assert_eq!(devices.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["a", "b", "c"]);
-    assert_eq!(serde_json::to_value(&devices[0]).unwrap(), json!({"id": "a", "name": "Headset", "isDefault": true}));
+    assert_eq!(serde_json::to_value(&devices[0]).unwrap(), json!({"id": "a", "name": "Headset", "isDefault": true, "bluetooth": false}));
+}
+
+// ---- v1.5 Bluetooth microphones -----------------------------------------------------------------------------------
+
+#[test]
+fn a_bluetooth_microphone_is_told_by_its_device_instance_id() {
+    for id in [
+        r"{1}.BTHHFENUM\BthHFPAudio\8&2A7E4A5B&0&97",
+        r"{1}.BTHENUM\{0000111e-0000-1000-8000-00805f9b34fb}_VID&0001004c_PID&2014\8&3B1&0&D4B5",
+        r"{1}.BTHLEDevice\{0000184e-0000-1000-8000-00805f9b34fb}_Dev_VID&02005c\9&1",
+        r"{1}.bthhfenum\bthhfpaudio\8&1",
+    ] {
+        assert_eq!(bus_of_instance_id(Some(id)), MicBus::Bluetooth, "{id}");
+        assert!(is_bluetooth_mic(bus_of_instance_id(Some(id)), "Microphone"), "{id}");
+    }
+    for id in [r"{1}.USB\VID_046D&PID_0A44&MI_00\7&1A2B&0&0000", r"{1}.HDAUDIO\FUNC_01&VEN_10EC&DEV_0257&SUBSYS_17AA\4&1", r"{1}.INTELAUDIO\FUNC_01&VEN_8086\5&2"] {
+        assert_eq!(bus_of_instance_id(Some(id)), MicBus::Other, "{id}");
+    }
+    assert_eq!(bus_of_instance_id(None), MicBus::Unknown);
+    assert_eq!(bus_of_instance_id(Some("  ")), MicBus::Unknown);
+}
+
+#[test]
+fn a_bluetooth_name_counts_whatever_the_bus_and_headset_only_when_the_system_does_not_say() {
+    for name in ["Headset (WH-1000XM4 Hands-Free AG Audio)", "AirPods Pro", "Galaxy Buds2 Pro", "Bluetooth Headset", "Jabra Handsfree Link", "Headset Microphone (Jabra Evolve2 65)"] {
+        assert!(is_bluetooth_mic(MicBus::Unknown, name), "{name}");
+    }
+    for name in ["Microphone Array (Realtek(R) Audio)", "MacBook Pro Microphone", "USB Audio Device", "Yeti Stereo Microphone"] {
+        assert!(!is_bluetooth_mic(MicBus::Unknown, name), "{name}");
+        assert!(!is_bluetooth_mic(MicBus::Other, name), "{name}");
+    }
+    // A Bluetooth headset behind the audio chip's Bluetooth offload reports the chip's bus ({1}.INTELAUDIO\…).
+    for name in ["Headset (WH-1000XM4 Hands-Free AG Audio)", "AirPods Pro", "Galaxy Buds2 Pro", "Microphone (Intel Smart Sound Technology for Bluetooth Audio)"] {
+        assert!(is_bluetooth_mic(MicBus::Other, name), "{name}");
+    }
+    assert!(!is_bluetooth_mic(MicBus::Other, "Headset Microphone (Realtek(R) Audio)"), "a wired headset on the audio jack");
+    assert!(is_bluetooth_mic(MicBus::Bluetooth, "Microphone"));
+}
+
+#[test]
+fn the_microphone_in_use_is_the_chosen_one_while_connected_else_the_default() {
+    let devices = vec![device("a", "Laptop mic", true), InputDevice { bluetooth: true, ..device("b", "AirPods Pro", false) }];
+    assert_eq!(mic_in_use(&devices, Some("b")).map(|d| (d.id.as_str(), d.bluetooth)), Some(("b", true)));
+    assert_eq!(mic_in_use(&devices, Some("gone")).map(|d| d.id.as_str()), Some("a"), "unplugged: the system default");
+    assert_eq!(mic_in_use(&devices, None).map(|d| d.id.as_str()), Some("a"));
+    assert_eq!(mic_in_use(&[], None), None);
+    assert_eq!(mic_in_use(&[device("x", "Array", false)], None), None, "no default is known");
 }
 
 #[test]

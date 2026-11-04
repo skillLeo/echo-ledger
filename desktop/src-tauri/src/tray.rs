@@ -209,7 +209,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                             .map(|_| ())
                     }
                     "review" => {
-                        crate::actions::navigate(&app, "library", None, false);
+                        crate::actions::review_waiting(&app);
                         Ok(())
                     }
                     "quit" => {

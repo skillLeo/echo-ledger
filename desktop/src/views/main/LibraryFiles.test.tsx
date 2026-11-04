@@ -152,6 +152,26 @@ describe("Rename", () => {
     expect(callsOf("session_organise")).toEqual([{ id: "b", patch: { pinned: false } }]);
   });
 
+  it("opens the menu upwards on a row near the bottom of the list, so the list does not cut it off", async () => {
+    const box = (top: number, height: number) => ({ top, bottom: top + height, height, left: 0, right: 300, width: 300, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    await renderLibrary();
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("list")) return box(100, 400);
+      if (this.classList.contains("row-menu-pop")) return box(470, 110); // ends at 580, below the list
+      return box(0, 0);
+    });
+    fireEvent.click(menuOf("Budget review"));
+    expect(screen.getByRole("menu", { name: "Actions for Budget review" })).toHaveClass("up");
+    fireEvent.click(menuOf("Budget review"));
+    rect.mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("list")) return box(100, 400);
+      if (this.classList.contains("row-menu-pop")) return box(200, 110);
+      return box(0, 0);
+    });
+    fireEvent.click(menuOf("Zoom with Acme"));
+    expect(screen.getByRole("menu", { name: "Actions for Zoom with Acme" })).not.toHaveClass("up");
+  });
+
   it("hides the row menu while recordings are being selected", async () => {
     await renderLibrary();
     fireEvent.click(screen.getByRole("button", { name: "Select" }));

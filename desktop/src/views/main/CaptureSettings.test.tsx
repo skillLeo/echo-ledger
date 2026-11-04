@@ -65,8 +65,8 @@ describe("caption style (B4)", () => {
 
 describe("microphone and capture health (B5)", () => {
   const devices = [
-    { id: "mic-default", name: "Laptop microphone", isDefault: true },
-    { id: "mic-usb", name: "USB headset", isDefault: false },
+    { id: "mic-default", name: "Laptop microphone", isDefault: true, bluetooth: false },
+    { id: "mic-usb", name: "USB headset", isDefault: false, bluetooth: false },
   ];
   const result = { seconds: 10, micPeak: 0.2, systemPeak: 0, micHeard: true, systemHeard: false, wavBase64: "UklGRiQAAABXQVZF" };
 
@@ -99,6 +99,25 @@ describe("microphone and capture health (B5)", () => {
     expect(screen.getByLabelText("Record from")).toHaveValue("mic-usb");
     fireEvent.change(screen.getByLabelText("Record from"), { target: { value: "" } });
     expect(patch).toHaveBeenCalledWith({ inputDevice: null });
+  });
+
+  it("says accuracy is lower next to the choice when the microphone in use is Bluetooth (v1.5)", async () => {
+    respond("input_devices", [...devices, { id: "mic-bt", name: "AirPods Pro", isDefault: false, bluetooth: true }]);
+    await renderCard(makeSettings({ inputDevice: "mic-bt" }));
+    expect(screen.getByTestId("bluetooth-note")).toHaveTextContent("Accuracy is lower with Bluetooth mics. A wired or built-in microphone hears calls better.");
+    expect(screen.getByTestId("bluetooth-note")).toHaveAttribute("title", "AirPods Pro");
+  });
+
+  it("says nothing about Bluetooth for a wired microphone, also when the Bluetooth one is only connected", async () => {
+    respond("input_devices", [...devices, { id: "mic-bt", name: "AirPods Pro", isDefault: false, bluetooth: true }]);
+    await renderCard(makeSettings({ inputDevice: null }));
+    expect(screen.queryByTestId("bluetooth-note")).not.toBeInTheDocument();
+  });
+
+  it("follows the system default when it is the Bluetooth one", async () => {
+    respond("input_devices", [{ id: "hf", name: "Headset (WH-1000XM4 Hands-Free AG Audio)", isDefault: true, bluetooth: true }, devices[1]]);
+    await renderCard(makeSettings({ inputDevice: null }));
+    expect(screen.getByTestId("bluetooth-note")).toBeInTheDocument();
   });
 
   it("says when the chosen microphone is not connected", async () => {

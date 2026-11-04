@@ -339,7 +339,8 @@ select.chip option { color: var(--text); background: var(--surface); }
 .segment:hover { background: var(--surface-3); }
 .seg-spk { grid-area: spk; font-weight: 600; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
 .seg-time { grid-area: time; color: var(--text-faint); font-size: var(--text-xs); }
-.seg-text { grid-area: text; font-size: 16px; line-height: 26px; color: var(--text); }
+/* text-align: start, not the row button's left: an Urdu or Arabic line (dir="auto") wraps from the right. */
+.seg-text { grid-area: text; font-size: 16px; line-height: 26px; color: var(--text); text-align: start; }
 .segment.cont { grid-template-areas: ". text text"; padding-top: 0; }
 .segment.cont .seg-avatar { display: none; }
 .segment.cont .seg-spk, .segment.cont .seg-time { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
@@ -426,14 +427,13 @@ button.segment.active { background: var(--accent-soft); }
 .queue-learn { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
 .queue-learn > span { flex: 1 1 auto; min-width: 0; }
 .queue-status { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-muted); flex: none; }
-/* The waiting recordings sit behind one summary card (the phone's "Keep or discard?" card); Review opens the list. */
-.queue-card { display: flex; align-items: center; gap: var(--space-3); min-width: 0; border: 0; background: var(--accent-soft); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); }
-.queue-card-icon { flex: none; width: 36px; height: 36px; display: grid; place-items: center; color: var(--accent-text); }
-.queue-card-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.queue-card .queue-head { padding: 0; }
-.queue-card .queue-label { color: var(--text); font-size: 16px; font-weight: 500; }
-.queue-card .queue-meta { color: var(--text-muted); font-size: var(--text-sm); }
-.queue-card > .btn { flex: none; }
+/* Recordings still waiting for Keep or Discard (left from before v1.5, or opened from the after-call chip) sit behind
+   one slim line, "2 calls waiting · Review"; Review opens the list. */
+.queue-slim { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 32px; padding: 0 var(--space-1) 0 var(--space-3); border-radius: var(--radius-field); background: var(--surface-3); color: var(--text-muted); font-size: var(--text-sm); }
+.queue-slim svg { flex: none; }
+.queue-slim-label { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); font-weight: 500; color: var(--text); }
+.queue-slim-sep { flex: none; }
+.queue-slim > .btn { flex: none; height: 28px; }
 .queue-list { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
 .queue-bulk { justify-content: flex-start; }
 .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color: var(--accent); animation: spin 0.9s linear infinite; flex: none; }
@@ -496,6 +496,10 @@ button.segment.active { background: var(--accent-soft); }
   .library { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 0; }
   .list { max-height: 45vh; min-height: 160px; }
   .detail { overflow: visible; }
+  /* Here the page (.content, 24 px padding) is what scrolls, and sticky bars stop at its padding: without these the
+     transcript showed through above the find bar and below the player. */
+  .detail .find-bar { top: calc(-1 * var(--space-5)); }
+  .detail .player-dock { bottom: calc(-1 * var(--space-5)); }
 }
 
 /* ---------- caption overlay + dictation (transparent windows) ---------- */
@@ -546,11 +550,17 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .detail-actions .btn.ghost { height: 34px; padding: 0 var(--space-3); font-size: var(--text-sm); }
 .detail-sources { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-left: calc(-1 * var(--space-2)); }
 .detail-meta { font-size: var(--text-sm); color: var(--text-muted); }
+/* v1.5: "Backup engine — Re-transcribe?" and "Waiting for Groq — retrying at 2:05 pm" under the engine line. */
+.backup-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; margin-top: 2px; color: var(--text); }
+.backup-line > .btn { flex: none; }
+.retry-line { margin-top: 2px; }
 /* Header chips: Client, Language and Labels, each a chip with its control. */
 .head-chips { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: var(--space-1); }
 .head-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 var(--space-1) 0 var(--space-3); border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: transparent; font-size: var(--text-sm); color: var(--text-muted); white-space: nowrap; }
 .head-chip > .chip-key { color: var(--text-faint); font-weight: 500; }
 .head-chip select, .head-chip input { height: 28px; border: 0; background: transparent; color: var(--text); font-size: var(--text-sm); font-weight: 600; padding: 0 var(--space-1); max-width: 150px; border-radius: var(--radius-tag); }
+/* The language names are long ("Auto (English / Urdu / Arabic)", "Urdu (with English words)"): 150 px cut them. */
+.head-chip.retranscribe-row select { max-width: 240px; }
 .head-chip select:focus, .head-chip input:focus { outline: 2px solid var(--focus); outline-offset: 0; }
 .head-chip .btn { height: 26px; padding: 0 var(--space-2); font-size: var(--text-xs); }
 .head-chip.labels-chip { padding-right: var(--space-1); gap: var(--space-1); }
@@ -628,7 +638,7 @@ audio.player { display: none; }
 .search-hits .hit-card { padding: var(--space-2) var(--space-3); border-radius: var(--radius-field); border: 1px solid var(--border); background: var(--surface); margin-bottom: var(--space-2); }
 .search-hits .hit { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: var(--space-2); width: 100%; text-align: start; padding: var(--space-1) 6px; margin-top: var(--space-1); border: 0; border-radius: var(--radius-tag); background: transparent; color: inherit; font: inherit; cursor: pointer; }
 .search-hits .hit:hover { background: var(--surface-3); }
-.hit-snippet { overflow-wrap: anywhere; unicode-bidi: plaintext; }
+.hit-snippet { overflow-wrap: anywhere; unicode-bidi: plaintext; text-align: start; }
 .search-hits mark, .hit-snippet mark { background: color-mix(in srgb, var(--warning-fill) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 /* Call notes of a recording filed under a client. */
@@ -721,6 +731,13 @@ audio.player { display: none; }
 .action-card-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .action-card-title { font-size: 16px; font-weight: 500; }
 .activity-page section + section { margin-top: var(--space-4); }
+/* "Skipped 3 short calls" (v1.5): one quiet line; Show lists them, each with Restore, for 24 hours. */
+.skipped-head { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; padding-left: var(--space-3); }
+.skipped-line { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skipped-head > .btn, .skipped-row > .btn { flex: none; }
+.skipped-list { list-style: none; margin: 0; padding: 0 0 0 var(--space-3); display: grid; gap: 0; }
+.skipped-row { display: flex; align-items: center; gap: var(--space-2); min-height: 32px; min-width: 0; }
+.skipped-meta { flex: 1; min-width: 0; font-size: var(--text-sm); color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
 
 /* Settings: General plus one panel per mode, chosen from a list like the phone's (B19). */
 .settings-layout { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: var(--space-5); align-items: start; }
@@ -821,6 +838,8 @@ audio.player { display: none; }
 .row-menu-btn:hover, .row-menu-btn[aria-expanded="true"] { background: var(--surface-3); color: var(--text); }
 .row-menu-pop { position: absolute; top: 36px; right: 0; z-index: 6; min-width: 160px; display: grid; gap: 2px; padding: var(--space-1); box-shadow: var(--shadow-3); border-radius: var(--radius-field); }
 .row-menu-pop .btn { justify-content: flex-start; border-radius: var(--radius-sm); }
+/* Near the bottom of the list it opens upwards, so the list's scroll box does not cut it off. */
+.row-menu-pop.up { top: auto; bottom: 36px; }
 .item.renaming { cursor: default; background: var(--surface-3); }
 .item-rename { padding: 6px 10px; font-weight: 600; margin-bottom: 2px; }
 .title-button { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; text-align: left; cursor: text; border-radius: 4px; overflow-wrap: anywhere; letter-spacing: inherit; }

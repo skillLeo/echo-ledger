@@ -9,24 +9,14 @@ use serde_json::Value;
 use crate::overlay::geometry::{Corner, PillPosition};
 use crate::shortcuts::{Action, default_map};
 
-/// "Ask before saving" (A2.6): which finished recordings wait for Keep / Discard.
+/// "After a call" (v1.5): a finished call is kept at once ("Saved · … · Undo" for a few seconds) or a small chip asks,
+/// keeping it by itself after 10 s. Replaces "Ask before saving" and "If I don't choose within 60 s".
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum AskBeforeSaving {
-    #[default]
-    Always,
-    AutoOnly,
-    Never,
-}
-
-/// "If I don't choose within 60 s" (A2.5).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DecisionTimeout {
+pub enum AfterCall {
     #[default]
     Keep,
-    Discard,
-    Wait,
+    Ask,
 }
 
 /// Accepted values of `captionLines`.
@@ -237,10 +227,10 @@ pub struct Settings {
     pub client_id: Option<String>,
     /// One-time consent acknowledgement for recording calls (shown once, never nags).
     pub consent_acknowledged: bool,
-    /// When a finished recording waits for Keep / Discard instead of uploading at once.
-    pub ask_before_saving: AskBeforeSaving,
-    /// What happens to a recording nobody decided on within 60 s.
-    pub decision_timeout: DecisionTimeout,
+    /// What happens when a call ends: kept at once with Undo, or asked about with a chip that keeps it after 10 s.
+    pub after_call: AfterCall,
+    /// Automatic call recordings shorter than this many seconds are skipped quietly (0 = never; v1.5, `skipped`).
+    pub skip_calls_shorter_than_s: u32,
     /// Offer the "Record / Ignore / Always ignore" chip when an unrecognised app or site holds the mic and plays audio.
     pub ask_unknown_apps: bool,
     /// User site rules only (built-ins live in `detect::sites`); a user rule with a built-in's id replaces it.
@@ -301,8 +291,10 @@ impl Default for Settings {
             dictation_output: "type".into(),
             client_id: None,
             consent_acknowledged: false,
-            ask_before_saving: AskBeforeSaving::Always,
-            decision_timeout: DecisionTimeout::Keep,
+            // Also what a file from before v1.5 (askBeforeSaving / decisionTimeout, no afterCall) loads as: the user
+            // asked for Keep automatically as the default. The old keys are read and ignored.
+            after_call: AfterCall::Keep,
+            skip_calls_shorter_than_s: crate::skipped::DEFAULT_SHORTER_THAN_S,
             ask_unknown_apps: false,
             site_rules: Vec::new(),
             caption_lines: DEFAULT_CAPTION_LINES,
@@ -357,6 +349,9 @@ impl Settings {
                 "captionLines" => Value::from(caption_lines_or_default(value.as_u64())),
                 "quietFrom" => Value::from(value.as_str().filter(|t| crate::activity::parse_hhmm(t).is_some()).unwrap_or("22:00")),
                 "quietTo" => Value::from(value.as_str().filter(|t| crate::activity::parse_hhmm(t).is_some()).unwrap_or("07:00")),
+                "skipCallsShorterThanS" => Value::from(
+                    value.as_u64().and_then(|v| u32::try_from(v).ok()).filter(|v| crate::skipped::SHORTER_THAN_CHOICES.contains(v)).unwrap_or(crate::skipped::DEFAULT_SHORTER_THAN_S),
+                ),
                 "lockAfterMinutes" => Value::from(value.as_u64().and_then(|m| u32::try_from(m).ok()).filter(|m| crate::lock::LOCK_AFTER_CHOICES.contains(m)).unwrap_or(5)),
                 _ => value,
             };

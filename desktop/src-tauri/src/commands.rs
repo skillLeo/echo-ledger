@@ -15,7 +15,6 @@ use crate::net::uploader::{UploadItem, UploadQueue};
 use crate::overlay::geometry::{RectPx, WorkArea, nearest_corner};
 use crate::overlay::{HitRegions, redock};
 use crate::pending::{DecisionFiles, PendingItem};
-use crate::settings::DecisionTimeout;
 use crate::tray::TrayState;
 use crate::settings::Settings;
 use crate::shortcuts::{self, Action};
@@ -57,7 +56,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let recording = state.capture.info();
     let paused = state.capture.is_paused();
     let pill_hidden = state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst);
-    let pending_decisions = DecisionFiles::in_dir(&state.data_dir).load().items.len();
+    // Only recordings that wait for the person: one whose after-call chip counts down needs nothing (v1.5).
+    let pending_decisions = DecisionFiles::in_dir(&state.data_dir).load().waiting();
     let tray_state = crate::tray::tray_state(recording.is_some(), paused, pending_decisions, queue.failed(), budget == BudgetState::Reached, queue.active() > 0);
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode };
     let mic_note = recording.as_ref().is_some_and(|r| r.mode == crate::audio::RecordingMode::MicNote);
@@ -175,8 +175,10 @@ pub struct SettingsPatch {
     /// Full replacement of the user rules (built-ins are never stored).
     site_rules: Option<Vec<crate::detect::sites::SiteRule>>,
     browser_automation: Option<bool>,
-    ask_before_saving: Option<crate::settings::AskBeforeSaving>,
-    decision_timeout: Option<crate::settings::DecisionTimeout>,
+    /// `keep` (Saved · Undo) or `ask` (the chip).
+    after_call: Option<crate::settings::AfterCall>,
+    /// 0, 5, 10, 20 or 30; anything else is refused.
+    skip_calls_shorter_than_s: Option<u32>,
     /// 2, 3 or 5; anything else is refused.
     caption_lines: Option<u8>,
     /// Full replacement; refused when a value is out of range.
@@ -226,8 +228,8 @@ impl SettingsPatch {
         if let Some(v) = self.ask_unknown_apps { s.ask_unknown_apps = v; }
         if let Some(v) = &self.site_rules { s.site_rules = v.clone(); }
         if let Some(v) = self.browser_automation { s.browser_automation = v; }
-        if let Some(v) = self.ask_before_saving { s.ask_before_saving = v; }
-        if let Some(v) = self.decision_timeout { s.decision_timeout = v; }
+        if let Some(v) = self.after_call { s.after_call = v; }
+        if let Some(v) = self.skip_calls_shorter_than_s && crate::skipped::SHORTER_THAN_CHOICES.contains(&v) { s.skip_calls_shorter_than_s = v; }
         if let Some(v) = self.caption_lines { s.caption_lines = v; }
         if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }
         if let Some(v) = &self.input_device { s.input_device = v.clone(); }
@@ -270,6 +272,11 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
     {
         return Err(AppError::msg("Choose when the app locks."));
     }
+    if let Some(seconds) = patch.skip_calls_shorter_than_s
+        && !crate::skipped::SHORTER_THAN_CHOICES.contains(&seconds)
+    {
+        return Err(AppError::msg("Choose never, 5, 10, 20 or 30 seconds."));
+    }
     if patch.app_lock == Some(true) && !crate::lock::LockFile::load(&paths::app_lock(&app.state::<AppState>().data_dir)).pin_hash.is_some_and(|h| !h.is_empty()) {
         return Err(AppError::msg("Set a PIN first. It unlocks the app when Windows Hello or Touch ID is not available."));
     }
@@ -307,12 +314,6 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         && let Some(w) = app.get_webview_window(crate::overlay::OVERLAY)
     {
         redock(&w, corner);
-    }
-    if patch.decision_timeout.is_some() {
-        // The policy in force now applies to recordings whose time is already up (A2.5).
-        crate::actions::apply_due_timeouts(&app);
-        crate::actions::emit_pending(&app);
-        crate::actions::refresh_review(&app);
     }
     crate::actions::emit_status(&app);
     Ok(updated)
@@ -589,15 +590,8 @@ pub struct RecordingState {
     pub hidden: bool,
     /// The recording's language chip (none: automatic, the client's or the console default).
     pub language: Option<String>,
-}
-
-/// What the review card shows: the newest undecided recording of this run.
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ReviewPayload {
-    pub item: PendingItem,
-    pub timeout: DecisionTimeout,
-    pub queue_length: usize,
+    /// The recording's microphone is Bluetooth (v1.5): the pill says so when the recording starts.
+    pub bluetooth_mic: bool,
 }
 
 /// `main:navigate`: which view the main window opens on.
@@ -625,6 +619,7 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
         auto: info.is_some() && state.auto_started.load(std::sync::atomic::Ordering::SeqCst),
         hidden: state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst),
         language: info.as_ref().and_then(|i| state.recording_language(&i.client_ref)),
+        bluetooth_mic: info.is_some() && state.bluetooth_mic.load(std::sync::atomic::Ordering::SeqCst),
     }
 }
 
@@ -1549,7 +1544,7 @@ pub fn pending_rename(app: AppHandle, id: String, title: String) -> AppResult<Pe
     crate::actions::pending_rename(&app, &id, &title)
 }
 
-/// The language chip of a waiting recording (review card, waiting list): Keep transcribes in it.
+/// The language chip of a waiting recording (the waiting list): Keep transcribes in it.
 #[tauri::command]
 pub fn pending_set_language(app: AppHandle, id: String, language: Option<String>) -> AppResult<PendingItem> {
     crate::actions::pending_set_language(&app, &id, language)
@@ -1571,9 +1566,30 @@ pub async fn pending_open(app: AppHandle, id: String, rename: bool) -> AppResult
     crate::actions::pending_open(&app, &id, rename)
 }
 
+/// What the after-call window shows now (its page reads this when it starts, then follows `aftercall:state`).
 #[tauri::command]
-pub fn review_state(app: AppHandle) -> Option<ReviewPayload> {
-    crate::actions::review_payload(&app)
+pub fn after_call_state(app: AppHandle) -> crate::after_call::AfterCallState {
+    crate::actions::after_call_state(&app)
+}
+
+/// Undo on the "Saved" toast: the recording goes, from this computer or (once uploaded) to Recently deleted.
+#[tauri::command]
+pub async fn saved_undo(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::undo_saved(&app, &id).await?;
+    crate::actions::emit_status(&app);
+    Ok(())
+}
+
+/// Short or silent automatic calls skipped in the last 24 hours (Activity's "Skipped 3 short calls"), newest first.
+#[tauri::command]
+pub fn skipped_list(app: AppHandle) -> Vec<crate::skipped::SkippedItem> {
+    crate::actions::skipped_items(&app)
+}
+
+/// Restore on the skipped line: the call is kept and uploaded like any other.
+#[tauri::command]
+pub fn skipped_restore(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::restore_skipped(&app, &id)
 }
 
 // ---- Live Translate (v1.3, plan B6) ---------------------------------------------------------------------------------

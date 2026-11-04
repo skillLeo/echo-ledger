@@ -3,8 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import type { ComponentProps } from "react";
 import { RecordView } from "./RecordView";
 import type { AppStatus, MicUser } from "../../lib/ipc";
-import { callsOf, fail, resetTauriMock, respond } from "../../test/tauri";
-import { makeMicUser, makeRecording, makeStatus } from "../../test/fixtures";
+import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/tauri";
+import { makeMicUser, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -429,5 +429,51 @@ describe("RecordView upload errors", () => {
     const card = screen.getByText("Uploads waiting to retry").closest(".card") as HTMLElement;
     expect(within(card).getAllByText(/^e\d:/).map((n) => n.textContent)).toEqual(["e1: timeout", "e2: 503", "e3: reset"]);
     expect(container.querySelectorAll(".error-text")).toHaveLength(3);
+  });
+});
+
+describe("RecordView Bluetooth microphone (v1.5)", () => {
+  beforeEach(() => resetTauriMock());
+  const airpods = { id: "bt", name: "AirPods Pro", isDefault: true, bluetooth: true };
+  const laptop = { id: "laptop", name: "Microphone Array (Realtek(R) Audio)", isDefault: false, bluetooth: false };
+
+  it("says accuracy is lower when the microphone a recording uses is Bluetooth", async () => {
+    respond("input_devices", [airpods, laptop]);
+    respond("get_settings", makeSettings({ inputDevice: null }));
+    await setup();
+    const note = await screen.findByTestId("bluetooth-note");
+    expect(note).toHaveTextContent("Accuracy is lower with Bluetooth mics · AirPods Pro");
+  });
+
+  it("says nothing when the chosen microphone is wired, and follows a change in Settings", async () => {
+    respond("input_devices", [airpods, laptop]);
+    respond("get_settings", makeSettings({ inputDevice: "laptop" }));
+    await setup();
+    await waitFor(() => expect(callsOf("get_settings")).toHaveLength(1));
+    await act(async () => undefined);
+    expect(screen.queryByTestId("bluetooth-note")).not.toBeInTheDocument();
+    await emitEvent("settings:changed", makeSettings({ inputDevice: "bt" }));
+    expect(screen.getByTestId("bluetooth-note")).toBeInTheDocument();
+  });
+
+  it("stays quiet when the devices cannot be listed", async () => {
+    fail("input_devices", "not supported");
+    respond("get_settings", makeSettings());
+    await setup();
+    await act(async () => undefined);
+    expect(screen.queryByTestId("bluetooth-note")).not.toBeInTheDocument();
+  });
+
+  it("checks again when a recording starts", async () => {
+    respond("input_devices", [laptop]);
+    respond("get_settings", makeSettings());
+    const { rerender, run } = await setup();
+    await waitFor(() => expect(callsOf("input_devices")).toHaveLength(1));
+    respond("input_devices", [{ ...laptop, isDefault: false }, airpods]);
+    await act(async () => {
+      rerender(<RecordView status={makeStatus({ recording: makeRecording() })} run={run} />);
+    });
+    await waitFor(() => expect(callsOf("input_devices")).toHaveLength(2));
+    expect(await screen.findByTestId("bluetooth-note")).toBeInTheDocument();
   });
 });

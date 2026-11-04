@@ -1,5 +1,6 @@
 // Builders for the wire types the UI receives from the Rust core.
 import type {
+  AfterCallState,
   AppStatus,
   AskPayload,
   LibraryItem,
@@ -8,8 +9,9 @@ import type {
   PendingItem,
   RecordingInfo,
   RecordingState,
-  ReviewPayload,
+  SavedToast,
   Segment,
+  SkippedItem,
   Settings,
   SiteRule,
   TranscriptDetail,
@@ -75,8 +77,8 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     dictationOutput: "type",
     clientId: null,
     consentAcknowledged: false,
-    askBeforeSaving: "always",
-    decisionTimeout: "keep",
+    afterCall: "keep",
+    skipCallsShorterThanS: 10,
     askUnknownApps: false,
     siteRules: [],
     captionLines: 3,
@@ -142,11 +144,12 @@ export function makeRecordingState(overrides: Partial<RecordingState> = {}): Rec
     levels: [0.4, 0.2],
     auto: true,
     hidden: false,
+    bluetoothMic: false,
     ...overrides,
   };
 }
 
-/** A finished automatic Zoom call waiting for a decision, kept automatically in 60 s. */
+/** A finished automatic Zoom call waiting for Keep or Discard in the Library (no chip counts down for it). */
 export function makePendingItem(id = "pend-1", overrides: Partial<PendingItem> = {}): PendingItem {
   return {
     id,
@@ -160,13 +163,48 @@ export function makePendingItem(id = "pend-1", overrides: Partial<PendingItem> =
     endedAt: "2026-10-24T09:12:30Z",
     durationMs: 750_000,
     firstLine: "Thanks for joining, shall we start with the invoice?",
-    deadlineAt: "2026-10-24T09:13:30Z",
+    deadlineAt: null,
+    callerName: null,
     ...overrides,
   };
 }
 
-export function makeReviewPayload(overrides: Partial<ReviewPayload> = {}): ReviewPayload {
-  return { item: makePendingItem(), timeout: "keep", queueLength: 1, ...overrides };
+/** "Saved · Call with Omar · 4:12 · Undo", on screen for another 6 s from `now`. */
+export function makeSavedToast(overrides: Partial<SavedToast> = {}, now = Date.now()): SavedToast {
+  return {
+    id: "rec-1",
+    title: null,
+    callerName: "Omar",
+    sourceApp: "whatsapp",
+    mode: "call",
+    durationMs: 252_000,
+    until: new Date(now + 6_000).toISOString(),
+    ...overrides,
+  };
+}
+
+/** The Ask-me chip of a WhatsApp call, kept by itself 10 s from `now`. */
+export function makeChipItem(id = "pend-1", overrides: Partial<PendingItem> = {}, now = Date.now()): PendingItem {
+  return makePendingItem(id, { sourceApp: "whatsapp", durationMs: 252_000, deadlineAt: new Date(now + 10_000).toISOString(), ...overrides });
+}
+
+/** A 6-second WhatsApp call skipped as too short, restorable until a day after 09:12 on 24 Oct 2026. */
+export function makeSkippedItem(id = "skip-1", overrides: Partial<SkippedItem> = {}): SkippedItem {
+  return {
+    id,
+    sourceApp: "whatsapp",
+    title: null,
+    callerName: null,
+    startedAt: "2026-10-24T09:12:00Z",
+    durationMs: 6_000,
+    reason: "too_short",
+    expiresAt: "2026-10-25T09:12:06Z",
+    ...overrides,
+  };
+}
+
+export function makeAfterCallState(overrides: Partial<AfterCallState> = {}): AfterCallState {
+  return { saved: null, ask: null, ...overrides };
 }
 
 export function makeAskPayload(overrides: Partial<AskPayload> = {}): AskPayload {

@@ -1,7 +1,8 @@
 import { processName } from "./format";
-// Pure helpers behind the recording pill, the review card and the ask chip (unit-tested in controls.test.ts).
+// Pure helpers behind the recording pill, the after-call toast and chip, and the ask chip (unit-tested in
+// controls.test.ts).
 import { SOURCE_APP_LABELS, formatDuration, timestamp } from "./format";
-import type { AskPayload, DecisionTimeout, PendingItem, RecordingState } from "./ipc";
+import type { AskPayload, PendingItem, RecordingState } from "./ipc";
 
 /** Display label of a `source_app` value; unknown values read as words instead of a raw id. */
 export function sourceLabel(app: string | null | undefined): string {
@@ -57,33 +58,30 @@ export function nextAnchor(prev: TimerAnchor | null, state: RecordingState, now:
   return { elapsedMs: behind > 0 && behind < 1000 ? shown : state.elapsedMs, at: now, running: true };
 }
 
-/** Review card heading: the title when set, else `<Label> call`; voice notes read `Voice note`. */
-export function reviewTitle(item: PendingItem): string {
+/**
+ * What the after-call toast and chip call a recording (v1.5): its own title, else "Call with <name>" when the meeting
+ * app named the other side, else the app ("WhatsApp"); voice notes read "Voice note", an unknown app "Call".
+ */
+export function afterCallTitle(item: { title?: string | null; callerName?: string | null; sourceApp: string; mode: PendingItem["mode"] }): string {
   const title = item.title?.trim();
   if (title) return title;
   if (item.mode !== "call") return "Voice note";
-  return `${sourceLabel(item.sourceApp)} call`;
+  const caller = item.callerName?.trim();
+  if (caller) return `Call with ${caller}`;
+  return !item.sourceApp || item.sourceApp === "other" ? "Call" : sourceLabel(item.sourceApp);
 }
 
-/** Duration on the review card (`12:30`); a zero-length item still reads `0:00`. */
+/** A recording's length on the after-call toast and chip (`4:12`); a zero-length one still reads `0:00`. */
 export function reviewDuration(ms: number): string {
   return formatDuration(ms) || "0:00";
 }
 
-/** Whole seconds until `deadlineAt` (never below zero), or null without a valid deadline. */
+/** Seconds (with fractions) until `deadlineAt`, never below zero; null without a valid deadline. */
 export function secondsLeft(deadlineAt: string | null, now: number): number | null {
   if (!deadlineAt) return null;
   const deadline = Date.parse(deadlineAt);
   if (Number.isNaN(deadline)) return null;
-  return Math.max(0, Math.ceil((deadline - now) / 1000));
-}
-
-/** `Keeping in 42 s` / `Discarding in 42 s`; nothing for "Keep waiting" or when there is no deadline. */
-export function countdownText(timeout: DecisionTimeout, deadlineAt: string | null, now: number): string | null {
-  if (timeout === "wait") return null;
-  const seconds = secondsLeft(deadlineAt, now);
-  if (seconds === null) return null;
-  return timeout === "keep" ? `Keeping in ${seconds} s` : `Discarding in ${seconds} s`;
+  return Math.max(0, (deadline - now) / 1000);
 }
 
 /** Who the ask chip names: the browser site when the core knows it (browsers only), else the process name. */

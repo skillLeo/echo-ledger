@@ -33,8 +33,11 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
 const PLAIN_CODES: [&str; 9] = ["budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable", "ai_budget_reached", "ai_unavailable", "no_client", "suggestion_not_found"];
 
 fn server_text(status: u16, message: &str, code: Option<&str>, retry_after_secs: &Option<u64>) -> String {
+    let message = message.trim();
     match code {
-        Some(c) if PLAIN_CODES.contains(&c) && !message.trim().is_empty() => message.to_string(),
+        Some(c) if PLAIN_CODES.contains(&c) && !message.is_empty() => message.to_string(),
+        // An answer without a message (a proxy's empty 502, say) gives the status, not "Server returned 502: ".
+        _ if message.is_empty() => format!("Server returned {status}.{}", retry_hint(retry_after_secs)),
         _ => format!("Server returned {status}: {message}{}", retry_hint(retry_after_secs)),
     }
 }
@@ -157,6 +160,15 @@ mod server_text_tests {
     #[test]
     fn other_answers_keep_the_status() {
         assert_eq!(server(422, "The pairing code is invalid.", Some("validation_failed")).to_string(), "Server returned 422: The pairing code is invalid.");
-        assert_eq!(server(403, "", Some("storage_limit_reached")).to_string(), "Server returned 403: ");
+        assert_eq!(server(403, "", Some("storage_limit_reached")).to_string(), "Server returned 403.");
+    }
+
+    #[test]
+    fn an_answer_without_a_message_never_ends_in_a_dangling_colon() {
+        assert_eq!(server(502, "", None).to_string(), "Server returned 502.");
+        assert_eq!(server(500, "  ", None).to_string(), "Server returned 500.");
+        let limited = AppError::Server { status: 429, message: String::new(), code: None, retry_after_secs: Some(30) };
+        assert_eq!(limited.to_string(), "Server returned 429. Try again in 30 s.");
+        assert_eq!(server(404, " Not found ", None).to_string(), "Server returned 404: Not found");
     }
 }

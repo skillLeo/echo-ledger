@@ -181,6 +181,9 @@ const PROVIDER_NAMES: Record<string, string> = {
   azure_mai: "Azure Speech",
   whispercpp_local: "whisper.cpp",
   parakeet_local: "Parakeet",
+  soniox: "Soniox",
+  groq: "Groq",
+  gemini: "Gemini",
 };
 
 /** A speech engine by its product name ("assemblyai" → "AssemblyAI"); unknown ids are shown as sent (C8). */

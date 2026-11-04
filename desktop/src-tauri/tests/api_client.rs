@@ -493,6 +493,34 @@ async fn library_requests_page_by_since_and_cursor() {
     assert!(requests.iter().all(|r| r.header("authorization").is_some()));
 }
 
+/// v1.5: a transcript says when a backup engine made it, or when it tries its preferred engine again. The core hands
+/// the server's transcript to the page as it is, so the new fields reach it unchanged, and an older server without them
+/// still reads.
+#[tokio::test]
+async fn a_transcript_keeps_the_backup_engine_and_retry_fields_and_reads_without_them() {
+    let mut waiting = fixture("transcript.json");
+    waiting["status"] = json!("pending");
+    waiting["backup_engine"] = json!(false);
+    waiting["backup_reason"] = Value::Null;
+    waiting["retry_at"] = json!("2026-11-04T14:05:00+00:00");
+    waiting["retry_reason"] = json!("rate_limited");
+    let mut backup = fixture("transcript.json");
+    backup["backup_engine"] = json!(true);
+    backup["backup_reason"] = json!("waited");
+    let server = MockServer::start(
+        Router::new()
+            .fixed("GET", "/api/transcripts/W1", Reply::json(200, waiting.clone()))
+            .fixed("GET", "/api/transcripts/B1", Reply::json(200, backup.clone()))
+            .fixed("GET", "/api/transcripts/T1", Reply::json(200, fixture("transcript.json"))),
+    );
+    let c = client(&server);
+    assert_eq!(c.transcript("W1").await.unwrap(), waiting);
+    assert_eq!(c.transcript("B1").await.unwrap(), backup);
+    let old = c.transcript("T1").await.unwrap();
+    assert!(old.get("backup_engine").is_none() && old.get("retry_at").is_none(), "an older server sends neither");
+    assert_eq!(old["kind"], "final");
+}
+
 #[tokio::test]
 async fn simple_reads_hit_the_documented_paths() {
     let server = MockServer::start(

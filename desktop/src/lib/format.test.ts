@@ -138,6 +138,9 @@ describe("plain names (C8)", () => {
     const { providerName } = await import("./format");
     expect(providerName("assemblyai")).toBe("AssemblyAI");
     expect(providerName("elevenlabs")).toBe("ElevenLabs");
+    // The Urdu engines (since v1.2) were shown as raw ids: "Final transcript · groq".
+    expect(providerName("groq")).toBe("Groq");
+    expect(providerName("soniox")).toBe("Soniox");
     expect(providerName("new_engine")).toBe("new_engine");
     expect(providerName(null)).toBe("");
   });

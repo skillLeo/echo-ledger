@@ -1,6 +1,6 @@
 // Sample data for the screenshot fixture: the phone's design screens use the same people and calls, so the desktop
 // and the phone pictures can be compared side by side.
-import type { ActivityItem, CallNotes, ClientFolder, ClientWorkspace, LibraryItem, PendingItem, Segment, TranscriptDetail } from "../../src/lib/ipc";
+import type { ActivityItem, CallNotes, ClientFolder, ClientWorkspace, LibraryItem, PendingItem, Segment, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
 import { makeItem, makeTranscript } from "../../src/test/fixtures";
 
 const DAY = 86_400_000;
@@ -26,8 +26,10 @@ const ready = (id: string, preview: string) => ({
 export const ITEMS: LibraryItem[] = [
   makeItem("r1", { title: "Weekly sync with Northwind", source_app: "zoom", source_app_label: "Zoom", source_device: "desktop", source_device_label: "Desktop",
     client: client("c-north", "Northwind"), started_at: at(0, 9, 0), duration_ms: 2_530_000, status: "completed", transcript: ready("r1", "Let us go over the roadmap for the next quarter.") }),
+  // v1.5: an Urdu call a backup engine transcribed ("Backup engine — Re-transcribe?").
   makeItem("r2", { title: "Invoice questions", source_app: "whatsapp", source_app_label: "WhatsApp", source_device: "phone", source_device_label: "Phone", pinned: true,
-    client: client("c-aria", "Aria Studio"), started_at: at(0, 7, 10), duration_ms: 742_000, status: "completed", transcript: ready("r2", "Hi, thanks for calling.") }),
+    client: client("c-aria", "Aria Studio"), started_at: at(0, 7, 10), duration_ms: 742_000, status: "completed", language: "ur", language_chip: "UR",
+    transcript: { ...ready("r2", "Assalam o alaikum, invoice ka masla hai."), final_language: "ur" } }),
   makeItem("r3", { title: "Voice note", source_app: "voice_note", source_app_label: "Voice note", source_device: "phone", source_device_label: "Phone",
     started_at: at(0, 8, 12), duration_ms: 65_000, status: "processing", transcript: { final_status: "processing", final_transcript_id: "t-r3", live_available: false, preview: null } }),
   makeItem("r4", { title: "Call with +92 300 1234567", source_app: "whatsapp", source_app_label: "WhatsApp", source_device: "phone", source_device_label: "Phone",
@@ -69,6 +71,14 @@ const SEGMENTS: Segment[] = [
 ];
 
 export const TRANSCRIPTS: Record<string, TranscriptDetail> = {
+  "t-r2": makeTranscript({
+    id: "t-r2", kind: "final", provider: "assemblyai", model: "universal-2", status: "completed", language: "ur", backup_engine: true, backup_reason: "waited",
+    segments: [
+      seg(2, "Client", 1, 6, "السلام علیکم، invoice کا تھوڑا سا مسئلہ ہے۔"),
+      seg(1, "Me", 7, 12, "جی بتائیں، کون سی invoice؟"),
+      seg(2, "Client", 13, 20, "دوسری والی، اس میں payment terms غلط لکھے ہیں۔"),
+    ],
+  }),
   "t-r5": makeTranscript({
     id: "t-r5", kind: "final", provider: "assemblyai", model: "universal-2", status: "completed", language: "en", segments: SEGMENTS,
     views: { available: ["roman", "urdu"], status: "ready", default: "original" },
@@ -151,4 +161,11 @@ export const ACTIVITY: ActivityItem[] = [
   { id: "a2", kind: "transcript_ready", title: "Transcript ready", body: "Weekly sync with Northwind", session_id: "r1", read: false, at: at(0, 9, 40) },
   { id: "a3", kind: "transcript_ready", title: "Transcript ready", body: "Invoice questions", session_id: "r2", read: true, at: at(2, 8) },
   { id: "a4", kind: "device_paired", title: "New device", body: "Pixel 9 was paired", session_id: null, read: true, at: at(5, 10) },
+];
+
+/** Activity's "Skipped 3 short calls" (v1.5): restorable for 24 hours. */
+export const SKIPPED: SkippedItem[] = [
+  { id: "s1", sourceApp: "whatsapp", title: null, callerName: null, startedAt: at(0, 10, 4), durationMs: 6_000, reason: "too_short", expiresAt: at(-1, 10, 4) },
+  { id: "s2", sourceApp: "zoom", title: null, callerName: "Omar Khan", startedAt: at(0, 9, 41), durationMs: 95_000, reason: "no_speech", expiresAt: at(-1, 9, 42) },
+  { id: "s3", sourceApp: "microsoft_teams", title: "Stand-up", callerName: null, startedAt: at(0, 8, 30), durationMs: 4_000, reason: "too_short", expiresAt: at(-1, 8, 30) },
 ];

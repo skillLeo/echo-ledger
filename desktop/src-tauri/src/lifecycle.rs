@@ -71,7 +71,7 @@ pub struct Ready {
 #[derive(Debug, Default)]
 struct Slot {
     phase: Phase,
-    /// Why the window is on screen (the review card and the "ask" chip share one window).
+    /// Why the window is on screen (the after-call toast or chip and the "ask" chip share one window).
     uses: BTreeSet<&'static str>,
     /// Bumped on every hide: only the timer of the last hide may destroy the window.
     hidden: u64,
@@ -407,12 +407,12 @@ mod tests {
     fn a_window_shared_by_two_uses_stays_while_either_needs_it() {
         let mut s = Slots::default();
         let now = t0();
-        s.show(REVIEW, "review", now);
+        s.show(REVIEW, "after_call", now);
         s.show(REVIEW, "ask", now);
         s.ready(REVIEW, now);
-        assert_eq!(s.hide(REVIEW, "ask"), None, "the review card still needs the window");
+        assert_eq!(s.hide(REVIEW, "ask"), None, "the after-call toast still needs the window");
         assert!(s.in_use(REVIEW));
-        assert!(s.hide(REVIEW, "review").is_some());
+        assert!(s.hide(REVIEW, "after_call").is_some());
         assert!(!s.in_use(REVIEW));
     }
 
@@ -423,15 +423,15 @@ mod tests {
         assert_eq!(s.event(PILL, "pill:visibility", json!(true)), Delivery::Dropped, "no window: the page reads the state when it starts");
         s.show(PILL, "pill", now);
         assert_eq!(s.event(PILL, "pill:visibility", json!(true)), Delivery::Kept);
-        assert_eq!(s.event(REVIEW, "review:show", json!(1)), Delivery::Dropped);
-        s.show(REVIEW, "review", now);
-        assert_eq!(s.event(REVIEW, "review:show", json!(1)), Delivery::Kept);
-        assert_eq!(s.event(REVIEW, "review:hide", Value::Null), Delivery::Kept);
-        assert_eq!(s.event(REVIEW, "review:show", json!(2)), Delivery::Kept);
+        assert_eq!(s.event(REVIEW, "aftercall:state", json!(1)), Delivery::Dropped);
+        s.show(REVIEW, "after_call", now);
+        assert_eq!(s.event(REVIEW, "aftercall:state", json!(1)), Delivery::Kept);
+        assert_eq!(s.event(REVIEW, "ask:hide", Value::Null), Delivery::Kept);
+        assert_eq!(s.event(REVIEW, "aftercall:state", json!(2)), Delivery::Kept);
         let ready = s.ready(REVIEW, now);
-        assert_eq!(ready.events, vec![("review:hide".to_string(), Value::Null), ("review:show".to_string(), json!(2))], "the last state wins");
+        assert_eq!(ready.events, vec![("ask:hide".to_string(), Value::Null), ("aftercall:state".to_string(), json!(2))], "the last state wins");
         assert_eq!(ready.expire, None, "still in use");
-        assert_eq!(s.event(REVIEW, "review:hide", Value::Null), Delivery::Now, "a ready page gets events at once");
+        assert_eq!(s.event(REVIEW, "ask:hide", Value::Null), Delivery::Now, "a ready page gets events at once");
         assert!(s.ready(REVIEW, now).events.is_empty(), "nothing is sent twice");
         assert_eq!(s.ready(PILL, now).events, vec![("pill:visibility".to_string(), json!(true))]);
     }

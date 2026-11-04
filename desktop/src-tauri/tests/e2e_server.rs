@@ -2099,6 +2099,7 @@ e2e_test!(
                 primary: file.clone(),
                 channels: 1,
                 duration_ms: 0,
+                speech_ms: [0, 0],
             });
             pending.mic_wav = None;
             pending.system_wav = None;
@@ -3026,6 +3027,7 @@ e2e_test!(
                 primary: empty.clone(),
                 channels: 1,
                 duration_ms: 0,
+                speech_ms: [0, 0],
             },
             "voice_note",
         );

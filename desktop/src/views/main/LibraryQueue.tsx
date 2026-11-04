@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type PendingItem, type TranscriptionLanguage, type UploadItem } from "../../lib/ipc";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, learnPrompt, menuLabel, type LanguageChoice } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
@@ -12,6 +12,8 @@ import {
   pendingTitle,
   uploadTitle,
   verifyingUploads,
+  waitingItems,
+  waitingLine,
   waitingSummary,
 } from "../../lib/pending";
 import { AlertIcon, AppTileIcon, HourglassIcon, ImportIcon, appKind } from "../../components/Icons";
@@ -36,11 +38,13 @@ const meta = (sourceApp: string, startedAt: string, durationMs: number, extra?: 
 /**
  * The top of the Library list: recordings waiting for Keep / Discard (A2.5), imported files on their way up (with
  * Cancel), and uploads that stopped and need the user (A5.1). The lists come from the core and follow its
- * `pending:changed` / `uploads:changed` events. The waiting recordings sit behind one summary card (as on the
- * phone); Review opens the list.
+ * `pending:changed` / `uploads:changed` events. Since v1.5 calls are kept (or asked about by the after-call chip) when
+ * they end, so only recordings left waiting show, behind one slim line, "2 calls waiting · Review"; Review opens the
+ * list. A recording whose chip still counts down is not listed.
  */
 export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
-  const [pending, setPending] = useState<PendingItem[]>([]);
+  const [all, setPending] = useState<PendingItem[]>([]);
+  const pending = useMemo(() => waitingItems(all), [all]);
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState<{ id: string; text: string } | null>(null);
@@ -262,18 +266,13 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     <div className="queue">
       {pending.length > 0 && (
         <section className="queue-section" aria-labelledby="queue-pending-title">
-          <div className="queue-card">
-            <span className="queue-card-icon" aria-hidden="true"><HourglassIcon size={22} /></span>
-            <div className="queue-card-main">
-              <div className="queue-head">
-                <h2 id="queue-pending-title" className="queue-label">Waiting for your decision</h2>
-                <span className="queue-count">{pending.length}</span>
-              </div>
-              <div className="small muted queue-meta" data-testid="waiting-summary">{waitingSummary(pending)}</div>
-            </div>
+          <div className="queue-slim" data-testid="waiting-line" title={waitingSummary(pending)}>
+            <HourglassIcon size={15} />
+            <h2 id="queue-pending-title" className="queue-slim-label">{waitingLine(pending)}</h2>
+            <span className="queue-slim-sep" aria-hidden="true">·</span>
             <button
               type="button"
-              className="btn text"
+              className="btn text compact"
               aria-expanded={open}
               aria-controls={open ? "queue-pending-list" : undefined}
               onClick={() => setOpen((v) => !v)}
@@ -310,6 +309,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                           <input
                             className="input queue-rename"
                             aria-label="Title"
+                            dir="auto"
                             autoFocus
                             maxLength={200}
                             value={renaming.text}

@@ -174,7 +174,8 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
     result
 }
 
-/// The active capture endpoints with their friendly names; the default communications device is marked.
+/// The active capture endpoints with their friendly names; the default communications device is marked, and
+/// Bluetooth ones are told by their device instance id or their name (`is_bluetooth_mic`).
 fn input_devices_with(enumerator: &DeviceEnumerator) -> Vec<super::InputDevice> {
     let default = enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications).ok().and_then(|d| d.get_id().ok());
     let Ok(collection) = enumerator.get_device_collection(&Direction::Capture) else { return Vec::new() };
@@ -184,9 +185,28 @@ fn input_devices_with(enumerator: &DeviceEnumerator) -> Vec<super::InputDevice> 
         .filter_map(|device| {
             let id = device.get_id().ok()?;
             let name = device.get_friendlyname().unwrap_or_else(|_| "Microphone".into());
-            Some(super::InputDevice { is_default: default.as_deref() == Some(id.as_str()), id, name })
+            let bluetooth = super::is_bluetooth_mic(super::bus_of_instance_id(instance_id(&device).as_deref()), &name);
+            Some(super::InputDevice { is_default: default.as_deref() == Some(id.as_str()), id, name, bluetooth })
         })
         .collect()
+}
+
+/// The device instance id of the hardware behind an endpoint ("{1}.BTHHFENUM\BthHFPAudio\8&…" for a Bluetooth
+/// headset), from the endpoint's property store ({b3f8fa53-0004-438e-9003-51a46e139bfc},2); none when it cannot be read.
+fn instance_id(device: &wasapi::Device) -> Option<String> {
+    use windows::Win32::Foundation::PROPERTYKEY;
+    use windows::Win32::System::Com::StructuredStorage::{PropVariantClear, PropVariantToStringAlloc};
+    use windows::Win32::System::Com::{CoTaskMemFree, STGM_READ};
+    const KEY: PROPERTYKEY = PROPERTYKEY { fmtid: windows::core::GUID::from_u128(0xb3f8fa53_0004_438e_9003_51a46e139bfc), pid: 2 };
+    // The store and the value are released here: PropVariantClear for the value, CoTaskMemFree for the copied text.
+    let store = unsafe { device.as_immdevice().OpenPropertyStore(STGM_READ) }.ok()?;
+    let mut value = unsafe { store.GetValue(&KEY) }.ok()?;
+    let text = unsafe { PropVariantToStringAlloc(&value) };
+    let _ = unsafe { PropVariantClear(&mut value) };
+    let text = text.ok()?;
+    let id = unsafe { text.to_string() }.ok();
+    unsafe { CoTaskMemFree(Some(text.0.cast())) };
+    id.filter(|id| !id.is_empty())
 }
 
 /// The connected microphones (`input_devices` command).

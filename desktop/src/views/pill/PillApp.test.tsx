@@ -58,7 +58,7 @@ describe("recording pill", () => {
     expect(screen.getByText("Zoom")).toBeInTheDocument();
     const bars = screen.getByTestId("pill-meters").querySelectorAll(".rec-meter > span");
     expect([...bars].map((b) => (b as HTMLElement).style.height)).toEqual(["40%", "80%"]);
-    for (const name of ["Pause recording", "Stop and review", "Cancel recording", "Turn captions on", "Hide controls"]) {
+    for (const name of ["Pause recording", "Stop recording", "Cancel recording", "Turn captions on", "Hide controls"]) {
       expect(button(name)).toHaveAttribute("title", name);
     }
   });
@@ -127,7 +127,7 @@ describe("recording pill", () => {
     let finish: (value: unknown) => void = () => undefined;
     respondWith("stop_recording", () => new Promise((resolve) => (finish = resolve)));
     await renderPill();
-    fireEvent.click(button("Stop and review"));
+    fireEvent.click(button("Stop recording"));
     expect(pill()).not.toBeInTheDocument();
     await waitFor(() => expect(callsOf("stop_recording")).toHaveLength(1));
     // the once-a-second event sent while the core is still stopping does not bring it back
@@ -144,7 +144,7 @@ describe("recording pill", () => {
     await renderPill();
     fireEvent.click(button("Cancel recording"));
     expect(screen.getByText("Discard?")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Stop and review" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop recording" })).not.toBeInTheDocument();
     expect(callsOf("cancel_recording")).toHaveLength(0);
     respond("recording_state", makeRecordingState({ active: false }));
     fireEvent.click(button("Yes"));
@@ -159,7 +159,7 @@ describe("recording pill", () => {
     fireEvent.click(button("Cancel recording"));
     fireEvent.click(button("No"));
     expect(screen.queryByText("Discard?")).not.toBeInTheDocument();
-    expect(button("Stop and review")).toBeInTheDocument();
+    expect(button("Stop recording")).toBeInTheDocument();
     expect(callsOf("cancel_recording")).toHaveLength(0);
   });
 
@@ -203,7 +203,7 @@ describe("recording pill", () => {
   it("brings the pill back when Stop fails", async () => {
     fail("stop_recording", "Nothing is recording.");
     await renderPill();
-    fireEvent.click(button("Stop and review"));
+    fireEvent.click(button("Stop recording"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Nothing is recording.");
     expect(pill()).toBeInTheDocument();
   });
@@ -394,5 +394,54 @@ describe("bookmarks and the silent-other-side warning on the pill", () => {
     await emitEvent("recording:state", makeRecordingState());
     expect(screen.queryByTestId("mark-tray")).not.toBeInTheDocument();
     expect(screen.queryByTestId("far-side-warning")).not.toBeInTheDocument();
+  });
+});
+
+describe("Bluetooth microphone notice (v1.5)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    setWindowLabel("pill");
+    vi.stubGlobal("ResizeObserver", NoopResizeObserver);
+    respondAll({ overlay_set_hit_regions: undefined, recording_marked_tag: undefined });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+  const notice = () => screen.queryByTestId("bluetooth-notice");
+
+  it("says once, quietly, when the core finds the recording's microphone is Bluetooth", async () => {
+    await renderPill(makeRecordingState({ bluetoothMic: false }));
+    expect(notice()).not.toBeInTheDocument();
+    await emitEvent("recording:state", makeRecordingState({ bluetoothMic: true }));
+    expect(notice()).toHaveTextContent("Accuracy is lower with Bluetooth mics");
+    expect(notice()).toHaveAttribute("role", "status");
+    fireEvent.click(button("Dismiss notice"));
+    expect(notice()).not.toBeInTheDocument();
+    await emitEvent("recording:state", makeRecordingState({ bluetoothMic: true, elapsedMs: 70_000 }));
+    expect(notice()).not.toBeInTheDocument();
+  });
+
+  it("goes by itself after a few seconds and comes back for the next recording", async () => {
+    // Rendered before the timers are faked (waitFor drains with a real setTimeout); the notice comes after.
+    await renderPill(makeRecordingState({ bluetoothMic: false }));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await emitEvent("recording:state", makeRecordingState({ bluetoothMic: true }));
+    expect(notice()).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8_100);
+    });
+    expect(notice()).not.toBeInTheDocument();
+    await emitEvent("recording:state", makeRecordingState({ active: false, sourceApp: null, mode: null, bluetoothMic: false }));
+    await emitEvent("recording:state", makeRecordingState({ bluetoothMic: true, elapsedMs: 1_000 }));
+    expect(notice()).toBeInTheDocument();
+  });
+
+  it("gives way to a bookmark and to the silent-other-side warning", async () => {
+    await renderPill(makeRecordingState({ bluetoothMic: true }));
+    expect(notice()).toBeInTheDocument();
+    await emitEvent("capture:far_side", { silent: true, seconds: 30 });
+    expect(notice()).not.toBeInTheDocument();
+    expect(screen.getByTestId("far-side-warning")).toBeInTheDocument();
   });
 });

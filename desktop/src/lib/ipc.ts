@@ -5,8 +5,10 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 /** `translate_lock` and `translate_hide` (v1.3, Live Translate) are bound only while it runs and never shown in Settings. */
 export type ShortcutAction = "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "translate_lock" | "translate_hide";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
-export type AskBeforeSaving = "always" | "auto_only" | "never";
-export type DecisionTimeout = "keep" | "discard" | "wait";
+/** After a call (v1.5): kept at once with "Saved · Undo", or a small chip that keeps it by itself after 10 s. */
+export type AfterCall = "keep" | "ask";
+/** Why an automatic call was skipped quietly (v1.5): shorter than the setting, or nobody spoke on either side. */
+export type SkipReason = "too_short" | "no_speech";
 export type TrayState = "idle" | "recording" | "paused" | "uploading" | "attention";
 export type BudgetState = "ok" | "warn" | "reached";
 export type AskAnswer = "record" | "ignore" | "always_ignore";
@@ -63,8 +65,8 @@ export interface Settings {
   dictationOutput: "type" | "clipboard";
   clientId: string | null;
   consentAcknowledged: boolean;
-  askBeforeSaving: AskBeforeSaving;
-  decisionTimeout: DecisionTimeout;
+  afterCall: AfterCall;
+  skipCallsShorterThanS: number;
   askUnknownApps: boolean;
   siteRules: SiteRule[];
   captionLines: number;
@@ -181,8 +183,8 @@ export interface SettingsPatch {
   clientId?: string | null;
   consentAcknowledged?: boolean;
   overlayCorner?: Corner;
-  askBeforeSaving?: AskBeforeSaving;
-  decisionTimeout?: DecisionTimeout;
+  afterCall?: AfterCall;
+  skipCallsShorterThanS?: number;
   askUnknownApps?: boolean;
   siteRules?: SiteRule[];
   captionLines?: number;
@@ -219,6 +221,8 @@ export interface InputDevice {
   id: string;
   name: string;
   isDefault: boolean;
+  /** A Bluetooth headset or earbuds (v1.5): "Accuracy is lower with Bluetooth mics". */
+  bluetooth: boolean;
 }
 
 /** The 10-second test recording: loudest 100 ms per side (0-1), whether each side was heard, and a WAV to play. */
@@ -490,6 +494,16 @@ export interface TranscriptDetail {
   views?: { available: TranscriptView[]; status: TranscriptViewsStatus; default?: "original" | TranscriptView } | null;
   /** Suggested fixes: likely mishearings of the client's words, nothing changes until a person decides (since v1.4). */
   suggestions?: TranscriptSuggestion[];
+  /**
+   * Since v1.5: an Urdu or Auto recording was transcribed by an engine the routing table ranks lower, because the
+   * preferred one stayed unavailable for the whole wait (`waited`) or refused this recording (`rejected`). Missing on
+   * an older server: false / null.
+   */
+  backup_engine?: boolean;
+  backup_reason?: "waited" | "rejected" | null;
+  /** Since v1.5: while an Urdu or Auto transcript waits for its preferred engine, when it tries again and why. */
+  retry_at?: string | null;
+  retry_reason?: "rate_limited" | "unavailable" | null;
 }
 
 /** One suggested fix: in segment `index`, `from` may be `to`. */
@@ -615,7 +629,10 @@ export interface PillPosition {
   y: number;
 }
 
-/** A finished recording waiting for Keep / Discard. Times are RFC 3339 UTC; `deadlineAt` is null for "Keep waiting". */
+/**
+ * A finished recording that is not kept yet. Times are RFC 3339 UTC; `deadlineAt` is when the after-call chip keeps it
+ * by itself, null while it waits for Keep or Discard in the Library.
+ */
 export interface PendingItem {
   id: string;
   sourceApp: string;
@@ -631,6 +648,8 @@ export interface PendingItem {
   deadlineAt: string | null;
   /** The language Keep transcribes in; null = automatic (the client's or the console default). */
   language?: TranscriptionLanguage | null;
+  /** Who the call was with (a meeting window's title), for "Call with <name>" while it has no title. */
+  callerName?: string | null;
 }
 
 /** A kept recording in the upload queue. */
@@ -670,13 +689,38 @@ export interface RecordingState {
   hidden: boolean;
   /** The recording's language chip; null = automatic. */
   language?: TranscriptionLanguage | null;
+  /** The recording's microphone is Bluetooth (v1.5): the pill says so when it starts. */
+  bluetoothMic: boolean;
 }
 
-/** What the review card shows: the newest pending item of this run and the timeout policy. */
-export interface ReviewPayload {
-  item: PendingItem;
-  timeout: DecisionTimeout;
-  queueLength: number;
+/** "Saved · Call with Omar · 4:12 · Undo": a recording kept at once after a call; `until` is when the toast goes. */
+export interface SavedToast {
+  id: string;
+  title: string | null;
+  callerName: string | null;
+  sourceApp: string;
+  mode: "call" | "voice_note" | "mic_note";
+  durationMs: number;
+  until: string;
+}
+
+/** What the after-call window shows: the Saved toast and the Ask-me chip (its item's `deadlineAt` is when it keeps). */
+export interface AfterCallState {
+  saved: SavedToast | null;
+  ask: PendingItem | null;
+}
+
+/** A short or silent automatic call kept on this computer for 24 h (Activity's "Skipped 3 short calls"). Times are RFC 3339 UTC. */
+export interface SkippedItem {
+  id: string;
+  sourceApp: string;
+  title: string | null;
+  callerName: string | null;
+  startedAt: string;
+  durationMs: number;
+  reason: SkipReason;
+  /** When it is deleted for good. */
+  expiresAt: string;
 }
 
 /** The unknown-app chip: `name` is the process, `site` the browser host when known, `seconds` how long it stays. */
@@ -706,8 +750,8 @@ export interface EventPayloads {
   "recording:state": RecordingState;
   "pill:visibility": boolean;
   "pending:changed": PendingItem[];
-  "review:show": ReviewPayload;
-  "review:hide": null;
+  "skipped:changed": SkippedItem[];
+  "aftercall:state": AfterCallState;
   "ask:show": AskPayload;
   "ask:hide": null;
   "uploads:changed": UploadItem[];
@@ -806,8 +850,16 @@ export const api = {
   retranscribe: (id: string, language: TranscriptionLanguage | null) => invoke<unknown>("session_retranscribe", { id, language }),
   /** The pill's language chip: live captions reconnect in it; the recording keeps running. */
   setRecordingLanguage: (language: TranscriptionLanguage | null) => invoke<void>("set_recording_language", { language }),
+  /** Opens a waiting recording in the main window (from the chip: with its title open); its chip stops counting. */
   pendingOpen: (id: string, rename: boolean) => invoke<void>("pending_open", { id, rename }),
-  reviewState: () => invoke<ReviewPayload | null>("review_state"),
+  /** What the after-call window shows now (the Saved toast and the Ask-me chip). */
+  afterCallState: () => invoke<AfterCallState>("after_call_state"),
+  /** Undo on the Saved toast: the recording goes (to Recently deleted once it is uploaded). */
+  savedUndo: (id: string) => invoke<void>("saved_undo", { id }),
+  /** Short or silent automatic calls skipped in the last 24 h, newest first. */
+  skippedList: () => invoke<SkippedItem[]>("skipped_list"),
+  /** Keeps a skipped call like any other (it uploads and is transcribed). */
+  skippedRestore: (id: string) => invoke<void>("skipped_restore", { id }),
   uploadList: () => invoke<UploadItem[]>("upload_list"),
   uploadRetry: (id: string) => invoke<void>("upload_retry", { id }),
   uploadDiscard: (id: string) => invoke<void>("upload_discard", { id }),
@@ -911,7 +963,10 @@ export async function subscribeCaptions(onEvent: (e: CaptionEvent) => void): Pro
 }
 
 export function errorMessage(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e instanceof Error) return e.message;
-  return "Something went wrong";
+  // A rejection with an empty text (or an Error without a message) used to show an empty error, or none at all.
+  const text = typeof e === "string" ? e
+    : e instanceof Error ? e.message
+      : typeof (e as { message?: unknown } | null)?.message === "string" ? (e as { message: string }).message
+        : "";
+  return text.trim() || "Something went wrong";
 }

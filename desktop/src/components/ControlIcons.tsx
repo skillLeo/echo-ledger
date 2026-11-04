@@ -1,4 +1,4 @@
-// Glyphs for the recording pill and the review card, in the same 24 px outline style as Icons.tsx. Media controls
+// Glyphs for the recording pill and the after-call toast and chip, in the same 24 px outline style as Icons.tsx. Media controls
 // (pause, play, stop) are filled so they stay legible at 14 px on the translucent surfaces.
 import type { ReactNode, SVGProps } from "react";
 import { ICON_STROKE } from "./Icons";

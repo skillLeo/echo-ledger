@@ -1,6 +1,6 @@
-// A3.3 / A2.2: jsdom cannot lay out or animate, so these tests pin the CSS contract of the pill and the review card:
-// sizes that fit their windows, the 180 ms ease-out slide-in, no motion with reduced motion, and transparent window
-// backgrounds. The look on a real screen is a manual QA step.
+// A3.3 / v1.5: jsdom cannot lay out or animate, so these tests pin the CSS contract of the pill and the after-call
+// toast and chip: sizes that fit their windows, the 180 ms ease-out slide-in, no motion with reduced motion, and
+// transparent window backgrounds. The look on a real screen is a manual QA step.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
@@ -69,40 +69,70 @@ describe("recording pill styles", () => {
   });
 });
 
-describe("review card styles", () => {
-  it("is a 340 x 148 card with a 16 px radius, bottom-right in the 360 x 168 window", () => {
+describe("after-call styles", () => {
+  it("puts the toast and chip bottom-right in the 360 x 168 window, one 36 px pill row each", () => {
     const root = styleOf("review-root");
     expect(root.padding).toBe("10px");
     expect(root.justifyContent).toBe("flex-end");
     expect(root.alignItems).toBe("flex-end");
-    const card = styleOf("review-card", "review-root");
-    expect(card.width).toBe("340px");
-    expect(card.height).toBe("148px");
-    expect(card.borderRadius).toBe("16px");
-    expect(card.borderWidth).toBe("1px");
+    const pill = styleOf("after-pill", "review-root");
+    expect(pill.height).toBe("36px");
+    expect(pill.borderRadius).toBe("18px");
+    expect(pill.display).toBe("flex");
+    expect(pill.maxWidth).toBe("340px");
+    expect(pill.borderWidth).toBe("1px");
   });
 
-  it("slides in over 180 ms ease-out from 12 px below", () => {
-    const card = styleOf("review-card", "review-root");
-    expect(card.animationName).toBe("ctl-slide-in");
-    expect(card.animationDuration).toBe("180ms");
-    expect(card.animationTimingFunction).toBe("ease-out");
+  it("uses the recording pill's dark surface in both themes", () => {
+    const rule = topLevelRule(".after-pill");
+    expect(rule?.style.getPropertyValue("--ctl-surface").trim()).toBe("var(--pill-bg)");
+    expect(rule?.style.getPropertyValue("--ctl-text").trim()).toBe("var(--pill-text)");
+  });
+
+  it("keeps the chip's app icon a 20 px circle, not the main window's shell grid", () => {
+    // Regression: the icon was "after-icon app", and styles.css's `.app` (the 232 px sidebar grid) pushed it over the
+    // title. Both stylesheets load in the after-call window.
+    const icon = styleOf("after-icon source", "after-pill");
+    expect(icon.width).toBe("20px");
+    expect(icon.display).toBe("grid");
+    expect(icon.gridTemplateColumns).toBe("none");
+    expect(styleOf("after-icon app", "after-pill").gridTemplateColumns, "what the old class picked up").toBe("232px 1fr");
+    const ok = styleOf("after-icon ok", "after-pill");
+    expect(ok.width).toBe("20px");
+  });
+
+  it("ellipsises a long title and keeps the length in tabular digits", () => {
+    const title = styleOf("after-title", "after-pill");
+    expect(title.textOverflow).toBe("ellipsis");
+    expect(title.whiteSpace).toBe("nowrap");
+    expect(styleOf("after-duration", "after-pill").fontVariantNumeric).toBe("tabular-nums");
+  });
+
+  it("slides in over 180 ms ease-out from 12 px below, like the ask chip", () => {
+    for (const className of ["after-pill", "ask-chip"]) {
+      const s = styleOf(className, "review-root");
+      expect(s.animationName).toBe("ctl-slide-in");
+      expect(s.animationDuration).toBe("180ms");
+      expect(s.animationTimingFunction).toBe("ease-out");
+    }
     const keyframes = [...style.sheet!.cssRules].find((r): r is CSSKeyframesRule => r instanceof CSSKeyframesRule && r.name === "ctl-slide-in");
     expect(keyframes?.cssRules[0].cssText.replace(/\s+/g, " ")).toContain("transform: translateY(12px)");
     expect(keyframes?.cssRules[0].cssText).toContain("opacity: 0");
   });
 
-  it("does not move with reduced motion", () => {
-    const reduced = rulesIn("prefers-reduced-motion");
-    const card = reduced.find((r) => r.selectorText.includes(".review-card"));
-    expect(card?.style.animation).toBe("none");
-    expect(card?.selectorText).toContain(".ask-chip");
+  it("counts the chip down with a thin line that starts from what is left", () => {
+    const keyframes = [...style.sheet!.cssRules].find((r): r is CSSKeyframesRule => r instanceof CSSKeyframesRule && r.name === "after-countdown");
+    expect(keyframes?.cssRules[0].cssText).toContain("var(--from");
+    expect(styleOf("after-progress", "after-pill").height).toBe("2px");
   });
 
-  it("ellipsises the first caption line", () => {
-    const line = styleOf("review-line", "review-root");
-    expect(line.textOverflow).toBe("ellipsis");
-    expect(line.whiteSpace).toBe("nowrap");
+  it("does not move or count down with reduced motion", () => {
+    const reduced = rulesIn("prefers-reduced-motion");
+    const pills = reduced.find((r) => r.selectorText.includes(".after-pill"));
+    expect(pills?.style.animation).toBe("none");
+    expect(pills?.selectorText).toContain(".ask-chip");
+    const lines = reduced.find((r) => r.selectorText.includes(".after-progress"));
+    expect(lines?.style.display).toBe("none");
   });
 });
 

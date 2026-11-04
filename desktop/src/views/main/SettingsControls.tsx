@@ -11,21 +11,26 @@ export function Toggle({ on, onChange, label, hint }: { on: boolean; onChange: (
   );
 }
 
-/** A labelled select row in a settings card. */
-export function SelectRow<T extends string>({ label, value, options, onChange, width = 220 }: {
+/** A labelled select row in a settings card, with an optional line under the label. */
+export function SelectRow<T extends string>({ label, value, options, onChange, width = 220, hint }: {
   label: string;
   value: T;
   options: readonly (readonly [T, string])[];
   onChange: (value: T) => void;
   width?: number;
+  hint?: string;
 }) {
   const id = useId();
+  const hintId = useId();
+  const select = (
+    <select id={id} className="input" style={{ width }} value={value} aria-describedby={hint ? hintId : undefined} onChange={(e) => onChange(e.target.value as T)}>
+      {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
+    </select>
+  );
   return (
     <div className="toggle">
-      <label htmlFor={id}>{label}</label>
-      <select id={id} className="input" style={{ width }} value={value} onChange={(e) => onChange(e.target.value as T)}>
-        {options.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
-      </select>
+      {hint ? <div><label htmlFor={id}>{label}</label><div id={hintId} className="small muted">{hint}</div></div> : <label htmlFor={id}>{label}</label>}
+      {select}
     </div>
   );
 }

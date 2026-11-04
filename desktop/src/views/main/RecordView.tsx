@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { api, type AppStatus, type MicUser } from "../../lib/ipc";
+import { api, listenTo, type AppStatus, type InputDevice, type MicUser } from "../../lib/ipc";
 import { processName, sourceAppLabel } from "../../lib/format";
 import { explainMicUser, micTone } from "../../lib/explainer";
 import { DISCARD_CONFIRM } from "../../lib/pending";
+import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { useWindowShown } from "../../lib/visibility";
 import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
 import { LiveTranslateCard } from "./LiveTranslateCard";
@@ -57,6 +58,32 @@ function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => 
   );
 }
 
+/**
+ * The Bluetooth microphone a recording would use (v1.5), or null. Read when the page shows and again when a recording
+ * starts (a headset may have been connected since); the choice follows Settings.
+ */
+function useBluetoothMic(recordingRef: string | null): InputDevice | null {
+  const [devices, setDevices] = useState<InputDevice[]>([]);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const shown = useWindowShown();
+  useEffect(() => {
+    if (!shown) return;
+    let alive = true;
+    api.inputDevices().then((d) => alive && setDevices(Array.isArray(d) ? d : [])).catch(() => undefined);
+    api.settings().then((s) => alive && setChosen(s.inputDevice ?? null)).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [shown, recordingRef]);
+  useEffect(() => {
+    const un = listenTo("settings:changed", (s) => setChosen(s.inputDevice ?? null));
+    return () => {
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
+  return bluetoothMic(devices, chosen);
+}
+
 const BACKEND_LABEL: Record<string, string> = {
   process_loopback: "Windows process loopback (EchoLedger excluded)",
   endpoint_loopback: "Windows endpoint loopback (all system audio)",
@@ -74,6 +101,7 @@ export function RecordView({ status, run, onImport }: {
   const paused = !!recording && status.paused;
   const [mic, sys] = status.levels;
   const what = recording ? (recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp)) : "";
+  const bluetooth = useBluetoothMic(recording?.clientRef ?? null);
   const cancel = () => {
     if (window.confirm(DISCARD_CONFIRM)) void run(api.cancelRecording);
   };
@@ -105,6 +133,9 @@ export function RecordView({ status, run, onImport }: {
             )}
             <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter"><div style={{ width: `${Math.min(100, mic * 400)}%` }} /></div></div>
             <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter"><div style={{ width: `${Math.min(100, sys * 400)}%` }} /></div></div>
+            {bluetooth && recording?.mode !== "voice_note" && (
+              <p className="small muted bluetooth-note" data-testid="bluetooth-note" title={bluetooth.name}>{BLUETOOTH_NOTE} · {bluetooth.name}</p>
+            )}
           </div>
         </div>
       </div>

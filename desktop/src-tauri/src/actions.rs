@@ -8,6 +8,7 @@ use chrono::Utc;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
+use crate::after_call::{AfterCallState, SavedToast};
 use crate::audio::types::Channel;
 use crate::audio::{FinishedRecording, RecordingMode};
 use crate::error::{AppError, AppResult};
@@ -18,7 +19,9 @@ use crate::net::uploader::{
     AfterAttempt, DiscardQueue, PendingUpload, UploadOutcome, UploadQueue, UploadTiming, UsageQueue, after_attempt, delete_local_audio, states,
 };
 use crate::overlay::{OVERLAY, set_overlay_visible};
+use crate::settings::AfterCall;
 use crate::shortcuts::Action;
+use crate::skipped::{SkipReason, SkippedCall, SkippedFiles, SkippedItem};
 use crate::stt::captions::{CaptionEvent, CaptionHub};
 
 const CAPTION_TARGETS: &[&str] = &[OVERLAY, "main"];
@@ -284,6 +287,31 @@ fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     start_ticker(app);
     emit_status(app);
     emit_recording_state(app);
+    check_bluetooth_mic(app, info);
+}
+
+/// Whether the recording's microphone is Bluetooth (v1.5), asked of the system beside the start so the start does not
+/// wait for it; the pill shows "Accuracy is lower with Bluetooth mics" when it is.
+fn check_bluetooth_mic(app: &AppHandle, info: &crate::audio::RecordingInfo) {
+    let state = app.state::<crate::AppState>();
+    state.bluetooth_mic.store(false, Ordering::SeqCst);
+    if info.mode == RecordingMode::VoiceNote {
+        return; // this computer's sound only
+    }
+    let (app, client_ref) = (app.clone(), info.client_ref.clone());
+    std::thread::spawn(move || {
+        let devices = crate::audio::platform::input_devices();
+        let preferred = crate::audio::platform::preferred_mic();
+        if !crate::audio::platform::mic_in_use(&devices, preferred.as_deref()).is_some_and(|d| d.bluetooth) {
+            return;
+        }
+        let state = app.state::<crate::AppState>();
+        // Still the same recording (a very short one may have ended meanwhile).
+        if state.capture.info().is_some_and(|i| i.client_ref == client_ref) {
+            state.bluetooth_mic.store(true, Ordering::SeqCst);
+            emit_recording_state(&app);
+        }
+    });
 }
 
 /// Stops captions (waiting for their final turns) and the capture. Returns the finished files, the server session
@@ -298,14 +326,15 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     state.captions_on_resume.store(false, Ordering::SeqCst);
     let session = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).begin_stop();
     let finished = state.capture.stop()?;
+    state.bluetooth_mic.store(false, Ordering::SeqCst);
     set_overlay_visible(app, OVERLAY, false);
     crate::overlay::set_pill_visible(app, false);
     *state.recording_started_at.lock().unwrap() = None;
     Ok(finished.map(|f| (f, session, provider)))
 }
 
-/// Stops the recording and asks Keep / Discard (A2), or keeps it at once when the "Ask before saving" policy says
-/// so. Auto mode never stops a manual recording.
+/// Stops the recording; "After a call" decides what comes next (the Saved toast, or the chip). Auto mode never stops a
+/// manual recording.
 pub async fn stop_recording(app: &AppHandle, from_auto: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if from_auto && !state.auto_started.load(Ordering::SeqCst) {
@@ -321,7 +350,8 @@ pub async fn stop_recording(app: &AppHandle, from_auto: bool) -> AppResult<()> {
     Ok(())
 }
 
-/// Quit while recording: the recording is stopped and stays as a decision (never discarded); no card.
+/// Quit while recording: the recording is stopped and kept, or (Ask me) waits for the next start; never discarded,
+/// nothing is shown.
 pub async fn stop_recording_for_quit(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let auto = state.auto_started.load(Ordering::SeqCst);
@@ -339,7 +369,7 @@ pub async fn cancel_recording(app: &AppHandle) -> AppResult<()> {
     }
     if let Some((finished, session, _)) = end_capture(app).await? {
         let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&finished.info.client_ref);
-        let _ = std::fs::remove_dir_all(&finished.output.dir);
+        crate::recovery::delete_recording_folder(&finished.output.dir);
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
@@ -350,7 +380,10 @@ pub async fn cancel_recording(app: &AppHandle) -> AppResult<()> {
     Ok(())
 }
 
-fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option<String>, provider: Option<String>, auto: bool, show_card: bool) -> AppResult<()> {
+/// What a finished recording does next (v1.5 "After a call"): kept at once with the "Saved · Undo" toast, or asked
+/// about with the chip, which keeps it by itself after 10 s. `interactive` is false when the app quits in the middle
+/// of a call: nothing is shown, and a recording that would be asked about waits in the Library for the next start.
+fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option<String>, provider: Option<String>, auto: bool, interactive: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let client_ref = finished.info.client_ref.clone();
     let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&client_ref);
@@ -358,7 +391,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     // recording the server would reject (the server enforces the same floor).
     let silent = std::fs::metadata(&finished.output.primary).map(|m| m.len() < MIN_AUDIO_BYTES).unwrap_or(true);
     if silent {
-        let _ = std::fs::remove_dir_all(&finished.output.dir);
+        crate::recovery::delete_recording_folder(&finished.output.dir);
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
@@ -369,6 +402,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     let settings = state.settings();
     let live_segments = state.captions.lock().unwrap().segments();
     let mode = finished.info.mode;
+    let now = Utc::now();
     let decision = PendingDecision::from_recording(
         &finished,
         DecisionInput {
@@ -377,14 +411,21 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             live_segments,
             live_provider: provider,
             server_session_id: session,
-            created_at: Utc::now(),
+            created_at: now,
             language: state.recording_language(&client_ref),
             language_marks: take_language_marks(&state, &client_ref),
             caller: take_caller(&state, &client_ref),
         },
     );
+    let output = &finished.output;
+    if let Some(reason) = crate::skipped::reason(auto, mode, output.duration_ms, settings.skip_calls_shorter_than_s, output.speech_ms) {
+        return skip_finished(app, decision, late, reason, now);
+    }
+    let ask = pending::after_call(settings.after_call, mode) == AfterCall::Ask;
+    let decision = if ask && interactive { decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)) } else { decision };
     let id = decision.id.clone();
-    let created_at = decision.created_at;
+    let keep_at = decision.keep_at();
+    let toast = (!ask && interactive).then(|| SavedToast::of(&decision, now));
     {
         let files = DecisionFiles::in_dir(&state.data_dir);
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
@@ -393,16 +434,95 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             files.set_server_session(&id, &late)?;
         }
     }
-    if !pending::should_ask(settings.ask_before_saving, auto, mode) {
-        return keep_decision(app, &id);
+    if !ask {
+        keep_decision(app, &id)?;
+        if let Some(toast) = toast {
+            show_saved(app, toast);
+        }
+        return Ok(());
     }
-    if show_card {
-        state.review_run.lock().unwrap_or_else(|p| p.into_inner()).push(id);
+    if let Some(at) = keep_at {
+        surfaces(&state).show_chip(id);
+        schedule_keep(app, at);
     }
     emit_pending(app);
-    refresh_review(app);
-    schedule_timeout(app, created_at);
+    refresh_after_call(app);
     Ok(())
+}
+
+fn surfaces(state: &crate::AppState) -> std::sync::MutexGuard<'_, crate::after_call::Surfaces> {
+    state.after_call.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// A short or silent automatic call (v1.5): nothing is shown, kept or uploaded. It waits in `skipped.json` for 24 hours
+/// so Activity can restore it; a server session captions opened for it is deleted at once (a restored call opens a
+/// new one when it uploads).
+fn skip_finished(app: &AppHandle, mut decision: PendingDecision, late: Option<String>, reason: SkipReason, now: chrono::DateTime<Utc>) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    for session in decision.take_server_session().into_iter().chain(late) {
+        queue_discard(app, session)?;
+    }
+    let call = SkippedCall { decision, reason, skipped_at: now };
+    let expires = call.expires_at();
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        SkippedFiles::in_dir(&state.data_dir).add(call)?;
+    }
+    schedule_purge(app, expires);
+    emit_skipped(app);
+    Ok(())
+}
+
+/// The skipped calls Activity lists (still restorable, newest first); the ones whose 24 hours are over go first.
+pub fn skipped_items(app: &AppHandle) -> Vec<SkippedItem> {
+    purge_skipped(app);
+    let state = app.state::<crate::AppState>();
+    SkippedFiles::in_dir(&state.data_dir).load().ui_items(Utc::now())
+}
+
+/// `skipped:changed` with the whole list.
+pub fn emit_skipped(app: &AppHandle) {
+    let state = app.state::<crate::AppState>();
+    let items = SkippedFiles::in_dir(&state.data_dir).load().ui_items(Utc::now());
+    let _ = app.emit("skipped:changed", items);
+}
+
+/// Restore on Activity's skipped line: the call is kept like any other (upload, then the final transcript).
+pub fn restore_skipped(app: &AppHandle, id: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        SkippedFiles::in_dir(&state.data_dir).restore(id, Utc::now())?;
+    }
+    state.upload_notify.notify_one();
+    emit_skipped(app);
+    emit_uploads(app);
+    emit_status(app);
+    Ok(())
+}
+
+/// Deletes the skipped calls whose 24 hours are over.
+pub fn purge_skipped(app: &AppHandle) {
+    let state = app.state::<crate::AppState>();
+    let done = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        SkippedFiles::in_dir(&state.data_dir).purge(Utc::now())
+    };
+    match done {
+        Ok(ids) if !ids.is_empty() => emit_skipped(app),
+        Ok(_) => {}
+        Err(e) => eprintln!("[echoledger] removing skipped calls: {e}"),
+    }
+}
+
+/// Wakes up when a skipped call's 24 hours are over (the list is also cleaned whenever it is read and at start).
+fn schedule_purge(app: &AppHandle, at: chrono::DateTime<Utc>) {
+    let wait = (at - Utc::now()).to_std().unwrap_or_default() + Duration::from_secs(1);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(wait).await;
+        purge_skipped(&app);
+    });
 }
 
 /// Keep: the recording moves to the upload queue and the final transcript follows.
@@ -431,16 +551,15 @@ pub fn discard_decision(app: &AppHandle, id: &str) -> AppResult<()> {
 }
 
 fn after_decision(app: &AppHandle, id: &str) {
-    app.state::<crate::AppState>().review_run.lock().unwrap_or_else(|p| p.into_inner()).retain(|r| r != id);
+    surfaces(&app.state::<crate::AppState>()).clear_chip(id);
     emit_pending(app);
-    refresh_review(app);
+    refresh_after_call(app);
     emit_status(app);
 }
 
 pub fn pending_items(app: &AppHandle) -> Vec<pending::PendingItem> {
     let state = app.state::<crate::AppState>();
-    let policy = state.settings().decision_timeout;
-    let mut items = DecisionFiles::in_dir(&state.data_dir).load().ui_items(policy);
+    let mut items = DecisionFiles::in_dir(&state.data_dir).load().ui_items();
     items.sort_by(|a, b| b.ended_at.cmp(&a.ended_at));
     items
 }
@@ -450,68 +569,139 @@ pub fn emit_pending(app: &AppHandle) {
     emit_status(app);
 }
 
-/// What the review card shows: the newest undecided recording of this run.
-pub fn review_payload(app: &AppHandle) -> Option<crate::commands::ReviewPayload> {
+/// What the after-call window shows now: the Saved toast while it lasts, and the chip while its recording counts down.
+pub fn after_call_state(app: &AppHandle) -> AfterCallState {
     let state = app.state::<crate::AppState>();
-    let policy = state.settings().decision_timeout;
-    let store = DecisionFiles::in_dir(&state.data_dir).load();
-    let run = state.review_run.lock().unwrap_or_else(|p| p.into_inner()).clone();
-    let waiting: Vec<&String> = run.iter().filter(|id| store.find(id).is_some()).collect();
-    let newest = waiting.last()?;
-    Some(crate::commands::ReviewPayload { item: store.find(newest)?.item(policy), timeout: policy, queue_length: waiting.len() })
-}
-
-/// Shows the card for the newest undecided recording of this run, or hides it when there is none.
-pub fn refresh_review(app: &AppHandle) {
-    match review_payload(app) {
-        Some(payload) => crate::overlay::show_review(app, payload),
-        None => crate::overlay::hide_review(app),
-    }
-}
-
-/// Applies the current "If I don't choose within 60 s" policy to every recording whose time is up.
-pub fn apply_due_timeouts(app: &AppHandle) {
-    let state = app.state::<crate::AppState>();
-    let policy = state.settings().decision_timeout;
-    let done = {
-        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        DecisionFiles::in_dir(&state.data_dir).apply_timeouts(Utc::now(), policy)
+    let (saved, chip) = {
+        let surfaces = surfaces(&state);
+        (surfaces.saved(Instant::now()).cloned(), surfaces.chip().map(str::to_string))
     };
+    let ask = chip.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| !d.waits()).map(PendingDecision::item));
+    AfterCallState { saved, ask }
+}
+
+/// Puts the after-call window in line with `after_call_state` (built when something is to be shown, let go when not).
+pub fn refresh_after_call(app: &AppHandle) {
+    crate::overlay::show_after_call(app, &after_call_state(app));
+}
+
+/// "Saved · … · Undo" for 6 s; the window is told again once the time is over.
+fn show_saved(app: &AppHandle, toast: SavedToast) {
+    surfaces(&app.state::<crate::AppState>()).show_saved(toast, Instant::now());
+    refresh_after_call(app);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(crate::after_call::SAVED_SECONDS) + Duration::from_millis(100)).await;
+        refresh_after_call(&app);
+    });
+}
+
+/// Undo on the Saved toast: as if the recording had been discarded. Still on this computer (queued or uploading), its
+/// files are deleted and nothing more is sent; already uploaded, it is deleted on the server like any delete, so it
+/// stays in Recently deleted for 48 hours. An upload that ends after this is deleted by the worker.
+pub async fn undo_saved(app: &AppHandle, id: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let uploaded = {
+        let mut surfaces = surfaces(&state);
+        let session = surfaces.uploaded_session(id, Instant::now());
+        surfaces.undo(id);
+        session
+    };
+    refresh_after_call(app);
+    if discard_upload(app, id).is_ok() {
+        return Ok(());
+    }
+    if let Some(session) = uploaded {
+        let deleted = match state.api() {
+            Ok(api) => api.delete_session(&session).await,
+            Err(e) => Err(e),
+        };
+        match deleted {
+            Ok(()) => {}
+            Err(e) if e.status() == Some(404) => {}
+            // Offline or refused for now: the worker deletes it once it can.
+            Err(_) => queue_discard(app, session)?,
+        }
+        let _ = crate::commands::refresh_library_inner(app).await;
+    }
+    Ok(())
+}
+
+/// Keeps every recording whose chip time is over ("Ask me"), also one whose time ran out while the app was closed,
+/// and sets the timer for the next chip still counting. That chip may have no timer of its own: a restart sets one
+/// timer for all of them, and a timer that wakes early (the clock was set back) keeps nothing. Without this its
+/// recording would count for ever, hidden from the Library and every count until the next start.
+pub fn keep_due(app: &AppHandle) {
+    let state = app.state::<crate::AppState>();
+    let now = Utc::now();
+    let (done, next) = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        let done = files.keep_due(now);
+        (done, files.load().next_wake(now))
+    };
+    if let Some(at) = next {
+        schedule_keep(app, at);
+    }
     match done {
         Ok(done) if !done.is_empty() => {
             {
-                let mut run = state.review_run.lock().unwrap_or_else(|p| p.into_inner());
-                run.retain(|r| !done.iter().any(|(id, _)| id == r));
+                let mut surfaces = surfaces(&state);
+                for id in &done {
+                    surfaces.clear_chip(id);
+                }
             }
             state.upload_notify.notify_one();
             emit_pending(app);
             emit_uploads(app);
-            refresh_review(app);
+            refresh_after_call(app);
         }
         Ok(_) => {}
-        Err(e) => eprintln!("[echoledger] decision timeout: {e}"),
+        Err(e) => eprintln!("[echoledger] keeping after the chip: {e}"),
     }
 }
 
-/// Wakes up when a recording's time is up and applies the policy in force then.
-fn schedule_timeout(app: &AppHandle, created_at: chrono::DateTime<Utc>) {
-    let due = created_at + chrono::Duration::seconds(pending::DECISION_WINDOW_SECS);
-    let wait = (due - Utc::now()).to_std().unwrap_or_default() + Duration::from_millis(200);
+/// Wakes up when a chip's time is over and keeps what is due then.
+fn schedule_keep(app: &AppHandle, at: chrono::DateTime<Utc>) {
+    let wait = (at - Utc::now()).to_std().unwrap_or_default() + Duration::from_millis(200);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(wait).await;
-        apply_due_timeouts(&app);
+        keep_due(&app);
     });
 }
 
-/// At start: overdue decisions get the current policy; the others get timers. The card is not shown for them.
+/// At start: a recording whose chip time ran out while the app was closed is kept, one whose chip still counts (a
+/// restart within 10 s) gets its timer (`keep_due`). Recordings that wait for the person stay as they are, whatever
+/// the setting. Skipped calls past their 24 hours are deleted; the others get their timers.
 pub fn restore_pending(app: &AppHandle) {
-    apply_due_timeouts(app);
+    keep_due(app);
     let state = app.state::<crate::AppState>();
-    for decision in DecisionFiles::in_dir(&state.data_dir).load().items {
-        schedule_timeout(app, decision.created_at);
+    purge_skipped(app);
+    for call in SkippedFiles::in_dir(&state.data_dir).load().items {
+        schedule_purge(app, call.expires_at());
     }
     emit_pending(app);
+}
+
+/// Recordings recovered at start (since v1.3) wait in the Library. One stopped in the middle of the recording follows
+/// "After a call" (`cut_short`): under "Keep automatically" it is kept at once. One that was already finished waits
+/// whatever the setting, as it may have been discarded, undone or uploaded before (`recovery::Recovery`).
+pub fn after_recovery(app: &AppHandle, cut_short: &[String]) {
+    if app.state::<crate::AppState>().settings().after_call == AfterCall::Keep {
+        for id in cut_short {
+            if let Err(e) = keep_decision(app, id) {
+                eprintln!("[echoledger] keeping the recovered recording {id}: {e}");
+            }
+        }
+    }
+    emit_pending(app);
+}
+
+/// Tray "Review recordings (N)": the Library with the waiting list open at the newest waiting recording.
+pub fn review_waiting(app: &AppHandle) {
+    let first = pending_items(app).into_iter().find(|i| i.deadline_at.is_none()).map(|i| i.id);
+    navigate(app, "library", first, false);
 }
 
 pub fn pending_rename(app: &AppHandle, id: &str, title: &str) -> AppResult<pending::PendingItem> {
@@ -521,8 +711,8 @@ pub fn pending_rename(app: &AppHandle, id: &str, title: &str) -> AppResult<pendi
         DecisionFiles::in_dir(&state.data_dir).rename(id, title)?
     };
     emit_pending(app);
-    refresh_review(app);
-    Ok(updated.item(state.settings().decision_timeout))
+    refresh_after_call(app);
+    Ok(updated.item())
 }
 
 /// Who a finished recording was with (cleared with it).
@@ -570,8 +760,8 @@ pub fn pending_set_language(app: &AppHandle, id: &str, language: Option<String>)
         DecisionFiles::in_dir(&state.data_dir).set_language(id, language)?
     };
     emit_pending(app);
-    refresh_review(app);
-    Ok(updated.item(state.settings().decision_timeout))
+    refresh_after_call(app);
+    Ok(updated.item())
 }
 
 /// The pill's language chip. With live captions on, the caption stream reconnects in the new language; the
@@ -622,24 +812,28 @@ pub async fn pending_assign_client(app: &AppHandle, id: &str, client_id: Option<
         DecisionFiles::in_dir(&state.data_dir).assign_client(id, client_id, client_name)?
     };
     emit_pending(app);
-    refresh_review(app);
-    Ok(updated.item(state.settings().decision_timeout))
+    refresh_after_call(app);
+    Ok(updated.item())
 }
 
-/// Shows the main window on a view (tray "Review recordings", the card's Open / Rename).
+/// Shows the main window on a view (tray "Review recordings", the chip's title).
 pub fn navigate(app: &AppHandle, view: &str, pending_id: Option<String>, rename: bool) {
     let payload = crate::commands::NavigatePayload { view: view.to_string(), pending_id, rename, recording_id: None };
     crate::tray::show_main(app);
     crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
 }
 
+/// Opens a waiting recording in the main window (the chip's title: with its title field open). Its chip stops
+/// counting, so it is never kept while the person is still naming it: it waits for Keep or Discard there.
 pub fn pending_open(app: &AppHandle, id: &str, rename: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
-    if DecisionFiles::in_dir(&state.data_dir).load().find(id).is_none() {
-        return Err(AppError::msg(pending::NOT_WAITING));
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).stop_countdown(id)?;
     }
-    state.review_run.lock().unwrap_or_else(|p| p.into_inner()).retain(|r| r != id);
-    crate::overlay::hide_review(app);
+    surfaces(&state).clear_chip(id);
+    emit_pending(app);
+    refresh_after_call(app);
     navigate(app, "library", Some(id.to_string()), rename);
     Ok(())
 }
@@ -886,7 +1080,7 @@ pub(crate) fn forget_client(app: &AppHandle, client_id: &str) {
     };
     if pending_changed {
         emit_pending(app);
-        refresh_review(app);
+        refresh_after_call(app);
     }
     let _ = app.emit("app:toast", "The selected client was removed on the server, so no client is set now.");
 }
@@ -1104,6 +1298,23 @@ async fn run_upload_cycle(app: &AppHandle) {
             AfterAttempt::Keep => store_item(app, &item),
         }
         emit_uploads(app);
+        // Undo on the Saved toast while this attempt ran: what reached the server is deleted again (v1.5). Checked
+        // under the same lock Undo takes, so a recording is either found uploaded by Undo or deleted here.
+        let undone = {
+            let mut surfaces = surfaces(&state);
+            let undone = surfaces.take_undone(&id);
+            if !undone && let Ok(UploadOutcome::Ready { session_id }) = &result {
+                surfaces.uploaded(&id, session_id, Instant::now());
+            }
+            undone
+        };
+        if undone {
+            let reached = result.as_ref().ok().map(|o| o.session_id().to_string()).filter(|s| !s.is_empty()).or_else(|| item.server_session());
+            if let Some(session) = reached {
+                let _ = queue_discard(app, session);
+            }
+            continue;
+        }
         match result {
             Ok(UploadOutcome::Ready { .. }) => uploaded += 1,
             Ok(UploadOutcome::Deleted { .. }) => {

@@ -31,7 +31,7 @@ beforeEach(() => {
     overlay_set_hit_regions: undefined,
     recording_state: makeRecordingState(),
     marker_tags: [],
-    review_state: null,
+    after_call_state: { saved: null, ask: null },
     lock_status: { enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 },
     library_list: [],
     library_refresh: [],
@@ -50,7 +50,7 @@ afterEach(() => {
 const windows: [string, () => ReactElement, string[], boolean][] = [
   ["overlay", () => <OverlayApp />, ["overlay:visibility"], true],
   ["pill", () => <PillApp />, ["pill:visibility", "recording:state"], false],
-  ["review", () => <ReviewApp />, ["review:show", "review:hide", "ask:show", "ask:hide"], false],
+  ["review", () => <ReviewApp />, ["aftercall:state", "ask:show", "ask:hide"], false],
   ["dictation", () => <DictationApp />, ["overlay:visibility", "dictation:state", "dictation:level"], true],
   ["main", () => <MainApp />, ["main:navigate", "app:status"], false],
 ];
