@@ -174,6 +174,13 @@ fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, 
                             }
                         })
                     }
+                    // Since v1.5: the transcript with the meeting's screens at their moments, for Claude or ChatGPT.
+                    listOf("pdf" to "Meeting pack (PDF, with screens)", "zip" to "Meeting pack (ZIP)").forEach { (format, label) ->
+                        DropdownMenuItem(text = { Text(label) }, onClick = {
+                            menu = false
+                            scope.launch { vm.meetingPack(sessionId, format, view)?.let { shareFile(context, it) } }
+                        })
+                    }
                 }
             }
         }

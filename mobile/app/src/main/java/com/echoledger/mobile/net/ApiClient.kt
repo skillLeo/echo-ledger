@@ -233,6 +233,34 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(req, LibraryResponse.serializer())!!
     }
 
+    /** `GET /api/sessions/{id}/screens` (since v1.5): the recording's screen moments in time order. */
+    suspend fun screens(sessionId: String): List<com.echoledger.mobile.data.ScreenDto> =
+        call(request("sessions/$sessionId/screens").get().build(), com.echoledger.mobile.data.ScreensResponse.serializer())!!.data
+
+    suspend fun deleteScreen(sessionId: String, screenId: String) {
+        call(request("sessions/$sessionId/screens/$screenId").delete().build(), null as KSerializer<Unit>?)
+    }
+
+    /** A screen's picture from its signed link (no token: the link carries its own signature). */
+    suspend fun screenImage(url: String): ByteArray = withContext(Dispatchers.IO) {
+        http.newCall(Request.Builder().url(url).get().build()).execute().use { resp ->
+            if (!resp.isSuccessful) throw java.io.IOException("The screen could not be loaded (${resp.code}).")
+            resp.body.bytes()
+        }
+    }
+
+    /** `GET /api/sessions/{id}/pack` (since v1.5): the meeting pack, a PDF or a ZIP, in [view]. */
+    suspend fun meetingPack(sessionId: String, format: String, view: String?): Pair<ByteArray, String> = withContext(Dispatchers.IO) {
+        val url = url("sessions/$sessionId/pack").toHttpUrl().newBuilder().addQueryParameter("format", format)
+            .apply { view?.let { addQueryParameter("view", it) } }.build()
+        val req = Request.Builder().url(url).apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
+        http.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) parse(resp, null as KSerializer<Unit>?)
+            val name = ExportNames.fromDisposition(resp.header("Content-Disposition")) ?: "Meeting pack.$format"
+            resp.body.bytes() to name
+        }
+    }
+
     /** A smart folder the phone cannot work out from its own copy (since v1.5: `imported`, `shared`), first 100. */
     suspend fun libraryFolder(folder: String): LibraryResponse {
         val url = url("library").toHttpUrl().newBuilder().addQueryParameter("folder", folder).addQueryParameter("limit", "100").build()

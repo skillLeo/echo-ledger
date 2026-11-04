@@ -365,6 +365,11 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
     }
     val shown = ShowAs.lines(segments, showAs, views)
     val appSettings by vm.settings.collectAsState()
+    // Screen moments (since v1.5): what was on the shared screen, after the line it belongs to; asked only when there are some.
+    var screens by remember(item.id) { mutableStateOf<List<com.echoledger.mobile.data.ScreenDto>>(emptyList()) }
+    LaunchedEffect(item.id, item.screenCount) { if ((item.screenCount ?: 0) > 0) screens = vm.screens(item.id) }
+    val screensAfter = remember(screens, segments) { com.echoledger.mobile.core.ScreenMoments.byLine(segments, screens) }
+    var openScreen by remember { mutableStateOf<com.echoledger.mobile.data.ScreenDto?>(null) }
 
     // Unsure words go into the copy as "[?word]" (or the console's style); Copy for AI starts with the note (plan A4).
     fun copy(withTimestamps: Boolean, forAi: Boolean = false) {
@@ -376,7 +381,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                 appSettings.unsureStyle,
                 appSettings.unsureThreshold,
                 appSettings.unsureNote,
-                forAi
+                forAi,
+                screens
             )
             clipboard.setClipEntry(ClipData.newPlainText("EchoLedger transcript", text).toClipEntry())
             vm.showMessage(
@@ -387,6 +393,22 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                 }
             )
         }
+    }
+
+    openScreen?.let { screen ->
+        ScreenViewer(
+            vm,
+            screen,
+            onPlay = if (player.ready) {
+                {
+                    player.seekTo(screen.atMs)
+                    openScreen = null
+                }
+            } else {
+                null
+            },
+            onDismiss = { openScreen = null }
+        )
     }
 
     // The page (since v1.3): top bar (back, Copy, more), the title with its source, the transcript as the hero with
@@ -791,6 +813,7 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                                 }
                             }
                         }
+                        screensAfter[index]?.forEach { screen -> ScreenMomentRow(vm, screen) { openScreen = screen } }
                     }
                 }
             }

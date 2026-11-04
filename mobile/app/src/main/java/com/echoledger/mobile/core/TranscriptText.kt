@@ -9,9 +9,12 @@ import java.util.Locale
  * one line per segment, `[m:ss] ` prefix when timestamps are requested, `Speaker: ` prefix unless only one speaker.
  */
 object TranscriptText {
-    fun render(segments: List<SegmentDto>, withTimestamps: Boolean): String {
+    fun render(segments: List<SegmentDto>, withTimestamps: Boolean): String = renderLines(segments, withTimestamps).joinToString("\n")
+
+    /** One rendered line per segment (the speaker prefix is left out when there is only one speaker). */
+    fun renderLines(segments: List<SegmentDto>, withTimestamps: Boolean): List<String> {
         val singleSpeaker = segments.map { it.speaker }.distinct().size <= 1
-        return segments.joinToString("\n") { s ->
+        return segments.map { s ->
             buildString {
                 if (withTimestamps) append('[').append(stamp(s.startMs)).append("] ")
                 if (!singleSpeaker) append(s.speaker).append(": ")
@@ -65,10 +68,18 @@ object TranscriptText {
         style: String,
         threshold: Double,
         noteOn: Boolean,
-        forAi: Boolean = false
+        forAi: Boolean = false,
+        screens: List<com.echoledger.mobile.data.ScreenDto> = emptyList()
     ): String {
         val used = if (forAi && style == "off") "brackets" else style
-        val body = render(segments.mapIndexed { i, s -> s.copy(text = markedLine(s, inView(i), threshold, used)) }, withTimestamps)
+        val withMarks = segments.mapIndexed { i, s -> s.copy(text = markedLine(s, inView(i), threshold, used)) }
+        // Since v1.5 Copy for AI puts "[Screen 7 at 14:32: …]" after the line it belongs to, so "this page" has a picture.
+        val after = if (forAi) ScreenMoments.byLine(segments, screens) else emptyMap()
+        val body = renderLines(withMarks, withTimestamps).flatMapIndexed { i, line ->
+            listOf(line) +
+                after[i].orEmpty().map(ScreenMoments::marker)
+        }
+            .joinToString("\n")
         val marked = MARKED.containsMatchIn(body) || body.contains("[unclear") || body.contains("(?)")
         return if (forAi || (noteOn && used != "off" && marked)) note(used) + "\n\n" + body else body
     }

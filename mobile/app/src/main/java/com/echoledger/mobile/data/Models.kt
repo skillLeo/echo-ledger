@@ -282,7 +282,9 @@ data class LibraryItem(
     /** Whether this user has opened it (since v1.3); false shows the unopened dot, null (an older server) does not. */
     val opened: Boolean? = null,
     /** How it got its project (since v1.5): "user", "contact", "rule", or null (the Inbox). */
-    @SerialName("filed_by") val filedBy: String? = null
+    @SerialName("filed_by") val filedBy: String? = null,
+    /** Screen moments kept during the meeting (since v1.5); null from an older server. */
+    @SerialName("screen_count") val screenCount: Int? = null
 )
 
 @Serializable
@@ -661,3 +663,21 @@ data class ResolvedLinkDto(
     @SerialName("shared_id") val sharedId: String? = null,
     @SerialName("request_link_id") val requestLinkId: String? = null
 )
+
+/** A screen moment (since v1.5): what was on the shared screen at [atMs] of the recording ("Screen 7 at 14:32"). */
+@Serializable
+data class ScreenDto(
+    val id: String,
+    val index: Int = 0,
+    @SerialName("at_ms") val atMs: Long = 0,
+    val width: Int = 0,
+    val height: Int = 0,
+    val trigger: String? = null,
+    @SerialName("ocr_text") val ocrText: String? = null,
+    val description: String? = null,
+    @SerialName("image_url") val imageUrl: String? = null,
+    @SerialName("thumb_url") val thumbUrl: String? = null
+)
+
+@Serializable
+data class ScreensResponse(val data: List<ScreenDto> = emptyList())

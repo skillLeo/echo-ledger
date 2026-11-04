@@ -465,6 +465,32 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { graph.api()?.libraryFolder(folder)?.data }.getOrNull()
     }
 
+    /** A recording's screen moments (since v1.5); empty when there are none or they could not be loaded. */
+    suspend fun screens(sessionId: String): List<com.echoledger.mobile.data.ScreenDto> = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.screens(sessionId) }.getOrNull().orEmpty()
+    }
+
+    /** A screen's picture from its signed link; null when it could not be loaded. */
+    suspend fun screenImage(url: String): androidx.compose.ui.graphics.ImageBitmap? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.screenImage(url) }.getOrNull()?.let(ScreenImages::decode)
+    }
+
+    /** The meeting pack (since v1.5): transcript with its screens, as a PDF or a ZIP in the private cache. */
+    suspend fun meetingPack(sessionId: String, format: String, view: String?): File? = withContext(Dispatchers.IO) {
+        try {
+            val api = graph.api() ?: return@withContext null
+            val (bytes, name) = api.meetingPack(sessionId, format, view)
+            val dir = File(getApplication<Application>().cacheDir, "exports").apply {
+                deleteRecursively()
+                mkdirs()
+            }
+            File(dir, name).apply { writeBytes(bytes) }
+        } catch (e: Exception) {
+            _message.value = e.message ?: "The meeting pack could not be made."
+            null
+        }
+    }
+
     /** What a link opened in the app is for this phone; null = open the web page. */
     suspend fun resolveLink(link: String): com.echoledger.mobile.data.ResolvedLinkDto? = withContext(Dispatchers.IO) {
         graph.api()?.resolveLink(link)
