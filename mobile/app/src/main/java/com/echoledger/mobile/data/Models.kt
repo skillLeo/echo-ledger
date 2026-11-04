@@ -280,7 +280,9 @@ data class LibraryItem(
     /** The language chosen for the recording (since v1.1.2); null = automatic. */
     val language: String? = null,
     /** Whether this user has opened it (since v1.3); false shows the unopened dot, null (an older server) does not. */
-    val opened: Boolean? = null
+    val opened: Boolean? = null,
+    /** How it got its project (since v1.5): "user", "contact", "rule", or null (the Inbox). */
+    @SerialName("filed_by") val filedBy: String? = null
 )
 
 @Serializable
@@ -389,8 +391,19 @@ data class ShareLinkDto(
     @SerialName("view_count") val viewCount: Int = 0,
     @SerialName("has_password") val hasPassword: Boolean = false,
     @SerialName("include_audio") val includeAudio: Boolean = false,
-    @SerialName("created_at") val createdAt: String? = null
+    @SerialName("created_at") val createdAt: String? = null,
+    /** Since v1.5: a recording's or a project's link, who may open it, and whether files can be downloaded. */
+    val kind: String = "session",
+    @SerialName("session_id") val sessionId: String? = null,
+    @SerialName("client_id") val clientId: String? = null,
+    val audience: String = "public",
+    val people: List<String> = emptyList(),
+    @SerialName("allow_download") val allowDownload: Boolean? = null,
+    @SerialName("last_viewed_at") val lastViewedAt: String? = null
 )
+
+@Serializable
+data class ShareResponse(val data: ShareLinkDto)
 
 @Serializable
 data class ShareListResponse(val data: List<ShareLinkDto> = emptyList())
@@ -477,8 +490,76 @@ data class ClientDto(
     val pinned: Boolean = false,
     @SerialName("session_count") val sessionCount: Int = 0,
     /** The client's default language (since v1.1.2); null = the console default. */
-    val language: String? = null
+    val language: String? = null,
+    /** Since v1.5 (Projects): the folder it sits in (null = top level), its ancestors from the top, and counts. */
+    @SerialName("parent_id") val parentId: String? = null,
+    val path: List<NamedRef> = emptyList(),
+    @SerialName("children_count") val childrenCount: Int = 0,
+    @SerialName("nested_session_count") val nestedSessionCount: Int? = null
 )
+
+/** A filing rule of a project (since v1.5): "title" contains, "app" (a source_app), or a "contact". */
+@Serializable
+data class FilingRuleDto(val id: Long, val kind: String, val value: String, @SerialName("created_at") val createdAt: String? = null)
+
+@Serializable
+data class FilingRulesResponse(val data: List<FilingRuleDto> = emptyList())
+
+@Serializable
+data class FilingRuleResponse(val data: FilingRuleDto)
+
+/** DELETE /api/clients/{id} (since v1.5): its recordings went to the Inbox, its subfolders up a level. */
+@Serializable
+data class DeletedProjectAnswer(
+    @SerialName("moved_sessions") val movedSessions: Int = 0,
+    @SerialName("moved_projects") val movedProjects: Int = 0
+)
+
+/** Something a teammate sent (since v1.5): a recording or a project, read-only until saved. */
+@Serializable
+data class SharedItemDto(
+    val id: String,
+    val kind: String = "session",
+    val from: SenderDto? = null,
+    val note: String? = null,
+    val title: String? = null,
+    @SerialName("sent_at") val sentAt: String? = null,
+    @SerialName("saved_at") val savedAt: String? = null,
+    val session: LibraryItem? = null,
+    val client: ClientDto? = null
+)
+
+@Serializable
+data class SenderDto(val name: String? = null, val email: String? = null)
+
+@Serializable
+data class SharedResponse(val data: List<SharedItemDto> = emptyList())
+
+@Serializable
+data class SentAnswer(val sent: Int = 0)
+
+@Serializable
+data class SavedSharedAnswer(@SerialName("session_id") val sessionId: String? = null, @SerialName("client_id") val clientId: String? = null)
+
+/** A "Request files" link (since v1.5): anyone with it can send files into the Inbox or a project. */
+@Serializable
+data class RequestLinkDto(
+    val id: String,
+    val url: String? = null,
+    val title: String? = null,
+    @SerialName("client_id") val clientId: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("max_files") val maxFiles: Int? = null,
+    @SerialName("max_mb") val maxMb: Int? = null,
+    val received: Int = 0,
+    @SerialName("revoked_at") val revokedAt: String? = null
+)
+
+@Serializable
+data class RequestLinksResponse(val data: List<RequestLinkDto> = emptyList())
+
+@Serializable
+data class RequestLinkResponse(val data: RequestLinkDto)
 
 @Serializable
 data class ClientResponse(val data: ClientDto)
@@ -570,3 +651,13 @@ data class LiveTranslateToken(
 
 @Serializable
 data class LiveTranslation(val type: String, @SerialName("target_language") val targetLanguage: String)
+
+/** `GET /api/links/resolve` (since v1.5): a link opened in the app goes to this recording, project or list. */
+@Serializable
+data class ResolvedLinkDto(
+    val kind: String,
+    @SerialName("session_id") val sessionId: String? = null,
+    @SerialName("client_id") val clientId: String? = null,
+    @SerialName("shared_id") val sharedId: String? = null,
+    @SerialName("request_link_id") val requestLinkId: String? = null
+)

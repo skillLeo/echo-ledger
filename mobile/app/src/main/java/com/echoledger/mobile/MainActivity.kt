@@ -31,11 +31,11 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.rounded.AccountCircle
-import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Icon
@@ -66,6 +66,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.lifecycleScope
+import com.echoledger.mobile.core.AppLinks
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.recording.RecordingService
@@ -73,7 +74,6 @@ import com.echoledger.mobile.ui.ActivityBadge
 import com.echoledger.mobile.ui.ActivityScreen
 import com.echoledger.mobile.ui.AppLockMachine
 import com.echoledger.mobile.ui.Brand
-import com.echoledger.mobile.ui.ClientsScreen
 import com.echoledger.mobile.ui.EchoLedgerTheme
 import com.echoledger.mobile.ui.LibraryScreen
 import com.echoledger.mobile.ui.LocalUnlockPrompter
@@ -85,6 +85,8 @@ import com.echoledger.mobile.ui.Method
 import com.echoledger.mobile.ui.Motion
 import com.echoledger.mobile.ui.OnboardingScreen
 import com.echoledger.mobile.ui.PairingScreen
+import com.echoledger.mobile.ui.ProjectsScreen
+import com.echoledger.mobile.ui.ProjectsTarget
 import com.echoledger.mobile.ui.RecordMode
 import com.echoledger.mobile.ui.RecordScreen
 import com.echoledger.mobile.ui.RecordSheet
@@ -93,6 +95,7 @@ import com.echoledger.mobile.ui.SettingsScreen
 import com.echoledger.mobile.ui.SettingsState
 import com.echoledger.mobile.ui.SetupScreen
 import com.echoledger.mobile.ui.SharedNotesScreen
+import com.echoledger.mobile.ui.SmartFolder
 import com.echoledger.mobile.ui.StartupSplash
 import com.echoledger.mobile.ui.UnlockPrompter
 import com.echoledger.mobile.ui.WaitingScreen
@@ -118,7 +121,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (savedInstanceState == null) openRequest.value = intent?.getStringExtra(EXTRA_OPEN)
+        if (savedInstanceState == null) openRequest.value = intent?.getStringExtra(EXTRA_OPEN) ?: intent?.let(::linkRequest)
         // Content hidden in Recents and screenshots while the app lock and its "hide content" option are on.
         lifecycleScope.launch {
             vm.settingsState.collect { state ->
@@ -159,7 +162,18 @@ class MainActivity : FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intent.getStringExtra(EXTRA_OPEN)?.let { openRequest.value = it }
+        (intent.getStringExtra(EXTRA_OPEN) ?: linkRequest(intent))?.let { openRequest.value = it }
+    }
+
+    /** A share, project or request link opened in the app (since v1.5), as an [openRequest]; null for any other intent. */
+    private fun linkRequest(intent: Intent): String? = AppLinks.link(intent.action, intent.data)?.let { OPEN_LINK_PREFIX + it }
+
+    /** A link the app cannot open itself goes to the browser, never back here (an App Link would loop). */
+    private fun openInBrowser(link: String) {
+        val view = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)).addCategory(Intent.CATEGORY_BROWSABLE)
+        val chooser = Intent.createChooser(view, null)
+            .putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, arrayOf(android.content.ComponentName(this, MainActivity::class.java)))
+        runCatching { startActivity(chooser) }
     }
 
     @OptIn(ExperimentalSharedTransitionApi::class)
@@ -308,6 +322,29 @@ class MainActivity : FragmentActivity() {
                 sharedNotes = it.removePrefix(OPEN_SHARED_PREFIX)
                 showItem(null)
                 showSetup = false
+            }
+            // Since v1.5: a share, project or request link opens in place when it is this phone's; else in the browser.
+            open?.takeIf { it.startsWith(OPEN_LINK_PREFIX) }?.removePrefix(OPEN_LINK_PREFIX)?.let { link ->
+                openRequest.value = null
+                val resolved = if (currentSettings.paired) vm.resolveLink(link) else null
+                when (resolved?.kind) {
+                    "session" -> resolved.sessionId?.let { openSession = it }
+
+                    "project", "shared", "request" -> {
+                        showItem(null)
+                        showSetup = false
+                        tab = TAB_CLIENTS
+                        vm.openInProjects(
+                            when (resolved.kind) {
+                                "project" -> resolved.clientId?.let { ProjectsTarget.Project(it) }
+                                "shared" -> ProjectsTarget.Folder(SmartFolder.SHARED.key)
+                                else -> ProjectsTarget.Requests
+                            }
+                        )
+                    }
+
+                    else -> openInBrowser(link)
+                }
             }
             if (open != null) openRequest.value = null
         }
@@ -462,7 +499,7 @@ class MainActivity : FragmentActivity() {
                                             label = "tab"
                                         ) { current ->
                                             when (current) {
-                                                TAB_CLIENTS -> ClientsScreen(vm, onOpenItem = {
+                                                TAB_CLIENTS -> ProjectsScreen(vm, onOpenItem = {
                                                     showItem(it)
                                                 }, scrollToTop = reselected, onOpenAt = { id, ms ->
                                                     // A call note or an answer's source: the recording opens at that moment.
@@ -549,6 +586,9 @@ class MainActivity : FragmentActivity() {
         /** `shared:<local id>,<local id>`: the voice notes just shared to EchoLedger from another app (since v1.3). */
         const val OPEN_SHARED_PREFIX = "shared:"
 
+        /** `link:<url>`: a share, project or request link opened in the app (since v1.5). */
+        const val OPEN_LINK_PREFIX = "link:"
+
         const val NO_SCREEN_LOCK = "App lock is off because this phone has no screen lock."
 
         /** Keeps the lock state across a rotation; a snapshot from an earlier process is ignored (cold starts re-lock). */
@@ -581,7 +621,7 @@ private const val TAB_YOU = "you"
 /** Library · Clients · [record] · Activity · You (since v1.3). */
 private val MAIN_TABS = listOf(
     NavTab(TAB_LIBRARY, "Library", Icons.Outlined.VideoLibrary, Icons.Rounded.VideoLibrary),
-    NavTab(TAB_CLIENTS, "Clients", Icons.Outlined.Group, Icons.Rounded.Group),
+    NavTab(TAB_CLIENTS, "Projects", Icons.Outlined.Folder, Icons.Rounded.Folder),
     NavTab(TAB_ACTIVITY, "Activity", Icons.Outlined.Notifications, Icons.Rounded.Notifications),
     NavTab(TAB_YOU, "You", Icons.Outlined.AccountCircle, Icons.Rounded.AccountCircle)
 )

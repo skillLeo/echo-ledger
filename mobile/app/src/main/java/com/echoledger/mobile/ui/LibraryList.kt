@@ -229,24 +229,27 @@ fun RowScope.SelectionActions(
             moveOpen = false
             newClient = null
         }) {
-            DropdownMenuItem(text = { Text("No client") }, onClick = {
+            // Since v1.5: the Inbox (no project) and the projects as a tree, subfolders indented under their parent.
+            DropdownMenuItem(text = { Text("Inbox") }, onClick = {
                 moveOpen = false
                 onMove(null)
             })
-            folders.forEach { c ->
-                DropdownMenuItem(text = { Text("${Organise.badge(c.name, c.avatar)} · ${c.name}", maxLines = 1) }, onClick = {
+            ProjectTree.flatten(folders).forEach { (c, depth) ->
+                DropdownMenuItem(text = {
+                    Text("${"    ".repeat(depth)}${Organise.badge(c.name, c.avatar)} · ${c.name}", maxLines = 1)
+                }, onClick = {
                     moveOpen = false
                     onMove(c.id)
                 })
             }
             HorizontalDivider()
             if (newClient == null) {
-                DropdownMenuItem(text = { Text("New client…", color = Brand.AccentText) }, onClick = { newClient = "" })
+                DropdownMenuItem(text = { Text("New project…", color = Brand.AccentText) }, onClick = { newClient = "" })
             } else {
                 Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(newClient.orEmpty(), {
                         newClient = it.take(120)
-                    }, placeholder = { Text("Client name") }, singleLine = true, modifier = Modifier.width(180.dp))
+                    }, placeholder = { Text("Project name") }, singleLine = true, modifier = Modifier.width(180.dp))
                     TextButton(enabled = !newClient.isNullOrBlank(), onClick = {
                         onCreateClient(newClient!!.trim())
                         newClient = null

@@ -125,7 +125,7 @@ class MainActivityTest : AppTest() {
 
         awaitText("Weekly sync")
 
-        listOf("Library", "Clients", "Record", "Activity", "You").forEach { compose.onNodeWithContentDescription(it).assertIsDisplayed() }
+        listOf("Library", "Projects", "Record", "Activity", "You").forEach { compose.onNodeWithContentDescription(it).assertIsDisplayed() }
         compose.onNodeWithContentDescription("Library").assertIsSelected()
     }
 
@@ -147,8 +147,8 @@ class MainActivityTest : AppTest() {
         compose.onNodeWithContentDescription("You").performClick()
         awaitText("Game translate")
 
-        compose.onNodeWithContentDescription("Clients").performClick()
-        awaitText("Clients")
+        compose.onNodeWithContentDescription("Projects").performClick()
+        awaitText("Folders")
 
         compose.onNodeWithContentDescription("Activity").performClick()
         compose.onNodeWithContentDescription("Activity").assertIsSelected()

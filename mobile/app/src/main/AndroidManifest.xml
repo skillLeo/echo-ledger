@@ -73,6 +73,28 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Since v1.5: "Open in EchoLedger" on a share, project or request page (echoledger://open?link=…). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="echoledger" android:host="open" />
+            </intent-filter>
+            <!--
+              Since v1.5: the server's share (/s/), project (/p/) and request (/r/) links open here (Android App Links,
+              verified by the server's assetlinks.json). The host comes from the build (gradle property
+              echoledger.appLinkHost, kept out of the repository); without it the filter matches nothing.
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="${appLinkHost}" />
+                <data android:pathPrefix="/s/" />
+                <data android:pathPrefix="/p/" />
+                <data android:pathPrefix="/r/" />
+            </intent-filter>
             <!-- Game / Watch translate on and off from the launcher, Samsung Routines or a back tap. -->
             <meta-data
                 android:name="android.app.shortcuts"

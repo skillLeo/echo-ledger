@@ -364,6 +364,111 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onFailure { _message.value = it.message ?: "The client could not be created." }.getOrNull()
             ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
     }
+
+    // ---- Projects, filing rules and sharing (since v1.5) -----------------------------------------------------------
+
+    private val _projectsTarget = MutableStateFlow<ProjectsTarget?>(null)
+
+    /** Where the Projects tab should go next (a link opened in the app); the tab clears it once it went there. */
+    val projectsTarget: StateFlow<ProjectsTarget?> = _projectsTarget.asStateFlow()
+
+    fun openInProjects(target: ProjectsTarget?) {
+        _projectsTarget.value = target
+    }
+
+    private suspend fun reloadClients() {
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.clients()?.data }.getOrNull() }?.let { _clients.value = it }
+    }
+
+    /** A new project, inside [parentId] when given; the list is reloaded so the counts and paths are the server's. */
+    suspend fun createProject(name: String, parentId: String?): ClientDto? =
+        workspaceCall("The project could not be created.") { it.createProject(name.trim(), parentId) }?.also { reloadClients() }
+
+    suspend fun renameProject(id: String, name: String): Boolean = (
+        workspaceCall("The project could not be renamed.") {
+            it.updateProject(id, name = name.trim())
+        } != null
+        ).also { if (it) reloadClients() }
+
+    /** Moves a project into [parentId], or to the top level when it is null. */
+    suspend fun moveProject(id: String, parentId: String?): Boolean =
+        (workspaceCall("The project could not be moved.") { it.updateProject(id, parentId = parentId, toTop = parentId == null) } != null)
+            .also { if (it) reloadClients() }
+
+    /** Deletes a project: its recordings go to the Inbox and its subfolders up a level (said in the message). */
+    suspend fun deleteProject(id: String): Boolean {
+        val answer = workspaceCall("The project could not be deleted.") { it.deleteProject(id) } ?: return false
+        _message.value = buildString {
+            append("Project deleted")
+            if (answer.movedSessions > 0) append(" · ${countLabel(answer.movedSessions)} moved to the Inbox")
+        }
+        reloadClients()
+        refresh()
+        return true
+    }
+
+    suspend fun filingRules(clientId: String): List<com.echoledger.mobile.data.FilingRuleDto> =
+        workspaceCall("The filing rules could not be loaded.") { it.filingRules(clientId) }.orEmpty()
+
+    suspend fun addFilingRule(clientId: String, kind: String, value: String): com.echoledger.mobile.data.FilingRuleDto? =
+        workspaceCall("The rule could not be added.") { it.addFilingRule(clientId, kind, value.trim()) }
+
+    suspend fun deleteFilingRule(clientId: String, ruleId: Long): Boolean =
+        workspaceCall("The rule could not be removed.") { it.deleteFilingRule(clientId, ruleId) } != null
+
+    suspend fun createShareLink(
+        sessionId: String?,
+        clientId: String?,
+        audience: String,
+        password: String?,
+        people: List<String>,
+        allowDownload: Boolean,
+        expiresAt: String?
+    ): ShareLinkDto? = workspaceCall("The link could not be made.") {
+        it.createShareLink(sessionId, clientId, audience, password, people, allowDownload, expiresAt)
+    }
+
+    suspend fun projectShares(clientId: String): List<ShareLinkDto> =
+        workspaceCall("The links could not be loaded.") { it.projectShares(clientId).data }.orEmpty()
+
+    /** Sends a recording or a project to teammates; true when it went (the message says to how many). */
+    suspend fun sendToTeammates(sessionId: String?, clientId: String?, to: List<String>, note: String?): Boolean {
+        val sent = workspaceCall("It could not be sent.") { it.sendToTeammates(sessionId, clientId, to, note) } ?: return false
+        _message.value = if (sent == 1) "Sent to 1 person" else "Sent to $sent people"
+        return true
+    }
+
+    suspend fun sharedWithMe(): List<com.echoledger.mobile.data.SharedItemDto>? =
+        workspaceCall("Shared with me could not be loaded.") { it.sharedWithMe() }
+
+    /** "Save to my library": a copy that is yours; the library is synced so it shows at once. */
+    suspend fun saveShared(id: String): Boolean {
+        workspaceCall("It could not be saved.") { it.saveShared(id) } ?: return false
+        _message.value = "Saved to your library"
+        refresh()
+        return true
+    }
+
+    suspend fun removeShared(id: String): Boolean = workspaceCall("It could not be removed.") { it.removeShared(id) } != null
+
+    suspend fun requestLinks(): List<com.echoledger.mobile.data.RequestLinkDto>? =
+        workspaceCall("The request links could not be loaded.") { it.requestLinks() }
+
+    suspend fun createRequestLink(title: String, clientId: String?, expiresAt: String?): com.echoledger.mobile.data.RequestLinkDto? =
+        workspaceCall("The request link could not be made.") { it.createRequestLink(title.trim(), clientId, expiresAt) }
+
+    suspend fun revokeRequestLink(id: String): Boolean =
+        workspaceCall("The request link could not be turned off.") { it.revokeRequestLink(id) } != null
+
+    /** A smart folder from the server (`imported`, `shared`); null when it could not be loaded. */
+    suspend fun libraryFolder(folder: String): List<LibraryItem>? = withContext(Dispatchers.IO) {
+        runCatching { graph.api()?.libraryFolder(folder)?.data }.getOrNull()
+    }
+
+    /** What a link opened in the app is for this phone; null = open the web page. */
+    suspend fun resolveLink(link: String): com.echoledger.mobile.data.ResolvedLinkDto? = withContext(Dispatchers.IO) {
+        graph.api()?.resolveLink(link)
+    }
     // ---- Client workspaces (since 1.4) -----------------------------------------------------------------------------
 
     /** Runs one workspace request; null (and the server's words as the message) when it failed. */

@@ -8,7 +8,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -24,7 +26,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Description
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Group
+import androidx.compose.material.icons.rounded.Monitor
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -46,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -64,9 +70,11 @@ import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoEmptyState
 import com.echoledger.mobile.ui.design.EchoTopBar
+import com.echoledger.mobile.ui.design.IconTile
 import com.echoledger.mobile.ui.design.InlineBanner
 import com.echoledger.mobile.ui.design.LibraryItemRow
 import com.echoledger.mobile.ui.design.ListPadding
+import com.echoledger.mobile.ui.design.RecordingRow
 import com.echoledger.mobile.ui.design.SectionHeader
 import com.echoledger.mobile.ui.design.SegmentedControl
 import com.echoledger.mobile.ui.design.SkeletonRow
@@ -115,11 +123,24 @@ object ClientFiles {
     val LANGUAGES = listOf("en" to "English", "roman_urdu" to "Roman Urdu")
 }
 
-private val TABS = listOf("Overview", "Recordings", "Files", "Ask")
+private val TABS = listOf("Notes", "Recordings", "Files", "Screens", "Ask")
+
+/** The project menu (since v1.5): what each item asks the Projects screen to open. */
+internal val PROJECT_MENU = listOf(
+    "subfolder" to "New folder inside",
+    "rename" to "Rename",
+    "move" to "Move",
+    "share" to "Share link",
+    "send" to "Send to a teammate",
+    "rules" to "Filing rules",
+    "delete" to "Delete project"
+)
 
 /**
- * A client's page (since 1.4): Overview (AI notes switch, brief, memory, latest call notes, Copy for AI), Recordings,
- * Files and Ask. [onOpenAt] opens a recording at a moment (a note's or an answer's citation).
+ * A project's page (since 1.4 as a client's; since v1.5 with subfolders): Notes (AI notes switch, brief, memory,
+ * latest call notes, Copy for AI), Recordings, Files, Screens (screen moments, a later update) and Ask, with the
+ * breadcrumbs ([path]), its [subfolders] and the project menu ([onMenu] gets a [PROJECT_MENU] key). [onOpenAt] opens
+ * a recording at a moment (a note's or an answer's citation).
  */
 @Composable
 fun ClientWorkspaceScreen(
@@ -129,7 +150,13 @@ fun ClientWorkspaceScreen(
     today: LocalDate,
     onOpenItem: (LibraryItem) -> Unit,
     onOpenAt: (String, Long) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    path: List<ClientDto> = emptyList(),
+    subfolders: List<ClientDto> = emptyList(),
+    onOpenProject: (String?) -> Unit = {},
+    nested: Boolean = false,
+    onNested: (Boolean) -> Unit = {},
+    onMenu: ((String) -> Unit)? = null
 ) {
     BackHandler(onBack = onBack)
     var tab by rememberSaveable(client.id) { mutableIntStateOf(0) }
@@ -149,11 +176,47 @@ fun ClientWorkspaceScreen(
             reload++
         }
     }
+    var menuOpen by remember { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = ListPadding) {
         item(key = "top") {
             EchoTopBar(client.name, large = false, navigation = {
                 BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = Brand.Text)
+            }, actions = {
+                if (onMenu != null) {
+                    Box {
+                        BarIcon(Icons.Rounded.MoreVert, "Project menu", { menuOpen = true }, tint = Brand.Text)
+                        androidx.compose.material3.DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            PROJECT_MENU.forEach { (key, label) ->
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(label) }, onClick = {
+                                    menuOpen = false
+                                    onMenu(key)
+                                })
+                            }
+                        }
+                    }
+                }
             })
+        }
+        // Breadcrumbs (since v1.5): Projects › Acme › Invoices; each part opens that level.
+        if (path.isNotEmpty()) {
+            item(key = "crumbs") {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = Space.screen).horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val crumbs = listOf<ClientDto?>(null) + path
+                    crumbs.forEachIndexed { i, crumb ->
+                        if (i > 0) Text(" › ", style = LocalEchoType.current.labelM, color = Brand.Muted)
+                        Text(
+                            crumb?.name ?: "Projects",
+                            style = LocalEchoType.current.labelM,
+                            color = Brand.AccentText,
+                            maxLines = 1,
+                            modifier = Modifier.clickable(role = Role.Button) { onOpenProject(crumb?.id) }.padding(vertical = Space.s1)
+                        )
+                    }
+                }
+            }
         }
         item(key = "head") {
             Row(
@@ -167,10 +230,45 @@ fun ClientWorkspaceScreen(
                 }
             }
         }
+        // Its folders (since v1.5), above the tabs.
+        if (subfolders.isNotEmpty()) {
+            item(key = "h-folders") { SectionHeader("Folders") }
+            items(subfolders, key = { "sub-${it.id}" }) { folder ->
+                RecordingRow(
+                    title = folder.name,
+                    time = "",
+                    meta = countLabel(folder.nestedSessionCount ?: folder.sessionCount),
+                    tile = { IconTile(Icons.Rounded.Folder, Brand.AccentText) },
+                    onClick = { onOpenProject(folder.id) },
+                    onLongClick = { onOpenProject(folder.id) }
+                )
+            }
+        }
         item(key = "tabs") { SegmentedControl(TABS, tab, { tab = it }, Modifier.padding(horizontal = Space.screen, vertical = Space.s2)) }
         val w = workspace
         when {
+            tab == 3 -> item(key = "screens") {
+                EchoEmptyState(
+                    Icons.Rounded.Monitor,
+                    "Screen moments arrive in a later update",
+                    body = "What was on a shared screen during a meeting will show here, linked to the transcript."
+                )
+            }
+
             tab == 1 -> {
+                if (subfolders.isNotEmpty()) {
+                    item(key = "nested") {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = Space.screen), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "Include its folders",
+                                style = LocalEchoType.current.bodyM,
+                                color = Brand.Text,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Switch(checked = nested, onCheckedChange = onNested)
+                        }
+                    }
+                }
                 if (recordings.isEmpty()) {
                     item(key = "empty") {
                         EchoEmptyState(

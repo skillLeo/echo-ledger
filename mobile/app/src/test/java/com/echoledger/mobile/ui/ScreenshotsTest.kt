@@ -295,7 +295,7 @@ class ScreenshotsTest : ScreenTest() {
         seedLibrary()
         vm.refresh()
         pumpUntil("the clients to load") { vm.clients.value.isNotEmpty() }
-        shoot { ClientsScreen(vm, onOpenItem = {}) }
+        shoot { ProjectsScreen(vm, onOpenItem = {}) }
         capture("clients")
     }
 

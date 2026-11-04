@@ -159,6 +159,7 @@ fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, 
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     var shareDialog by remember { mutableStateOf(false) }
+    var sendSheet by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (transcriptId != null) {
             Column {
@@ -177,8 +178,11 @@ fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, 
             }
         }
         OutlinedButton(onClick = { shareDialog = true }) { Text("Share link") }
+        OutlinedButton(onClick = { sendSheet = true }) { Text("Send") }
     }
-    if (shareDialog) ShareLinkDialog(vm, sessionId, hasAudio) { shareDialog = false }
+    // Since v1.5: who may open the link (anyone, a password, chosen people), downloads, and how long it works.
+    if (shareDialog) ShareSheet(vm, sessionId = sessionId, clientId = null, title = "this recording", onDismiss = { shareDialog = false })
+    if (sendSheet) SendSheet(vm, sessionId = sessionId, clientId = null, title = "this recording", onDismiss = { sendSheet = false })
 }
 
 /** Make a view-only link (shown once, with Copy and the share sheet) and see or revoke the recording's links. */

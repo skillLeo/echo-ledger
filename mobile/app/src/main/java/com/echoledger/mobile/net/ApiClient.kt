@@ -10,19 +10,30 @@ import com.echoledger.mobile.data.ClientsResponse
 import com.echoledger.mobile.data.CompleteAnswer
 import com.echoledger.mobile.data.CreateSessionRequest
 import com.echoledger.mobile.data.CreateSessionResponse
+import com.echoledger.mobile.data.DeletedProjectAnswer
 import com.echoledger.mobile.data.DeviceTranscript
+import com.echoledger.mobile.data.FilingRuleDto
+import com.echoledger.mobile.data.FilingRuleResponse
+import com.echoledger.mobile.data.FilingRulesResponse
 import com.echoledger.mobile.data.FinishSessionRequest
 import com.echoledger.mobile.data.LibraryResponse
 import com.echoledger.mobile.data.LiveTranslateToken
 import com.echoledger.mobile.data.OpenSessionRequest
 import com.echoledger.mobile.data.RecordingUpload
 import com.echoledger.mobile.data.RegisterResponse
+import com.echoledger.mobile.data.RequestLinkDto
+import com.echoledger.mobile.data.RequestLinkResponse
+import com.echoledger.mobile.data.RequestLinksResponse
+import com.echoledger.mobile.data.SavedSharedAnswer
 import com.echoledger.mobile.data.SearchResponse
 import com.echoledger.mobile.data.SecurityResponse
+import com.echoledger.mobile.data.SentAnswer
 import com.echoledger.mobile.data.ServerConfig
 import com.echoledger.mobile.data.SessionDetailDto
 import com.echoledger.mobile.data.ShareLinkDto
 import com.echoledger.mobile.data.ShareListResponse
+import com.echoledger.mobile.data.SharedItemDto
+import com.echoledger.mobile.data.SharedResponse
 import com.echoledger.mobile.data.StorageDto
 import com.echoledger.mobile.data.SttTokenResponse
 import com.echoledger.mobile.data.TranscriptDto
@@ -222,6 +233,22 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(req, LibraryResponse.serializer())!!
     }
 
+    /** A smart folder the phone cannot work out from its own copy (since v1.5: `imported`, `shared`), first 100. */
+    suspend fun libraryFolder(folder: String): LibraryResponse {
+        val url = url("library").toHttpUrl().newBuilder().addQueryParameter("folder", folder).addQueryParameter("limit", "100").build()
+        val req = Request.Builder().url(url).header("Accept", "application/json")
+            .apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
+        return call(req, LibraryResponse.serializer())!!
+    }
+
+    /** `GET /api/links/resolve` (since v1.5): what a share, project or request link is for this phone; null = open the web page. */
+    suspend fun resolveLink(link: String): com.echoledger.mobile.data.ResolvedLinkDto? = runCatching {
+        val url = url("links/resolve").toHttpUrl().newBuilder().addQueryParameter("url", link).build()
+        val req = Request.Builder().url(url).header("Accept", "application/json")
+            .apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
+        call(req, com.echoledger.mobile.data.ResolvedLinkDto.serializer())
+    }.getOrNull()
+
     suspend fun transcript(id: String): TranscriptDto = call(request("transcripts/$id").get().build(), TranscriptDto.serializer())!!
 
     /** `POST /api/transcripts/{id}/suggestions/{n}` (since 1.4): accept (the words change) or dismiss a suggested fix. */
@@ -351,6 +378,108 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
             if (language == null) put("language", kotlinx.serialization.json.JsonNull) else put("language", language)
         }.toString().toRequestBody(jsonType)
         call(request("clients/$id").patch(body).build(), null as KSerializer<Unit>?)
+    }
+
+    // ---- Projects, filing rules and sharing (since v1.5) ----------------------------------------------------------
+
+    /** `POST /api/clients` with a parent: a new project, inside [parentId] when given. */
+    suspend fun createProject(name: String, parentId: String?): ClientDto {
+        val body = buildJsonObject {
+            put("name", name)
+            parentId?.let { put("parent_id", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("clients").post(body).build(), ClientResponse.serializer())!!.data
+    }
+
+    /** `PATCH /api/clients/{id}`: rename and/or move a project ([toTop] moves it to the top level). */
+    suspend fun updateProject(id: String, name: String? = null, parentId: String? = null, toTop: Boolean = false): ClientDto {
+        val body = buildJsonObject {
+            name?.let { put("name", it) }
+            if (toTop) put("parent_id", kotlinx.serialization.json.JsonNull) else parentId?.let { put("parent_id", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("clients/$id").patch(body).build(), ClientResponse.serializer())!!.data
+    }
+
+    /** `DELETE /api/clients/{id}`: its recordings go to the Inbox, its subfolders up a level. */
+    suspend fun deleteProject(id: String): DeletedProjectAnswer =
+        call(request("clients/$id").delete().build(), DeletedProjectAnswer.serializer())!!
+
+    suspend fun filingRules(clientId: String): List<FilingRuleDto> =
+        call(request("clients/$clientId/rules").get().build(), FilingRulesResponse.serializer())!!.data
+
+    suspend fun addFilingRule(clientId: String, kind: String, value: String): FilingRuleDto {
+        val body = buildJsonObject {
+            put("kind", kind)
+            put("value", value)
+        }.toString().toRequestBody(jsonType)
+        return call(request("clients/$clientId/rules").post(body).build(), FilingRuleResponse.serializer())!!.data
+    }
+
+    suspend fun deleteFilingRule(clientId: String, ruleId: Long) {
+        call(request("clients/$clientId/rules/$ruleId").delete().build(), null as KSerializer<Unit>?)
+    }
+
+    /**
+     * A share link of a recording ([sessionId]) or a project ([clientId]): [audience] `public`, `password` or `people`
+     * ([people] are emails), [allowDownload], and when it ends ([expiresAt] ISO, null = never). The URL is shown once.
+     */
+    suspend fun createShareLink(
+        sessionId: String?,
+        clientId: String?,
+        audience: String,
+        password: String?,
+        people: List<String>,
+        allowDownload: Boolean,
+        expiresAt: String?
+    ): ShareLinkDto {
+        val body = buildJsonObject {
+            put("audience", audience)
+            if (audience == "password") password?.let { put("password", it) }
+            if (audience == "people") put("people", buildJsonArray { people.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+            put("allow_download", allowDownload)
+            expiresAt?.let { put("expires_at", it) }
+        }.toString().toRequestBody(jsonType)
+        val path = if (clientId != null) "clients/$clientId/shares" else "sessions/$sessionId/shares"
+        return call(request(path).post(body).build(), ShareLinkDto.serializer())!!
+    }
+
+    /** `GET /api/shares?client_id=`: a project's links. */
+    suspend fun projectShares(clientId: String): ShareListResponse =
+        call(request("shares?client_id=$clientId").get().build(), ShareListResponse.serializer())!!
+
+    /** Send a recording ([sessionId]) or a project ([clientId]) to teammates by email; how many got it. */
+    suspend fun sendToTeammates(sessionId: String?, clientId: String?, to: List<String>, note: String?): Int {
+        val body = buildJsonObject {
+            put("to", buildJsonArray { to.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } })
+            note?.takeIf { it.isNotBlank() }?.let { put("note", it) }
+        }.toString().toRequestBody(jsonType)
+        val path = if (clientId != null) "clients/$clientId/send" else "sessions/$sessionId/send"
+        return call(request(path).post(body).build(), SentAnswer.serializer())!!.sent
+    }
+
+    suspend fun sharedWithMe(): List<SharedItemDto> = call(request("shared-with-me").get().build(), SharedResponse.serializer())!!.data
+
+    suspend fun saveShared(id: String): SavedSharedAnswer =
+        call(request("shared-with-me/$id/save").post("{}".toRequestBody(jsonType)).build(), SavedSharedAnswer.serializer())!!
+
+    suspend fun removeShared(id: String) {
+        call(request("shared-with-me/$id").delete().build(), null as KSerializer<Unit>?)
+    }
+
+    suspend fun requestLinks(): List<RequestLinkDto> =
+        call(request("request-links").get().build(), RequestLinksResponse.serializer())!!.data
+
+    suspend fun createRequestLink(title: String, clientId: String?, expiresAt: String?): RequestLinkDto {
+        val body = buildJsonObject {
+            put("title", title)
+            put("client_id", clientId?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
+            expiresAt?.let { put("expires_at", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("request-links").post(body).build(), RequestLinkResponse.serializer())!!.data
+    }
+
+    suspend fun revokeRequestLink(id: String) {
+        call(request("request-links/$id").delete().build(), null as KSerializer<Unit>?)
     }
 
     // ---- Client workspaces (since 1.4) -------------------------------------------------------------------------

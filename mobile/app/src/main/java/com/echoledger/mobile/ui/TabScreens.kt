@@ -297,79 +297,6 @@ private fun ActivityRow(item: ActivityItemDto, today: LocalDate, divider: Boolea
     )
 }
 
-/**
- * The Clients tab (since v1.3): every client with initials, how many recordings and the last call; a client's page
- * lists its recordings with the same rows as the Library. "+" adds a client.
- */
-@Composable
-fun ClientsScreen(
-    vm: MainViewModel,
-    onOpenItem: (LibraryItem) -> Unit,
-    scrollToTop: Int = 0,
-    today: LocalDate = LocalDate.now(),
-    onOpenAt: (String, Long) -> Unit = { _, _ -> }
-) {
-    val clients by vm.clients.collectAsState()
-    val library by vm.library.collectAsState()
-    var openId by rememberSaveable { mutableStateOf<String?>(null) }
-    var adding by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    val list = rememberLazyListState()
-    // The tab tapped again (since 1.3.2): a client page closes first; on the list it scrolls to the top.
-    LaunchedEffect(scrollToTop) {
-        if (scrollToTop > 0) {
-            if (openId != null) openId = null else list.animateScrollToItem(0)
-        }
-    }
-    val live = library.filter { !it.deleted }
-    val open = clients.firstOrNull { it.id == openId }
-    if (open != null) {
-        // The client's workspace (since 1.4): Overview · Recordings · Files · Ask.
-        val recordings = live.filter { it.client?.id == open.id }.sortedByDescending { it.startedAt }
-        ClientWorkspaceScreen(vm, open, recordings, today, onOpenItem, onOpenAt, onBack = { openId = null })
-        return
-    }
-    LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = ListPadding) {
-        item(key = "top") { EchoTopBar("Clients", actions = { BarIcon(Icons.Rounded.Add, "New client", { adding = true }) }) }
-        if (clients.isEmpty()) {
-            item(key = "empty") {
-                EchoEmptyState(
-                    Icons.Rounded.Group,
-                    "No clients yet",
-                    body = "A client keeps one person's or company's recordings together.",
-                    action = "New client",
-                    onAction = { adding = true }
-                )
-            }
-        }
-        val sorted = clients.sortedWith(
-            compareByDescending<com.echoledger.mobile.data.ClientDto> {
-                it.pinned
-            }.thenBy { it.name.lowercase() }
-        )
-        itemsIndexed(sorted, key = { _, it -> it.id }) { i, client ->
-            val mine = live.filter { it.client?.id == client.id }
-            val count = if (mine.isNotEmpty()) mine.size else client.sessionCount
-            val last = mine.maxByOrNull { it.startedAt.orEmpty() }?.startedAt
-            RecordingRow(
-                title = client.name,
-                time = "",
-                meta = listOfNotNull(countLabel(count), last?.let { "Last call ${rowTime(it, today)}" }).joinToString(" · "),
-                tile = { Avatar(client.name, size = 44.dp) },
-                onClick = { openId = client.id },
-                onLongClick = { openId = client.id },
-                divider = i < sorted.lastIndex
-            )
-        }
-    }
-    if (adding) {
-        NewClientDialog(onDismiss = { adding = false }) { name ->
-            adding = false
-            scope.launch { vm.createClient(name) }
-        }
-    }
-}
-
 internal fun countLabel(n: Int) = when (n) {
     0 -> "No recordings yet"
     1 -> "1 recording"
@@ -377,15 +304,3 @@ internal fun countLabel(n: Int) = when (n) {
 }
 
 private fun languageName(code: String) = com.echoledger.mobile.core.Languages.menu(code)
-
-@Composable
-private fun NewClientDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("New client") },
-        text = { OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Name") }, modifier = Modifier.fillMaxWidth()) },
-        confirmButton = { TextButton(onClick = { onCreate(name.trim()) }, enabled = name.isNotBlank()) { Text("Add") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
