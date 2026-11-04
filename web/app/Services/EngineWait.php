@@ -26,6 +26,9 @@ use Throwable;
  * it as a backup (`meta.route.backup`, reason `waited`); an engine that refuses the recording hands it on at once
  * (reason `rejected`, EngineFallbackJob). English, Arabic and the other languages keep the immediate fallback.
  *
+ * Pacing (Groq's limits, any language and kind): an engine with no room right now is tried again when it has room.
+ * That is never a failure; for Urdu and Auto it counts towards the same wait.
+ *
  * While a transcript waits, `meta.route.retry_at` / `retry_reason` say when and why; the scheduled run carries that
  * time, so a run queued by anyone else before it (stt:reconcile, a repeated upload) does nothing.
  */
@@ -145,6 +148,29 @@ final class EngineWait
         $seconds = $retryAfter !== null ? max(self::MIN_SECONDS, $retryAfter) : self::BACKOFF_MINUTES[min($waits, count(self::BACKOFF_MINUTES) - 1)] * 60;
         $this->schedule($transcript, self::earlier(now()->addSeconds($seconds), $deadline), $reason,
             [...$route, 'wait_started_at' => $since->toAtomString(), 'waits' => $waits + 1]);
+
+        return true;
+    }
+
+    /**
+     * Pacing (Groq's limits, App\Stt\GroqPacer): the engine has no room for this request for [$seconds]. Any transcript
+     * waits for it, without a failure and on the same engine; an Urdu or Auto final one only within its wait. False
+     * when that wait is over: the caller hands it on.
+     */
+    public function pace(Transcript $transcript, int $seconds): bool
+    {
+        $route = self::route($transcript);
+        $at = now()->addSeconds(max(self::MIN_SECONDS, $seconds));
+        if ($transcript->kind === TranscriptKind::Final && self::forUrdu($transcript)) {
+            $since = self::since($route) ?? now();
+            $deadline = $this->deadline($since);
+            if (! now()->lt($deadline)) {
+                return false;
+            }
+            $at = self::earlier($at, $deadline);
+            $route['wait_started_at'] = $since->toAtomString();
+        }
+        $this->schedule($transcript, $at, self::RATE_LIMITED, $route);
 
         return true;
     }

@@ -8,6 +8,7 @@ use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Models\Setting;
 use App\Rules\CertificatePin;
+use App\Stt\GroqPacer;
 use App\Stt\KeytermPolicy;
 use App\Stt\LanguageRouter;
 use Illuminate\Support\Facades\Schema;
@@ -55,6 +56,7 @@ final class SettingsRepository
         'accuracy.double_check_clients' => true,         // since v1.4: always for recordings filed under a client
         'client_ai.monthly_usd' => 5.0,                  // since v1.4: Claude spend of client workspaces per month
         'groq.model' => 'whisper-large-v3',              // not turbo (docs: console.groq.com/docs/model/whisper-large-v3)
+        'groq.plan' => GroqPacer::DEFAULT_PLAN,          // since v1.5: free | developer, the limits Groq requests are paced under
         'audio.ffmpeg_path' => null,                     // null = FFMPEG_PATH, then ~/bin/ffmpeg, then the system one
         'audio.chunk_seconds' => 600,                    // Whisper chunks are cut at pauses, at most this long
         'audio.silence_db' => -40,                       // quieter than this for 0.6 s is a pause

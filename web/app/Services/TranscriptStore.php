@@ -20,6 +20,7 @@ use App\Services\Views\TranscriptViews;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
+use App\Stt\Support\PartCache;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\DB;
 
@@ -30,6 +31,8 @@ final class TranscriptStore
 
     public function complete(Transcript $transcript, NormalizedTranscript $result): Transcript
     {
+        // The engine answered for the whole recording: the parts kept for a run that had to wait are not needed.
+        app(PartCache::class)->forget($transcript->id);
         // The right language every time: a result in a language the recording may not use, or in Hindi letters, is
         // run once more with the language forced (the billed first run stays in the usage ledger).
         if (($forced = $this->forcedLanguage($transcript, $result)) !== null) {

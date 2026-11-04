@@ -23,6 +23,7 @@ use App\Services\Workspaces\PlanLimits;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\SubmitResult;
+use App\Stt\Exceptions\ProviderBusy;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\ProviderNotConfigured;
 use App\Stt\LanguageChoice;
@@ -197,6 +198,12 @@ final class TranscribeFinalJob implements ShouldQueue
     {
         try {
             return $driver->submitFinal($request);
+        } catch (ProviderBusy $e) {
+            // The engine's limits have no room now (since v1.5, Groq): not a failure, the same engine goes on later where
+            // it stopped. An Urdu or Auto recording whose wait is over goes to the next engine, as after a rate limit.
+            if (! app(EngineWait::class)->pace($transcript, $e->retryAfterSeconds)) {
+                $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
+            }
         } catch (ProviderNotConfigured $e) {
             $store->fail($transcript, $e->getMessage(), TranscriptErrorCode::ProviderNotConfigured);
         } catch (ProviderJobFailed $e) {

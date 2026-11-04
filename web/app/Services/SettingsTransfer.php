@@ -49,6 +49,7 @@ final class SettingsTransfer
         'assemblyai.region',
         'assemblyai.streaming_model',
         'assemblyai.async_models',
+        'groq.plan',
         'elevenlabs.base_url',
         'elevenlabs.model_id',
         'azure.region',

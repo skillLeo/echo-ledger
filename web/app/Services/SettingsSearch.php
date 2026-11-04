@@ -32,6 +32,7 @@ final class SettingsSearch
         'routing' => ['recording', 'Engine per language', 'language urdu arabic english auto other engine routing order fallback backup wait hours busy retry groq whisper soniox elevenlabs assemblyai script'],
         'bookmarks' => ['recording', 'Bookmarks', 'tags markers one tap during a call'],
         'assemblyai' => ['recording', 'AssemblyAI', 'region eu us streaming model final transcript models'],
+        'groq' => ['recording', 'Groq (Whisper large-v3)', 'plan free developer rate requests audio seconds hour day pacing whisper'],
         'elevenlabs' => ['recording', 'ElevenLabs', 'scribe base url batch model'],
         'azure' => ['recording', 'Azure Speech', 'region endpoint mai transcribe model'],
         'whisper' => ['recording', 'whisper.cpp (self-hosted)', 'server url slice length vad'],

@@ -13,6 +13,7 @@ use App\Models\Transcript;
 use App\Services\ActivityFeed;
 use App\Services\EngineWait;
 use App\Stt\LanguageRouter;
+use App\Stt\Support\PartCache;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
@@ -101,6 +102,7 @@ final class EngineFallbackJob implements ShouldQueue
             ]);
             $session->update(['status' => SessionStatus::Processing, 'final_provider' => $next->value]);
         });
+        app(PartCache::class)->forget($transcript->id); // what the last engine answered so far is not used again
         TranscribeFinalJob::dispatch($transcript->id);
     }
 }

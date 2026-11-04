@@ -19,6 +19,7 @@ use App\Services\SettingsTransfer;
 use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
+use App\Stt\GroqPacer;
 use App\Stt\KeytermPolicy;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
@@ -145,6 +146,7 @@ class Settings extends Page
             'assemblyai_region' => $all['assemblyai.region'],
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
             'assemblyai_async_models' => $all['assemblyai.async_models'],
+            'groq_plan' => isset(GroqPacer::PLANS[$all['groq.plan'] ?? '']) ? $all['groq.plan'] : GroqPacer::DEFAULT_PLAN,
             'elevenlabs_base_url' => $all['elevenlabs.base_url'],
             'elevenlabs_model_id' => $all['elevenlabs.model_id'],
             'azure_region' => $all['azure.region'],
@@ -331,6 +333,10 @@ class Settings extends Page
                             'universal-streaming-multilingual' => 'Universal-Streaming Multilingual (budget)',
                         ])->required(),
                         TagsInput::make('assemblyai_async_models')->label('Final transcript models (priority order)')->columnSpanFull(),
+                    ]),
+                    $this->section('groq')->collapsible()->collapsed()->columns(2)->schema([
+                        Select::make('groq_plan')->label('Groq plan')->options(GroqPacer::PLAN_LABELS)->required()->selectablePlaceholder(false)
+                            ->helperText('Requests to Groq are paced under the plan\'s limits (Free: 20 requests a minute, 2 hours of audio an hour, 8 a day). The limits Groq reports in its answers always win. API Credentials → Groq shows this hour\'s and today\'s use.'),
                     ]),
                     $this->section('elevenlabs')->collapsible()->collapsed()->columns(2)->schema([
                         TextInput::make('elevenlabs_base_url')->label('API base URL')->url()->required()->rule(new ProviderEndpoint('elevenlabs')),
@@ -627,6 +633,7 @@ class Settings extends Page
             'assemblyai.region' => $state['assemblyai_region'],
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],
+            'groq.plan' => isset(GroqPacer::PLANS[$state['groq_plan'] ?? '']) ? $state['groq_plan'] : GroqPacer::DEFAULT_PLAN,
             'elevenlabs.base_url' => rtrim((string) $state['elevenlabs_base_url'], '/'),
             'elevenlabs.model_id' => $state['elevenlabs_model_id'],
             'azure.region' => $state['azure_region'] ?: null,
