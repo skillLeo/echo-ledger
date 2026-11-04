@@ -463,6 +463,32 @@ class MainActivityTest : AppTest() {
     }
 
     @Test
+    fun `a link to a recording that is not in this phone's library opens Shared with me instead`() {
+        serve()
+        server.on("GET", "/api/links/resolve", FakeServer.json(200, """{"kind":"session","session_id":"01JNOTINMYLIBRARY000000000"}"""))
+        server.on("GET", "/api/shared-with-me", FakeServer.json(200, """{"data":[]}"""))
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.library.refresh()
+        }
+        val saved = MainActivity.linkFallbackMs
+        MainActivity.linkFallbackMs = 200
+        try {
+            val link = "https://ledger.example.com/s/" + "a".repeat(43)
+            val intent = Intent(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_LINK_PREFIX + link)
+            val controller = buildActivity(MainActivity::class.java, intent).create()
+            controller.get().simulateBiometrics(false)
+            controller.start().postCreate(null).resume().visible()
+
+            // The Shared with me folder itself (its empty state), not just its name in a list.
+            awaitText("Nothing shared with you")
+            assertEquals(1, server.requestsTo("GET", "/api/links/resolve").size)
+        } finally {
+            MainActivity.linkFallbackMs = saved
+        }
+    }
+
+    @Test
     fun `opening with open=pending shows the calls waiting`() {
         serve()
         runBlocking {

@@ -8,6 +8,8 @@ import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -47,9 +50,11 @@ import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.ui.EchoLedgerTheme
 import com.echoledger.mobile.ui.LocalEchoType
+import com.echoledger.mobile.ui.Motion
 import com.echoledger.mobile.ui.Space
 import com.echoledger.mobile.ui.design.tabular
 import com.echoledger.mobile.ui.formatDuration
+import com.echoledger.mobile.ui.reduceMotion
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -201,9 +206,20 @@ fun AfterCallChip(
     val shape = RoundedCornerShape(50)
     val left = remember { Animatable(1f) }
     LaunchedEffect(visibleMs) { left.animateTo(0f, tween(visibleMs.toInt(), easing = LinearEasing)) }
+    // Since v1.5 (Phase 7): the chip rises into place and a kept call's check pops in; with Remove animations on,
+    // both are simply there.
+    val still = reduceMotion()
+    val shown = remember { Animatable(if (still) 1f else 0f) }
+    LaunchedEffect(Unit) { if (!still) shown.animateTo(1f, tween(Motion.SLOW, easing = Motion.EaseOut)) }
+    val pop = remember { Animatable(if (still) 1f else 0.4f) }
+    LaunchedEffect(Unit) { if (!still) pop.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow)) }
     val duration = formatDuration(durationMs).ifEmpty { "0:00" }
     Column(
         Modifier
+            .graphicsLayer {
+                alpha = shown.value
+                translationY = (1f - shown.value) * 24.dp.toPx()
+            }
             .widthIn(max = 420.dp)
             .clip(shape)
             .background(PillColors.background)
@@ -215,6 +231,17 @@ fun AfterCallChip(
             verticalAlignment = Alignment.CenterVertically
         ) {
             val label = if (mode == DecisionPopup.Mode.SAVED) "Saved · $title · $duration" else "$title · $duration"
+            if (mode == DecisionPopup.Mode.SAVED) {
+                Icon(
+                    Icons.Rounded.Check,
+                    contentDescription = null,
+                    tint = PillColors.accent,
+                    modifier = Modifier.padding(end = Space.s2).size(18.dp).graphicsLayer {
+                        scaleX = pop.value
+                        scaleY = pop.value
+                    }
+                )
+            }
             Text(
                 label,
                 style = type.labelL.tabular(),

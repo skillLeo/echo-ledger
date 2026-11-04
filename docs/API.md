@@ -737,10 +737,10 @@ when it is installed; the desktop app registers `echoledger://open?link=<url>` a
 EchoLedger". Without the app the web page opens as before.
 
 `GET /api/links/resolve?url=<a /s/, /p/ or /r/ link of this server>` — `library:read`: what the link is for the
-caller, so the app can open it in place: `200 {"kind": "session", "session_id": "…"}` (a recording of the caller's
-workspace, or one sent to the caller), `{"kind": "project", "client_id": "…"}`, `{"kind": "shared", "shared_id":
-"…"}` (an item in Shared with me) or `{"kind": "request", "request_link_id": "…"}` (one of the caller's request
-links). Anything else — someone else's link, revoked, expired, unknown — is `404 not_found`, and the app opens the
+caller, so the app can open it in place: `200 {"kind": "session", "session_id": "…"}` (a recording in the caller's
+own library), `{"kind": "project", "client_id": "…"}` (one of the caller's projects), `{"kind": "shared",
+"shared_id": "…"}` (something a teammate sent the caller, a recording or a project: its item in Shared with me) or
+`{"kind": "request", "request_link_id": "…"}` (one of the caller's request links). Anything else — someone else's link, revoked, expired, unknown — is `404 not_found`, and the app opens the
 web page instead. The token is checked like the page checks it; nothing about other workspaces is told.
 
 ### Screen moments (since v1.5)

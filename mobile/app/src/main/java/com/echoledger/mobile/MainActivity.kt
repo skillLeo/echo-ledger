@@ -110,6 +110,7 @@ import com.echoledger.mobile.ui.isDarkTheme
 import com.echoledger.mobile.ui.lockAvailability
 import com.echoledger.mobile.ui.promptUnlock
 import com.echoledger.mobile.ui.reconnectUnlockPrompt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
@@ -209,6 +210,8 @@ class MainActivity : FragmentActivity() {
         var openItemCache by remember { mutableStateOf<LibraryItem?>(null) }
         var openAtMs by rememberSaveable { mutableStateOf<Long?>(null) }
         var openSession by remember { mutableStateOf<String?>(null) }
+        // A recording a link resolved to, while it is not in this phone's library yet (see the fallback below).
+        var linkSession by remember { mutableStateOf<String?>(null) }
         var showSetup by rememberSaveable { mutableStateOf(false) }
         // Waiting for you (since 1.3.2): every call waiting for Keep or Discard on one screen.
         var showWaiting by rememberSaveable { mutableStateOf(false) }
@@ -335,7 +338,10 @@ class MainActivity : FragmentActivity() {
                 openRequest.value = null
                 val resolved = if (currentSettings.paired) vm.resolveLink(link) else null
                 when (resolved?.kind) {
-                    "session" -> resolved.sessionId?.let { openSession = it }
+                    "session" -> resolved.sessionId?.let {
+                        openSession = it
+                        linkSession = it
+                    }
 
                     "project", "shared", "request" -> {
                         showItem(null)
@@ -354,6 +360,19 @@ class MainActivity : FragmentActivity() {
                 }
             }
             if (open != null) openRequest.value = null
+        }
+        // An older server answers "session" for a recording a teammate sent (it is "shared" since the v1.5 contract):
+        // when it is not in the library after 8 s, Shared with me shows it instead of nothing happening.
+        LaunchedEffect(linkSession) {
+            val id = linkSession ?: return@LaunchedEffect
+            delay(linkFallbackMs)
+            if (openSession == id) {
+                openSession = null
+                showItem(null)
+                tab = TAB_CLIENTS
+                vm.openInProjects(ProjectsTarget.Folder(SmartFolder.SHARED.key))
+            }
+            linkSession = null
         }
         LaunchedEffect(openSession, libraryItems) {
             val id = openSession ?: return@LaunchedEffect
@@ -595,6 +614,9 @@ class MainActivity : FragmentActivity() {
 
         /** `link:<url>`: a share, project or request link opened in the app (since v1.5). */
         const val OPEN_LINK_PREFIX = "link:"
+
+        /** How long a link's recording may take to appear in the library before Shared with me opens instead. */
+        internal var linkFallbackMs = 8_000L
 
         const val NO_SCREEN_LOCK = "App lock is off because this phone has no screen lock."
 
