@@ -38,7 +38,7 @@ describe("command palette (B9)", () => {
     const props = renderPalette();
     const input = screen.getByRole("combobox");
     fireEvent.change(input, { target: { value: "go to" } });
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Library", "Go to Clients", "Go to Record", "Go to Activity", "Go to Settings"]);
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Library", "Go to Projects", "Go to Record", "Go to Activity", "Go to Settings"]);
     expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "ArrowDown" });

@@ -46,7 +46,7 @@ export function paletteCommands(status: AppStatus, actions: {
     { id: "copy", label: "Copy the last 2 minutes of captions", keywords: "clipboard", run: () => actions.run(() => api.copyLastMinutes(2)) },
     { id: "sync", label: "Sync the library", keywords: "refresh download", run: () => actions.run(api.refreshLibrary, "Library synced") },
     { id: "library", label: "Go to Library", keywords: "recordings transcripts", run: () => actions.go("library") },
-    { id: "clients", label: "Go to Clients", keywords: "workspace brief notes files ask", run: () => actions.go("clients") },
+    { id: "projects", label: "Go to Projects", keywords: "clients folders workspace brief notes files ask", run: () => actions.go("projects") },
     { id: "record", label: "Go to Record", keywords: "microphone detection", run: () => actions.go("record") },
     { id: "activity", label: "Go to Activity", keywords: "notifications bell", run: () => actions.go("activity") },
     { id: "settings", label: "Go to Settings", keywords: "preferences shortcuts captions language", run: () => actions.go("settings") },

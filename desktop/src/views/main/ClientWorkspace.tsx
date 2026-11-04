@@ -1,21 +1,30 @@
-// A client's workspace (docs/API.md "Client workspaces", since v1.4): the AI notes switch and budget, the brief, the
-// memory and the latest call notes (Overview), the client's recordings, its files and pasted instructions, and Ask.
+// A project's page (docs/API.md "Client workspaces" since v1.4, "Projects" since v1.5): breadcrumbs, its folders and
+// menu, then Recordings (search, sort, its folders' recordings too), Files, Notes (the AI notes switch and budget, Ask,
+// the brief and the memory), Screens (a later update) and, while AI notes are on, the call notes Claude wrote.
 // Anything the server is still writing or reading is asked for again every few seconds until it is done.
-import { useEffect, useMemo, useRef, useState } from "react";
-import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type BriefSections, type ClientAnswer, type ClientFile, type ClientFolder, type ClientWorkspace as Workspace, type LibraryItem, type MemoryKind, type MemoryLine } from "../../lib/ipc";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type BriefSections, type ClientAnswer, type ClientFile, type ClientFolder, type ClientWorkspace as Workspace, type LibraryItem, type MemoryKind, type MemoryLine, type SearchResult } from "../../lib/ipc";
 import { formatDuration, formatWhen, timestamp } from "../../lib/format";
 import { usePoll } from "../../lib/usePoll";
 import { notifyWhenAway } from "../../lib/notify";
 import { claimFileDrops } from "../../lib/dropTarget";
 import { listenForFileDrops } from "../../lib/ipc";
-import { AlertIcon, AppTileIcon, appKind, CloseIcon, CopyIcon, FileIcon, ImportIcon, PinIcon, PlusIcon, SendIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
+import { searchItems, sortItems, type SortKey } from "../../lib/library";
+import { ancestors, nestedCount, projectRecordings, projectTree } from "../../lib/projects";
+import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
+import { snippetParts } from "../../lib/player";
+import { AlertIcon, AppTileIcon, appKind, ChevronRightIcon, CloseIcon, CopyIcon, FileIcon, FolderIcon, ImportIcon, MonitorIcon, PinIcon, PlusIcon, SearchIcon, SendIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
 import { PlayIcon } from "../../components/ControlIcons";
 import { NotesSections } from "./CallNotes";
 import { ClientAvatar, clientSummary } from "./ClientAvatar";
+import { MenuButton, type MenuItem } from "./MenuButton";
 
 type Notify = (text: string, error?: boolean) => void;
-type Tab = "overview" | "recordings" | "files" | "ask";
-const TABS: readonly [Tab, string][] = [["overview", "Overview"], ["recordings", "Recordings"], ["files", "Files"], ["ask", "Ask"]];
+type Tab = "recordings" | "files" | "notes" | "screens" | "ai_notes";
+const TABS: readonly [Tab, string][] = [["recordings", "Recordings"], ["files", "Files"], ["notes", "Notes"], ["screens", "Screens"], ["ai_notes", "AI notes"]];
+
+/** The sort orders of a project's recordings: newest, oldest, name, length. */
+export const PROJECT_SORTS: readonly [SortKey, string][] = [["newest", "Newest first"], ["oldest", "Oldest first"], ["title", "Name A–Z"], ["longest", "Longest first"]];
 
 /** The brief's sections in the order the page shows them; `goal` is one line, the rest are lists. */
 export const BRIEF_FIELDS: readonly [keyof BriefSections, string][] = [
@@ -51,18 +60,39 @@ function fileKind(file: ClientFile): string {
   return ext === "pdf" ? "PDF" : ext === "docx" ? "Word" : ext === "md" ? "Markdown" : ext === "txt" ? "Text" : ext.toUpperCase();
 }
 
-export function ClientWorkspace({ client, recordings, notify, onOpenRecording, onClientChanged }: {
+export function ClientWorkspace({ client, projects = [client], items, notify, onOpenRecording, onClientChanged, onOpenProject, menu = [], actions = null, onMoveRecordings, rules = null }: {
   client: ClientFolder;
-  /** The client's recordings in the saved library, newest first. */
-  recordings: LibraryItem[];
+  /** Every project, for the breadcrumbs, the folders and the folders' recordings. */
+  projects?: readonly ClientFolder[];
+  /** The saved library. */
+  items: readonly LibraryItem[];
   notify: Notify;
   onOpenRecording: (id: string, ms?: number) => void;
   onClientChanged: (client: Partial<ClientFolder> & { id: string }) => void;
+  /** Opens another project (a breadcrumb or a folder); null = the Projects page. */
+  onOpenProject?: (id: string | null) => void;
+  /** The project menu (New folder inside, Rename, Move, Share, Delete …). */
+  menu?: readonly (MenuItem | null | false)[];
+  /** Buttons beside the title (Share). */
+  actions?: ReactNode;
+  /** Recordings dragged from the list onto a project in the sidebar. */
+  onMoveRecordings?: (ids: string[], projectId: string | null) => void;
+  /** The filing rules section of the Recordings tab (since v1.5). */
+  rules?: ReactNode;
 }) {
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>("recordings");
   const [ws, setWs] = useState<Workspace | null>(null);
   const [error, setError] = useState<string | null>(null);
   const previous = useRef<Workspace | null>(null);
+  const crumbs = useMemo(() => ancestors(projects, client.id), [projects, client.id]);
+  const subfolders = useMemo(() => projectTree(projects.filter((p) => p.parent_id === client.id)).map((n) => n.project), [projects, client.id]);
+  const own = useMemo(() => projectRecordings(items, projects, client.id, false), [items, projects, client.id]);
+  // AI notes are shown while they are on for the project; before the workspace has loaded, as the list says.
+  const aiNotes = ws ? ws.client.ai_notes : client.ai_notes !== false;
+  const tabs = TABS.filter(([id]) => id !== "ai_notes" || aiNotes);
+  useEffect(() => {
+    if (tab === "ai_notes" && !aiNotes) setTab("notes");
+  }, [tab, aiNotes]);
 
   const load = async () => {
     try {
@@ -103,31 +133,57 @@ export function ClientWorkspace({ client, recordings, notify, onOpenRecording, o
     }
   };
 
+  const total = Math.max(nestedCount(client, items, projects), own.length);
   return (
     <>
+      {onOpenProject && (
+        <nav className="crumbs" aria-label="Where this project is">
+          <button type="button" className="crumb" onClick={() => onOpenProject(null)}>Projects</button>
+          {crumbs.map((c) => (
+            <span key={c.id} className="crumb-step">
+              <ChevronRightIcon size={12} aria-hidden="true" />
+              <button type="button" className="crumb" onClick={() => onOpenProject(c.id)}>{c.name}</button>
+            </span>
+          ))}
+          <span className="crumb-step"><ChevronRightIcon size={12} aria-hidden="true" /><span className="crumb current" aria-current="page">{client.name}</span></span>
+        </nav>
+      )}
       <div className="workspace-head">
         <ClientAvatar client={client} large />
         <div style={{ minWidth: 0, flex: 1 }}>
           <h1 className="page-title">{client.name}</h1>
-          <div className="small muted">{clientSummary(Math.max(recordings.length, client.session_count ?? 0), recordings[0]?.started_at)}</div>
+          <div className="small muted">{clientSummary(total, projectRecordings(items, projects, client.id, true)[0]?.started_at)}</div>
         </div>
+        {actions}
         <button type="button" className="btn" onClick={() => void copyForAi()} title="The brief, memory and recent call notes as one text, ready to paste into a chat">
           <SparkleIcon size={16} />Copy for AI
         </button>
+        {menu.some(Boolean) && <MenuButton label="Project menu" items={menu} />}
       </div>
-      <div className="tabs" role="tablist" aria-label={`${client.name} workspace`}>
-        {TABS.map(([id, label]) => (
+      {subfolders.length > 0 && onOpenProject && (
+        <div className="subfolders" role="list" aria-label="Folders">
+          {subfolders.map((f) => (
+            <span role="listitem" key={f.id}>
+              <button type="button" className="folder-chip" onClick={() => onOpenProject(f.id)}>
+                <FolderIcon size={16} /><span>{f.name}</span><span className="muted">{nestedCount(f, items, projects) || ""}</span>
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="tabs" role="tablist" aria-label={`${client.name} project`}>
+        {tabs.map(([id, label]) => (
           <button key={id} type="button" role="tab" id={`ws-tab-${id}`} className="tab" aria-selected={tab === id} aria-controls={`ws-panel-${id}`} onClick={() => setTab(id)}>{label}</button>
         ))}
       </div>
       <div role="tabpanel" id={`ws-panel-${tab}`} aria-labelledby={`ws-tab-${tab}`}>
-        {error && !ws && (
+        {error && !ws && tab !== "recordings" && tab !== "screens" && (
           <div className="notice error sync-error" role="alert">
             <span>Couldn't load {client.name}'s workspace. {error}</span>
             <button type="button" className="btn compact" onClick={() => void load()}>Retry</button>
           </div>
         )}
-        {!ws && !error && tab !== "recordings" && (
+        {!ws && !error && tab !== "recordings" && tab !== "screens" && (
           <div aria-busy="true">
             <span className="sr-only">Loading the workspace…</span>
             <span className="skeleton" style={{ width: "60%", height: 14, marginBottom: 10 }} />
@@ -135,18 +191,28 @@ export function ClientWorkspace({ client, recordings, notify, onOpenRecording, o
             <span className="skeleton" style={{ width: "45%", height: 12 }} />
           </div>
         )}
-        {tab === "overview" && ws && <Overview ws={ws} client={client} notify={notify} onChange={setWs} onReload={load} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} />}
-        {tab === "recordings" && <Recordings recordings={recordings} clientName={client.name} onOpen={(id) => onOpenRecording(id)} />}
+        {tab === "recordings" && (
+          <Recordings client={client} projects={projects} items={items} hasFolders={subfolders.length > 0} onOpen={(id, ms) => onOpenRecording(id, ms)} onMove={onMoveRecordings} rules={rules} />
+        )}
         {tab === "files" && ws && <Files ws={ws} clientId={client.id} notify={notify} onChange={setWs} />}
-        {tab === "ask" && ws && <Ask ws={ws} clientId={client.id} onOpenRecording={onOpenRecording} />}
+        {tab === "notes" && ws && <Notes ws={ws} client={client} notify={notify} onChange={setWs} onReload={load} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} />}
+        {tab === "screens" && (
+          <div className="empty-state" data-testid="screens-empty">
+            <span className="empty-icon"><MonitorIcon size={26} /></span>
+            <span className="empty-title">Screen moments arrive in a later update</span>
+            <p>What was on a shared screen during a meeting will show here, next to the moment in the transcript.</p>
+          </div>
+        )}
+        {tab === "ai_notes" && ws && <AiNotes ws={ws} clientName={client.name} onOpenRecording={onOpenRecording} />}
       </div>
     </>
   );
 }
 
-// ---- Overview --------------------------------------------------------------------------------------------------
+// ---- Notes -----------------------------------------------------------------------------------------------------
 
-function Overview({ ws, client, notify, onChange, onReload, onOpenRecording, onClientChanged }: {
+/** The AI notes switch and the month's AI budget, Ask, the brief and the memory. */
+function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClientChanged }: {
   ws: Workspace;
   client: ClientFolder;
   notify: Notify;
@@ -186,26 +252,43 @@ function Overview({ ws, client, notify, onChange, onReload, onOpenRecording, onC
           </div>
         </div>
       </section>
+      <section className="ws-section" aria-labelledby="ws-ask">
+        <h3 id="ws-ask">Ask</h3>
+        <Ask ws={ws} clientId={client.id} onOpenRecording={onOpenRecording} />
+      </section>
       <Brief ws={ws} clientId={client.id} notify={notify} onChange={onChange} onReload={onReload} />
       <Memory ws={ws} clientId={client.id} notify={notify} onChange={onChange} onOpenRecording={onOpenRecording} />
-      <section className="ws-section" aria-labelledby="ws-notes">
-        <h3 id="ws-notes">Latest call notes</h3>
-        {ws.notes.length === 0 && <p className="small muted">Notes appear here after a call filed under {client.name} is kept and transcribed.</p>}
-        {ws.notes.slice(0, 3).map((note) => (
-          <div key={note.id} className="card" style={{ marginBottom: 10 }}>
-            <div className="row">
-              <b style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{note.session?.title ?? "Call"}</b>
-              <span className="small muted">{formatWhen(note.session?.started_at ?? note.created_at ?? undefined)}{note.session?.duration_ms ? ` · ${formatDuration(note.session.duration_ms)}` : ""}</span>
-              <span className="spacer" />
-              <button type="button" className="btn text compact" onClick={() => onOpenRecording(note.session_id)}>Open</button>
-            </div>
-            {note.status === "pending" && <div className="row small muted" role="status"><span className="spinner" aria-hidden="true" />Writing the notes…</div>}
-            {(note.status === "failed" || note.status === "skipped") && <p className="small muted">{note.error ?? "No notes were written for this call."}</p>}
-            {note.status === "ready" && <NotesSections notes={note} onOpen={(ms) => onOpenRecording(note.session_id, ms)} />}
-          </div>
-        ))}
-      </section>
     </>
+  );
+}
+
+// ---- AI notes --------------------------------------------------------------------------------------------------
+
+/** The call notes Claude wrote after the project's calls, newest first (the last 10 the server keeps here). */
+function AiNotes({ ws, clientName, onOpenRecording }: { ws: Workspace; clientName: string; onOpenRecording: (id: string, ms?: number) => void }) {
+  return (
+    <section className="ws-section" aria-label="Call notes">
+      {ws.notes.length === 0 && (
+        <div className="empty-state">
+          <span className="empty-icon"><SparkleIcon size={26} /></span>
+          <span className="empty-title">No call notes yet</span>
+          <p>Notes appear here after a call filed under {clientName} is kept and transcribed.</p>
+        </div>
+      )}
+      {ws.notes.map((note) => (
+        <div key={note.id} className="card" style={{ marginBottom: 10 }}>
+          <div className="row">
+            <b style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{note.session?.title ?? "Call"}</b>
+            <span className="small muted">{formatWhen(note.session?.started_at ?? note.created_at ?? undefined)}{note.session?.duration_ms ? ` · ${formatDuration(note.session.duration_ms)}` : ""}</span>
+            <span className="spacer" />
+            <button type="button" className="btn text compact" onClick={() => onOpenRecording(note.session_id)}>Open</button>
+          </div>
+          {note.status === "pending" && <div className="row small muted" role="status"><span className="spinner" aria-hidden="true" />Writing the notes…</div>}
+          {(note.status === "failed" || note.status === "skipped") && <p className="small muted">{note.error ?? "No notes were written for this call."}</p>}
+          {note.status === "ready" && <NotesSections notes={note} onOpen={(ms) => onOpenRecording(note.session_id, ms)} />}
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -395,30 +478,105 @@ function Memory({ ws, clientId, notify, onChange, onOpenRecording }: {
 
 // ---- Recordings ------------------------------------------------------------------------------------------------
 
-function Recordings({ recordings, clientName, onOpen }: { recordings: LibraryItem[]; clientName: string; onOpen: (id: string) => void }) {
-  if (recordings.length === 0) {
-    return (
-      <div className="empty-state">
-        <span className="empty-icon"><FileIcon size={26} /></span>
-        <span className="empty-title">No recordings yet</span>
-        <p>Recordings filed under {clientName} show up here.</p>
-      </div>
-    );
-  }
+/**
+ * The project's recordings (its folders' too when asked), found by the words of their titles and previews and, from
+ * two letters on, by what was said in them; sorted newest, oldest, by name or by length. A row can be dragged onto
+ * another project in the sidebar.
+ */
+function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules }: {
+  client: ClientFolder;
+  projects: readonly ClientFolder[];
+  items: readonly LibraryItem[];
+  hasFolders: boolean;
+  onOpen: (id: string, ms?: number) => void;
+  onMove?: (ids: string[], projectId: string | null) => void;
+  rules?: ReactNode;
+}) {
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<SortKey>("newest");
+  const [nested, setNested] = useState(false);
+  const [found, setFound] = useState<SearchResult["data"]>([]);
+  const withFolders = nested && hasFolders;
+  const all = useMemo(() => projectRecordings(items, projects, client.id, withFolders), [items, projects, client.id, withFolders]);
+  const shown = useMemo(() => sortItems(searchItems(all, query), sort), [all, query, sort]);
+  const folderName = (item: LibraryItem) => (item.client && item.client.id !== client.id ? item.client.name : null);
+  // What was said: the server's transcript search, for this project.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      setFound([]);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      api.searchLibrary({ q, clientId: client.id }).then((r) => alive && setFound(r.data.filter((d) => d.hits.length > 0))).catch(() => alive && setFound([]));
+    }, 350);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [query, client.id]);
+  const startDrag = (e: React.PointerEvent, item: LibraryItem) => {
+    if (!onMove) return;
+    beginRecordingDrag(e, () => ({ ids: [item.id], label: dragLabel([item.title]) }), onMove);
+  };
   return (
-    <div className="ws-recordings group">
-      {recordings.map((item) => (
-        <button key={item.id} type="button" className="item" onClick={() => onOpen(item.id)}>
-          <div className="row">
-            <span className={`avatar app-${appKind(item.source_app)}`}><AppTileIcon app={item.source_app} /></span>
-            <div className="item-main">
-              <div className="item-line"><span className="item-title">{item.title}</span><span className="item-time">{formatWhen(item.started_at).split(" · ")[0]}</span></div>
-              <div className="item-sub">{[formatDuration(item.duration_ms), item.language_chip && item.language_chip !== "Auto" ? item.language_chip : null].filter(Boolean).join(" · ")}</div>
+    <>
+      <div className="toolbar project-tools">
+        <label className="searchbox">
+          <SearchIcon size={18} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${client.name}`} aria-label="Search in this project" />
+          {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search">×</button>}
+        </label>
+        <select className="chip" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort recordings">
+          {PROJECT_SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+        </select>
+        {hasFolders && <label className="check"><input type="checkbox" checked={nested} onChange={(e) => setNested(e.target.checked)} />Include its folders</label>}
+      </div>
+      {rules}
+      {found.length > 0 && (
+        <div className="group search-hits" role="region" aria-label="Matches in transcripts">
+          <div className="group-label">In transcripts</div>
+          {found.map((r) => (
+            <div key={r.session.id} className="hit-card">
+              <div className="item-title">{r.session.title}</div>
+              {r.hits.map((h) => (
+                <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="hit" onClick={() => onOpen(r.session.id, h.start_ms)}
+                  aria-label={`Play ${r.session.title ?? "recording"} from ${timestamp(h.start_ms)}`}>
+                  <span className="seg-time">{timestamp(h.start_ms)}</span>
+                  <span className="hit-snippet" dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}</span>
+                </button>
+              ))}
             </div>
-          </div>
-        </button>
-      ))}
-    </div>
+          ))}
+        </div>
+      )}
+      {all.length === 0 ? (
+        <div className="empty-state">
+          <span className="empty-icon"><FileIcon size={26} /></span>
+          <span className="empty-title">No recordings yet</span>
+          <p>Recordings filed under {client.name} show up here. Drag recordings from the Library onto it in the sidebar, or use Move.</p>
+        </div>
+      ) : shown.length === 0 ? (
+        <div className="empty">Nothing matches. Try other words.</div>
+      ) : (
+        <div className="ws-recordings group" role="list" aria-label={`${client.name} recordings`}>
+          {shown.map((item) => (
+            <div role="listitem" key={item.id}>
+              <button type="button" className="item" onPointerDown={(e) => startDrag(e, item)} onClick={() => { if (!dragJustEnded()) onOpen(item.id); }}>
+                <div className="row">
+                  <span className={`avatar app-${appKind(item.source_app)}`}><AppTileIcon app={item.source_app} /></span>
+                  <div className="item-main">
+                    <div className="item-line"><span className="item-title">{item.title}</span><span className="item-time">{formatWhen(item.started_at).split(" · ")[0]}</span></div>
+                    <div className="item-sub">{[formatDuration(item.duration_ms), item.language_chip && item.language_chip !== "Auto" ? item.language_chip : null, folderName(item) ? `in ${folderName(item)}` : null].filter(Boolean).join(" · ")}</div>
+                  </div>
+                </div>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

@@ -148,6 +148,18 @@ export const SparkleIcon = (p: IconProps) => (
 export const ChevronRightIcon = (p: IconProps) => (
   <Svg {...p}><path d="m9 6 6 6-6 6" /></Svg>
 );
+/** A project (a client folder, since v1.5). */
+export const FolderIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M3.5 7a2 2 0 0 1 2-2h3.8l2 2.2h7.2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V7z" /></Svg>
+);
+/** The Inbox: recordings in no project. */
+export const InboxIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M3.5 13.5 6.2 5.5h11.6l2.7 8M3.5 13.5V18a1.5 1.5 0 0 0 1.5 1.5h14a1.5 1.5 0 0 0 1.5-1.5v-4.5M3.5 13.5h4.8l1.4 2.3h4.6l1.4-2.3h4.8" /></Svg>
+);
+/** A share or request link. */
+export const LinkIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M10.2 13.8a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.1 1.1M13.8 10.2a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.1-1.1" /></Svg>
+);
 export const HourglassIcon = (p: IconProps) => (
   <Svg {...p}><path d="M6.5 3h11M6.5 21h11M8 3v3.5a4 4 0 0 0 1.6 3.2L12 11.5l2.4-1.8A4 4 0 0 0 16 6.5V3M8 21v-3.5a4 4 0 0 1 1.6-3.2l2.4-1.8 2.4 1.8a4 4 0 0 1 1.6 3.2V21" /></Svg>
 );

@@ -197,28 +197,59 @@ describe("MainApp navigation", () => {
 });
 
 describe("MainApp sidebar and keys", () => {
-  it("lists Library, Clients, Record, Activity and Settings, and collapses to icons that keep their names", async () => {
+  it("lists Library, Projects, Record, Activity and Settings, and collapses to icons that keep their names", async () => {
     await renderPaired();
-    expect([...document.querySelectorAll(".nav .nav-btn")].map((b) => b.textContent)).toEqual(["Library", "Clients", "Record", "Activity", "Settings"]);
+    expect([...document.querySelectorAll(".nav .nav-btn")].map((b) => b.textContent)).toEqual(["Library", "Projects", "Record", "Activity", "Settings"]);
     fireEvent.click(screen.getByRole("button", { name: "Collapse the sidebar" }));
     expect(document.querySelector(".app")).toHaveClass("collapsed");
-    expect(nav("Clients")).toHaveAttribute("title", "Clients");
+    expect(nav("Projects")).toHaveAttribute("title", "Projects");
     expect(window.localStorage.getItem("echoledger-sidebar")).toBe("collapsed");
     fireEvent.click(screen.getByRole("button", { name: "Expand the sidebar" }));
     expect(document.querySelector(".app")).not.toHaveClass("collapsed");
     expect(window.localStorage.getItem("echoledger-sidebar")).toBe("expanded");
   });
 
-  it("opens Clients and Activity from the sidebar", async () => {
+  it("opens Projects and Activity from the sidebar", async () => {
     respond("activity_list", { data: [], unread_count: 0 });
     respond("pending_list", []);
     await renderPaired();
-    fireEvent.click(nav("Clients"));
-    expect(await screen.findByRole("heading", { name: "Clients" })).toBeInTheDocument();
-    expect(nav("Clients")).toHaveAttribute("aria-current", "page");
+    fireEvent.click(nav("Projects"));
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    expect(nav("Projects")).toHaveAttribute("aria-current", "page");
     fireEvent.click(nav("Activity"));
     expect(await screen.findByRole("heading", { name: "Activity" })).toBeInTheDocument();
     await flushAsync();
+  });
+
+  it("shows the project tree under Projects in the sidebar and opens a project from it", async () => {
+    mockBackend();
+    respond("list_clients", { data: [
+      { id: "c1", name: "Acme Holdings", parent_id: null, nested_session_count: 3 },
+      { id: "c3", name: "Invoices", parent_id: "c1", nested_session_count: 1 },
+    ] });
+    respond("client_workspace", { data: { client: { id: "c3", name: "Invoices", ai_notes: true }, ai: { configured: true, spent_usd: 0, budget_usd: 5, client_spent_usd: 0 }, brief: null, memory: [], notes: [], files: [] } });
+    render(<MainApp />);
+    const tree = await screen.findByRole("list", { name: "Projects in the sidebar" });
+    expect(within(tree).getByRole("button", { name: "Acme Holdings" })).toBeInTheDocument();
+    expect(within(tree).getByText("3")).toBeInTheDocument();
+    expect(within(tree).queryByRole("button", { name: "Invoices" })).not.toBeInTheDocument();
+    fireEvent.click(within(tree).getByRole("button", { name: "Show the folders in Acme Holdings" }));
+    fireEvent.click(within(tree).getByRole("button", { name: "Invoices" }));
+    expect(await screen.findByRole("heading", { name: "Invoices" })).toBeInTheDocument();
+    expect(within(tree).getByRole("button", { name: "Invoices" })).toHaveAttribute("aria-current", "true");
+    expect(within(sidebar()).getByRole("button", { name: "Projects" })).toHaveAttribute("aria-current", "page");
+    // The tree stays expanded on this computer.
+    expect(JSON.parse(window.localStorage.getItem("echoledger-projects-open") ?? "[]")).toEqual(["c1"]);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse the sidebar" }));
+    expect(screen.queryByRole("list", { name: "Projects in the sidebar" })).not.toBeInTheDocument();
+    await flushAsync();
+  });
+
+  it("reads the projects again shortly after the library changes", async () => {
+    await renderPaired();
+    const before = callsOf("list_clients").length;
+    await emitEvent("library:updated", 1);
+    await waitFor(() => expect(callsOf("list_clients").length).toBe(before + 1), { timeout: 3000 });
   });
 
   it("N starts a voice note, never while typing; Ctrl+K opens search", async () => {
