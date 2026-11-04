@@ -19,6 +19,7 @@ use App\Services\Views\ClaudeTranscriptConverter;
 use App\Services\Views\TooLongForOneRequest;
 use App\Services\Views\TranscriptConverter;
 use App\Services\Views\TranscriptViews;
+use App\Services\Views\WordByWordConverter;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
 use Filament\Facades\Filament;
@@ -152,6 +153,60 @@ it('asks once more for the lines that fail, and keeps the original words where t
     $state = app(TranscriptViews::class)->state($transcript->fresh());
     expect($fake->calls)->toBe(2)
         ->and($state['roman'])->toBe(['aap kaise hain', 'main bilkul theek hoon', 'کل صبح دس بجے آفس میں ملتے ہیں'])
+        ->and($state['kept'])->toBe(['roman' => [2]]);
+});
+
+it('lets Roman Urdu have more words than the original (split words) but hardly fewer (dropped words), since v1.5', function () {
+    $source = implode(' ', array_fill(0, 40, 'لفظ'));
+    $roman = fn (int $n): string => implode(' ', array_fill(0, $n, 'lafz'));
+    expect(TranscriptViews::failures($source, ['roman' => $roman(44)], ['roman'], 'ur'))->toBe([])
+        ->and(TranscriptViews::failures($source, ['roman' => $roman(38)], ['roman'], 'ur'))->toBe([])
+        ->and(TranscriptViews::failures($source, ['roman' => $roman(36)], ['roman'], 'ur'))->toBe(['roman'])
+        ->and(TranscriptViews::wordList('کل [unclear: دو لفظ] ٹھیک [?ہے]،'))->toBe(['کل', '[unclear: دو لفظ]', 'ٹھیک', '[?ہے]،']);
+});
+
+it('redoes Roman Urdu word by word when a line lost words twice, and keeps the original when the words still do not match', function () {
+    app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+    $fake = new class implements TranscriptConverter, WordByWordConverter
+    {
+        public int $calls = 0;
+
+        /** @var array<int, list<string>> */
+        public array $byWord = [];
+
+        public function convert(array $lines, string $language, array $views): array
+        {
+            $this->calls++;
+            $out = [];
+            foreach ($lines as $i => $text) {
+                // Line 0 is right; lines 1 and 2 lose half their words every time.
+                $out[$i] = ['roman' => $i === 0 ? 'aap kaise hain' : 'theek', 'urdu' => $text, 'english' => 'E: '.$text];
+            }
+
+            return ['lines' => $out, 'input_tokens' => 10, 'output_tokens' => 10, 'model' => 'claude-sonnet-5-5'];
+        }
+
+        public function romanWords(array $lines, string $language): array
+        {
+            $this->byWord = $lines;
+
+            // Line 1: one entry per word; line 2: one entry short.
+            return ['lines' => [1 => ['main', 'bilkul', 'theek', 'hoon'], 2 => ['kal', 'subah']], 'input_tokens' => 5, 'output_tokens' => 5, 'model' => 'claude-sonnet-5-5'];
+        }
+    };
+    app()->instance(TranscriptConverter::class, $fake);
+    $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'ur', 'status' => 'completed']);
+    $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'groq', 'status' => TranscriptStatus::Completed, 'language' => 'ur', 'text' => 'x', 'segments' => [
+        ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'آپ کیسے ہیں'],
+        ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 1000, 'end_ms' => 1900, 'text' => 'میں بالکل ٹھیک ہوں'],
+        ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 2000, 'end_ms' => 2900, 'text' => 'کل صبح دس بجے ملتے ہیں'],
+    ]]);
+
+    app(TranscriptViews::class)->make($transcript);
+
+    $state = app(TranscriptViews::class)->state($transcript->fresh());
+    expect($fake->byWord)->toBe([1 => ['میں', 'بالکل', 'ٹھیک', 'ہوں'], 2 => ['کل', 'صبح', 'دس', 'بجے', 'ملتے', 'ہیں']])
+        ->and($state['roman'])->toBe(['aap kaise hain', 'main bilkul theek hoon', 'کل صبح دس بجے ملتے ہیں'])
         ->and($state['kept'])->toBe(['roman' => [2]]);
 });
 

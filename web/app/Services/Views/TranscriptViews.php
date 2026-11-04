@@ -41,8 +41,17 @@ final class TranscriptViews
     /** "[unclear]", "[unclear: …]" and "[?word]" (a word the engine was unsure of): kept on the same word in every view. */
     private const MARKER = '/\[(?:unclear(?::[^\]]*)?|\?[^\]]+)\]/u';
 
-    /** A transliteration may differ from the original by this share of its words (and always by 2). */
+    /**
+     * A transliteration may have this share more words than the original (and always 2): one Urdu word is often two
+     * in Roman Urdu ("کیلئے" → "ke liye").
+     */
     private const WORD_SLACK = 0.25;
+
+    /**
+     * Since v1.5 it may have only this share fewer (and always 2: "واٹس ایپ" → "WhatsApp"): fewer words than that means
+     * words were dropped (the Roman Urdu check found long lines that lost 10 % of their words within the old slack).
+     */
+    private const DROP_SLACK = 0.05;
 
     /** Source characters per request; a chunk whose answer does not fit is split again. */
     public const CHUNK_CHARS = 6000;
@@ -104,11 +113,13 @@ final class TranscriptViews
         foreach ($views as $view) {
             $text = trim((string) ($out[$view] ?? ''));
             $transliteration = $view === 'roman' || ($view === 'urdu' && $language === 'ur');
-            $slack = max(2, (int) round($words * self::WORD_SLACK));
+            $more = max(2, (int) round($words * self::WORD_SLACK));
+            $fewer = max(2, (int) ceil($words * self::DROP_SLACK));
+            $difference = self::words($text) - $words;
             if ($text === ''
                 || ScriptCheck::hasDevanagari($text)
                 || preg_match_all(self::MARKER, $text) !== $markers
-                || ($transliteration && abs(self::words($text) - $words) > $slack)) {
+                || ($transliteration && ($difference > $more || -$difference > $fewer))) {
                 $failed[] = $view;
             }
         }
@@ -259,12 +270,20 @@ final class TranscriptViews
         try {
             foreach (self::chunks($lines) as $chunk) {
                 $answer = $this->convertAll($chunk, $language, $available, $tokens, $model);
-                // Lines that fail the checks are asked once more; a view that fails again keeps the original words.
+                // Lines that fail the checks are asked once more (Roman Urdu word by word, since v1.5); a view that fails
+                // again keeps the original words.
                 $bad = array_filter($chunk, fn (string $text, int $i): bool => self::failures($text, $answer[$i] ?? [], $available, $language) !== [], ARRAY_FILTER_USE_BOTH);
                 $again = $bad === [] ? [] : $this->convertAll($bad, $language, $available, $tokens, $model);
+                $romanAgainBad = array_filter(
+                    $bad,
+                    fn (string $text, int $i): bool => in_array('roman', self::failures($text, $answer[$i] ?? [], $available, $language), true)
+                        && self::failures($text, ['roman' => (string) ($again[$i]['roman'] ?? '')], ['roman'], $language) !== [],
+                    ARRAY_FILTER_USE_BOTH
+                );
+                $byWord = $this->romanByWord($romanAgainBad, $language, $tokens, $model);
                 foreach ($bad as $i => $text) {
                     foreach (self::failures($text, $answer[$i] ?? [], $available, $language) as $view) {
-                        $retry = $again[$i][$view] ?? null;
+                        $retry = $view === 'roman' && isset($byWord[$i]) ? $byWord[$i] : ($again[$i][$view] ?? null);
                         if (is_string($retry) && self::failures($text, [$view => $retry], [$view], $language) === []) {
                             $answer[$i][$view] = $retry;
                         } else {
@@ -294,6 +313,53 @@ final class TranscriptViews
         }
         $this->remember($transcript, $views);
         $this->bill($transcript, $model, $tokens);
+    }
+
+    /**
+     * Roman Urdu word by word (since v1.5) for lines whose Roman Urdu lost words twice: one transliteration per word,
+     * kept only when there is exactly one per word and none is empty. Converters without the word-by-word mode, an
+     * empty list or a failed request give nothing back (the lines then keep their original words).
+     *
+     * @param  array<int, string>  $lines
+     * @param  array{input: int, output: int}  $tokens
+     * @return array<int, string>
+     */
+    private function romanByWord(array $lines, string $language, array &$tokens, ?string &$model): array
+    {
+        if ($lines === [] || ! $this->converter instanceof WordByWordConverter) {
+            return [];
+        }
+        $words = array_map(self::wordList(...), $lines);
+        try {
+            $answer = $this->converter->romanWords($words, $language);
+        } catch (Throwable $e) {
+            Log::info('Roman Urdu word by word failed', ['error' => mb_substr($e->getMessage(), 0, 200)]);
+
+            return [];
+        }
+        $tokens['input'] += $answer['input_tokens'];
+        $tokens['output'] += $answer['output_tokens'];
+        $model = $answer['model'];
+        $out = [];
+        foreach ($answer['lines'] as $i => $roman) {
+            if (isset($words[$i]) && count($roman) === count($words[$i]) && ! in_array('', $roman, true)) {
+                $out[$i] = implode(' ', $roman);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * The words of a line for the word-by-word mode; a marker ("[unclear: two words]", "[?word]") stays one word.
+     *
+     * @return list<string>
+     */
+    public static function wordList(string $text): array
+    {
+        preg_match_all('/\[[^\]]*\]\S*|\S+/u', trim($text), $m);
+
+        return $m[0];
     }
 
     /**

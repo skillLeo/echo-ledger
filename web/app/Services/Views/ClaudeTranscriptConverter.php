@@ -15,7 +15,7 @@ use RuntimeException;
  * line, same index). The model is the console setting `claude.model` (Claude Sonnet 5.5 by default, plan A3); refusals fall back
  * server-side on the models that support it.
  */
-class ClaudeTranscriptConverter implements TranscriptConverter
+class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConverter
 {
     /** Models that take the server-side refusal fallback (`fallbacks: "default"`). */
     private const FALLBACK_MODELS = ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5'];
@@ -44,6 +44,22 @@ class ClaudeTranscriptConverter implements TranscriptConverter
         are, and a word the engine was unsure of, written "[?word]", keeps its brackets around that word's own
         transliteration or translation; never use Hindi (Devanagari) letters. Every input index appears exactly once in
         the output.
+        TXT;
+
+    /** Since v1.5, for lines whose Roman Urdu lost words: one transliteration per input word, nothing else. */
+    private const WORDS_SYSTEM = <<<'TXT'
+        You write Urdu transcript lines from a business phone call in Pakistan in Roman Urdu, word by word. The input is
+        JSON: the call's language and a list of lines, each with an index and its words as a list. For every line return
+        the same index and "roman": a list with exactly one entry for each input word, in the same order.
+        - Each entry is that one word in Latin letters, the way Pakistanis type it ("کیا" becomes "kya", "ٹھیک" becomes
+          "theek"). An English word written in Urdu letters gets its normal English spelling ("میٹنگ" becomes
+          "meeting"). A word already in Latin letters, a number or an amount is copied unchanged.
+        - "[unclear]" and "[unclear: ...]" are copied as they are; "[?word]" keeps its brackets around that word's own
+          transliteration.
+        - An entry may hold two Latin words only when one Urdu word is written as two in Roman Urdu ("کیلئے" becomes
+          "ke liye"). Never drop, merge, reorder, translate or explain words, never leave an entry empty, never use Hindi
+          (Devanagari) letters. Every input index appears exactly once in the output, with as many entries as it had
+          words.
         TXT;
 
     public function __construct(private readonly CredentialVault $vault, private readonly SettingsRepository $settings) {}
@@ -120,9 +136,85 @@ class ClaudeTranscriptConverter implements TranscriptConverter
         ];
     }
 
+    public function romanWords(array $lines, string $language): array
+    {
+        $key = $this->vault->get('anthropic', 'api_key');
+        if ($key === null || $key === '') {
+            throw new RuntimeException(TranscriptViews::missingKeyMessage());
+        }
+        $model = $this->model();
+        $input = [
+            'language' => LanguageChoice::label($language),
+            'lines' => array_map(fn (int $i, array $words): array => ['index' => $i, 'words' => $words], array_keys($lines), array_values($lines)),
+        ];
+        $arguments = [
+            'model' => $model,
+            'maxTokens' => 16000,
+            'system' => [['type' => 'text', 'text' => self::WORDS_SYSTEM, 'cacheControl' => ['type' => 'ephemeral']]],
+            'messages' => [['role' => 'user', 'content' => json_encode($input, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR)]],
+            'outputConfig' => ['effort' => 'medium', 'format' => ['type' => 'json_schema', 'schema' => self::wordsSchema()]],
+            'requestOptions' => ['timeout' => 300.0, 'maxRetries' => 2],
+        ];
+        if (in_array($model, self::FALLBACK_MODELS, true)) {
+            $arguments['fallbacks'] = 'default';
+            $arguments['betas'] = ['server-side-fallback-2026-07-01'];
+        }
+        $message = $this->client($key)->beta->messages->create(...$arguments);
+        if ($message->stopReason === 'refusal') {
+            throw new RuntimeException('Claude declined to convert this transcript.');
+        }
+        if ($message->stopReason === 'max_tokens') {
+            throw new TooLongForOneRequest('The words of these lines did not fit in one answer.');
+        }
+        $json = '';
+        foreach ($message->content as $block) {
+            if (($block->type ?? null) === 'text') {
+                $json .= $block->text;
+            }
+        }
+        $data = json_decode($json, true);
+        $out = [];
+        foreach (is_array($data) && is_array($data['lines'] ?? null) ? $data['lines'] : [] as $line) {
+            if (is_array($line) && isset($line['index']) && array_key_exists((int) $line['index'], $lines) && is_array($line['roman'] ?? null)) {
+                $out[(int) $line['index']] = array_map(fn (mixed $w): string => is_string($w) ? trim($w) : '', array_values($line['roman']));
+            }
+        }
+
+        return [
+            'lines' => $out,
+            'input_tokens' => $message->usage->inputTokens + (int) $message->usage->cacheReadInputTokens + (int) $message->usage->cacheCreationInputTokens,
+            'output_tokens' => $message->usage->outputTokens,
+            'model' => $message->model,
+        ];
+    }
+
     protected function client(string $key): Client
     {
         return new Client(apiKey: $key);
+    }
+
+    /** @return array<string, mixed> */
+    private static function wordsSchema(): array
+    {
+        return [
+            'type' => 'object',
+            'properties' => [
+                'lines' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'index' => ['type' => 'integer'],
+                            'roman' => ['type' => 'array', 'items' => ['type' => 'string']],
+                        ],
+                        'required' => ['index', 'roman'],
+                        'additionalProperties' => false,
+                    ],
+                ],
+            ],
+            'required' => ['lines'],
+            'additionalProperties' => false,
+        ];
     }
 
     /** @return array<string, mixed> */
