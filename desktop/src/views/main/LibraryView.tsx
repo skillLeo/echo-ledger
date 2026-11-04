@@ -6,7 +6,8 @@ import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove
 import { SharedWithMe, sentLine } from "./SharedWithMe";
 import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialogs";
 import { activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
-import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SharePanel, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
+import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
+import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
@@ -1099,7 +1100,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   )}
                   {scriptWarning(current.transcript?.script_warning) && <div className="notice" role="status">{scriptWarning(current.transcript?.script_warning)}</div>}
                 </div>
-                {panel === "share" && <SharePanel sessionId={current.id} hasAudio={!!playbackUrl} notify={notify} onClose={() => setPanel(null)} />}
+                {panel === "share" && !readOnly && (
+                  <ShareDialog target={{ kind: "session", id: current.id, title: current.title ?? null, hasAudio: !!playbackUrl }} view={exportView} notify={notify} onClose={() => setPanel(null)} />
+                )}
                 {playbackError && <div className="notice" style={{ marginTop: 12 }}>{playbackError}</div>}
                 {bookmarks.length > 0 && (
                   <div className="chips bookmarks" role="list" aria-label="Bookmarks" style={{ marginTop: 12 }}>

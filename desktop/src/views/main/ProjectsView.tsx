@@ -4,18 +4,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, errorMessage, listenTo, type ClientFolder, type LibraryItem } from "../../lib/ipc";
 import { canAddSubfolder, hasSubfolders, projectLabel } from "../../lib/projects";
-import { FolderIcon, PlusIcon } from "../../components/Icons";
+import { FolderIcon, LinkIcon, PlusIcon, ShareIcon } from "../../components/Icons";
 import { ClientWorkspace } from "./ClientWorkspace";
 import { ProjectTree } from "./ProjectTree";
 import { DeleteProjectDialog, MoveProjectDialog, moveRecordings, movedText, NameDialog } from "./ProjectDialogs";
 import { RulesSection } from "./FilingRules";
+import { ShareDialog } from "./ShareDialog";
+import { RequestLinksSheet } from "./RequestLinks";
 
 type Notify = (text: string, error?: boolean) => void;
 type Dialog =
   | { kind: "new"; parentId: string | null }
   | { kind: "rename"; project: ClientFolder }
   | { kind: "move"; project: ClientFolder }
-  | { kind: "delete"; project: ClientFolder };
+  | { kind: "delete"; project: ClientFolder }
+  | { kind: "share"; project: ClientFolder; start: "link" | "send" }
+  | { kind: "requests"; projectId: string | null; focusId: string | null };
 
 /** "Deleted Acme · 12 recordings moved to the Inbox · 2 folders moved up". */
 export function deletedText(name: string, answer: { moved_sessions?: number; moved_projects?: number }): string {
@@ -27,7 +31,7 @@ export function deletedText(name: string, answer: { moved_sessions?: number; mov
   return parts.join(" · ");
 }
 
-export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle }: {
+export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null }: {
   notify: Notify;
   /** Every project; null while they load. */
   projects: ClientFolder[] | null;
@@ -43,9 +47,23 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   /** Which projects show their folders (shared with the sidebar). */
   expanded: ReadonlySet<string>;
   onToggle: (id: string) => void;
+  /** A request link to show (an echoledger link to it was opened). */
+  requestFocus?: { id: string; seq: number } | null;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  // Request links exist on this server (since v1.5): asked once; Request files is hidden until it says so.
+  const [requests, setRequests] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api.requestLinks().then((r) => alive && setRequests(r !== null), () => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (requestFocus) setDialog({ kind: "requests", projectId: null, focusId: requestFocus.id });
+  }, [requestFocus?.seq]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // The saved library says how many recordings each project has and when the last call was, without a server trip.
     api.library().then(setItems).catch(() => undefined);
@@ -144,6 +162,8 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
           folders={list.filter((c) => c.parent_id === dialog.project.id).length} parentName={parentName(dialog.project)}
           onDelete={() => remove(dialog.project)} onClose={close} />
       )}
+      {dialog.kind === "share" && <ShareDialog target={{ kind: "project", id: dialog.project.id, name: dialog.project.name }} start={dialog.start} notify={notify} onClose={close} />}
+      {dialog.kind === "requests" && <RequestLinksSheet projects={list} projectId={dialog.projectId} focusId={dialog.focusId} notify={notify} onClose={close} />}
     </>
   );
 
@@ -152,13 +172,21 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       nested && canAddSubfolder(list, project.id) && { label: "New folder inside", onPick: () => setDialog({ kind: "new", parentId: project.id }) },
       { label: "Rename", onPick: () => setDialog({ kind: "rename", project }) },
       nested && { label: "Move…", onPick: () => setDialog({ kind: "move", project }) },
+      nested && { label: "Share link…", onPick: () => setDialog({ kind: "share", project, start: "link" }) },
+      nested && { label: "Send to a teammate…", onPick: () => setDialog({ kind: "share", project, start: "send" }) },
+      requests && { label: "Request files into it…", onPick: () => setDialog({ kind: "requests", projectId: project.id, focusId: null }) },
       nested && { label: "Delete project…", danger: true, onPick: () => setDialog({ kind: "delete", project }) },
     ];
+    const share = nested && (
+      <button type="button" className="btn" onClick={() => setDialog({ kind: "share", project, start: "link" })} title="A link to the project's recordings, or send it to a teammate">
+        <ShareIcon size={16} />Share
+      </button>
+    );
     return (
       <div className="project-page">
         <ClientWorkspace key={project.id} client={project} projects={list} items={items} notify={notify} onOpenRecording={onOpenRecording}
           onClientChanged={(next) => onChanged((all) => all.map((c) => (c.id === next.id ? { ...c, ...next } : c)))}
-          onOpenProject={onOpenProject} menu={menu} onMoveRecordings={(ids, target) => void dropMove(ids, target)}
+          onOpenProject={onOpenProject} menu={menu} actions={share || null} onMoveRecordings={(ids, target) => void dropMove(ids, target)}
           rules={nested ? <RulesSection project={project} notify={notify} /> : null} />
         {dialogs}
       </div>
@@ -173,6 +201,11 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
           <p className="page-sub">Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in the Inbox.</p>
         </div>
         <span className="spacer" />
+        {requests && (
+          <button type="button" className="btn" onClick={() => setDialog({ kind: "requests", projectId: null, focusId: null })} title="A link anyone can use to send you voice notes and files">
+            <LinkIcon size={16} />Request files
+          </button>
+        )}
         <button type="button" className="btn primary" onClick={() => setDialog({ kind: "new", parentId: null })}><PlusIcon size={16} />New project</button>
       </div>
       {error && (

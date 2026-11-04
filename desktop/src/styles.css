@@ -991,3 +991,19 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .rule-add { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .rule-add .select { flex: none; }
 .rule-add .input { flex: 1; min-width: 200px; width: auto; }
+.sheet.share-sheet { width: min(620px, 100%); }
+.share-field { border: 0; margin: 0; padding: 0; display: grid; gap: var(--space-2); min-width: 0; }
+.share-field legend { padding: 0; margin-bottom: var(--space-1); }
+.radio-row { display: flex; align-items: center; gap: var(--space-2); min-height: 28px; cursor: pointer; }
+.radio-row input { margin: 0; flex: none; }
+.toggle-row { display: flex; align-items: center; gap: var(--space-3); justify-content: space-between; cursor: pointer; }
+.share-sheet .share-made { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
+.share-sheet .share-made .btn { justify-self: start; }
+.share-sheet .share-url { display: block; padding: 6px var(--space-2); border-radius: 8px; background: var(--surface); border: 1px solid var(--border); font-size: var(--text-sm); overflow-wrap: anywhere; user-select: all; }
+.share-links { display: grid; gap: var(--space-2); }
+.links-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 240px; overflow: auto; }
+.link-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+.link-row.focused { border-color: var(--accent); }
+.link-main { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.link-who { font-weight: 500; overflow-wrap: anywhere; }
+.input.number { width: 84px; flex: none; }
