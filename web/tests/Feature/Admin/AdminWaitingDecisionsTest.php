@@ -16,7 +16,10 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 
 uses(AdminTestHelpers::class);
 
-/* The "Keep or discard?" card above the recordings list: the calls still waiting for the phone or computer. */
+/*
+ * The calls still waiting for the phone or computer, above the recordings list: since v1.5 one slim line, "4 calls
+ * waiting · Review" (the Activity page keeps the "Keep or discard?" card).
+ */
 
 /** A recording of the user's workspace that has not been kept or discarded yet. */
 function waitingCall(User $owner, string $startedAtUtc, ?int $durationMs, array $attributes = []): CaptureSession
@@ -90,27 +93,32 @@ it('only counts the waiting calls of the given workspace', function () {
     expect(WaitingDecisionsWidget::canView())->toBeFalse();
 });
 
-it('hides the card when nothing is waiting', function () {
+it('hides the line when nothing is waiting', function () {
     $admin = $this->signInAsAdmin();
     CaptureSession::factory()->create(['user_id' => $admin->id]);
 
     expect(waitingSummaryFor($admin))->toBeNull()
+        ->and(app(LibraryOrganiser::class)->waitingCount((int) $admin->current_workspace_id))->toBe(0)
         ->and(WaitingDecisionsWidget::canView())->toBeFalse();
     $this->get(CaptureSessionResource::getUrl('index'))->assertOk()
-        ->assertDontSee('Keep or discard?')->assertDontSee('decides Keep or Discard');
+        ->assertDontSee('data-waiting-decisions', false)->assertDontSee('call waiting')->assertDontSee('Keep or discard?');
 });
 
-it('shows the card with a Review link to the waiting view above the recordings list', function () {
+it('shows one slim line with a Review link to the waiting view above the recordings list', function () {
     $admin = $this->signInAsAdmin();
     $waiting = waitingCall($admin, '2026-10-29 21:30:00', 138_000);
+    waitingCall($admin, '2026-10-30 21:30:00', 60_000);
     $kept = CaptureSession::factory()->create(['user_id' => $admin->id]);
     $reviewUrl = CaptureSessionResource::getUrl('index', ['tab' => 'waiting']);
 
     expect(WaitingDecisionsWidget::canView())->toBeTrue()
         ->and($reviewUrl)->toEndWith('/admin/sessions?tab=waiting');
     $this->get(CaptureSessionResource::getUrl('index'))->assertOk()
-        ->assertSeeInOrder(['Keep or discard?', 'Review', '1 call waiting · Oct 30 · 2:18 total', 'The phone or computer that recorded them decides Keep or Discard.'])
-        ->assertSee('href="'.e($reviewUrl).'"', escape: false);
+        ->assertSeeInOrder(['2 calls waiting', '·', 'Review'])
+        ->assertSee('href="'.e($reviewUrl).'"', escape: false)
+        // The details stay one hover away; the large card is gone from the Library.
+        ->assertSee('title="2 calls waiting · oldest Oct 30 · 3:18 total. The phone or computer that recorded them decides Keep or Discard."', escape: false)
+        ->assertDontSee('Keep or discard?');
 
     Livewire::withQueryParams(['tab' => 'waiting'])->test(ListCaptureSessions::class)
         ->assertSet('activeTab', 'waiting')

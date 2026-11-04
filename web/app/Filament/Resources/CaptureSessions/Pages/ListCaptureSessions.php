@@ -67,7 +67,7 @@ class ListCaptureSessions extends ListRecords
         return $tabs;
     }
 
-    /** The "Keep or discard?" card, only while recordings wait for a decision. */
+    /** The "4 calls waiting · Review" line, only while recordings wait for a decision. */
     protected function getHeaderWidgets(): array
     {
         return [WaitingDecisionsWidget::class];

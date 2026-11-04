@@ -98,6 +98,12 @@ final class LibraryOrganiser
         return $counts;
     }
 
+    /** How many of the workspace's recordings wait for Keep or Discard (the Library's chip, since v1.5). */
+    public function waitingCount(int $workspaceId): int
+    {
+        return $this->applyView(CaptureSession::query()->where('workspace_id', $workspaceId), 'waiting', $this->settings->displayTimezone())->count();
+    }
+
     /**
      * The one-line summary of the workspace's recordings waiting for Keep or Discard, worded like the phone and
      * desktop cards: "4 calls waiting · oldest Oct 30 · 2:18 total", or "1 call waiting · Oct 30 · 0:42 total". The

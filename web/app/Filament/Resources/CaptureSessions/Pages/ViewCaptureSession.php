@@ -25,6 +25,7 @@ use App\Services\Accuracy\AccuracyLab;
 use App\Services\Accuracy\ReferenceText;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\EngineComparison;
+use App\Services\EngineWait;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\LibraryOrganiser;
 use App\Services\Retranscriber;
@@ -57,6 +58,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\HtmlString;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use RuntimeException;
@@ -156,9 +158,22 @@ class ViewCaptureSession extends ViewRecord
 
     private function liveMessage(): string
     {
-        return $this->session()->status === SessionStatus::Uploading
-            ? 'Uploading. This page updates by itself.'
-            : 'Transcribing. This page updates by itself when the transcript is ready.';
+        $session = $this->session();
+        if ($session->status === SessionStatus::Uploading) {
+            return 'Uploading. This page updates by itself.';
+        }
+        // Since v1.5 an Urdu or Auto recording waits for its engine when that one is busy or down (EngineWait).
+        $final = $session->finalTranscript()->first();
+        $retryAt = $final !== null ? EngineWait::fields($final)['retry_at'] : null;
+        if ($final !== null && $retryAt !== null) {
+            $zone = app(SettingsRepository::class)->displayTimezone();
+            $at = Carbon::parse($retryAt)->setTimezone($zone);
+
+            return 'Waiting for '.($final->providerKey()?->getLabel() ?? $final->provider).' — retrying at '
+                .$at->format($at->isSameDay(now()->setTimezone($zone)) ? 'g:i A' : 'M j, g:i A').'. This page updates by itself.';
+        }
+
+        return 'Transcribing. This page updates by itself when the transcript is ready.';
     }
 
     /**
@@ -840,6 +855,32 @@ class ViewCaptureSession extends ViewRecord
                     return;
                 }
                 Notification::make()->title('Re-transcribing in '.LanguageChoice::label($run->language).' with '.($run->providerKey()?->getLabel() ?? $run->provider))->success()->send();
+            });
+    }
+
+    /**
+     * "Backup engine — Re-transcribe?" (since v1.5, the banner under the chips): a lower engine wrote the transcript of
+     * an Urdu or Auto recording, so the first engine of its list tries again in the same language (Re-transcribe as).
+     */
+    public function retranscribeBackupAction(): Action
+    {
+        return Action::make('retranscribeBackup')
+            ->label('Re-transcribe')
+            ->requiresConfirmation()
+            ->modalHeading('Re-transcribe with the first engine?')
+            ->modalDescription('The first engine for this language transcribes the recording again, in the same language. The current transcript stays until the new one is ready.')
+            ->modalSubmitActionLabel('Re-transcribe')
+            ->visible(fn (): bool => $this->session()->primaryRecording?->isReady() === true && ! $this->session()->hasNoAudio())
+            ->action(function (): void {
+                $session = $this->session();
+                try {
+                    $run = app(Retranscriber::class)->startAs($session, LanguageChoice::normalize($session->language));
+                } catch (RuntimeException $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
+
+                    return;
+                }
+                Notification::make()->title('Re-transcribing with '.($run->providerKey()?->getLabel() ?? $run->provider))->success()->send();
             });
     }
 

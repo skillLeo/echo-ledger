@@ -275,7 +275,8 @@ final class EngineWait
                 'meta' => [...($transcript->meta ?? []), 'route' => [...$route, 'retry_at' => $token, 'retry_reason' => $reason]],
             ]);
             if ($transcript->kind === TranscriptKind::Final) {
-                $transcript->captureSession()->first()?->update(['status' => SessionStatus::Processing]);
+                // Touched as well: library sync and the console's live status see the new retry time, however long it waits.
+                $transcript->captureSession()->first()?->fill(['status' => SessionStatus::Processing])->touch();
             }
         });
         TranscribeFinalJob::dispatch($transcript->id, $token)->delay($at)->afterCommit();

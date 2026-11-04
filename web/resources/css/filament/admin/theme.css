@@ -1569,6 +1569,50 @@ textarea.el-field-input {
     color: var(--text-faint);
 }
 
+/* Since v1.5 the Library shows the waiting calls as one slim line: "4 calls waiting · Review". */
+.el-waiting-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    max-width: 100%;
+    min-height: 34px;
+    padding: 0 var(--space-2) 0 var(--space-3);
+    border-radius: var(--radius-full);
+    background-color: var(--accent-soft);
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+    color: var(--accent-text);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.el-waiting-chip-icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+}
+
+.el-waiting-chip-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.el-waiting-chip-action {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-full);
+    font-weight: 600;
+    color: var(--accent-text);
+}
+
+.el-waiting-chip-action:hover,
+.el-waiting-chip-action:focus-visible {
+    background-color: var(--surface);
+}
+
 /* ================================================================== Library: list and detail */
 
 /* Filament's grid makes the two columns from 1280 px; below that the detail is not shown (a row opens the page). */
