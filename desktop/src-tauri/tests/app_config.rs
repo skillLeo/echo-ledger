@@ -227,6 +227,17 @@ fn macos_declares_the_microphone_and_audio_capture_purposes() {
 }
 
 #[test]
+fn the_echoledger_link_scheme_is_registered_by_the_installer_and_on_macos() {
+    // v1.5 "Links in the apps": the bundler writes the Windows installer's protocol keys from the deep-link schemes,
+    // and macOS reads the scheme from Info.plist. The scheme is the one the share pages link to.
+    let schemes = &tauri_conf()["plugins"]["deep-link"]["desktop"]["schemes"];
+    assert_eq!(schemes, &serde_json::json!([desktop_lib::deep_link::SCHEME]));
+    let info = std::fs::read_to_string(manifest_dir().join("Info.plist")).unwrap();
+    assert!(info.contains("<key>CFBundleURLSchemes</key>"), "Info.plist lacks the URL scheme");
+    assert!(info.contains("<string>echoledger</string>"), "Info.plist does not name the echoledger scheme");
+}
+
+#[test]
 fn the_windows_installer_installs_per_user_without_elevation() {
     let windows = json("tauri.windows.conf.json");
     assert_eq!(

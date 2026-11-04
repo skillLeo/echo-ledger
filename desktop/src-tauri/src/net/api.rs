@@ -333,9 +333,126 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
-    /// `PATCH /api/clients/{id}` (since v1.1): rename, colour, avatar or pin a client folder.
+    /// `PATCH /api/clients/{id}` (since v1.1): rename, colour, avatar or pin a client folder; since v1.5 also
+    /// `parent_id` (move a project into another one, `null` = the top level).
     pub async fn update_client(&self, id: &str, body: &serde_json::Value) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.patch(self.url(&format!("clients/{id}"))))?.json(body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/clients/{id}` (since v1.5): its recordings go to the Inbox and its subfolders up a level;
+    /// `{"moved_sessions", "moved_projects"}`.
+    pub async fn delete_client(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.delete(self.url(&format!("clients/{id}"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/library/views?tz=` (since v1.1): the smart views' counts and the labels; since v1.5 `folders`, the
+    /// smart folders' counts.
+    pub async fn library_views(&self, tz: Option<&str>) -> AppResult<serde_json::Value> {
+        let mut req = self.http.get(self.url("library/views"));
+        if let Some(tz) = tz {
+            req = req.query(&[("tz", tz)]);
+        }
+        let resp = self.authed(req)?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// One page of a smart folder (`GET /api/library?folder=`, since v1.5).
+    pub async fn library_folder(&self, folder: &str, cursor: Option<&str>) -> AppResult<LibraryResponse> {
+        let mut query: Vec<(&str, &str)> = vec![("folder", folder), ("limit", "100")];
+        if let Some(c) = cursor {
+            query.push(("cursor", c));
+        }
+        let resp = self.authed(self.http.get(self.url("library")).query(&query))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/clients/{id}/rules` (since v1.5): the project's filing rules.
+    pub async fn client_rules(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url(&format!("clients/{id}/rules"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/clients/{id}/rules` (since v1.5): `title`, `app` or `contact`; `409 rule_exists` when another
+    /// project has the same one.
+    pub async fn add_client_rule(&self, id: &str, kind: &str, value: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("clients/{id}/rules"))))?.json(&json!({ "kind": kind, "value": value })).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/clients/{id}/rules/{rule}` (since v1.5).
+    pub async fn delete_client_rule(&self, id: &str, rule: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("clients/{id}/rules/{rule}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/{sessions|clients}/{id}/shares` with the v1.5 fields (audience, people, downloads, expiry); the
+    /// answer is the link with its URL, shown once.
+    pub async fn create_link_share(&self, target: &str, id: &str, body: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("{target}/{id}/shares"))))?.json(body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/shares` (since v1.5): the workspace's share links, newest first, narrowed to one recording or project.
+    pub async fn shares(&self, session_id: Option<&str>, client_id: Option<&str>) -> AppResult<serde_json::Value> {
+        let mut query: Vec<(&str, &str)> = Vec::new();
+        if let Some(id) = session_id {
+            query.push(("session_id", id));
+        }
+        if let Some(id) = client_id {
+            query.push(("client_id", id));
+        }
+        let resp = self.authed(self.http.get(self.url("shares")).query(&query))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/{sessions|clients}/{id}/send` (since v1.5): to teammates with an account; `{"sent": n}`.
+    pub async fn send_to(&self, target: &str, id: &str, body: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("{target}/{id}/send"))))?.json(body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/shared-with-me` (since v1.5): recordings and projects teammates sent.
+    pub async fn shared_with_me(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("shared-with-me")))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/shared-with-me/{id}/save` (since v1.5): a copy in this workspace; `{"session_id"}` or `{"client_id"}`.
+    pub async fn save_shared(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url(&format!("shared-with-me/{id}/save"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/shared-with-me/{id}` (since v1.5): off the list; the sender's recording stays.
+    pub async fn remove_shared(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("shared-with-me/{id}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/request-links` (since v1.5): a public upload page into a project or the Inbox (`url` shown once).
+    pub async fn create_request_link(&self, body: &serde_json::Value) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.post(self.url("request-links")))?.json(body).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/request-links` (since v1.5).
+    pub async fn request_links(&self) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("request-links")))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/request-links/{id}` (since v1.5): the upload page stops working.
+    pub async fn revoke_request_link(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("request-links/{id}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `GET /api/links/resolve?url=` (since v1.5): what a share, project or request link of this server is for the
+    /// caller; `404 not_found` for anything it may not open in place.
+    pub async fn resolve_link(&self, link: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url("links/resolve")).query(&[("url", link)]))?.send().await?;
         Self::parse(resp).await
     }
     /// `GET /api/security` (since v1.1): paired devices and the recent audit log.

@@ -10,5 +10,18 @@
   <string>EchoLedger reads the address of the browser tab that uses your microphone, to tell a call from dictation.</string>
   <key>LSUIElement</key>
   <true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.echoledger.desktop</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>echoledger</string>
+      </array>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+    </dict>
+  </array>
 </dict>
 </plist>

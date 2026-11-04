@@ -144,7 +144,7 @@ describe("organise panel", () => {
     fireEvent.change(screen.getByLabelText("New client name"), { target: { value: "Globex" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { client_id: "c3" } }]));
-    expect(callsOf("client_create")).toEqual([{ name: "Globex", color: null, avatar: null }]);
+    expect(callsOf("client_create")).toEqual([{ name: "Globex", color: null, avatar: null, parentId: null }]);
   });
 
   it("says why a change failed", async () => {

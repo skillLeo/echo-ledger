@@ -95,7 +95,7 @@ describe("the Clients page", () => {
     fireEvent.click(screen.getByRole("button", { name: "New client" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Client name" }), { target: { value: "Nova" } });
     fireEvent.click(screen.getByRole("button", { name: "Add client" }));
-    await waitFor(() => expect(callsOf("client_create")).toEqual([{ name: "Nova", color: null, avatar: null }]));
+    await waitFor(() => expect(callsOf("client_create")).toEqual([{ name: "Nova", color: null, avatar: null, parentId: null }]));
     expect(await screen.findByRole("heading", { name: "Nova" })).toBeInTheDocument();
   });
 

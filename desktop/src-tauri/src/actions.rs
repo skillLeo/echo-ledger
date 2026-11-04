@@ -818,7 +818,7 @@ pub async fn pending_assign_client(app: &AppHandle, id: &str, client_id: Option<
 
 /// Shows the main window on a view (tray "Review recordings", the chip's title).
 pub fn navigate(app: &AppHandle, view: &str, pending_id: Option<String>, rename: bool) {
-    let payload = crate::commands::NavigatePayload { view: view.to_string(), pending_id, rename, recording_id: None };
+    let payload = crate::commands::NavigatePayload { view: view.to_string(), pending_id, rename, recording_id: None, link: None };
     crate::tray::show_main(app);
     crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
 }
@@ -1347,17 +1347,30 @@ async fn run_upload_cycle(app: &AppHandle) {
 /// How long after an OS notification bringing the app forward opens its recording.
 const NOTIFIED_WINDOW: Duration = Duration::from_secs(600);
 
-/// Another start of the app (a second launch, or a click on one of our notifications): show the window and, when a
-/// notification about a recording went out in the last ten minutes, open that recording.
-pub fn show_main_from_outside(app: &AppHandle) {
+/// Another start of the app (a second launch, an `echoledger://open` link, or a click on one of our notifications):
+/// show the window and open the link it was started with or, when a notification about a recording went out in the
+/// last ten minutes, that recording.
+pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {
+    if let Some(link) = crate::deep_link::find_open_link(args) {
+        open_app_link(app, link);
+        return;
+    }
     crate::tray::show_main(app);
     let target = app.state::<crate::AppState>().notified.lock().unwrap_or_else(|p| p.into_inner()).take();
     if let Some((id, at)) = target
         && at.elapsed() < NOTIFIED_WINDOW
     {
-        let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: Some(id) };
+        let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: Some(id), link: None };
         crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
     }
+}
+
+/// Shows the main window with a share, project or request link to open in place (v1.5). The page resolves it once it
+/// is unlocked, and opens the web page instead when it is not this workspace's.
+pub fn open_app_link(app: &AppHandle, link: String) {
+    crate::tray::show_main(app);
+    let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: None, link: Some(link) };
+    crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
 }
 
 /// Polls the activity centre every minute and shows new notifications (B18), outside the quiet hours.

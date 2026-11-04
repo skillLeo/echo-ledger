@@ -310,9 +310,14 @@ export interface LibraryItem {
     /** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
     final_progress?: TranscriptProgress | null;
   };
+  /** How it got into its project (since v1.5): by hand, the caller is a contact, a filing rule; null = the Inbox. */
+  filed_by?: "user" | "contact" | "rule" | null;
 }
 
-/** A client folder (B15): `avatar` is one emoji or two letters; pinned folders come first. */
+/**
+ * A client folder (B15), called a project in the apps since v1.5: `avatar` is one emoji or two letters; pinned folders
+ * come first. A project can sit in another one (at most 4 levels); an older server sends none of the v1.5 fields.
+ */
 export interface ClientFolder {
   id: string;
   name: string;
@@ -322,10 +327,95 @@ export interface ClientFolder {
   /** The client's default language (since v1.1.2); null = the console default. */
   language?: TranscriptionLanguage | null;
   keyterm_count?: number;
+  /** Recordings directly in it. */
   session_count?: number;
   /** Claude writes call notes after each kept recording of this client (since v1.4, default on). */
   ai_notes?: boolean;
+  /** The project it sits in (since v1.5); null = the top level. */
+  parent_id?: string | null;
+  /** Its ancestors from the top (since v1.5), empty at the top. */
+  path?: { id: string; name: string }[];
+  children_count?: number;
+  /** Recordings in it and in its subfolders (since v1.5). */
+  nested_session_count?: number;
 }
+
+/** The smart folders of the Library (since v1.5): views the server computes, never copies. */
+export type SmartFolder = "inbox" | "whatsapp" | "whatsapp_business" | "google_meet" | "zoom" | "teams" | "phone" | "voice_notes" | "imported" | "shared";
+
+/** `GET /api/library/views`: counts of the smart views and labels and, since v1.5, of the smart folders. */
+export interface LibraryViews {
+  views?: Record<string, number>;
+  labels?: { label: string; count: number }[];
+  /** Missing on an older server, which then shows no smart folders. */
+  folders?: Partial<Record<SmartFolder, number>> | null;
+}
+
+/** A project's filing rule (since v1.5): the title contains `value`, the recording comes from an app, or the caller is a contact. */
+export type RuleKind = "title" | "app" | "contact";
+export interface FilingRule {
+  id: number | string;
+  kind: RuleKind;
+  value: string;
+  created_at?: string | null;
+}
+
+/** Who may open a share link (since v1.5): anyone with it, anyone with it and the password, the people named. */
+export type ShareAudience = "public" | "password" | "people";
+
+/** What the share dialog asks for (Rust `sharing::ShareOptions`); `expiresAt` null = the link never expires. */
+export interface ShareOptions {
+  audience: ShareAudience;
+  password?: string | null;
+  people?: string[];
+  allowDownload: boolean;
+  expiresAt?: string | null;
+  view?: TranscriptView | null;
+}
+
+/** A recording or a project a teammate sent (since v1.5); `session` is read-only. */
+export interface SharedItem {
+  id: string;
+  kind: "session" | "project";
+  from: { name?: string | null; email?: string | null } | null;
+  note: string | null;
+  title: string | null;
+  sent_at: string | null;
+  saved_at: string | null;
+  session: LibraryItem | null;
+  client: ClientFolder | null;
+}
+
+/** A request link (since v1.5): a page where anyone can send voice notes and files into a project or the Inbox. */
+export interface RequestLink {
+  id: string;
+  /** Only right after it was made. */
+  url?: string;
+  title: string | null;
+  client_id: string | null;
+  expires_at: string | null;
+  max_files: number | null;
+  max_mb: number | null;
+  received: number;
+  revoked_at: string | null;
+  created_at?: string | null;
+}
+
+/** What the Request files sheet asks for (Rust `sharing::RequestLinkOptions`); `clientId` null = the Inbox. */
+export interface RequestLinkOptions {
+  title: string;
+  clientId: string | null;
+  expiresAt: string | null;
+  maxFiles: number | null;
+  maxMb: number | null;
+}
+
+/** What a share, project or request link is for this workspace (`GET /api/links/resolve`, since v1.5). */
+export type ResolvedLink =
+  | { kind: "session"; session_id: string }
+  | { kind: "project"; client_id: string }
+  | { kind: "shared"; shared_id: string }
+  | { kind: "request"; request_link_id: string };
 
 /** A line of a client's memory (since v1.4): what was decided, asked, changed or is in scope. */
 export type MemoryKind = "scope" | "decision" | "question" | "change";
@@ -573,10 +663,11 @@ export interface SearchResult {
   next_page: number | null;
 }
 
-/** A share link of a recording; `url` is only present right after it was made. */
+/** A share link of a recording or (since v1.5) a project; `url` is only present right after it was made. */
 export interface ShareLink {
   id: string;
-  session_id: string;
+  /** The recording's; null for a project's link. */
+  session_id: string | null;
   has_password: boolean;
   include_audio: boolean;
   expires_at: string | null;
@@ -587,6 +678,12 @@ export interface ShareLink {
   created_by: string | null;
   created_at: string;
   url?: string;
+  /** Since v1.5 (missing on an older server). */
+  kind?: "session" | "project";
+  client_id?: string | null;
+  audience?: ShareAudience;
+  people?: string[];
+  allow_download?: boolean;
 }
 
 export interface TranscriptRevision {
@@ -737,6 +834,8 @@ export interface NavigatePayload {
   rename: boolean;
   /** A recording to open (an OS notification was clicked, B18). */
   recordingId?: string | null;
+  /** A share, project or request link to open in place (an echoledger://open link, since v1.5). */
+  link?: string | null;
 }
 
 /** Events the core emits to the webviews and the payload each one carries (none = `null`). */
@@ -807,8 +906,37 @@ export const api = {
     invoke<number>("sessions_bulk", { ids, action, clientId, label }),
   /** One zip file, saved where the person chooses; null when they cancel the save dialog. */
   exportSessions: (ids: string[], format: BulkExportFormat) => invoke<string | null>("sessions_export", { ids, format }),
-  createClient: (name: string, color: string | null = null, avatar: string | null = null) => invoke<{ data: ClientFolder }>("client_create", { name, color, avatar }),
-  updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned" | "language" | "ai_notes">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
+  /** A new project; `parentId` makes it a subfolder (since v1.5). */
+  createClient: (name: string, color: string | null = null, avatar: string | null = null, parentId: string | null = null) =>
+    invoke<{ data: ClientFolder }>("client_create", { name, color, avatar, parentId }),
+  /** `parent_id` moves a project into another one, null to the top level (since v1.5). */
+  updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned" | "language" | "ai_notes" | "parent_id">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
+  // Projects, smart folders, filing rules, sharing and links (since v1.5).
+  /** Its recordings go to the Inbox and its subfolders up a level. */
+  deleteClient: (id: string) => invoke<{ moved_sessions?: number; moved_projects?: number }>("client_delete", { id }),
+  libraryViews: (tz: string | null = null) => invoke<LibraryViews>("library_views", { tz }),
+  libraryFolder: (folder: SmartFolder) => invoke<LibraryItem[]>("library_folder", { folder }),
+  /** null: the server has no filing rules yet. */
+  clientRules: (id: string) => invoke<{ data: FilingRule[] } | null>("client_rules", { id }),
+  addClientRule: (id: string, kind: RuleKind, value: string) => invoke<{ data: FilingRule }>("client_rule_add", { id, kind, value }),
+  deleteClientRule: (id: string, rule: string) => invoke<void>("client_rule_delete", { id, rule }),
+  /** A share link for a recording or a project; its `url` is shown once. */
+  createShareLink: (kind: "session" | "project", id: string, options: ShareOptions) => invoke<ShareLink>("share_link_create", { kind, id, options }),
+  /** The links of a recording or a project; null on a server older than v1.5 (then `listShares` and `createShare`). */
+  sharesOf: (sessionId: string | null, clientId: string | null = null) => invoke<{ data: ShareLink[] } | null>("shares_of", { sessionId, clientId }),
+  /** How many people it was sent to. */
+  sendToTeammate: (kind: "session" | "project", id: string, to: string[], note: string | null = null) => invoke<number>("send_to_teammate", { kind, id, to, note }),
+  /** null: the server has no Shared with me yet. */
+  sharedWithMe: () => invoke<{ data: SharedItem[] } | null>("shared_with_me"),
+  saveShared: (id: string) => invoke<{ session_id?: string; client_id?: string }>("shared_save", { id }),
+  removeShared: (id: string) => invoke<void>("shared_remove", { id }),
+  createRequestLink: (options: RequestLinkOptions) => invoke<{ data: RequestLink }>("request_link_create", { options }),
+  /** null: the server has no request links yet. */
+  requestLinks: () => invoke<{ data: RequestLink[] } | null>("request_links"),
+  revokeRequestLink: (id: string) => invoke<void>("request_link_revoke", { id }),
+  /** null: the app cannot open it in place; `openLink` opens its page in the browser. */
+  resolveLink: (url: string) => invoke<ResolvedLink | null>("links_resolve", { url }),
+  openLink: (url: string) => invoke<void>("link_open", { url }),
   // Client workspaces (since v1.4): brief, memory, files, Ask, Copy for AI and call notes.
   clientWorkspace: (id: string) => invoke<{ data: ClientWorkspace }>("client_workspace", { id }),
   saveClientBrief: (id: string, sections: BriefSections) => invoke<{ data: ClientBrief }>("client_brief_save", { id, sections }),
