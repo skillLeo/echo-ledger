@@ -67,8 +67,8 @@ describe("the Move dialog", () => {
     fireEvent.click(within(picker).getByRole("radio", { name: /Invoices/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Move" }));
     await waitFor(() => expect(callsOf("session_organise")).toEqual([{ id: "b", patch: { client_id: "c3" } }]));
-    expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Acme › Invoices");
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Acme › Invoices"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("moves the selection with one bulk action, into the Inbox", async () => {
@@ -84,7 +84,7 @@ describe("the Move dialog", () => {
     fireEvent.click(within(dialog).getByRole("radio", { name: /Inbox/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Move" }));
     await waitFor(() => expect(callsOf("sessions_bulk")).toEqual([{ ids: ["a", "c"], action: "move", clientId: null, label: null }]));
-    expect(notify).toHaveBeenCalledWith("Moved 2 recordings to the Inbox");
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved 2 recordings to the Inbox"));
   });
 
   it("makes a new project and moves into it", async () => {
@@ -99,7 +99,7 @@ describe("the Move dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create and move" }));
     await waitFor(() => expect(callsOf("session_organise")).toEqual([{ id: "b", patch: { client_id: "c9" } }]));
     expect(callsOf("client_create")).toEqual([{ name: "Nova", color: null, avatar: null, parentId: null }]);
-    expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Nova");
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Nova"));
   });
 
   it("keeps the dialog open and says why a move failed", async () => {

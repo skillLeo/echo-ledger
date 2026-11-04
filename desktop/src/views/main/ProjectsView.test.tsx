@@ -282,7 +282,7 @@ describe("the project menu", () => {
     fireEvent.click(within(picker).getByRole("radio", { name: /Zed Logistics/ }));
     fireEvent.click(screen.getByRole("button", { name: "Move" }));
     await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "c3", patch: { parent_id: "c2" } }]));
-    expect(props.notify).toHaveBeenCalledWith("Moved Invoices into Zed Logistics");
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Moved Invoices into Zed Logistics"));
     await flushAsync();
     expect(within(screen.getByRole("navigation", { name: "Where this project is" })).getByRole("button", { name: "Zed Logistics" })).toBeInTheDocument();
   });
@@ -323,8 +323,8 @@ describe("the project menu", () => {
     expect(dialog).toHaveTextContent("Its files, brief, notes, memory and filing rules are deleted with it.");
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete project" }));
     await waitFor(() => expect(callsOf("client_delete")).toEqual([{ id: "c1" }]));
-    expect(props.notify).toHaveBeenCalledWith("Deleted Acme Holdings · 2 recordings moved to the Inbox · 1 folder moved up");
-    expect(screen.getByRole("heading", { name: "Projects" })).toBeInTheDocument();
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Deleted Acme Holdings · 2 recordings moved to the Inbox · 1 folder moved up"));
+    expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
     expect(within(screen.getByRole("list", { name: "Projects" })).getByText("Invoices")).toBeInTheDocument();
   });
 

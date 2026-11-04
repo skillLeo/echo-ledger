@@ -45,8 +45,8 @@ describe("filing rules", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Title contains" }), { target: { value: "  weekly sync " } });
     fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
     await waitFor(() => expect(callsOf("client_rule_add")).toEqual([{ id: "c1", kind: "title", value: "weekly sync" }]));
-    expect(notify).toHaveBeenCalledWith("Rule added: Title contains “weekly sync”");
-    expect(within(screen.getByRole("list", { name: "Acme filing rules" })).getByText("Title contains “weekly sync”")).toBeInTheDocument();
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Rule added: Title contains “weekly sync”"));
+    expect(within(await screen.findByRole("list", { name: "Acme filing rules" })).getByText("Title contains “weekly sync”")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Title contains" })).toHaveValue("");
   });
 
@@ -64,7 +64,7 @@ describe("filing rules", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Contact number or email" }), { target: { value: "+92 300 1234567" } });
     fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
     await waitFor(() => expect(callsOf("client_rule_add")[1]).toEqual({ id: "c1", kind: "contact", value: "+92 300 1234567" }));
-    expect(screen.getByText("Contact +92 300 1234567")).toBeInTheDocument();
+    expect(await screen.findByText("Contact +92 300 1234567")).toBeInTheDocument();
   });
 
   it("says in plain words which project already has the rule", async () => {
@@ -83,7 +83,7 @@ describe("filing rules", () => {
     edit();
     fireEvent.click(screen.getByRole("button", { name: "Remove the rule From Zoom" }));
     await waitFor(() => expect(callsOf("client_rule_delete")).toEqual([{ id: "c1", rule: "8" }]));
-    expect(screen.queryByText("From Zoom")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("From Zoom")).not.toBeInTheDocument());
   });
 
   it("is not shown on a server without filing rules", async () => {

@@ -129,8 +129,8 @@ describe("Shared with me", () => {
     const props = await renderShared();
     fireEvent.click(within(screen.getAllByRole("listitem")[0]).getByRole("button", { name: "Save to my library" }));
     await waitFor(() => expect(callsOf("shared_save")).toEqual([{ id: "01JDSHARE1" }]));
-    expect(props.notify).toHaveBeenCalledWith("Saved to your Library");
-    expect(props.onSmartFolder).toHaveBeenCalledWith(null);
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Saved to your Library"));
+    await waitFor(() => expect(props.onSmartFolder).toHaveBeenCalledWith(null));
     expect(screen.getAllByText("Saved to your Library").length).toBeGreaterThan(0);
   });
 
@@ -147,7 +147,7 @@ describe("Shared with me", () => {
     await renderShared();
     fireEvent.click(screen.getByRole("button", { name: "Remove Northwind from Shared with me" }));
     await waitFor(() => expect(callsOf("shared_remove")).toEqual([{ id: "01JDSHARE2" }]));
-    expect(screen.queryByText("Northwind")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Northwind")).not.toBeInTheDocument());
   });
 
   it("opens the item an app link points at", async () => {
