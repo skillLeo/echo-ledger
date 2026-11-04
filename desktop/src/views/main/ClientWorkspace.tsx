@@ -575,7 +575,7 @@ function Ask({ ws, clientId, onOpenRecording }: { ws: Workspace; clientId: strin
     <>
       {!ws.ai.configured && <div className="notice" role="status" style={{ marginBottom: 12 }}>Ask needs the server's Anthropic key. Ask the person who runs the console to add it.</div>}
       <form className="ask-box" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
-        <textarea className="input" aria-label="Question" placeholder={`Ask about ${ws.client.name}: “When do we launch?”`} maxLength={500} value={question}
+        <textarea className="input" aria-label="Question" dir="auto" placeholder={`Ask about ${ws.client.name}: “When do we launch?”`} maxLength={500} value={question}
           onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void ask(); } }} />
         <div className="row">
           <span className="segmented" role="group" aria-label="Answer in">

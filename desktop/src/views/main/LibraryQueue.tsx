@@ -309,6 +309,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                           <input
                             className="input queue-rename"
                             aria-label="Title"
+                            dir="auto"
                             autoFocus
                             maxLength={200}
                             value={renaming.text}

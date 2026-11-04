@@ -192,7 +192,7 @@ export default function MainApp() {
       listen<AppStatus>("app:status", (e) => setStatus(e.payload)),
       listen<string>("app:error", (e) => setToast({ text: e.payload, error: true })),
       listen<string>("app:toast", (e) => setToast({ text: e.payload })),
-      // Tray "Review recordings (N)" and the review card's Open / Rename (contract 4.5).
+      // Tray "Review recordings (N)" and the after-call chip's title, which opens its title field (contract 4.5).
       listenTo("main:navigate", (nav) => {
         if (!nav || !TABS.includes(nav.view)) return;
         setTab(nav.view);

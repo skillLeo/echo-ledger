@@ -294,6 +294,8 @@ describe("Waiting recordings: rename", () => {
     expect(titleBox("p1")).toHaveValue("Weekly sync");
     expect(titleBox("p1")).toHaveFocus();
     expect(titleBox("p1")).toHaveAttribute("maxLength", "200");
+    // An Urdu title is typed right to left, like the Library's own title field.
+    expect(titleBox("p1")).toHaveAttribute("dir", "auto");
   });
 
   it("saves on Enter with pending_rename and shows the title the core returns", async () => {

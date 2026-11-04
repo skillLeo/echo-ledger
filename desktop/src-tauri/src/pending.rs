@@ -36,7 +36,7 @@ pub fn after_call(setting: AfterCall, mode: RecordingMode) -> AfterCall {
     if mode == RecordingMode::Call { setting } else { AfterCall::Keep }
 }
 
-/// The review card's preview: the first final caption turn as `Me: …` / `Client: …`, at most 140 characters.
+/// The waiting list's preview: the first final caption turn as `Me: …` / `Client: …`, at most 140 characters.
 pub fn first_line(segments: &[SegmentDto]) -> Option<String> {
     let first = segments.iter().filter(|s| !s.text.trim().is_empty()).min_by_key(|s| (s.start_ms, s.channel))?;
     let line = format!("{}: {}", first.speaker, first.text.trim());
@@ -437,7 +437,7 @@ impl DecisionFiles {
         self.update(id, |d| d.title = title)
     }
 
-    /// The language chip on the review card or in the waiting list: the final transcript uses it at Keep.
+    /// The language chip in the waiting list: the final transcript uses it at Keep.
     pub fn set_language(&self, id: &str, language: Option<String>) -> AppResult<PendingDecision> {
         self.update(id, |d| d.language = language)
     }

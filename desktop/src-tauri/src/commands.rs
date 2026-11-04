@@ -1544,7 +1544,7 @@ pub fn pending_rename(app: AppHandle, id: String, title: String) -> AppResult<Pe
     crate::actions::pending_rename(&app, &id, &title)
 }
 
-/// The language chip of a waiting recording (review card, waiting list): Keep transcribes in it.
+/// The language chip of a waiting recording (the waiting list): Keep transcribes in it.
 #[tauri::command]
 pub fn pending_set_language(app: AppHandle, id: String, language: Option<String>) -> AppResult<PendingItem> {
     crate::actions::pending_set_language(&app, &id, language)

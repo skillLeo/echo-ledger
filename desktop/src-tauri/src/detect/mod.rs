@@ -256,7 +256,7 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
         let id = uuid::Uuid::new_v4().to_string();
         let payload = ask_payload(&id, &target);
         lock(&detect.asks).insert(id.clone(), target);
-        crate::overlay::show_ask(app, payload); // the chip shares the review card's window
+        crate::overlay::show_ask(app, payload); // the chip shares the after-call window
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(Duration::from_secs(ASK_SECONDS)).await;

@@ -303,6 +303,8 @@ describe("Ask", () => {
     respond("client_ask", { data: ANSWER });
     const { onOpenRecording } = await renderClients();
     tab("Ask");
+    // An Urdu question is typed right to left (v1.5 sweep).
+    expect(screen.getByRole("textbox", { name: "Question" })).toHaveAttribute("dir", "auto");
     fireEvent.change(screen.getByRole("textbox", { name: "Question" }), { target: { value: "  When do we launch?  " } });
     fireEvent.click(within(screen.getByRole("group", { name: "Answer in" })).getByRole("button", { name: "Roman Urdu" }));
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
