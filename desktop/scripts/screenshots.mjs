@@ -29,6 +29,8 @@ const SCREENS = [
     await page.waitForSelector(".queue-item.pending");
   }],
   ["library-empty", "library-empty", async (page) => page.waitForSelector(".empty-state")],
+  // v1.5: a call a backup engine transcribed.
+  ["library-backup", "library-backup", async (page) => page.waitForSelector("[data-testid=backup-engine]")],
   ["clients", "clients", async (page) => page.waitForSelector(".brief-grid")],
   ["client-files", "clients", async (page) => {
     await page.getByRole("tab", { name: "Files" }).click();
@@ -41,7 +43,16 @@ const SCREENS = [
     await page.waitForSelector(".ask-answer");
   }],
   ["record", "record", async (page) => page.waitForSelector(".record-btn")],
-  ["activity", "activity", async (page) => page.waitForSelector(".activity-item")],
+  ["record-bluetooth", "record-bluetooth", async (page) => page.waitForSelector("[data-testid=bluetooth-note]")],
+  ["activity", "activity", async (page) => {
+    await page.waitForSelector(".activity-item");
+    await page.waitForSelector("[data-testid=skipped-calls]");
+  }],
+  ["activity-skipped", "activity", async (page) => {
+    await page.waitForSelector("[data-testid=skipped-calls]");
+    await page.getByTestId("skipped-calls").getByRole("button", { name: "Show" }).click();
+    await page.waitForSelector(".skipped-list");
+  }],
   ["settings", "settings", async (page) => {
     await page.waitForSelector(".settings-row");
     await page.getByRole("button", { name: "General" }).click();
@@ -55,6 +66,10 @@ const SCREENS = [
     await page.waitForSelector(".after-pill.saved");
     await page.waitForSelector(".after-pill.chip");
     await page.waitForSelector(".overlay-card .caption-line");
+  }],
+  ["controls-bluetooth", "controls-bluetooth", async (page) => {
+    await page.waitForSelector("[data-testid=bluetooth-notice]");
+    await page.waitForSelector(".after-pill.chip");
   }],
 ];
 

@@ -1,12 +1,13 @@
 // A fixture mode for screenshots: the real views in a plain browser, with Tauri's own IPC mock answering every command
-// from sample data (data.ts). `?screen=library|library-empty|clients|record|activity|settings|controls&theme=light|dark`.
+// from sample data (data.ts). `?screen=library|library-empty|library-backup|clients|record|record-bluetooth|activity|settings|controls|
+// controls-bluetooth&theme=light|dark` (v1.5: "-bluetooth" records from AirPods, "library-backup" opens the backup-engine call).
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
 import { makeAfterCallState, makeChipItem, makeMicUser, makeRecordingState, makeSavedToast, makeSettings, makeStatus } from "../../src/test/fixtures";
-import { ACTIVITY, ANSWER, CLIENTS, ITEMS, NOTES_R5, PENDING, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
+import { ACTIVITY, ANSWER, CLIENTS, ITEMS, NOTES_R5, PENDING, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 
 const params = new URLSearchParams(location.search);
 const screen = params.get("screen") ?? "library";
@@ -14,7 +15,8 @@ const theme = params.get("theme") === "dark" ? "dark" : "light";
 localStorage.setItem("echoledger-theme", theme);
 document.documentElement.dataset.theme = theme;
 document.documentElement.style.colorScheme = theme;
-document.documentElement.dataset.window = screen === "controls" ? "controls" : "main";
+const controls = screen.startsWith("controls");
+document.documentElement.dataset.window = controls ? "controls" : "main";
 
 /** One second of silence, so the player has something to load. */
 function silentWav(): string {
@@ -30,14 +32,16 @@ function silentWav(): string {
 const audioUrl = silentWav();
 
 const empty = screen === "library-empty";
-const tab = screen.startsWith("library") ? "library" : screen.startsWith("client") ? "clients" : screen;
+const bluetooth = screen.endsWith("-bluetooth");
+const tab = screen.startsWith("library") ? "library" : screen.startsWith("client") ? "clients" : screen.startsWith("record") ? "record" : screen;
+const opened = screen === "library-backup" ? "r2" : "r5";
 type Args = Record<string, unknown>;
 let captions: { onmessage: (e: unknown) => void } | null = null;
 
 const commands: Record<string, (args: Args) => unknown> = {
-  app_status: () => makeStatus({ deviceName: "Work laptop", pendingDecisions: empty ? 0 : PENDING.length, captionsLive: screen === "controls" }),
+  app_status: () => makeStatus({ deviceName: "Work laptop", pendingDecisions: empty ? 0 : PENDING.length, captionsLive: controls }),
   get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true }),
-  main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" ? null : "r5", scroll: {} }),
+  main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : ITEMS),
   library_refresh: () => (empty ? [] : ITEMS),
@@ -47,6 +51,7 @@ const commands: Record<string, (args: Args) => unknown> = {
   transcript_views: () => VIEWS,
   unsure_markers: () => null,
   pending_list: () => (empty ? [] : PENDING),
+  skipped_list: () => (empty ? [] : SKIPPED),
   upload_list: () => [],
   activity_list: () => ({ data: ACTIVITY, unread_count: ACTIVITY.filter((a) => !a.read).length }),
   search_library: () => ({ data: [], next_page: null }),
@@ -56,13 +61,16 @@ const commands: Record<string, (args: Args) => unknown> = {
   mic_users: () => [makeMicUser(), makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
   translate_apps: () => [],
   translate_status: () => null,
-  input_devices: () => [{ id: "default", name: "Microphone (Realtek Audio)", isDefault: true }],
+  input_devices: () => [
+    { id: "default", name: "Microphone (Realtek Audio)", isDefault: !bluetooth, bluetooth: false },
+    ...(bluetooth ? [{ id: "airpods", name: "AirPods Pro", isDefault: true, bluetooth: true }] : []),
+  ],
   permissions_status: () => ({ microphone: "allowed", browserAutomation: false, platform: "windows" }),
   security_overview: () => ({ devices: [{ id: "d1", name: "Work laptop", platform: "windows", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: true }, { id: "d2", name: "Pixel 9", platform: "android", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: false }], events: [] }),
   storage_info: () => ({ recordings_bytes: 812_000_000, recordings_count: 42, disk_free_bytes: 80_123_456_789, disk_total_bytes: 107_374_182_400, retention_days: 30 }),
   dictation_history: () => [],
   marker_tags: () => ["Budget", "Decision", "Follow up"],
-  recording_state: () => makeRecordingState({ elapsedMs: 134_000, sourceApp: "whatsapp", language: "ur" }),
+  recording_state: () => makeRecordingState({ elapsedMs: 134_000, sourceApp: "whatsapp", language: "ur", bluetoothMic: bluetooth }),
   // The after-call window: "Saved · … · Undo" over the Ask-me chip (its line at 6 of 10 s); both stay for the picture.
   after_call_state: () =>
     makeAfterCallState({
@@ -81,7 +89,7 @@ window.addEventListener("beforeunload", () => clearMocks());
 
 async function render() {
   const root = ReactDOM.createRoot(document.getElementById("root")!);
-  if (screen !== "controls") {
+  if (!controls) {
     const { default: MainApp } = await import("../../src/views/main/MainApp");
     root.render(<React.StrictMode><MainApp /></React.StrictMode>);
     return;
