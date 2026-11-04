@@ -26,8 +26,8 @@ dataset('admin urls', [
     'profile' => ['/admin/profile'],
 ]);
 
-it('sends the site root to the admin console', function () {
-    $this->get('/')->assertRedirect('/admin');
+it('shows the landing page at the site root, whose Sign in leads to the admin console', function () {
+    $this->get('/')->assertOk()->assertSee('Sign in')->assertSee('href="'.url('/admin').'"', false);
 });
 
 it('redirects a guest from the console page to the login page', function (string $url) {

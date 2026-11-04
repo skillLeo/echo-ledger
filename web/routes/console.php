@@ -13,7 +13,9 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('queue:work --stop-when-empty --max-time=55 --tries=3 --timeout=900')
     ->everyMinute()
     ->withoutOverlapping(15)
-    ->runInBackground();
+    ->runInBackground()
+    // On a VPS a supervisor runs the workers (QUEUE_VIA_SCHEDULER=false, docs/DEPLOY_VPS.md).
+    ->when(fn (): bool => (bool) config('queue.via_scheduler', true));
 
 Schedule::command('stt:reconcile')->everyFiveMinutes()->withoutOverlapping(10);
 

@@ -16,6 +16,12 @@ return [
     'default' => env('QUEUE_CONNECTION', 'database'),
 
     /*
+    | Shared hosting has no long-running processes, so the scheduler starts a worker every minute (routes/console.php).
+    | On a VPS a supervisor runs the workers instead: QUEUE_VIA_SCHEDULER=false (docs/DEPLOY_VPS.md).
+    */
+    'via_scheduler' => (bool) env('QUEUE_VIA_SCHEDULER', true),
+
+    /*
     |--------------------------------------------------------------------------
     | Queue Connections
     |--------------------------------------------------------------------------

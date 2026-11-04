@@ -5,12 +5,24 @@ declare(strict_types=1);
 use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
 use App\Http\Controllers\ConsoleUploadController;
+use App\Http\Controllers\DownloadsController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
+use App\Http\Controllers\SiteController;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
 
-Route::redirect('/', '/admin');
+// The public site (since v1.5): the landing page, the downloads page and the apps' update manifests (docs/API.md
+// "Public pages and app downloads"). Nothing here shows anyone's data; throttled per IP.
+Route::middleware('throttle:site')->group(function (): void {
+    Route::get('/', [SiteController::class, 'home'])->name('site.home');
+    Route::get('/downloads', [DownloadsController::class, 'page'])->name('downloads');
+    Route::get('/downloads/android.json', [DownloadsController::class, 'android'])->name('downloads.android');
+    Route::get('/downloads/desktop.json', [DownloadsController::class, 'desktop'])->name('downloads.desktop');
+    Route::get('/downloads/files/{name}', [DownloadsController::class, 'file'])
+        ->where('name', '[A-Za-z0-9][A-Za-z0-9._-]{0,119}')
+        ->name('downloads.file');
+});
 
 // Decrypted playback for the admin transcript player (HTTP Range supported).
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)

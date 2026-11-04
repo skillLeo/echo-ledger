@@ -46,6 +46,14 @@ return [
             'report' => false,
         ],
 
+        // The apps' builds on the downloads page (since v1.5): served by DownloadsController, never directly.
+        'downloads' => [
+            'driver' => 'local',
+            'root' => storage_path('app/downloads'),
+            'throw' => true,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

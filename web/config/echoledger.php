@@ -27,6 +27,9 @@ return [
     // Plaintext temp files (decrypt for provider upload) live here and are deleted in `finally`.
     'tmp_dir' => storage_path('app/private/tmp'),
 
+    // The landing and downloads pages ask search engines to stay away until the public launch (since v1.5).
+    'site_indexable' => (bool) env('ECHOLEDGER_SITE_INDEXABLE', false),
+
     'accepted_mimes' => [
         'audio/ogg', 'audio/opus', 'audio/flac', 'audio/x-flac', 'audio/wav', 'audio/x-wav', 'audio/wave',
         'audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'audio/webm', 'audio/amr', 'application/ogg',

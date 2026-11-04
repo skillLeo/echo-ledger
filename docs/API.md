@@ -274,7 +274,13 @@ No sign-in, throttled (60/min/IP). The apps open these pages in the browser.
   each `signature` made with the updater key (the public half is built into the app). `404 not_found` while none.
 - Builds are published by the release step, not uploaded through the console: `php artisan echoledger:publish-release
   <file> --platform=android|windows|macos-arm|macos-intel --app-version=1.5.0 [--code=16] [--notes=…]
-  [--signature=<file.sig>]` stores the file, measures it, computes the SHA-256 and keeps the older builds listed.
+  [--updater-file=<the Mac .app.tar.gz>] [--signature=<file.sig>]` stores the file, measures it, computes the SHA-256
+  and keeps the older builds listed. The phone needs `--code`; a desktop build is offered to the updater only with a
+  `--signature` (of the Windows installer, or of the Mac `--updater-file`). Files are served from
+  `/downloads/files/<name>` as attachments (ranges honoured), e.g. `EchoLedger-1.5.0.apk`,
+  `EchoLedger-1.5.0-setup.exe`, `EchoLedger-1.5.0-mac-apple-silicon.dmg`.
+- `GET /` is the public landing page (it shows nobody's data); `ECHOLEDGER_SITE_INDEXABLE=true` lets search engines
+  index the landing and downloads pages (off until the public launch).
 
 ### `GET /api/config` — `config:read`
 ```json
