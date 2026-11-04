@@ -651,8 +651,9 @@ unless a share link of the recording allows downloads.
 - `GET /api/sessions/{id}/pack?format=pdf|zip&view=roman|english|urdu|original&include_audio=0|1` — `library:read`:
   - `pdf`: a title page (title, date, length, people, project), then the transcript in the view, each screen placed
     at its moment with the label "[Screen 7 at 14:32]". Claude and ChatGPT read PDF pages as text and images.
-  - `zip`: `transcript.md` (the same order, each screen as `![Screen 7 at 14:32](images/screen-07.webp)` with its
-    description), the `images/` folder, and with `include_audio=1` the recording's audio.
+  - `zip`: `transcript.md` (the same order, each screen as a Markdown image titled "Screen 7 at 14:32" that points to
+    `images/screen-07.webp`, with its description), the `images/` folder, and with `include_audio=1` the recording's
+    audio.
   - `409 nothing_to_export` without a finished transcript. Names like `GET /api/transcripts/{id}/export`.
 - "Copy for AI" (in the apps) puts `[Screen N at mm:ss: <description>]` lines between the transcript lines at the
   screens' moments; the apps build it from `GET /api/sessions/{id}/screens`.
