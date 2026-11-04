@@ -62,6 +62,11 @@ Every addition below is marked **(since v1.1)**.
 | 404 | `memory_not_found` | Since v1.4: the memory line is unknown or belongs to another client | Refresh the workspace |
 | 404 | `file_not_found` | Since v1.4: the client file is unknown or already deleted | Refresh the workspace |
 | 404 | `suggestion_not_found` | Since v1.4: the suggested fix is unknown or was already accepted or dismissed | Refresh the transcript |
+| 404 | `rule_not_found` | Since v1.5: the filing rule is unknown or belongs to another project | Refresh the rules |
+| 404 | `recipient_not_found` | Since v1.5: an email to send to has no account on this server; nothing was sent | Check the address |
+| 409 | `rule_exists` | Since v1.5: another project already has a rule with that kind and value | Show which project has it |
+| 422 | `invalid_parent` | Since v1.5: a project cannot go under itself or one of its own subfolders | Pick another folder |
+| 422 | `too_deep` | Since v1.5: projects nest at most 4 levels | Pick a higher folder |
 | 405 | `method_not_allowed` | Wrong HTTP method | Permanent |
 | 409 | `upload_complete` | Chunk sent after the recording started assembling | Stop sending chunks; poll `GET /api/recordings/{id}` |
 | 409 | `session_not_recording` | `stt/token`: the session is not in status `recording`, or is 4 hours old or older | Captions are unavailable for this recording; keep recording |
@@ -522,6 +527,86 @@ required and unique per owner (≤ 120), `color` is `#rrggbb`, `avatar` keeps on
 ### `PATCH /api/clients/{id}` — `sessions:write` (since v1.1)
 Any of `name`, `color`, `avatar`, `pinned`, `retention_days` (1-365, `null` = the general setting) →
 `200 {"data": <client>}`; `404 client_not_found`.
+### Projects (since v1.5)
+The apps call client folders **Projects**; the API keeps the name `clients`, and everything above still holds. A
+project can sit inside another one (subfolders, at most 4 levels), and recordings that are in no project are the
+**Inbox**.
+
+- Client objects (in `GET /api/clients`, `POST`/`PATCH /api/clients…` answers) gain `parent_id` (string or `null` =
+  top level), `path` (the ancestors from the top: `[{"id": "01JB…", "name": "Acme"}]`, empty at the top),
+  `children_count` and `nested_session_count` (recordings in it and its subfolders; `session_count` stays the
+  recordings directly in it).
+- `POST /api/clients` and `PATCH /api/clients/{id}` accept `parent_id` (a project of the same workspace, or `null`).
+  A move under itself or one of its own subfolders is `422 invalid_parent`; deeper than 4 levels is `422 too_deep`.
+- `DELETE /api/clients/{id}` — `sessions:write`: deletes the project. Its recordings go to the Inbox (nothing is
+  deleted), its subfolders move up to its parent, and its files, brief, notes, memory and rules go with it.
+  `200 {"moved_sessions": 12, "moved_projects": 2}`; `404 client_not_found`; a member of a workspace deleting a
+  project needs the admin or owner role (`403 not_allowed`).
+- `GET /api/library` gains `folder` (the smart folders, computed views and never copies): `inbox` (no project),
+  `whatsapp`, `whatsapp_business`, `google_meet`, `zoom`, `teams`, `phone` (SIM calls), `voice_notes`, `imported`
+  (files imported on a device, uploaded on the console or sent through a request link) and `shared` (recordings
+  others sent you, see "Sending to a teammate"). With `client_id`, `include_subfolders=1` also lists the recordings
+  of its subfolders. `GET /api/library/views` gains `folders`: `{"inbox": 4, "whatsapp": 31, …, "shared": 1}`.
+- Library items gain `filed_by`: `user` (moved by hand or chosen when recording), `contact` (the caller is one of the
+  project's contacts), `rule` (a filing rule) or `null` (Inbox).
+
+### Filing rules (since v1.5)
+A recording that ends without a project is filed by the first match: the caller is one of a project's contacts
+(as since v1.4), then a `title` rule (the title contains the text, ignoring capitals; desktop titles come from the
+meeting window), then an `app` rule (`source_app`); otherwise it stays in the Inbox. A rule never moves a recording
+that is already in a project.
+
+- `GET /api/clients/{id}/rules` — `library:read` → `200 {"data": [{"id": 7, "kind": "title", "value": "Acme", "created_at": "…"}]}`.
+- `POST /api/clients/{id}/rules` — `sessions:write`: `{"kind": "title" | "app" | "contact", "value": "Acme"}`
+  (`contact` is a phone number or an email and adds a contact; `app` is a `source_app` wire value; ≤ 120
+  characters) → `201 {"data": <rule>}`. The same kind and value on another project is `409 rule_exists`.
+- `DELETE /api/clients/{id}/rules/{rule}` — `sessions:write` → `204`; `404 rule_not_found`.
+
+### Share links (since v1.5)
+Share links can now be for a project too, and say who may open them.
+
+- `POST /api/sessions/{id}/shares` and the new `POST /api/clients/{id}/shares` — `sessions:write` take
+  `audience`: `public` (anyone with the link, the default and what older apps get), `password` (anyone with the
+  link and `password`, 6–100 characters) or `people` (`people`: up to 20 emails; they open it signed in to the
+  console with one of those emails), plus `allow_download` (default `true`: audio and transcript files can be
+  downloaded; `false` = read and listen only), `expires_at` (ISO, optional) and `view` (as before). The answer is
+  `201 {"data": <share>}` with `url` (shown once).
+- A share: `{"id", "kind": "session" | "project", "session_id" | "client_id", "audience", "people": [...],
+  "allow_download", "expires_at", "revoked_at", "view_count", "last_viewed_at", "created_at"}`.
+- `GET /api/shares` — `library:read`: every share of the workspace's recordings and projects, newest first
+  (`?session_id=` or `?client_id=` to narrow); `DELETE /api/shares/{id}` revokes (as before).
+- Pages: `/s/{token}` (a recording, as before) and `/p/{token}` (a project: its recordings, newest first, each
+  opening as `/s/…` would). With `allow_download`, `/s/{token}/download` gives a ZIP of the audio and the
+  transcript (in the link's view). People-only links ask for the console sign-in first and refuse other emails.
+
+### Sending to a teammate (since v1.5)
+- `POST /api/sessions/{id}/send` and `POST /api/clients/{id}/send` — `sessions:write`: `{"to": ["ana@example.com"],
+  "note": "for tomorrow"}` (up to 20 emails of people with an account on this server; `note` ≤ 500) →
+  `201 {"sent": 1}`; an email with no account is `404 recipient_not_found` (nothing is sent).
+- `GET /api/shared-with-me` — `library:read`: `{"data": [{"id": "01JD…", "kind": "session" | "project", "from":
+  {"name": "Hassam", "email": "…"}, "note": "…", "title": "Call with Omar", "sent_at": "…", "saved_at": null,
+  "session": <library item, read-only> | null, "client": <client> | null}]}`. Received recordings are also in the
+  `shared` smart folder; they can be played and read, not edited.
+- `POST /api/shared-with-me/{id}/save` — `sessions:write`: copies it into your own workspace (a recording with its
+  audio, final transcript and views; a project with its recordings) → `201 {"session_id": "…"}` or
+  `{"client_id": "…"}`; the copy is yours and independent of the original.
+- `DELETE /api/shared-with-me/{id}` → `204` (takes it off your list; the sender's recording stays).
+
+### Request links (since v1.5)
+- `POST /api/request-links` — `sessions:write`: `{"title": "Send me your voice notes", "client_id": "01JB…" | null,
+  "expires_at": "…", "max_files": 20, "max_mb": 100}` → `201 {"data": {"id", "url", "title", "client_id",
+  "expires_at", "max_files", "max_mb", "received": 0, "revoked_at": null}}` (`url` shown once). `GET
+  /api/request-links` lists them; `DELETE /api/request-links/{id}` revokes.
+- `/r/{token}` is a public upload page (throttled, no account): audio and video (opus, ogg, mp3, m4a, aac, wav, mp4,
+  webm) become recordings in the link's project or the Inbox, titled from the file name; with a project, PDF,
+  DOCX, TXT and images (PNG, JPG, WebP) go to its Files. Other types, files over `max_mb` or more than `max_files`
+  are refused with a plain message.
+
+### Links in the apps (since v1.5)
+`/.well-known/assetlinks.json` lets Android open `/s/…`, `/p/…` and `/r/…` links of this server in the phone app
+when it is installed; the desktop app registers `echoledger://open?link=<url>` and the share page offers "Open in
+EchoLedger". Without the app the web page opens as before.
+
 ### `GET /api/search` — `library:read`, throttled (60/min/device) (since v1.1)
 Searches titles and transcript text (final and live) of every device. Query: `q` (2–200 characters; every word
 must match, `"quoted phrases"` stay together, case does not matter), and the optional filters `client_id`,
