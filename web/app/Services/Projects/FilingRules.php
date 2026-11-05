@@ -12,6 +12,7 @@ use App\Models\ClientContact;
 use App\Models\FilingRule;
 use App\Models\Scopes\WorkspaceScope;
 use App\Services\Callers\CallerMatcher;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -71,29 +72,58 @@ final class FilingRules
         ['value' => $value, 'match' => $match] = self::normalise($kind, $value);
 
         return DB::transaction(function () use ($project, $kind, $value, $match): array {
-            $existing = FilingRule::query()->withoutGlobalScope(WorkspaceScope::class)->with('client')
-                ->where('workspace_id', $project->workspace_id)->where('kind', $kind)->where('match_value', $match)->first();
+            // Adds of one workspace one at a time, so the lookup below sees a rule another request just added.
+            ProjectTree::lock($project->workspace_id);
+            $existing = $this->existing($project, $kind, $match);
             if ($existing instanceof FilingRule) {
-                if ($existing->client_id === $project->id) {
-                    return ['rule' => $existing, 'created' => false];
-                }
-                throw self::exists($existing->client);
+                return self::taken($project, $existing);
             }
             $contact = null;
             if ($kind === 'contact') {
                 $contact = $this->contactFor($project, $value, $match);
             }
-            $rule = FilingRule::query()->create([
-                'workspace_id' => $project->workspace_id,
-                'client_id' => $project->id,
-                'kind' => $kind,
-                'value' => $value,
-                'match_value' => $match,
-                'client_contact_id' => $contact?->wasRecentlyCreated === true ? $contact->id : null,
-            ]);
+            try {
+                $rule = FilingRule::query()->create([
+                    'workspace_id' => $project->workspace_id,
+                    'client_id' => $project->id,
+                    'kind' => $kind,
+                    'value' => $value,
+                    'match_value' => $match,
+                    'client_contact_id' => $contact?->wasRecentlyCreated === true ? $contact->id : null,
+                ]);
+            } catch (UniqueConstraintViolationException $e) {
+                // Taken in the meantime all the same: answered like a request that came second.
+                $existing = $this->existing($project, $kind, $match, latest: true);
+
+                return $existing instanceof FilingRule ? self::taken($project, $existing) : throw $e;
+            }
 
             return ['rule' => $rule, 'created' => true];
         });
+    }
+
+    /** The workspace's rule of this kind and value; `latest` reads past this transaction's snapshot (a locking read). */
+    private function existing(Client $project, string $kind, string $match, bool $latest = false): ?FilingRule
+    {
+        $rule = FilingRule::query()->withoutGlobalScope(WorkspaceScope::class)->with('client')
+            ->where('workspace_id', $project->workspace_id)->where('kind', $kind)->where('match_value', $match)
+            ->when($latest, fn ($q) => $q->lockForUpdate())->first();
+
+        return $rule instanceof FilingRule ? $rule : null;
+    }
+
+    /**
+     * The project's own rule (`created` false), or `409 rule_exists` naming the project that has it.
+     *
+     * @return array{rule: FilingRule, created: bool}
+     */
+    private static function taken(Client $project, FilingRule $existing): array
+    {
+        if ($existing->client_id === $project->id) {
+            return ['rule' => $existing, 'created' => false];
+        }
+
+        throw self::exists($existing->client);
     }
 
     /** The project's contact with this number or email, else a new one; another project's is `409 rule_exists`. */

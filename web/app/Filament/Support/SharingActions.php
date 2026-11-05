@@ -151,12 +151,24 @@ final class SharingActions
             ->modalSubmitActionLabel('Save')
             ->action(function (Client $record, array $data, Action $action): void {
                 $name = trim((string) $data['name']);
-                if (app(ProjectTree::class)->nameTaken($record->workspace_id, $record->parent_id, $name, $record->id)) {
-                    Notification::make()->title(ProjectTree::NAME_TAKEN)->danger()->send();
+                $tree = app(ProjectTree::class);
+                try {
+                    // With the other changes of the workspace's projects waiting (ProjectTree::place).
+                    $tree->place($record->workspace_id, function () use ($record, $name, $tree): Client {
+                        $record->refresh();
+                        $tree->assertNameFree($record->workspace_id, $record->parent_id, $name, $record->id);
+                        $record->update(['name' => $name]);
+
+                        return $record;
+                    });
+                } catch (ApiError $e) {
+                    Notification::make()->title($e->getMessage())->danger()->send();
                     $action->halt();
+
+                    return;
                 }
-                $record->update(['name' => $name]);
-                Notification::make()->title('Renamed to “'.$name.'”')->success()->send();
+                // Toasts render their title as HTML: a name is text.
+                Notification::make()->title('Renamed to “'.e($name).'”')->success()->send();
             });
     }
 
@@ -177,17 +189,24 @@ final class SharingActions
             ->action(function (Client $record, array $data, Action $action): void {
                 $tree = app(ProjectTree::class);
                 try {
-                    $parent = $tree->parentFor($record->workspace_id, $data['parent_id'] ?? null);
-                    $tree->assertCanPlace($record, $parent);
-                    $tree->assertNameFree($record->workspace_id, $parent?->id, $record->name, $record->id);
+                    // With the other changes of the workspace's projects waiting (ProjectTree::place).
+                    $tree->place($record->workspace_id, function () use ($record, $data, $tree): Client {
+                        $record->refresh();
+                        $parent = $tree->parentFor($record->workspace_id, $data['parent_id'] ?? null);
+                        $tree->assertCanPlace($record, $parent);
+                        $tree->assertNameFree($record->workspace_id, $parent?->id, $record->name, $record->id);
+                        $record->update(['parent_id' => $parent?->id]);
+
+                        return $record;
+                    });
                 } catch (ApiError $e) {
                     Notification::make()->title($e->getMessage())->danger()->send();
                     $action->halt();
 
                     return;
                 }
-                $record->update(['parent_id' => $parent?->id]);
-                Notification::make()->title($parent === null ? 'Moved to the top level' : 'Moved into “'.$parent->name.'”')->success()->send();
+                $parent = $record->parent_id !== null ? $record->parent()->first() : null;
+                Notification::make()->title($parent === null ? 'Moved to the top level' : 'Moved into “'.e($parent->name).'”')->success()->send();
             });
     }
 

@@ -51,6 +51,8 @@ class AdminPanelProvider extends PanelProvider
             // C6: a quiet notice while the browser is offline.
             ->renderHook(PanelsRenderHook::BODY_END, fn (): View => view('filament.offline-banner'))
             ->profile(isSimple: false)
+            // Confirming one's email (v1.5): offered, not forced; people-only share links need it (PublicShareController).
+            ->emailVerification(isRequired: false)
             // Optional TOTP 2FA with one-time recovery codes: offered in the profile, not forced at login.
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable()->brandName('EchoLedger'),

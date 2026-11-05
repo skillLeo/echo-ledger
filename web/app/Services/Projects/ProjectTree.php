@@ -12,7 +12,9 @@ use App\Models\Client;
 use App\Models\ClientFile;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\Workspaces\Workspaces;
+use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -168,12 +170,83 @@ final class ProjectTree
         }
         $parents = $this->parents($parent->workspace_id);
         if ($project !== null && ($parent->id === $project->id || in_array($parent->id, self::below($project->id, $parents), true))) {
-            throw new ApiError(422, 'invalid_parent', 'A project cannot go inside itself or one of its own subfolders.', ['errors' => ['parent_id' => ['Pick another folder.']]]);
+            throw self::invalidParent();
         }
         $height = $project !== null ? self::height($project->id, $parents) : 1;
         if (self::depth($parent->id, $parents) + $height > Client::MAX_DEPTH) {
-            throw new ApiError(422, 'too_deep', 'Projects nest at most '.Client::MAX_DEPTH.' levels.', ['errors' => ['parent_id' => ['Pick a higher folder.']]]);
+            throw self::tooDeep();
         }
+    }
+
+    /**
+     * Makes one change to the workspace's projects (a new one, a move, a rename) with every other change of them
+     * waiting: the workspace row stays locked until the transaction ends, so the checks inside $change see every
+     * change made before it. Then the project is checked where it ended up (never in a loop, at most MAX_DEPTH levels,
+     * its name free in its folder), which refuses whatever still slipped past; a refusal rolls the change back.
+     *
+     * @param  Closure(): Client  $change
+     */
+    public function place(int $workspaceId, Closure $change): Client
+    {
+        return DB::transaction(function () use ($workspaceId, $change): Client {
+            self::lock($workspaceId);
+            $project = $change();
+            $this->assertPlaced($project);
+
+            return $project;
+        });
+    }
+
+    /** Holds the other changes of the workspace's projects until the transaction ends (SQLite writes one at a time). */
+    public static function lock(int $workspaceId): void
+    {
+        Workspace::query()->whereKey($workspaceId)->lockForUpdate()->first();
+    }
+
+    /** The checks of assertCanPlace() and assertNameFree() for a project just made, moved or renamed, where it now is. */
+    public function assertPlaced(Client $project): void
+    {
+        $moved = $project->wasRecentlyCreated || $project->wasChanged('parent_id');
+        if ($moved) {
+            $parents = $this->parents($project->workspace_id);
+            if (self::inLoop($project->id, $parents)) {
+                throw self::invalidParent();
+            }
+            if (self::depth($project->id, $parents) + self::height($project->id, $parents) - 1 > Client::MAX_DEPTH) {
+                throw self::tooDeep();
+            }
+        }
+        if ($moved || $project->wasChanged('name')) {
+            $this->assertNameFree($project->workspace_id, $project->parent_id, $project->name, $project->id);
+        }
+    }
+
+    /**
+     * True when the folders above the project never reach the top: going up comes back to one already passed.
+     *
+     * @param  array<string, string|null>  $parents
+     */
+    public static function inLoop(string $id, array $parents): bool
+    {
+        $seen = [$id];
+        for ($parent = $parents[$id] ?? null; $parent !== null; $parent = $parents[$parent] ?? null) {
+            if (in_array($parent, $seen, true)) {
+                return true;
+            }
+            $seen[] = $parent;
+        }
+
+        return false;
+    }
+
+    private static function invalidParent(): ApiError
+    {
+        return new ApiError(422, 'invalid_parent', 'A project cannot go inside itself or one of its own subfolders.', ['errors' => ['parent_id' => ['Pick another folder.']]]);
+    }
+
+    private static function tooDeep(): ApiError
+    {
+        return new ApiError(422, 'too_deep', 'Projects nest at most '.Client::MAX_DEPTH.' levels.', ['errors' => ['parent_id' => ['Pick a higher folder.']]]);
     }
 
     /** True when another project of the same folder already has this name (capitals ignored). */
@@ -225,10 +298,13 @@ final class ProjectTree
         if ($actor !== null && ! $this->canDelete($actor, $project->workspace_id)) {
             throw new ApiError(403, 'not_allowed', 'Only the workspace owner can delete a project.');
         }
-        $paths = ClientFile::query()->withoutGlobalScope(WorkspaceScope::class)->where('client_id', $project->id)
-            ->whereNotNull('path')->pluck('path')->map(fn ($p): string => (string) $p)->all();
+        $paths = [];
 
-        $result = DB::transaction(function () use ($project): array {
+        $result = DB::transaction(function () use ($project, &$paths): array {
+            // No subfolder, name or file of the project changes meanwhile (moving them up checks names in the parent).
+            self::lock($project->workspace_id);
+            $paths = ClientFile::query()->withoutGlobalScope(WorkspaceScope::class)->where('client_id', $project->id)
+                ->whereNotNull('path')->pluck('path')->map(fn ($p): string => (string) $p)->all();
             $now = now();
             $sessions = CaptureSession::query()->withoutGlobalScopes()->where('client_id', $project->id);
             $moved = (clone $sessions)->whereNull('deleted_at')->count();

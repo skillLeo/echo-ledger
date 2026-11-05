@@ -3,13 +3,16 @@
 declare(strict_types=1);
 
 use App\Enums\SourceDevice;
+use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientFile;
+use App\Models\Plan;
 use App\Models\Recording;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\ChunkedUploadService;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Sharing\RequestLinks;
@@ -187,6 +190,15 @@ describe('the page', function () {
         expect(Storage::disk('recordings')->directories('request-parts'))->toBe([]);
     });
 
+    it('keeps a sent file\'s name as plain text: no path, control or direction-changing characters', function () {
+        $link = requestLink($this);
+
+        // "notes", a right-to-left override, then "fdp.txt": the console would show "notestxt.pdf".
+        sendWhole($this, $link['url'], "Plain notes.\n", "C:\\Users\\x\\notes\u{202E}fdp\u{0000}.txt", 'text/plain')->assertOk();
+        sendWhole($this, $link['url'], "More notes.\n", "\u{202E}\u{0007}", 'text/plain')->assertOk();
+        expect(unscoped(fn () => ClientFile::query()->orderBy('created_at')->orderBy('id')->pluck('name')->all()))->toEqualCanonicalizing(['notesfdp.txt', 'File']);
+    });
+
     it('refuses types by their content, not only their name', function () {
         $link = requestLink($this);
 
@@ -206,6 +218,29 @@ describe('the page', function () {
             ->and($this->asToken($this->token)->getJson('/api/request-links')->json('data.0.received'))->toBe(0);
     });
 
+    it('refuses scripts dressed as images or text and empty files, and keeps an image with more behind it encrypted', function () {
+        $link = requestLink($this);
+        $png = (string) base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+
+        foreach ([
+            'logo.png' => '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            'shell.txt' => '<?php system($_GET["c"]); ?>',
+            'page.txt' => "Notes\n<script>alert(1)</script>\n",
+        ] as $name => $bytes) {
+            $start = startUpload($this, $link['url'], $bytes, $name, 'text/plain')->assertCreated();
+            sendChunk($this, $link['url'], $start->json('upload_id'), 0, $bytes, $start->json('chunk_size'))->assertStatus(422)
+                ->assertJsonPath('code', 'unsupported_type');
+        }
+        visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH).'/files', ['name' => 'empty.txt', 'size' => 0, 'sha256' => hash('sha256', '')])
+            ->assertStatus(422)->assertJsonPath('errors.size.0', 'This file is empty.');
+        // A real image with a page after it is an image: kept encrypted, never served as a page (Files has no download).
+        $polyglot = $png.'<html><script>alert(1)</script></html>';
+        sendWhole($this, $link['url'], $polyglot, 'photo.png', 'image/png')->assertOk();
+        $file = unscoped(fn () => ClientFile::query()->sole());
+        expect($file->mime)->toBe('image/png')
+            ->and(Storage::disk('recordings')->get((string) $file->path))->not->toContain('<script>');
+    });
+
     it('refuses files over the link\'s size and more files than it takes', function () {
         $link = requestLink($this, ['max_files' => 1, 'max_mb' => 1]);
 
@@ -213,6 +248,80 @@ describe('the page', function () {
         sendWhole($this, $link['url'], wav(), 'first.wav', 'audio/wav')->assertOk();
         startUpload($this, $link['url'], wav(), 'second.wav', 'audio/wav')->assertStatus(422)->assertJsonPath('code', 'too_many_files')
             ->assertJsonPath('message', 'This link takes at most 1 file.');
+    });
+
+    it('counts files still being sent against the plan\'s storage, so unfinished uploads cannot pass it', function () {
+        $small = Plan::query()->create(['key' => 'small', 'name' => 'Small', 'storage_bytes' => 1_000_000]);
+        Workspace::query()->whereKey($this->device->workspace_id)->update(['plan_id' => $small->id]);
+        $link = requestLink($this);
+
+        startUpload($this, $link['url'], wav(600_000), 'first.wav', 'audio/wav')->assertCreated();
+        // The first is not finished, but its 600 KB are taken: a second one of that size does not fit.
+        startUpload($this, $link['url'], wav(600_000), 'second.wav', 'audio/wav')->assertForbidden()
+            ->assertJsonPath('code', 'storage_limit_reached')->assertJsonPath('message', 'This link cannot take more files right now.');
+        startUpload($this, $link['url'], wav(300_000), 'small.wav', 'audio/wav')->assertCreated();
+        expect(RequestUpload::query()->count())->toBe(2);
+    });
+
+    it('takes no more files than the link allows when another start lands at the same time', function () {
+        $link = requestLink($this, ['max_files' => 1]);
+        // Another sender's start that slipped in while this one was being made (two requests at once).
+        $raced = false;
+        RequestUpload::created(function (RequestUpload $upload) use (&$raced): void {
+            if (! $raced) {
+                $raced = true;
+                RequestUpload::query()->create(['request_link_id' => $upload->request_link_id, 'kind' => 'file', 'name' => 'other.pdf', 'size_bytes' => 10,
+                    'sha256' => str_repeat('b', 64), 'status' => 'uploading', 'chunk_size_bytes' => 10, 'total_chunks' => 1, 'received_chunks' => []]);
+            }
+        });
+
+        startUpload($this, $link['url'], wav(), 'mine.wav', 'audio/wav')->assertStatus(422)->assertJsonPath('code', 'too_many_files');
+        expect(RequestUpload::query()->count())->toBeLessThanOrEqual(1)
+            ->and(unscoped(fn () => CaptureSession::query()->count()))->toBe(0);
+    });
+
+    it('keeps every chunk of a document when two of them arrive at once', function () {
+        $link = requestLink($this);
+        $pdf = "%PDF-1.4\n".str_repeat('x', 600_000);
+        $start = startUpload($this, $link['url'], $pdf, 'scope.pdf', 'application/pdf')->assertCreated();
+        [$id, $size] = [$start->json('upload_id'), $start->json('chunk_size')];
+        // This request read the upload before the other one stored chunk 1.
+        $stale = RequestUpload::query()->findOrFail($id);
+        sendChunk($this, $link['url'], $id, 1, $pdf, $size)->assertOk();
+
+        $chunk = substr($pdf, 0, $size);
+        $body = fopen('php://memory', 'r+');
+        fwrite($body, $chunk);
+        rewind($body);
+        app(RequestLinks::class)->chunk($stale, 0, hash('sha256', $chunk), $body);
+        expect(RequestUpload::query()->findOrFail($id)->received_chunks)->toBe([0, 1]);
+    });
+
+    it('adds a document once and counts it once when it is finished twice at the same time', function () {
+        $link = requestLink($this);
+        $text = "Plain notes from the client.\n";
+        $start = startUpload($this, $link['url'], $text, 'notes.txt', 'text/plain')->assertCreated();
+        $id = $start->json('upload_id');
+        sendChunk($this, $link['url'], $id, 0, $text, $start->json('chunk_size'))->assertOk();
+        // The same `complete` again while the first one is storing the file (two requests at once).
+        $second = null;
+        ClientFile::created(function () use (&$second, $id): void {
+            if ($second === null) {
+                $second = 'running';
+                try {
+                    $second = app(RequestLinks::class)->complete(RequestUpload::query()->findOrFail($id));
+                } catch (ApiError $e) {
+                    $second = $e->apiCode();
+                }
+            }
+        });
+
+        visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH)."/files/{$id}/complete")->assertOk()->assertExactJson(['status' => 'ready']);
+        expect($second)->toBe('upload_finished')
+            ->and(unscoped(fn () => ClientFile::query()->count()))->toBe(1)
+            ->and(RequestLink::query()->withoutGlobalScopes()->findOrFail($link['id'])->received)->toBe(1);
+        // Sent again later, it is simply done.
+        visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH)."/files/{$id}/complete")->assertOk()->assertExactJson(['status' => 'ready']);
     });
 
     it('refuses a small Word file whose body would unpack into too much', function () {
@@ -232,6 +341,22 @@ describe('the page', function () {
 
         visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH).'/files', ['name' => 'huge.pdf', 'size' => 21 * 1024 * 1024, 'sha256' => str_repeat('a', 64)])
             ->assertStatus(413)->assertJsonPath('code', 'too_large');
+    });
+
+    it('refuses the rest of an upload once its link is revoked or expires mid-way', function () {
+        foreach (['revoked', 'expired'] as $how) {
+            $link = requestLink($this);
+            $bytes = wav(600_000);
+            $start = startUpload($this, $link['url'], $bytes, "{$how}.wav", 'audio/wav')->assertCreated();
+            sendChunk($this, $link['url'], $start->json('upload_id'), 0, $bytes, $start->json('chunk_size'))->assertOk();
+            $how === 'revoked'
+                ? $this->asToken($this->token)->deleteJson('/api/request-links/'.$link['id'])->assertNoContent()
+                : RequestLink::query()->withoutGlobalScopes()->whereKey($link['id'])->update(['expires_at' => now()->subSecond()]);
+
+            sendChunk($this, $link['url'], $start->json('upload_id'), 1, $bytes, $start->json('chunk_size'))->assertNotFound()->assertJsonPath('code', 'not_found');
+            visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH).'/files/'.$start->json('upload_id').'/complete')->assertNotFound();
+        }
+        expect(RequestUpload::query()->where('status', 'ready')->count())->toBe(0);
     });
 
     it('picks up an unfinished upload of the same file', function () {

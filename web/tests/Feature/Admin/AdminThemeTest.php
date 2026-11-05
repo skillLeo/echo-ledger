@@ -84,14 +84,16 @@ it('has the command palette as global search on Ctrl or Cmd + K and a collapsibl
         ->and($this->panel->isSidebarCollapsibleOnDesktop())->toBeTrue();
 });
 
-it('has sign-in, profile and revealable passwords but no sign-up, reset or email verification', function () {
+it('has sign-in, profile and revealable passwords, an email confirmation it never forces, but no sign-up or reset', function () {
     expect($this->panel->hasLogin())->toBeTrue()
         ->and($this->panel->hasProfile())->toBeTrue()
         ->and($this->panel->isProfilePageSimple())->toBeFalse()
         ->and($this->panel->arePasswordsRevealable())->toBeTrue()
         ->and($this->panel->hasRegistration())->toBeFalse()
         ->and($this->panel->hasPasswordReset())->toBeFalse()
-        ->and($this->panel->hasEmailVerification())->toBeFalse();
+        // Since v1.5 people-only share links need a confirmed email; nobody is kept out of the console without one.
+        ->and($this->panel->hasEmailVerification())->toBeTrue()
+        ->and($this->panel->isEmailVerificationRequired())->toBeFalse();
 });
 
 it('titles console pages "Page - EchoLedger" and declares the language', function () {

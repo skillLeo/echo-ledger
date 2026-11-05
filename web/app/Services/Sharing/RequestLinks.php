@@ -17,6 +17,7 @@ use App\Models\Recording;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
 use App\Models\Scopes\WorkspaceScope;
+use App\Models\Workspace;
 use App\Services\ChunkedUploadService;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\ConsoleUploads;
@@ -26,6 +27,7 @@ use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -71,6 +73,9 @@ final class RequestLinks
 
     /** Bytes of the first chunk looked at to tell what a file really is. */
     private const SNIFF_BYTES = 64 * 1024;
+
+    /** Longer than finishing a file takes, so the lock outlives only a request that died while holding it. */
+    private const COMPLETE_LOCK_SECONDS = 900;
 
     public function __construct(private readonly ChunkedUploadService $uploads) {}
 
@@ -138,7 +143,8 @@ final class RequestLinks
 
     /**
      * Starts one file, or picks up its unfinished upload (the same file on the same link, not yet abandoned). Refuses
-     * types the link does not take, files over its size, and more files than it takes (abandoned uploads not counted).
+     * types the link does not take, files over its size, more files than it takes (abandoned uploads not counted) and
+     * files the plan's storage has no room for (counting what is still being sent).
      *
      * @param  array{name: string, size: int, sha256: string, type?: string|null}  $file
      */
@@ -146,17 +152,12 @@ final class RequestLinks
     {
         $sha = strtolower($file['sha256']);
         $size = (int) $file['size'];
-        $since = now()->subHours(self::ABANDONED_HOURS);
         $unfinished = $link->uploads()->where('sha256', $sha)->where('size_bytes', $size)->where('status', 'uploading')
-            ->where('updated_at', '>=', $since)->first();
+            ->where('updated_at', '>=', now()->subHours(self::ABANDONED_HOURS))->first();
         if ($unfinished instanceof RequestUpload) {
             return $unfinished;
         }
-        $taken = $link->uploads()->where(fn ($q) => $q->where('status', 'ready')
-            ->orWhere(fn ($q) => $q->where('status', 'uploading')->where('updated_at', '>=', $since)))->count();
-        if ($taken >= $link->max_files) {
-            throw new ApiError(422, 'too_many_files', 'This link takes at most '.$link->max_files.($link->max_files === 1 ? ' file.' : ' files.'));
-        }
+        $this->assertFilesLeft($link, 0);
         if ($size > $link->max_mb * 1024 * 1024) {
             throw new ApiError(413, 'too_large', "Files can be at most {$link->max_mb} MB here.");
         }
@@ -172,48 +173,87 @@ final class RequestLinks
         if ($document !== null && $size > ClientWorkspace::MAX_FILE_BYTES) {
             throw new ApiError(413, 'too_large', 'Documents and images can be at most '.intdiv(ClientWorkspace::MAX_FILE_BYTES, 1024 * 1024).' MB.');
         }
+        $this->assertRoom($link, $size);
+        // The last part of a path, without control or direction-changing characters (they can make a name read as another).
+        $name = (string) preg_replace('/\p{C}+/u', '', basename(str_replace('\\', '/', $file['name'])));
+        $name = mb_substr(trim($name), 0, 255) ?: 'File';
+
+        return DB::transaction(function () use ($link, $project, $audioMime, $name, $size, $sha): RequestUpload {
+            // One start at a time in a workspace, and the checks run again once the new upload is in: two senders at
+            // once cannot pass the link's number of files or the plan's storage together (the refusal rolls it back).
+            Workspace::query()->whereKey($link->workspace_id)->lockForUpdate()->first();
+            $upload = $this->newUpload($link, $project, $audioMime, $name, $size, $sha);
+            $this->assertFilesLeft($link, 1);
+            $this->assertRoom($link, 0);
+
+            return $upload;
+        });
+    }
+
+    /** `422 too_many_files` when the link's files (finished or still coming, $mine of them this request's) are all taken. */
+    private function assertFilesLeft(RequestLink $link, int $mine): void
+    {
+        $taken = $link->uploads()->where(fn ($q) => $q->where('status', 'ready')
+            ->orWhere(fn ($q) => $q->where('status', 'uploading')->where('updated_at', '>=', now()->subHours(self::ABANDONED_HOURS))))->count();
+        if ($taken - $mine >= $link->max_files) {
+            throw new ApiError(422, 'too_many_files', 'This link takes at most '.$link->max_files.($link->max_files === 1 ? ' file.' : ' files.'));
+        }
+    }
+
+    /**
+     * `403 storage_limit_reached` when the plan's storage cannot also hold $incoming bytes and every file still being
+     * sent through the workspace's request links (they are stored once they finish).
+     */
+    private function assertRoom(RequestLink $link, int $incoming): void
+    {
+        $links = RequestLink::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $link->workspace_id)->select('id');
+        $coming = (int) RequestUpload::query()->whereIn('request_link_id', $links)->where('status', 'uploading')
+            ->where('updated_at', '>=', now()->subHours(self::ABANDONED_HOURS))
+            // A recording already put together is counted as stored.
+            ->where(fn ($q) => $q->whereNull('recording_id')->orWhereIn('recording_id', Recording::query()->whereNull('stored_path')->select('id')))
+            ->sum('size_bytes');
         try {
-            app(PlanLimits::class)->assertStorage($link->workspace_id, $size);
+            app(PlanLimits::class)->assertStorage($link->workspace_id, $coming + $incoming);
         } catch (ApiError) {
             // The plan's own wording asks the owner to raise a setting; the sender only needs to know it did not go.
             throw new ApiError(403, 'storage_limit_reached', 'This link cannot take more files right now.');
         }
-        $name = mb_substr((string) str_replace('\\', '/', $file['name']), 0, 255);
-        $name = mb_substr((string) basename($name), 0, 255) ?: 'File';
+    }
 
-        return DB::transaction(function () use ($link, $project, $audioMime, $name, $size, $sha): RequestUpload {
-            $chunkSize = ChunkedUploadService::advertisedChunkSize();
-            if ($audioMime === null) {
-                return $link->uploads()->create([
-                    'kind' => 'file', 'name' => $name, 'size_bytes' => $size, 'sha256' => $sha, 'status' => 'uploading',
-                    'chunk_size_bytes' => $chunkSize, 'total_chunks' => max(1, (int) ceil($size / $chunkSize)), 'received_chunks' => [],
-                ]);
-            }
-            $session = CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->create([
-                'workspace_id' => $link->workspace_id,
-                'user_id' => $link->user_id,
-                'device_id' => null,
-                'client_id' => $project?->id,
-                'origin' => CaptureSession::ORIGIN_REQUESTED,
-                'client_ref' => (string) Str::uuid(),
-                'source_device' => SourceDevice::Web,
-                'source_app' => SourceApp::VoiceNote,
-                'title' => ConsoleUploads::titleFromFileName($name),
-                'started_at' => now(),
-                'ended_at' => now(),
-                'status' => SessionStatus::Uploading,
-                'final_provider' => $this->providerFor($project),
-            ]);
-            $recording = $this->uploads->createRecording($session, [
-                'role' => RecordingRole::Primary->value, 'mime' => $audioMime, 'codec' => null, 'channels' => 1, 'sample_rate' => null,
-                'duration_ms' => null, 'size_bytes' => $size, 'sha256' => $sha,
-            ], $chunkSize);
-
+    /** The upload's row and, for sound or video, its recording waiting for chunks. */
+    private function newUpload(RequestLink $link, ?Client $project, ?string $audioMime, string $name, int $size, string $sha): RequestUpload
+    {
+        $chunkSize = ChunkedUploadService::advertisedChunkSize();
+        if ($audioMime === null) {
             return $link->uploads()->create([
-                'kind' => 'recording', 'name' => $name, 'size_bytes' => $size, 'sha256' => $sha, 'status' => 'uploading',
-                'recording_id' => $recording->id, 'chunk_size_bytes' => $chunkSize, 'total_chunks' => $recording->total_chunks,
+                'kind' => 'file', 'name' => $name, 'size_bytes' => $size, 'sha256' => $sha, 'status' => 'uploading',
+                'chunk_size_bytes' => $chunkSize, 'total_chunks' => max(1, (int) ceil($size / $chunkSize)), 'received_chunks' => [],
             ]);
-        });
+        }
+        $session = CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->create([
+            'workspace_id' => $link->workspace_id,
+            'user_id' => $link->user_id,
+            'device_id' => null,
+            'client_id' => $project?->id,
+            'origin' => CaptureSession::ORIGIN_REQUESTED,
+            'client_ref' => (string) Str::uuid(),
+            'source_device' => SourceDevice::Web,
+            'source_app' => SourceApp::VoiceNote,
+            'title' => ConsoleUploads::titleFromFileName($name),
+            'started_at' => now(),
+            'ended_at' => now(),
+            'status' => SessionStatus::Uploading,
+            'final_provider' => $this->providerFor($project),
+        ]);
+        $recording = $this->uploads->createRecording($session, [
+            'role' => RecordingRole::Primary->value, 'mime' => $audioMime, 'codec' => null, 'channels' => 1, 'sample_rate' => null,
+            'duration_ms' => null, 'size_bytes' => $size, 'sha256' => $sha,
+        ], $chunkSize);
+
+        return $link->uploads()->create([
+            'kind' => 'recording', 'name' => $name, 'size_bytes' => $size, 'sha256' => $sha, 'status' => 'uploading',
+            'recording_id' => $recording->id, 'chunk_size_bytes' => $chunkSize, 'total_chunks' => $recording->total_chunks,
+        ]);
     }
 
     /**
@@ -253,21 +293,44 @@ final class RequestLinks
         if ($index === 0 && self::sniffDocument(substr($bytes, 0, self::SNIFF_BYTES), $upload->name) === null) {
             $this->refuse($upload, self::REFUSED);
         }
-        $received = array_values(array_unique([...($upload->received_chunks ?? []), $index]));
-        sort($received);
-        // A chunk sent again changes nothing but still keeps the upload alive (ABANDONED_HOURS).
-        $upload->fill(['received_chunks' => $received])->touch();
 
-        return $upload;
+        return DB::transaction(function () use ($upload, $index): RequestUpload {
+            // Chunks sent at once each add themselves to the list as it is stored now, not as their request read it.
+            $locked = RequestUpload::query()->lockForUpdate()->findOrFail($upload->id);
+            $received = array_values(array_unique([...($locked->received_chunks ?? []), $index]));
+            sort($received);
+            // A chunk sent again changes nothing but still keeps the upload alive (ABANDONED_HOURS).
+            $locked->fill(['received_chunks' => $received])->touch();
+
+            return $locked;
+        });
     }
 
     /**
      * Finishes a file once every chunk is in: a recording is assembled, verified, encrypted and transcribed as usual; a
-     * document is verified, checked again as a whole and added to the project's Files.
+     * document is verified, checked again as a whole and added to the project's Files. One finish at a time per
+     * upload: a `complete` sent again while one runs is `409 upload_finished` (a document would be added twice, and
+     * each copy read and counted), and one sent after it finds the file done.
      *
      * @return array{status: string, missing_chunks?: list<int>}
      */
     public function complete(RequestUpload $upload): array
+    {
+        $lock = Cache::lock('request-complete:'.$upload->id, self::COMPLETE_LOCK_SECONDS);
+        if (! $lock->get()) {
+            throw new ApiError(409, 'upload_finished', 'This file is already being finished.');
+        }
+        try {
+            return $this->finish($upload->refresh());
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * @return array{status: string, missing_chunks?: list<int>}
+     */
+    private function finish(RequestUpload $upload): array
     {
         if ($upload->status === 'ready') {
             return ['status' => 'ready'];

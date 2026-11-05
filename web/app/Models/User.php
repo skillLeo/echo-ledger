@@ -11,6 +11,7 @@ use Filament\Auth\MultiFactor\App\Contracts\HasAppAuthentication;
 use Filament\Auth\MultiFactor\App\Contracts\HasAppAuthenticationRecovery;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -19,21 +20,36 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Carbon;
 
 /**
+ * A console account. Its email is confirmed (`email_verified_at`) once its owner opened the link the console sent to
+ * it; people-only share links (v1.5) open only for a confirmed email, and a changed email must be confirmed again.
+ *
  * @property int $id
  * @property string $name
  * @property string $email
+ * @property Carbon|null $email_verified_at
  * @property bool $is_super_admin
  * @property int|null $current_workspace_id
  * @property-read Workspace|null $currentWorkspace
  */
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery
+class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery, MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, InteractsWithAppAuthentication, InteractsWithAppAuthenticationRecovery, Notifiable;
+
+    protected static function booted(): void
+    {
+        // What was confirmed is the old address (the profile page changes it at once).
+        static::updating(function (User $user): void {
+            if ($user->isDirty('email') && ! $user->isDirty('email_verified_at')) {
+                $user->email_verified_at = null;
+            }
+        });
+    }
 
     public function canAccessPanel(Panel $panel): bool
     {

@@ -16,7 +16,9 @@ use App\Models\Workspace;
 use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
 use App\Services\Views\TranscriptViews;
+use Filament\Notifications\Notification;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\DB;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
@@ -71,6 +73,24 @@ describe('sending', function () {
             ->and($items[0]['session'])->toMatchArray(['id' => $this->call->id, 'title' => 'Call with Omar', 'client' => null, 'device' => null, 'filed_by' => null]);
         $note = DatabaseNotification::query()->where('notifiable_id', $this->omar->id)->get()->sole(fn ($n): bool => ActivityFeed::kindOf($n) === 'shared_with_you');
         expect(ActivityFeed::payload($note))->toMatchArray(['kind' => 'shared_with_you', 'title' => 'Ana sent you Call with Omar', 'body' => 'for tomorrow', 'session_id' => $this->call->id]);
+    });
+
+    it('puts a title, note and name with markup into the recipient\'s bell as text, and into the apps as typed', function () {
+        // Anyone on the server can send to anyone: the bell renders its texts as HTML, so markup must stay text there.
+        $this->ana->forceFill(['name' => 'Ana <b>Boss</b>'])->save();
+        $title = '<a href="https://evil.example/login" style="position:fixed;inset:0">Your session ended, sign in again</a>';
+        $trap = sentRecording($this, $title, Fixtures::audio(5050));
+        $note = '<div style="position:fixed;inset:0;background:#fff">Sign in at <a href="https://evil.example">here</a> & <i>soon</i></div>';
+        $this->postJson("/api/sessions/{$trap->id}/send", ['to' => ['omar@example.com'], 'note' => $note])->assertCreated();
+
+        $stored = DatabaseNotification::query()->where('notifiable_id', $this->omar->id)->get()->sole(fn ($n): bool => ActivityFeed::kindOf($n) === 'shared_with_you');
+        $bell = Notification::fromDatabase($stored)->inline()->toEmbeddedHtml();
+        expect($bell)->not->toContain('href="https://evil.example')->not->toContain('style="position:fixed')->not->toContain('<b>Boss</b>')
+            ->toContain('&lt;a href')->toContain('&lt;b&gt;Boss&lt;/b&gt;');
+        // The apps and the console's Activity page get the words as they were typed (they show text, never HTML).
+        expect(ActivityFeed::payload($stored))->toMatchArray(['title' => "Ana <b>Boss</b> sent you {$title}", 'body' => $note]);
+        $activity = $this->asToken($this->omarToken)->getJson('/api/activity')->assertOk()->json('data');
+        expect(collect($activity)->firstWhere('kind', 'shared_with_you'))->toMatchArray(['title' => "Ana <b>Boss</b> sent you {$title}", 'body' => $note]);
     });
 
     it('sends nothing when one email has no account', function () {
@@ -131,6 +151,42 @@ describe('reading what was sent', function () {
         $this->postJson("/api/sessions/{$this->call->id}/shares", ['audience' => 'public'])->assertNotFound();
         $this->getJson("/api/sessions/{$notSent->id}")->assertNotFound();
         expect($this->call->fresh()->title)->toBe('Call with Omar');
+    });
+
+    it('counts a sent project\'s recordings as the recipient can open them, in it and below it', function () {
+        $project = Client::factory()->create(['user_id' => $this->ana->id, 'name' => 'Acme']);
+        $sub = Client::factory()->create(['user_id' => $this->ana->id, 'name' => 'Design', 'parent_id' => $project->id]);
+        sentRecording($this, 'Kick-off', Fixtures::audio(5300), $project);
+        sentRecording($this, 'Design review', Fixtures::audio(5400), $sub);
+        // Still being recorded: not something Omar can open yet.
+        $this->makeReadySession($this->device, Fixtures::audio(5500), ['title' => 'Live now', 'status' => SessionStatus::Recording, 'client_id' => $project->id]);
+        $this->postJson("/api/clients/{$project->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+
+        expect(received($this)[0]['client'])->toMatchArray(['session_count' => 1, 'nested_session_count' => 2, 'children_count' => 1]);
+    });
+
+    it('lists Shared with me in the same number of queries however much was sent', function () {
+        $queries = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            received($this);
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+        $send = function (int $i): void {
+            $project = Client::factory()->create(['user_id' => $this->ana->id, 'name' => "Project {$i}"]);
+            $call = sentRecording($this, "Call {$i}", Fixtures::audio(6000 + $i), $project);
+            $this->asToken($this->token)->postJson("/api/sessions/{$call->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+            $this->asToken($this->token)->postJson("/api/clients/{$project->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+        };
+        $send(1);
+        $few = $queries();
+        foreach (range(2, 6) as $i) {
+            $send($i);
+        }
+
+        expect(received($this))->toHaveCount(12)->and($queries())->toBeLessThanOrEqual($few);
     });
 
     it('drops a recording from the list once the sender deletes it', function () {
@@ -202,6 +258,20 @@ describe('saving a copy', function () {
         $this->postJson("/api/shared-with-me/{$item['id']}/save")->assertForbidden()->assertJsonPath('code', 'storage_limit_reached');
         expect(unscoped(fn () => CaptureSession::query()->where('workspace_id', $this->omar->current_workspace_id)->count()))->toBe(0)
             ->and(SentItem::query()->sole()->saved_at)->toBeNull();
+    });
+});
+
+describe('saving again', function () {
+    it('checks the plan\'s storage on every save, so saving the same item again cannot pass it', function () {
+        $this->postJson("/api/sessions/{$this->call->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+        $item = received($this)[0];
+        $one = (int) Recording::query()->where('capture_session_id', $this->call->id)->sum('stored_size_bytes');
+        $plan = Plan::query()->create(['key' => 'one-copy', 'name' => 'One copy', 'storage_bytes' => (int) ($one * 1.5)]);
+        Workspace::query()->whereKey($this->omar->current_workspace_id)->update(['plan_id' => $plan->id]);
+
+        $this->postJson("/api/shared-with-me/{$item['id']}/save")->assertCreated();
+        $this->postJson("/api/shared-with-me/{$item['id']}/save")->assertForbidden()->assertJsonPath('code', 'storage_limit_reached');
+        expect(unscoped(fn () => CaptureSession::query()->where('workspace_id', $this->omar->current_workspace_id)->count()))->toBe(1);
     });
 });
 

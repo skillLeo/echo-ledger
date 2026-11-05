@@ -12,7 +12,10 @@ use App\Models\ShareLinkView;
 use App\Models\User;
 use App\Services\ShareLinks;
 use App\Services\Views\TranscriptViews;
+use Filament\Auth\Notifications\VerifyEmail;
+use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Api\Support\Fixtures;
@@ -135,6 +138,39 @@ describe('audiences', function () {
         expect(zipEntries($this->get(pathOf($share).'/download')->assertOk()))->toHaveCount(2);
     });
 
+    it('opens a people-only link only once the signed-in person has confirmed their email', function () {
+        // An account whose email nobody confirmed: an owner's Add member makes one for any address (and knows its password).
+        $ana = User::factory()->unverified()->create(['email' => 'ana@example.com']);
+        $share = shareOf($this, ['audience' => 'people', 'people' => ['ana@example.com'], 'allow_download' => true]);
+        Notification::fake();
+
+        $this->actingAs($ana, 'web');
+        $page = $this->get(pathOf($share))->assertForbidden()->assertSee('Confirm your email to open this link')->assertSee('ana@example.com');
+        expect($page->getContent())->not->toContain('Budget review')->not->toContain('Secret words');
+        $this->get(pathOf($share).'/audio')->assertNotFound();
+        $this->get(pathOf($share).'/download')->assertNotFound();
+
+        // "Send me the link": the console's email confirmation, which comes back to this page.
+        $this->post(pathOf($share))->assertRedirect(Filament::getPanel('admin')->getEmailVerificationPromptUrl());
+        Notification::assertSentTo($ana, VerifyEmail::class);
+        expect(session('url.intended'))->toBe(url(pathOf($share)));
+
+        $ana->markEmailAsVerified();
+        $this->get(pathOf($share))->assertOk()->assertSee('Secret words of Budget review');
+        $this->get(pathOf($share).'/audio')->assertOk();
+    });
+
+    it('asks for the email again once it changes', function () {
+        $ana = User::factory()->create(['email' => 'ana@example.com']);
+        $share = shareOf($this, ['audience' => 'people', 'people' => ['ana.new@example.com']]);
+
+        // The profile page changes the address at once: what was confirmed was the old one.
+        $ana->update(['email' => 'ana.new@example.com']);
+        expect($ana->fresh()->hasVerifiedEmail())->toBeFalse();
+        $this->actingAs($ana->fresh(), 'web')->get(pathOf($share))->assertForbidden()->assertSee('Confirm your email to open this link');
+        expect(User::factory()->create()->hasVerifiedEmail())->toBeTrue();
+    });
+
     it('validates the people of a people-only link', function () {
         $this->postJson("/api/sessions/{$this->session->id}/shares", ['audience' => 'people'])->assertStatus(422);
         $this->postJson("/api/sessions/{$this->session->id}/shares", ['audience' => 'people', 'people' => ['not an email']])->assertStatus(422);
@@ -157,6 +193,16 @@ describe('downloads and expiry', function () {
         expect($audio)->toBe($this->audio)->and($text)->toContain('Me: Secret words of Budget review');
         expect(ShareLinkView::query()->where('outcome', 'download')->count())->toBe(1)
             ->and($this->workFiles())->toBe([]);
+    });
+
+    it('names the ZIP and its files without any path in them, whatever the title', function () {
+        $this->session = sharedRecording($this, '../../..\\Windows\\evil:name?', $this->audio);
+        $response = browser($this)->get(pathOf(shareOf($this, ['allow_download' => true])).'/download')->assertOk();
+
+        expect($response->headers->get('Content-Disposition'))->not->toContain('/')->not->toContain('\\');
+        foreach (array_keys(zipEntries($response)) as $name) {
+            expect($name)->not->toContain('/')->not->toContain('\\')->not->toContain(':');
+        }
     });
 
     it('puts the audio in the ZIP as it is, without packing it again on every download', function () {
@@ -241,6 +287,23 @@ describe('project links', function () {
         $this->travel(2)->hours();
         browser($this)->get(pathOf($expiring))->assertNotFound();
         expect(ShareLink::query()->where('client_id', $this->sub->id)->exists())->toBeFalse();
+    });
+
+    it('never lists a recording in the undo bin, moved out after the link was made, or still being recorded', function () {
+        $share = shareOf($this, ['audience' => 'public', 'allow_download' => true], "/api/clients/{$this->project->id}/shares");
+        $binned = sharedRecording($this, 'Binned call', Fixtures::audio(3200), $this->project);
+        $moved = sharedRecording($this, 'Moved call', Fixtures::audio(3300), $this->sub);
+        $live = sharedRecording($this, 'Live call', Fixtures::audio(3400), $this->project, ['status' => SessionStatus::Recording]);
+        $binned->delete();
+        $this->patchJson("/api/sessions/{$moved->id}", ['client_id' => null])->assertOk();
+
+        $page = browser($this)->get(pathOf($share))->assertOk()->assertSee('Kick-off')->assertSee('Design review');
+        expect($page->getContent())->not->toContain('Binned call')->not->toContain('Moved call')->not->toContain('Live call');
+        foreach ([$binned, $moved, $live] as $hidden) {
+            foreach (['', '/audio', '/download'] as $part) {
+                browser($this)->get(pathOf($share).'/'.$hidden->id.$part)->assertNotFound();
+            }
+        }
     });
 
     it('keeps a password or people check on the project page and its recordings', function () {

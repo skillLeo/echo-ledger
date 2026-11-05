@@ -25,6 +25,7 @@ use App\Services\ShareLinks;
 use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\Workspaces;
 use Filament\Actions\Testing\TestAction;
+use Illuminate\Support\Str;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
 uses(AdminTestHelpers::class);
@@ -103,6 +104,31 @@ describe('a project\'s page', function () {
         expect($acme->fresh()->parent_id)->toBeNull();
         $this->panelComponent(ViewClient::class, ['record' => $site->id])->callAction('moveProject', data: ['parent_id' => $beta->id]);
         expect($site->fresh()->parent_id)->toBe($beta->id);
+    });
+
+    it('refuses a move or a new project that a change made at the same time would make wrong', function () {
+        $acme = adminProject($this->admin, 'Acme');
+        $beta = adminProject($this->admin, 'Beta');
+        // Another tab moves Beta under Acme while this one moves Acme under Beta.
+        Client::updating(function (Client $moving) use ($acme, $beta): void {
+            if ($moving->id === $acme->id && $moving->isDirty('parent_id')) {
+                Client::query()->whereKey($beta->id)->toBase()->update(['parent_id' => $acme->id]);
+            }
+        });
+        $this->panelComponent(ViewClient::class, ['record' => $acme->id])->callAction('moveProject', data: ['parent_id' => $beta->id])
+            ->assertNotified('A project cannot go inside itself or one of its own subfolders.');
+        expect($acme->fresh()->parent_id)->toBeNull()->and($beta->fresh()->parent_id)->toBeNull();
+
+        // Another tab makes "Gamma" at the top while this one saves its own "Gamma".
+        Client::creating(function (Client $client): void {
+            if ($client->name === 'Gamma' && Client::query()->where('name', 'Gamma')->doesntExist()) {
+                Client::query()->toBase()->insert(['id' => (string) Str::ulid(), 'workspace_id' => $client->workspace_id, 'user_id' => $client->user_id,
+                    'name' => 'Gamma', 'pinned' => false, 'created_at' => now(), 'updated_at' => now()]);
+            }
+        });
+        $this->panelComponent(CreateClient::class)->fillForm(['name' => 'Gamma', 'color' => '#22d3ee'])->call('create')
+            ->assertHasFormErrors(['name']);
+        expect(Client::query()->where('name', 'Gamma')->count())->toBeLessThanOrEqual(1);
     });
 
     it('deletes a project after saying its recordings go to the Inbox, for owners only', function () {

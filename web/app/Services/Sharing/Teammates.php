@@ -159,11 +159,14 @@ final class Teammates
                 ->where('status', '!=', SessionStatus::Recording->value)->get()
             : CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereKey($item->capture_session_id)->get();
         $bytes = (int) Recording::query()->whereIn('capture_session_id', $sessions->modelKeys())->whereNotNull('stored_path')->sum('stored_size_bytes');
-        app(PlanLimits::class)->assertStorage($workspaceId, $bytes);
 
         $this->written = [];
         try {
-            $result = DB::transaction(function () use ($person, $workspaceId, $item, $sessions): array {
+            $result = DB::transaction(function () use ($person, $workspaceId, $item, $sessions, $bytes): array {
+                // One copy at a time in the workspace, with its projects' other changes waiting: two saves at once
+                // cannot both pass the plan's storage, and copied folders take names that are free (ProjectTree::place).
+                ProjectTree::lock($workspaceId);
+                app(PlanLimits::class)->assertStorage($workspaceId, $bytes);
                 if ($item->kind === 'project' && $item->client !== null) {
                     $folders = $this->copyTree($item->client, null, $workspaceId, $person);
                     foreach ($sessions as $session) {
@@ -199,9 +202,10 @@ final class Teammates
     /**
      * Copies a project and its subfolders (names, colours, avatars, languages) into the workspace.
      *
+     * @param  array<string, string>  $map  the folders copied so far: a folder is copied once, even from a tree with a loop
      * @return array<string, string> original project id → its copy's id
      */
-    private function copyTree(Client $project, ?string $parentId, int $workspaceId, User $person): array
+    private function copyTree(Client $project, ?string $parentId, int $workspaceId, User $person, array $map = []): array
     {
         $copy = Client::query()->withoutGlobalScope(WorkspaceScope::class)->create([
             'workspace_id' => $workspaceId,
@@ -212,9 +216,11 @@ final class Teammates
             'avatar' => $project->avatar,
             'language' => $project->language,
         ]);
-        $map = [$project->id => $copy->id];
+        $map[$project->id] = $copy->id;
         foreach (Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('parent_id', $project->id)->orderBy('name')->get() as $child) {
-            $map += $this->copyTree($child, $copy->id, $workspaceId, $person);
+            if (! isset($map[$child->id])) {
+                $map = $this->copyTree($child, $copy->id, $workspaceId, $person, $map);
+            }
         }
 
         return $map;
@@ -289,46 +295,78 @@ final class Teammates
     }
 
     /**
-     * One item as GET /api/shared-with-me lists it.
+     * The items as GET /api/shared-with-me lists them. What they show is read for all of them at once (not per item),
+     * and past the workspace scope: the recordings and projects are in the senders' workspaces.
      *
-     * @param  callable(CaptureSession): array<string, mixed>  $sessionPayload
-     * @return array<string, mixed>
+     * @param  Collection<int, SentItem>  $items
+     * @param  callable(CaptureSession): array<string, mixed>  $sessionPayload  a recording as a library item
+     * @return list<array<string, mixed>>
      */
-    public function payload(SentItem $item, callable $sessionPayload): array
+    public function payloads(Collection $items, callable $sessionPayload): array
     {
-        $client = $item->kind === 'project' ? $item->client : null;
-        $session = $item->kind === 'session' ? $item->captureSession : null;
+        $items->loadMissing(['captureSession.transcripts', 'captureSession.markers:id,capture_session_id,tag,at_ms', 'captureSession.labels']);
+        /** @var Collection<int, Client> $projects */
+        $projects = new Collection($items->where('kind', 'project')->pluck('client')->filter()->unique('id')->values()->all());
+        $projects->loadCount('keyterms');
+        $counts = $this->projectCounts($projects);
 
-        return [
-            'id' => $item->id,
-            'kind' => $item->kind,
-            'from' => ['name' => $item->sender->name, 'email' => $item->sender->email],
-            'note' => $item->note,
-            'title' => $item->title,
-            'sent_at' => $item->sent_at->toAtomString(),
-            'saved_at' => $item->saved_at?->toAtomString(),
-            'session' => $session !== null ? $sessionPayload(self::readOnly($session)) : null,
-            'client' => $client !== null ? $this->projectPayload($client) : null,
-        ];
+        return array_values($items->map(function (SentItem $item) use ($sessionPayload, $projects, $counts): array {
+            $client = $item->kind === 'project' && $item->client !== null ? $projects->find($item->client->id) : null;
+            $session = $item->kind === 'session' ? $item->captureSession : null;
+
+            return [
+                'id' => $item->id,
+                'kind' => $item->kind,
+                'from' => ['name' => $item->sender->name, 'email' => $item->sender->email],
+                'note' => $item->note,
+                'title' => $item->title,
+                'sent_at' => $item->sent_at->toAtomString(),
+                'saved_at' => $item->saved_at?->toAtomString(),
+                'session' => $session !== null ? $sessionPayload(self::readOnly($session)) : null,
+                // A sent project as the recipient sees it: its own counts, none of the sender's tree around it.
+                'client' => $client instanceof Client ? [
+                    ...ConfigController::clientPayload($client->setAttribute('capture_sessions_count', $counts[$client->id]['direct'])),
+                    'parent_id' => null,
+                    'path' => [],
+                    'children_count' => $counts[$client->id]['children'],
+                    'nested_session_count' => $counts[$client->id]['nested'],
+                ] : null,
+            ];
+        })->all());
     }
 
     /**
-     * A sent project as the recipient sees it: its own counts, none of the sender's tree around it.
+     * Each project's subfolders and its recordings, directly in it and with its subfolders', counted as the recipient
+     * can open them (not those still being recorded): one query for the tree of each workspace, one for the counts.
      *
-     * @return array<string, mixed>
+     * @param  Collection<int, Client>  $projects
+     * @return array<string, array{children: int, direct: int, nested: int}>
      */
-    private function projectPayload(Client $project): array
+    private function projectCounts(Collection $projects): array
     {
-        $ids = $this->projects->withDescendants($project);
-        $project->loadCount(['keyterms', 'captureSessions']);
+        $trees = [];
+        foreach ($projects->groupBy('workspace_id') as $workspaceId => $inWorkspace) {
+            $parents = $this->projects->parents((int) $workspaceId);
+            foreach ($inWorkspace as $project) {
+                $trees[$project->id] = ['ids' => [$project->id, ...ProjectTree::below($project->id, $parents)],
+                    'children' => count(array_filter($parents, fn (?string $parent): bool => $parent === $project->id))];
+            }
+        }
+        $ids = array_values(array_unique(array_merge([], ...array_column($trees, 'ids'))));
+        $perFolder = $ids === [] ? [] : CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('client_id', $ids)
+            ->where('status', '!=', SessionStatus::Recording->value)->groupBy('client_id')->selectRaw('client_id, COUNT(*) AS recordings')
+            ->pluck('recordings', 'client_id')->map(fn ($n): int => (int) $n)->all();
 
-        return [
-            ...ConfigController::clientPayload($project),
-            'parent_id' => null,
-            'path' => [],
-            'children_count' => Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('parent_id', $project->id)->count(),
-            'nested_session_count' => CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('client_id', $ids)->count(),
-        ];
+        $counts = [];
+        foreach ($trees as $id => $tree) {
+            $counts[$id] = [
+                'children' => $tree['children'],
+                'direct' => $perFolder[$id] ?? 0,
+                'nested' => array_sum(array_map(fn (string $folder): int => $perFolder[$folder] ?? 0, $tree['ids'])),
+            ];
+        }
+
+        return $counts;
     }
 
     /** Takes an item off the person's list; the sender's recording or project stays. */

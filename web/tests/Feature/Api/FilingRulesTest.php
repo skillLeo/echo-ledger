@@ -66,6 +66,19 @@ describe('the rules of a project', function () {
         $this->postJson("/api/clients/{$this->beta->id}/rules", ['kind' => 'app', 'value' => 'zoom'])->assertCreated();
     });
 
+    it('answers rule_exists, not an error, when another project takes the same rule at the same time', function () {
+        // Another request adds "zoom" to Beta after this one looked and before it is saved.
+        FilingRule::creating(function (FilingRule $rule): void {
+            if ($rule->client_id === $this->acme->id) {
+                FilingRule::query()->toBase()->insert(['workspace_id' => $rule->workspace_id, 'client_id' => $this->beta->id, 'kind' => 'app', 'value' => 'zoom',
+                    'match_value' => 'zoom', 'created_at' => now(), 'updated_at' => now()]);
+            }
+        });
+
+        $this->postJson("/api/clients/{$this->acme->id}/rules", ['kind' => 'app', 'value' => 'zoom'])->assertStatus(409)
+            ->assertJsonPath('code', 'rule_exists')->assertJsonPath('client_id', $this->beta->id)->assertJsonPath('client_name', 'Beta');
+    });
+
     it('validates kinds and values', function () {
         $this->postJson("/api/clients/{$this->acme->id}/rules", ['kind' => 'colour', 'value' => 'red'])->assertStatus(422);
         $this->postJson("/api/clients/{$this->acme->id}/rules", ['kind' => 'app', 'value' => 'myspace'])->assertStatus(422)->assertJsonPath('code', 'validation_failed');

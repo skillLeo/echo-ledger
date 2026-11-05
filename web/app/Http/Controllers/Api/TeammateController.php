@@ -62,10 +62,7 @@ final class TeammateController extends Controller
     {
         $items = $this->teammates->received($this->device($request)->user);
 
-        return response()->json(['data' => $items->map(fn (SentItem $item): array => $this->teammates->payload(
-            $item,
-            fn (CaptureSession $s): array => (new LibraryItemResource($s->load(['transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels'])))->resolve($request),
-        ))->values()]);
+        return response()->json(['data' => $this->teammates->payloads($items, fn (CaptureSession $s): array => (new LibraryItemResource($s))->resolve($request))]);
     }
 
     /** POST /api/shared-with-me/{id}/save: a copy in the device's workspace, independent of the original. */

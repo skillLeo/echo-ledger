@@ -40,6 +40,8 @@ final class MakeAdmin extends Command
         $user = User::query()->firstOrNew(['email' => $email]);
         $user->fill(['name' => $name, 'password' => $password]);
         $user->is_super_admin = true; // never mass-assignable
+        // The operator typed the address on the server: it is confirmed (people-only share links open only for that).
+        $user->email_verified_at ??= now();
         $user->save();
         // Every user works inside a workspace (B20); a promoted user keeps the ones they have.
         if (! $user->workspaces()->exists()) {
