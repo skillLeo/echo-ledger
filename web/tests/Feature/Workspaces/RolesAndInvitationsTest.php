@@ -7,6 +7,7 @@ use App\Exceptions\ApiError;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Mail\InvitationMail;
 use App\Models\CaptureSession;
+use App\Models\Client;
 use App\Models\Device;
 use App\Models\Plan;
 use App\Models\User;
@@ -160,6 +161,48 @@ describe('a viewer\'s device', function () {
             expect($response->status())->toBe(403, $uri)->and($response->json('code'))->toBe('not_allowed', $uri)
                 ->and($response->json('message'))->toContain('You are a viewer in '.$ws->name);
         }
+    });
+
+    it('gets 403 not_allowed from every route that makes or changes recordings and projects, its own old ones included', function () {
+        ['token' => $token, 'device' => $device, 'ws' => $ws, 'viewer' => $viewer] = viewerDevice();
+        // A member made these before being made a viewer: they stay theirs to open, not to change.
+        $project = Client::query()->create(['workspace_id' => $ws->id, 'user_id' => $viewer->id, 'name' => 'Old project']);
+        $session = CaptureSession::factory()->create(['user_id' => $viewer->id, 'workspace_id' => $ws->id, 'device_id' => $device->id, 'client_id' => $project->id, 'title' => 'Old call']);
+        $transcript = Fx::transcript($session);
+        $s = "/api/sessions/{$session->id}";
+        $c = "/api/clients/{$project->id}";
+        $t = "/api/transcripts/{$transcript->id}";
+        $x = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
+
+        foreach ([
+            ['PATCH', $s, ['title' => 'Renamed']], ['DELETE', $s, []], ['POST', '/api/sessions/bulk', ['ids' => [$session->id], 'action' => 'pin']],
+            ['POST', "{$s}/transcripts", []], ['POST', "{$s}/restore", []], ['DELETE', "/api/bin/{$session->id}", []],
+            ['POST', "{$s}/markers", ['at_ms' => 0]], ['DELETE', "{$s}/markers/{$x}", []], ['POST', "{$s}/retranscribe", []],
+            ['DELETE', "{$s}/screens/{$x}", []], ['PUT', "{$s}/speakers", ['speakers' => []]], ['POST', "{$s}/notes", []],
+            ['POST', "{$s}/shares", []], ['POST', "{$s}/send", ['to' => ['someone@example.test']]],
+            ['POST', '/api/clients', ['name' => 'New project']], ['PATCH', $c, ['name' => 'Renamed']], ['DELETE', $c, []],
+            ['POST', "{$c}/rules", ['kind' => 'title', 'value' => 'Acme']], ['DELETE', "{$c}/rules/1", []],
+            ['PUT', "{$c}/brief", ['sections' => ['goal' => 'x']]], ['POST', "{$c}/brief/refresh", []],
+            ['POST', "{$c}/memory", ['kind' => 'decision', 'text' => 'x']], ['PATCH', "{$c}/memory/{$x}", ['pinned' => true]], ['DELETE', "{$c}/memory/{$x}", []],
+            ['POST', "{$c}/files", []], ['DELETE', "{$c}/files/{$x}", []], ['POST', "{$c}/ask", ['question' => 'What was agreed?']],
+            ['POST', "{$c}/shares", []], ['POST', "{$c}/send", ['to' => ['someone@example.test']]],
+            ['POST', '/api/vocabulary/keyterms', ['term' => 'Acme', 'client_id' => $project->id]],
+            ['POST', '/api/vocabulary/replacements', ['from' => 'acme', 'to' => 'Acme', 'client_id' => $project->id]],
+            ['PATCH', $t, ['segments' => []]], ['POST', "{$t}/replace", ['find' => 'a', 'replace' => 'b']], ['POST', "{$t}/views", ['view' => 'roman']],
+            ['POST', "{$t}/restore", ['revision' => 1]], ['POST', "{$t}/suggestions/0", ['action' => 'accept']],
+        ] as [$method, $uri, $body]) {
+            $response = $this->api($token)->json($method, $uri, $body);
+            expect($response->status())->toBe(403, "{$method} {$uri}")->and($response->json('code'))->toBe('not_allowed', "{$method} {$uri}")
+                ->and($response->json('message'))->toContain('You are a viewer in '.$ws->name);
+        }
+
+        expect($session->fresh()->title)->toBe('Old call')
+            ->and($session->fresh()->trashed())->toBeFalse()
+            ->and(Client::query()->withoutGlobalScopes()->where('user_id', $viewer->id)->pluck('name')->all())->toBe(['Old project']);
+        // Opening stays, and taking back a link is never refused (it only narrows who sees a recording).
+        $this->api($token)->getJson($s)->assertOk()->assertJsonPath('title', 'Old call');
+        $this->api($token)->getJson("{$c}/workspace")->assertOk();
+        $this->api($token)->deleteJson("/api/shares/{$x}")->assertNotFound();
     });
 
     it('reads config, account and what is shared with it', function () {

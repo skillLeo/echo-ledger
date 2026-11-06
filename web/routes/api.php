@@ -69,62 +69,65 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
         Route::post('usage', [UsageController::class, 'store'])->middleware('abilities:stt:token')->name('api.usage.store');
 
         Route::middleware('abilities:sessions:write')->group(function (): void {
-            // Since v1.5 a viewer's device records and uploads nothing (403 not_allowed).
+            // Since v1.5 a viewer's device records, uploads and changes nothing (403 not_allowed): `record` on recording
+            // and upload routes, `ownContent` where a person makes or changes their own recordings and projects. Taking
+            // back a link stays open to everyone, as it only narrows who sees a recording.
+            $own = EnsureCanRecord::class.':ownContent';
             Route::post('sessions', [SessionController::class, 'store'])->middleware(EnsureCanRecord::class)->name('api.sessions.store');
             Route::post('sessions/{id}/finish', [SessionController::class, 'finish'])->name('api.sessions.finish');
             Route::post('sessions/{id}/recordings', [SessionController::class, 'addRecording'])->middleware(EnsureCanRecord::class)->name('api.sessions.recordings');
-            Route::post('sessions/{id}/transcripts', [SessionController::class, 'storeTranscript'])->name('api.sessions.transcripts');
-            Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->name('api.sessions.destroy');
-            Route::patch('sessions/{id}', [OrganiseController::class, 'update'])->name('api.sessions.update');
-            Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->name('api.sessions.bulk');
-            Route::post('clients', [OrganiseController::class, 'storeClient'])->name('api.clients.store');
-            Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->name('api.clients.update');
+            Route::post('sessions/{id}/transcripts', [SessionController::class, 'storeTranscript'])->middleware(EnsureCanRecord::class)->name('api.sessions.transcripts');
+            Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->middleware($own)->name('api.sessions.destroy');
+            Route::patch('sessions/{id}', [OrganiseController::class, 'update'])->middleware($own)->name('api.sessions.update');
+            Route::post('sessions/bulk', [OrganiseController::class, 'bulk'])->middleware($own)->name('api.sessions.bulk');
+            Route::post('clients', [OrganiseController::class, 'storeClient'])->middleware($own)->name('api.clients.store');
+            Route::patch('clients/{id}', [OrganiseController::class, 'updateClient'])->middleware($own)->name('api.clients.update');
             // Projects (v1.5): deleting one sends its recordings to the Inbox and its subfolders up a level.
-            Route::delete('clients/{id}', [OrganiseController::class, 'destroyClient'])->name('api.clients.destroy');
+            Route::delete('clients/{id}', [OrganiseController::class, 'destroyClient'])->middleware($own)->name('api.clients.destroy');
             // Filing rules (v1.5): title, app and contact rules that file a recording ending without a project.
-            Route::post('clients/{id}/rules', [FilingRuleController::class, 'store'])->name('api.clients.rules.store');
-            Route::delete('clients/{id}/rules/{rule}', [FilingRuleController::class, 'destroy'])->name('api.clients.rules.destroy');
+            Route::post('clients/{id}/rules', [FilingRuleController::class, 'store'])->middleware($own)->name('api.clients.rules.store');
+            Route::delete('clients/{id}/rules/{rule}', [FilingRuleController::class, 'destroy'])->middleware($own)->name('api.clients.rules.destroy');
             // Client workspaces (v1.4): brief, memory, files, notes and Ask.
-            Route::put('clients/{id}/brief', [ClientWorkspaceController::class, 'updateBrief'])->name('api.clients.brief.update');
-            Route::post('clients/{id}/brief/refresh', [ClientWorkspaceController::class, 'refreshBrief'])->name('api.clients.brief.refresh');
-            Route::post('clients/{id}/memory', [ClientWorkspaceController::class, 'storeMemory'])->name('api.clients.memory.store');
-            Route::patch('clients/{id}/memory/{item}', [ClientWorkspaceController::class, 'updateMemory'])->name('api.clients.memory.update');
-            Route::delete('clients/{id}/memory/{item}', [ClientWorkspaceController::class, 'destroyMemory'])->name('api.clients.memory.destroy');
-            Route::post('clients/{id}/files', [ClientWorkspaceController::class, 'storeFile'])->name('api.clients.files.store');
-            Route::delete('clients/{id}/files/{file}', [ClientWorkspaceController::class, 'destroyFile'])->name('api.clients.files.destroy');
-            Route::post('clients/{id}/ask', [ClientWorkspaceController::class, 'ask'])->middleware('throttle:ask')->name('api.clients.ask');
-            Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->name('api.sessions.notes.make');
-            Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->name('api.transcripts.suggestions');
+            Route::put('clients/{id}/brief', [ClientWorkspaceController::class, 'updateBrief'])->middleware($own)->name('api.clients.brief.update');
+            Route::post('clients/{id}/brief/refresh', [ClientWorkspaceController::class, 'refreshBrief'])->middleware($own)->name('api.clients.brief.refresh');
+            Route::post('clients/{id}/memory', [ClientWorkspaceController::class, 'storeMemory'])->middleware($own)->name('api.clients.memory.store');
+            Route::patch('clients/{id}/memory/{item}', [ClientWorkspaceController::class, 'updateMemory'])->middleware($own)->name('api.clients.memory.update');
+            Route::delete('clients/{id}/memory/{item}', [ClientWorkspaceController::class, 'destroyMemory'])->middleware($own)->name('api.clients.memory.destroy');
+            Route::post('clients/{id}/files', [ClientWorkspaceController::class, 'storeFile'])->middleware($own)->name('api.clients.files.store');
+            Route::delete('clients/{id}/files/{file}', [ClientWorkspaceController::class, 'destroyFile'])->middleware($own)->name('api.clients.files.destroy');
+            Route::post('clients/{id}/ask', [ClientWorkspaceController::class, 'ask'])->middleware([$own, 'throttle:ask'])->name('api.clients.ask');
+            Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->middleware($own)->name('api.sessions.notes.make');
+            Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->middleware($own)->name('api.transcripts.suggestions');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
             // Your account (v1.5): sign out every device and console session; delete the account after 7 days.
             Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
             Route::delete('account', [AccountController::class, 'destroy'])->name('api.account.destroy');
-            Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->name('api.sessions.restore');
-            Route::delete('bin/{id}', [BinController::class, 'destroy'])->name('api.bin.destroy');
-            Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
-            Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->name('api.sessions.retranscribe');
-            Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->name('api.sessions.markers.destroy');
+            Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->middleware($own)->name('api.sessions.restore');
+            Route::delete('bin/{id}', [BinController::class, 'destroy'])->middleware($own)->name('api.bin.destroy');
+            Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->middleware($own)->name('api.sessions.markers.store');
+            Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->middleware($own)->name('api.sessions.retranscribe');
+            Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->middleware($own)->name('api.sessions.markers.destroy');
             // Screen moments (v1.5): a screen comes off the recording's timeline (sending one is an upload route below).
-            Route::delete('sessions/{id}/screens/{screen}', [ScreenController::class, 'destroy'])->name('api.sessions.screens.destroy');
-            Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');
-            Route::post('sessions/{id}/shares', [ShareController::class, 'store'])->name('api.sessions.shares.store');
+            Route::delete('sessions/{id}/screens/{screen}', [ScreenController::class, 'destroy'])->middleware($own)->name('api.sessions.screens.destroy');
+            Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->middleware($own)->name('api.sessions.speakers');
+            Route::post('sessions/{id}/shares', [ShareController::class, 'store'])->middleware($own)->name('api.sessions.shares.store');
             Route::delete('shares/{id}', [ShareController::class, 'destroy'])->name('api.shares.destroy');
             // Share links for a project (v1.5): its recordings behind one link.
-            Route::post('clients/{id}/shares', [ShareController::class, 'storeForProject'])->name('api.clients.shares.store');
+            Route::post('clients/{id}/shares', [ShareController::class, 'storeForProject'])->middleware($own)->name('api.clients.shares.store');
             // Sending to a teammate (v1.5): a recording or project to accounts on this server; save a copy of one sent to you.
-            Route::post('sessions/{id}/send', [TeammateController::class, 'sendSession'])->name('api.sessions.send');
-            Route::post('clients/{id}/send', [TeammateController::class, 'sendProject'])->name('api.clients.send');
-            Route::post('shared-with-me/{id}/save', [TeammateController::class, 'save'])->name('api.shared.save');
+            Route::post('sessions/{id}/send', [TeammateController::class, 'sendSession'])->middleware($own)->name('api.sessions.send');
+            Route::post('clients/{id}/send', [TeammateController::class, 'sendProject'])->middleware($own)->name('api.clients.send');
+            Route::post('shared-with-me/{id}/save', [TeammateController::class, 'save'])->middleware(EnsureCanRecord::class.':saveShared')->name('api.shared.save');
             Route::delete('shared-with-me/{id}', [TeammateController::class, 'destroy'])->name('api.shared.destroy');
             // Request links (v1.5): a public page others send files through.
             Route::post('request-links', [RequestLinkController::class, 'store'])->middleware(EnsureCanRecord::class)->name('api.request-links.store');
             Route::delete('request-links/{id}', [RequestLinkController::class, 'destroy'])->name('api.request-links.destroy');
-            Route::post('vocabulary/keyterms', [VocabularyController::class, 'addKeyterm'])->name('api.vocabulary.keyterms');
-            Route::post('vocabulary/replacements', [VocabularyController::class, 'addReplacement'])->name('api.vocabulary.replacements');
-            Route::patch('transcripts/{id}', [TranscriptEditController::class, 'update'])->name('api.transcripts.update');
-            Route::post('transcripts/{id}/replace', [TranscriptEditController::class, 'replace'])->name('api.transcripts.replace');
-            Route::post('transcripts/{id}/views', [TranscriptViewsController::class, 'store'])->name('api.transcripts.views.make');
-            Route::post('transcripts/{id}/restore', [TranscriptEditController::class, 'restore'])->name('api.transcripts.restore');
+            Route::post('vocabulary/keyterms', [VocabularyController::class, 'addKeyterm'])->middleware($own)->name('api.vocabulary.keyterms');
+            Route::post('vocabulary/replacements', [VocabularyController::class, 'addReplacement'])->middleware($own)->name('api.vocabulary.replacements');
+            Route::patch('transcripts/{id}', [TranscriptEditController::class, 'update'])->middleware($own)->name('api.transcripts.update');
+            Route::post('transcripts/{id}/replace', [TranscriptEditController::class, 'replace'])->middleware($own)->name('api.transcripts.replace');
+            Route::post('transcripts/{id}/views', [TranscriptViewsController::class, 'store'])->middleware($own)->name('api.transcripts.views.make');
+            Route::post('transcripts/{id}/restore', [TranscriptEditController::class, 'restore'])->middleware($own)->name('api.transcripts.restore');
         });
 
         Route::middleware('abilities:library:read')->group(function (): void {

@@ -12,6 +12,7 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use InvalidArgumentException;
 
 /**
@@ -113,6 +114,25 @@ final class Workspaces
         $role = $this->roleOf($actor, $device->workspace_id);
 
         return $role !== null && ($role->manages() || (int) $device->user_id === (int) $actor->getKey());
+    }
+
+    /**
+     * `403 not_allowed` when the table of App\Policies\WorkspacePolicy refuses [$ability] to [$actor] in the workspace
+     * (the device API's recording, upload and content routes, since v1.5). A viewer opens what is shared with them;
+     * someone no longer in the workspace does nothing there.
+     */
+    public function assertMay(User $actor, int $workspaceId, string $ability): void
+    {
+        $workspace = Workspace::query()->find($workspaceId);
+        if (! $workspace instanceof Workspace || Gate::forUser($actor)->allows($ability, $workspace)) {
+            return;
+        }
+        $role = $this->roleOf($actor, $workspaceId);
+        throw new ApiError(403, 'not_allowed', match (true) {
+            $role === null => "You are no longer in {$workspace->name}.",
+            $ability === 'ownContent' => "You are a viewer in {$workspace->name}: you can open what is shared with you, not make or change recordings and projects.",
+            default => "You are a viewer in {$workspace->name}: you can open what is shared with you, not record.",
+        });
     }
 
     /** `403 not_allowed` for a viewer: they open what is shared with them, they do not record (since v1.5). */
