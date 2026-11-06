@@ -51,6 +51,7 @@ final class AuditLog
         'google_login' => 'Signed in with Google',
         'google_linked' => 'Google account linked',
         'google_unlinked' => 'Google account unlinked',
+        'google_confirmed' => 'Confirmed with Google',
         'device_signed_in' => 'Device signed in',
         'sign_in_locked' => 'Sign-in locked after failures',
         'signed_out_everywhere' => 'Signed out everywhere',

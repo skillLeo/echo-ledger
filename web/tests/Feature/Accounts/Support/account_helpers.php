@@ -37,6 +37,7 @@ function fakeGoogle(string $id = 'google-sub-1', string $email = 'person@example
     $provider = Mockery::mock(GoogleProvider::class);
     $provider->shouldReceive('redirectUrl')->andReturnSelf();
     $provider->shouldReceive('scopes')->andReturnSelf();
+    $provider->shouldReceive('with')->andReturnSelf();
     $provider->shouldReceive('redirect')->andReturn(new RedirectResponse('https://accounts.google.com/o/oauth2/auth?client_id=1234-test'));
     $provider->shouldReceive('user')->andReturn($user);
     $factory = Mockery::mock(Factory::class);

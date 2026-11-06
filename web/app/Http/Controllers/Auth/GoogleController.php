@@ -18,6 +18,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Laravel\Socialite\Two\AbstractProvider;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
@@ -26,7 +27,8 @@ use Throwable;
  * when the account has two-step sign-in: Google stands in for the password, never for the second step). A verified
  * Google address that matches an account not linked yet links only after that account's password, or its two-step
  * code, is given here: never silently. A new address makes an account only while sign-up allows it. From the
- * profile, a signed-in person links the Google account they choose.
+ * profile, a signed-in person links the Google account they choose; on /account/delete, an account linked to Google
+ * may confirm with it instead of a password (one made with Google has none it knows).
  */
 final class GoogleController extends Controller
 {
@@ -43,31 +45,48 @@ final class GoogleController extends Controller
     public function redirect(Request $request): Response
     {
         abort_unless($this->google->configured(), 404);
-        $link = $request->query('intent') === 'link' && Auth::guard('web')->check();
-        $request->session()->put('google.intent', $link ? 'link' : 'sign-in');
+        $signedIn = Auth::guard('web')->check();
+        $intent = match (true) {
+            $signedIn && $request->query('intent') === 'link' => 'link',
+            $signedIn && $request->query('intent') === 'confirm' => 'confirm',
+            default => 'sign-in',
+        };
+        $request->session()->put('google.intent', $intent);
+        $provider = $this->google->provider();
+        // Confirming it is you: Google asks which account, rather than taking whichever is open in the browser.
+        if ($intent === 'confirm' && $provider instanceof AbstractProvider) {
+            $provider->with(['prompt' => 'select_account']);
+        }
 
-        return $this->google->provider()->redirect();
+        return $provider->redirect();
     }
 
     public function callback(Request $request): Response
     {
         abort_unless($this->google->configured(), 404);
         $intent = $request->session()->pull('google.intent', 'sign-in');
+        $signedIn = Auth::guard('web')->user();
+        $confirming = $intent === 'confirm' && $signedIn instanceof User;
         if ($request->query('error') !== null) {
-            return $this->message('Google sign-in was cancelled', 'Nothing changed. You can sign in with your password or try Google again.');
+            return $confirming ? $this->backToDelete('Google did not confirm it. Nothing changed.')
+                : $this->message('Google sign-in was cancelled', 'Nothing changed. You can sign in with your password or try Google again.');
         }
         try {
             $profile = $this->google->profile($this->google->provider()->user());
         } catch (Throwable) {
-            return $this->message('Google sign-in did not finish', 'Google did not confirm the sign-in. Try again from the sign-in page.');
+            return $confirming ? $this->backToDelete('Google did not confirm it. Try again.')
+                : $this->message('Google sign-in did not finish', 'Google did not confirm the sign-in. Try again from the sign-in page.');
         }
         if ($profile['id'] === '') {
-            return $this->message('Google sign-in did not finish', 'Google did not say which account signed in. Try again.');
+            return $confirming ? $this->backToDelete('Google did not say which account it was. Try again.')
+                : $this->message('Google sign-in did not finish', 'Google did not say which account signed in. Try again.');
         }
 
-        $signedIn = Auth::guard('web')->user();
         if ($intent === 'link' && $signedIn instanceof User) {
             return $this->linkSignedIn($signedIn, $profile['id']);
+        }
+        if ($confirming) {
+            return $this->confirmSignedIn($request, $signedIn, $profile['id']);
         }
 
         $linked = User::query()->where('google_id', $profile['id'])->first();
@@ -149,6 +168,25 @@ final class GoogleController extends Controller
         session()->flash('google.status', 'Google account linked. You can now sign in with Google.');
 
         return redirect()->to($profile);
+    }
+
+    /** "Confirm with Google" on /account/delete: only the Google account linked to the signed-in account counts. */
+    private function confirmSignedIn(Request $request, User $user, string $googleId): RedirectResponse
+    {
+        if ($user->google_id === null || ! hash_equals($user->google_id, $googleId)) {
+            $this->audit->record('login_failed', $user->id, null, 'Confirm with Google: another Google account was chosen');
+
+            return $this->backToDelete('That is not the Google account linked to this account. Choose the linked one, or use your password.');
+        }
+        GoogleSignIn::markConfirmed($request->session(), $user);
+        $this->audit->record('google_confirmed', $user->id, $user, 'Confirmed with Google to delete the account');
+
+        return redirect()->route('account.delete');
+    }
+
+    private function backToDelete(string $error): RedirectResponse
+    {
+        return redirect()->route('account.delete')->with('account.delete.error', $error);
     }
 
     /** @param  array{id: string, email: string, name: string, verified: bool}  $profile */

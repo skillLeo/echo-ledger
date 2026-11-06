@@ -9,6 +9,7 @@ use App\Filament\Pages\WorkspaceSettings;
 use App\Models\AccountExport;
 use App\Models\User;
 use App\Services\Accounts\AccountDeletion;
+use App\Services\Accounts\GoogleSignIn;
 use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
 use Filament\Facades\Filament;
@@ -21,8 +22,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * The public account pages (since v1.5, docs/API.md "Your account"): /account/delete, which Google Play links to
- * (sign in on the console's own page, confirm with the password or a two-step code, done; made for a phone), and
- * the signed download link of "Export my data".
+ * (sign in on the console's own page, confirm with the password, a two-step code or the linked Google account, done;
+ * made for a phone), and the signed download link of "Export my data".
  */
 final class AccountPageController extends Controller
 {
@@ -38,7 +39,7 @@ final class AccountPageController extends Controller
             return view('account.delete', ['user' => null]);
         }
 
-        return view('account.delete', ['user' => $user, 'date' => $this->date($user)]);
+        return view('account.delete', ['user' => $user, 'date' => $this->date($user), 'error' => $request->session()->get('account.delete.error'), ...$this->google($request, $user)]);
     }
 
     public function delete(Request $request, AccountDeletion $deletion): View|Response
@@ -53,14 +54,20 @@ final class AccountPageController extends Controller
             'code' => ['nullable', 'string', 'max:64'],
             'understood' => ['accepted'],
         ], ['understood.accepted' => 'Tick the box to confirm that you understand.']);
+        // An account linked to Google that just chose that Google account again needs no password (one made with
+        // Google has none it knows); two-step sign-in still asks for its code, as Google never stands in for it.
+        $google = $this->google($request, $user);
         try {
-            $deletion->confirm($user, $user->hasTwoFactor() ? null : ($data['password'] ?? null), $user->hasTwoFactor() ? ($data['code'] ?? null) : null);
+            if (! $google['googleConfirmed']) {
+                $deletion->confirm($user, $user->hasTwoFactor() ? null : ($data['password'] ?? null), $user->hasTwoFactor() ? ($data['code'] ?? null) : null);
+            }
             $deletion->schedule($user);
         } catch (ApiError $e) {
             $team = $e->apiCode() === 'owner_of_team';
 
-            return response()->view('account.delete', ['user' => $user, 'date' => null, 'error' => $e->getMessage(), 'workspaceUrl' => $team ? WorkspaceSettings::getUrl(panel: 'admin') : null], $e->getStatusCode() === 429 ? 429 : 422);
+            return response()->view('account.delete', ['user' => $user, 'date' => null, 'error' => $e->getMessage(), 'workspaceUrl' => $team ? WorkspaceSettings::getUrl(panel: 'admin') : null, ...$google], $e->getStatusCode() === 429 ? 429 : 422);
         }
+        GoogleSignIn::forgetConfirmed($request->session());
         $date = $this->date($user->fresh() ?? $user);
         Auth::guard('web')->logout();
         $request->session()->invalidate();
@@ -84,6 +91,17 @@ final class AccountPageController extends Controller
                 fclose($out);
             }
         }, $name, ['Content-Type' => 'application/zip', 'Cache-Control' => 'no-store', 'Content-Length' => (string) $model->bytes]);
+    }
+
+    /** @return array{googleConfirmed: bool, googleUrl: string|null} */
+    private function google(Request $request, User $user): array
+    {
+        $offered = ! $user->hasTwoFactor() && $user->google_id !== null;
+
+        return [
+            'googleConfirmed' => $offered && GoogleSignIn::confirmed($request->session(), $user),
+            'googleUrl' => $offered && app(GoogleSignIn::class)->configured() ? route('auth.google.redirect', ['intent' => 'confirm']) : null,
+        ];
     }
 
     private function date(User $user): ?string

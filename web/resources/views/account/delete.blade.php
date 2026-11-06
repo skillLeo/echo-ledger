@@ -26,10 +26,21 @@
                     <label>Code from your authenticator app, or a recovery code
                         <input type="text" name="code" autocomplete="one-time-code" required maxlength="64">
                     </label>
+                @elseif (! empty($googleConfirmed))
+                    <p class="hint">Confirmed with your Google account.</p>
                 @else
                     <label>Your password
                         <input type="password" name="password" autocomplete="current-password" required>
                     </label>
+                    @if ($user->google_id !== null)
+                        <p class="hint">Made your account with Google and never set a password?
+                            @if (! empty($googleUrl))
+                                <a href="{{ $googleUrl }}">Confirm with Google</a> instead.
+                            @else
+                                Sign out, then use "Forgot password?" on the sign-in page to set one.
+                            @endif
+                        </p>
+                    @endif
                 @endif
                 <label class="check"><input type="checkbox" name="understood" value="1" required> <span>I understand that after 7 days this cannot be undone.</span></label>
                 @if (! empty($error))

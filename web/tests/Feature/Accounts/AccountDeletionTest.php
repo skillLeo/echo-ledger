@@ -18,6 +18,7 @@ use App\Models\Transcript;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Accounts\AccountDeletion;
+use App\Services\Accounts\GoogleSignIn;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Screens\ScreenStore;
 use App\Services\Sharing\RequestLinks;
@@ -28,6 +29,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\PersonalAccessToken;
 use Livewire\Livewire;
 use Tests\Feature\Api\Support\Fixtures;
@@ -153,6 +155,71 @@ describe('/account/delete', function () {
         $this->post('/account/delete', ['password' => 'password', 'understood' => '1'])->assertOk()->assertSee('Your account will be deleted');
         expect($user->fresh()->deletes_at)->not->toBeNull();
         $this->assertGuest('web');
+    });
+
+    it('lets an account made with Google confirm with that Google account, which it has no password for', function () {
+        fakeGoogle(id: 'google-sub-9', email: 'made.with.google@example.test');
+        $user = Fx::user(['email' => 'made.with.google@example.test', 'password' => Str::password(40)]);
+        $user->forceFill(['google_id' => 'google-sub-9'])->save();
+        $this->actingAs($user, 'web');
+
+        $page = $this->get('/account/delete')->assertOk()->assertSee('Confirm with Google')->assertSee('name="password"', false);
+        expect($page->getContent())->toContain(e(route('auth.google.redirect', ['intent' => 'confirm'])));
+
+        // Nothing is confirmed without Google or the password.
+        $this->post('/account/delete', ['understood' => '1'])->assertStatus(422);
+        expect($user->fresh()->deletes_at)->toBeNull();
+
+        $this->get('/auth/google/redirect?intent=confirm')->assertRedirect();
+        $this->get('/auth/google/callback')->assertRedirect(route('account.delete'));
+        $this->get('/account/delete')->assertOk()->assertSee('Confirmed with your Google account')->assertDontSee('name="password"', false);
+        expect(AuditEvent::query()->where('event', 'google_confirmed')->where('user_id', $user->id)->exists())->toBeTrue();
+
+        $this->post('/account/delete', ['understood' => '1'])->assertOk()->assertSee('Your account will be deleted');
+        expect($user->fresh()->deletes_at)->not->toBeNull();
+        $this->assertGuest('web');
+    });
+
+    it('counts only the linked Google account, for a few minutes, and never instead of a two-step code', function () {
+        $user = Fx::user(['email' => 'linked@example.test']);
+        $user->forceFill(['google_id' => 'google-sub-linked'])->save();
+        $this->actingAs($user, 'web');
+
+        // Another Google account is refused.
+        fakeGoogle(id: 'google-sub-someone-else', email: 'someone@example.test');
+        $this->get('/auth/google/redirect?intent=confirm');
+        $this->get('/auth/google/callback')->assertRedirect(route('account.delete'));
+        $this->get('/account/delete')->assertSee('That is not the Google account linked to this account')->assertSee('name="password"', false);
+        $this->post('/account/delete', ['understood' => '1'])->assertStatus(422);
+        expect($user->fresh()->deletes_at)->toBeNull();
+
+        // The linked one counts for 5 minutes.
+        fakeGoogle(id: 'google-sub-linked', email: 'linked@example.test');
+        $this->get('/auth/google/redirect?intent=confirm');
+        $this->get('/auth/google/callback')->assertRedirect(route('account.delete'));
+        $this->travel(GoogleSignIn::CONFIRMED_MINUTES + 1)->minutes();
+        $this->get('/account/delete')->assertSee('name="password"', false);
+        $this->post('/account/delete', ['understood' => '1'])->assertStatus(422);
+        expect($user->fresh()->deletes_at)->toBeNull();
+
+        // With two-step sign-in the code is still asked for: Google never stands in for it.
+        [$secret] = accountsEnrolTotp($user);
+        $this->get('/auth/google/redirect?intent=confirm');
+        $this->get('/auth/google/callback');
+        $this->get('/account/delete')->assertSee('name="code"', false)->assertDontSee('Confirm with Google')->assertDontSee('Confirmed with your Google account');
+        $this->post('/account/delete', ['understood' => '1'])->assertStatus(422);
+        expect($user->fresh()->deletes_at)->toBeNull();
+        $this->post('/account/delete', ['code' => accountsTotp($user, $secret), 'understood' => '1'])->assertOk();
+        expect($user->fresh()->deletes_at)->not->toBeNull();
+    });
+
+    it('tells an app whose account was made with Google where to confirm with Google', function () {
+        $user = Fx::user();
+        $user->forceFill(['google_id' => 'google-sub-app'])->save();
+        [, $token] = $this->enroll($user);
+
+        $this->asToken($token)->deleteJson('/api/account', ['password' => 'wrong-password-1'])->assertStatus(422)
+            ->assertJsonPath('code', 'invalid_credentials')->assertJsonPath('message', fn (string $m): bool => str_contains($m, route('account.delete')));
     });
 
     it('sends the owner of a team to the Workspace page', function () {

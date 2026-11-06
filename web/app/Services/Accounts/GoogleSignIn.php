@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Services\Accounts;
 
+use App\Models\User;
 use App\Services\CredentialVault;
+use Illuminate\Contracts\Session\Session;
 use Laravel\Socialite\Contracts\Provider;
 use Laravel\Socialite\Contracts\User as SocialiteUser;
 use Laravel\Socialite\Facades\Socialite;
@@ -17,7 +19,35 @@ use Laravel\Socialite\Two\AbstractProvider;
  */
 final class GoogleSignIn
 {
+    /** Minutes a "Confirm with Google" on /account/delete stands in for the password. */
+    public const CONFIRMED_MINUTES = 5;
+
+    private const CONFIRMED = 'google.confirmed';
+
     public function __construct(private readonly CredentialVault $vault) {}
+
+    /**
+     * The person just chose this account's linked Google account again ("Confirm with Google" on /account/delete):
+     * an account made with Google has a password nobody ever saw, so this is how it confirms it is them.
+     */
+    public static function markConfirmed(Session $session, User $user): void
+    {
+        $session->put(self::CONFIRMED, ['user_id' => $user->id, 'google_id' => $user->google_id, 'until' => now()->addMinutes(self::CONFIRMED_MINUTES)->getTimestamp()]);
+    }
+
+    /** Whether [$user] confirmed with its linked Google account in this session in the last few minutes. */
+    public static function confirmed(Session $session, User $user): bool
+    {
+        $state = $session->get(self::CONFIRMED);
+
+        return is_array($state) && (int) ($state['user_id'] ?? 0) === $user->id && $user->google_id !== null
+            && hash_equals($user->google_id, (string) ($state['google_id'] ?? '')) && (int) ($state['until'] ?? 0) >= now()->getTimestamp();
+    }
+
+    public static function forgetConfirmed(Session $session): void
+    {
+        $session->forget(self::CONFIRMED);
+    }
 
     public function configured(): bool
     {

@@ -45,7 +45,10 @@ final class AccountDeletion
             if (! Hash::check((string) $password, $user->password)) {
                 $this->guard->fail($user->email, $user->id);
 
-                throw new ApiError(422, 'invalid_credentials', 'That password is wrong.');
+                // An account made with Google has a password nobody saw: the public page confirms with Google instead.
+                throw new ApiError(422, 'invalid_credentials', $user->google_id !== null && ! $user->hasTwoFactor()
+                    ? 'That password is wrong. Made your account with Google? Open '.route('account.delete').' and confirm with Google there.'
+                    : 'That password is wrong.');
             }
         } elseif (! filled($otp) || ! $this->codes->verify($user, (string) $otp)) {
             $this->guard->fail($user->email, $user->id);
