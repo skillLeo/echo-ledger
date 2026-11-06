@@ -396,8 +396,8 @@ export default function MainApp() {
     }
   };
 
-  // Rendered in every branch: a pairing error, or "unpaired on the server" arriving with the status that sends the
-  // window back to the pairing form, must stay visible (A6.DU1).
+  // Rendered in every branch: a pairing error, or "signed out on the server" arriving with the status that sends the
+  // window back to the sign-in form, must stay visible (A6.DU1).
   const toastView = toast && <div className={`toast ${toast.error ? "error" : ""}`} role="status">{toast.text}</div>;
 
   if (lock?.locked) {

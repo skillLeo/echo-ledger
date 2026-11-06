@@ -101,14 +101,14 @@ describe("MainApp start-up and pairing gate", () => {
     expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
   });
 
-  // A6.DU1: the 401 "unpaired on the server" error arrives together with the status that shows the pairing form.
-  it("keeps the 'unpaired on the server' error visible on the pairing form", async () => {
+  // A6.DU1: the 401 "signed out on the server" error arrives together with the status that shows the sign-in form.
+  it("keeps the 'signed out on the server' error visible on the sign-in form", async () => {
     await renderPaired();
-    await emitEvent("app:error", "This computer was unpaired on the server. Pair it again to upload.");
+    await emitEvent("app:error", "This computer was signed out on the server. Sign in again to upload.");
     await emitEvent("app:status", makeStatus({ paired: false }));
     expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
     const toast = screen.getByRole("status");
-    expect(toast).toHaveTextContent("This computer was unpaired on the server. Pair it again to upload.");
+    expect(toast).toHaveTextContent("This computer was signed out on the server. Sign in again to upload.");
     expect(toast).toHaveClass("toast", "error");
   });
 

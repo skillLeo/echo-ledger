@@ -1191,7 +1191,9 @@ pub fn copy_last_minutes(app: &AppHandle, minutes: u64) -> AppResult<String> {
     Ok(text)
 }
 
-const UNPAIRED: &str = "This computer was unpaired on the server. Pair it again to upload.";
+/// A token the server no longer takes: the device was removed in the console, or the account signed out everywhere or
+/// asked to be deleted (since v1.5).
+const UNPAIRED: &str = "This computer was signed out on the server. Sign in again to upload.";
 
 /// Background worker: on notify / every 30 s it sends queued usage reports (v1.1 servers), deletes discarded
 /// server sessions, then uploads the queue oldest first; refreshes the library after uploads.
