@@ -86,7 +86,9 @@ object SettingsTransfer {
         "phoneFont",
         "recentSearches",
         // The server says what the plan allows and the role (since v1.5).
-        "plan"
+        "plan",
+        // Whose waiting recordings these are (since v1.5): this phone's sign-in, never another's.
+        "account"
     )
 
     sealed interface Result {

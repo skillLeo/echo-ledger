@@ -55,7 +55,9 @@ data class LocalRecording(
     val skipDuplicate: Boolean = false,
     /** Since v1.5, for state "skipped": why ([com.echoledger.mobile.calls.SkippedCalls.Reason] wire value) and when. */
     val skippedReason: String? = null,
-    val skippedAt: String? = null
+    val skippedAt: String? = null,
+    /** Since v1.5: the account it was made under, once someone else signed in here ([com.echoledger.mobile.core.Owner]); null = this phone's account. */
+    val owner: com.echoledger.mobile.core.Owner? = null
 )
 
 /**

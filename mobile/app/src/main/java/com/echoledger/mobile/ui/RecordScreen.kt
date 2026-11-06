@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.calls.PostCallPrompt
+import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.core.PlanState
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.ClientDto
@@ -303,7 +304,18 @@ fun RecordScreen(
                 }
             }
         }
-        val queued = pending.filter { it.state in setOf("queued", "uploading") }
+        // Since v1.5: recordings made under another account wait for it (core/Owner) instead of uploading here.
+        val waiting = pending.filter { it.state in setOf("queued", "uploading", "failed") }
+        val held = waiting.mapNotNull { rec -> Owner.heldFor(rec.owner, settings.account)?.let { rec to it } }
+        held.groupBy({ it.second }, { it.first }).forEach { (owner, recordings) ->
+            InlineBanner(
+                Owner.waitingLine(recordings.size, owner),
+                Modifier.padding(horizontal = Space.screen, vertical = Space.s2),
+                kind = BannerKind.Info
+            )
+        }
+        val heldIds = held.map { it.first.id }.toSet()
+        val queued = pending.filter { it.state in setOf("queued", "uploading") && it.id !in heldIds }
         if (queued.isNotEmpty()) {
             InlineBanner(
                 "Uploading ${queued.size} recording(s)…" +
@@ -313,7 +325,7 @@ fun RecordScreen(
                 onAction = { vm.retryPending() }
             )
         }
-        val failedUploads = pending.filter { it.state == "failed" }
+        val failedUploads = pending.filter { it.state == "failed" && it.id !in heldIds }
         if (failedUploads.isNotEmpty()) {
             SectionHeader("${failedUploads.size} recording(s) could not be uploaded")
             failedUploads.forEach { rec ->

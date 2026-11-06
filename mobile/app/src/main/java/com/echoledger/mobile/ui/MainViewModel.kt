@@ -9,6 +9,7 @@ import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.calls.Decisions
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.core.Organise
+import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.core.SettingsTransfer
 import com.echoledger.mobile.core.SignIn
@@ -159,7 +160,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** What a pairing and every sign-in end with: the token (Keystore-encrypted), the server and its config. */
-    private suspend fun finishSignIn(serverUrl: String, pins: List<String>, response: com.echoledger.mobile.data.RegisterResponse) {
+    private suspend fun finishSignIn(
+        serverUrl: String,
+        pins: List<String>,
+        response: com.echoledger.mobile.data.RegisterResponse,
+        email: String? = null
+    ) {
+        val previous = graph.settings.current().let { it.account ?: it.serverUrl?.let { url -> Owner.of(url, null) } }
         graph.settings.saveToken(response.token)
         val finalPins = response.config.pins.ifEmpty { pins }
         graph.settings.update {
@@ -177,6 +184,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             )
         }
         graph.invalidateApi()
+        // Since v1.5: whose account this is (the typed email, else the server's answer; an older server has none), and
+        // recordings made under another account wait for it instead of uploading into this one.
+        val known = email ?: withContext(Dispatchers.IO) { runCatching { graph.api()?.account()?.email }.getOrNull() }
+        val next = Owner.of(serverUrl, known)
+        withContext(Dispatchers.IO) {
+            Owner.stamp(graph.recordings.all(), previous, next).forEach { graph.recordings.save(it) }
+        }
+        graph.settings.update { it.copy(account = next) }
+        retryPending()
         refresh()
     }
 
@@ -196,7 +212,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     .signInWithPassword(email.trim(), password, otp, deviceName(typedName), BuildConfig.VERSION_NAME, Build.VERSION.RELEASE)
             }
             _otpNeeded.value = false
-            finishSignIn(url, emptyList(), response)
+            finishSignIn(url, emptyList(), response, email.trim())
             _message.value = "Signed in as ${email.trim()}"
         } catch (e: com.echoledger.mobile.net.ApiException) {
             if (e.code == "otp_required") _otpNeeded.value = true

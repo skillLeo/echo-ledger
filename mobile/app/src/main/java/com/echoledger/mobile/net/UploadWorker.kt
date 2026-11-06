@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.ArtifactDto
 import com.echoledger.mobile.data.CallerDto
@@ -43,6 +44,12 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             return Result.failure()
         }
         val api = graph.api() ?: return Result.retry()
+        // Since v1.5: a recording made under another account waits for it (core/Owner); it is sent again at its sign-in.
+        val current = graph.settings.current().account
+        Owner.heldFor(rec.owner, current)?.let { owner ->
+            graph.recordings.update(id) { it.copy(state = "queued", lastError = held(owner)) }
+            return Result.success()
+        }
 
         return try {
             graph.recordings.update(id) { it.copy(state = "uploading", lastError = null) }
@@ -249,6 +256,9 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         const val DUPLICATE = "duplicate_recording"
         const val ALREADY_THERE = "Already in your Library"
         const val NO_CONNECTION = "No connection to your server. It uploads by itself when the phone is back online."
+
+        /** The line a recording made under another account shows while it waits for that account. */
+        fun held(owner: Owner): String = "Waits for ${owner.label()}: sign in as that account to send it."
 
         /**
          * What a failed upload says (since v1.3, copy pass): what happened and what to do, never a raw exception
