@@ -83,9 +83,12 @@ be restored from the console's Recently deleted page for 48 hours.
 - **Migration `2026_11_22_000001`:** plans get price, retention days, seats, AI credits and features; Personal (every
   workspace made before) loses the B20 limits it still had at their defaults and has every feature; a Free plan is
   added for new sign-ups (placeholder numbers: 300 minutes, 5 GB, 30 days, 1 seat, US$1 of AI, no Live Translate and
-  no AI notes). Filing rules become each person's. Nothing of the library changes. Rollback (`migrate:rollback
+  no AI notes). Filing rules become each person's. In a team workspace, a recording, folder or request link one
+  person put in another person's project moves (with its notes and memory lines) to a new top-level project of its
+  own maker named like that one ("Acme", or "Acme (2)"); nothing is deleted. Rollback (`migrate:rollback
   --step=1`) moves Free workspaces to Personal, gives Personal its B20 limits back, turns admins and viewers into
-  members, and refuses while two people of one workspace have the same filing rule (it names them).
+  members, keeps those new projects, and refuses while two people of one workspace have the same filing rule (it
+  names them).
 - **Privacy:** after this deploy owners and admins no longer see their members' recordings and projects. On a
   one-person server nothing changes.
 - **Plans page and Server usage:** System → Plans makes, edits and assigns plans; System → Server usage has the
