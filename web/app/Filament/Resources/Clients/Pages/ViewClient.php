@@ -28,6 +28,7 @@ use App\Services\Projects\FilingRules;
 use App\Services\Projects\ProjectTree;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptExporter;
+use App\Services\Workspaces\PlanLimits;
 use App\Support\UrduText;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -214,7 +215,7 @@ class ViewClient extends ViewRecord
     {
         $client = $this->client();
         try {
-            app(ClientWorkspace::class)->assertCanSpend($client->workspace_id);
+            app(ClientWorkspace::class)->assertCanWriteNotes($client->workspace_id);
         } catch (ApiError $e) {
             Notification::make()->title($e->getMessage())->warning()->send();
 
@@ -232,6 +233,11 @@ class ViewClient extends ViewRecord
             'memoryText' => ['required', 'string', 'max:500'],
         ], [], ['memoryText' => 'line', 'memoryKind' => 'kind']);
         $client = $this->client();
+        if (! app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes')) {
+            Notification::make()->title(PlanLimits::FEATURE_MESSAGES['ai_notes'])->warning()->send();
+
+            return;
+        }
         ClientMemoryItem::query()->create([
             'workspace_id' => $client->workspace_id,
             'client_id' => $client->id,
@@ -364,7 +370,7 @@ class ViewClient extends ViewRecord
 
         return $this->brief()->status === 'working'
             || ClientFile::query()->where('client_id', $client->id)->where('status', 'extracting')->exists()
-            || CallNote::query()->where('client_id', $client->id)->where('status', 'pending')->exists();
+            || CallNote::query()->ofProjectMaker($client)->where('status', 'pending')->exists();
     }
 
     /** The poll: a re-render shows what is done. */
@@ -403,9 +409,9 @@ class ViewClient extends ViewRecord
                 'budget' => $service->budget($client->workspace_id),
                 'clientSpend' => $service->clientSpend($client),
                 'brief' => $this->brief(),
-                'memory' => ClientMemoryItem::query()->where('client_id', $client->id)->orderByDesc('pinned')->orderByDesc('happened_on')->orderByDesc('created_at')
+                'memory' => ClientMemoryItem::query()->ofProjectMaker($client)->orderByDesc('pinned')->orderByDesc('happened_on')->orderByDesc('created_at')
                     ->limit(300)->get()->groupBy('kind'),
-                'notes' => CallNote::query()->where('client_id', $client->id)->with('captureSession')->latest()->limit(5)->get(),
+                'notes' => CallNote::query()->ofProjectMaker($client)->with('captureSession')->latest()->limit(5)->get(),
             ],
         };
     }
@@ -419,7 +425,7 @@ class ViewClient extends ViewRecord
 
     private function memoryItem(string $id): ?ClientMemoryItem
     {
-        $item = ClientMemoryItem::query()->where('client_id', $this->client()->id)->find($id);
+        $item = ClientMemoryItem::query()->ofProjectMaker($this->client())->find($id);
 
         return $item instanceof ClientMemoryItem ? $item : null;
     }
@@ -439,7 +445,7 @@ class ViewClient extends ViewRecord
      */
     private function recordings(): Builder
     {
-        $query = CaptureSession::query()->where('workspace_id', $this->client()->workspace_id)->where('client_id', $this->client()->id);
+        $query = CaptureSession::query()->where('workspace_id', $this->client()->workspace_id)->where('user_id', $this->client()->user_id)->where('client_id', $this->client()->id);
         $search = trim($this->search);
         if ($search !== '') {
             $pattern = '%'.strtr(mb_strtolower($search), ['!' => '!!', '%' => '!%', '_' => '!_']).'%';
@@ -464,7 +470,7 @@ class ViewClient extends ViewRecord
      */
     private function screenGroups(Client $client, string $zone): array
     {
-        $sessions = CaptureSession::query()->where('workspace_id', $client->workspace_id)
+        $sessions = CaptureSession::query()->where('workspace_id', $client->workspace_id)->where('user_id', $client->user_id)
             ->whereIn('client_id', app(ProjectTree::class)->withDescendants($client))
             ->where('status', '!=', SessionStatus::Recording->value)->whereHas('screens')
             ->latest('started_at')->limit(self::SCREEN_RECORDINGS)->get();
@@ -495,14 +501,14 @@ class ViewClient extends ViewRecord
     /** Levels from the top down to this project: 1 at the top. */
     private function depth(): int
     {
-        return ProjectTree::depth($this->client()->id, app(ProjectTree::class)->parents($this->client()->workspace_id));
+        return ProjectTree::depth($this->client()->id, app(ProjectTree::class)->parents($this->client()->workspace_id, $this->client()->user_id));
     }
 
     /** "Projects > Acme > Website > Name": the folders above it, each a link. */
     public function getBreadcrumbs(): array
     {
         $client = $this->client();
-        $nodes = Client::query()->where('workspace_id', $client->workspace_id)->get(['id', 'parent_id', 'name'])
+        $nodes = Client::query()->where('workspace_id', $client->workspace_id)->where('user_id', $client->user_id)->get(['id', 'parent_id', 'name'])
             ->mapWithKeys(fn (Client $c): array => [$c->id => ['parent_id' => $c->parent_id, 'name' => $c->name]])->all();
         $crumbs = [ClientResource::getUrl('index') => 'Projects'];
         foreach (ProjectTree::pathOf($client->id, $nodes) as $ancestor) {

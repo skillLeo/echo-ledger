@@ -55,7 +55,7 @@ final class LibraryController extends Controller
         $serverTime = now();
         // The `shared` folder (since v1.5) is what others sent this person, from their workspaces, read-only.
         $shared = ($data['folder'] ?? null) === 'shared';
-        $query = ($shared ? $teammates->sharedSessions($device->user) : CaptureSession::query()->where('workspace_id', $device->workspace_id))->with([
+        $query = ($shared ? $teammates->sharedSessions($device->user) : CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id))->with([
             'device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms', 'labels',
             // Only this user's own "opened" row: whether to show the unopened dot (since v1.3).
             'opens' => fn ($q) => $q->where('user_id', $device->user_id),
@@ -84,7 +84,7 @@ final class LibraryController extends Controller
         }
         if (! empty($data['client_id'])) {
             $project = $request->boolean('include_subfolders')
-                ? Client::query()->where('workspace_id', $device->workspace_id)->find($data['client_id']) : null;
+                ? Client::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($data['client_id']) : null;
             $project instanceof Client
                 ? $query->whereIn('client_id', $projects->withDescendants($project))
                 : $query->where('client_id', $data['client_id']);
@@ -152,7 +152,7 @@ final class LibraryController extends Controller
         /** @var Device $device */
         $device = $request->user();
         $transcript = Transcript::query()
-            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->whereNull('deleted_at'))
+            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->whereNull('deleted_at'))
             ->find($id)
             // Since v1.5: the transcript of a recording a teammate sent this person (read-only).
             ?? Transcript::query()->whereIn('capture_session_id', $teammates->sharedSessions($device->user)->select('capture_sessions.id'))->findOrFail($id);

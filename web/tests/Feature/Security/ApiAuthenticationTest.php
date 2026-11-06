@@ -89,6 +89,11 @@ function secDeviceGuardedRoutes(): array
         'DELETE sessions/{id}/screens/{screen}' => ['DELETE', '/api/sessions/'.Fx::MISSING_ID.'/screens/'.Fx::MISSING_ID, 'sessions:write'],
         'GET clients/{id}/screens' => ['GET', '/api/clients/'.Fx::MISSING_ID.'/screens', 'library:read'],
         'GET sessions/{id}/pack' => ['GET', '/api/sessions/'.Fx::MISSING_ID.'/pack', 'library:read'],
+        'POST account/sign-out-everywhere' => ['POST', '/api/account/sign-out-everywhere', 'sessions:write'],
+        'GET account' => ['GET', '/api/account', 'config:read'],
+        'DELETE account' => ['DELETE', '/api/account', 'sessions:write'],
+        'POST account/export' => ['POST', '/api/account/export', 'library:read'],
+        'GET account/export/{id}' => ['GET', '/api/account/export/'.Fx::MISSING_ID, 'library:read'],
     ];
 }
 
@@ -136,11 +141,14 @@ it('exposes exactly the documented public API routes and guards every other one'
 
     expect($public)->toBe([
         'GET api/recordings/{recording}/audio',
+        // Since v1.5: signing in with an account (the email and password, or the browser sign-in's code).
+        'POST api/auth/device/token',
+        'POST api/auth/password',
         'POST api/devices/register',
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(83);
+    expect($guarded)->toBe(88);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

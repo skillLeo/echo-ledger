@@ -107,8 +107,8 @@ it('changes the password when the current password is confirmed', function () {
 
     $this->panelComponent(EditProfile::class)
         ->fillForm([
-            'password' => 'a-much-longer-passphrase',
-            'passwordConfirmation' => 'a-much-longer-passphrase',
+            'password' => 'a-much-longer-passphrase-42',
+            'passwordConfirmation' => 'a-much-longer-passphrase-42',
             'currentPassword' => 'password',
         ])
         ->call('save')
@@ -117,9 +117,9 @@ it('changes the password when the current password is confirmed', function () {
         ->assertSet('data.passwordConfirmation', null);
 
     $stored = $admin->fresh()->password;
-    expect(Hash::check('a-much-longer-passphrase', $stored))->toBeTrue()
+    expect(Hash::check('a-much-longer-passphrase-42', $stored))->toBeTrue()
         ->and(Hash::check('password', $stored))->toBeFalse()
-        ->and($stored)->not->toContain('a-much-longer-passphrase');
+        ->and($stored)->not->toContain('a-much-longer-passphrase-42');
 
     // The new password signs in; the old one no longer does.
     auth()->logout();
@@ -128,7 +128,7 @@ it('changes the password when the current password is confirmed', function () {
         ->call('authenticate')
         ->assertHasFormErrors(['email']);
     $this->panelComponent(Login::class)
-        ->fillForm(['email' => 'owner@example.test', 'password' => 'a-much-longer-passphrase'])
+        ->fillForm(['email' => 'owner@example.test', 'password' => 'a-much-longer-passphrase-42'])
         ->call('authenticate')
         ->assertHasNoFormErrors();
     $this->assertAuthenticatedAs($admin);
@@ -140,8 +140,8 @@ it('refuses a password change without the right current password', function () {
 
     $this->panelComponent(EditProfile::class)
         ->fillForm([
-            'password' => 'a-much-longer-passphrase',
-            'passwordConfirmation' => 'a-much-longer-passphrase',
+            'password' => 'a-much-longer-passphrase-42',
+            'passwordConfirmation' => 'a-much-longer-passphrase-42',
             'currentPassword' => 'guess',
         ])
         ->call('save')
@@ -156,8 +156,8 @@ it('refuses a password change when the current password is left blank', function
 
     $this->panelComponent(EditProfile::class)
         ->fillForm([
-            'password' => 'a-much-longer-passphrase',
-            'passwordConfirmation' => 'a-much-longer-passphrase',
+            'password' => 'a-much-longer-passphrase-42',
+            'passwordConfirmation' => 'a-much-longer-passphrase-42',
             'currentPassword' => '',
         ])
         ->call('save')
@@ -184,7 +184,7 @@ it('refuses a new password whose confirmation does not match', function () {
 
     $this->panelComponent(EditProfile::class)
         ->fillForm([
-            'password' => 'a-much-longer-passphrase',
+            'password' => 'a-much-longer-passphrase-42',
             'passwordConfirmation' => 'something-else-entirely',
             'currentPassword' => 'password',
         ])

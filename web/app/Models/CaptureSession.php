@@ -12,6 +12,7 @@ use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Models\Concerns\BelongsToWorkspace;
+use App\Models\Concerns\OwnedByMaker;
 use App\Models\Scopes\WorkspaceScope;
 use App\Services\ProviderCopyEraser;
 use App\Services\Screens\ScreenStore;
@@ -75,7 +76,7 @@ use Illuminate\Support\Carbon;
 class CaptureSession extends Model
 {
     /** @use HasFactory<CaptureSessionFactory> */
-    use BelongsToWorkspace, HasFactory, HasUlids, Prunable, SoftDeletes;
+    use BelongsToWorkspace, HasFactory, HasUlids, OwnedByMaker, Prunable, SoftDeletes;
 
     /** `filed_by` values (v1.5): moved by hand or chosen when recording, a contact of the project, a filing rule. */
     public const FILED_BY_USER = 'user';

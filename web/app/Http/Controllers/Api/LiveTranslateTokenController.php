@@ -10,6 +10,7 @@ use App\Models\Device;
 use App\Services\CredentialVault;
 use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\PlanLimits;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -45,6 +46,7 @@ final class LiveTranslateTokenController extends Controller
             'language_hints.*' => ['string', 'regex:/^[a-z]{2}$/'],
             'continue_over_budget' => ['sometimes', 'boolean'],
         ]);
+        app(PlanLimits::class)->assertFeature($device->workspace_id, 'live_translate');
         $spending = $budget->state($device->workspace_id);
         if ($spending['reached'] && ! $request->boolean('continue_over_budget')) {
             throw new ApiError(403, 'budget_exceeded', sprintf(

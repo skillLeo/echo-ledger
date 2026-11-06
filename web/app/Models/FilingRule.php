@@ -15,6 +15,7 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int $workspace_id
+ * @property int|null $user_id the person whose project it is (since v1.5: each person's rules are their own)
  * @property string $client_id
  * @property string $kind
  * @property string $value
@@ -29,7 +30,7 @@ class FilingRule extends Model
 
     public const KINDS = ['title', 'app', 'contact'];
 
-    protected $fillable = ['workspace_id', 'client_id', 'kind', 'value', 'match_value', 'client_contact_id'];
+    protected $fillable = ['workspace_id', 'user_id', 'client_id', 'kind', 'value', 'match_value', 'client_contact_id'];
 
     /** @return BelongsTo<Client, $this> */
     public function client(): BelongsTo

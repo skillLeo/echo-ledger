@@ -22,6 +22,7 @@ use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptEditor;
+use App\Services\Workspaces\PlanLimits;
 use App\Stt\SttManager;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
@@ -76,19 +77,31 @@ final class ClientWorkspace
     }
 
     /**
-     * This month's client AI spend and limit of a workspace.
+     * This month's client AI spend and limit of a workspace: its plan's AI credits (since v1.5), else the server's
+     * `client_ai.monthly_usd` (a plan with no credits set, like Personal, keeps the server's limit on what it costs).
      *
      * @return array{spent_usd: float, budget_usd: float}
      */
     public function budget(int $workspaceId): array
     {
-        $limit = $this->settings->get('client_ai.monthly_usd', self::DEFAULT_BUDGET_USD);
+        $limit = app(PlanLimits::class)->aiCredits($workspaceId) ?? $this->settings->get('client_ai.monthly_usd', self::DEFAULT_BUDGET_USD);
         $spent = UsageLedgerEntry::query()->withoutGlobalScopes()->where('workspace_id', $workspaceId)
             ->where('provider', 'claude')->where('use_case', 'like', 'client_%')
             ->where('occurred_at', '>=', Carbon::now($this->settings->displayTimezone())->startOfMonth()->utc())
             ->sum('cost_usd');
 
         return ['spent_usd' => round((float) $spent, 4), 'budget_usd' => is_numeric($limit) ? (float) $limit : self::DEFAULT_BUDGET_USD];
+    }
+
+    /**
+     * Client notes, the brief, memory and Ask (since v1.5 the plan's `ai_notes`, `403 feature_not_in_plan`), then what
+     * every Claude request needs. Suggested fixes and reading a PDF are no part of the feature: the plan never switches
+     * those off.
+     */
+    public function assertCanWriteNotes(int $workspaceId): void
+    {
+        app(PlanLimits::class)->assertFeature($workspaceId, 'ai_notes');
+        $this->assertCanSpend($workspaceId);
     }
 
     /** Refuses a Claude request a workspace cannot have now: no key, or the month's budget used up. */
@@ -99,7 +112,9 @@ final class ClientWorkspace
         }
         $budget = $this->budget($workspaceId);
         if ($budget['spent_usd'] >= $budget['budget_usd']) {
-            throw new ApiError(403, 'ai_budget_reached', sprintf("This month's AI budget (\$%.2f) is used up. Raise it in Settings → AI.", $budget['budget_usd']));
+            throw new ApiError(403, 'ai_budget_reached', app(PlanLimits::class)->aiCredits($workspaceId) !== null
+                ? sprintf("This month's AI credits (\$%.2f) are used up. They come back next month, or with a bigger plan.", $budget['budget_usd'])
+                : sprintf("This month's AI budget (\$%.2f) is used up. Raise it in Settings → AI.", $budget['budget_usd']));
         }
     }
 
@@ -120,6 +135,8 @@ final class ClientWorkspace
             'duration_ms' => 0,
             'channels' => 1,
             'billed_ms' => 0,
+            'input_tokens' => $usage['input_tokens'],
+            'output_tokens' => $usage['output_tokens'],
             'unit_price_usd' => 0,
             'cost_usd' => round(($usage['input_tokens'] * $in + $usage['output_tokens'] * $out) / 1_000_000, 6),
             'billable' => true,
@@ -147,8 +164,8 @@ final class ClientWorkspace
                 return;
             }
             $session = CaptureSession::query()->withoutGlobalScopes()->find($transcript->capture_session_id);
-            $client = $session?->client_id !== null ? Client::query()->withoutGlobalScopes()->find($session->client_id) : null;
-            if ($session === null || $client === null || ! $client->ai_notes) {
+            $client = $session !== null ? $this->projectOf($session) : null;
+            if ($session === null || $client === null || ! $client->ai_notes || ! app(PlanLimits::class)->allows($session->workspace_id, 'ai_notes')) {
                 return;
             }
             CallNote::query()->withoutGlobalScopes()->updateOrCreate(
@@ -161,10 +178,20 @@ final class ClientWorkspace
         }
     }
 
+    /**
+     * The project a recording is filed under, when it is its maker's own: since v1.5 nobody's notes or memory lines go
+     * into another person's project (null for the Inbox too).
+     */
+    public function projectOf(CaptureSession $session): ?Client
+    {
+        return $session->client_id === null ? null
+            : Client::query()->withoutGlobalScopes()->where('user_id', $session->user_id)->find($session->client_id);
+    }
+
     /** Writes (or rewrites) the notes of one recording, then updates the client's memory and, without files, its brief. */
     public function makeNotes(CaptureSession $session, ?string $language = null): CallNote
     {
-        $client = Client::query()->withoutGlobalScopes()->findOrFail($session->client_id);
+        $client = Client::query()->withoutGlobalScopes()->where('user_id', $session->user_id)->findOrFail($session->client_id);
         $note = CallNote::query()->withoutGlobalScopes()->firstOrNew(['capture_session_id' => $session->id]);
         $note->fill(['workspace_id' => $session->workspace_id, 'client_id' => $client->id, 'language' => $language ?? $note->language ?? 'en']);
         $transcript = $session->finalTranscript()->first();
@@ -175,7 +202,7 @@ final class ClientWorkspace
             return $note;
         }
         try {
-            $this->assertCanSpend($session->workspace_id);
+            $this->assertCanWriteNotes($session->workspace_id);
         } catch (ApiError $e) {
             $note->fill(['status' => 'skipped', 'error' => $e->getMessage()])->save();
 
@@ -363,7 +390,7 @@ final class ClientWorkspace
             return $brief;
         }
         try {
-            $this->assertCanSpend($client->workspace_id);
+            $this->assertCanWriteNotes($client->workspace_id);
             $result = $this->ai->brief($client->name, $documents, $notes);
         } catch (Throwable $e) {
             $brief->fill(['sections' => $brief->sections ?? ClientBrief::emptySections(), 'status' => 'failed', 'error' => mb_substr($e->getMessage(), 0, 300)])->save();
@@ -397,7 +424,7 @@ final class ClientWorkspace
     /** @return list<string> the latest ready notes of a client as plain text, oldest first */
     private function recentNotesText(Client $client, int $count): array
     {
-        $notes = CallNote::query()->withoutGlobalScopes()->where('client_id', $client->id)->where('status', 'ready')
+        $notes = CallNote::query()->withoutGlobalScopes()->ofProjectMaker($client)->where('status', 'ready')
             ->with('captureSession')->latest()->limit($count)->get()->reverse();
 
         return array_values($notes->map(fn (CallNote $note): string => $this->noteText($note))->all());
@@ -603,10 +630,10 @@ final class ClientWorkspace
      */
     public function ask(Client $client, string $question, string $language): array
     {
-        $this->assertCanSpend($client->workspace_id);
+        $this->assertCanWriteNotes($client->workspace_id);
         $passages = (new PassageSearch($this->settings))->top($client, $question, self::PASSAGES);
         $brief = ClientBrief::query()->withoutGlobalScopes()->where('client_id', $client->id)->first();
-        $memory = ClientMemoryItem::query()->withoutGlobalScopes()->where('client_id', $client->id)->orderByDesc('pinned')->orderBy('happened_on')
+        $memory = ClientMemoryItem::query()->withoutGlobalScopes()->ofProjectMaker($client)->orderByDesc('pinned')->orderBy('happened_on')
             ->limit(200)->get()->map(fn (ClientMemoryItem $m): string => '- '.ucfirst($m->kind).($m->happened_on ? ' ('.$m->happened_on->toDateString().')' : '').': '.$m->text)->all();
         try {
             $result = $this->ai->ask(
@@ -651,7 +678,7 @@ final class ClientWorkspace
                 }
             }
         }
-        $memory = ClientMemoryItem::query()->withoutGlobalScopes()->where('client_id', $client->id)->orderBy('kind')->orderBy('happened_on')->get();
+        $memory = ClientMemoryItem::query()->withoutGlobalScopes()->ofProjectMaker($client)->orderBy('kind')->orderBy('happened_on')->get();
         if ($memory->isNotEmpty()) {
             $out[] = '';
             $out[] = '## Memory';

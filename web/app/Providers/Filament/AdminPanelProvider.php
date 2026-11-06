@@ -5,10 +5,16 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Filament\Auth\AppAuthentication;
+use App\Filament\Auth\EditProfile;
+use App\Filament\Auth\EmailVerificationPrompt;
+use App\Filament\Auth\Login;
+use App\Filament\Auth\Register;
+use App\Filament\Auth\RequestPasswordReset;
 use App\Filament\Support\CommandPalette;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
 use App\Filament\Support\Palette;
+use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
@@ -42,17 +48,31 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogo(fn (): View => view('filament.brand'))
             ->brandLogoHeight('1.75rem')
             ->favicon(asset('favicon.svg'))
-            ->login()
+            ->login(Login::class)
+            // Sign-up (since v1.5): the page exists, but answers 404 until Settings → "Who can sign up" opens it.
+            ->registration(Register::class)
+            ->passwordReset(RequestPasswordReset::class)
             // The activity centre (B18): the bell shows transcript, upload, device and budget notifications.
             ->databaseNotifications()
             ->databaseNotificationsPolling('30s')
             // Passkeys (B16): a second way in, next to the password and the optional two-step code.
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn (): View => view('filament.auth.passkey-login'))
+            // Sign in with Google (since v1.5), once API Credentials → Google sign-in is filled in.
+            ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn (): View => view('filament.auth.google-login'))
+            ->renderHook(PanelsRenderHook::AUTH_REGISTER_FORM_AFTER, fn (): View => view('filament.auth.google-login', ['label' => 'Sign up with Google']))
+            // Since v1.5: the Terms and the Privacy Policy under every page and the sign-in page.
+            ->renderHook(PanelsRenderHook::FOOTER, fn (): View => view('filament.legal-links'))
+            ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_END, fn (): View => view('filament.legal-links'))
+            // Since v1.5: members and viewers while the console is closed to them are pointed to the apps.
+            ->renderHook(PanelsRenderHook::PAGE_START, fn (): View => view('filament.use-the-apps'))
+            // Since v1.5: the workspace switcher at the top of the sidebar, for people in more than one.
+            ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, fn (): View => view('filament.workspace-switcher'))
             // C6: a quiet notice while the browser is offline.
             ->renderHook(PanelsRenderHook::BODY_END, fn (): View => view('filament.offline-banner'))
-            ->profile(isSimple: false)
-            // Confirming one's email (v1.5): offered, not forced; people-only share links need it (PublicShareController).
-            ->emailVerification(isRequired: false)
+            ->profile(EditProfile::class, isSimple: false)
+            // Confirming one's email: required since v1.5 Phase 4 (an unconfirmed account sees only "Confirm your
+            // email", and the apps' sign-in answers 403 email_not_verified); people-only share links need it too.
+            ->emailVerification(EmailVerificationPrompt::class, isRequired: true)
             // Optional TOTP 2FA with one-time recovery codes: offered in the profile, not forced at login.
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable()->brandName('EchoLedger'),
@@ -109,6 +129,8 @@ class AdminPanelProvider extends PanelProvider
                 Authenticate::class,
                 // B20: the current workspace is checked on every page and Livewire request.
                 EnsureWorkspaceMember::class,
+                // Since v1.5: an account being deleted reaches only "Keep my account".
+                AccountGate::class,
             ], isPersistent: true);
     }
 }

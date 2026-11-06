@@ -64,40 +64,42 @@ function billedMinutes(int $workspaceId, int $minutes): void
 }
 
 describe('roles', function () {
-    it('shares the library: a member sees the owner\'s recordings', function () {
+    it('keeps each library private since v1.5: a member sees only their recordings, the owner only theirs', function () {
         $t = team();
 
-        $ids = collect($this->api(Fx::token($t['memberDevice']))->getJson('/api/library?limit=100')->assertOk()->json('data'))->pluck('id');
+        $member = collect($this->api(Fx::token($t['memberDevice']))->getJson('/api/library?limit=100')->assertOk()->json('data'))->pluck('id');
+        $this->app['auth']->forgetGuards();
+        $owner = collect($this->api(Fx::token($t['ownerDevice']))->getJson('/api/library?limit=100')->assertOk()->json('data'))->pluck('id');
 
-        expect($ids->all())->toContain($t['ownerSession']->id, $t['memberSession']->id);
+        expect($member->all())->toBe([$t['memberSession']->id])->and($owner->all())->toBe([$t['ownerSession']->id]);
     });
 
-    it('lets a member delete only their own recordings through the API', function () {
+    it('lets a member delete only their own recordings through the API; anyone else\'s is a 404', function () {
         $t = team();
         $token = Fx::token($t['memberDevice']);
 
-        $this->api($token)->deleteJson("/api/sessions/{$t['ownerSession']->id}")->assertForbidden()->assertJsonPath('code', 'not_allowed');
+        $this->api($token)->deleteJson("/api/sessions/{$t['ownerSession']->id}")->assertNotFound()->assertJsonPath('code', 'session_not_found');
         $this->api($token)->deleteJson("/api/sessions/{$t['memberSession']->id}")->assertNoContent();
 
         expect(unscoped(fn () => CaptureSession::query()->find($t['ownerSession']->id)))->not->toBeNull()
             ->and(unscoped(fn () => CaptureSession::query()->find($t['memberSession']->id)))->toBeNull();
     });
 
-    it('lets the owner delete a member\'s recording', function () {
+    it('does not let the owner delete a member\'s recording since v1.5: it is a 404 to them', function () {
         $t = team();
 
-        $this->api(Fx::token($t['ownerDevice']))->deleteJson("/api/sessions/{$t['memberSession']->id}")->assertNoContent();
+        $this->api(Fx::token($t['ownerDevice']))->deleteJson("/api/sessions/{$t['memberSession']->id}")->assertNotFound()->assertJsonPath('code', 'session_not_found');
 
-        expect(unscoped(fn () => CaptureSession::onlyTrashed()->find($t['memberSession']->id)))->not->toBeNull();
+        expect(unscoped(fn () => CaptureSession::query()->find($t['memberSession']->id)))->not->toBeNull();
     });
 
-    it('keeps a member from restoring or erasing the owner\'s recording in the bin', function () {
+    it('keeps a member from restoring or erasing the owner\'s recording in the bin: a 404', function () {
         $t = team();
         $t['ownerSession']->delete();
         $token = Fx::token($t['memberDevice']);
 
-        $this->api($token)->postJson("/api/sessions/{$t['ownerSession']->id}/restore")->assertForbidden()->assertJsonPath('code', 'not_allowed');
-        $this->api($token)->deleteJson("/api/bin/{$t['ownerSession']->id}")->assertForbidden()->assertJsonPath('code', 'not_allowed');
+        $this->api($token)->postJson("/api/sessions/{$t['ownerSession']->id}/restore")->assertNotFound()->assertJsonPath('code', 'session_not_found');
+        $this->api($token)->deleteJson("/api/bin/{$t['ownerSession']->id}")->assertNotFound()->assertJsonPath('code', 'session_not_found');
 
         expect(unscoped(fn () => CaptureSession::onlyTrashed()->find($t['ownerSession']->id)?->media_erased_at))->toBeNull();
     });
@@ -112,29 +114,42 @@ describe('roles', function () {
         expect(unscoped(fn () => CaptureSession::query()->find($t['ownerSession']->id)))->not->toBeNull();
     });
 
-    it('hides delete in the console for a member on someone else\'s recording and device', function () {
+    it('shows a member in the console only their own recordings, to open and not to change', function () {
         $t = team();
         $this->actingAs($t['member'], 'web');
         Filament::setCurrentPanel('admin');
 
         Livewire::test(ListCaptureSessions::class)
-            ->assertCanSeeTableRecords([$t['ownerSession'], $t['memberSession']])
-            ->assertActionHidden(TestAction::make(DeleteAction::class)->table($t['ownerSession']))
-            ->assertActionVisible(TestAction::make(DeleteAction::class)->table($t['memberSession']));
+            ->assertCanSeeTableRecords([$t['memberSession']])
+            ->assertCanNotSeeTableRecords([$t['ownerSession']])
+            ->assertActionDoesNotExist(TestAction::make(DeleteAction::class)->table($t['memberSession']));
+        // Devices are on the profile in the small console; the Devices page is the whole console's.
+        $this->get(ListDevices::getUrl())->assertForbidden();
+    });
+
+    it('shows the owner every device of the workspace to revoke, but only their own recordings', function () {
+        $t = team();
+        $this->actingAs($t['owner'], 'web');
+        Filament::setCurrentPanel('admin');
+
+        Livewire::test(ListCaptureSessions::class)
+            ->assertCanSeeTableRecords([$t['ownerSession']])
+            ->assertCanNotSeeTableRecords([$t['memberSession']]);
         Livewire::test(ListDevices::class)
-            ->assertActionHidden(TestAction::make('rename')->table($t['ownerDevice']))
-            ->assertActionHidden(TestAction::make(DeleteAction::class)->table($t['ownerDevice']))
+            ->assertCanSeeTableRecords([$t['ownerDevice'], $t['memberDevice']])
             ->assertActionVisible(TestAction::make(DeleteAction::class)->table($t['memberDevice']));
     });
 
-    it('lets only a super admin\'s device change the shared vocabulary; anyone may add to a client of the workspace', function () {
+    it('lets only a super admin\'s device change the shared vocabulary; anyone may add to their own project, nobody to someone else\'s', function () {
         $t = team();
         $client = Fx::client($t['owner'], 'Team client');
+        $own = Fx::client($t['member'], 'My client');
         $token = Fx::token($t['memberDevice']);
 
         $this->api($token)->postJson('/api/vocabulary/keyterms', ['term' => 'Kubernetes'])->assertForbidden()->assertJsonPath('code', 'not_allowed');
         $this->api($token)->postJson('/api/vocabulary/replacements', ['from' => 'kubes', 'to' => 'Kubernetes'])->assertForbidden();
-        $this->api($token)->postJson('/api/vocabulary/keyterms', ['term' => 'Kubernetes', 'client_id' => $client->id])->assertCreated();
+        $this->api($token)->postJson('/api/vocabulary/keyterms', ['term' => 'Kubernetes', 'client_id' => $client->id])->assertNotFound();
+        $this->api($token)->postJson('/api/vocabulary/keyterms', ['term' => 'Kubernetes', 'client_id' => $own->id])->assertCreated();
     });
 
     it('keeps server pages for super admins: a member gets 403 on Settings and API credentials', function () {
@@ -195,13 +210,17 @@ describe('memberships', function () {
 });
 
 describe('plan limits', function () {
-    it('gives every new workspace the Personal plan with generous limits', function () {
+    it('keeps existing workspaces on the Personal plan: every feature, no limits', function () {
         $plan = Workspace::query()->findOrFail(Fx::user()->current_workspace_id)->plan;
 
         expect($plan->key)->toBe(Plan::PERSONAL)
-            ->and($plan->monthly_minutes)->toBe(30000)
-            ->and($plan->storage_bytes)->toBe(500 * 1024 ** 3)
-            ->and($plan->max_devices)->toBe(25);
+            ->and($plan->monthly_minutes)->toBeNull()
+            ->and($plan->storage_bytes)->toBeNull()
+            ->and($plan->max_devices)->toBeNull()
+            ->and($plan->retention_days)->toBeNull()
+            ->and($plan->seats)->toBeNull()
+            ->and($plan->aiCredits())->toBeNull()
+            ->and($plan->featureMap())->toBe(['live_translate' => true, 'screen_moments' => true, 'ai_notes' => true, 'connector' => true]);
     });
 
     it('refuses streaming tokens once the workspace used its monthly minutes, and only for that workspace', function () {

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToWorkspace;
+use App\Models\Concerns\OwnedByMaker;
+use App\Models\Scopes\OwnerScope;
 use App\Models\Scopes\WorkspaceScope;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -34,7 +36,7 @@ use Illuminate\Support\Carbon;
  */
 class RequestLink extends Model
 {
-    use BelongsToWorkspace, HasUlids;
+    use BelongsToWorkspace, HasUlids, OwnedByMaker;
 
     protected $fillable = ['workspace_id', 'user_id', 'client_id', 'token_hash', 'title', 'expires_at', 'max_files', 'max_mb', 'received', 'revoked_at'];
 
@@ -43,7 +45,7 @@ class RequestLink extends Model
     /** @return BelongsTo<Client, $this> the link names its project itself, whoever is signed in */
     public function client(): BelongsTo
     {
-        return $this->belongsTo(Client::class)->withoutGlobalScope(WorkspaceScope::class);
+        return $this->belongsTo(Client::class)->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class]);
     }
 
     /** @return BelongsTo<User, $this> */

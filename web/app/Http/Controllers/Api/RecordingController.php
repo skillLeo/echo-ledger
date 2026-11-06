@@ -10,7 +10,6 @@ use App\Http\Resources\RecordingUploadResource;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Recording;
-use App\Models\Scopes\WorkspaceScope;
 use App\Services\ChunkedUploadService;
 use App\Services\Data\CompleteOutcome;
 use App\Services\RecordingCipher;
@@ -73,7 +72,7 @@ final class RecordingController extends Controller
         $model = Recording::query()->findOrFail($recording);
         // The signature is the key (B20 bypass): the recording may be another workspace's that was sent to the
         // listener (v1.5), so its session is read past the workspace scope.
-        $session = CaptureSession::withTrashed()->withoutGlobalScope(WorkspaceScope::class)->find($model->capture_session_id);
+        $session = CaptureSession::acrossPeople()->withTrashed()->find($model->capture_session_id);
         // A recording in the undo bin (B17) is not played, even through a link signed before the delete.
         abort_unless($model->isReady() && $session !== null && ! $session->trashed(), 404);
 
@@ -142,7 +141,7 @@ final class RecordingController extends Controller
         $device = $request->user();
 
         return Recording::query()
-            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->whereNull('deleted_at'))
+            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->whereNull('deleted_at'))
             ->findOrFail($id);
     }
 }

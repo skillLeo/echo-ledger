@@ -51,7 +51,7 @@ final class UsageLedger
         $streamed = (int) $data['streamed_ms'];
         $channels = (int) $data['channels'];
         $sessionId = empty($data['session_id']) ? null
-            : CaptureSession::withTrashed()->where('workspace_id', $device->workspace_id)->find($data['session_id'])?->id;
+            : CaptureSession::withTrashed()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($data['session_id'])?->id;
 
         $entry = UsageLedgerEntry::query()->firstOrCreate(
             ['user_id' => $device->user_id, 'report_id' => $data['report_id']],

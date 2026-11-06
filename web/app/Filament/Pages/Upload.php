@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use BackedEnum;
 use Filament\Pages\Page;
@@ -17,6 +18,8 @@ use Filament\Support\Icons\Heroicon;
  */
 class Upload extends Page
 {
+    use FullConsoleOnly;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowUpTray;
 
     protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::ArrowUpTray;

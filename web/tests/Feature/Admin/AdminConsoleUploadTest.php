@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
+use App\Enums\WorkspaceRole;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -230,10 +231,11 @@ describe('access', function () {
         $outsider = $this->makeAdmin();
         $member = User::factory()->create();
         $workspace = Workspace::query()->findOrFail($this->admin->current_workspace_id);
-        app(Workspaces::class)->addMember($workspace, $member);
+        // An admin: since v1.5 members and viewers have the read-only console, which uploads nothing (403).
+        app(Workspaces::class)->addMember($workspace, $member, WorkspaceRole::Admin);
         app(Workspaces::class)->switchTo($member, $workspace);
 
-        // Another workspace, and another member of the same one: the same 404 as an unknown id.
+        // Another workspace, and another person of the same one: the same 404 as an unknown id.
         foreach ([$outsider, $member->fresh()] as $user) {
             $this->actingAs($user, 'web');
             $this->getJson(route('admin.uploads.show', $id))->assertNotFound();
@@ -286,16 +288,16 @@ describe('duplicates', function () {
         expect(CaptureSession::query()->count())->toBe(1);
     });
 
-    it('skips a file someone else in the workspace is uploading right now', function () {
+    it('does not tell anyone what someone else in the workspace has: the same file from another person is new (since v1.5 libraries are private)', function () {
         $bytes = uplWav(4096);
         $member = User::factory()->create();
         $workspace = Workspace::query()->findOrFail($this->admin->current_workspace_id);
-        app(Workspaces::class)->addMember($workspace, $member);
+        app(Workspaces::class)->addMember($workspace, $member, WorkspaceRole::Admin);
         app(Workspaces::class)->switchTo($member, $workspace);
         uplStart($this, $bytes)->assertCreated();
 
         $this->actingAs($member->fresh(), 'web');
-        uplStart($this, $bytes)->assertStatus(409)->assertJson(['code' => 'duplicate_recording']);
+        uplStart($this, $bytes)->assertCreated();
     });
 
     it('does not count a deleted recording, another workspace\'s copy or a different file', function () {

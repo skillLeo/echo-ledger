@@ -8,7 +8,6 @@ use App\Enums\UploadStatus;
 use App\Models\Recording;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
-use App\Models\Scopes\WorkspaceScope;
 use App\Services\Sharing\RequestLinks;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -45,7 +44,7 @@ final class TempFileSweeper
      */
     private function sweepRequestUploads(Carbon $cutoff): int
     {
-        $ended = RequestLink::query()->withoutGlobalScope(WorkspaceScope::class)
+        $ended = RequestLink::acrossPeople()
             ->where(fn ($q) => $q->whereNotNull('revoked_at')->orWhere('expires_at', '<=', now()))->select('id');
         $abandoned = RequestUpload::query()->where('status', 'uploading')
             ->where(fn ($q) => $q->where('updated_at', '<', now()->subHours(RequestLinks::ABANDONED_HOURS))

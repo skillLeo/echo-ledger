@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Support\SharingActions;
 use App\Models\Client;
 use App\Models\RequestLink;
@@ -34,6 +35,7 @@ use UnitEnum;
  */
 class RequestLinksPage extends Page implements HasTable
 {
+    use FullConsoleOnly;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowDownOnSquareStack;
@@ -86,7 +88,7 @@ class RequestLinksPage extends Page implements HasTable
         $tz = app(SettingsRepository::class)->displayTimezone();
 
         return $table
-            ->query(fn (): Builder => RequestLink::query()->where('workspace_id', CurrentWorkspace::id())->with('client'))
+            ->query(fn (): Builder => RequestLink::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->with('client'))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('title')->label('Title')->limit(60)->searchable(),

@@ -7,12 +7,14 @@ namespace App\Http\Controllers\Api;
 use App\Enums\DevicePlatform;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
+use App\Services\Accounts\LoginAlerts;
 use App\Services\AuditLog;
 use App\Services\DeviceConfigPayload;
 use App\Services\PairingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Laravel\Sanctum\NewAccessToken;
 
 final class DeviceController extends Controller
 {
@@ -28,9 +30,17 @@ final class DeviceController extends Controller
         ]);
 
         [$device, $token] = $pairing->redeem($data['pairing_code'], $data, $request->ip());
+        // A paired device is a new sign-in to its owner's account too (since v1.5).
+        app(LoginAlerts::class)->deviceSignedIn($device);
 
+        return self::created($device, $token, $config);
+    }
+
+    /** The 201 answer of pairing, shared by the account sign-ins (docs/API.md: "exactly like devices/register"). */
+    public static function created(Device $device, NewAccessToken $token, DeviceConfigPayload $config): JsonResponse
+    {
         return response()->json([
-            'device' => $this->deviceArray($device),
+            'device' => self::deviceArray($device),
             'token' => $token->plainTextToken,
             'token_expires_at' => $token->accessToken->expires_at?->toAtomString(),
             'config' => $config->build($device),
@@ -56,7 +66,7 @@ final class DeviceController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function deviceArray(Device $device): array
+    private static function deviceArray(Device $device): array
     {
         return [
             'id' => $device->id,

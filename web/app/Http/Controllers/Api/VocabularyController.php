@@ -127,7 +127,7 @@ final class VocabularyController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $client = Client::query()->where('workspace_id', $device->workspace_id)->find($id);
+        $client = Client::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if (! $client instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }

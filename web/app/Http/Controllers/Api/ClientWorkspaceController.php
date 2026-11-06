@@ -16,6 +16,7 @@ use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
 use App\Models\Device;
 use App\Services\ClientAi\ClientWorkspace;
+use App\Services\Workspaces\PlanLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -34,13 +35,13 @@ final class ClientWorkspaceController extends Controller
     {
         $client = $this->client($request, $id);
         $brief = ClientBrief::query()->where('client_id', $client->id)->first();
-        $notes = CallNote::query()->where('client_id', $client->id)->with('captureSession')->latest()->limit(10)->get();
+        $notes = CallNote::query()->ofProjectMaker($client)->with('captureSession')->latest()->limit(10)->get();
 
         return response()->json(['data' => [
             'client' => ['id' => $client->id, 'name' => $client->name, 'ai_notes' => $client->ai_notes],
             'ai' => ['configured' => $this->workspace->configured(), 'client_spent_usd' => $this->workspace->clientSpend($client)] + $this->workspace->budget($client->workspace_id),
             'brief' => $brief?->toApi() ?? ['sections' => ClientBrief::emptySections(), 'edited' => false, 'status' => 'ready', 'error' => null, 'generated_at' => null, 'updated_at' => null],
-            'memory' => ClientMemoryItem::query()->where('client_id', $client->id)->orderByDesc('pinned')->orderByDesc('happened_on')->orderByDesc('created_at')
+            'memory' => ClientMemoryItem::query()->ofProjectMaker($client)->orderByDesc('pinned')->orderByDesc('happened_on')->orderByDesc('created_at')
                 ->limit(300)->get()->map(fn (ClientMemoryItem $m): array => $m->toApi())->all(),
             'notes' => $notes->map(fn (CallNote $n): array => self::noteWithSession($n))->all(),
             'files' => ClientFile::query()->where('client_id', $client->id)->latest()->get()->map(fn (ClientFile $f): array => $f->toApi())->all(),
@@ -66,7 +67,7 @@ final class ClientWorkspaceController extends Controller
     public function refreshBrief(Request $request, string $id): JsonResponse
     {
         $client = $this->client($request, $id);
-        $this->workspace->assertCanSpend($client->workspace_id);
+        $this->workspace->assertCanWriteNotes($client->workspace_id);
         $brief = ClientBrief::query()->firstOrNew(['client_id' => $client->id]);
         $brief->fill(['workspace_id' => $client->workspace_id, 'sections' => $brief->sections ?? ClientBrief::emptySections(), 'status' => 'working', 'error' => null])->save();
         RefreshClientBriefJob::dispatch($client->id, true);
@@ -78,6 +79,7 @@ final class ClientWorkspaceController extends Controller
     public function storeMemory(Request $request, string $id): JsonResponse
     {
         $client = $this->client($request, $id);
+        app(PlanLimits::class)->assertFeature($client->workspace_id, 'ai_notes');
         $data = $request->validate([
             'kind' => ['required', Rule::in(ClientMemoryItem::KINDS)],
             'text' => ['required', 'string', 'max:500'],
@@ -187,14 +189,15 @@ final class ClientWorkspaceController extends Controller
     public function makeNotes(Request $request, string $id): JsonResponse
     {
         $session = $this->session($request, $id);
-        if ($session->client_id === null) {
+        $project = $this->workspace->projectOf($session);
+        if ($project === null) {
             throw new ApiError(409, 'no_client', 'File this recording under a client first.');
         }
         $data = $request->validate(['language' => ['sometimes', Rule::in(['en', 'roman_urdu'])]]);
-        $this->workspace->assertCanSpend($session->workspace_id);
+        $this->workspace->assertCanWriteNotes($session->workspace_id);
         $note = CallNote::query()->updateOrCreate(['capture_session_id' => $session->id], [
             'workspace_id' => $session->workspace_id,
-            'client_id' => $session->client_id,
+            'client_id' => $project->id,
             'status' => 'pending',
             'error' => null,
             'language' => $data['language'] ?? 'en',
@@ -227,7 +230,7 @@ final class ClientWorkspaceController extends Controller
 
     private function client(Request $request, string $id): Client
     {
-        $client = Client::query()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
+        $client = Client::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
         if (! $client instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }
@@ -237,7 +240,7 @@ final class ClientWorkspaceController extends Controller
 
     private function session(Request $request, string $id): CaptureSession
     {
-        $session = CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
+        $session = CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
@@ -248,7 +251,7 @@ final class ClientWorkspaceController extends Controller
     private function memoryItem(Request $request, string $id, string $item): ClientMemoryItem
     {
         $client = $this->client($request, $id);
-        $line = ClientMemoryItem::query()->where('client_id', $client->id)->find($item);
+        $line = ClientMemoryItem::query()->ofProjectMaker($client)->find($item);
         if (! $line instanceof ClientMemoryItem) {
             throw new ApiError(404, 'memory_not_found', 'That line is not in this client\'s memory.');
         }

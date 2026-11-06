@@ -104,6 +104,11 @@ function abilityRoutes(): array
         'delete a screen' => ['DELETE', "/api/sessions/{$id}/screens/{$id}", 'sessions:write'],
         'project screens' => ['GET', "/api/clients/{$id}/screens", 'library:read'],
         'meeting pack' => ['GET', "/api/sessions/{$id}/pack", 'library:read'],
+        'sign out everywhere' => ['POST', '/api/account/sign-out-everywhere', 'sessions:write'],
+        'your account' => ['GET', '/api/account', 'config:read'],
+        'delete your account' => ['DELETE', '/api/account', 'sessions:write'],
+        'export your data' => ['POST', '/api/account/export', 'library:read'],
+        'your export' => ['GET', "/api/account/export/{$id}", 'library:read'],
     ];
 }
 
@@ -121,7 +126,7 @@ describe('route coverage', function () {
         expect($declared)->toBe($tested);
     });
 
-    it('leaves only registration, signed audio and provider webhooks reachable without a token', function () {
+    it('leaves only registration, account sign-in, signed audio and provider webhooks reachable without a token', function () {
         $open = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/') && ! in_array('auth:sanctum', $route->gatherMiddleware(), true))
             ->map(fn ($route) => $route->methods()[0].' /'.$route->uri())
@@ -129,6 +134,8 @@ describe('route coverage', function () {
 
         expect($open)->toBe([
             'GET /api/recordings/{recording}/audio',
+            'POST /api/auth/device/token',
+            'POST /api/auth/password',
             'POST /api/devices/register',
             'POST /api/webhooks/stt/{provider}',
         ]);

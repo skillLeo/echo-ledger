@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
+use App\Enums\WorkspaceRole;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Plan;
@@ -14,6 +15,7 @@ use App\Services\CredentialVault;
 use App\Services\PairingService;
 use App\Services\Screens\ScreenStore;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -25,6 +27,8 @@ use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
 uses(InteractsWithDeviceApi::class);
+
+require_once __DIR__.'/../Accounts/Support/account_helpers.php';
 
 /*
  * docs/API.md "Error codes" (since v1.1): every error answer is {"message", "code", "errors"?}, clients branch on code,
@@ -40,9 +44,6 @@ const ENVELOPE_MISSING_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
  */
 const ENVELOPE_PENDING_CODES = [
     'budget_exceeded',
-    // Phase 4: signing in with an account, the account itself, plans.
-    'otp_required', 'email_not_verified', 'owner_of_team', 'invalid_credentials', 'invalid_otp', 'invalid_code',
-    'too_many_attempts', 'feature_not_in_plan', 'seat_limit_reached',
 ];
 
 /** @return array<string, array{0: int, 1: string}> the docs table as code => [status, code] */
@@ -216,12 +217,29 @@ function produceError(object $test, string $code): TestResponse
 
             return $test->flushHeaders()->postJson('/api/devices/register', ['pairing_code' => $code, 'name' => 'Second', 'platform' => 'android']);
         case 'not_allowed':
-            $member = withoutWorkspace(User::factory()->create());
-            app(Workspaces::class)->addMember(Workspace::query()->findOrFail($test->device->workspace_id), $member);
-            [, $memberToken] = $test->enroll($member->fresh());
-            $theirs = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
+            // Since v1.5 someone else's recording is a 404; a viewer's device is what `not_allowed` is left for.
+            $viewer = withoutWorkspace(User::factory()->create());
+            app(Workspaces::class)->addMember(Workspace::query()->findOrFail($test->device->workspace_id), $viewer, WorkspaceRole::Viewer);
+            [, $viewerToken] = $test->enroll($viewer->fresh());
 
-            return $test->asToken($memberToken)->deleteJson("/api/sessions/{$theirs->id}");
+            return $test->asToken($viewerToken)->createSession($test->bytes);
+        case 'feature_not_in_plan':
+            Plan::personal()->update(['features' => ['screen_moments' => false]]);
+            $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id, 'device_id' => $test->device->id]);
+
+            return $test->postJson("/api/sessions/{$session->id}/screens", ['at_ms' => 0, 'width' => 1, 'height' => 1, 'trigger' => 'manual']);
+        case 'seat_limit_reached':
+            // Only the console and the invitation page invite (no device route does): the plan's own refusal, answered
+            // by the API's error handler as a device would get it.
+            Plan::personal()->update(['seats' => 1]);
+            $workspaceId = (int) $test->device->workspace_id;
+            Route::middleware('api')->post('api/__test-seat', function () use ($workspaceId) {
+                app(PlanLimits::class)->assertSeat($workspaceId);
+
+                return response()->noContent();
+            });
+
+            return $test->postJson('/api/__test-seat');
         case 'too_many_labels':
             $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
 
@@ -239,6 +257,36 @@ function produceError(object $test, string $code): TestResponse
             Http::fake(['streaming.assemblyai.com/*' => Http::response(['error' => 'Invalid API key'], 401)]);
 
             return $test->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $test->openSession()]);
+        case 'otp_required':
+        case 'invalid_otp':
+            $person = User::factory()->create(['email' => 'two.step@example.test']);
+            accountsEnrolTotp($person);
+            app('auth')->forgetGuards();
+
+            return $test->flushHeaders()->postJson('/api/auth/password', ['email' => $person->email, 'password' => 'password', 'otp' => $code === 'invalid_otp' ? '000000' : null, 'name' => 'Phone', 'platform' => 'android']);
+        case 'email_not_verified':
+        case 'invalid_credentials':
+            $person = User::factory()->unverified()->create(['email' => 'unconfirmed@example.test']);
+            app('auth')->forgetGuards();
+
+            return $test->flushHeaders()->postJson('/api/auth/password', ['email' => $person->email, 'password' => $code === 'invalid_credentials' ? 'wrong-password-1' : 'password', 'name' => 'Phone', 'platform' => 'android']);
+        case 'too_many_attempts':
+            app('auth')->forgetGuards();
+            $test->flushHeaders();
+            foreach (range(1, 5) as $i) {
+                $test->withServerVariables(['REMOTE_ADDR' => "198.51.100.{$i}"])->postJson('/api/auth/password', ['email' => 'locked@example.test', 'password' => 'wrong-password-1', 'name' => 'Phone', 'platform' => 'android']);
+            }
+
+            return $test->withServerVariables(['REMOTE_ADDR' => '198.51.100.77'])->postJson('/api/auth/password', ['email' => 'locked@example.test', 'password' => 'wrong-password-1', 'name' => 'Phone', 'platform' => 'android']);
+        case 'owner_of_team':
+            $teammate = withoutWorkspace(User::factory()->create());
+            app(Workspaces::class)->addMember(Workspace::query()->findOrFail($test->device->workspace_id), $teammate);
+
+            return $test->deleteJson('/api/account', ['password' => 'password']);
+        case 'invalid_code':
+            app('auth')->forgetGuards();
+
+            return $test->flushHeaders()->postJson('/api/auth/device/token', ['code' => 'not-a-code', 'code_verifier' => str_repeat('v', 43), 'name' => 'Laptop', 'platform' => 'windows']);
         case 'provider_not_configured':
             return $test->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $test->openSession()]);
         default:
@@ -259,8 +307,9 @@ it('produces each documented code with its status, a message and nothing interna
 
     $response->assertStatus($status)->assertJsonPath('code', $code);
     expect($response->json('message'))->toBeString()->not->toBe('');
-    // Since v1.5 rule_exists names the project that has the rule and recipient_not_found the emails with no account.
-    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id', 'client_id', 'client_name', 'emails']))->toBe([]);
+    // Since v1.5 rule_exists names the project that has the rule, recipient_not_found the emails with no account and
+    // feature_not_in_plan the feature.
+    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id', 'client_id', 'client_name', 'emails', 'feature']))->toBe([]);
     expectNoInternals($response);
 })->with(array_diff_key(documentedErrorCodes(), array_flip(ENVELOPE_PENDING_CODES)));
 

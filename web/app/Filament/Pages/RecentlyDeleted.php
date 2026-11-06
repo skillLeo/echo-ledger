@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages;
 
 use App\Exceptions\ApiError;
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Models\CaptureSession;
 use App\Services\RetentionPolicy;
 use App\Services\Workspaces\CurrentWorkspace;
@@ -26,6 +27,7 @@ use UnitEnum;
 /** The 48-hour undo bin (plan B17): restore a deleted recording, or erase it now. */
 class RecentlyDeleted extends Page implements HasTable
 {
+    use FullConsoleOnly;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTrash;
@@ -44,7 +46,7 @@ class RecentlyDeleted extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn (): Builder => CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->whereNull('media_erased_at')
+            ->query(fn (): Builder => CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->whereNull('media_erased_at')
                 ->where('deleted_at', '>', now()->subHours(CaptureSession::BIN_HOURS)))
             ->defaultSort('deleted_at', 'desc')
             ->description('Deleted recordings stay here for '.CaptureSession::BIN_HOURS.' hours, then their audio and transcripts are erased for good.')

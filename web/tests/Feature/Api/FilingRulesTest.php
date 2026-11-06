@@ -70,7 +70,7 @@ describe('the rules of a project', function () {
         // Another request adds "zoom" to Beta after this one looked and before it is saved.
         FilingRule::creating(function (FilingRule $rule): void {
             if ($rule->client_id === $this->acme->id) {
-                FilingRule::query()->toBase()->insert(['workspace_id' => $rule->workspace_id, 'client_id' => $this->beta->id, 'kind' => 'app', 'value' => 'zoom',
+                FilingRule::query()->toBase()->insert(['workspace_id' => $rule->workspace_id, 'user_id' => $rule->user_id, 'client_id' => $this->beta->id, 'kind' => 'app', 'value' => 'zoom',
                     'match_value' => 'zoom', 'created_at' => now(), 'updated_at' => now()]);
             }
         });

@@ -61,7 +61,8 @@ final class FilingRules
 
     /**
      * Adds a rule to the project. The same kind and value on this project returns the rule it already has
-     * (`created` false); on another project of the workspace it is `409 rule_exists` naming that project. A contact
+     * (`created` false); on another project of the same person it is `409 rule_exists` naming that project (since v1.5
+     * each person's rules are their own, as their projects are). A contact
      * rule also adds the contact (or uses the project's contact with that number or email); only a contact it added
      * is remembered, so removing the rule never deletes a contact the project already had.
      *
@@ -85,6 +86,7 @@ final class FilingRules
             try {
                 $rule = FilingRule::query()->create([
                     'workspace_id' => $project->workspace_id,
+                    'user_id' => $project->user_id,
                     'client_id' => $project->id,
                     'kind' => $kind,
                     'value' => $value,
@@ -102,11 +104,14 @@ final class FilingRules
         });
     }
 
-    /** The workspace's rule of this kind and value; `latest` reads past this transaction's snapshot (a locking read). */
+    /**
+     * The person's rule of this kind and value in the workspace; `latest` reads past this transaction's snapshot (a
+     * locking read).
+     */
     private function existing(Client $project, string $kind, string $match, bool $latest = false): ?FilingRule
     {
         $rule = FilingRule::query()->withoutGlobalScope(WorkspaceScope::class)->with('client')
-            ->where('workspace_id', $project->workspace_id)->where('kind', $kind)->where('match_value', $match)
+            ->where('workspace_id', $project->workspace_id)->where('user_id', $project->user_id)->where('kind', $kind)->where('match_value', $match)
             ->when($latest, fn ($q) => $q->lockForUpdate())->first();
 
         return $rule instanceof FilingRule ? $rule : null;
@@ -129,7 +134,7 @@ final class FilingRules
     /** The project's contact with this number or email, else a new one; another project's is `409 rule_exists`. */
     private function contactFor(Client $project, string $value, string $match): ClientContact
     {
-        $projects = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $project->workspace_id)->select('id');
+        $projects = Client::acrossPeople()->where('workspace_id', $project->workspace_id)->where('user_id', $project->user_id)->select('id');
         $email = str_starts_with($match, 'email:') ? substr($match, 6) : null;
         $digits = str_starts_with($match, 'phone:') ? substr($match, 6) : null;
         $same = ClientContact::query()->with('client')->whereIn('client_id', $projects)
@@ -191,15 +196,15 @@ final class FilingRules
     }
 
     /**
-     * Files a recording that ended without a project by the title and app rules of its workspace (the contact match
-     * already ran when the caller was stored). Returns true when it was filed.
+     * Files a recording that ended without a project by the title and app rules of the person who made it (the contact
+     * match already ran when the caller was stored). Returns true when it was filed.
      */
     public function apply(CaptureSession $session): bool
     {
         if ($session->client_id !== null) {
             return false;
         }
-        $rules = FilingRule::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $session->workspace_id)
+        $rules = FilingRule::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $session->workspace_id)->where('user_id', $session->user_id)
             ->whereIn('kind', ['title', 'app'])->orderBy('id')->get(['id', 'client_id', 'kind', 'match_value']);
         if ($rules->isEmpty()) {
             return false;

@@ -10,7 +10,6 @@ use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Api\RecordingController;
 use App\Models\CaptureSession;
 use App\Models\Client;
-use App\Models\Scopes\WorkspaceScope;
 use App\Models\ShareLink;
 use App\Models\Transcript;
 use App\Models\User;
@@ -84,7 +83,7 @@ final class PublicShareController extends Controller
             $this->shares->log($link, 'viewed', $request);
             /** @var Client $project */
             $project = $link->client;
-            $folders = Client::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('id', $this->projects->withDescendants($project))->pluck('name', 'id');
+            $folders = Client::acrossPeople()->whereIn('id', $this->projects->withDescendants($project))->pluck('name', 'id');
             $sessions = $this->projectSessions($link)->latest('started_at')->limit(500)->get();
 
             return response()->view('share.project', [
@@ -304,7 +303,8 @@ final class PublicShareController extends Controller
         /** @var Client $project */
         $project = $link->client;
 
-        return CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)
+        // Since v1.5 the project's maker's recordings: nobody else's is filed in it.
+        return CaptureSession::acrossPeople()->where('user_id', $project->user_id)
             ->whereIn('client_id', $this->projects->withDescendants($project))
             ->where('status', '!=', SessionStatus::Recording->value);
     }

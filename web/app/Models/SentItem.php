@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Scopes\OwnerScope;
 use App\Models\Scopes\WorkspaceScope;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -52,13 +53,13 @@ class SentItem extends Model
     /** @return BelongsTo<CaptureSession, $this> */
     public function captureSession(): BelongsTo
     {
-        return $this->belongsTo(CaptureSession::class)->withoutGlobalScope(WorkspaceScope::class);
+        return $this->belongsTo(CaptureSession::class)->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class]);
     }
 
     /** @return BelongsTo<Client, $this> */
     public function client(): BelongsTo
     {
-        return $this->belongsTo(Client::class)->withoutGlobalScope(WorkspaceScope::class);
+        return $this->belongsTo(Client::class)->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class]);
     }
 
     /** @return array<string, string> */

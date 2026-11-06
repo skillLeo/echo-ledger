@@ -8,6 +8,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceDevice;
 use App\Models\CaptureSession;
 use App\Services\Usage\UsageSummary;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\StatsOverviewWidget;
@@ -18,11 +19,17 @@ class SourceStatsOverview extends StatsOverviewWidget
 {
     protected static ?int $sort = -2;
 
+    /** Since v1.5 the dashboard of the whole console; members and viewers see their library instead. */
+    public static function canView(): bool
+    {
+        return ConsoleAccess::full();
+    }
+
     protected ?string $pollingInterval = null;
 
     protected function getStats(): array
     {
-        $base = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id());
+        $base = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId());
         $counts = (clone $base)->toBase()->selectRaw('source_device, count(*) as c')->groupBy('source_device')->pluck('c', 'source_device');
 
         $stats = [];

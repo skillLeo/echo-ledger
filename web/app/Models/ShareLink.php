@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Models\Scopes\OwnerScope;
 use App\Models\Scopes\WorkspaceScope;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -57,13 +58,13 @@ class ShareLink extends Model
      */
     public function captureSession(): BelongsTo
     {
-        return $this->belongsTo(CaptureSession::class)->withTrashed()->withoutGlobalScope(WorkspaceScope::class);
+        return $this->belongsTo(CaptureSession::class)->withTrashed()->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class]);
     }
 
     /** @return BelongsTo<Client, $this> the project of a project link, found the same way */
     public function client(): BelongsTo
     {
-        return $this->belongsTo(Client::class)->withoutGlobalScope(WorkspaceScope::class);
+        return $this->belongsTo(Client::class)->withoutGlobalScopes([WorkspaceScope::class, OwnerScope::class]);
     }
 
     /** @return HasMany<ShareLinkView, $this> */

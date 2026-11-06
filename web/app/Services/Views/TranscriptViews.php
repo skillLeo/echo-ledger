@@ -483,6 +483,8 @@ final class TranscriptViews
             'duration_ms' => 0,
             'channels' => 1,
             'billed_ms' => 0,
+            'input_tokens' => $tokens['input'],
+            'output_tokens' => $tokens['output'],
             'unit_price_usd' => 0,
             'cost_usd' => $cost,
             'billable' => true,

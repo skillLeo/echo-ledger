@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -34,6 +35,8 @@ use UnitEnum;
  */
 class Search extends Page
 {
+    use FullConsoleOnly;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedMagnifyingGlass;
 
     protected static string|UnitEnum|null $navigationGroup = 'More';
@@ -67,7 +70,7 @@ class Search extends Page
                 }),
             Grid::make(['default' => 2, 'lg' => 4])->schema([
                 Select::make('client_id')->label('Client')->live()->placeholder('Any client')
-                    ->options(fn () => Client::query()->where('workspace_id', $workspaceId)->orderBy('name')->pluck('name', 'id')->all()),
+                    ->options(fn () => Client::query()->where('workspace_id', $workspaceId)->where('user_id', CurrentWorkspace::userId())->orderBy('name')->pluck('name', 'id')->all()),
                 Select::make('source_app')->label('App')->live()->placeholder('Any app')->options(SourceApp::class),
                 Select::make('source_device')->label('Device')->live()->placeholder('Any device')->options(SourceDevice::class),
                 Select::make('status')->label('Status')->live()->placeholder('Any status')->options(SessionStatus::class),

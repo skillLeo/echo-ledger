@@ -136,7 +136,7 @@ final class ConsoleUploads
         // Live recordings only: the undo bin and deleted recordings do not count.
         $matches = Recording::query()->with('captureSession')
             ->where('role', RecordingRole::Primary->value)->where('sha256', $sha)
-            ->whereIn('capture_session_id', CaptureSession::query()->where('workspace_id', $workspaceId)->select('id'))
+            ->whereIn('capture_session_id', CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson()->select('id'))
             ->orderBy('created_at')->get();
         $inLibrary = $matches->first(fn (Recording $r): bool => ! $this->isResumable($r, $user, $size));
         if ($inLibrary instanceof Recording) {
@@ -220,7 +220,7 @@ final class ConsoleUploads
         if ($clientId === null || $clientId === '') {
             return null;
         }
-        $client = Client::query()->where('workspace_id', $workspaceId)->find((string) $clientId);
+        $client = Client::query()->where('workspace_id', $workspaceId)->ofPerson()->find((string) $clientId);
         if (! $client instanceof Client) {
             throw new ApiError(422, 'client_not_found', 'Choose one of your clients.', ['errors' => ['client_id' => ['Choose one of your clients.']]]);
         }

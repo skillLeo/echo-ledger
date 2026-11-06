@@ -11,6 +11,7 @@ use App\Models\Scopes\WorkspaceScope;
 use App\Models\Screen;
 use App\Services\ChunkedUploadService;
 use App\Services\RecordingCipher;
+use App\Services\Workspaces\PlanLimits;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -71,7 +72,8 @@ class ScreenStore
 
     /**
      * Keeps a picture of the recording: the same picture (by SHA-256) twice is the screen already kept, not a copy.
-     * `409 too_many_screens` at the cap. The text and description are made afterwards on the queue.
+     * `409 too_many_screens` at the cap, and since v1.5 `403 storage_limit_reached` at the plan's storage. The text and
+     * description are made afterwards on the queue.
      *
      * @param  array{mime: string, width: int, height: int}  $picture  what sniff() found
      * @param  array{at_ms: int, width: int, height: int, trigger: string, sha256: string}  $meta
@@ -85,6 +87,7 @@ class ScreenStore
             return [$existing, false];
         }
         $this->assertRoom($session);
+        app(PlanLimits::class)->assertStorage($session->workspace_id, (int) filesize($plainPath));
 
         $id = (string) Str::ulid();
         $folder = 'screens/'.now()->format('Y/m');
@@ -120,6 +123,8 @@ class ScreenStore
                     'image_path' => $imagePath,
                     'thumb_path' => $thumbPath,
                     'bytes' => (int) filesize($plainPath),
+                    // Since v1.5 the plan's storage counts what the two encrypted files take.
+                    'stored_bytes' => self::sizeOf($imagePath) + self::sizeOf($thumbPath),
                 ]);
                 $screen->id = $id;
                 $screen->save();
@@ -190,6 +195,17 @@ class ScreenStore
         return $bytes;
     }
 
+    /** Decrypts the picture into [$dstPath] without holding it in memory (the account export); its size, or null when it is gone. */
+    public function pictureToFile(Screen $screen, string $dstPath): ?int
+    {
+        $disk = Storage::disk('recordings');
+        if ($screen->image_path === null || ! $disk->exists($screen->image_path)) {
+            return null;
+        }
+
+        return $this->cipher()->decryptToFile($disk->path($screen->image_path), $dstPath, $screen->id);
+    }
+
     /** Deletes one screen and its two files. */
     public function delete(Screen $screen): void
     {
@@ -249,6 +265,7 @@ class ScreenStore
                 'capture_session_id' => $copy->id,
                 'image_path' => $written['image'],
                 'thumb_path' => $written['thumb'] ?? null,
+                'stored_bytes' => self::sizeOf($written['image']) + self::sizeOf($written['thumb'] ?? null),
                 ...$original->only(['at_ms', 'width', 'height', 'trigger', 'sha256', 'mime', 'bytes', 'ocr_text', 'description', 'search_text', 'described_at']),
             ]);
             $screen->id = $id;
@@ -320,5 +337,16 @@ class ScreenStore
     private function cipher(): RecordingCipher
     {
         return app(RecordingCipher::class);
+    }
+
+    /** Bytes a file takes on the recordings disk, 0 when it is not there. */
+    private static function sizeOf(?string $path): int
+    {
+        if ($path === null) {
+            return 0;
+        }
+        $full = Storage::disk('recordings')->path($path);
+
+        return is_file($full) ? (int) filesize($full) : 0;
     }
 }

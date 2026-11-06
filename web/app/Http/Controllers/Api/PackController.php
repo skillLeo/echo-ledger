@@ -26,7 +26,7 @@ final class PackController extends Controller
         /** @var Device $device */
         $device = $request->user();
         // An export: the workspace's own recordings only (a recording a teammate sent is read in place, never exported).
-        $session = CaptureSession::query()->where('workspace_id', $device->workspace_id)->findOrFail($id);
+        $session = CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->findOrFail($id);
         $file = $pack->build($session, $data['format'], $data['view'] ?? null, $request->boolean('include_audio'));
         app(AuditLog::class)->record('transcript_exported', $device->user_id, $session, "Meeting pack exported as {$data['format']}", ['format' => 'pack_'.$data['format']]);
 

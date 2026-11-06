@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToWorkspace;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -36,6 +37,20 @@ class ClientMemoryItem extends Model
     protected function casts(): array
     {
         return ['happened_on' => 'date', 'pinned' => 'boolean', 'at_ms' => 'integer'];
+    }
+
+    /**
+     * The memory of [$project] without the lines taken from another person's recording (since v1.5: filed under a
+     * shared project before v1.5, they are that person's). Lines citing a call that is gone stay.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeOfProjectMaker(Builder $query, Client $project): Builder
+    {
+        return $query->where('client_id', $project->id)->whereNot(fn (Builder $line) => $line->where('source_type', 'call')
+            ->whereExists(fn ($session) => $session->from('capture_sessions')->whereColumn('capture_sessions.id', 'client_memory_items.source_id')
+                ->where('capture_sessions.user_id', '!=', $project->user_id)));
     }
 
     /** @return array<string, mixed> */

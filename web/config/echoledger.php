@@ -27,6 +27,10 @@ return [
     // Plaintext temp files (decrypt for provider upload) live here and are deleted in `finally`.
     'tmp_dir' => storage_path('app/private/tmp'),
 
+    // Since v1.5: the request header a proxy in front of the server names the visitor's country in (for example
+    // CF-IPCountry behind Cloudflare), shown next to devices and sign-in alerts. Unset = the country is not known.
+    'country_header' => env('ECHOLEDGER_COUNTRY_HEADER'),
+
     // The landing and downloads pages ask search engines to stay away until the public launch (since v1.5).
     'site_indexable' => (bool) env('ECHOLEDGER_SITE_INDEXABLE', false),
 

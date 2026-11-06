@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Filament\Pages\Usage;
 use App\Filament\Widgets\Usage\DailyUsageChart;
+use App\Models\Plan;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Services\LiveTranslate\LiveTranslateBudget;
@@ -105,6 +106,7 @@ it('shows the month, the plan meter and the chart to a member, and the server ca
     usageReportRow($admin, ['billed_ms' => 85 * 60000]);
     $member = Fx::user();
     usageReportRow($member, ['billed_ms' => 3 * 60000]);
+    Plan::personal()->update(['monthly_minutes' => 30000]);
     Filament::setCurrentPanel('admin');
 
     $this->actingAs($admin, 'web');

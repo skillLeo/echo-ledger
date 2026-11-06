@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Support\SharingActions;
@@ -27,9 +28,10 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
-/** Shares (v1.5): every link to the workspace's recordings and projects, who may open it, its views, and Revoke. */
+/** Shares (v1.5): every link to the person's recordings and projects in the workspace, who may open it, its views, and Revoke. */
 class Shares extends Page implements HasTable
 {
+    use FullConsoleOnly;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedLink;
@@ -50,7 +52,7 @@ class Shares extends Page implements HasTable
         $tz = app(SettingsRepository::class)->displayTimezone();
 
         return $table
-            ->query(fn (): Builder => ShareController::workspaceLinks((int) CurrentWorkspace::id())->with(['captureSession', 'client']))
+            ->query(fn (): Builder => ShareController::workspaceLinks((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId())->with(['captureSession', 'client']))
             ->defaultSort('created_at', 'desc')
             ->description('Links to your recordings and projects. Revoking one stops it at once; the address is shown only when it is made.')
             ->columns([

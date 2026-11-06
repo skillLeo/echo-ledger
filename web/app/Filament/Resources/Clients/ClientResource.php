@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\Clients;
 
 use App\Exceptions\ApiError;
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\Clients\Pages\CreateClient;
 use App\Filament\Resources\Clients\Pages\EditClient;
 use App\Filament\Resources\Clients\Pages\ListClients;
@@ -51,6 +52,8 @@ use UnitEnum;
  */
 class ClientResource extends Resource
 {
+    use FullConsoleOnly;
+
     protected static ?string $model = Client::class;
 
     protected static ?string $modelLabel = 'project';
@@ -71,7 +74,7 @@ class ClientResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->withCount(['keyterms', 'captureSessions', 'children'])
+        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->withCount(['keyterms', 'captureSessions', 'children'])
             ->withMax('captureSessions', 'started_at');
     }
 

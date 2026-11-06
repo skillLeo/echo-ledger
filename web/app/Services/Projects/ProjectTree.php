@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Services\Projects;
 
-use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
 use App\Http\Controllers\Api\ConfigController;
 use App\Models\CaptureSession;
@@ -24,7 +23,8 @@ use Throwable;
  * Projects with subfolders (docs/API.md "Projects", since v1.5). A project (a `clients` row) sits at the top of its
  * workspace or inside another project, at most Client::MAX_DEPTH levels deep and never inside itself; names are
  * unique among the projects of one folder. Recordings in no project are the Inbox. Every lookup is by the explicit
- * workspace id, like the rest of the library.
+ * workspace id, like the rest of the library, and since v1.5 by the person: projects are private to whoever made them,
+ * so a tree is one person's projects in one workspace.
  */
 final class ProjectTree
 {
@@ -33,13 +33,13 @@ final class ProjectTree
     public function __construct(private readonly Workspaces $workspaces) {}
 
     /**
-     * Parent of every project of the workspace, by id.
+     * Parent of every project of one person in the workspace (every person's when none is named), by id.
      *
      * @return array<string, string|null>
      */
-    public function parents(int $workspaceId): array
+    public function parents(int $workspaceId, ?int $userId = null): array
     {
-        return Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)
+        return Client::acrossPeople()->where('workspace_id', $workspaceId)->when($userId !== null, fn ($q) => $q->where('user_id', $userId))
             ->pluck('parent_id', 'id')->map(fn ($p): ?string => $p === null ? null : (string) $p)->all();
     }
 
@@ -50,7 +50,7 @@ final class ProjectTree
      */
     public function descendantIds(Client $project): array
     {
-        return self::below($project->id, $this->parents($project->workspace_id));
+        return self::below($project->id, $this->parents($project->workspace_id, $project->user_id));
     }
 
     /**
@@ -151,7 +151,7 @@ final class ProjectTree
         if ($parentId === null || $parentId === '') {
             return null;
         }
-        $parent = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)->find((string) $parentId);
+        $parent = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)->ofPerson()->find((string) $parentId);
         if (! $parent instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }
@@ -168,7 +168,7 @@ final class ProjectTree
         if ($parent === null) {
             return;
         }
-        $parents = $this->parents($parent->workspace_id);
+        $parents = $this->parents($parent->workspace_id, $parent->user_id);
         if ($project !== null && ($parent->id === $project->id || in_array($parent->id, self::below($project->id, $parents), true))) {
             throw self::invalidParent();
         }
@@ -208,7 +208,7 @@ final class ProjectTree
     {
         $moved = $project->wasRecentlyCreated || $project->wasChanged('parent_id');
         if ($moved) {
-            $parents = $this->parents($project->workspace_id);
+            $parents = $this->parents($project->workspace_id, $project->user_id);
             if (self::inLoop($project->id, $parents)) {
                 throw self::invalidParent();
             }
@@ -217,7 +217,7 @@ final class ProjectTree
             }
         }
         if ($moved || $project->wasChanged('name')) {
-            $this->assertNameFree($project->workspace_id, $project->parent_id, $project->name, $project->id);
+            $this->assertNameFree($project->workspace_id, $project->parent_id, $project->name, $project->id, $project->user_id);
         }
     }
 
@@ -249,10 +249,13 @@ final class ProjectTree
         return new ApiError(422, 'too_deep', 'Projects nest at most '.Client::MAX_DEPTH.' levels.', ['errors' => ['parent_id' => ['Pick a higher folder.']]]);
     }
 
-    /** True when another project of the same folder already has this name (capitals ignored). */
-    public function nameTaken(int $workspaceId, ?string $parentId, string $name, ?string $ignoreId = null): bool
+    /**
+     * True when another project of the same folder already has this name (capitals ignored): one person's projects
+     * (the request's person when none is named), as each person's top level is their own.
+     */
+    public function nameTaken(int $workspaceId, ?string $parentId, string $name, ?string $ignoreId = null, ?int $userId = null): bool
     {
-        return Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)
+        return Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)->ofPerson($userId)
             ->where(fn ($q) => $parentId === null ? $q->whereNull('parent_id') : $q->where('parent_id', $parentId))
             ->whereRaw('LOWER(name) = ?', [mb_strtolower(trim($name))])
             ->when($ignoreId !== null, fn ($q) => $q->whereKeyNot($ignoreId))
@@ -260,29 +263,32 @@ final class ProjectTree
     }
 
     /** `422 validation_failed` on `name` when the folder already has a project of that name. */
-    public function assertNameFree(int $workspaceId, ?string $parentId, string $name, ?string $ignoreId = null): void
+    public function assertNameFree(int $workspaceId, ?string $parentId, string $name, ?string $ignoreId = null, ?int $userId = null): void
     {
-        if ($this->nameTaken($workspaceId, $parentId, $name, $ignoreId)) {
+        if ($this->nameTaken($workspaceId, $parentId, $name, $ignoreId, $userId)) {
             throw new ApiError(422, 'validation_failed', self::NAME_TAKEN, ['errors' => ['name' => [self::NAME_TAKEN]]]);
         }
     }
 
     /** "Notes", or "Notes (2)" when the folder already has a "Notes" (moving subfolders up, saving a copy). */
-    public function freeName(int $workspaceId, ?string $parentId, string $name, ?string $ignoreId = null): string
+    public function freeName(int $workspaceId, ?string $parentId, string $name, ?string $ignoreId = null, ?int $userId = null): string
     {
         $base = mb_substr(trim($name), 0, 110);
         $candidate = $base;
-        for ($n = 2; $this->nameTaken($workspaceId, $parentId, $candidate, $ignoreId); $n++) {
+        for ($n = 2; $this->nameTaken($workspaceId, $parentId, $candidate, $ignoreId, $userId); $n++) {
             $candidate = "{$base} ({$n})";
         }
 
         return $candidate;
     }
 
-    /** Only owners delete projects (the admin role comes with the v1.5 roles); never across workspaces. */
-    public function canDelete(User $actor, int $workspaceId): bool
+    /**
+     * Since v1.5 only the person who made a project deletes it (owners and admins do not see it), while they belong
+     * to its workspace; never across workspaces.
+     */
+    public function canDelete(User $actor, Client $project): bool
     {
-        return $this->workspaces->roleOf($actor, $workspaceId) === WorkspaceRole::Owner;
+        return $this->workspaces->roleOf($actor, $project->workspace_id)?->records() === true && (int) $project->user_id === (int) $actor->getKey();
     }
 
     /**
@@ -295,8 +301,8 @@ final class ProjectTree
      */
     public function delete(Client $project, ?User $actor = null): array
     {
-        if ($actor !== null && ! $this->canDelete($actor, $project->workspace_id)) {
-            throw new ApiError(403, 'not_allowed', 'Only the workspace owner can delete a project.');
+        if ($actor !== null && ! $this->canDelete($actor, $project)) {
+            throw new ApiError(403, 'not_allowed', 'Only the person who made a project can delete it.');
         }
         $paths = [];
 
@@ -312,11 +318,11 @@ final class ProjectTree
             $sessions->update(['client_id' => null, 'filed_by' => null, 'updated_at' => $now]);
 
             /** @var Collection<int, Client> $children */
-            $children = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('parent_id', $project->id)->orderBy('name')->get();
+            $children = Client::acrossPeople()->where('parent_id', $project->id)->orderBy('name')->get();
             foreach ($children as $child) {
                 $child->forceFill([
                     'parent_id' => $project->parent_id,
-                    'name' => $this->freeName($project->workspace_id, $project->parent_id, $child->name, $child->id),
+                    'name' => $this->freeName($project->workspace_id, $project->parent_id, $child->name, $child->id, $child->user_id),
                 ])->save();
             }
             $project->delete();
@@ -337,13 +343,14 @@ final class ProjectTree
     }
 
     /**
-     * Every project of the workspace as devices see it, pinned first, then by name.
+     * Every project of one person in the workspace (the request's person when none is named) as devices see it,
+     * pinned first, then by name.
      *
      * @return list<array<string, mixed>>
      */
-    public function payloads(int $workspaceId): array
+    public function payloads(int $workspaceId, ?int $userId = null): array
     {
-        $clients = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)
+        $clients = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)->ofPerson($userId)
             ->withCount(['keyterms', 'captureSessions'])->orderByDesc('pinned')->orderBy('name')->get();
 
         return array_values(array_map(fn (Client $c): array => self::payloadIn($c, $clients), $clients->all()));
@@ -356,7 +363,7 @@ final class ProjectTree
      */
     public function payload(Client $client): array
     {
-        $clients = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $client->workspace_id)
+        $clients = Client::acrossPeople()->where('workspace_id', $client->workspace_id)->where('user_id', $client->user_id)
             ->withCount(['keyterms', 'captureSessions'])->get();
         $fresh = $clients->firstWhere('id', $client->id) ?? $client->loadCount('keyterms', 'captureSessions');
 

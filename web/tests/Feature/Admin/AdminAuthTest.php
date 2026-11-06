@@ -61,10 +61,10 @@ it('offers a show and hide control on the password field', function () {
     expect($html)->toMatch('/<input[^>]*id="form\.password"[^>]*type="password"/');
 });
 
-it('does not render a registration or password-reset path', function () {
+it('offers no registration path while sign-up is off, and a password reset (since v1.5)', function () {
     $html = $this->get('/admin/login')->assertOk()->getContent();
 
-    expect($html)->not->toContain('/admin/register')->not->toContain('password-reset');
+    expect($html)->not->toContain('/admin/register')->toContain('password-reset');
     $this->get('/admin/register')->assertNotFound();
 });
 

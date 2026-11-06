@@ -42,6 +42,8 @@ final class MakeAdmin extends Command
         $user->is_super_admin = true; // never mass-assignable
         // The operator typed the address on the server: it is confirmed (people-only share links open only for that).
         $user->email_verified_at ??= now();
+        // The operator set the server up: there is no sign-up after which to show the recording-consent notice.
+        $user->consent_seen_at ??= now();
         $user->save();
         // Every user works inside a workspace (B20); a promoted user keeps the ones they have.
         if (! $user->workspaces()->exists()) {

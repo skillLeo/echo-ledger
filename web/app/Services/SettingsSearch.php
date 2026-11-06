@@ -21,6 +21,7 @@ final class SettingsSearch
         'storage' => 'Storage',
         'game' => 'Game translate',
         'watch' => 'Watch translate',
+        'email' => 'Email',
         'about' => 'About',
     ];
 
@@ -41,6 +42,7 @@ final class SettingsSearch
         'captions' => ['captions', 'Live captions', 'engine provider channels client only cost streaming'],
         'dictation' => ['dictation', 'Dictation', 'engine provider voice typing keyboard'],
         'access' => ['privacy', 'Sign-in and access', 'two-factor 2fa passkeys browsers sessions audit log password'],
+        'signup' => ['privacy', 'Sign-up', 'who can sign up register registration accounts new people invite invitation anyone nobody google members console viewers'],
         'pins' => ['privacy', 'Certificate pins', 'pinning spki sha256 tls certificate security'],
         'devices' => ['devices', 'Paired devices', 'pair revoke phone computer devices page'],
         'retention' => ['storage', 'Storage and retention', 'delete days undo bin recordings transcripts erase 48 hours'],
@@ -48,6 +50,7 @@ final class SettingsSearch
         'plan' => ['storage', 'Plan limits', 'plan workspace minutes gigabytes pairings quota raise'],
         'game' => ['game', 'Game translate', 'live translate pubg codm voice chat arabic english speed budget soniox cost dollars'],
         'watch' => ['watch', 'Watch translate', 'live translate subtitles films videos youtube urdu speed soniox'],
+        'email' => ['email', 'Email', 'smtp mail server host port encryption tls ssl starttls user username password sender from address name test email send dns spf dkim dmarc'],
         'about' => ['about', 'About', 'version export import backup settings file json'],
     ];
 

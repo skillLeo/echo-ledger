@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Filament\Widgets\Usage;
 
+use App\Models\User;
 use App\Services\Usage\UsageReport;
 use App\Services\Workspaces\CurrentWorkspace;
+use App\Services\Workspaces\Workspaces;
 use Filament\Widgets\ChartWidget;
 
 /** Billable minutes per day of one month, on the Usage page only (never on the dashboard). */
@@ -28,7 +30,11 @@ class DailyUsageChart extends ChartWidget
 
     protected function getData(): array
     {
-        $daily = app(UsageReport::class)->forMonth((int) CurrentWorkspace::id(), $this->month)['daily'];
+        // A member's chart is their own minutes; owners and admins see the workspace's (since v1.5).
+        $user = auth()->user();
+        $workspace = (int) CurrentWorkspace::id();
+        $own = $user instanceof User && app(Workspaces::class)->roleOf($user, $workspace)?->manages() !== true;
+        $daily = app(UsageReport::class)->forMonth($workspace, $this->month, $own ? $user->id : null)['daily'];
 
         return [
             'datasets' => [[

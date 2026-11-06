@@ -18,12 +18,14 @@ use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Services\Accounts\KnownBrowsers;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
 use App\Services\ClientAi\ClaudeClientAi;
 use App\Services\ClientAi\ClientAi;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
+use App\Services\MailSettings;
 use App\Services\RecordingCipher;
 use App\Services\Screens\ClaudeScreenDescriber;
 use App\Services\Screens\ScreenDescriber;
@@ -33,11 +35,17 @@ use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
 use Filament\Support\Facades\FilamentTimezone;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Mail\MailManager;
+use Illuminate\Mail\Markdown;
+use Illuminate\Mail\SendQueuedMailable;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -50,6 +58,14 @@ class AppServiceProvider extends ServiceProvider
         // Scoped = fresh per request and per queued job (no stale settings/secrets across jobs).
         $this->app->scoped(SettingsRepository::class);
         $this->app->scoped(CredentialVault::class);
+        // Settings → Email (since v1.5): the stored SMTP server replaces the .env one once the mailer is made, and
+        // before each queued email, so a long-running worker sends with the latest save.
+        $this->app->singleton(MailSettings::class);
+        $this->app->afterResolving('mail.manager', function (mixed $manager): void {
+            if ($manager instanceof MailManager) {
+                $this->app->make(MailSettings::class)->apply($manager);
+            }
+        });
         // "Show as" views come from the Claude API; tests swap in a fake.
         $this->app->bind(TranscriptConverter::class, ClaudeTranscriptConverter::class);
         // Client workspaces (v1.4) ask Claude through one interface; tests swap in a fake.
@@ -81,13 +97,24 @@ class AppServiceProvider extends ServiceProvider
         AuditLog::listen();
         // The activity centre (B18).
         ActivityFeed::listen();
+        Event::listen(JobProcessing::class, function (JobProcessing $event): void {
+            if (($event->job->payload()['data']['commandName'] ?? null) === SendQueuedMailable::class) {
+                app(MailSettings::class)->apply();
+            }
+        });
+        // Since v1.5: a console sign-in from a browser the account has not used before emails the account.
+        Event::listen(Login::class, [KnownBrowsers::class, 'handle']);
+        // The account emails carry text people typed (a note, a title, a workspace or device name): with secured
+        // encoding a "[link](…)" in it stays text, so nobody can put their own link in an email this server signs.
+        Markdown::withSecuredEncoding();
 
         // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
         FilamentTimezone::set(fn (): string => app(SettingsRepository::class)->displayTimezone());
 
-        // Console passwords follow the same 12-character minimum as `echoledger:make-admin` (Filament's profile
-        // page validates new passwords with Password::default()).
-        Password::defaults(static fn (): Password => Password::min(12));
+        // Console passwords: 12 characters with letters and numbers (sign-up, profile and reset all validate with
+        // Password::default(); `echoledger:make-admin` keeps its 12-character minimum). No "uncompromised" check:
+        // it would send part of each password's hash to a third party.
+        Password::defaults(static fn (): Password => Password::min(12)->letters()->numbers());
 
         // Short, stable morph names: tokens and Livewire payloads never carry PHP class names.
         Relation::enforceMorphMap([
@@ -119,6 +146,16 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('request-upload', fn (Request $request) => Limit::perMinute(300)->by('request:'.$request->ip()));
         RateLimiter::for('pairing', fn (Request $request) => Limit::perMinute(5)->by('pair:'.$request->ip()));
         RateLimiter::for('passkey', fn (Request $request) => Limit::perMinute(20)->by('passkey:'.$request->ip()));
+        // Signing in with an account (since v1.5, docs/API.md): the password route answers its own code when throttled,
+        // as it does after 5 failures for one email; the browser sign-in's code exchange and its approval page.
+        RateLimiter::for('auth-password', fn (Request $request) => Limit::perMinute(5)->by('auth-pw:'.$request->ip())
+            ->response(fn (Request $request, array $headers) => response()->json(['message' => 'Too many sign-in attempts. Try again later.', 'code' => 'too_many_attempts'], 429, $headers)));
+        RateLimiter::for('auth-token', fn (Request $request) => Limit::perMinute(10)->by('auth-token:'.$request->ip()));
+        RateLimiter::for('device-sign-in', fn (Request $request) => Limit::perMinute(30)->by('device-sign-in:'.$request->ip()));
+        // The public account pages (since v1.5): /account/delete and the export download.
+        RateLimiter::for('account', fn (Request $request) => Limit::perMinute(30)->by('account:'.$request->ip()));
+        // Sign in with Google (since v1.5): the redirect, Google's answer and the "confirm it is you" step.
+        RateLimiter::for('google', fn (Request $request) => Limit::perMinute(20)->by('google:'.$request->ip()));
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by('hook:'.$request->ip()));
         // The public site (since v1.5): the landing and downloads pages and the apps' update manifests.
         RateLimiter::for('site', fn (Request $request) => Limit::perMinute(60)->by('site:'.$request->ip()));

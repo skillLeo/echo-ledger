@@ -11,7 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * The tenant boundary (B20): every device, pairing code, client, recording and usage row belongs to one workspace;
- * its members see all of it. Roles live on the membership (`workspace_user.role`).
+ * since v1.5 what each person makes in it is theirs alone (App\Models\Scopes\OwnerScope). Roles live on the membership
+ * (`workspace_user.role`, App\Policies\WorkspacePolicy).
  *
  * @property int $id
  * @property string $name

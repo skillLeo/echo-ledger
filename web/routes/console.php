@@ -26,6 +26,10 @@ Schedule::command('recordings:recover')->everyFiveMinutes()->withoutOverlapping(
 Schedule::command('sessions:sweep-open')->everyFifteenMinutes()->withoutOverlapping(10);
 
 Schedule::command('recordings:retention')->hourly()->withoutOverlapping(30);
+
+// Since v1.5: accounts past their 7-day deletion grace are erased; "Export my data" ZIPs go 24 hours after they are made.
+Schedule::command('echoledger:erase-accounts')->hourly()->withoutOverlapping(60);
+Schedule::command('echoledger:prune-exports')->hourly()->withoutOverlapping(30);
 Schedule::command('model:prune')->daily()->withoutOverlapping(60);
 
 Schedule::command('sanctum:prune-expired --hours=24')->daily();

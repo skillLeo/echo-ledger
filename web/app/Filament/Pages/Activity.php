@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\User;
 use App\Services\ActivityFeed;
@@ -24,6 +25,8 @@ use Illuminate\Support\Carbon;
  */
 class Activity extends Page
 {
+    use FullConsoleOnly;
+
     /** How many notifications the page lists; older ones stay in the bell until they are pruned. */
     public const LIMIT = 60;
 

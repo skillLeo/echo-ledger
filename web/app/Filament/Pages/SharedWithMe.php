@@ -17,7 +17,9 @@ use App\Models\User;
 use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\Teammates;
 use App\Services\TranscriptExporter;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
+use App\Services\Workspaces\Workspaces;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -50,6 +52,12 @@ class SharedWithMe extends Page implements HasTable
 
     protected static ?string $title = 'Shared with me';
 
+    /** Since v1.5 in the small console too (members and viewers), unless Settings closes the console to them. */
+    public static function canAccess(): bool
+    {
+        return ConsoleAccess::open();
+    }
+
     protected static ?string $slug = 'shared-with-me';
 
     public function content(Schema $schema): Schema
@@ -77,6 +85,8 @@ class SharedWithMe extends Page implements HasTable
                     ->modalSubmitAction(false)->modalCancelActionLabel('Close')
                     ->modalContent(fn (SentItem $item): View => view('filament.pages.shared-preview', $this->preview($item))),
                 Action::make('save')->label('Save to my library')->icon(Heroicon::OutlinedArrowDownTray)
+                    // Since v1.5 a viewer opens what is shared with them and keeps no library.
+                    ->visible(fn (): bool => app(Workspaces::class)->roleOf($this->person(), (int) CurrentWorkspace::id())?->records() === true)
                     ->requiresConfirmation()
                     ->modalHeading('Save a copy?')
                     ->modalDescription(fn (SentItem $item): string => $item->kind === 'project'

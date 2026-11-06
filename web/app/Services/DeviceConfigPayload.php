@@ -56,7 +56,7 @@ final class DeviceConfigPayload
                 'source_device' => $device->sourceDevice()->value,
             ],
             'server_time' => now()->toAtomString(),
-            'retention_days' => $this->settings->retentionDays(),
+            'retention_days' => app(RetentionPolicy::class)->daysForWorkspace($device->workspace_id),
             'upload' => [
                 'chunk_size_bytes' => ChunkedUploadService::advertisedChunkSize(),
                 'max_recording_bytes' => (int) config('echoledger.max_recording_bytes'),
@@ -94,8 +94,8 @@ final class DeviceConfigPayload
     }
 
     /**
-     * The workspace's plan. B20 plans have no feature switches yet, so every feature is on (as the contract reads a
-     * missing one); their limits are the minutes, storage and devices of B20. Retention and seats come with Phase 4.
+     * The workspace's plan: its features (a plan that names none has them all, as the contract reads a missing one) and
+     * its limits, `null` for none. Storage counts every person's recordings and screens in the workspace.
      *
      * @return array<string, mixed>
      */
@@ -107,12 +107,12 @@ final class DeviceConfigPayload
         return [
             'key' => $plan->key,
             'name' => $plan->name,
-            'features' => ['live_translate' => true, 'screen_moments' => true, 'ai_notes' => true, 'connector' => true],
+            'features' => $plan->featureMap(),
             'limits' => [
                 'monthly_minutes' => $plan->monthly_minutes,
                 'storage_bytes' => $plan->storage_bytes,
-                'retention_days' => null,
-                'seats' => null,
+                'retention_days' => $plan->retention_days,
+                'seats' => $plan->seats,
             ],
             'used' => [
                 'minutes' => (int) round($limits->minutesUsed($device->workspace_id)),

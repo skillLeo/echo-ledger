@@ -6,6 +6,8 @@ use App\Enums\WorkspaceRole;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkspaceInvitation;
+use App\Services\Accounts\Invitations;
 use App\Services\Workspaces\Workspaces;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -31,7 +33,7 @@ it('lets an owner add a new person as a member with a one-time password', functi
         ->and($person->workspaces()->count())->toBe(1);
 });
 
-it('adds an existing account, changes roles and removes members, but never the last owner', function () {
+it('invites an existing account, changes roles and removes members, but never the owner themselves', function () {
     $owner = Fx::user();
     $other = Fx::user();
     $this->actingAs($owner, 'web');
@@ -39,14 +41,18 @@ it('adds an existing account, changes roles and removes members, but never the l
 
     $page = Livewire::test(WorkspaceSettings::class)
         ->callAction('addMember', ['email' => $other->email, 'role' => 'member'])
-        ->assertCanSeeTableRecords([$owner, $other]);
-    $page->callAction(TestAction::make('changeRole')->table($other));
-    expect($workspace->roleOf($other))->toBe(WorkspaceRole::Owner);
+        ->assertNotified('Invitation sent to '.$other->email)
+        ->assertCanNotSeeTableRecords([$other]);
+    // Accepting the link makes them a member.
+    app(Invitations::class)->accept(WorkspaceInvitation::query()->where('email', $other->email)->firstOrFail(), $other);
+    $page = Livewire::test(WorkspaceSettings::class)->assertCanSeeTableRecords([$owner, $other]);
+    $page->callAction(TestAction::make('changeRole')->table($other), ['role' => 'admin']);
+    expect($workspace->roleOf($other))->toBe(WorkspaceRole::Admin);
     $page->callAction(TestAction::make('remove')->table($other));
     expect($workspace->roleOf($other))->toBeNull()
         ->and($other->fresh()->current_workspace_id)->not->toBe($workspace->id);
 
-    $page->callAction(TestAction::make('remove')->table($owner))->assertNotified('A workspace needs at least one owner.');
+    $page->assertActionHidden(TestAction::make('remove')->table($owner));
     expect($workspace->roleOf($owner))->toBe(WorkspaceRole::Owner)
         ->and(Hash::check('password', (string) $other->fresh()->password))->toBeTrue(); // an existing account keeps its password
 });

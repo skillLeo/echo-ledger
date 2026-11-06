@@ -2,25 +2,38 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\AccountPageController;
 use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
 use App\Http\Controllers\AdminPackController;
 use App\Http\Controllers\AppLinksController;
+use App\Http\Controllers\Auth\DeviceSignInController;
+use App\Http\Controllers\Auth\GoogleController;
+use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
 use App\Http\Controllers\RequestLinkPageController;
 use App\Http\Controllers\ScreenMediaController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\WorkspaceSwitchController;
+use App\Http\Middleware\EnsureConsoleAccess;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
 
-// The public site (since v1.5): the landing page, the downloads page and the apps' update manifests (docs/API.md
+// Console routes outside Filament's pages need a confirmed email too (since v1.5), like the panel's own pages.
+$consoleVerified = 'verified:filament.admin.auth.email-verification.prompt';
+
+// The public site (since v1.5): the landing page, the downloads page, the legal pages and the apps' update manifests (docs/API.md
 // "Public pages and app downloads"). Nothing here shows anyone's data; throttled per IP.
 Route::middleware('throttle:site')->group(function (): void {
     Route::get('/', [SiteController::class, 'home'])->name('site.home');
     Route::get('/downloads', [DownloadsController::class, 'page'])->name('downloads');
+    // The legal pages (drafts for review), linked from the site, the console and the apps.
+    Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
+    Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
     Route::get('/downloads/android.json', [DownloadsController::class, 'android'])->name('downloads.android');
     Route::get('/downloads/desktop.json', [DownloadsController::class, 'desktop'])->name('downloads.desktop');
     Route::get('/downloads/files/{name}', [DownloadsController::class, 'file'])
@@ -33,7 +46,7 @@ Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app
 
 // Decrypted playback for the admin transcript player (HTTP Range supported).
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
-    ->middleware(['auth:web', EnsureWorkspaceMember::class])
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])
     ->name('admin.recordings.stream');
 
 // Screen moments (v1.5): a picture or thumbnail from the signed link the API hands out (30 minutes, no token), and on
@@ -45,21 +58,21 @@ Route::get('/screen-media/{screen}/{variant}', [ScreenMediaController::class, 's
     ->middleware(['signed', 'throttle:uploads'])->name('screens.media');
 Route::get('/admin-media/screens/{screen}/{variant}', [ScreenMediaController::class, 'console'])
     ->whereUlid('screen')->whereIn('variant', ['image', 'thumb'])
-    ->middleware(['auth:web', EnsureWorkspaceMember::class])->name('admin.screens.media');
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])->name('admin.screens.media');
 
 // Console exports of a transcript (download; `html` opens for printing to PDF).
 Route::get('/admin-export/transcripts/{transcript}/{format}', AdminExportController::class)
-    ->middleware(['auth:web', EnsureWorkspaceMember::class])
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])
     ->name('admin.transcripts.export');
 
 // Export → Meeting pack (v1.5): the transcript with its screens; `html` opens with a Print button, `zip` downloads.
 Route::get('/admin-export/sessions/{session}/pack/{format}', AdminPackController::class)
     ->whereUlid('session')->whereIn('format', ['html', 'zip'])
-    ->middleware(['auth:web', EnsureWorkspaceMember::class])
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])
     ->name('admin.sessions.pack');
 
 // Library → Upload: the browser's chunked, resumable uploads (the devices' chunk path, behind the console session).
-Route::middleware(['auth:web', EnsureWorkspaceMember::class, 'throttle:uploads'])
+Route::middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class.':full', 'throttle:uploads'])
     ->prefix('/admin-upload/recordings')->name('admin.uploads.')->group(function (): void {
         Route::post('/', [ConsoleUploadController::class, 'store'])->name('store');
         Route::get('/{recording}', [ConsoleUploadController::class, 'show'])->name('show');
@@ -88,6 +101,41 @@ Route::middleware('throttle:request-upload')->prefix('/r/{token}/files')->name('
     Route::post('/', [RequestLinkPageController::class, 'store'])->name('store');
     Route::post('/{upload}/chunks/{index}', [RequestLinkPageController::class, 'chunk'])->whereNumber('index')->name('chunk');
     Route::post('/{upload}/complete', [RequestLinkPageController::class, 'complete'])->name('complete');
+});
+
+// Sign in with Google (v1.5): Socialite's redirect and callback, then "confirm it is you" when Google's address matches
+// an account not linked yet, or the account has two-step sign-in. Throttled per IP.
+Route::middleware('throttle:google')->prefix('/auth/google')->name('auth.google.')->group(function (): void {
+    Route::get('/redirect', [GoogleController::class, 'redirect'])->name('redirect');
+    Route::get('/callback', [GoogleController::class, 'callback'])->name('callback');
+    Route::get('/confirm', [GoogleController::class, 'confirmForm'])->name('confirm');
+    Route::post('/confirm', [GoogleController::class, 'confirm'])->name('confirm.store');
+});
+
+// Your account (v1.5): /account/delete without the app (Google Play links to it), and the "Export my data" link.
+// Workspace invitations (v1.5): a signed link for one address, 7 days, once.
+Route::middleware(['signed', 'throttle:account'])->group(function (): void {
+    Route::get('/invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
+    Route::post('/invitations/{token}', [InvitationController::class, 'accept'])->middleware('auth:web')->name('invitations.accept');
+});
+
+// The console's workspace switcher (v1.5): only a workspace the person belongs to.
+Route::post('/admin-workspaces/{workspace}/switch', WorkspaceSwitchController::class)->whereNumber('workspace')
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, 'throttle:account'])->name('admin.workspaces.switch');
+
+Route::middleware('throttle:account')->group(function (): void {
+    Route::get('/account/delete', [AccountPageController::class, 'deletePage'])->name('account.delete');
+    Route::post('/account/delete', [AccountPageController::class, 'delete'])->middleware('auth:web')->name('account.delete.store');
+});
+// Signed for its 24 hours and fetched without a session, as the apps download it too.
+Route::get('/account/export/{export}/download', [AccountPageController::class, 'download'])
+    ->whereUlid('export')->withoutMiddleware('web')->middleware(['signed', 'throttle:account'])->name('account.export.download');
+
+// The apps' browser sign-in (v1.5, docs/API.md "Signing in with an account"): PKCE S256, the approval page behind the
+// console's sign-in, then the app's echoledger://signed-in link with a one-time code.
+Route::middleware('throttle:device-sign-in')->group(function (): void {
+    Route::get('/device/sign-in', [DeviceSignInController::class, 'show'])->name('device.sign-in');
+    Route::post('/device/sign-in', [DeviceSignInController::class, 'approve'])->middleware('auth:web')->name('device.sign-in.approve');
 });
 
 // Passkey sign-in on the console login page (B16): a challenge, then the signed answer. Throttled per IP.

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Widgets;
 
 use App\Services\RetentionPolicy;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -14,6 +15,12 @@ use Illuminate\Support\Number;
 class StorageOverview extends StatsOverviewWidget
 {
     protected static ?int $sort = 3;
+
+    /** Since v1.5 the dashboard of the whole console; members and viewers see their library instead. */
+    public static function canView(): bool
+    {
+        return ConsoleAccess::full();
+    }
 
     protected ?string $heading = 'Storage';
 

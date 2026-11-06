@@ -10,6 +10,7 @@ use App\Models\Credential;
 use App\Models\Device;
 use App\Models\ShareLink;
 use App\Models\User;
+use App\Services\Accounts\SignInGuard;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -45,6 +46,27 @@ final class AuditLog
         'passkey_added' => 'Passkey added',
         'passkey_removed' => 'Passkey removed',
         'credentials_changed' => 'Provider credentials changed',
+        // Since v1.5: accounts, sign-in from the apps, teams and the settings.
+        'account_created' => 'Account made',
+        'google_login' => 'Signed in with Google',
+        'google_linked' => 'Google account linked',
+        'google_unlinked' => 'Google account unlinked',
+        'google_confirmed' => 'Confirmed with Google',
+        'device_signed_in' => 'Device signed in',
+        'sign_in_locked' => 'Sign-in locked after failures',
+        'signed_out_everywhere' => 'Signed out everywhere',
+        'account_deletion_requested' => 'Account deletion asked for',
+        'account_deletion_cancelled' => 'Account kept',
+        'account_erased' => 'Account erased',
+        'account_exported' => 'Data exported',
+        'sent_to_teammate' => 'Sent to a teammate',
+        'member_invited' => 'Invitation sent',
+        'member_added' => 'Member added',
+        'member_removed' => 'Member removed',
+        'role_changed' => 'Role changed',
+        'workspace_renamed' => 'Workspace renamed',
+        'settings_changed' => 'Settings changed',
+        'test_email_sent' => 'Test email sent',
     ];
 
     /**
@@ -102,14 +124,21 @@ final class AuditLog
     {
         $log = fn (): self => app(self::class);
         Event::listen(Login::class, function (Login $e) use ($log): void {
-            if ($e->guard === 'web' && $e->user instanceof User && ! session()->pull('audit.passkey_login', false)) {
+            // Passkey and Google sign-ins record their own event.
+            $own = session()->pull('audit.passkey_login', false) || session()->pull('audit.google_login', false);
+            if ($e->guard === 'web' && $e->user instanceof User && ! $own) {
                 $log()->record('login', (int) $e->user->getAuthIdentifier());
             }
         });
         Event::listen(Failed::class, function (Failed $e) use ($log): void {
             if ($e->guard === 'web') {
                 $email = Str::limit((string) ($e->credentials['email'] ?? ''), 120, '');
-                $log()->record('login_failed', $e->user instanceof User ? (int) $e->user->getAuthIdentifier() : null, null, "Sign-in failed for {$email}");
+                $userId = $e->user instanceof User ? (int) $e->user->getAuthIdentifier() : null;
+                $log()->record('login_failed', $userId, null, "Sign-in failed for {$email}");
+                // Since v1.5 the console's failures count with the apps' sign-ins: a burst locks the email for a while.
+                if ($email !== '') {
+                    app(SignInGuard::class)->fail($email, $userId);
+                }
             }
         });
         Event::listen(Logout::class, function (Logout $e) use ($log): void {
@@ -119,7 +148,9 @@ final class AuditLog
         });
 
         CaptureSession::deleted(fn (CaptureSession $s) => $log()->record('session_deleted', $s->user_id, $s, 'Recording deleted: '.$s->displayTitle()));
-        Device::created(fn (Device $d) => $log()->record('device_paired', $d->user_id, $d, "Device paired: {$d->name}"));
+        Device::created(fn (Device $d) => $d->signedInWith === null
+            ? $log()->record('device_paired', $d->user_id, $d, "Device paired: {$d->name}")
+            : $log()->record('device_signed_in', $d->user_id, $d, "Signed in on {$d->name} ({$d->platform->getLabel()}) ".($d->signedInWith === 'browser' ? 'through the browser' : 'with a password'), ['via' => $d->signedInWith]));
         Device::deleted(fn (Device $d) => $log()->record('device_revoked', $d->user_id, $d, "Device revoked: {$d->name}"));
         // A link opens a recording or (since v1.5) a project: the log names whichever it is.
         $shared = fn (ShareLink $l): array => $l->client_id !== null

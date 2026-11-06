@@ -62,13 +62,13 @@ final class BinController extends Controller
     {
         return response()->json([
             ...$this->policy->storage($this->device($request)->workspace_id),
-            'retention_days' => $this->policy->daysFor(null),
+            'retention_days' => $this->policy->daysForWorkspace($this->device($request)->workspace_id),
         ]);
     }
 
     private function binned(Request $request, string $id): CaptureSession
     {
-        $session = CaptureSession::onlyTrashed()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
+        $session = CaptureSession::onlyTrashed()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }

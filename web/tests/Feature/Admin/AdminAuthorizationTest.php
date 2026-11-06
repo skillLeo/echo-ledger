@@ -95,7 +95,7 @@ it('registers only the B20 role policies: recordings and devices; scoping rests 
         ->and(Gate::getPolicyFor(Device::class))->toBeInstanceOf(DevicePolicy::class)
         ->and(Gate::getPolicyFor(Client::class))->toBeNull();
     expect(collect(glob(app_path('Policies/*.php')))->map(fn (string $f): string => basename($f))->sort()->values()->all())
-        ->toBe(['CaptureSessionPolicy.php', 'DevicePolicy.php']);
+        ->toBe(['CaptureSessionPolicy.php', 'DevicePolicy.php', 'WorkspacePolicy.php']);
 });
 
 it('scopes every resource query to the signed-in admin', function () {

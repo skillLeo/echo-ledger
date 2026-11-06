@@ -41,7 +41,7 @@ final class ShareController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $project = Client::query()->where('workspace_id', $device->workspace_id)->find($id);
+        $project = Client::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if (! $project instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }
@@ -103,7 +103,7 @@ final class ShareController extends Controller
     }
 
     /**
-     * GET /api/shares (since v1.5): every link of the workspace's recordings and projects, newest first; `session_id`
+     * GET /api/shares (since v1.5): every link of the person's recordings and projects in the workspace, newest first; `session_id`
      * or `client_id` narrows it.
      */
     public function all(Request $request): JsonResponse
@@ -114,7 +114,7 @@ final class ShareController extends Controller
         ]);
         /** @var Device $device */
         $device = $request->user();
-        $links = $this->workspaceLinks($device->workspace_id)
+        $links = $this->workspaceLinks($device->workspace_id, $device->user_id)
             ->when(! empty($data['session_id']), fn (Builder $q) => $q->where('capture_session_id', $data['session_id']))
             ->when(! empty($data['client_id']), fn (Builder $q) => $q->where('client_id', $data['client_id']))
             ->with(['captureSession', 'client'])->latest()->orderByDesc('id')->limit(self::LIST_LIMIT)->get();
@@ -127,7 +127,7 @@ final class ShareController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $link = $this->workspaceLinks($device->workspace_id)->find($id);
+        $link = $this->workspaceLinks($device->workspace_id, $device->user_id)->find($id);
         if (! $link instanceof ShareLink) {
             throw new ApiError(404, 'share_not_found', 'Share link not found.');
         }
@@ -137,22 +137,22 @@ final class ShareController extends Controller
     }
 
     /**
-     * Links of the workspace's recordings and projects.
+     * Links of the person's own recordings and projects in the workspace (since v1.5 nobody sees another person's).
      *
      * @return Builder<ShareLink>
      */
-    public static function workspaceLinks(int $workspaceId): Builder
+    public static function workspaceLinks(int $workspaceId, int $userId): Builder
     {
         return ShareLink::query()->where(fn (Builder $q) => $q
-            ->whereHas('captureSession', fn ($s) => $s->where('workspace_id', $workspaceId))
-            ->orWhereHas('client', fn ($c) => $c->where('workspace_id', $workspaceId)));
+            ->whereHas('captureSession', fn ($s) => $s->where('workspace_id', $workspaceId)->where('user_id', $userId))
+            ->orWhereHas('client', fn ($c) => $c->where('workspace_id', $workspaceId)->where('user_id', $userId)));
     }
 
     private function session(Request $request, string $id): CaptureSession
     {
         /** @var Device $device */
         $device = $request->user();
-        $session = CaptureSession::query()->where('workspace_id', $device->workspace_id)->find($id);
+        $session = CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
