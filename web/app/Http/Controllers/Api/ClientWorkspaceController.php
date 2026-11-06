@@ -191,7 +191,7 @@ final class ClientWorkspaceController extends Controller
         $session = $this->session($request, $id);
         $project = $this->workspace->projectOf($session);
         if ($project === null) {
-            throw new ApiError(409, 'no_client', 'File this recording under a client first.');
+            throw new ApiError(409, 'no_client', 'File this recording under a project first.');
         }
         $data = $request->validate(['language' => ['sometimes', Rule::in(['en', 'roman_urdu'])]]);
         $this->workspace->assertCanWriteNotes($session->workspace_id);
@@ -232,7 +232,7 @@ final class ClientWorkspaceController extends Controller
     {
         $client = Client::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
         if (! $client instanceof Client) {
-            throw new ApiError(404, 'client_not_found', 'Client not found.');
+            throw new ApiError(404, 'client_not_found', 'Project not found.');
         }
 
         return $client;
@@ -253,7 +253,7 @@ final class ClientWorkspaceController extends Controller
         $client = $this->client($request, $id);
         $line = ClientMemoryItem::query()->ofProjectMaker($client)->find($item);
         if (! $line instanceof ClientMemoryItem) {
-            throw new ApiError(404, 'memory_not_found', 'That line is not in this client\'s memory.');
+            throw new ApiError(404, 'memory_not_found', 'That line is not in this project\'s memory.');
         }
 
         return $line;

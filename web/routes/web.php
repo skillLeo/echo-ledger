@@ -21,6 +21,7 @@ use App\Http\Controllers\SiteController;
 use App\Http\Controllers\WorkspaceSwitchController;
 use App\Http\Middleware\EnsureConsoleAccess;
 use App\Http\Middleware\EnsureWorkspaceMember;
+use Filament\Http\Middleware\AuthenticateSession;
 use Illuminate\Support\Facades\Route;
 
 // Console routes outside Filament's pages need a confirmed email too (since v1.5), like the panel's own pages.
@@ -132,8 +133,9 @@ Route::get('/account/export/{export}/download', [AccountPageController::class, '
     ->whereUlid('export')->withoutMiddleware('web')->middleware(['signed', 'throttle:account'])->name('account.export.download');
 
 // The apps' browser sign-in (v1.5, docs/API.md "Signing in with an account"): PKCE S256, the approval page behind the
-// console's sign-in, then the app's echoledger://signed-in link with a one-time code.
-Route::middleware('throttle:device-sign-in')->group(function (): void {
+// console's sign-in, then the app's echoledger://signed-in link with a one-time code. With the console's session check:
+// a session it has ended (the password changed since) gets the sign-in here too.
+Route::middleware([AuthenticateSession::class, 'throttle:device-sign-in'])->group(function (): void {
     Route::get('/device/sign-in', [DeviceSignInController::class, 'show'])->name('device.sign-in');
     Route::post('/device/sign-in', [DeviceSignInController::class, 'approve'])->middleware('auth:web')->name('device.sign-in.approve');
 });

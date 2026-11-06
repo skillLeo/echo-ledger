@@ -44,7 +44,9 @@ class SharedWithMe extends Page implements HasTable
 {
     use InteractsWithTable;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInboxArrowDown;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
+
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::Users;
 
     protected static string|UnitEnum|null $navigationGroup = 'More';
 
@@ -101,7 +103,7 @@ class SharedWithMe extends Page implements HasTable
                         Notification::make()->title('Removed from Shared with me')->success()->send();
                     }),
             ])
-            ->emptyStateIcon(Heroicon::OutlinedInboxArrowDown)
+            ->emptyStateIcon(Heroicon::OutlinedUsers)
             ->emptyStateHeading('Nothing shared with you yet')
             ->emptyStateDescription('When a teammate sends you a recording or a project, it appears here.');
     }

@@ -95,7 +95,7 @@ it('needs the Anthropic key (saying where to add it), then makes the views on th
     $transcript = urduTranscript($this);
 
     $this->postJson("/api/transcripts/{$transcript->id}/views")->assertStatus(409)->assertJsonPath('code', 'views_unavailable')
-        ->assertJsonPath('message', 'Add your Anthropic key in API Credentials to see Roman Urdu and English: '.rtrim((string) config('app.url'), '/').'/admin/api-credentials');
+        ->assertJsonPath('message', 'Roman Urdu and English need the server\'s Anthropic key. Whoever runs this server adds it under API Credentials: '.rtrim((string) config('app.url'), '/').'/admin/api-credentials');
     app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
 
     $this->postJson("/api/transcripts/{$transcript->id}/views")->assertStatus(202)->assertJsonPath('status', 'making');

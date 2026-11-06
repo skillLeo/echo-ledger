@@ -196,7 +196,7 @@ final class SessionLifecycle
 
         $client = Client::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($clientId);
         if ($client === null) {
-            throw new ApiError(404, 'client_not_found', 'Client not found.');
+            throw new ApiError(404, 'client_not_found', 'Project not found.');
         }
 
         return $client->id;

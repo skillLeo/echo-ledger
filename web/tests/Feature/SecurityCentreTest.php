@@ -97,7 +97,7 @@ describe('the device security API', function () {
         expect(collect($answer->json('devices'))->pluck('id')->sort()->values()->all())->toBe(collect([$this->device->id, $this->laptop->id])->sort()->values()->all())
             ->and(collect($answer->json('devices'))->firstWhere('id', $this->device->id)['current'])->toBeTrue()
             ->and(collect($answer->json('events'))->pluck('event')->unique()->values()->all())->toBe(['device_paired'])
-            ->and($answer->json('events.0.label'))->toBe('Device paired');
+            ->and($answer->json('events.0.label'))->toBe('Device signed in with a code');
     });
 
     it('revokes another device of the owner but not itself or a stranger\'s', function () {

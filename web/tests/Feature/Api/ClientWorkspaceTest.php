@@ -217,6 +217,37 @@ describe('files', function () {
         $this->deleteJson("/api/clients/{$this->client->id}/files/{$id}")->assertNotFound()->assertJsonPath('code', 'file_not_found');
     });
 
+    it('says so when a stored file cannot be read after every try, and leaves a file that moved on alone', function () {
+        Queue::fake();
+        $file = app(ClientWorkspace::class)->addFile($this->client, UploadedFile::fake()->createWithContent('notes.txt', 'Some notes'), $this->device->user_id);
+        Storage::disk('recordings')->put((string) $file->path, 'damaged');
+        $job = new ExtractClientFileJob($file->id);
+
+        expect(fn () => $job->handle(app(ClientWorkspace::class)))->toThrow(RuntimeException::class);
+        expect($file->refresh()->status)->toBe('extracting')
+            ->and($job->tries)->toBe(3)->and($job->backoff)->toBe([60, 300]);
+
+        $job->failed(new RuntimeException('Not for people'));
+        expect($file->refresh())->status->toBe('failed')->error->toBe(ClientWorkspace::UNREADABLE);
+
+        $file->forceFill(['status' => 'ready', 'error' => null])->save();
+        $job->failed(null);
+        expect($file->refresh())->status->toBe('ready')->error->toBeNull();
+    });
+
+    it('does not read a PDF again on another try: its reading, which is billed, never throws out of the job', function () {
+        Queue::fake();
+        $file = app(ClientWorkspace::class)->addFile($this->client, UploadedFile::fake()->createWithContent('scope.pdf', "%PDF-1.4\nSCOPE\n%%EOF"), $this->device->user_id);
+        $job = new ExtractClientFileJob($file->id);
+
+        $job->handle(app(ClientWorkspace::class));
+        $job->handle(app(ClientWorkspace::class));
+
+        expect($file->refresh()->status)->toBe('ready')
+            ->and(collect($this->ai->calls)->where(0, 'pdf')->count())->toBe(1)
+            ->and(UsageLedgerEntry::query()->where('use_case', 'client_file')->count())->toBe(1);
+    });
+
     it('reads Word files here and refuses other kinds', function () {
         $path = tempnam(sys_get_temp_dir(), 'docx');
         $zip = new ZipArchive;

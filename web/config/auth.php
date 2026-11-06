@@ -49,6 +49,13 @@ return [
             'driver' => 'sanctum',
             'provider' => 'devices',
         ],
+
+        // The Claude and ChatGPT connector (since v1.5): Passport access tokens of a person, on /mcp only. Passport
+        // looks its guard up under this name.
+        'api' => [
+            'driver' => 'passport',
+            'provider' => 'users',
+        ],
     ],
 
     /*

@@ -34,9 +34,9 @@ class CaptureSessionResource extends Resource
 
     protected static ?string $breadcrumb = 'Library';
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedFilm;
 
-    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::RectangleStack;
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::Film;
 
     protected static string|UnitEnum|null $navigationGroup = null;
 

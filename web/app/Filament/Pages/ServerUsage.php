@@ -34,6 +34,8 @@ class ServerUsage extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedServerStack;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::ServerStack;
+
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 7;

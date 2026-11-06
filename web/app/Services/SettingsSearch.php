@@ -44,7 +44,7 @@ final class SettingsSearch
         'access' => ['privacy', 'Sign-in and access', 'two-factor 2fa passkeys browsers sessions audit log password'],
         'signup' => ['privacy', 'Sign-up', 'who can sign up register registration accounts new people invite invitation anyone nobody google members console viewers'],
         'pins' => ['privacy', 'Certificate pins', 'pinning spki sha256 tls certificate security'],
-        'devices' => ['devices', 'Paired devices', 'pair revoke phone computer devices page'],
+        'devices' => ['devices', 'Signed-in devices', 'pair sign in revoke phone computer devices page'],
         'retention' => ['storage', 'Storage and retention', 'delete days undo bin recordings transcripts erase 48 hours'],
         'limit' => ['storage', 'Monthly limit', 'budget minutes dollars usd warn percent prices cost usage'],
         'plan' => ['storage', 'Plan limits', 'plan workspace minutes gigabytes pairings quota raise'],

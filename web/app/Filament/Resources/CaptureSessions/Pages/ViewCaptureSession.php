@@ -217,7 +217,7 @@ class ViewCaptureSession extends ViewRecord
         $this->assertCanChange();
         $client = $this->session()->client;
         if ($client === null) {
-            return ['error' => 'File this recording under a client first.'];
+            return ['error' => 'File this recording under a project first.'];
         }
         $rule = TextReplacements::rules([['from' => $from, 'to' => $to, 'match_case' => false, 'whole_word' => true]]);
         if ($rule === []) {
@@ -290,7 +290,7 @@ class ViewCaptureSession extends ViewRecord
         $session = $this->session();
         $project = app(ClientWorkspace::class)->projectOf($session);
         if ($project === null) {
-            Notification::make()->title('File this recording under a client first.')->warning()->send();
+            Notification::make()->title('File this recording under a project first.')->warning()->send();
 
             return;
         }
@@ -338,22 +338,22 @@ class ViewCaptureSession extends ViewRecord
         Notification::make()->title($session->keep_forever ? 'Kept: never deleted automatically' : 'Deleted after the usual time again')->success()->send();
     }
 
-    /** The Client chip: file the recording under a client (or none), as the apps' Organise does. */
+    /** The Project chip: file the recording under a project (or none), as the apps' Organise does. */
     public function fileUnderAction(): Action
     {
         return Action::make('fileUnder')
-            ->label('Client')
-            ->modalHeading('File under a client')
+            ->label('Project')
+            ->modalHeading('File under a project')
             ->modalWidth('md')
             ->fillForm(fn (): array => ['client_id' => $this->session()->client_id])
             ->schema([
-                Select::make('client_id')->label('Client')->placeholder('No client')
+                Select::make('client_id')->label('Project')->placeholder('No project')
                     ->options(fn (): array => Client::query()->where('workspace_id', $this->session()->workspace_id)->where('user_id', $this->session()->user_id)->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all()),
             ])
             ->modalSubmitActionLabel('Save')
             ->action(function (array $data): void {
                 $session = app(LibraryOrganiser::class)->update($this->session(), ['client_id' => $data['client_id'] ?? null]);
-                Notification::make()->title($session->client !== null ? 'Filed under '.$session->client->name : 'No client')->success()->send();
+                Notification::make()->title($session->client !== null ? 'Filed under '.$session->client->name : 'No project')->success()->send();
             });
     }
 
@@ -547,7 +547,7 @@ class ViewCaptureSession extends ViewRecord
                 ...array_map(fn (string $label, int $i): TextInput => TextInput::make("names.{$i}")
                     ->label("Name for “{$label}”")->placeholder($label)->maxLength(TranscriptEditor::MAX_SPEAKER_CHARS),
                     $this->speakerLabels(), array_keys($this->speakerLabels())),
-                Toggle::make('remember')->label('Use these names for this client’s next recordings')
+                Toggle::make('remember')->label('Use these names for this project’s next recordings')
                     ->visible(fn (): bool => $this->session()->client !== null),
             ])
             ->action(function (array $data): void {

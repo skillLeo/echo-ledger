@@ -29,7 +29,7 @@
 
     @if ($recordings === [])
         <div class="el-empty">
-            <span class="el-empty-icon">@svg('heroicon-o-play-circle', ['aria-hidden' => 'true'])</span>
+            <span class="el-empty-icon">@svg('heroicon-o-film', ['aria-hidden' => 'true'])</span>
             @if (trim($this->search) !== '')
                 <p class="el-empty-title">No recordings match “{{ $this->search }}”</p>
                 <p class="el-empty-text">Try other words: titles, callers and transcripts are searched.</p>

@@ -13,6 +13,7 @@ use App\Models\Recording;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\Screen;
 use App\Models\Workspace;
+use App\Services\Storage\RecordingFiles;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -144,15 +145,13 @@ final class RetentionPolicy
             $query->whereHas('captureSession', fn (Builder $q) => $q->withTrashed()->where('workspace_id', $workspaceId)->ofPerson());
             $screens->whereIn('capture_session_id', CaptureSession::withTrashed()->where('workspace_id', $workspaceId)->ofPerson()->select('id'));
         }
-        $root = Storage::disk('recordings')->path('');
-        $free = is_dir($root) ? @disk_free_space($root) : false;
-        $total = is_dir($root) ? @disk_total_space($root) : false;
+        $space = app(RecordingFiles::class)->diskSpace();
 
         return [
             'recordings_bytes' => (int) $query->sum('stored_size_bytes') + (int) $screens->sum(DB::raw('COALESCE(stored_bytes, bytes)')),
             'recordings_count' => $query->count(),
-            'disk_free_bytes' => $free === false ? null : (int) $free,
-            'disk_total_bytes' => $total === false ? null : (int) $total,
+            'disk_free_bytes' => $space['free'],
+            'disk_total_bytes' => $space['total'],
         ];
     }
 }

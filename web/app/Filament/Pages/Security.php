@@ -15,6 +15,7 @@ use App\Services\Passkeys;
 use App\Services\WebSessions;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
@@ -40,6 +41,8 @@ class Security extends Page implements HasTable
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;
+
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::ShieldCheck;
 
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
@@ -122,18 +125,22 @@ class Security extends Page implements HasTable
                 TextColumn::make('created_at')->label('When')->dateTime('M j, Y · g:i A'),
                 TextColumn::make('event')->label('Event')->badge()->formatStateUsing(fn (string $state): string => AuditLog::label($state))
                     ->color(fn (string $state): string => match ($state) {
-                        'login_failed', 'session_deleted', 'device_revoked', 'mfa_disabled', 'passkey_removed' => 'danger',
-                        'credentials_changed', 'password_changed', 'share_created' => 'warning',
+                        'login_failed', 'session_deleted', 'device_revoked', 'mfa_disabled', 'passkey_removed', 'connector_token_reused' => 'danger',
+                        'credentials_changed', 'password_changed', 'share_created', 'connector_connected' => 'warning',
                         default => 'gray',
                     }),
                 TextColumn::make('summary')->label('What')->limit(80)->wrap(),
                 TextColumn::make('actor')->label('By')->formatStateUsing(fn (AuditEvent $record): string => self::actorLabel($record)),
                 TextColumn::make('ip')->label('IP address')->placeholder('—')->toggleable(),
             ])
+            // The filter button's badge shows once a filter is on, not as a 0 (see the theme).
+            ->filtersTriggerAction(fn (Action $action, Table $table): Action => $action
+                ->extraAttributes(fn (): array => ['data-active-filters' => (string) $table->getActiveFiltersCount()]))
             ->filters([
                 SelectFilter::make('event')->label('Event')->options(AuditLog::EVENTS),
             ])
             ->paginated([25, 50, 100])
+            ->emptyStateIcon(Heroicon::OutlinedShieldCheck)
             ->emptyStateHeading('Nothing recorded yet');
     }
 
@@ -142,6 +149,8 @@ class Security extends Page implements HasTable
         return match ($event->actor) {
             'device' => Device::query()->whereKey($event->device_id)->value('name') ?? 'A removed device',
             'web' => 'Console',
+            // Since v1.5: the app the connector's call came from ("Claude").
+            'connector' => (string) ($event->meta['client'] ?? 'A connected app'),
             default => 'EchoLedger',
         };
     }

@@ -12,6 +12,7 @@ use App\Models\Screen;
 use App\Models\Transcript;
 use App\Support\UrduText;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -35,17 +36,28 @@ final class LibrarySearch
     public string $engine = 'like';
 
     /**
-     * @param  array{client_id?: string|null, source_app?: string|null, source_device?: string|null, from?: string|null,
-     *     to?: string|null, tag?: string|null, bookmarked?: bool, status?: string|null}  $filters
+     * @param  array{client_id?: string|null, client_ids?: list<string>, source_app?: string|null, source_device?: string|null,
+     *     from?: string|null, to?: string|null, tag?: string|null, bookmarked?: bool, status?: string|null}  $filters
      * @return array{items: Collection<int, CaptureSession>, hits: array<string, array{hits: list<array<string, mixed>>, count: int}>, more: bool}
      */
     public function search(int $workspaceId, string $query, array $filters = [], int $limit = 20, int $page = 1): array
+    {
+        return $this->searchIn($this->filtered($workspaceId, $filters), $query, $limit, $page);
+    }
+
+    /**
+     * The same search over a query the caller has already limited to what the person may read: the connector's
+     * search over what teammates sent them (since v1.5), which the library's search leaves out.
+     *
+     * @param  Builder<CaptureSession>  $base
+     * @return array{items: Collection<int, CaptureSession>, hits: array<string, array{hits: list<array<string, mixed>>, count: int}>, more: bool}
+     */
+    public function searchIn(Builder $base, string $query, int $limit = 20, int $page = 1): array
     {
         $terms = self::terms($query);
         // Transcripts are searched in their folded form (Urdu spelling variants made one, App\Support\UrduText), with
         // folded terms; titles keep the original letters and the original terms.
         $folded = array_values(array_unique(array_map(UrduText::fold(...), $terms)));
-        $base = $this->filtered($workspaceId, $filters);
         $this->engine = 'like';
         // Since v1.5 the text and description of screen moments are searched too, like transcripts.
         $matching = (clone $base)->where(fn (Builder $q) => $q
@@ -58,9 +70,14 @@ final class LibrarySearch
                 ->orWhereHas('screens', fn (Builder $s) => $s->whereFullText('search_text', self::booleanQuery($folded), ['mode' => 'boolean']))
                 ->orWhere(fn (Builder $title) => $this->likeAll($title, 'title', $terms)));
             // The engine is chosen for the whole query, never per page, so paging stays consistent.
-            if ((clone $fulltext)->exists()) {
-                $matching = $fulltext;
-                $this->engine = 'fulltext';
+            try {
+                if ((clone $fulltext)->exists()) {
+                    $matching = $fulltext;
+                    $this->engine = 'fulltext';
+                }
+            } catch (QueryException $e) {
+                // LIKE still finds the words; the log shows what the boolean query got wrong.
+                report($e);
             }
         }
         $sessions = $this->page($matching, $limit, $page);
@@ -272,6 +289,10 @@ final class LibrarySearch
                 $query->where($field, $filters[$field]);
             }
         }
+        // Since v1.5: a project and its subfolders (the connector).
+        if (isset($filters['client_ids'])) {
+            $query->whereIn('client_id', $filters['client_ids']);
+        }
         if (! empty($filters['from'])) {
             $query->where('started_at', '>=', Carbon::parse($filters['from'])->startOfDay()->utc());
         }
@@ -329,14 +350,16 @@ final class LibrarySearch
     }
 
     /**
-     * Boolean-mode query: every term required, phrases quoted.
+     * Boolean-mode query: every term required. Only plain words go in bare: inside a word `@`, `-`, `*` and the like are
+     * operators, which is a syntax error for an email address and "not this word" for "well-known". A quoted phrase
+     * finds the same words in order.
      *
      * @param  list<string>  $terms
      */
     public static function booleanQuery(array $terms): string
     {
         return implode(' ', array_map(
-            fn (string $t): string => str_contains($t, ' ') ? '+"'.str_replace('"', '', $t).'"' : '+'.$t,
+            fn (string $t): string => preg_match('/^[\p{L}\p{N}\p{M}]+$/u', $t) === 1 ? '+'.$t : '+"'.str_replace('"', '', $t).'"',
             $terms,
         ));
     }

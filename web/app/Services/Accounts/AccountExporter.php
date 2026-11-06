@@ -19,9 +19,9 @@ use App\Models\Screen;
 use App\Models\Transcript;
 use App\Models\User;
 use App\Services\AuditLog;
-use App\Services\RecordingCipher;
 use App\Services\Screens\ScreenStore;
 use App\Services\SettingsRepository;
+use App\Services\Storage\RecordingFiles;
 use App\Services\TranscriptExporter;
 use App\Services\Views\TranscriptViews;
 use Illuminate\Database\Eloquent\Collection;
@@ -76,7 +76,7 @@ final class AccountExporter
     private array $usedNames = [];
 
     public function __construct(
-        private readonly RecordingCipher $cipher,
+        private readonly RecordingFiles $files,
         private readonly TranscriptExporter $exporter,
         private readonly TranscriptViews $views,
         private readonly ScreenStore $screens,
@@ -114,10 +114,8 @@ final class AccountExporter
             $this->close();
 
             $relative = 'exports/'.$export->id.'.zip.elr';
-            $disk = Storage::disk('recordings');
-            $disk->makeDirectory('exports');
             $bytes = (int) filesize($this->zipPath);
-            $this->cipher->encryptFile($this->zipPath, $disk->path($relative), $export->id);
+            $this->files->encryptInto($this->zipPath, $relative, $export->id);
         } finally {
             File::deleteDirectory($work);
         }
@@ -155,7 +153,7 @@ final class AccountExporter
             }
             $name = "{$folder}/audio-{$recording->role->value}.".(self::AUDIO[strtolower($recording->mime)] ?? 'audio');
             $plain = $work.'/'.$recording->id.'.audio';
-            $bytes = $this->cipher->decryptToFile(Storage::disk('recordings')->path($recording->stored_path), $plain, $recording->id);
+            $bytes = $this->files->decryptToFile($recording->stored_path, $plain, $recording->id);
             // Audio is compressed already: stored as it is.
             $this->addPlain($plain, $name, $bytes, store: true);
             $files[] = $name;
@@ -255,7 +253,7 @@ final class AccountExporter
                 } elseif (Storage::disk('recordings')->exists($file->path)) {
                     $name = $this->uniqueName("{$folder}/files/".self::safe($file->name, 80), file: true);
                     $plain = $work.'/'.$file->id.'.file';
-                    $this->addPlain($plain, $name, $this->cipher->decryptToFile(Storage::disk('recordings')->path($file->path), $plain, $file->id));
+                    $this->addPlain($plain, $name, $this->files->decryptToFile($file->path, $plain, $file->id));
                 } else {
                     continue;
                 }

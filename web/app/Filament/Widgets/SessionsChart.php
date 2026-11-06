@@ -23,7 +23,7 @@ class SessionsChart extends ChartWidget
         return ConsoleAccess::full();
     }
 
-    protected ?string $heading = 'Sessions · last 14 days';
+    protected ?string $heading = 'Recordings · last 14 days';
 
     protected ?string $pollingInterval = null;
 

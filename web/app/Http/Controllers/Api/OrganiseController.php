@@ -168,7 +168,7 @@ final class OrganiseController extends Controller
     {
         $client = Client::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
         if (! $client instanceof Client) {
-            throw new ApiError(404, 'client_not_found', 'Client not found.');
+            throw new ApiError(404, 'client_not_found', 'Project not found.');
         }
 
         return $client;

@@ -61,7 +61,72 @@ RECORDINGS_S3_ENDPOINT=https://<the provider's S3 endpoint>
 RECORDINGS_S3_PATH_STYLE=true
 ```
 
-Leave `RECORDINGS_DRIVER` unset (or `local`) to keep them on the VPS disk.
+Leave `RECORDINGS_DRIVER` unset (or `local`) to keep them on the VPS disk. The region is what the provider says (`auto`
+on Cloudflare R2), and `_ENDPOINT` can stay empty on Amazon S3. Keep `_PATH_STYLE=true` unless the provider asks for the
+bucket's name in the host (`<bucket>.<endpoint>`).
+
+Check the settings before anything depends on them. This writes, reads, lists and deletes a small test file:
+
+```
+php artisan config:cache
+php artisan recordings:check-storage
+```
+
+- **The bucket stays private.** Files are never served from it: every download goes through the server, which decrypts
+  it. Give the key reading, writing, deleting and listing, on this one bucket only.
+- **What the storage company can see:** encrypted files, their sizes and their dates. Upload parts, which wait
+  unencrypted on the server's own disk until the whole file is in, are encrypted one by one on the way to a bucket. The
+  keys (`files/2026/11/<id>.elr`, `screens/...`, `client-files/...`, `exports/...`) hold only ids.
+- **Temp space:** the server still needs room in `storage/app/private/tmp`. A file is copied there to be decrypted, played
+  or sent to a speech engine, and goes as soon as that is done. Plan for twice the largest recording per queue worker
+  (2 GB by default), and for an account export, twice the account's size.
+- **Speed:** playing a recording fetches and decrypts the whole file for each request, also for a range, as it does from
+  the disk; from a bucket that adds the download. Choose a bucket in the VPS's region.
+- **Failed deletes:** a delete the bucket refuses after three tries is retried by `stt:reconcile` from
+  the `storage_deletions` table (5 minutes, doubling up to 6 hours) until it goes. Upload parts a failed delete left are
+  removed by the same command after 24 hours.
+- **A bucket that is down for a while:** assembling a finished upload tries again after 1 and after 5 more minutes, then
+  asks for the file again (a device keeps its audio until the recording is ready). Reading a project file's text tries as
+  often, then marks the file failed. A document sent through a request link keeps its parts: choosing the file again goes on.
+- **Add two rules at the provider:**
+  - Abort unfinished multipart uploads after a day. A file from 64 MB goes up in parts; a server that dies halfway leaves
+    them in the bucket, billed but not visible.
+  - **Old versions must go, or erasing does not erase.** Erasing sends a plain delete. On a bucket that keeps versions
+    that only hides the file: the old version stays, and this server's key still opens it. With versioning on, add a rule
+    that expires noncurrent versions and leftover delete markers after at most 30 days, the time the database backups are
+    kept. Backblaze B2 keeps every version unless told otherwise: set its lifecycle to "Keep only the last version". With
+    versioning off there is nothing to do. `recordings:check-storage` warns when versioning is on, or when the key may not
+    read that setting; it cannot see the rule, so check that at the provider.
+- **The console's "Server disk" meter disappears,** and `GET /api/storage` answers `null` for the disk fields: a bucket has
+  no size to report. What the recordings take is still counted, from the database.
+
+Moving existing files: keep the keys, and leave the unfinished upload parts out (they are not encrypted):
+
+```
+rclone copy storage/app/private/recordings remote:<bucket> --exclude "parts/**" --exclude "request-parts/**"
+```
+
+Run it once while the site works, once more after setting the site to maintenance, then switch `RECORDINGS_DRIVER` and
+check a recording plays. Uploads that were under way ask for their parts again and carry on by themselves. Keep the old
+folder until a backup of the bucket exists.
+
+Back up the bucket as well: `APP_KEY` and `ECHOLEDGER_RECORDINGS_KEY` never go there, so a copy of it is as safe as the
+bucket itself, and useless without those two keys. A copy holds erased files for as long as it is kept: 30 days at most,
+as with the rule above.
+
+## Claude and ChatGPT connector
+
+The connector signs its tokens with a key pair in `storage/` (web/DEPLOY.md, "Claude and ChatGPT connector"). They do
+not come with `storage/app/private`. Copy them from the old server when you move, so nobody has to connect again:
+
+```
+rsync -a old-server:/path/to/web/storage/oauth-private.key old-server:/path/to/web/storage/oauth-public.key /var/www/echoledger/web/storage/
+chown www-data:www-data /var/www/echoledger/web/storage/oauth-*.key
+chmod 600 /var/www/echoledger/web/storage/oauth-*.key
+```
+
+On a new server with nothing to copy, run this once instead: `sudo -u www-data php artisan passport:keys`, then the same
+`chmod`. Never commit them. Nginx below already lets `/.well-known/` through to the app.
 
 ## Queue workers (Supervisor)
 
@@ -119,9 +184,10 @@ server {
 - **Database:** every night, `mysqldump --single-transaction --routines --triggers`, compressed, copied to the
   backup provider and kept for 30 days.
 - **Recordings, screens and files** (when on the disk): every night with `restic` or `borg` to the backup provider.
-  They are already encrypted. Object storage gets bucket versioning instead.
+  They are already encrypted. Object storage gets bucket versioning instead, with the rule that removes old versions
+  after 30 days ("Add two rules at the provider" above).
 - **Keys:** keep `APP_KEY` and `ECHOLEDGER_RECORDINGS_KEY` offline in a password manager. A backup without the
-  recordings key cannot be played.
+  recordings key cannot be played. Losing `storage/oauth-*.key` only means making new ones: connected apps sign in again.
 - Restore one backup to a scratch database once a month, to know the backups work.
 
 ## Monitoring
@@ -139,7 +205,8 @@ server {
    for the device apps"). Make the VPS's TLS key first, add its pin to Settings → Device security on the **current**
    server, and wait until every device has synced once (a day). Otherwise the apps refuse the new server.
 3. Set up the VPS: the software above, the code at the same commit as production, `.env` (copied, with the changes
-   above), `composer install --no-dev --optimize-autoloader`, `public/build` uploaded, Nginx, Supervisor and cron.
+   above), `composer install --no-dev --optimize-autoloader`, `public/build` uploaded, the connector's keys (above),
+   Nginx, Supervisor and cron.
 4. **Rehearsal:** copy the database and `storage/app/private` from the shared host and run `php artisan migrate
    --force`, which should have nothing to do. Open the console through a hosts-file entry and play an old
    recording: that proves the recordings key works.

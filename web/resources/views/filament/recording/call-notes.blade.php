@@ -1,5 +1,5 @@
 {{--
-    Call notes of a client's recording (v1.4): only the sections with something in them, every line opening the
+    Call notes of a recording in a project (v1.4): only the sections with something in them, every line opening the
     recording at its moment, unsure ones marked "verify". "Write notes" (again) in English or Roman Urdu.
 --}}
 @php

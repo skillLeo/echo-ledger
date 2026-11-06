@@ -84,7 +84,7 @@ describe('overview', function () {
         $html = workspacePage($this)->html();
 
         expect($html)->toContain('role="switch"')->toContain('aria-checked="true"')
-            ->toContain('AI this month: $0.42 of $5.00 · this client $0.42')
+            ->toContain('AI this month: $0.42 of $5.00 · this project $0.42')
             ->toContain('An online shop')->toContain('Login page')
             ->toContain('Decisions')->toContain('Open questions')->toContain('Which payment provider?')
             ->toContain('Launch on November 15')->toContain('verify')
@@ -117,7 +117,7 @@ describe('overview', function () {
         Queue::fake();
         app(CredentialVault::class)->forget('anthropic', 'api_key');
 
-        workspacePage($this)->call('remakeBrief')->assertNotified('Add your Anthropic key in API Credentials to use client notes and Ask.');
+        workspacePage($this)->call('remakeBrief')->assertNotified('AI is not set up on this server yet. Whoever runs it adds the Anthropic key under API Credentials.');
         Queue::assertNothingPushed();
     });
 

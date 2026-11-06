@@ -34,7 +34,7 @@ class ContactsRelationManager extends RelationManager
                 ->helperText('As it shows on calls: the WhatsApp name or the name in your phone.'),
             TextInput::make('phone')->tel()->maxLength(40)->helperText('Any format: +92 300 1234567 and 0300-1234567 match.'),
             TextInput::make('email')->email()->maxLength(190)->helperText('Matches calendar invitations.'),
-            Select::make('language')->label('Language')->options(LanguageChoice::selectOptions())->placeholder("The client's language")
+            Select::make('language')->label('Language')->options(LanguageChoice::selectOptions())->placeholder("The project's language")
                 ->dehydrateStateUsing(fn (?string $state): ?string => LanguageChoice::normalize($state)),
         ]);
     }

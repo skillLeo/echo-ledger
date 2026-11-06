@@ -127,7 +127,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 22;
+const LATER_MIGRATIONS = 28;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
@@ -203,7 +203,7 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
 const PHASE2_STEPS = 5;
 
 /** Migrations that came after them (rolled back first); add yours here as for LATER_MIGRATIONS. */
-const AFTER_PHASE2 = 7;
+const AFTER_PHASE2 = 13;
 
 /** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
 function seedPhase2Library(Connection $db): array
@@ -301,7 +301,7 @@ it('refuses to roll projects back while one person has two projects of the same 
 /** The v1.5 Phase 3 migration (screen moments), and how many came after it (rolled back first). */
 const PHASE3_STEPS = 1;
 
-const AFTER_PHASE3 = 5;
+const AFTER_PHASE3 = 11;
 
 it('runs the v1.5 Phase 3 migration down and up again on a library with screen moments', function () {
     $db = cycleConnection();
@@ -348,7 +348,7 @@ it('runs the v1.5 Phase 3 migration down and up again on a library with screen m
 /** The v1.5 account migrations (accounts, data exports), and how many came after them (rolled back first). */
 const ACCOUNT_STEPS = 2;
 
-const AFTER_ACCOUNTS = 3;
+const AFTER_ACCOUNTS = 9;
 
 it('runs the v1.5 account migrations down and up again without touching the library', function () {
     $db = cycleConnection();
@@ -404,7 +404,57 @@ it('runs the v1.5 account migrations down and up again without touching the libr
 });
 
 /** The v1.5 plans, roles and privacy migration; add later ones to the count as for LATER_MIGRATIONS. */
-const AFTER_PLANS = 2;
+const AFTER_PLANS = 8;
+
+/** Passport's four tables and Connected apps (v1.5, the Claude and ChatGPT connector); add later ones as for LATER_MIGRATIONS. */
+const CONNECTOR_STEPS = 5;
+
+const AFTER_CONNECTOR = 1;
+
+const CONNECTOR_TABLES = ['oauth_auth_codes', 'oauth_access_tokens', 'oauth_refresh_tokens', 'oauth_clients', 'connected_apps'];
+
+it('runs the v1.5 connector migrations down and up again without touching the library', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    $seeded = seedPhase2Library($db);
+    $now = now();
+    $client = (string) Str::uuid();
+    $db->table('oauth_clients')->insert(['id' => $client, 'name' => 'Claude', 'redirect_uris' => '["https://claude.ai/api/mcp/auth_callback"]', 'grant_types' => '["authorization_code","refresh_token"]', 'revoked' => false, 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('oauth_auth_codes')->insert(['id' => str_repeat('a', 80), 'user_id' => $seeded['user'], 'client_id' => $client, 'scopes' => '["mcp:use"]', 'revoked' => false, 'expires_at' => $now->copy()->addMinutes(10)]);
+    $db->table('oauth_access_tokens')->insert(['id' => str_repeat('b', 80), 'user_id' => $seeded['user'], 'client_id' => $client, 'scopes' => '["mcp:use"]', 'revoked' => false, 'created_at' => $now, 'updated_at' => $now, 'expires_at' => $now->copy()->addHour()]);
+    $db->table('oauth_refresh_tokens')->insert(['id' => str_repeat('c', 80), 'access_token_id' => str_repeat('b', 80), 'revoked' => false, 'expires_at' => $now->copy()->addDays(30)]);
+    $db->table('connected_apps')->insert(['user_id' => $seeded['user'], 'client_id' => $client]);
+    expect($db->table('connected_apps')->value('created_at'))->not->toBeNull();
+    // One row per person and app.
+    expect(fn () => $db->table('connected_apps')->insert(['user_id' => $seeded['user'], 'client_id' => $client]))->toThrow(QueryException::class);
+
+    cycleArtisan('migrate:rollback', ['--step' => CONNECTOR_STEPS + AFTER_CONNECTOR]);
+    $schema = $db->getSchemaBuilder();
+    foreach (CONNECTOR_TABLES as $table) {
+        expect($schema->hasTable($table))->toBeFalse($table);
+    }
+    // Nothing else is lost.
+    expect($db->table('users')->count())->toBe(2)
+        ->and($db->table('capture_sessions')->count())->toBe(1)
+        ->and($db->table('clients')->count())->toBe(2)
+        ->and($db->table('share_links')->count())->toBe(3);
+
+    cycleArtisan('migrate');
+    foreach (CONNECTOR_TABLES as $table) {
+        expect($schema->hasTable($table))->toBeTrue($table)->and($db->table($table)->count())->toBe(0);
+    }
+    // An account's connections go with it.
+    $db->table('connected_apps')->insert(['user_id' => $seeded['user'], 'client_id' => $client]);
+    $db->table('capture_sessions')->delete();
+    $db->table('request_links')->delete();
+    $db->table('users')->where('id', $seeded['user'])->delete();
+    expect($db->table('connected_apps')->count())->toBe(0);
+})->after(function () {
+    if (config('database.connections.cycle.driver') === 'sqlite') {
+        DB::disconnect('cycle');
+        @unlink((string) config('database.connections.cycle.database'));
+    }
+});
 
 it('runs the v1.5 plans and roles migration down and up again without touching the library', function () {
     $db = cycleConnection();

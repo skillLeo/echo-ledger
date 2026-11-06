@@ -58,7 +58,7 @@ it('lists the steps in order with their links', function () {
             'Turn on two-factor sign-in',
             'Add a provider key',
             'Set certificate pins',
-            'Pair your first device',
+            'Sign in your first device',
             'Choose how long to keep recordings',
         ])
         ->and($steps[0]['url'])->toEndWith('/admin/security')

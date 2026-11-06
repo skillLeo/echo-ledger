@@ -30,7 +30,7 @@
         <label class="el-sr" for="instructions-name">Name</label>
         <input id="instructions-name" type="text" class="el-field-input" wire:model="instructionsName" maxlength="200" placeholder="Name (optional), like “Scope from the email”">
         <label class="el-sr" for="instructions-text">Instructions</label>
-        <textarea id="instructions-text" class="el-field-input" rows="5" wire:model="instructions" placeholder="Paste the client’s brief, an email or your own notes"></textarea>
+        <textarea id="instructions-text" class="el-field-input" rows="5" wire:model="instructions" placeholder="Paste the brief, an email or your own notes"></textarea>
         @error('instructions')<p class="el-caption" role="alert" style="color: var(--danger)">{{ $message }}</p>@enderror
         <div><button type="submit" class="el-pill el-pill-primary" wire:loading.attr="disabled" wire:target="addInstructions">Add instructions</button></div>
     </form>

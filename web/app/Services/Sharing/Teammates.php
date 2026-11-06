@@ -24,6 +24,7 @@ use App\Services\AuditLog;
 use App\Services\ChunkedUploadService;
 use App\Services\Projects\ProjectTree;
 use App\Services\Screens\ScreenStore;
+use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use App\Support\UrduText;
@@ -206,7 +207,7 @@ final class Teammates
             });
         } catch (Throwable $e) {
             // The rows were rolled back: the encrypted copies already written must not stay behind.
-            Storage::disk('recordings')->delete($this->writtenFiles());
+            app(RecordingFiles::class)->erase($this->writtenFiles());
             throw $e;
         }
         // The one id of the copy, a project's or a recording's.

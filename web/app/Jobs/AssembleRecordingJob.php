@@ -8,6 +8,7 @@ use App\Enums\UploadStatus;
 use App\Models\Recording;
 use App\Services\ChunkedUploadService;
 use App\Services\FinalTranscriptCoordinator;
+use App\Services\Storage\RecordingFiles;
 use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -27,6 +28,17 @@ final class AssembleRecordingJob implements ShouldQueue
     public const LOCK_SECONDS = 900;
 
     public function __construct(public readonly string $recordingId) {}
+
+    /**
+     * On a bucket the tries wait: a few seconds of trouble there are routine, and three tries in a row would end in
+     * failed() with a whole upload thrown away. On the server's own disk a failure tells the device at once, as ever.
+     *
+     * @return list<int>
+     */
+    public function backoff(): array
+    {
+        return app(RecordingFiles::class)->isLocal() ? [] : [60, 300];
+    }
 
     /** One assembly per recording at a time: the inline `complete`, the queued retry and `recordings:recover`. */
     public static function lock(string $recordingId): Lock

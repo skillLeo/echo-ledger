@@ -42,7 +42,7 @@
                 {{ $detail->started_at->copy()->setTimezone($zone)->format('M j · g:i A') }}@if ($detail->duration_ms) · {{ \App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable::duration($detail->duration_ms) }}@endif
             </p>
             <div class="el-chips">
-                <span class="el-chip el-chip-static @if ($detail->client) el-on @endif">@svg('heroicon-o-user', ['aria-hidden' => 'true'])<span>{{ $detail->client?->name ?? 'No client' }}</span></span>
+                <span class="el-chip el-chip-static @if ($detail->client) el-on @endif">@svg($detail->client ? 'heroicon-s-folder' : 'heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $detail->client?->name ?? 'No project' }}</span></span>
                 <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ \App\Stt\LanguageChoice::label($final->language ?? $detail->language) }}</span></span>
                 @foreach ($detail->labels as $label)
                     <span class="el-chip el-chip-static">@svg('heroicon-o-tag', ['aria-hidden' => 'true'])<span>{{ $label->label }}</span></span>

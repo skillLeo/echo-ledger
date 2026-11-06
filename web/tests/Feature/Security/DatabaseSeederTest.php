@@ -38,6 +38,12 @@ it('creates the local demo admin with the documented password only in local deve
     expect(Hash::check(DatabaseSeeder::LOCAL_DEMO_PASSWORD, seededAdmin()->password))->toBeTrue();
 });
 
+it('confirms the admin\'s email, as echoledger:make-admin does, so the console opens', function () {
+    seedAs('local', []);
+
+    expect(seededAdmin()->email_verified_at)->not->toBeNull();
+});
+
 it('creates a new admin with a random password elsewhere when no password is configured', function () {
     seedAs('production', []);
 

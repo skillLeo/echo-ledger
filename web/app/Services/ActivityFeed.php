@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Enums\SourceDevice;
 use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
@@ -67,7 +68,7 @@ final class ActivityFeed
             }
         });
         Screen::created(fn (Screen $s) => $feed()->planLimitChanged($s->workspace_id, self::LIMIT_STORAGE));
-        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->name} paired", 'It can now record, sync and see the library.', null, 'heroicon-o-device-phone-mobile'));
+        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->name} signed in", 'It can now record, sync and see the library.', null, $d->sourceDevice() === SourceDevice::Desktop ? 'heroicon-o-computer-desktop' : 'heroicon-o-device-phone-mobile'));
         UsageLedgerEntry::created(fn (UsageLedgerEntry $e) => $feed()->budgetChanged($e));
     }
 
@@ -169,7 +170,7 @@ final class ActivityFeed
             }
             $name = $limit === self::LIMIT_STORAGE ? 'Storage' : 'AI credits';
             [$title, $body] = $kind === 'budget_reached'
-                ? ["{$name} of your plan used up", $limit === self::LIMIT_STORAGE ? 'New recordings stay on the device until there is room or the plan is bigger.' : 'Client notes and Ask wait until next month or a bigger plan.']
+                ? ["{$name} of your plan used up", $limit === self::LIMIT_STORAGE ? 'New recordings stay on the device until there is room or the plan is bigger.' : 'Project notes and Ask wait until next month or a bigger plan.']
                 : ["{$name} at {$warnAt}% of your plan", $limit === self::LIMIT_STORAGE ? Number::fileSize((int) $used, precision: 1).' used.' : '$'.number_format($used, 2).' used this month.'];
             $start = (string) UsagePeriod::current($settings)['start']->toIso8601String();
             foreach ($this->owners($workspaceId) as $user) {
@@ -218,7 +219,7 @@ final class ActivityFeed
     public function sharedWithYou(User $recipient, string $title, string $body, ?string $sessionId): void
     {
         try {
-            $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-inbox-arrow-down')
+            $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-users')
                 ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'admin'), shouldOpenInNewTab: false)->markAsRead()]);
             $recipient->notifyNow($notification->toDatabase());
         } catch (Throwable $e) {

@@ -22,9 +22,11 @@ use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationGroup;
-use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
+use Filament\Support\Facades\FilamentIcon;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\View\TablesIconAlias;
 use Filament\View\PanelsRenderHook;
 use Filament\Widgets\AccountWidget;
 use Illuminate\Contracts\View\View;
@@ -37,6 +39,16 @@ use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class AdminPanelProvider extends PanelProvider
 {
+    public function boot(): void
+    {
+        // Filament's own table buttons and its empty table: outlined at rest, like everything else (docs/DESIGN_SYSTEM.md).
+        FilamentIcon::register([
+            TablesIconAlias::ACTIONS_FILTER => Heroicon::OutlinedFunnel,
+            TablesIconAlias::ACTIONS_COLUMN_MANAGER => Heroicon::OutlinedViewColumns,
+            TablesIconAlias::EMPTY_STATE => Heroicon::OutlinedRectangleStack,
+        ]);
+    }
+
     public function panel(Panel $panel): Panel
     {
         return $panel
@@ -46,7 +58,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandName('EchoLedger')
             // The brand mark (since v1.5, docs/design/brand) next to the name, and as the tab's icon.
             ->brandLogo(fn (): View => view('filament.brand'))
-            ->brandLogoHeight('1.75rem')
+            ->brandLogoHeight('1.5rem')
             ->favicon(asset('favicon.svg'))
             ->login(Login::class)
             // Sign-up (since v1.5): the page exists, but answers 404 until Settings → "Who can sign up" opens it.
@@ -60,9 +72,8 @@ class AdminPanelProvider extends PanelProvider
             // Sign in with Google (since v1.5), once API Credentials → Google sign-in is filled in.
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn (): View => view('filament.auth.google-login'))
             ->renderHook(PanelsRenderHook::AUTH_REGISTER_FORM_AFTER, fn (): View => view('filament.auth.google-login', ['label' => 'Sign up with Google']))
-            // Since v1.5: the Terms and the Privacy Policy under every page and the sign-in page.
+            // Since v1.5: the Terms and the Privacy Policy under every page and the sign-in page (both layouts have this hook).
             ->renderHook(PanelsRenderHook::FOOTER, fn (): View => view('filament.legal-links'))
-            ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_END, fn (): View => view('filament.legal-links'))
             // Since v1.5: members and viewers while the console is closed to them are pointed to the apps.
             ->renderHook(PanelsRenderHook::PAGE_START, fn (): View => view('filament.use-the-apps'))
             // Since v1.5: the workspace switcher at the top of the sidebar, for people in more than one.
@@ -94,7 +105,7 @@ class AdminPanelProvider extends PanelProvider
             // Self-hosted font and initials avatars: the console asks no third-party host for anything.
             ->font('Inter', provider: LocalInterFontProvider::class)
             ->defaultAvatarProvider(InitialsAvatarProvider::class)
-            // Ctrl / Cmd + K: pages, recordings (title and transcript) and clients.
+            // Ctrl / Cmd + K: pages, recordings (title and transcript) and projects.
             ->globalSearch(CommandPalette::class)
             ->globalSearchKeyBindings(['mod+k'])
             ->globalSearchFieldSuffix(fn (): string => 'Ctrl K')
@@ -107,9 +118,6 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
-            ->pages([
-                Dashboard::class,
-            ])
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
             ->widgets([
                 AccountWidget::class,

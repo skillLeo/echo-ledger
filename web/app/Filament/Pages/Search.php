@@ -39,6 +39,8 @@ class Search extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedMagnifyingGlass;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::MagnifyingGlass;
+
     protected static string|UnitEnum|null $navigationGroup = 'More';
 
     protected static ?int $navigationSort = 0;
@@ -69,7 +71,7 @@ class Search extends Page
                     $this->page = 1;
                 }),
             Grid::make(['default' => 2, 'lg' => 4])->schema([
-                Select::make('client_id')->label('Client')->live()->placeholder('Any client')
+                Select::make('client_id')->label('Project')->live()->placeholder('Any project')
                     ->options(fn () => Client::query()->where('workspace_id', $workspaceId)->where('user_id', CurrentWorkspace::userId())->orderBy('name')->pluck('name', 'id')->all()),
                 Select::make('source_app')->label('App')->live()->placeholder('Any app')->options(SourceApp::class),
                 Select::make('source_device')->label('Device')->live()->placeholder('Any device')->options(SourceDevice::class),

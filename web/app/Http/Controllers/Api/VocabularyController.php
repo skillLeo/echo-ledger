@@ -60,7 +60,7 @@ final class VocabularyController extends Controller
             $existing = $client->keytermList();
             if (! in_array(mb_strtolower($term), array_map('mb_strtolower', $existing), true)) {
                 if (count($existing) >= self::MAX_CLIENT_KEYTERMS) {
-                    throw new ApiError(409, 'vocabulary_full', 'This client already has 200 keyterms. Remove one first.');
+                    throw new ApiError(409, 'vocabulary_full', 'This project already has 200 keyterms. Remove one first.');
                 }
                 $client->keyterms()->create(['term' => $term]);
             }
@@ -119,7 +119,7 @@ final class VocabularyController extends Controller
         /** @var Device $device */
         $device = $request->user();
         if (! $device->user->is_super_admin) {
-            throw new ApiError(403, 'not_allowed', 'Only the server admin can change the shared vocabulary. Add the words to a client instead.');
+            throw new ApiError(403, 'not_allowed', 'Only the server admin can change the shared vocabulary. Add the words to a project instead.');
         }
     }
 
@@ -129,7 +129,7 @@ final class VocabularyController extends Controller
         $device = $request->user();
         $client = Client::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if (! $client instanceof Client) {
-            throw new ApiError(404, 'client_not_found', 'Client not found.');
+            throw new ApiError(404, 'client_not_found', 'Project not found.');
         }
 
         return $client;

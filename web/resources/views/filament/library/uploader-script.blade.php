@@ -141,7 +141,7 @@
                 if (this.$refs.input) this.$refs.input.value = '';
             },
 
-            // One client and language for the whole batch; each file becomes its own recording.
+            // One project and language for the whole batch; each file becomes its own recording.
             start() {
                 for (const f of this.waiting) {
                     Object.assign(f, { clientId: this.clientId || null, language: this.language || null, state: 'queued', message: '' });

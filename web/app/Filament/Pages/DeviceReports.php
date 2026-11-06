@@ -32,6 +32,8 @@ class DeviceReports extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDevicePhoneMobile;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::DevicePhoneMobile;
+
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 8;

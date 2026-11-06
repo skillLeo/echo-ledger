@@ -202,7 +202,7 @@ describe('chunked upload', function () {
             ->assertStatus(422)->assertJsonPath('errors.size.0', 'This file is larger than the 2 GB limit.');
         $foreign = Client::factory()->create(['user_id' => $this->makeAdmin()->id]);
         uplStart($this, $bytes, 'call.wav', ['client_id' => $foreign->id])->assertStatus(422)
-            ->assertJson(['code' => 'client_not_found'])->assertJsonPath('errors.client_id.0', 'Choose one of your clients.');
+            ->assertJson(['code' => 'client_not_found'])->assertJsonPath('errors.client_id.0', 'Choose one of your projects.');
 
         expect(CaptureSession::query()->count())->toBe(0);
     });

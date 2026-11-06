@@ -31,9 +31,10 @@
         .uploads .name { overflow-wrap: anywhere; }
         .uploads .state { font-size: 13px; color: var(--muted); text-align: end; }
         .uploads .state.ok { color: #15803d; }
-        .uploads .state.bad { color: #e11d48; }
+        .uploads .state.bad { color: var(--danger); }
         .bar { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
-        .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+        .bar > span { display: block; height: 100%; width: 0; background: var(--accent); }
+        @media (prefers-reduced-motion: no-preference) { .bar > span { transition: width .2s; } }
     </style>
     @include('partials.sha256')
     <script>
@@ -65,7 +66,16 @@
                 return subtle() ? hex(await subtle().digest('SHA-256', bytes)) : new window.ElSha256().update(new Uint8Array(bytes)).hex();
             }
 
+            // A busy server or a moment's trouble with its storage is tried again with growing pauses, as the console's uploader does.
             async function call(url, body, headers) {
+                for (let attempt = 0; ; attempt++) {
+                    const res = await post(url, body, headers);
+                    if ((res.status !== 0 && res.status !== 429 && res.status < 500) || attempt >= 4) return res;
+                    await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+                }
+            }
+
+            async function post(url, body, headers) {
                 let response;
                 try {
                     response = await fetch(url, {
@@ -116,22 +126,32 @@
                 ui.say('Preparing…');
                 const sha = await hashFile(file);
                 let res = await call(cfg.store, JSON.stringify({ name: file.name, size: file.size, sha256: sha, type: file.type }), { 'Content-Type': 'application/json' });
-                if (res.status !== 200 && res.status !== 201) throw new Error(res.json.message || 'The file was not taken.');
+                if (res.status !== 200 && res.status !== 201) throw new Error(refusal(res));
                 const upload = res.json;
                 const base = cfg.store + '/' + upload.upload_id;
-                const missing = upload.missing_chunks;
-                let sent = upload.total_chunks - missing.length;
-                for (const index of missing) {
-                    ui.say('Sending… ' + Math.round(sent / upload.total_chunks * 100) + '%');
-                    const bytes = await file.slice(index * upload.chunk_size, (index + 1) * upload.chunk_size).arrayBuffer();
-                    res = await call(base + '/chunks/' + index, bytes, { 'Content-Type': 'application/octet-stream', 'Upload-Chunk-Sha256': await hashBytes(bytes) });
-                    if (res.status !== 200) throw new Error(res.json.message || 'The file was not taken.');
-                    sent++;
-                    ui.progress(sent / upload.total_chunks);
+                let missing = upload.missing_chunks;
+                for (let round = 0; ; round++) {
+                    let sent = upload.total_chunks - missing.length;
+                    for (const index of missing) {
+                        ui.say('Sending… ' + Math.round(sent / upload.total_chunks * 100) + '%');
+                        const bytes = await file.slice(index * upload.chunk_size, (index + 1) * upload.chunk_size).arrayBuffer();
+                        res = await call(base + '/chunks/' + index, bytes, { 'Content-Type': 'application/octet-stream', 'Upload-Chunk-Sha256': await hashBytes(bytes) });
+                        if (res.status !== 200) throw new Error(refusal(res));
+                        sent++;
+                        ui.progress(sent / upload.total_chunks);
+                    }
+                    ui.say('Finishing…');
+                    res = await call(base + '/complete', null, {});
+                    if (res.status === 200) return;
+                    // Parts the server no longer has (its files moved to other storage) go once more.
+                    if (round >= 2 || res.status !== 422 || res.json.code !== 'upload_incomplete') throw new Error(refusal(res));
+                    missing = res.json.missing_chunks;
                 }
-                ui.say('Finishing…');
-                res = await call(base + '/complete', null, {});
-                if (res.status !== 200) throw new Error(res.json.message || 'The file was not taken.');
+            }
+
+            // The server's own trouble is no refusal of the file: what was sent waits, and choosing it again goes on from there.
+            function refusal(res) {
+                return res.status >= 500 ? 'The server could not finish this file now. Choose it again in a while to go on.' : (res.json.message || 'The file was not taken.');
             }
 
             async function pump() {

@@ -30,6 +30,9 @@
                     <tr><td>Microsoft Azure Speech</td><td>The audio of a recording, or the live audio while captions or dictation run.</td><td>Transcripts, live captions and dictation, when the operator chose it.</td></tr>
                     <tr><td>Anthropic (Claude)</td><td>The text of a transcript; for projects, the text of the project's files and notes and your questions; for screen moments, the pictures of the screen.</td><td>The Roman Urdu, Urdu and English views, suggested fixes, call notes, briefs and Ask, and reading the text on shared screens.</td></tr>
                     <tr><td>The hosting provider of this server</td><td>Everything the server stores, encrypted where described above, on its machines.</td><td>Running the server and its backups.</td></tr>
+                    @if (config('filesystems.disks.recordings.driver') === 's3-compatible')
+                        <tr><td>The storage company this server uses</td><td>The encrypted files of recordings, screens, projects, exports and uploads under way, with their sizes and dates; never a key that opens them.</td><td>Keeping the files and their backups.</td></tr>
+                    @endif
                 </tbody>
             </table>
         </div>

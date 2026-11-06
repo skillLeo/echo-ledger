@@ -33,6 +33,8 @@ class Usage extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChartBar;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::ChartBar;
+
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 4;

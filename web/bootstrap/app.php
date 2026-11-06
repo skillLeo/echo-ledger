@@ -8,6 +8,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
+use League\OAuth2\Server\Exception\OAuthServerException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -21,15 +22,18 @@ return Application::configure(basePath: dirname(__DIR__))
             'abilities' => CheckAbilities::class,
             'ability' => CheckForAnyAbility::class,
         ]);
-        // API clients get 401 JSON; browsers go to the Filament login.
-        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : route('filament.admin.auth.login'));
+        // API clients and the connector's /mcp get 401 JSON; browsers go to the Filament login.
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*', 'mcp') ? null : route('filament.admin.auth.login'));
         // nosniff, Referrer-Policy, framing, HSTS and the console CSP on every answer.
         $middleware->append(SecurityHeaders::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->shouldRenderJsonWhen(fn (Request $request) => $request->is('api/*') || $request->expectsJson());
+        $exceptions->shouldRenderJsonWhen(fn (Request $request) => $request->is('api/*', 'mcp') || $request->expectsJson());
         // Device API errors: {"message", "code", ...} with fixed messages (docs/API.md "Error codes").
         $exceptions->render(fn (Throwable $e, Request $request) => (new ApiExceptionRenderer)($e, $request));
+        // An expired or wrong token of the connector is an everyday answer (401), not a server error: Passport's guard
+        // would otherwise write each one to the log.
+        $exceptions->dontReport(OAuthServerException::class);
         // Never put secrets or audio into logs/flash data.
         $exceptions->dontFlash(['current_password', 'password', 'password_confirmation', 'pairing_code', 'token']);
     })->create();

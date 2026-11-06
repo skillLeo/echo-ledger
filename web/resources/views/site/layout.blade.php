@@ -20,7 +20,7 @@
         a { color: var(--accent); }
         header.site, main, footer.site { max-width: 960px; margin: 0 auto; padding: 0 16px; }
         header.site { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 20px; padding-bottom: 20px; }
-        .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); text-decoration: none; }
+        .brand { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 18px; letter-spacing: -0.4px; color: var(--text); text-decoration: none; }
         nav.site { display: flex; gap: 16px; flex-wrap: wrap; font-size: 15px; }
         nav.site a { color: var(--muted); text-decoration: none; }
         nav.site a:hover, nav.site a:focus-visible { color: var(--text); }
@@ -39,7 +39,7 @@
 </head>
 <body>
 <header class="site">
-    <a class="brand" href="{{ route('site.home') }}"><img src="{{ asset('favicon.svg') }}" width="28" height="28" alt="">EchoLedger</a>
+    <a class="brand" href="{{ route('site.home') }}"><img src="{{ asset('mark.svg') }}" width="24" height="24" alt="">EchoLedger</a>
     <nav class="site" aria-label="Site">
         <a href="{{ route('downloads') }}">Downloads</a>
         <a href="{{ url('/admin') }}">Sign in</a>

@@ -21,7 +21,8 @@ use Throwable;
 
 /**
  * Writes the audit log (plan B16). Who did it comes from the request: a paired device, a signed-in console user,
- * or the system (scheduled jobs). Recording the event never breaks the action it describes.
+ * an app connected through the connector (since v1.5), or the system (scheduled jobs). Recording the event never breaks
+ * the action it describes.
  */
 final class AuditLog
 {
@@ -37,7 +38,7 @@ final class AuditLog
         'sessions_exported' => 'Transcripts exported',
         'share_created' => 'Share link made',
         'share_revoked' => 'Share link revoked',
-        'device_paired' => 'Device paired',
+        'device_paired' => 'Device signed in with a code',
         'device_revoked' => 'Device revoked',
         'device_token_rotated' => 'Device key renewed',
         'password_changed' => 'Password changed',
@@ -67,6 +68,11 @@ final class AuditLog
         'workspace_renamed' => 'Workspace renamed',
         'settings_changed' => 'Settings changed',
         'test_email_sent' => 'Test email sent',
+        // Since v1.5: the Claude and ChatGPT connector.
+        'connector_connected' => 'App connected',
+        'connector_disconnected' => 'App disconnected',
+        'connector_token_reused' => 'App disconnected: used token came back',
+        'connector_tool_call' => 'Read by a connected app',
     ];
 
     /**
@@ -104,6 +110,12 @@ final class AuditLog
      */
     private function actor(): array
     {
+        // The connector's guard is only asked once /mcp has made it the guard of the request: making it needs the keys.
+        if (auth()->getDefaultDriver() === 'api' && auth()->guard('api')->hasUser()) {
+            $person = auth()->guard('api')->user();
+
+            return ['connector', null, $person instanceof User ? (int) $person->getAuthIdentifier() : null];
+        }
         $device = auth()->guard('sanctum');
         if ($device->hasUser() && $device->user() instanceof Device) {
             return ['device', $device->user()->id, $device->user()->user_id];
@@ -149,7 +161,7 @@ final class AuditLog
 
         CaptureSession::deleted(fn (CaptureSession $s) => $log()->record('session_deleted', $s->user_id, $s, 'Recording deleted: '.$s->displayTitle()));
         Device::created(fn (Device $d) => $d->signedInWith === null
-            ? $log()->record('device_paired', $d->user_id, $d, "Device paired: {$d->name}")
+            ? $log()->record('device_paired', $d->user_id, $d, "Device signed in with a code: {$d->name}")
             : $log()->record('device_signed_in', $d->user_id, $d, "Signed in on {$d->name} ({$d->platform->getLabel()}) ".($d->signedInWith === 'browser' ? 'through the browser' : 'with a password'), ['via' => $d->signedInWith]));
         Device::deleted(fn (Device $d) => $log()->record('device_revoked', $d->user_id, $d, "Device revoked: {$d->name}"));
         // A link opens a recording or (since v1.5) a project: the log names whichever it is.

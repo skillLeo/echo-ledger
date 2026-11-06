@@ -23,6 +23,7 @@ use App\Services\ClientAi\ClientWorkspace;
 use App\Services\ConsoleUploads;
 use App\Services\Data\CompleteOutcome;
 use App\Services\SettingsRepository;
+use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
@@ -296,7 +297,7 @@ final class RequestLinks
         if (strlen($bytes) !== $expected || ! hash_equals(strtolower($sha256), hash('sha256', $bytes))) {
             throw new ApiError(422, 'validation_failed', 'The chunk does not match its size or checksum. Send it again.');
         }
-        Storage::disk('recordings')->put($upload->partsDirectory().'/'.$index.'.part', $bytes);
+        app(RecordingFiles::class)->putPart($upload->partsDirectory().'/'.$index.'.part', $bytes);
         if ($index === 0 && self::sniffDocument(substr($bytes, 0, self::SNIFF_BYTES), $upload->name) === null) {
             $this->refuse($upload, self::REFUSED);
         }
@@ -355,7 +356,11 @@ final class RequestLinks
             };
         }
 
-        $missing = array_values(array_diff(range(0, $upload->total_chunks - 1), $upload->received_chunks ?? []));
+        // Stored by a request that died before it could say so: the file must not be added twice.
+        if ($upload->client_file_id !== null) {
+            return $this->received($upload);
+        }
+        $missing = $this->missingParts($upload);
         if ($missing !== []) {
             throw new ApiError(422, 'upload_incomplete', 'Upload is incomplete.', ['missing_chunks' => $missing]);
         }
@@ -378,10 +383,26 @@ final class RequestLinks
             $upload->update(['client_file_id' => $file->id]);
         } finally {
             @unlink($plain);
-            Storage::disk('recordings')->deleteDirectory($upload->partsDirectory());
         }
+        // Only now. A refusal and a file that fails its check remove the parts themselves; after any other failure (the
+        // bucket's, say) they stay, and `complete` can be sent again.
+        app(RecordingFiles::class)->eraseFolder($upload->partsDirectory());
 
         return $this->received($upload);
+    }
+
+    /**
+     * The chunks of a document not on the list or not stored: parts on the server's own disk are not moved when the files
+     * go to a bucket (docs/DEPLOY_VPS.md), and those are asked for again, as a recording's are.
+     *
+     * @return list<int>
+     */
+    private function missingParts(RequestUpload $upload): array
+    {
+        $received = array_flip($upload->received_chunks ?? []);
+        $stored = array_flip(app(RecordingFiles::class)->namesIn($upload->partsDirectory()));
+
+        return array_values(array_filter(range(0, $upload->total_chunks - 1), static fn (int $index): bool => ! isset($received[$index], $stored[$index.'.part'])));
     }
 
     /**
@@ -434,7 +455,7 @@ final class RequestLinks
         if ($session !== null && $session->status === SessionStatus::Uploading) {
             $session->delete();
         }
-        Storage::disk('recordings')->deleteDirectory($upload->partsDirectory());
+        app(RecordingFiles::class)->eraseFolder($upload->partsDirectory());
         $upload->update(['status' => 'failed', 'error' => self::ABANDONED]);
     }
 
@@ -445,7 +466,7 @@ final class RequestLinks
             // Still uploading: deleting the session erases the parts at once (CaptureSession::booted).
             Recording::query()->find($upload->recording_id)?->captureSession()->first()?->delete();
         }
-        Storage::disk('recordings')->deleteDirectory($upload->partsDirectory());
+        app(RecordingFiles::class)->eraseFolder($upload->partsDirectory());
         $upload->update(['status' => 'refused', 'error' => $message]);
 
         throw new ApiError($status, $code, $message);
@@ -463,23 +484,27 @@ final class RequestLinks
 
     private function assemble(RequestUpload $upload, string $plain): void
     {
-        $disk = Storage::disk('recordings');
+        $files = app(RecordingFiles::class);
         $out = fopen($plain, 'wb');
         $hash = hash_init('sha256');
         $size = 0;
         try {
             for ($i = 0; $i < $upload->total_chunks; $i++) {
-                $part = (string) $disk->get($upload->partsDirectory().'/'.$i.'.part');
-                $size += strlen($part);
-                hash_update($hash, $part);
-                fwrite($out, $part);
+                $files->readPart($upload->partsDirectory().'/'.$i.'.part', static function ($part) use ($out, $hash, &$size): void {
+                    while (! feof($part)) {
+                        $buffer = (string) fread($part, 1024 * 1024);
+                        $size += strlen($buffer);
+                        hash_update($hash, $buffer);
+                        fwrite($out, $buffer);
+                    }
+                });
             }
         } finally {
             fclose($out);
         }
         if ($size !== $upload->size_bytes || ! hash_equals($upload->sha256, hash_final($hash))) {
             $upload->update(['received_chunks' => []]);
-            $disk->deleteDirectory($upload->partsDirectory());
+            $files->eraseFolder($upload->partsDirectory());
             throw new ApiError(422, 'verification_failed', ChunkedUploadService::VERIFICATION_FAILED);
         }
     }

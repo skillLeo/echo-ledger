@@ -44,7 +44,7 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 | ☐ | 13 | As the member, try to delete one of the owner's recordings. | The console offers no delete for it. | W-6 |
 | ☐ | 14 | As the owner, remove the member. | The member is gone and their devices are unpaired. | W-7 |
 | ☐ | 15 | Open **Usage**. | The current month shows with minutes, cost, storage and devices. Nothing is broken. | W-8 |
-| ☐ | 16 | Open **Devices** and click **Pair a device**. | A code and a QR code appear. Keep this page open for Parts 2 and 3. | — |
+| ☐ | 16 | Open **Profile → Devices** and click **Sign in a device**. | A code and a QR code appear. Keep this page open for Parts 2 and 3. | — |
 
 ---
 
@@ -144,7 +144,7 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 | ☐ | 68 | Install the APK. | The install finishes and the app opens to the setup guide. | A-01 |
 | ☐ | 69 | In the guide, allow the microphone, notifications, display over other apps and battery. | Each row says "Allowed" when you return. | O-4 |
 | ☐ | 70 | Tap **Scan QR code** and scan any other QR code first. | "That isn't an EchoLedger pairing code" and nothing is paired. | A-02 |
-| ☐ | 71 | Scan the QR code on **Devices → Pair a device** (new code if needed). | The phone pairs and the guide moves on by itself. | O-5 |
+| ☐ | 71 | Scan the QR code on **Profile → Devices → Sign in a device** (new code if needed). | The phone pairs and the guide moves on by itself. | O-5 |
 | ☐ | 72 | Run the 10-second test while you speak. | The meter moves and the result says the microphone works. | O-5 |
 | ☐ | 73 | Finish the guide. | The Library shows the recordings from Windows with Phone, Desktop and Web labels. | A-02 |
 | ☐ | 74 | Open **Settings → Devices → This phone → Setup guide** and connect through Shizuku (or paste the ADB command on a computer). | The helper status turns green. | A-10, A-11 |
@@ -419,7 +419,7 @@ Run these when the change touches the area, or before a release.
 | O-W4 | Give a client an avatar and pin it. | The folder shows the avatar and comes first everywhere. |
 | R-4 | Leave a deleted recording for 48 hours. | It leaves Recently deleted and cannot be restored. |
 | N-1 | Upload a recording. | The bell shows "Transcript ready". |
-| N-6 | Pair a device and go past 80 % of a small monthly limit. | "Device paired" and the limit notices appear once each. |
+| N-6 | Sign in a device and go past 80 % of a small monthly limit. | "<device> signed in" and the limit notices appear once each. |
 | W-11 | Set the device limit to the number paired, then pair one more. | "Device limit reached — raise it in Settings". |
 | W-10 | Set the storage limit below what is used and upload. | "Storage limit reached — raise it in Settings". The recording stays on the device. |
 | W-12 | Pass 80 % and 100 % of the monthly limit. | The bell shows each notice once per owner. |

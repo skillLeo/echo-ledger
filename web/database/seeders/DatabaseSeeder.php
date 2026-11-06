@@ -40,6 +40,8 @@ class DatabaseSeeder extends Seeder
             $admin->password = $password;
         }
         $admin->is_super_admin = true;
+        // As echoledger:make-admin: the console opens only with a confirmed email since v1.5.
+        $admin->email_verified_at ??= now();
         $admin->save();
         if (! $admin->workspaces()->exists()) {
             app(Workspaces::class)->createFor($admin);

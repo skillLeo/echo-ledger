@@ -56,7 +56,7 @@ final class SecurityController extends Controller
             throw new ApiError(404, 'device_not_found', 'Device not found.');
         }
         if ($target->id === $device->id) {
-            throw new ApiError(409, 'current_device', 'This is the device you are using. Unpair it in its settings instead.');
+            throw new ApiError(409, 'current_device', 'This is the device you are using. Sign out of it in its settings instead.');
         }
         $target->delete();
 

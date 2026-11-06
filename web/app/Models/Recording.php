@@ -7,14 +7,13 @@ namespace App\Models;
 use App\Enums\RecordingRole;
 use App\Enums\UploadStatus;
 use App\Services\SettingsRepository;
+use App\Services\Storage\RecordingFiles;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Storage;
-use Throwable;
 
 /**
  * One uploaded audio artifact of a session (PLAN.md D5). Stored encrypted on the `recordings` disk.
@@ -78,17 +77,10 @@ class Recording extends Model
 
     public function deleteFiles(): void
     {
-        $disk = Storage::disk('recordings');
-        try {
-            if ($this->stored_path !== null && $disk->exists($this->stored_path)) {
-                $disk->delete($this->stored_path);
-            }
-            if ($disk->directoryExists($this->partsDirectory())) {
-                $disk->deleteDirectory($this->partsDirectory());
-            }
-        } catch (Throwable $e) {
-            report($e); // missing files must never block deletion or pruning
-        }
+        // Neither throws: missing files must never block deletion or pruning.
+        $files = app(RecordingFiles::class);
+        $files->erase($this->stored_path);
+        $files->eraseFolder($this->partsDirectory());
     }
 
     protected static function booted(): void

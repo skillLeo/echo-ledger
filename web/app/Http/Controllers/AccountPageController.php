@@ -10,13 +10,12 @@ use App\Models\AccountExport;
 use App\Models\User;
 use App\Services\Accounts\AccountDeletion;
 use App\Services\Accounts\GoogleSignIn;
-use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
+use App\Services\Storage\RecordingFiles;
 use Filament\Facades\Filament;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -77,17 +76,17 @@ final class AccountPageController extends Controller
     }
 
     /** The "Export my data" ZIP, decrypted as it is sent; the signed link works for its 24 hours. */
-    public function download(string $export, RecordingCipher $cipher): StreamedResponse
+    public function download(string $export, RecordingFiles $files): StreamedResponse
     {
         $model = AccountExport::query()->find($export);
-        abort_unless($model instanceof AccountExport && $model->downloadable() && $model->path !== null && Storage::disk('recordings')->exists($model->path), 404);
-        $path = Storage::disk('recordings')->path($model->path);
+        abort_unless($model instanceof AccountExport && $model->downloadable() && $model->path !== null && $files->disk()->exists($model->path), 404);
+        $path = $model->path;
         $name = 'EchoLedger export '.$model->created_at->format('Y-m-d').'.zip';
 
-        return response()->streamDownload(function () use ($cipher, $path, $model): void {
+        return response()->streamDownload(function () use ($files, $path, $model): void {
             $out = fopen('php://output', 'wb');
             if ($out !== false) {
-                $cipher->decryptToStream($path, $out, $model->id);
+                $files->decryptToStream($path, $out, $model->id);
                 fclose($out);
             }
         }, $name, ['Content-Type' => 'application/zip', 'Cache-Control' => 'no-store', 'Content-Length' => (string) $model->bytes]);

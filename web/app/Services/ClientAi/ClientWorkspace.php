@@ -9,6 +9,7 @@ use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Jobs\ExtractClientFileJob;
 use App\Jobs\MakeCallNotesJob;
+use App\Jobs\MakeSuggestedFixesJob;
 use App\Jobs\RefreshClientBriefJob;
 use App\Models\CallNote;
 use App\Models\CaptureSession;
@@ -19,8 +20,8 @@ use App\Models\ClientMemoryItem;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
-use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
+use App\Services\Storage\RecordingFiles;
 use App\Services\TranscriptEditor;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\SttManager;
@@ -57,6 +58,9 @@ final class ClientWorkspace
     public const MAX_WORD_BODY_BYTES = self::MAX_FILE_BYTES;
 
     public const WORD_TOO_LARGE = 'This Word file is too large to read.';
+
+    /** A file's `error` when its stored original cannot be read. */
+    public const UNREADABLE = 'The file could not be read.';
 
     /** How many passages one question carries (about 8 000 tokens). */
     private const PASSAGES = 12;
@@ -108,7 +112,7 @@ final class ClientWorkspace
     public function assertCanSpend(int $workspaceId): void
     {
         if (! $this->configured()) {
-            throw new ApiError(409, 'ai_unavailable', 'Add your Anthropic key in API Credentials to use client notes and Ask.');
+            throw new ApiError(409, 'ai_unavailable', 'AI is not set up on this server yet. Whoever runs it adds the Anthropic key under API Credentials.');
         }
         $budget = $this->budget($workspaceId);
         if ($budget['spent_usd'] >= $budget['budget_usd']) {
@@ -165,7 +169,13 @@ final class ClientWorkspace
             }
             $session = CaptureSession::query()->withoutGlobalScopes()->find($transcript->capture_session_id);
             $client = $session !== null ? $this->projectOf($session) : null;
-            if ($session === null || $client === null || ! $client->ai_notes || ! app(PlanLimits::class)->allows($session->workspace_id, 'ai_notes')) {
+            if ($session === null || $client === null || ! $client->ai_notes) {
+                return;
+            }
+            // Since v1.5 a plan may leave the notes out, never the suggested fixes that otherwise come with them.
+            if (! app(PlanLimits::class)->allows($session->workspace_id, 'ai_notes')) {
+                MakeSuggestedFixesJob::dispatch($session->id);
+
                 return;
             }
             CallNote::query()->withoutGlobalScopes()->updateOrCreate(
@@ -477,9 +487,15 @@ final class ClientWorkspace
             'status' => $image ? 'ready' : 'extracting',
         ]);
         $relative = 'client-files/'.$client->id.'/'.$file->id.'.elr';
-        $disk = Storage::disk('recordings');
-        $disk->makeDirectory(dirname($relative));
-        app(RecordingCipher::class)->encryptFile($plainPath, $disk->path($relative), $file->id);
+        $files = app(RecordingFiles::class);
+        try {
+            $files->encryptInto($plainPath, $relative, $file->id);
+        } catch (Throwable $e) {
+            // No row without its file. A bucket may have kept what it was sent with only its answer lost: that goes too.
+            $files->erase($relative);
+            $file->delete();
+            throw $e;
+        }
         $file->forceFill(['path' => $relative])->save();
         if (! $image) {
             ExtractClientFileJob::dispatch($file->id);
@@ -512,7 +528,7 @@ final class ClientWorkspace
         $client = Client::query()->withoutGlobalScopes()->find($file->client_id);
         $bytes = $this->original($file);
         if ($client === null || $bytes === null) {
-            $file->forceFill(['status' => 'failed', 'error' => 'The file could not be read.'])->save();
+            $file->forceFill(['status' => 'failed', 'error' => self::UNREADABLE])->save();
 
             return;
         }
@@ -539,7 +555,8 @@ final class ClientWorkspace
     private function briefAfterFiles(Client $client): void
     {
         $brief = ClientBrief::query()->withoutGlobalScopes()->where('client_id', $client->id)->first();
-        if ($brief?->edited !== true) {
+        // Without AI notes in the plan the brief stays as it is, rather than showing a failed remake nobody asked for.
+        if ($brief?->edited !== true && app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes')) {
             RefreshClientBriefJob::dispatch($client->id);
         }
     }
@@ -558,7 +575,7 @@ final class ClientWorkspace
         if ($file->path === null || ! Storage::disk('recordings')->exists($file->path)) {
             return null;
         }
-        $plain = app(RecordingCipher::class)->decryptToMemory(Storage::disk('recordings')->path($file->path), $file->id);
+        $plain = app(RecordingFiles::class)->decryptToMemory($file->path, $file->id);
         $plain->rewind();
         $bytes = '';
         while (! $plain->eof()) {

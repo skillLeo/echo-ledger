@@ -19,7 +19,7 @@
             [$ownOnly ? 'Your billable minutes' : 'Billable minutes', $min($t['minutes']), 'Streaming '.$min($t['streaming_minutes']).' · final '.$min($t['final_minutes'])],
             ['Estimated cost', $usd($t['cost_usd']), 'Priced with the rates in Settings'],
             ['Storage used', $bytes($plan['storage']['used']), $plan['storage']['limit'] === null ? 'No limit' : 'of '.$bytes($plan['storage']['limit'])],
-            ['Paired devices', (string) $plan['devices']['used'], $plan['devices']['limit'] === null ? 'No limit' : 'of '.$plan['devices']['limit']],
+            ['Signed-in devices', (string) $plan['devices']['used'], $plan['devices']['limit'] === null ? 'No limit' : 'of '.$plan['devices']['limit']],
         ] as [$label, $value, $hint])
             <x-filament::section compact>
                 <div style="font-size:.8rem;opacity:.7">{{ $label }}</div>
@@ -102,9 +102,9 @@
             @endif
         </x-filament::section>
 
-        <x-filament::section heading="Top clients">
+        <x-filament::section heading="Top projects">
             @if ($report['clients'] === [])
-                <p style="opacity:.6">No billable minutes for a client in {{ $report['label'] }}.</p>
+                <p style="opacity:.6">No billable minutes for a project in {{ $report['label'] }}.</p>
             @else
                 <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                     <tbody>

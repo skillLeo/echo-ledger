@@ -84,6 +84,7 @@ soft-delete rows act as sync tombstones.
 | `credentials` | Provider secrets, encrypted with Laravel's `encrypted` cast. | Unique `(provider, key)`. Write-only in the UI. |
 | `webhook_events` | Raw provider callbacks for idempotency and audit. | Unique `(provider, idempotency_key)`. |
 | `provider_deletions` | Retry queue for erasing provider-side copies. | Unique `(provider, provider_job_id)`. |
+| `storage_deletions` | Retry queue for files a recordings bucket did not delete (`RECORDINGS_DRIVER=s3` only). | Unique `path`. |
 
 Only five root tables carry `workspace_id`: `devices`, `device_pairing_codes`, `clients`, `capture_sessions` and
 `usage_ledger`. The rest are reached through one of them and cascade with it. Per-person data (`users`, `passkeys`,
@@ -110,7 +111,7 @@ microphone.
 
 ## Pairing and authentication
 
-1. The admin clicks **Devices → Pair a device**. The server creates a random code and stores only its hash. The
+1. The admin clicks **Profile → Devices → Sign in a device**. The server creates a random code and stores only its hash. The
    code is shown as text and as a QR payload: `{"v":1,"url":…,"code":…,"pins":[…]}`.
 2. The device calls `POST /api/devices/register` with the code. The server creates the `Device` and issues a
    Sanctum token:

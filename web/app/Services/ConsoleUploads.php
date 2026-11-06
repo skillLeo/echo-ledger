@@ -17,6 +17,7 @@ use App\Models\Recording;
 use App\Models\User;
 use App\Services\Data\CompleteOutcome;
 use App\Services\Projects\FilingRules;
+use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
@@ -222,7 +223,7 @@ final class ConsoleUploads
         }
         $client = Client::query()->where('workspace_id', $workspaceId)->ofPerson()->find((string) $clientId);
         if (! $client instanceof Client) {
-            throw new ApiError(422, 'client_not_found', 'Choose one of your clients.', ['errors' => ['client_id' => ['Choose one of your clients.']]]);
+            throw new ApiError(422, 'client_not_found', 'Choose one of your projects.', ['errors' => ['client_id' => ['Choose one of your projects.']]]);
         }
 
         return $client;
@@ -327,8 +328,7 @@ final class ConsoleUploads
     /** Whether the first chunk of an upload is a sound or video container, by its content (not its name). */
     public static function firstChunkIsMedia(Recording $recording): bool
     {
-        $path = Storage::disk('recordings')->path($recording->partsDirectory().'/0.part');
-        $head = is_file($path) ? (string) file_get_contents($path, false, null, 0, self::SNIFF_BYTES) : '';
+        $head = app(RecordingFiles::class)->partHead($recording->partsDirectory().'/0.part', self::SNIFF_BYTES);
         $sniffed = strtolower((string) (new FinfoMimeTypeDetector)->detectMimeTypeFromBuffer($head));
         $accepted = [...array_map('strtolower', (array) config('echoledger.accepted_mimes')), ...self::VIDEO_CONTAINERS];
 

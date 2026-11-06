@@ -36,7 +36,7 @@ class SourceStatsOverview extends StatsOverviewWidget
         foreach (SourceDevice::cases() as $device) {
             $stats[] = Stat::make($device->getLabel(), (int) ($counts[$device->value] ?? 0))
                 ->icon($device->getIcon())
-                ->description('sessions')
+                ->description('recordings')
                 ->color($device->getColor());
         }
 

@@ -213,7 +213,7 @@ final class TranscriptViews
     /** Said in every app when the Anthropic key is missing, with where to add it. */
     public static function missingKeyMessage(): string
     {
-        return 'Add your Anthropic key in API Credentials to see Roman Urdu and English: '.rtrim((string) config('app.url'), '/').'/admin/api-credentials';
+        return 'Roman Urdu and English need the server\'s Anthropic key. Whoever runs this server adds it under API Credentials: '.rtrim((string) config('app.url'), '/').'/admin/api-credentials';
     }
 
     /** Whether views can be made at all now (a key is set). */

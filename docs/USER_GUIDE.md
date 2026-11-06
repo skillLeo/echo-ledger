@@ -112,7 +112,7 @@ account (you have 7 days to change your mind by signing in again).
 **Pairing** still works, also for older apps. It connects a device to your server with a one-time code; you need
 the web console.
 
-1. In the console, open **Devices** and click **Pair a device**. A code and a QR code appear. The code works for
+1. In the console, open **Profile → Devices** and click **Sign in a device**. A code and a QR code appear. The code works for
    10 minutes and only once.
 2. **Phone:** tap **Scan QR code** and point the camera at the screen. Or type the server address and the code.
 3. **Windows:** type the server address and the code.
@@ -472,6 +472,14 @@ the transcript) know what "this page" or "click here" meant.
 - **For your AI:** **Copy for AI** adds a line like "[Screen 7 at 14:32: the invoice page]" at each screen.
   **Export → Meeting pack** makes a PDF (the transcript with each screen at its moment; Claude and ChatGPT read both)
   or a ZIP with the transcript, the pictures and, if you like, the audio.
+
+## 15c. Ask Claude or ChatGPT about your recordings (since v1.5)
+
+Add EchoLedger as a connector in Claude or ChatGPT, and you can ask them things like "What did Omar ask for on Tuesday's
+call?". They read what you can open in the apps, and nothing else: they cannot record, change, share or delete
+anything. You disconnect them under **Profile → Connected apps**.
+
+How to add it, what the AI can and cannot see, and example questions: [Claude and ChatGPT connector](CONNECTOR.md).
 
 ## 16. Live Translate: games and videos
 

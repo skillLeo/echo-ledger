@@ -121,7 +121,7 @@ final class ScreenController extends Controller
         $device = $request->user();
         $client = Client::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if (! $client instanceof Client) {
-            throw new ApiError(404, 'client_not_found', 'Client not found.');
+            throw new ApiError(404, 'client_not_found', 'Project not found.');
         }
         $request->validate(['include_subfolders' => ['nullable', 'boolean'], 'cursor' => ['nullable', 'string', 'max:512']]);
         $folders = $request->boolean('include_subfolders') ? $projects->withDescendants($client) : [$client->id];

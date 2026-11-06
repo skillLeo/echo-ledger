@@ -75,7 +75,7 @@ final class PairingService
             // Since v1.5 an account in its deletion grace signs nothing in (its codes are dropped then; this covers a race).
             $owner = $pairing === null ? null : User::query()->find($pairing->user_id);
             if ($pairing === null || $pairing->used_at !== null || $pairing->expires_at->isPast() || ! $owner instanceof User || $owner->isBeingDeleted()) {
-                throw ValidationException::withMessages(['pairing_code' => 'This pairing code is invalid, expired, or already used.']);
+                throw ValidationException::withMessages(['pairing_code' => 'This code is invalid, expired, or already used.']);
             }
 
             [$device, $token] = $this->createDevice($pairing->workspace_id, $pairing->user_id, $attributes, $ip);

@@ -324,6 +324,52 @@ describe('the page', function () {
         visitor($this)->postJson(parse_url($link['url'], PHP_URL_PATH)."/files/{$id}/complete")->assertOk()->assertExactJson(['status' => 'ready']);
     });
 
+    it('keeps a document\'s parts when storing it fails, with no row left behind, and complete can be sent again', function () {
+        $link = requestLink($this);
+        $text = "Plain notes from the client.\n";
+        $start = startUpload($this, $link['url'], $text, 'notes.txt', 'text/plain')->assertCreated();
+        $id = $start->json('upload_id');
+        sendChunk($this, $link['url'], $id, 0, $text, $start->json('chunk_size'))->assertOk();
+        $complete = parse_url($link['url'], PHP_URL_PATH)."/files/{$id}/complete";
+
+        $key = config('echoledger.recordings_key');
+        config(['echoledger.recordings_key' => '']);
+        expect(visitor($this)->postJson($complete)->status())->toBeGreaterThanOrEqual(500);
+
+        expect(Storage::disk('recordings')->files("request-parts/{$id}"))->toHaveCount(1)
+            ->and(unscoped(fn () => ClientFile::query()->count()))->toBe(0)
+            ->and(RequestUpload::query()->findOrFail($id)->status)->toBe('uploading');
+
+        config(['echoledger.recordings_key' => $key]);
+        visitor($this)->postJson($complete)->assertOk()->assertExactJson(['status' => 'ready']);
+
+        expect(Storage::disk('recordings')->files("request-parts/{$id}"))->toBe([])
+            ->and(unscoped(fn () => ClientFile::query()->count()))->toBe(1);
+    });
+
+    it('asks again for a part of a document that is on the list but not stored', function () {
+        $link = requestLink($this);
+        $pdf = "%PDF-1.4\n".str_repeat('x', 600_000);
+        $start = startUpload($this, $link['url'], $pdf, 'scope.pdf', 'application/pdf')->assertCreated();
+        [$id, $size] = [$start->json('upload_id'), $start->json('chunk_size')];
+        foreach ($start->json('missing_chunks') as $index) {
+            sendChunk($this, $link['url'], $id, $index, $pdf, $size)->assertOk();
+        }
+        $complete = parse_url($link['url'], PHP_URL_PATH)."/files/{$id}/complete";
+        Storage::disk('recordings')->delete("request-parts/{$id}/1.part");
+
+        visitor($this)->postJson($complete)->assertStatus(422)->assertJsonPath('code', 'upload_incomplete')->assertJsonPath('missing_chunks', [1]);
+        sendChunk($this, $link['url'], $id, 1, $pdf, $size)->assertOk();
+        visitor($this)->postJson($complete)->assertOk()->assertExactJson(['status' => 'ready']);
+    });
+
+    it('has the page send what is asked for again, and try again when the server has trouble', function () {
+        $page = (string) visitor($this)->get(parse_url(requestLink($this)['url'], PHP_URL_PATH))->assertOk()->getContent();
+
+        expect($page)->toContain("res.json.code !== 'upload_incomplete'")->toContain('missing = res.json.missing_chunks')
+            ->toContain('res.status < 500')->toContain('The server could not finish this file now.');
+    });
+
     it('refuses a small Word file whose body would unpack into too much', function () {
         $link = requestLink($this);
         $bomb = docx(text: str_repeat('a', ClientWorkspace::MAX_WORD_BODY_BYTES));

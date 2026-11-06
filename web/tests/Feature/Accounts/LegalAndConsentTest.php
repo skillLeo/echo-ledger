@@ -32,6 +32,14 @@ it('lists every processor of recordings and what each receives', function () {
     expect($page)->toContain('What it receives')->toContain(RecordingConsent::TEXT);
 });
 
+it('names a storage company only when the files are in a bucket', function () {
+    expect((string) $this->get('/privacy')->getContent())->not->toContain('storage company');
+
+    config(['filesystems.disks.recordings.driver' => 's3-compatible']);
+
+    expect((string) $this->get('/privacy')->getContent())->toContain('The storage company this server uses')->toContain('never a key that opens them');
+});
+
 it('says what the server does since v1.5: content is private to its maker, in a team workspace too', function () {
     $privacy = (string) $this->get('/privacy')->getContent();
     $terms = (string) $this->get('/terms')->getContent();

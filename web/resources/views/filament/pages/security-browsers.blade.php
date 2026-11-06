@@ -25,5 +25,5 @@
             <div style="margin-top:.75rem"><x-filament::button size="sm" color="danger" wire:click="signOutOtherBrowsers">Sign out all other browsers</x-filament::button></div>
         @endif
     @endif
-    <p class="muted" style="margin-top:.75rem">{{ $devices === 1 ? '1 paired device' : $devices.' paired devices' }} · <a href="{{ $devicesUrl }}" style="text-decoration:underline">Manage devices</a></p>
+    <p class="muted" style="margin-top:.75rem">{{ $devices === 1 ? '1 signed-in device' : $devices.' signed-in devices' }} · <a href="{{ $devicesUrl }}" style="text-decoration:underline">Manage devices</a></p>
 </div>

@@ -38,7 +38,7 @@ final class UsageBreakdown
         'show_as' => 'Show as (transcript views)',
         'screen_describe' => 'Screen descriptions',
         'client_notes' => 'Call notes',
-        'client_brief' => 'Client brief',
+        'client_brief' => 'Project brief',
         'client_ask' => 'Ask',
         'client_fixes' => 'Suggested fixes',
         'client_file' => 'Reading files',

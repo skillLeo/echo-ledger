@@ -114,7 +114,7 @@ it('checks the session before the client', function () {
 
     $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'client_id' => $foreignClient->id])->assertStatus(422)->assertJsonPath('code', 'session_required');
     $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->openSession(), 'client_id' => $foreignClient->id])
-        ->assertNotFound()->assertExactJson(['message' => 'Client not found.', 'code' => 'client_not_found']);
+        ->assertNotFound()->assertExactJson(['message' => 'Project not found.', 'code' => 'client_not_found']);
 });
 
 it('checks the session before answering that captions are off', function () {

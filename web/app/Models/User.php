@@ -25,10 +25,14 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
+use Laravel\Passport\Contracts\OAuthenticatable;
+use Laravel\Passport\HasApiTokens;
 
 /**
  * A console account. Its email is confirmed (`email_verified_at`) once its owner opened the link the console sent to
  * it; people-only share links (v1.5) open only for a confirmed email, and a changed email must be confirmed again.
+ * Since v1.5 Claude and ChatGPT read its recordings with Passport tokens (the connector, routes/ai.php); Passport's
+ * deprecated `clients()` is this model's projects, as before.
  *
  * @property int $id
  * @property string $name
@@ -46,10 +50,10 @@ use Illuminate\Support\Facades\Mail;
  */
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
-class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery, MustVerifyEmail
+class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery, MustVerifyEmail, OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, InteractsWithAppAuthentication, InteractsWithAppAuthenticationRecovery, Notifiable;
+    use HasApiTokens, HasFactory, InteractsWithAppAuthentication, InteractsWithAppAuthenticationRecovery, Notifiable;
 
     protected static function booted(): void
     {

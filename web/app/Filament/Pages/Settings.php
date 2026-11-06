@@ -73,6 +73,8 @@ class Settings extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::Cog6Tooth;
+
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 3;
@@ -267,7 +269,7 @@ class Settings extends Page
                 'general' => $this->tab('general', [
                     $this->section('language')->columns(2)->schema([
                         Select::make('default_language')->label('Default language')->options(LanguageChoice::selectOptions())->selectablePlaceholder(false)
-                            ->helperText('Auto picks English, Urdu or Arabic. Urdu and Arabic always allow English words inside. A client or recording can choose its own.'),
+                            ->helperText('Auto picks English, Urdu or Arabic. Urdu and Arabic always allow English words inside. A project or recording can choose its own.'),
                         CheckboxList::make('languages_auto_more')->label('Auto may also pick')->options(LanguageChoice::MORE)->columns(4)
                             ->helperText('English, Urdu and Arabic are always detected. Tick a language only if your calls use it.'),
                         Select::make('languages_auto_fallback')->label('When Auto hears another language, use')
@@ -279,11 +281,11 @@ class Settings extends Page
                             ->helperText('Times in this console are shown in this zone, in 12-hour AM/PM format. Recordings are stored in UTC.'),
                     ]),
                     $this->section('vocabulary')
-                        ->description('Words the engines should know, and corrections made to every new final transcript. Each client can add its own on its page.')
+                        ->description('Words the engines should know, and corrections made to every new final transcript. Each project can add its own on its page.')
                         ->schema([
                             TagsInput::make('vocabulary_keyterms')->label('Keyterms for every recording')
                                 ->placeholder('Add a name, product or term')
-                                ->helperText('Up to 200 terms of at most 50 characters and 5 words. The client’s own keyterms come first; each engine takes as many as it accepts.')
+                                ->helperText('Up to 200 terms of at most 50 characters and 5 words. The project’s own keyterms come first; each engine takes as many as it accepts.')
                                 ->nestedRecursiveRules(['string', 'max:50', fn () => function (string $attribute, mixed $value, \Closure $fail): void {
                                     if (($message = KeytermPolicy::validate((string) $value)) !== null) {
                                         $fail($message);
@@ -315,9 +317,9 @@ class Settings extends Page
                                 ->helperText('When the first engine of the Urdu or Auto list is busy (rate limited) or down, the recording waits for it and it is tried again (after 2, 4, 8, 16, then every 30 minutes) instead of going to a weaker engine. After this long the next engine writes it, marked "Backup engine". 0 hands it on at once, like the other languages. Default 6.'),
                             Toggle::make('double_check')->label('Double-check unsure lines with a second engine')->columnSpanFull()
                                 ->helperText('Whisper on Groq (or ElevenLabs Scribe when Whisper wrote the transcript) listens again to up to 12 lines the first engine was not sure of. When they disagree, both are shown; the transcript is never changed. Each line is billed (Groq: at least 10 seconds).'),
-                            Toggle::make('double_check_clients')->label('Always double-check recordings filed under a client')->columnSpan(2)
-                                ->helperText('On by default: client calls are the ones you rely on, so their unsure lines get a second listen even with the switch above off.'),
-                            TextInput::make('client_ai_monthly_usd')->label('AI budget for client workspaces (US$ a month)')->numeric()->minValue(0)->maxValue(1000)->step(0.5)->required()->columnSpan(2)
+                            Toggle::make('double_check_clients')->label('Always double-check recordings filed under a project')->columnSpan(2)
+                                ->helperText('On by default: calls in a project are the ones you rely on, so their unsure lines get a second listen even with the switch above off.'),
+                            TextInput::make('client_ai_monthly_usd')->label('AI budget for projects (US$ a month)')->numeric()->minValue(0)->maxValue(1000)->step(0.5)->required()->columnSpan(2)
                                 ->helperText('Call notes, briefs, file reading and Ask stop for the month when this is used up. Default $5.'),
                             Select::make('claude_model')->label('Show as (Roman Urdu, اردو and English views)')->options(self::CLAUDE_MODELS)->required()->columnSpan(2)
                                 ->helperText('The Claude model that writes the views (key on API Credentials → Anthropic). An hour of Urdu call costs about US$0.50 with Sonnet, about US$1 with Opus.'),
@@ -421,11 +423,11 @@ class Settings extends Page
                         TagsInput::make('app_pins')->label('Server certificate pins (SPKI SHA-256)')
                             ->placeholder('sha256/base64…')
                             ->nestedRecursiveRule(new CertificatePin)
-                            ->helperText('Current + backup key pins sent to devices at pairing. Leave empty only for local development.'),
+                            ->helperText('Current + backup key pins sent to devices at sign-in. Leave empty only for local development.'),
                     ]),
                 ]),
                 'devices' => $this->tab('devices', [
-                    $this->section('devices')->description('Pair a phone or computer, see when it was last seen and revoke it.')->schema([
+                    $this->section('devices')->description('Sign in a phone or computer, see when it was last seen and revoke it.')->schema([
                         Actions::make([Action::make('openDevices')->label('Open Devices')->color('gray')->url(fn (): string => DeviceResource::getUrl())]),
                     ]),
                 ]),
@@ -436,7 +438,7 @@ class Settings extends Page
                             ->afterStateUpdated(fn (?string $state, Set $set) => is_numeric($state) ? $set('retention_days', (int) $state) : null),
                         TextInput::make('retention_days')->label('Days')
                             ->numeric()->minValue(1)->maxValue(365)->required()
-                            ->helperText('Older recordings go to the 48-hour undo bin, then are erased. Kept recordings and clients with their own setting are exempt.'),
+                            ->helperText('Older recordings go to the 48-hour undo bin, then are erased. Kept recordings and projects with their own setting are exempt.'),
                     ]),
                     $this->section('limit')
                         ->description('For the whole server, per calendar month in the time zone above. At the limit, devices show "Monthly transcription limit reached" and new transcripts wait. Leave a limit empty for none.')
@@ -467,9 +469,9 @@ class Settings extends Page
                             TextInput::make('plan_storage_gb')->label('Storage (GB)')
                                 ->integer()->minValue(1)->maxValue(1_000_000)->nullable()
                                 ->helperText('Encrypted recordings, the undo bin included. New uploads stop at the limit.'),
-                            TextInput::make('plan_max_devices')->label('Paired devices')
+                            TextInput::make('plan_max_devices')->label('Signed-in devices')
                                 ->integer()->minValue(1)->maxValue(10_000)->nullable()
-                                ->helperText('New pairings stop at the limit.'),
+                                ->helperText('New sign-ins stop at the limit.'),
                         ]),
                 ]),
                 // Since v1.3 (Phase B): the phone's Game and Watch translate panels start from these; the phone
