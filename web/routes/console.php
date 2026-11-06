@@ -33,3 +33,7 @@ Schedule::command('echoledger:prune-exports')->hourly()->withoutOverlapping(30);
 Schedule::command('model:prune')->daily()->withoutOverlapping(60);
 
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
+
+// Since v1.5, the connector: Passport's used and expired tokens and codes, and apps that registered but never connected.
+Schedule::command('passport:purge --hours=168')->daily();
+Schedule::command('echoledger:prune-oauth-clients')->daily();

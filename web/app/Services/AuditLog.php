@@ -21,7 +21,8 @@ use Throwable;
 
 /**
  * Writes the audit log (plan B16). Who did it comes from the request: a paired device, a signed-in console user,
- * or the system (scheduled jobs). Recording the event never breaks the action it describes.
+ * an app connected through the connector (since v1.5), or the system (scheduled jobs). Recording the event never breaks
+ * the action it describes.
  */
 final class AuditLog
 {
@@ -67,6 +68,10 @@ final class AuditLog
         'workspace_renamed' => 'Workspace renamed',
         'settings_changed' => 'Settings changed',
         'test_email_sent' => 'Test email sent',
+        // Since v1.5: the Claude and ChatGPT connector.
+        'connector_connected' => 'App connected',
+        'connector_disconnected' => 'App disconnected',
+        'connector_tool_call' => 'Read by a connected app',
     ];
 
     /**
@@ -104,6 +109,12 @@ final class AuditLog
      */
     private function actor(): array
     {
+        // The connector's guard is only asked once /mcp has made it the guard of the request: making it needs the keys.
+        if (auth()->getDefaultDriver() === 'api' && auth()->guard('api')->hasUser()) {
+            $person = auth()->guard('api')->user();
+
+            return ['connector', null, $person instanceof User ? (int) $person->getAuthIdentifier() : null];
+        }
         $device = auth()->guard('sanctum');
         if ($device->hasUser() && $device->user() instanceof Device) {
             return ['device', $device->user()->id, $device->user()->user_id];

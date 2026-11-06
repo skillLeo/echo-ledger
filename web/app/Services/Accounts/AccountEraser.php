@@ -15,6 +15,7 @@ use App\Models\RequestUpload;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AuditLog;
+use App\Services\Connector\ConnectedApps;
 use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\RequestLinks;
 use App\Services\WebSessions;
@@ -106,6 +107,8 @@ final class AccountEraser
             DB::table((string) config('session.table', 'sessions'))->where('user_id', $user->id)->delete();
         }
         $user->notifications()->delete();
+        // The connector's tables have no foreign key to the account: every token and code of the person ends here.
+        app(ConnectedApps::class)->disconnectAll($user);
         $id = $user->id;
         $user->delete();
         $this->audit->record('account_erased', null, null, "Account #{$id} erased after its 7 days", ['recordings' => $recordings, 'projects' => $projects, 'workspaces' => count($solo)]);

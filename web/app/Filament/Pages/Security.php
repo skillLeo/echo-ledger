@@ -142,6 +142,8 @@ class Security extends Page implements HasTable
         return match ($event->actor) {
             'device' => Device::query()->whereKey($event->device_id)->value('name') ?? 'A removed device',
             'web' => 'Console',
+            // Since v1.5: the app the connector's call came from ("Claude").
+            'connector' => (string) ($event->meta['client'] ?? 'A connected app'),
             default => 'EchoLedger',
         };
     }

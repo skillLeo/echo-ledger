@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Auth;
 
 use App\Exceptions\ApiError;
+use App\Models\ConnectedApp;
 use App\Models\Device;
 use App\Models\KnownBrowser;
 use App\Models\User;
@@ -13,6 +14,7 @@ use App\Services\Accounts\AccountExports;
 use App\Services\Accounts\AccountSessions;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\AuditLog;
+use App\Services\Connector\ConnectedApps;
 use App\Services\PairingService;
 use App\Services\SettingsRepository;
 use App\Services\WebSessions;
@@ -34,8 +36,8 @@ use Illuminate\Support\Arr;
 
 /**
  * The profile (since v1.5): name, email, password and two-step sign-in as before, and below them the account's own
- * things: Sign in with Google, and Devices (every phone, computer and browser signed in, "Sign in a device" with a
- * pairing QR for one's own account, Revoke and "Sign out everywhere").
+ * things: Sign in with Google, Devices (every phone, computer and browser signed in, "Sign in a device" with a pairing
+ * QR for one's own account, Revoke and "Sign out everywhere"), and Connected apps (Claude, ChatGPT) with Disconnect.
  */
 class EditProfile extends BaseEditProfile
 {
@@ -55,6 +57,7 @@ class EditProfile extends BaseEditProfile
             ...Arr::wrap($this->getMultiFactorAuthenticationContentComponent()),
             $this->googleSection(),
             $this->devicesSection(),
+            $this->connectedAppsSection(),
             Section::make('Recording consent')->schema([
                 Text::make(RecordingConsent::TEXT.' '.RecordingConsent::APPS),
             ]),
@@ -144,7 +147,7 @@ class EditProfile extends BaseEditProfile
                         ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md'),
                     Action::make('signOutEverywhere')->label('Sign out everywhere')->icon(Heroicon::OutlinedArrowRightStartOnRectangle)->color('danger')
                         ->requiresConfirmation()
-                        ->modalDescription('Every phone and computer is signed out (sign them in again to keep recording) and every browser, this one included.')
+                        ->modalDescription('Every phone and computer is signed out (sign them in again to keep recording), every browser, this one included, and every connected app such as Claude or ChatGPT.')
                         ->action(function (): void {
                             app(AccountSessions::class)->signOutEverywhere($this->account());
                             Filament::auth()->logout();
@@ -205,6 +208,37 @@ class EditProfile extends BaseEditProfile
     {
         $done = app(WebSessions::class)->revoke($this->account()->id, $id, session()->getId());
         Notification::make()->title($done ? 'Browser signed out' : 'That browser was already signed out')->success()->send();
+    }
+
+    /** Profile → Connected apps (since v1.5): Claude, ChatGPT and other apps that read this account's recordings. */
+    private function connectedAppsSection(): Section
+    {
+        return Section::make('Connected apps')
+            ->description('Apps you allowed to read your recordings. They only read; Disconnect ends their access at once.')
+            ->schema([
+                View::make('filament.profile.connected-apps')->viewData(fn (): array => $this->connectedAppsData()),
+            ]);
+    }
+
+    /** @return array<string, mixed> */
+    public function connectedAppsData(): array
+    {
+        $timezone = app(SettingsRepository::class)->displayTimezone();
+
+        return [
+            'apps' => app(ConnectedApps::class)->forUser($this->account())->map(fn (ConnectedApp $app): array => [
+                'id' => $app->id,
+                'name' => ConnectedApps::name($app->client_id),
+                'connected' => $app->created_at->copy()->setTimezone($timezone)->format('M j, Y'),
+                'last_used' => $app->last_used_at?->diffForHumans(),
+            ])->all(),
+        ];
+    }
+
+    public function disconnectApp(int $id): void
+    {
+        $done = app(ConnectedApps::class)->disconnect($this->account(), $id);
+        Notification::make()->title($done ? 'App disconnected' : 'That app was already disconnected')->success()->send();
     }
 
     private function googleSection(): Section

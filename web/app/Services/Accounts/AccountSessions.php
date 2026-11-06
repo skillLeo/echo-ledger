@@ -9,6 +9,7 @@ use App\Models\DevicePairingCode;
 use App\Models\DeviceSignInCode;
 use App\Models\User;
 use App\Services\AuditLog;
+use App\Services\Connector\ConnectedApps;
 use App\Services\WebSessions;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -54,6 +55,8 @@ final class AccountSessions
             DB::table((string) config('session.table', 'sessions'))->where('user_id', $user->id)->delete();
         }
         $user->forceFill(['remember_token' => Str::random(60)])->saveQuietly();
+        // Since v1.5 the apps connected through the connector lose their access too.
+        app(ConnectedApps::class)->disconnectAll($user);
         $this->audit->record('signed_out_everywhere', $user->id, $user, $devices->count() === 1 ? 'Signed out everywhere (1 device)' : "Signed out everywhere ({$devices->count()} devices)");
 
         return $devices->count();

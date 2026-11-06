@@ -66,6 +66,16 @@ const ISO_WEB_BYPASS = [
     'account.export.download' => 'signed, expiring link of one person\'s own data export',
     'legal.terms' => 'public legal page: no workspace data',
     'legal.privacy' => 'public legal page: no workspace data',
+    'mcp.oauth.protected-resource' => 'the connector\'s OAuth discovery: addresses and the scope, no workspace data',
+    'mcp.oauth.protected-resource.nested' => 'the connector\'s OAuth discovery: addresses and the scope, no workspace data',
+    'mcp.oauth.authorization-server' => 'the connector\'s OAuth discovery: addresses and the scope, no workspace data',
+    'mcp.oauth.authorization-server.nested' => 'the connector\'s OAuth discovery: addresses and the scope, no workspace data',
+    'mcp.oauth.register' => 'dynamic client registration: a name and redirect addresses, no account or workspace data',
+    'passport.authorizations.authorize' => 'the connector\'s sign-in: the signed-in person is asked about their own account',
+    'passport.authorizations.approve' => 'the connector\'s sign-in: the signed-in person approves an app for their own account',
+    'passport.authorizations.deny' => 'the connector\'s sign-in: the signed-in person refuses an app for their own account',
+    'passport.token' => 'the connector\'s sign-in: the one-time code and its verifier decide the person',
+    'mcp' => 'the connector: a person\'s token, and its tools ask as the apps do (ConnectorToolsTest)',
 ];
 
 const ISO_MISSING_EXPORT = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
