@@ -84,6 +84,17 @@ impl ApiClient {
         AppError::Server { status, message, code, retry_after_secs }
     }
 
+    /// Any `429` from a sign-in route reads as the sign-in lock: the route's own throttle (5 a minute from one address,
+    /// `rate_limited`) comes before the lock per email (`too_many_attempts`), and both send `Retry-After`.
+    fn sign_in_throttled(e: AppError) -> AppError {
+        match e {
+            AppError::Server { status: 429, message, retry_after_secs, .. } => {
+                AppError::Server { status: 429, message, code: Some("too_many_attempts".into()), retry_after_secs }
+            }
+            e => e,
+        }
+    }
+
     pub async fn register(&self, code: &str, name: &str, platform: &str, os_version: &str) -> AppResult<RegisterResponse> {
         let resp = self
             .http
@@ -92,7 +103,7 @@ impl ApiClient {
             .json(&json!({ "pairing_code": code, "name": name, "platform": platform, "app_version": env!("CARGO_PKG_VERSION"), "os_version": os_version }))
             .send()
             .await?;
-        Self::parse(resp).await
+        Self::parse(resp).await.map_err(Self::sign_in_throttled)
     }
 
     /// `POST /api/auth/password` (since v1.5): signs this computer in to the person's account, like pairing. An account
@@ -110,7 +121,7 @@ impl ApiClient {
             .await?;
         if !resp.status().is_success() {
             let e = Self::answer_error(resp).await;
-            return if e.code() == Some("otp_required") { Ok(PasswordAnswer::OtpRequired) } else { Err(e) };
+            return if e.code() == Some("otp_required") { Ok(PasswordAnswer::OtpRequired) } else { Err(Self::sign_in_throttled(e)) };
         }
         Ok(PasswordAnswer::SignedIn(Box::new(resp.json::<RegisterResponse>().await?)))
     }
@@ -126,7 +137,7 @@ impl ApiClient {
             .send()
             .await?;
         if !resp.status().is_success() {
-            return Err(Self::answer_error(resp).await);
+            return Err(Self::sign_in_throttled(Self::answer_error(resp).await));
         }
         Ok(resp.json::<RegisterResponse>().await?)
     }

@@ -84,6 +84,26 @@ async fn sign_in_refusals_read_as_plain_words() {
 }
 
 #[tokio::test]
+async fn the_route_s_own_throttle_reads_as_the_sign_in_lock_too() {
+    // 5 a minute from one address: Laravel's throttle answers before the lock per email does.
+    let throttled = || Reply::json(429, json!({"message": "Too Many Attempts.", "code": "rate_limited"})).header("Retry-After", "52");
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", "/api/auth/password", throttled())
+            .fixed("POST", "/api/auth/device/token", throttled())
+            .fixed("POST", "/api/devices/register", throttled()),
+    );
+    let api = public(&server);
+    let expected = "Too many sign-in attempts. Wait 52 seconds, then try again.";
+
+    let password = api.sign_in_password(&sign_in(Some("000000")), "macos", "").await.unwrap_err();
+    assert_eq!(password.to_string(), expected);
+    assert_eq!(password.retry_after_secs(), Some(52));
+    assert_eq!(api.device_token("one-time", "the-verifier", "Studio Mac", "macos", "").await.unwrap_err().to_string(), expected);
+    assert_eq!(api.register("7KQ2-M9XD", "Studio Mac", "macos", "").await.unwrap_err().to_string(), expected);
+}
+
+#[tokio::test]
 async fn an_older_server_has_no_account_sign_in() {
     // The mock answers unknown routes like Laravel: 404 without a code.
     let server = MockServer::start(Router::new());
