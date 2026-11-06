@@ -203,8 +203,12 @@ it('answers hostile identifiers on every id route with 404 and never a server er
 
     foreach ($ids as $id) {
         $uri = str_replace('{id}', $id, $route);
-        $status = $this->api($t['aliceToken'])->json($method, $uri)->getStatusCode();
-        if (! in_array($status, [404, 405, 422, 414], true)) {
+        $response = $this->api($t['aliceToken'])->json($method, $uri);
+        $status = $response->getStatusCode();
+        // macOS's C library counts the second byte of a raw "ǖ" as a control character, so parse_url (in
+        // Request::create) turns it into "_" and Laravel rightly refuses the broken path: a 400, not a leak.
+        $malformed = $status === 400 && $response->json('message') === 'Malformed URL.';
+        if (! in_array($status, [404, 405, 422, 414], true) && ! $malformed) {
             $failures[] = "{$method} {$id} => {$status}";
         }
     }
