@@ -32,7 +32,7 @@ function adminSettingsFile(array $settings, string $format = SettingsTransfer::F
 // --- Groups and search (B19) -------------------------------------------------------------------------------------
 
 it('names the groups like the desktop app and the phone', function () {
-    expect(array_values(SettingsSearch::GROUPS))->toBe(['General', 'Recording', 'Captions', 'Dictation', 'Privacy & security', 'Devices', 'Storage', 'Game translate', 'Watch translate', 'About']);
+    expect(array_values(SettingsSearch::GROUPS))->toBe(['General', 'Recording', 'Captions', 'Dictation', 'Privacy & security', 'Devices', 'Storage', 'Game translate', 'Watch translate', 'Email', 'About']);
 });
 
 it('puts every section in a group and gives each group at least one section', function () {
@@ -65,7 +65,8 @@ it('shows one group at a time', function (string $group, string $see, string $do
     'privacy' => ['privacy', 'Server certificate pins', 'Dictation engine'],
     'devices' => ['devices', 'Open Devices', 'Server certificate pins'],
     'storage' => ['storage', 'Monthly limit (minutes)', 'Open Devices'],
-    'about' => ['about', 'never holds API keys', 'Monthly limit (minutes)'],
+    'email' => ['email', 'SMTP server', 'Monthly limit (minutes)'],
+    'about' => ['about', 'never holds API keys', 'SMTP server'],
 ]);
 
 it('matches a setting by its name, a keyword or its group', function () {

@@ -21,6 +21,7 @@ final class SettingsSearch
         'storage' => 'Storage',
         'game' => 'Game translate',
         'watch' => 'Watch translate',
+        'email' => 'Email',
         'about' => 'About',
     ];
 
@@ -49,6 +50,7 @@ final class SettingsSearch
         'plan' => ['storage', 'Plan limits', 'plan workspace minutes gigabytes pairings quota raise'],
         'game' => ['game', 'Game translate', 'live translate pubg codm voice chat arabic english speed budget soniox cost dollars'],
         'watch' => ['watch', 'Watch translate', 'live translate subtitles films videos youtube urdu speed soniox'],
+        'email' => ['email', 'Email', 'smtp mail server host port encryption tls ssl starttls user username password sender from address name test email send dns spf dkim dmarc'],
         'about' => ['about', 'About', 'version export import backup settings file json'],
     ];
 

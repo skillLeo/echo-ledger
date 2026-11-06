@@ -25,6 +25,7 @@ use App\Services\ClientAi\ClaudeClientAi;
 use App\Services\ClientAi\ClientAi;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
+use App\Services\MailSettings;
 use App\Services\RecordingCipher;
 use App\Services\Screens\ClaudeScreenDescriber;
 use App\Services\Screens\ScreenDescriber;
@@ -40,6 +41,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Mail\MailManager;
+use Illuminate\Mail\SendQueuedMailable;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
@@ -52,6 +56,14 @@ class AppServiceProvider extends ServiceProvider
         // Scoped = fresh per request and per queued job (no stale settings/secrets across jobs).
         $this->app->scoped(SettingsRepository::class);
         $this->app->scoped(CredentialVault::class);
+        // Settings → Email (since v1.5): the stored SMTP server replaces the .env one once the mailer is made, and
+        // before each queued email, so a long-running worker sends with the latest save.
+        $this->app->singleton(MailSettings::class);
+        $this->app->afterResolving('mail.manager', function (mixed $manager): void {
+            if ($manager instanceof MailManager) {
+                $this->app->make(MailSettings::class)->apply($manager);
+            }
+        });
         // "Show as" views come from the Claude API; tests swap in a fake.
         $this->app->bind(TranscriptConverter::class, ClaudeTranscriptConverter::class);
         // Client workspaces (v1.4) ask Claude through one interface; tests swap in a fake.
@@ -80,6 +92,11 @@ class AppServiceProvider extends ServiceProvider
         AuditLog::listen();
         // The activity centre (B18).
         ActivityFeed::listen();
+        Event::listen(JobProcessing::class, function (JobProcessing $event): void {
+            if (($event->job->payload()['data']['commandName'] ?? null) === SendQueuedMailable::class) {
+                app(MailSettings::class)->apply();
+            }
+        });
         // Since v1.5: a console sign-in from a browser the account has not used before emails the account.
         Event::listen(Login::class, [KnownBrowsers::class, 'handle']);
 

@@ -7,12 +7,15 @@ namespace App\Filament\Pages;
 use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Filament\Resources\Devices\DeviceResource;
+use App\Mail\TestMail;
 use App\Models\User;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
 use App\Services\Accounts\SignUp;
 use App\Services\AuditLog;
+use App\Services\CredentialVault;
 use App\Services\EngineWait;
+use App\Services\MailSettings;
 use App\Services\RetentionPolicy;
 use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
@@ -49,11 +52,14 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 use UnitEnum;
 
 /**
@@ -148,6 +154,12 @@ class Settings extends Page
             'vocabulary_replacements' => TextReplacements::rules($all['vocabulary.replacements'] ?? []),
             'display_timezone' => is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC',
             'signup_mode' => isset(SignUp::MODES[$all['signup.mode'] ?? '']) ? $all['signup.mode'] : SignUp::NOBODY,
+            'mail_host' => $all['mail.host'] ?? null,
+            'mail_port' => (int) ($all['mail.port'] ?? 587) ?: 587,
+            'mail_encryption' => isset(MailSettings::ENCRYPTIONS[$all['mail.encryption'] ?? '']) ? $all['mail.encryption'] : 'tls',
+            'mail_username' => $all['mail.username'] ?? null,
+            'mail_from_address' => $all['mail.from_address'] ?? null,
+            'mail_from_name' => $all['mail.from_name'] ?? null,
             'marker_tags' => SessionMarkers::presets($all['markers.tags'] ?? SessionMarkers::DEFAULT_TAGS),
             'assemblyai_region' => $all['assemblyai.region'],
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
@@ -479,6 +491,37 @@ class Settings extends Page
                         Select::make('live_translate_watch_speed')->label('Speed')->options(self::LIVE_TRANSLATE_SPEEDS)->required(),
                     ]),
                 ]),
+                // Since v1.5: the SMTP server of every email (sign-up, password resets, invitations, sign-in alerts).
+                'email' => $this->tab('email', [
+                    $this->section('email')->columns(2)
+                        ->description('Every email goes through this server: confirmations, password resets, invitations, sign-in alerts, exports. Empty server: the mailer of the server\'s .env file. The DNS records that keep these emails out of spam are in docs/EMAIL_DNS.md.')
+                        ->schema([
+                            TextInput::make('mail_host')->label('SMTP server')->placeholder('smtp.example.com')->maxLength(255)
+                                ->regex('/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/')->validationMessages(['regex' => 'Enter a host name such as smtp.example.com.']),
+                            TextInput::make('mail_port')->label('Port')->integer()->minValue(1)->maxValue(65535)->required(),
+                            Select::make('mail_encryption')->label('Encryption')->options(MailSettings::ENCRYPTIONS)->selectablePlaceholder(false)->required(),
+                            TextInput::make('mail_username')->label('User')->maxLength(255)->autocomplete('off'),
+                            TextInput::make('mail_password')->label('Password')->password()->maxLength(500)->autocomplete('new-password')
+                                ->placeholder('Leave empty to keep it')
+                                ->helperText(fn (): string => 'Stored encrypted like the API credentials, never shown again. Now: '.app(CredentialVault::class)->describe(...MailSettings::VAULT).'.'),
+                            Toggle::make('mail_password_forget')->label('Remove the stored password')->default(false)
+                                ->visible(fn (): bool => app(CredentialVault::class)->has(...MailSettings::VAULT)),
+                            TextInput::make('mail_from_address')->label('From address')->email()->maxLength(255)->placeholder('echoledger@example.com')
+                                ->helperText('Use an address of a domain whose DNS records allow this server (SPF, DKIM, DMARC).'),
+                            TextInput::make('mail_from_name')->label('From name')->maxLength(100)->placeholder('EchoLedger'),
+                            Actions::make([
+                                Action::make('sendTestEmail')->label('Send a test email')->icon(Heroicon::OutlinedPaperAirplane)->color('gray')
+                                    ->modalHeading('Send a test email')
+                                    ->modalDescription('Sent at once with the values on this page, saved or not.')
+                                    ->modalSubmitActionLabel('Send')
+                                    ->schema([
+                                        TextInput::make('to')->label('Send to')->email()->required()->maxLength(255)
+                                            ->default(fn (): ?string => auth()->user()?->email),
+                                    ])
+                                    ->action(fn (array $data) => $this->sendTestEmail((string) ($data['to'] ?? ''))),
+                            ])->key('smtp-actions')->columnSpanFull(),
+                        ]),
+                ]),
                 'about' => $this->tab('about', [
                     $this->section('about')
                         ->description('Export these settings to a file, or load them from one with Import settings at the top of the page. The file never holds API keys, webhook secrets or passwords.')
@@ -527,6 +570,62 @@ class Settings extends Page
             'EchoLedger console settings '.now()->format('Y-m-d').'.json',
             ['Content-Type' => 'application/json'],
         );
+    }
+
+    /**
+     * Settings → Email → "Send a test email": sent at once through the SMTP values on the page (saved or not), so the
+     * answer says whether they work. The SMTP server's own error is shown, without the password; 5 a minute.
+     */
+    public function sendTestEmail(string $to): void
+    {
+        if (RateLimiter::tooManyAttempts('test-email:'.auth()->id(), 5)) {
+            Notification::make()->title('Too many test emails')->body('Wait a minute, then try again.')->danger()->send();
+
+            return;
+        }
+        RateLimiter::hit('test-email:'.auth()->id(), 60);
+        $state = $this->form->getRawState();
+        $values = [
+            'mail.host' => $state['mail_host'] ?? null,
+            'mail.port' => $state['mail_port'] ?? null,
+            'mail.encryption' => $state['mail_encryption'] ?? null,
+            'mail.username' => $state['mail_username'] ?? null,
+            'mail.from_address' => $state['mail_from_address'] ?? null,
+            'mail.from_name' => $state['mail_from_name'] ?? null,
+        ];
+        $host = trim((string) $values['mail.host']);
+        if ($host === '' || preg_match('/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/', $host) !== 1 || filter_var($to, FILTER_VALIDATE_EMAIL) === false) {
+            Notification::make()->title('Enter the SMTP server and an address first')->danger()->send();
+
+            return;
+        }
+        $password = match (true) {
+            filled($state['mail_password'] ?? null) => (string) $state['mail_password'],
+            (bool) ($state['mail_password_forget'] ?? false) => null,
+            default => app(CredentialVault::class)->get(...MailSettings::VAULT),
+        };
+        config(['mail.mailers.'.MailSettings::TEST_MAILER => MailSettings::mailerConfig($values, $password)]);
+        $from = MailSettings::from($values, app(MailSettings::class)->envFrom());
+        $mail = new TestMail($host);
+        if (filled($from['address'])) {
+            $mail->from((string) $from['address'], filled($from['name']) ? (string) $from['name'] : null);
+        }
+        try {
+            Mail::mailer(MailSettings::TEST_MAILER)->to($to)->send($mail);
+            app(AuditLog::class)->record('test_email_sent', (int) auth()->id(), null, "Test email sent through {$host}", ['host' => $host]);
+            Notification::make()->title('Test email sent')
+                ->body("Sent to {$to} through {$host}. If it does not arrive, look in the spam folder and check the DNS records in docs/EMAIL_DNS.md.")
+                ->success()->send();
+        } catch (Throwable $e) {
+            $message = $e->getMessage();
+            if (filled($password)) {
+                $message = str_replace([$password, base64_encode($password)], '••••', $message);
+            }
+            Notification::make()->title('The test email was not sent')->body(Str::limit($message, 300, '…'))->danger()->persistent()->send();
+        } finally {
+            Mail::purge(MailSettings::TEST_MAILER);
+            config(['mail.mailers.'.MailSettings::TEST_MAILER => null]);
+        }
     }
 
     /** Applies a settings file: its values are put in the form and saved only if the whole form is valid. */
@@ -659,6 +758,12 @@ class Settings extends Page
             'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',
             'signup.mode' => isset(SignUp::MODES[$state['signup_mode'] ?? '']) ? $state['signup_mode'] : SignUp::NOBODY,
+            'mail.host' => filled($state['mail_host'] ?? null) ? mb_strtolower(trim((string) $state['mail_host'])) : null,
+            'mail.port' => (int) ($state['mail_port'] ?? 587) ?: 587,
+            'mail.encryption' => isset(MailSettings::ENCRYPTIONS[$state['mail_encryption'] ?? '']) ? $state['mail_encryption'] : 'tls',
+            'mail.username' => filled($state['mail_username'] ?? null) ? trim((string) $state['mail_username']) : null,
+            'mail.from_address' => filled($state['mail_from_address'] ?? null) ? trim((string) $state['mail_from_address']) : null,
+            'mail.from_name' => filled($state['mail_from_name'] ?? null) ? trim((string) $state['mail_from_name']) : null,
             'assemblyai.region' => $state['assemblyai_region'],
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],
@@ -687,6 +792,17 @@ class Settings extends Page
             'routing.final' => self::routingFromState($state),
             'routing.urdu_wait_hours' => EngineWait::clampHours($state['urdu_wait_hours'] ?? null),
         ]);
+        // The SMTP password goes to the credential vault (its change is in the audit log there); empty keeps it.
+        $vault = app(CredentialVault::class);
+        [$provider, $key] = MailSettings::VAULT;
+        if (filled($state['mail_password'] ?? null)) {
+            $vault->put($provider, $key, (string) $state['mail_password'], (int) auth()->id());
+        } elseif (($state['mail_password_forget'] ?? false) && $vault->has($provider, $key)) {
+            $vault->forget($provider, $key);
+        }
+        $this->data['mail_password'] = null;
+        $this->data['mail_password_forget'] = false;
+        app(MailSettings::class)->apply();
         // Plan limits live on the plan of the current workspace, not in settings (never exported).
         $limit = fn (string $key): ?int => filled($state[$key] ?? null) ? (int) $state[$key] : null;
         $gb = $limit('plan_storage_gb');

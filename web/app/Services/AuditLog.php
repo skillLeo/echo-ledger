@@ -65,6 +65,7 @@ final class AuditLog
         'role_changed' => 'Role changed',
         'workspace_renamed' => 'Workspace renamed',
         'settings_changed' => 'Settings changed',
+        'test_email_sent' => 'Test email sent',
     ];
 
     /**
