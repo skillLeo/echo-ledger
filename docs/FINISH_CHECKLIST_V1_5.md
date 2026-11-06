@@ -21,6 +21,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 | N12 | Keystore (optional) | Signed APK | Path, alias and passwords at build time, or keep debug builds. |
 | N13 | Soniox credit | Live Translate | soniox.com → Billing → add funds. |
 | N14 | Back up the desktop updater key | Installed desktop apps only take updates signed with it; losing it means reinstalling by hand | Copy C:echoledger-keysdesktop-updater.key (made 2026-11-04, no password yet) to your password manager or an offline drive. Say if you want a password on it before the public release. |
+| N15 | Production SSH from the Mac | Deploys (backup, bundle, migrations) run over SSH; the Mac has the keys but no host entry, and trying keys against the server is not something I do on my own | Add the console server to `~/.ssh/config` as `Host skillleo-host` (HostName, Port, User and IdentityFile as on the Windows laptop), or tell me which key and I will add the entry; then say "ssh ready". |
 
 ## Step 0
 
