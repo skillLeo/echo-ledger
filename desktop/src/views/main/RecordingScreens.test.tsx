@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { LibraryView } from "./LibraryView";
 import type { LibraryItem, ScreenMoment, TranscriptDetail } from "../../lib/ipc";
-import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeScreen, makeTranscript } from "../../test/fixtures";
 import { forgetPictures } from "../../lib/screens";
 
@@ -95,6 +95,29 @@ describe("screens on the recording page", () => {
     expect((document.querySelector("audio") as HTMLAudioElement).currentTime).toBe(880);
     expect(play).toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("reads the screens again once for fresh links when a picture's link has expired, and gives the focus back", async () => {
+    await openRecording(withScreens());
+    // The full pictures' links have expired; the list read again signs them anew.
+    respondWith("screen_image", ({ url }) => (String(url).endsWith("sig=1") && !String(url).includes("thumb") ? Promise.reject("The link expired.") : `data:image/webp;base64,${btoa(String(url))}`));
+    respondWith("session_screens", () => ({ data: screens.map((sc) => ({ ...sc, image_url: sc.image_url.replace("sig=1", "sig=2") })) }));
+    const thumb = screen.getByText("Screen 1 · 1:01").closest("button")!;
+    thumb.focus();
+    fireEvent.click(thumb);
+    await flushAsync();
+    await flushAsync();
+    expect(callsOf("session_screens")).toHaveLength(2);
+    const viewer = screen.getByRole("dialog", { name: "Screen 1 · 1:01" });
+    expect(within(viewer).getByRole("img")).toHaveAttribute("src", `data:image/webp;base64,${btoa(screens[0].image_url.replace("sig=1", "sig=2"))}`);
+    // A picture that still fails asks no more.
+    fail("screen_image", "Offline");
+    fireEvent.click(within(viewer).getByRole("button", { name: "Next screen" }));
+    await flushAsync();
+    expect(screen.getByRole("dialog")).toHaveTextContent("The picture could not be loaded.");
+    expect(callsOf("session_screens")).toHaveLength(2);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(document.activeElement).toBe(thumb);
   });
 
   it("shows every screen in the gallery", async () => {

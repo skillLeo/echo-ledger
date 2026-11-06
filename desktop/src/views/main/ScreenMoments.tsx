@@ -85,9 +85,10 @@ export function ScreenGallery({ screens, onOpen, onClose }: { screens: ScreenMom
 
 /**
  * The enlarged screen: previous / next (also the arrow keys), its description and the text on it, Play from here and,
- * on the recording page, Delete. Escape or a click beside it closes it.
+ * on the recording page, Delete. Escape or a click beside it closes it, and the focus goes back where it was. A picture
+ * that cannot be fetched (its signed link is valid for 30 minutes) has the list read again once, for fresh links.
  */
-export function ScreenViewer({ screens, index, onIndex, onClose, onPlay, onDelete, heading }: {
+export function ScreenViewer({ screens, index, onIndex, onClose, onPlay, onDelete, heading, onExpired }: {
   screens: ScreenMoment[];
   index: number;
   onIndex: (index: number) => void;
@@ -97,12 +98,24 @@ export function ScreenViewer({ screens, index, onIndex, onClose, onPlay, onDelet
   onDelete?: (screen: ScreenMoment) => void;
   /** A line under the label (a project's viewer names the recording). */
   heading?: (screen: ScreenMoment) => string | null;
+  /** Reads the screens again for fresh links (asked once per viewer). */
+  onExpired?: () => void;
 }) {
   const at = Math.max(0, Math.min(index, screens.length - 1));
   const screen = screens[at] as ScreenMoment | undefined;
   const { src, failed } = usePicture(screen?.image_url ?? null);
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => box.current?.focus(), []);
+  const renewed = useRef(false);
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    box.current?.focus();
+    return () => before?.focus?.();
+  }, []);
+  useEffect(() => {
+    if (!failed || renewed.current || !onExpired) return;
+    renewed.current = true;
+    onExpired();
+  }, [failed, onExpired]);
   if (!screen) return null;
   const step = (delta: 1 | -1) => {
     const next = at + delta;
@@ -135,7 +148,7 @@ export function ScreenViewer({ screens, index, onIndex, onClose, onPlay, onDelet
           </button>
           <div className="screen-viewer-picture" data-testid="screen-picture">
             {src ? <img src={src} alt={screenAlt(screen)} width={screen.width || undefined} height={screen.height || undefined} />
-              : failed ? <span className="small muted">The picture could not be loaded. Close and open it again to retry.</span>
+              : failed ? <span className="small muted">The picture could not be loaded.</span>
                 : <span className="spinner" aria-label="Loading the picture" />}
           </div>
           <button type="button" className="btn ghost icon-only screen-step" aria-label="Next screen" title="Next screen" disabled={at === screens.length - 1} onClick={() => step(1)}>
@@ -211,6 +224,15 @@ export function ProjectScreens({ client, first, notify, onOpenRecording, onClien
     }
   };
 
+  // The links of the first page, read again when a picture's link has expired.
+  const renew = useCallback(() => {
+    api.clientScreens(client.id, true, null).then((page) => {
+      if (!page) return;
+      const fresh = new Map(page.data.map((s) => [s.id, s]));
+      setScreens((list) => list.map((s) => (fresh.has(s.id) ? { ...s, image_url: fresh.get(s.id)!.image_url, thumb_url: fresh.get(s.id)!.thumb_url } : s)));
+    }).catch(() => undefined);
+  }, [client.id]);
+
   const toggle = async () => {
     const on = !keeps;
     setSaving(true);
@@ -273,7 +295,7 @@ export function ProjectScreens({ client, first, notify, onOpenRecording, onClien
         </div>
       )}
       {open !== null && screens[open] && (
-        <ScreenViewer screens={screens} index={open} onIndex={setOpen} onClose={() => setOpen(null)}
+        <ScreenViewer screens={screens} index={open} onIndex={setOpen} onClose={() => setOpen(null)} onExpired={renew}
           heading={(s) => sessionLine(s as ProjectScreen)}
           onPlay={(s) => { setOpen(null); onOpenRecording((s as ProjectScreen).session_id, s.at_ms); }} />
       )}

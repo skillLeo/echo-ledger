@@ -1303,7 +1303,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         </div>
       </div>
       {screenOpen !== null && screens?.[screenOpen] && (
-        <ScreenViewer screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)}
+        <ScreenViewer screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)} onExpired={reloadScreens}
           onPlay={playbackUrl ? (s) => { setScreenOpen(null); seek(s.at_ms); } : undefined}
           onDelete={(s) => void deleteScreen(s)} />
       )}

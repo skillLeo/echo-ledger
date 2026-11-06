@@ -208,9 +208,12 @@ impl Screens {
         self.live.user_paused.store(paused, Ordering::SeqCst);
         let mut pill = lock(&self.live.pill);
         if let Some(pill) = pill.as_mut() {
-            pill.on = !paused && pill.on;
             if paused {
+                pill.on = false;
                 pill.reason = Some(HoldReason::You);
+            } else if pill.reason == Some(HoldReason::You) {
+                // Until the next sample says on or why it waits, the chip reads "starting" instead of "paused by you".
+                pill.reason = None;
             }
         }
     }
@@ -494,6 +497,22 @@ mod tests {
         assert_eq!(s.listed(Ok(json!({"data": []}))).unwrap(), Some(json!({"data": []})));
         assert!(s.listed(Err(server(500, "server_error"))).is_err());
         assert!(s.in_plan(), "only the plan's answer stops the capture");
+    }
+
+    #[test]
+    fn a_pause_in_the_pill_shows_at_once_and_a_resume_waits_for_the_next_sample() {
+        let s = screens();
+        *lock(&s.live.pill) = Some(ScreensPill { on: true, reason: None, count: 2 });
+        s.set_paused(true);
+        assert_eq!(*lock(&s.live.pill), Some(ScreensPill { on: false, reason: Some(HoldReason::You), count: 2 }));
+        assert!(s.live.user_paused.load(Ordering::SeqCst));
+        s.set_paused(false);
+        assert_eq!(*lock(&s.live.pill), Some(ScreensPill { on: false, reason: None, count: 2 }), "not on before a sample says so");
+        assert!(!s.live.user_paused.load(Ordering::SeqCst));
+        // A resume never hides another reason to wait.
+        *lock(&s.live.pill) = Some(ScreensPill { on: false, reason: Some(HoldReason::Minimised), count: 2 });
+        s.set_paused(false);
+        assert_eq!(lock(&s.live.pill).as_ref().and_then(|p| p.reason), Some(HoldReason::Minimised));
     }
 
     #[test]
