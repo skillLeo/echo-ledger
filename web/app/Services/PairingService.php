@@ -72,7 +72,9 @@ final class PairingService
         return DB::transaction(function () use ($hash, $attributes, $ip): array {
             /** @var DevicePairingCode|null $pairing */
             $pairing = DevicePairingCode::query()->where('code_hash', $hash)->lockForUpdate()->first();
-            if ($pairing === null || $pairing->used_at !== null || $pairing->expires_at->isPast()) {
+            // Since v1.5 an account in its deletion grace signs nothing in (its codes are dropped then; this covers a race).
+            $owner = $pairing === null ? null : User::query()->find($pairing->user_id);
+            if ($pairing === null || $pairing->used_at !== null || $pairing->expires_at->isPast() || ! $owner instanceof User || $owner->isBeingDeleted()) {
                 throw ValidationException::withMessages(['pairing_code' => 'This pairing code is invalid, expired, or already used.']);
             }
 

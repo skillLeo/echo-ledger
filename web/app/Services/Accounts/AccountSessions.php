@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services\Accounts;
 
 use App\Models\Device;
+use App\Models\DevicePairingCode;
+use App\Models\DeviceSignInCode;
 use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\WebSessions;
@@ -14,8 +16,8 @@ use Illuminate\Support\Str;
 
 /**
  * Where an account is signed in (since v1.5, Profile → Devices): its devices in every workspace and its console
- * browsers. "Sign out everywhere" revokes every device with its tokens, ends every console session and changes the
- * "remember me" token, so nothing stays signed in.
+ * browsers. "Sign out everywhere" revokes every device with its tokens, ends every console session, drops the
+ * pairing and browser sign-in codes not used yet and changes the "remember me" token, so nothing stays or gets signed in.
  */
 final class AccountSessions
 {
@@ -45,6 +47,9 @@ final class AccountSessions
         foreach ($devices as $device) {
             $device->delete();
         }
+        // A code made a minute ago would otherwise still bring a device in afterwards.
+        DevicePairingCode::query()->withoutGlobalScopes()->where('user_id', $user->id)->whereNull('used_at')->delete();
+        DeviceSignInCode::query()->withoutGlobalScopes()->where('user_id', $user->id)->whereNull('used_at')->delete();
         if (WebSessions::available()) {
             DB::table((string) config('session.table', 'sessions'))->where('user_id', $user->id)->delete();
         }

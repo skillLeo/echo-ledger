@@ -8,6 +8,9 @@ use App\Models\Device;
 use App\Models\DevicePairingCode;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Accounts\AccountSessions;
+use App\Services\Accounts\DeviceSignIn;
+use App\Services\PairingService;
 use App\Services\Workspaces\Workspaces;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -90,6 +93,34 @@ it('signs out everywhere from the profile: every device, token and browser, this
         ->and($member->fresh()->remember_token)->not->toBe('old-remember-token')
         ->and(AuditEvent::query()->where('event', 'signed_out_everywhere')->where('user_id', $member->id)->exists())->toBeTrue();
     $this->assertGuest('web');
+});
+
+it('drops the pairing and browser sign-in codes not used yet when signing out everywhere', function () {
+    $member = Fx::user();
+    $this->actingAs($member, 'web');
+    $display = app(PairingService::class)->createCode($member);
+    $verifier = str_repeat('v', 64);
+    $code = app(DeviceSignIn::class)->approve($member, ['code_challenge' => DeviceSignIn::challengeOf($verifier), 'name' => 'Pixel', 'platform' => 'android']);
+    $other = Fx::user();
+    $kept = app(PairingService::class)->createCode($other);
+
+    app(AccountSessions::class)->signOutEverywhere($member);
+
+    app('auth')->forgetGuards();
+    $device = ['name' => 'Pixel', 'platform' => 'android', 'app_version' => '1.5.0', 'os_version' => '16'];
+    $this->postJson('/api/devices/register', ['pairing_code' => $display, ...$device])->assertStatus(422);
+    $this->postJson('/api/auth/device/token', ['code' => $code, 'code_verifier' => $verifier, ...$device])->assertStatus(422)->assertJsonPath('code', 'invalid_code');
+    $this->postJson('/api/devices/register', ['pairing_code' => $kept, ...$device])->assertCreated();
+});
+
+it('pairs no device for an account in its deletion grace', function () {
+    $member = Fx::user();
+    $display = app(PairingService::class)->createCode($member);
+    $member->forceFill(['deletion_requested_at' => now(), 'deletes_at' => now()->addDays(7)])->save();
+
+    $this->postJson('/api/devices/register', ['pairing_code' => $display, 'name' => 'Pixel', 'platform' => 'android', 'app_version' => '1.5.0', 'os_version' => '16'])
+        ->assertStatus(422)->assertJsonPath('code', 'validation_failed');
+    expect(unscoped(fn () => Device::query()->where('user_id', $member->id)->count()))->toBe(0);
 });
 
 it('signs out everywhere from the API, the asking device included (204)', function () {
