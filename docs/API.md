@@ -50,7 +50,7 @@ Every addition below is marked **(since v1.1)**.
 | 403 | `budget_exceeded` | Monthly limit reached: the server cap (message `Monthly transcription limit reached`) or, since B20, the workspace plan's minutes (message `Monthly limit reached — raise it in Settings`) | Keep recording without captions; show the message; do not retry until `usage.limit_reached` is false |
 | 403 | `storage_limit_reached` | Since B20: a new recording would pass the workspace plan's storage (message `Storage limit reached — raise it in Settings`) | Permanent for this upload: keep the recording on the device, show the message |
 | 403 | `device_limit_reached` | Since B20: pairing would pass the workspace plan's devices (message `Device limit reached — raise it in Settings`) | Show the message; do not retry |
-| 403 | `not_allowed` | Since B20: the role does not allow it — a member deleting, restoring or erasing someone else's recording, or a non-admin device changing the shared vocabulary; since v1.5 a viewer recording or uploading | Permanent; show the message |
+| 403 | `not_allowed` | The role does not allow it: since v1.5 a viewer recording or uploading, or a non-admin device changing the shared vocabulary (someone else's recording or project answers `404` since v1.5: it is private to its maker) | Permanent; show the message |
 | 403 | `ai_budget_reached` | Since v1.4: the workspace's monthly AI budget for client workspaces (`client_ai.monthly_usd`, default $5) is used up; since v1.5 the plan's AI credits | Show the message; client notes and Ask wait until next month or a higher budget |
 | 403 | `feature_not_in_plan` | Since v1.5: the workspace's plan leaves the feature out (`feature`: `live_translate`, `screen_moments`, `ai_notes`, `connector`) | Hide the feature; show the message once |
 | 403 | `seat_limit_reached` | Since v1.5: an invitation would pass the plan's seats | Show the message |
@@ -669,8 +669,8 @@ project can sit inside another one (subfolders, at most 4 levels), and recording
   A move under itself or one of its own subfolders is `422 invalid_parent`; deeper than 4 levels is `422 too_deep`.
 - `DELETE /api/clients/{id}` — `sessions:write`: deletes the project. Its recordings go to the Inbox (nothing is
   deleted), its subfolders move up to its parent, and its files, brief, notes, memory and rules go with it.
-  `200 {"moved_sessions": 12, "moved_projects": 2}`; `404 client_not_found`; a member of a workspace deleting a
-  project needs the admin or owner role (`403 not_allowed`).
+  `200 {"moved_sessions": 12, "moved_projects": 2}`; `404 client_not_found` (since v1.5 also for a project someone
+  else made: projects are private to their maker).
 - `GET /api/library` gains `folder` (the smart folders, computed views and never copies): `inbox` (no project),
   `whatsapp`, `whatsapp_business`, `google_meet`, `zoom`, `teams`, `phone` (SIM calls), `voice_notes`, `imported`
   (files imported on a device, uploaded on the console or sent through a request link) and `shared` (recordings
