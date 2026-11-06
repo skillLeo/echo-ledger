@@ -5,6 +5,7 @@ import { api, errorMessage, type AppStatus, type PermissionsStatus, type TestRes
 import { SignInView } from "./SignInView";
 import { testVerdict } from "./CaptureSettings";
 import { ConsentNotice } from "./ConsentNotice";
+import { Wordmark } from "../../components/BrandMark";
 import { CONSENT_TICK } from "../../lib/consent";
 
 export const STEPS = ["Permissions", "Sign in", "Test", "Done"] as const;
@@ -58,6 +59,7 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
   return (
     <main className="gate onboarding">
       <div className="card onboarding-card">
+        <Wordmark />
         <ol className="steps" aria-label="Setup steps">
           {STEPS.map((s, i) => <li key={s} className={i === index ? "current" : i < index ? "done" : ""} aria-current={i === index ? "step" : undefined}>{s}</li>)}
         </ol>

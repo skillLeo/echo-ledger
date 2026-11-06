@@ -70,6 +70,18 @@ pub fn dot_colour(state: TrayState) -> Option<[u8; 4]> {
     }
 }
 
+/// The tray's own picture (v1.5): the small mark of docs/design/brand (the brand's choice below 24 px), drawn for the
+/// menu bar's 18 pt at 2x on a Mac and for the notification area's 16 px at 2x on Windows. The window icon is the
+/// fallback if it ever fails to decode.
+#[cfg(target_os = "macos")]
+const TRAY_PNG: &[u8] = include_bytes!("../icons/tray-macos.png");
+#[cfg(not(target_os = "macos"))]
+const TRAY_PNG: &[u8] = include_bytes!("../icons/tray-windows.png");
+
+fn tray_base(app: &AppHandle) -> Option<Image<'static>> {
+    Image::from_bytes(TRAY_PNG).ok().or_else(|| app.default_window_icon().map(|i| i.clone().to_owned()))
+}
+
 /// Paints a filled dot with a transparent ring in the bottom-right quarter of an RGBA image.
 pub fn paint_dot(rgba: &mut [u8], width: u32, height: u32, colour: [u8; 4]) {
     let size = width.min(height) as f32;
@@ -193,8 +205,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .tooltip(tooltip(TrayState::Idle))
         .menu(&menu)
         .show_menu_on_left_click(false);
-    if let Some(icon) = app.default_window_icon() {
-        builder = builder.icon(icon.clone());
+    if let Some(icon) = tray_base(app) {
+        builder = builder.icon(icon);
     }
     builder
         .on_menu_event(|app, event| {
@@ -286,7 +298,7 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, p
     if *last != Some(state) {
         *last = Some(state);
         let _ = tray.set_tooltip(Some(tooltip(state)));
-        if let Some(base) = app.default_window_icon() {
+        if let Some(base) = tray_base(app) {
             let mut rgba = base.rgba().to_vec();
             if let Some(colour) = dot_colour(state) {
                 paint_dot(&mut rgba, base.width(), base.height(), colour);
@@ -388,6 +400,33 @@ mod tests {
         // A recording that ran before the role changed keeps its Stop line.
         let recording = MenuShape { recording: true, ..shape };
         assert!(labels(&recording).contains(&"Stop recording".to_string()));
+    }
+
+    #[test]
+    fn the_tray_draws_the_small_mark_at_the_tray_s_size() {
+        let icon = Image::from_bytes(TRAY_PNG).expect("the tray icon decodes");
+        let size = if cfg!(target_os = "macos") { 36 } else { 32 };
+        assert_eq!((icon.width(), icon.height()), (size, size));
+        let px = |x: u32, y: u32| {
+            let at = ((y * icon.width() + x) * 4) as usize;
+            [icon.rgba()[at], icon.rgba()[at + 1], icon.rgba()[at + 2], icon.rgba()[at + 3]]
+        };
+        // A rounded tile: the corner is transparent, the top edge is brand indigo, the ledger line is white.
+        assert_eq!(px(0, 0)[3], 0);
+        assert_eq!(px(size / 2, 2), [0x3E, 0x63, 0xDD, 0xFF]);
+        assert!(px(size / 2, size * 45 / 64)[..3].iter().all(|&c| c > 0xF0));
+        for other in [include_bytes!("../icons/tray-macos.png").as_slice(), include_bytes!("../icons/tray-windows.png").as_slice()] {
+            assert!(Image::from_bytes(other).is_ok());
+        }
+    }
+
+    #[test]
+    fn a_status_dot_fits_the_tray_icon() {
+        let icon = Image::from_bytes(TRAY_PNG).unwrap();
+        let mut rgba = icon.rgba().to_vec();
+        paint_dot(&mut rgba, icon.width(), icon.height(), [0xE5, 0x48, 0x4D, 0xFF]);
+        let at = (((icon.height() - 6) * icon.width() + icon.width() - 6) * 4) as usize;
+        assert_eq!(&rgba[at..at + 4], &[0xE5, 0x48, 0x4D, 0xFF]);
     }
 
     #[test]

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type AppStatus } from "../../lib/ipc";
 import { PairingView } from "./PairingView";
 import { ShieldIcon } from "../../components/Icons";
+import { Wordmark } from "../../components/BrandMark";
 
 const PAIRING_ONLY = "This server does not sign in with accounts yet. Pair this computer with a code from the console instead.";
 const OTP_ASKED = "Your account has two-factor sign-in. Type the code your authenticator app shows, or a recovery code.";
@@ -103,7 +104,7 @@ export function SignInView({ onSignedIn, notify, serverUrl }: {
   return (
     <div style={{ display: "grid", placeItems: "center", height: "100%", padding: 24 }}>
       <form className="card sign-in" style={{ width: 440 }} onSubmit={submit} aria-labelledby="sign-in-title">
-        <div className="brand" style={{ padding: "0 0 14px" }}><span className="brand-mark" />EchoLedger</div>
+        <Wordmark />
         <h1 id="sign-in-title" className="page-title">Sign in to EchoLedger</h1>
         <p className="page-sub">Sign in with your EchoLedger account. Your recordings and projects are there on every computer and phone you sign in on.</p>
         <label className="field">Server address

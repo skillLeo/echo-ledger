@@ -181,8 +181,11 @@ html[data-material] .sidebar { background: transparent; border-right-color: tran
 html[data-platform="macos"] .titlebar-drag { display: block; position: fixed; top: 0; left: 0; right: 0; height: 28px; z-index: 40; }
 html[data-platform="macos"] .sidebar { padding-top: 44px; }
 html[data-platform="macos"] .content { padding-top: 40px; }
-.brand { display: flex; align-items: center; gap: var(--space-2); min-height: 40px; padding: 0 var(--space-1) var(--space-3) var(--space-2); font-weight: 600; font-size: 15px; letter-spacing: -0.1px; }
-.brand-mark { width: 24px; height: 24px; border-radius: 7px; background: var(--accent); flex: none; display: grid; place-items: center; color: var(--on-accent); }
+.brand { display: flex; align-items: center; gap: var(--space-2); min-height: 40px; padding: 0 var(--space-1) var(--space-3) var(--space-2); font-weight: 600; font-size: var(--text-lg); letter-spacing: -0.3px; }
+/* The brand's mark (components/BrandMark.tsx, docs/design/brand): its own tile and indigo, so no background here. */
+.brand-mark { flex: none; display: block; }
+/* The wordmark on the sign-in, pairing, lock and setup cards: the mark, then the name in Inter 600, tightly tracked. */
+.wordmark { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); font-weight: 600; font-size: var(--text-lg); letter-spacing: -0.3px; color: var(--text); }
 .brand-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; }
 .sidebar-toggle { flex: none; width: 32px; height: 32px; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); display: grid; place-items: center; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
 .sidebar-toggle:hover { background: var(--surface-3); color: var(--text); }
@@ -710,6 +713,7 @@ audio.player { display: none; }
 .lock-screen { display: grid; place-items: center; min-height: 100vh; padding: var(--space-4); }
 .lock-card { display: grid; gap: var(--space-3); width: min(380px, 100% - 32px); text-align: center; padding: var(--space-6) var(--space-5); border-radius: var(--radius-lg); }
 .lock-card form { justify-content: center; gap: var(--space-2); }
+.lock-card .wordmark { justify-content: center; margin-bottom: 0; }
 .activity { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: var(--space-1); }
 
 /* Activity (B18): a page like the phone's, needs action first, then by day. */
@@ -765,6 +769,7 @@ audio.player { display: none; }
 @media (max-width: 900px) { .settings-layout { grid-template-columns: 1fr; } .settings-nav { position: static; } }
 .onboarding { display: grid; place-items: center; min-height: 100vh; padding: var(--space-4); }
 .onboarding-card { width: min(560px, 100% - 32px); display: grid; gap: var(--space-3); padding: var(--space-6); border-radius: var(--radius-lg); }
+.onboarding-card .wordmark { margin-bottom: 0; }
 .steps { display: flex; gap: var(--space-2); list-style: none; padding: 0; margin: 0 0 var(--space-2); font-size: var(--text-xs); color: var(--text-muted); counter-reset: step; flex-wrap: wrap; }
 .steps li { display: flex; align-items: center; gap: 6px; counter-increment: step; }
 .steps li::before { content: counter(step); width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--border-strong); font-size: 11px; font-weight: 600; }

@@ -6,6 +6,7 @@ import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityUnread } from "./ActivityCentre";
 import { OnboardingView } from "./OnboardingView";
 import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
+import { BrandMark } from "../../components/BrandMark";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
 import { UpdateBanner } from "./UpdateSettings";
@@ -451,7 +452,7 @@ export default function MainApp() {
       <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true"><MicIcon size={14} /></span>
+          <BrandMark size={24} />
           <span className="brand-name">EchoLedger</span>
           <button type="button" className="sidebar-toggle" aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"} aria-expanded={!collapsed}
             title={collapsed ? "Expand" : "Collapse"} onClick={toggleSidebar}><SidebarIcon size={18} /></button>
