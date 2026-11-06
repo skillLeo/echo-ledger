@@ -459,7 +459,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
             <h2 className="queue-label">Waiting for another account</h2>
             <span className="queue-count">{items.length}</span>
           </div>
-          <p className="small muted queue-meta">{heldLine(account, items.length)}</p>
+          <p className="small muted queue-note">{heldLine(account, items.length)}</p>
           {items.map((item) => {
             const title = uploadTitle(item);
             return (

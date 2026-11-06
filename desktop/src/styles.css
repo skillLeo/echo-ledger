@@ -417,6 +417,8 @@ button.segment.active { background: var(--accent-soft); }
 .queue-title, .queue-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .queue-title { font-weight: 500; font-size: 16px; }
 .queue-error { overflow-wrap: anywhere; line-height: 1.5; font-size: var(--text-xs); }
+/* Why recordings wait for another account (v1.5): a sentence, so it wraps. */
+.queue-note { margin: 0; padding: 0 var(--space-1); line-height: 1.5; overflow-wrap: anywhere; }
 .queue-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .queue-actions.decide { display: grid; grid-template-columns: 1fr 1fr; }
 .queue-actions.decide .btn { height: 44px; font-size: 15px; }
