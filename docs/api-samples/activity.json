@@ -1,0 +1,77 @@
+{
+    "data": [
+        {
+            "id": "86df4942-61cd-47bf-a815-22ba0c53f5bb",
+            "kind": "transcript_ready",
+            "title": "Transcript ready",
+            "body": "Retainer check-in",
+            "session_id": "01m6s1x6v38xtqnqa6exvtgtmn",
+            "read": false,
+            "at": "2026-11-06T18:28:33+00:00"
+        },
+        {
+            "id": "9c4c8ea3-abc1-495f-a198-56b3a31c3df2",
+            "kind": "transcript_ready",
+            "title": "Transcript ready",
+            "body": "Telehealth rollout",
+            "session_id": "01m6s1x74vb4r063attzygy1qn",
+            "read": false,
+            "at": "2026-11-06T18:28:33+00:00"
+        },
+        {
+            "id": "f971fab2-4319-44bc-9635-e1207e09fd6c",
+            "kind": "transcript_ready",
+            "title": "Transcript ready",
+            "body": "Weekly sync",
+            "session_id": "01m6s1x7d3zp5347zhrzbayfn3",
+            "read": false,
+            "at": "2026-11-06T18:28:33+00:00"
+        },
+        {
+            "id": "955e4113-24ef-40fd-8f46-7c891ade447d",
+            "kind": "transcript_ready",
+            "title": "Transcript ready",
+            "body": "WhatsApp Business call",
+            "session_id": "01m6s1x7kg9rn131qpcwxw57by",
+            "read": false,
+            "at": "2026-11-06T18:28:33+00:00"
+        },
+        {
+            "id": "57970c88-0aa9-4449-94c4-2fa78d0566c7",
+            "kind": "transcript_ready",
+            "title": "Transcript ready",
+            "body": "Voice note from Ali",
+            "session_id": "01m6s1x7pe8tc50m65qx88q5fq",
+            "read": false,
+            "at": "2026-11-06T18:28:33+00:00"
+        },
+        {
+            "id": "fda23ad4-ebac-4a44-b7d8-99b06b4e9bc6",
+            "kind": "device_paired",
+            "title": "Sample phone paired",
+            "body": "It can now record, sync and see the library.",
+            "session_id": null,
+            "read": false,
+            "at": "2026-11-06T18:28:33+00:00"
+        },
+        {
+            "id": "8a4ce42b-e15b-4daa-a531-cefc5763530b",
+            "kind": "device_paired",
+            "title": "Galaxy S25 Ultra paired",
+            "body": "It can now record, sync and see the library.",
+            "session_id": null,
+            "read": false,
+            "at": "2026-11-06T18:28:32+00:00"
+        },
+        {
+            "id": "a3f35c4c-f36f-4c4b-ab1c-964b693e655c",
+            "kind": "device_paired",
+            "title": "Work laptop paired",
+            "body": "It can now record, sync and see the library.",
+            "session_id": null,
+            "read": false,
+            "at": "2026-11-06T18:28:32+00:00"
+        }
+    ],
+    "unread_count": 8
+}

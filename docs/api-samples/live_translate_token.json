@@ -1,0 +1,20 @@
+{
+    "provider": "soniox",
+    "api_key": "tmp_key",
+    "expires_at": "2026-11-06T18:38:34+00:00",
+    "websocket_url": "wss://stt-rt.soniox.com/transcribe-websocket",
+    "model": "stt-rt-v5",
+    "translation": {
+        "type": "one_way",
+        "target_language": "en"
+    },
+    "language_hints": [
+        "ar"
+    ],
+    "budget": {
+        "used_usd": 0,
+        "limit_usd": 10,
+        "warn": false,
+        "reached": false
+    }
+}

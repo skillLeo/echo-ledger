@@ -1,0 +1,20 @@
+{
+    "data": {
+        "id": "01m6s1x86j0z17y6qtyyr062mp",
+        "name": "Sample project, renamed",
+        "color": "#8b5cf6",
+        "avatar": null,
+        "pinned": false,
+        "retention_days": null,
+        "language": null,
+        "ai_notes": true,
+        "screens": true,
+        "keyterm_count": 0,
+        "session_count": 0,
+        "updated_at": "2026-11-06T18:28:34+00:00",
+        "parent_id": null,
+        "path": [],
+        "children_count": 0,
+        "nested_session_count": 0
+    }
+}

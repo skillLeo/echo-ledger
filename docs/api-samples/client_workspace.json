@@ -1,0 +1,74 @@
+{
+    "data": {
+        "client": {
+            "id": "01m6s1x86j0z17y6qtyyr062mp",
+            "name": "Sample project, renamed",
+            "ai_notes": true
+        },
+        "ai": {
+            "configured": true,
+            "client_spent_usd": 0,
+            "spent_usd": 0.055,
+            "budget_usd": 5
+        },
+        "brief": {
+            "sections": {
+                "goal": "A short brief.",
+                "scope": [
+                    "Login"
+                ],
+                "constraints": [],
+                "deadlines": [],
+                "budget": [],
+                "people": [
+                    "Omar"
+                ],
+                "glossary": []
+            },
+            "edited": true,
+            "status": "ready",
+            "error": null,
+            "generated_at": null,
+            "updated_at": "2026-11-06T18:28:34Z"
+        },
+        "memory": [
+            {
+                "id": "01m6s1x87c1he30hkjzd72ga35",
+                "kind": "decision",
+                "text": "They chose the second plan.",
+                "happened_on": "2026-11-06",
+                "pinned": false,
+                "source": {
+                    "type": "user",
+                    "id": null,
+                    "at_ms": null
+                }
+            }
+        ],
+        "notes": [],
+        "files": [
+            {
+                "id": "01m6s1x87y4q0z9rjzxbpyz7f6",
+                "name": "notes.txt",
+                "mime": "text/plain",
+                "size_bytes": 11,
+                "pages": null,
+                "status": "ready",
+                "error": null,
+                "instructions": false,
+                "created_at": "2026-11-06T18:28:34Z"
+            },
+            {
+                "id": "01m6s1x87j330j7vdnx9cp7p7m",
+                "name": "Notes",
+                "mime": "text/plain",
+                "size_bytes": 19,
+                "pages": null,
+                "status": "ready",
+                "error": null,
+                "instructions": true,
+                "created_at": "2026-11-06T18:28:34Z"
+            }
+        ]
+    }
+}

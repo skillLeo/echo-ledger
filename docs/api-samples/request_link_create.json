@@ -1,0 +1,15 @@
+{
+    "data": {
+        "url": "https://echoledger.test/r/4XlelBI1wpkk_ns9sNJtdXMkcQQvxTFEpTE6GwC9fSA",
+        "id": "01m6s1x8apv93j0zrpw8pvwx3d",
+        "title": "Send me the file",
+        "client_id": null,
+        "expires_at": null,
+        "max_files": 20,
+        "max_mb": 100,
+        "received": 0,
+        "revoked_at": null,
+        "active": true,
+        "created_at": "2026-11-06T18:28:34+00:00"
+    }
+}

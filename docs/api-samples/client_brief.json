@@ -1,0 +1,22 @@
+{
+    "data": {
+        "sections": {
+            "goal": "A short brief.",
+            "scope": [
+                "Login"
+            ],
+            "constraints": [],
+            "deadlines": [],
+            "budget": [],
+            "people": [
+                "Omar"
+            ],
+            "glossary": []
+        },
+        "edited": true,
+        "status": "ready",
+        "error": null,
+        "generated_at": null,
+        "updated_at": "2026-11-06T18:28:34Z"
+    }
+}

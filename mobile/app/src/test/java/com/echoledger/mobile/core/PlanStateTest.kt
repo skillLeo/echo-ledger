@@ -29,7 +29,7 @@ class PlanStateTest {
             """{"key":"free","name":"Free","features":{"live_translate":false,"screen_moments":true,"ai_notes":false,"connector":true},
                "limits":{"monthly_minutes":300,"storage_bytes":5368709120,"retention_days":30,"seats":1},"used":{"minutes":120,"storage_bytes":4}}"""
         )
-        val workspace = ApiJson.decodeFromString(ConfigWorkspaceDto.serializer(), """{"id":"01J","name":"Acme team","role":"viewer"}""")
+        val workspace = ApiJson.decodeFromString(ConfigWorkspaceDto.serializer(), """{"id":1,"name":"Acme team","role":"viewer"}""")
         val state = PlanState.from(plan, workspace)
         assertFalse(state.liveTranslate)
         assertFalse(state.aiNotes)

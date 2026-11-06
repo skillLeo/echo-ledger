@@ -1,0 +1,19 @@
+{
+    "status": "ready",
+    "available": [
+        "urdu"
+    ],
+    "roman": null,
+    "english": null,
+    "urdu": [
+        "Hi Farah, thanks for making time today.",
+        "Of course. I wanted to confirm the Q3 retainer scope.",
+        "Sure. We kept the Karachi office onboarding in phase one.",
+        "Perfect, Acme Holdings will sign off by Friday."
+    ],
+    "default": "original",
+    "model": "claude-opus-5-5",
+    "made_at": "2026-11-06T18:28:33+00:00",
+    "error": null,
+    "kept": {}
+}

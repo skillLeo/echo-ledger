@@ -1,0 +1,14 @@
+{
+    "data": {
+        "id": "01m6s1x87c1he30hkjzd72ga35",
+        "kind": "decision",
+        "text": "They chose the second plan.",
+        "happened_on": "2026-11-06",
+        "pinned": false,
+        "source": {
+            "type": "user",
+            "id": null,
+            "at_ms": null
+        }
+    }
+}

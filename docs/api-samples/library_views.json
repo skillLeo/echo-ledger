@@ -1,0 +1,28 @@
+{
+    "views": {
+        "today": 0,
+        "this_week": 2,
+        "waiting": 0,
+        "bookmarked": 0,
+        "failed": 0,
+        "pinned": 0
+    },
+    "labels": [
+        {
+            "label": "Sample",
+            "count": 1
+        }
+    ],
+    "folders": {
+        "inbox": 2,
+        "whatsapp": 1,
+        "whatsapp_business": 1,
+        "google_meet": 1,
+        "zoom": 1,
+        "teams": 0,
+        "phone": 0,
+        "voice_notes": 1,
+        "imported": 0,
+        "shared": 0
+    }
+}

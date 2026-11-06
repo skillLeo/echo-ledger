@@ -15,6 +15,7 @@ on:
     tags: ['v*']
     paths:
       - 'desktop/**'
+      - 'docs/api-samples/**'
       - '.github/workflows/desktop-mac.yml'
   workflow_dispatch:
 
