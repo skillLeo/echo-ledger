@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Enums\TranscriptKind;
+use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Api\PackController;
 use App\Models\CaptureSession;
 use App\Services\AuditLog;
@@ -24,7 +26,7 @@ final class AdminPackController extends Controller
         abort_if(! $model instanceof CaptureSession, 404);
         $view = request()->query('view');
         $view = is_string($view) && in_array($view, MeetingPack::VIEWS, true) ? $view : null;
-        $finished = $model->transcripts()->where('kind', 'final')->where('status', 'completed')->exists();
+        $finished = $model->transcripts()->where('kind', TranscriptKind::Final->value)->where('status', TranscriptStatus::Completed->value)->exists();
         abort_unless($finished, 404);
         $file = $pack->build($model, $format, $view, request()->boolean('include_audio'), printBar: $format === 'html');
         app(AuditLog::class)->record('transcript_exported', (int) auth()->id(), $model, "Meeting pack exported as {$format}", ['format' => 'pack_'.$format]);
