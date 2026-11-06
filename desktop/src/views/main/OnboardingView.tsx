@@ -66,6 +66,8 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
           <section aria-labelledby="ob-perm">
             <h1 id="ob-perm" className="page-title">Welcome to EchoLedger</h1>
             <p className="small muted">EchoLedger records your calls, voice notes and dictation on this computer and keeps them in your own library.</p>
+            {/* The consent notice is on the first page too, so skipping the setup does not skip it (v1.5). */}
+            <div className="notice small"><ConsentNotice legal={false} /></div>
             <div className="toggle">
               <div>Microphone</div>
               <div className="row">
