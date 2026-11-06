@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import PillApp from "./PillApp";
 import { callsOf, currentWindow, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondAll, respondWith, setWindowLabel } from "../../test/tauri";
 import { makeRecording, makeRecordingState, makeStatus } from "../../test/fixtures";
@@ -443,5 +443,80 @@ describe("Bluetooth microphone notice (v1.5)", () => {
     await emitEvent("capture:far_side", { silent: true, seconds: 30 });
     expect(notice()).not.toBeInTheDocument();
     expect(screen.getByTestId("far-side-warning")).toBeInTheDocument();
+  });
+});
+
+describe("Screens chip (v1.5)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    setWindowLabel("pill");
+    vi.stubGlobal("ResizeObserver", NoopResizeObserver);
+    respondAll({ overlay_set_hit_regions: undefined });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const chip = () => screen.queryByTestId("pill-screens");
+  const on = (count = 3) => makeRecordingState({ screens: { on: true, reason: null, count } });
+
+  it("shows only while screens can be kept for the recording, and says how many", async () => {
+    await renderPill(makeRecordingState({ screens: null }));
+    expect(chip()).not.toBeInTheDocument();
+    await emitEvent("recording:state", on());
+    expect(chip()).toHaveAccessibleName("Screens on · 3 kept. Click to pause screens");
+    expect(chip()).toHaveClass("on");
+  });
+
+  it("pauses screens in one click and resumes them the same way; the recording goes on", async () => {
+    respondWith("screens_pause", ({ paused }) => makeRecordingState({ screens: { on: !paused, reason: paused ? "you" : null, count: 3 } }));
+    await renderPill(on());
+    fireEvent.click(chip()!);
+    expect(chip()).toHaveAccessibleName("Screens paused by you · 3 kept. Click to resume");
+    await flushAsync();
+    expect(callsOf("screens_pause")).toEqual([{ paused: true }]);
+    expect(callsOf("pause_recording")).toEqual([]);
+    await emitEvent("recording:state", makeRecordingState({ screens: { on: false, reason: "you", count: 3 } }));
+    fireEvent.click(chip()!);
+    await flushAsync();
+    expect(callsOf("screens_pause")).toEqual([{ paused: true }, { paused: false }]);
+  });
+
+  it("says why screens wait: a minimised meeting window, an excluded app, the permission, the hour's cap", async () => {
+    await renderPill(makeRecordingState({ screens: { on: false, reason: "minimised", count: 1 } }));
+    expect(chip()).toHaveAccessibleName("Screens paused while the meeting window is minimised or hidden · 1 kept. Click to pause screens");
+    expect(chip()).toHaveClass("held");
+    await emitEvent("recording:state", makeRecordingState({ screens: { on: false, reason: "excluded_app", count: 1 } }));
+    expect(chip()).toHaveAccessibleName("Screens paused while an excluded app is on screen · 1 kept. Click to pause screens");
+    await emitEvent("recording:state", makeRecordingState({ screens: { on: false, reason: "permission", count: 0 } }));
+    expect(chip()).toHaveAccessibleName("Screens paused: macOS needs the Screen Recording permission · 0 kept. Click to pause screens");
+    await emitEvent("recording:state", makeRecordingState({ screens: { on: false, reason: "hour_cap", count: 120 } }));
+    expect(chip()).toHaveAccessibleName("Screens paused: 120 screens this hour · 120 kept. Click to pause screens");
+  });
+
+  it("says Screens on under the pill once per recording, with Pause", async () => {
+    respondWith("screens_pause", () => makeRecordingState({ screens: { on: false, reason: "you", count: 0 } }));
+    await renderPill(makeRecordingState({ screens: { on: false, reason: "starting", count: 0 } }));
+    expect(screen.queryByTestId("screens-notice")).not.toBeInTheDocument();
+    await emitEvent("recording:state", on(0));
+    expect(screen.getByTestId("screens-notice")).toHaveTextContent("Screens on for this meeting");
+    fireEvent.click(within(screen.getByTestId("screens-notice")).getByRole("button", { name: "Pause" }));
+    expect(screen.queryByTestId("screens-notice")).not.toBeInTheDocument();
+    await flushAsync();
+    expect(callsOf("screens_pause")).toEqual([{ paused: true }]);
+    await emitEvent("recording:state", on(1));
+    expect(screen.queryByTestId("screens-notice")).not.toBeInTheDocument();
+  });
+
+  it("lets the notice go by itself after a few seconds", async () => {
+    await renderPill(makeRecordingState({ screens: null }));
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await emitEvent("recording:state", on(0));
+    expect(screen.getByTestId("screens-notice")).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_100);
+    });
+    expect(screen.queryByTestId("screens-notice")).not.toBeInTheDocument();
   });
 });

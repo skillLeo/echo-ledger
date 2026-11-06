@@ -141,6 +141,7 @@ pub struct DetectState {
     call: Mutex<CallTracker>,
     ask: Mutex<AskTracker>,
     far_side: Mutex<crate::audio::health::FarSideMonitor>,
+    meeting: Mutex<Option<crate::screens::platform::MeetingTree>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -152,6 +153,22 @@ impl DetectState {
     pub fn mic_users(&self) -> Vec<MicUser> {
         lock(&self.users).clone()
     }
+
+    /// The meeting app screen moments look at (refreshed once per second by the loop).
+    pub fn meeting(&self) -> Option<crate::screens::platform::MeetingTree> {
+        lock(&self.meeting).clone()
+    }
+}
+
+/// The meeting app of this moment: the tree auto mode records, else the call app or site that holds the microphone
+/// and plays audio (also with auto mode off, for a recording started by hand).
+pub fn meeting_tree(trees: &[TreeAudio], rules: &[SiteRule], recorded: Option<(u32, SourceApp)>) -> Option<crate::screens::platform::MeetingTree> {
+    let pick = recorded.or_else(|| {
+        let verdicts: Vec<Verdict> = trees.iter().map(|t| decide(t, rules, false, true)).collect();
+        pick_candidate(trees, &verdicts)
+    })?;
+    let tree = trees.iter().find(|t| t.root_pid == pick.0)?;
+    Some(crate::screens::platform::MeetingTree { root_pid: tree.root_pid, app: pick.1, name: tree.name.clone(), browser: is_browser_tree(tree) })
 }
 
 /// Payload of `ask:show` (section 4.3 `AskPayload`).
@@ -211,6 +228,7 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
     }
 
     *lock(&detect.users) = trees.iter().zip(&verdicts).map(|(t, v)| explain(t, v, rules, recorded.filter(|_| recording))).collect();
+    *lock(&detect.meeting) = meeting_tree(trees, rules, recorded.filter(|_| recording));
 
     // Caller names (since v1.2): who the recorded call is with, from its app's window titles.
     if recording

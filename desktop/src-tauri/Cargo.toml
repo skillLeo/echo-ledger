@@ -43,6 +43,8 @@ hound = "3.5.1"
 flacenc = "0.5.1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
+# Screen moments (v1.5) are stored as lossy WebP: libwebp built in by libwebp-sys (no image crate).
+webp = { version = "0.3.1", default-features = false }
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 # The native open and save dialogs, used from the core only (the webview never picks a path). Not through
@@ -70,6 +72,18 @@ windows = { version = "0.62.2", features = [
   "Foundation",
   "UI",
   "UI_ViewManagement",
+  # Screen moments (v1.5): Windows.Graphics.Capture of the meeting window or a monitor, read back through a D3D11
+  # staging texture; the borderless request, the window's cloaked state and its monitor.
+  "Graphics_Capture",
+  "Graphics_DirectX_Direct3D11",
+  "Security_Authorization_AppCapabilityAccess",
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Dxgi_Common",
+  "Win32_Graphics_Dwm",
+  "Win32_Graphics_Gdi",
+  "Win32_System_WinRT_Direct3D11",
+  "Win32_System_WinRT_Graphics_Capture",
 ] }
 windows-future = "0.3.2"
 
@@ -77,11 +91,14 @@ windows-future = "0.3.2"
 objc2 = "0.6.5"
 objc2-core-audio = "0.3.2"
 objc2-core-audio-types = "0.3.2"
-objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSValue", "NSUUID", "NSString"] }
-objc2-core-foundation = { version = "0.3.2", features = ["CFString", "CFDictionary", "CFArray", "CFNumber"] }
+objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSValue", "NSUUID", "NSString", "NSError"] }
+objc2-core-foundation = { version = "0.3.2", features = ["CFString", "CFDictionary", "CFArray", "CFNumber", "CFData", "CFCGTypes"] }
 block2 = "0.6.2"
 dispatch2 = "0.3.1"
 objc2-local-authentication = { version = "0.3.2", features = ["LAContext", "LAError", "block2"] }
+# Screen moments (v1.5): screenshots of the meeting window or display, and the Screen Recording permission.
+objc2-screen-capture-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "libc", "objc2-core-foundation", "objc2-core-graphics", "SCShareableContent", "SCStream", "SCScreenshotManager"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGImage", "CGDataProvider", "CGDirectDisplay", "CGWindow"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -56,7 +56,7 @@ describe("system-style settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Calls & meetings" }));
     expect(groupTitles()).toEqual(["Calls & meetings"]);
     expect(screen.getByRole("button", { name: "Calls & meetings" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "Calls & meetings" })).toHaveAccessibleDescription("Call apps, after a call, captions, microphone");
+    expect(screen.getByRole("button", { name: "Calls & meetings" })).toHaveAccessibleDescription("Call apps, after a call, captions, microphone, screens");
     expect(screen.getByRole("switch", { name: "Auto-record calls" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Caption position" })).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Start EchoLedger when I sign in" })).not.toBeInTheDocument();

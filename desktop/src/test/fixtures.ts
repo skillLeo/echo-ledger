@@ -10,6 +10,7 @@ import type {
   RecordingInfo,
   RecordingState,
   SavedToast,
+  ScreenMoment,
   Segment,
   SkippedItem,
   Settings,
@@ -101,6 +102,9 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     quietFrom: "22:00",
     quietTo: "07:00",
     onboardingDone: true,
+    screenMoments: true,
+    screenTarget: "meeting_window",
+    screenExcludedApps: ["1Password", "Bitwarden", "KeePass"],
     ...overrides,
   };
 }
@@ -145,6 +149,7 @@ export function makeRecordingState(overrides: Partial<RecordingState> = {}): Rec
     auto: true,
     hidden: false,
     bluetoothMic: false,
+    screens: null,
     ...overrides,
   };
 }
@@ -265,6 +270,15 @@ export function makeTranscript(overrides: Partial<TranscriptDetail> = {}): Trans
     language: "en",
     text: null,
     segments: CALL_SEGMENTS,
+    ...overrides,
+  };
+}
+
+/** A screen moment of a recording (docs/API.md "Screen moments"): Screen `index` at `at_ms`. */
+export function makeScreen(index: number, at_ms: number, overrides: Partial<ScreenMoment> = {}): ScreenMoment {
+  return {
+    id: `sc${index}`, index, at_ms, width: 1920, height: 1080, trigger: "change", ocr_text: null, description: null,
+    image_url: `https://ledger.example.test/screens/${index}.webp?sig=1`, thumb_url: `https://ledger.example.test/screens/${index}-thumb.webp?sig=1`,
     ...overrides,
   };
 }

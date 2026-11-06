@@ -18,6 +18,7 @@ pub mod overlay;
 pub mod pending;
 pub mod projects;
 pub mod recovery;
+pub mod screens;
 pub mod settings;
 pub mod sharing;
 pub mod shortcuts;
@@ -90,6 +91,9 @@ pub struct AppState {
     pub recording_language_marks: Mutex<Option<(String, Vec<net::models::LanguageMarkDto>)>>,
     /// Caller names (since v1.2): who the running recording is with (its client reference and the caller).
     pub recording_caller: Mutex<Option<(String, net::models::CallerDto)>>,
+    /// Screen moments (v1.5): the capture beside a call recording, the key that seals stored screens, what the plan
+    /// and the server said.
+    pub screens: screens::Screens,
 }
 
 impl AppState {
@@ -136,6 +140,7 @@ impl AppState {
             recording_language: Mutex::new(None),
             recording_language_marks: Mutex::new(None),
             recording_caller: Mutex::new(None),
+            screens: screens::Screens::new(Box::new(screens::platform::Native), Box::new(screens::store::KeychainKeys)),
         }
     }
 
@@ -182,6 +187,7 @@ impl AppState {
             let _ = self.update_settings(|s| s.pins = pins);
         }
         self.budget_blocked.store(false, std::sync::atomic::Ordering::SeqCst);
+        self.screens.note_config(&config);
         *self.server_config.lock().unwrap_or_else(|p| p.into_inner()) = Some(config);
     }
 
@@ -373,6 +379,14 @@ pub fn run() {
             commands::request_link_revoke,
             commands::links_resolve,
             commands::link_open,
+            commands::screens_status,
+            commands::screens_pause,
+            commands::screens_permission,
+            commands::session_screens,
+            commands::client_screens,
+            commands::screen_delete,
+            commands::screen_image,
+            commands::meeting_pack,
             commands::share_create,
             commands::share_list,
             commands::share_revoke,

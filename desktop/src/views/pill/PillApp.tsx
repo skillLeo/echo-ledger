@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState } from "../../lib/ipc";
+import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState, type ScreenHoldReason, type ScreensPill } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
 import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
 import { elapsedAt, formatTimer, isTwoChannel, meterLevel, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { BLUETOOTH_NOTE } from "../../lib/microphone";
-import { CaptionsIcon, MicIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
+import { CaptionsIcon, MicIcon, MonitorIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { AlertIcon, BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon } from "../../components/ControlIcons";
 import "../controls.css";
 
@@ -17,16 +17,39 @@ const DRAG_SAVE_MS = 400;
 export const MARK_TRAY_MS = 6000;
 /** How long "Accuracy is lower with Bluetooth mics" stays under the pill when a recording starts (v1.5). */
 export const BLUETOOTH_NOTICE_MS = 8000;
+/** How long "Screens on" stays under the pill the first time screens are kept in a recording (v1.5). */
+export const SCREENS_NOTICE_MS = 6000;
 
-type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark" | "language";
+/** Why screens are paused, as the Screens chip says it (v1.5). */
+export const SCREEN_HOLD_TEXT: Record<ScreenHoldReason, string> = {
+  you: "paused by you",
+  recording_paused: "paused with the recording",
+  minimised: "paused while the meeting window is minimised or hidden",
+  no_window: "waiting for the meeting window",
+  excluded_app: "paused while an excluded app is on screen",
+  permission: "paused: macOS needs the Screen Recording permission",
+  hour_cap: "paused: 120 screens this hour",
+  starting: "starting",
+};
+
+/** "Screens on · 3 kept. Click to pause screens" */
+export function screensChipText(screens: ScreensPill): string {
+  const kept = screens.count === 1 ? "1 kept" : `${screens.count} kept`;
+  if (screens.on) return `Screens on · ${kept}. Click to pause screens`;
+  if (screens.reason === "you") return `Screens paused by you · ${kept}. Click to resume`;
+  return `Screens ${SCREEN_HOLD_TEXT[screens.reason ?? "starting"]} · ${kept}. Click to pause screens`;
+}
+
+type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark" | "language" | "screens";
 
 /**
  * Loom-style recording controls in the 352 x 84 `pill` window: REC + timer, source, Me/Client levels, Pause/Resume,
  * Stop ("After a call" decides what follows), Cancel with an inline confirm, Mark, the language chip, Captions on/off and Hide. Under the pill, a
  * bookmark (from here or the shortcut) shows its tag presets and Undo for a few seconds, a call that has not heard
  * the other side for 30 s shows a warning, and a recording from a Bluetooth microphone says once that accuracy is lower
- * with it. The window never takes
- * focus: every control works on click, and only the pill itself is reported as a hit region.
+ * with it. While screen moments can be kept (v1.5) the Screens chip says whether they are on and pauses them in one
+ * click; the first time they are on in a recording, "Screens on" shows under the pill for a few seconds. The window
+ * never takes focus: every control works on click, and only the pill itself is reported as a hit region.
  */
 export default function PillApp() {
   const [rec, setRec] = useState<RecordingState | null>(null);
@@ -42,6 +65,9 @@ export default function PillApp() {
   const [bluetooth, setBluetooth] = useState(false);
   /** The Bluetooth notice was shown for this recording (once each). */
   const bluetoothShown = useRef(false);
+  const [screensNotice, setScreensNotice] = useState(false);
+  /** "Screens on" was shown for this recording (once each). */
+  const screensShown = useRef(false);
   const busy = useRef<Action | null>(null);
   /** Set while Stop, Cancel or Hide runs, so a late once-a-second event cannot bring the pill back. */
   const closing = useRef(false);
@@ -61,10 +87,18 @@ export default function PillApp() {
       setFarSide(null);
       bluetoothShown.current = false;
       setBluetooth(false);
-    } else if (state.bluetoothMic && !bluetoothShown.current) {
+      screensShown.current = false;
+      setScreensNotice(false);
+      return;
+    }
+    if (state.bluetoothMic && !bluetoothShown.current) {
       // The core checks the microphone just after the start; said once per recording.
       bluetoothShown.current = true;
       setBluetooth(true);
+    }
+    if (state.screens?.on && !screensShown.current) {
+      screensShown.current = true;
+      setScreensNotice(true);
     }
   }, []);
 
@@ -140,7 +174,13 @@ export default function PillApp() {
     return () => window.clearTimeout(timer);
   }, [bluetooth]);
 
-  const tray = mark ? "mark" : farSide && running ? "warn" : bluetooth && shown ? "bluetooth" : null;
+  useEffect(() => {
+    if (!screensNotice) return;
+    const timer = window.setTimeout(() => setScreensNotice(false), SCREENS_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [screensNotice]);
+
+  const tray = mark ? "mark" : farSide && running ? "warn" : bluetooth && shown ? "bluetooth" : screensNotice && shown && live?.screens?.on ? "screens" : null;
   useHitRegions([shown, confirming, tray]);
 
   /** Runs one command at a time; on failure shows the message and resyncs with the core. */
@@ -201,6 +241,15 @@ export default function PillApp() {
   };
 
   const markNow = () => void run("mark", api.markMoment);
+
+  // One click pauses screens for this recording (the recording goes on); a pause by the person is undone the same way.
+  const toggleScreens = () => {
+    if (!rec?.screens || busy.current) return;
+    const resume = rec.screens.reason === "you";
+    setScreensNotice(false);
+    patch({ screens: resume ? { ...rec.screens, on: true, reason: null } : { ...rec.screens, on: false, reason: "you" } });
+    void run("screens", () => api.screensPause(!resume));
+  };
 
   const tagMark = (tag: string) => {
     if (!mark) return;
@@ -287,6 +336,12 @@ export default function PillApp() {
               aria-label={`Language: ${languageLabel(live.language)}. Click to change`} title={`Language: ${languageLabel(live.language)} (click to change)`}>
               {languageChip(live.language)}
             </button>
+            {live.screens && (
+              <button type="button" className={`rec-btn rec-screens${live.screens.on ? " on" : " held"}`} data-testid="pill-screens"
+                aria-label={screensChipText(live.screens)} title={screensChipText(live.screens)} onClick={toggleScreens}>
+                <MonitorIcon size={15} />
+              </button>
+            )}
             <PillButton label={live.captions ? "Turn captions off" : "Turn captions on"} pressed={live.captions} onClick={toggleCaptions}>
               <CaptionsIcon size={15} />
             </PillButton>
@@ -310,6 +365,13 @@ export default function PillApp() {
           <AlertIcon size={14} />
           <span className="mark-text">Not hearing the other side for {farSide.seconds} s. Check the call's speaker or device.</span>
           <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setFarSide(null)}><MinimizeIcon size={14} /></button>
+        </div>
+      )}
+      {tray === "screens" && (
+        <div className="mark-tray note" data-hit data-testid="screens-notice" role="status">
+          <MonitorIcon size={14} />
+          <span className="mark-text">Screens on for this meeting</span>
+          <button type="button" className="rec-text-btn" onClick={toggleScreens}>Pause</button>
         </div>
       )}
       {tray === "bluetooth" && (

@@ -606,3 +606,33 @@ mod roots {
         assert!(started.elapsed() < std::time::Duration::from_secs(5));
     }
 }
+
+// ---- The meeting screen moments look at (v1.5) -------------------------------------------------------------------
+
+#[test]
+fn screen_moments_look_at_the_call_app_on_the_microphone_also_with_auto_mode_off() {
+    use desktop_lib::detect::meeting_tree;
+    let zoom = tree(900, "Zoom.exe", true, &["Zoom Meeting"]);
+    let meet = chrome(true, &["Meet - abc-defg-hij - Google Chrome"]);
+    let dictation = tree(700, "WINWORD.EXE", false, &[]);
+
+    let found = meeting_tree(&[dictation.clone(), meet.clone(), zoom.clone()], &[], None).expect("a call app holds the mic");
+    assert_eq!((found.root_pid, found.app, found.name.as_str(), found.browser), (900, SourceApp::Zoom, "Zoom.exe", false), "native apps first");
+
+    let browser = meeting_tree(&[meet], &[], None).unwrap();
+    assert_eq!((browser.app, browser.browser), (SourceApp::GoogleMeet, true));
+
+    assert_eq!(meeting_tree(&[dictation], &[], None), None, "holding the microphone alone is no meeting");
+}
+
+#[test]
+fn the_recorded_tree_stays_the_meeting_while_it_records() {
+    use desktop_lib::detect::meeting_tree;
+    let whatsapp = tree(300, "WhatsApp.exe", true, &["WhatsApp"]);
+    let zoom = tree(900, "Zoom.exe", true, &["Zoom Meeting"]);
+    // Auto mode records WhatsApp, labelled at start; Zoom joining later does not take the screens over.
+    let found = meeting_tree(&[whatsapp, zoom], &[], Some((300, SourceApp::Whatsapp))).unwrap();
+    assert_eq!((found.root_pid, found.app), (300, SourceApp::Whatsapp));
+    // The recorded tree is gone: no meeting window for now.
+    assert_eq!(meeting_tree(&[tree(900, "Zoom.exe", true, &[])], &[], Some((300, SourceApp::Whatsapp))), None);
+}

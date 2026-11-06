@@ -638,6 +638,87 @@ impl ApiClient {
         Self::ok_empty(resp).await
     }
 
+    /// `POST /api/sessions/{id}/screens` (since v1.5): one screen moment as `multipart/form-data`, the WebP `image`
+    /// with its moment, size, trigger and SHA-256. The same image again is `200` with the screen the server has.
+    pub async fn upload_screen(&self, session_id: &str, screen: &ScreenUpload, image: &[u8]) -> AppResult<serde_json::Value> {
+        let boundary = format!("echoledger-{}", uuid::Uuid::new_v4().simple());
+        let fields = [
+            ("at_ms", screen.at_ms.to_string()),
+            ("width", screen.width.to_string()),
+            ("height", screen.height.to_string()),
+            ("trigger", screen.trigger.clone()),
+            ("sha256", screen.sha256.clone()),
+        ];
+        let body = multipart_form(&boundary, &fields, "image", "screen.webp", "image/webp", image);
+        let resp = self
+            .authed(self.http.post(self.url(&format!("sessions/{session_id}/screens"))))?
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
+            .body(body)
+            .send()
+            .await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/sessions/{id}/screens` (since v1.5): the recording's screens in time order, with signed image links.
+    pub async fn session_screens(&self, id: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.get(self.url(&format!("sessions/{id}/screens"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/sessions/{id}/screens/{screen}` (since v1.5).
+    pub async fn delete_screen(&self, session_id: &str, screen: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("sessions/{session_id}/screens/{screen}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `GET /api/clients/{id}/screens` (since v1.5): a page of the project's screens, newest recording first.
+    pub async fn client_screens(&self, id: &str, include_subfolders: bool, cursor: Option<&str>) -> AppResult<serde_json::Value> {
+        let mut query = vec![("include_subfolders", u8::from(include_subfolders).to_string())];
+        if let Some(cursor) = cursor.filter(|c| !c.is_empty()) {
+            query.push(("cursor", cursor.to_string()));
+        }
+        let resp = self.authed(self.http.get(self.url(&format!("clients/{id}/screens"))).query(&query))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/sessions/{id}/pack` (since v1.5): the meeting pack (`html` to print, or `zip`) and the name the server
+    /// gives it.
+    pub async fn meeting_pack(&self, id: &str, format: &str, view: Option<&str>, include_audio: bool) -> AppResult<(Vec<u8>, String)> {
+        let mut query = vec![("format", format.to_string()), ("include_audio", u8::from(include_audio).to_string())];
+        if let Some(view) = view {
+            query.push(("view", view.to_string()));
+        }
+        // A pack with the audio takes longer than the client's usual 120 s.
+        let resp = self.authed(self.http.get(self.url(&format!("sessions/{id}/pack"))).query(&query))?.timeout(std::time::Duration::from_secs(600)).send().await?;
+        if !resp.status().is_success() {
+            return Err(Self::error(resp).await);
+        }
+        let disposition = resp.headers().get(reqwest::header::CONTENT_DISPOSITION).and_then(|v| v.to_str().ok()).unwrap_or_default().to_string();
+        let bytes = resp.bytes().await?.to_vec();
+        Ok((bytes, filename_from_disposition(&disposition).unwrap_or_else(|| format!("meeting-pack.{format}"))))
+    }
+
+    /// A screen's signed `image_url` or `thumb_url` (no bearer), fetched through the pinned client so the picture never
+    /// comes from anywhere but this server. Images only, at most 4 MB.
+    pub async fn screen_image(&self, url: &str) -> AppResult<(Vec<u8>, String)> {
+        if !same_server(&self.base, url) {
+            return Err(AppError::msg("The server sent a screen link of another site."));
+        }
+        let resp = self.http.get(url).send().await?;
+        if !resp.status().is_success() {
+            return Err(Self::error(resp).await);
+        }
+        let mime = resp.headers().get(reqwest::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or_default().split(';').next().unwrap_or_default().trim().to_ascii_lowercase();
+        if !matches!(mime.as_str(), "image/webp" | "image/png" | "image/jpeg") {
+            return Err(AppError::msg("The server did not send an image."));
+        }
+        let bytes = resp.bytes().await?;
+        if bytes.len() > 4 * 1024 * 1024 {
+            return Err(AppError::msg("The screen is too large to show."));
+        }
+        Ok((bytes.to_vec(), mime))
+    }
+
     /// Streams a recording's signed `playback_url` (no bearer) into `path`. The file appears only once it is complete,
     /// so a cut-off download leaves nothing half-written behind.
     pub async fn download_audio(&self, url: &str, path: &std::path::Path) -> AppResult<u64> {
@@ -759,6 +840,28 @@ pub fn multipart_file(boundary: &str, field: &str, filename: &str, mime: &str, b
     body.extend_from_slice(bytes);
     body.extend_from_slice(tail.as_bytes());
     body
+}
+
+/// A `multipart/form-data` body with text `fields` before one file part. Values are numbers, hex and plain words;
+/// line breaks are taken out all the same.
+pub fn multipart_form(boundary: &str, fields: &[(&str, String)], field: &str, filename: &str, mime: &str, bytes: &[u8]) -> Vec<u8> {
+    let mut body = Vec::with_capacity(bytes.len() + 512);
+    for (name, value) in fields {
+        let value: String = value.chars().filter(|c| !matches!(c, '\r' | '\n')).collect();
+        body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n").as_bytes());
+    }
+    body.extend_from_slice(&multipart_file(boundary, field, filename, mime, bytes));
+    body
+}
+
+/// Does `url` point at the server `base` (same scheme, host and port)?
+pub fn same_server(base: &str, url: &str) -> bool {
+    let origin = |u: &str| -> Option<String> {
+        let (scheme, rest) = u.trim().split_once("://")?;
+        let authority = rest.split(['/', '?', '#']).next()?;
+        (!authority.is_empty() && !authority.contains('@')).then(|| format!("{}://{}", scheme.to_ascii_lowercase(), authority.to_ascii_lowercase()))
+    };
+    matches!((origin(base), origin(url)), (Some(a), Some(b)) if a == b)
 }
 
 fn percent_decode(text: &str) -> String {

@@ -272,6 +272,12 @@ pub struct Settings {
     pub quiet_to: String,
     /// The first-run wizard (B19) was finished or skipped. Installs paired before v1.1 count as done.
     pub onboarding_done: bool,
+    /// Screen moments (v1.5): keep what was on the meeting's screen during call recordings.
+    pub screen_moments: bool,
+    /// What screen moments capture: `meeting_window` (the meeting app's window) or `whole_screen` (the screen it is on).
+    pub screen_target: String,
+    /// Apps never captured, by process or app name; password managers by default.
+    pub screen_excluded_apps: Vec<String>,
 }
 
 impl Default for Settings {
@@ -316,7 +322,18 @@ impl Default for Settings {
             quiet_from: "22:00".into(),
             quiet_to: "07:00".into(),
             onboarding_done: false,
+            screen_moments: true,
+            screen_target: crate::screens::privacy::MEETING_WINDOW.into(),
+            screen_excluded_apps: crate::screens::privacy::DEFAULT_EXCLUDED.iter().map(|s| s.to_string()).collect(),
         }
+    }
+}
+
+/// `screenTarget` from a stored or requested value: `whole_screen`, anything else the meeting window.
+pub fn screen_target_or_default(value: Option<&str>) -> &'static str {
+    match value {
+        Some(crate::screens::privacy::WHOLE_SCREEN) => crate::screens::privacy::WHOLE_SCREEN,
+        _ => crate::screens::privacy::MEETING_WINDOW,
     }
 }
 
@@ -353,6 +370,11 @@ impl Settings {
                     value.as_u64().and_then(|v| u32::try_from(v).ok()).filter(|v| crate::skipped::SHORTER_THAN_CHOICES.contains(v)).unwrap_or(crate::skipped::DEFAULT_SHORTER_THAN_S),
                 ),
                 "lockAfterMinutes" => Value::from(value.as_u64().and_then(|m| u32::try_from(m).ok()).filter(|m| crate::lock::LOCK_AFTER_CHOICES.contains(m)).unwrap_or(5)),
+                "screenTarget" => Value::from(screen_target_or_default(value.as_str())),
+                "screenExcludedApps" => {
+                    let names: Vec<String> = value.as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect()).unwrap_or_default();
+                    Value::from(crate::screens::privacy::tolerant_excluded(&names))
+                }
                 _ => value,
             };
             let previous = merged.insert(key.clone(), value);

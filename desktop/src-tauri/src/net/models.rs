@@ -59,6 +59,9 @@ pub struct ServerConfig {
     /// How unsure words appear in copied text (since v1.3, plan A4).
     #[serde(default, deserialize_with = "lenient")]
     pub unsure: Option<UnsureConfig>,
+    /// The workspace's plan and its features (since v1.5).
+    #[serde(default, deserialize_with = "lenient")]
+    pub plan: Option<PlanDto>,
 }
 
 /// `config.unsure` (docs/API.md "GET /api/config"): `[?word]` (brackets), `word(?)` (suffix) or plain (off) in copies,
@@ -124,6 +127,31 @@ impl ServerConfig {
             _ => false,
         }
     }
+
+    /// Whether the workspace's plan includes screen moments (since v1.5; a feature missing from the plan is on). `None`
+    /// from a server without plans.
+    pub fn screens_in_plan(&self) -> Option<bool> {
+        self.plan.as_ref().map(|p| p.features.get("screen_moments") != Some(&false))
+    }
+}
+
+/// `config.plan` (since v1.5). Only the features are read here; a feature missing from the map is on.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlanDto {
+    #[serde(default)]
+    pub key: Option<String>,
+    #[serde(default)]
+    pub features: HashMap<String, bool>,
+}
+
+/// The fields of `POST /api/sessions/{id}/screens` beside the image (since v1.5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScreenUpload {
+    pub at_ms: u64,
+    pub width: u32,
+    pub height: u32,
+    pub trigger: String,
+    pub sha256: String,
 }
 
 /// Deserialises an optional value, turning a value of the wrong shape into `None` instead of failing the parent.

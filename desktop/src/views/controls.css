@@ -362,3 +362,7 @@
   .ask-progress,
   .after-progress { display: none; }
 }
+
+/* The Screens chip (v1.5): on in the text colour, paused in the pause colour; the title says why and how many. */
+.rec-screens.on { color: var(--ctl-text); }
+.rec-screens.held { color: var(--ctl-paused); }

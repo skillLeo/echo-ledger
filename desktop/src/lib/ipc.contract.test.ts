@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import ipcTs from "./ipc.ts?raw";
 import settingsViewTsx from "../views/main/SettingsView.tsx?raw";
 import recordViewTsx from "../views/main/RecordView.tsx?raw";
+import screenSettingsTsx from "../views/main/ScreenSettings.tsx?raw";
 import commandsRs from "../../src-tauri/src/commands.rs?raw";
 import libRs from "../../src-tauri/src/lib.rs?raw";
 import settingsRs from "../../src-tauri/src/settings.rs?raw";
@@ -229,7 +230,31 @@ describe("wire types", () => {
     expect(sorted(tsInterfaceKeys("SettingsPatch"))).toEqual(sorted(settingsPatchKeys));
   });
 
-  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "SavedToast", "AfterCallState", "SkippedItem", "InputDevice", "AskPayload", "NavigatePayload", "ShareOptions", "RequestLinkOptions"])(
+  it("the meeting pack formats are the ones the Rust command takes", () => {
+    const body = commandsRs.slice(commandsRs.indexOf("pub async fn meeting_pack"));
+    const rust = [...body.slice(0, body.indexOf("_ => return Err")).matchAll(/"(\w+)" => "\w+"/g)].map((m) => m[1]);
+    expect(sorted(tsUnionValues("MeetingPackFormat"))).toEqual(sorted(rust));
+  });
+
+  it("a project change sends only the fields the Rust side lets through, the screens switch among them", () => {
+    const pick = /updateClient: \(id: string, patch: Partial<Pick<ClientFolder, ([^>]+)>>\)/.exec(ipcTs)?.[1] ?? "";
+    const rust = /CLIENT_PATCH_KEYS: \[&str; \d+\] = \[([^\]]+)\]/.exec(commandsRs)?.[1] ?? "";
+    const keys = (text: string) => sorted([...text.matchAll(/"(\w+)"/g)].map((m) => m[1]));
+    expect(keys(pick)).toEqual(keys(rust));
+    expect(keys(pick)).toContain("screens");
+  });
+
+  it("screen hold reasons match the serde names of the Rust enum", () => {
+    expect(sorted(tsUnionValues("ScreenHoldReason"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "HoldReason"), "HoldReason")));
+  });
+
+  it("the screen targets are the ones the Rust privacy rules know", () => {
+    const privacy = rustSourceDeclaring("enum", "HoldReason");
+    const consts = [...privacy.matchAll(/pub const (?:MEETING_WINDOW|WHOLE_SCREEN): &str = "(\w+)";/g)].map((m) => m[1]);
+    expect(sorted(tsUnionValues("ScreenTarget"))).toEqual(sorted(consts));
+  });
+
+  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "SavedToast", "AfterCallState", "SkippedItem", "InputDevice", "AskPayload", "NavigatePayload", "ShareOptions", "RequestLinkOptions", "ScreensPill", "ScreensStatus"])(
     "%s fields match the Rust struct",
     (name) => {
       expect(sorted(tsInterfaceKeys(name))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", name), name)));
@@ -244,7 +269,7 @@ describe("wire types", () => {
   );
 
   it("every setting the UI patches is a field the Rust SettingsPatch accepts", () => {
-    const sources = [settingsViewTsx, recordViewTsx].join("\n");
+    const sources = [settingsViewTsx, recordViewTsx, screenSettingsTsx].join("\n");
     const sent = new Set([...sources.matchAll(/(?:patch|updateSettings)\(\{\s*(\w+):/g)].map((m) => m[1]));
     expect(sent.size).toBeGreaterThanOrEqual(6);
     for (const key of sent) expect(settingsPatchKeys, `"${key}" is not in SettingsPatch`).toContain(key);

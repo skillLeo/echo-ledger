@@ -1,7 +1,8 @@
 // Screenshot harness: renders any EchoLedger window in a plain browser with the Tauri IPC mocked, so the views can be
 // captured by a browser driver against `npm run dev`. Open /screenshots/harness.html?w=<window>&theme=<dark|light>
-// [&view=library|record|settings|onboarding|lock|pairing] [&after=saved|ask|both for w=review]. Nothing here ships: it
-// is not part of the app build.
+// [&view=library|record|settings|onboarding|lock|pairing] [&after=saved|ask|both for w=review] [&screens=1: screen
+// moments on the first recording, the projects and the pill, &platform=windows|macos]. Nothing here ships: it is not
+// part of the app build.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { emit } from "@tauri-apps/api/event";
 import {
@@ -12,12 +13,13 @@ import {
   makePendingItem,
   makeRecordingState,
   makeSavedToast,
+  makeScreen,
   makeSettings,
   makeStatus,
   makeTranscript,
   makeUploadItem,
 } from "../src/test/fixtures";
-import type { CaptionEvent, LibraryItem } from "../src/lib/ipc";
+import type { CaptionEvent, LibraryItem, ProjectScreen, ScreenMoment } from "../src/lib/ipc";
 
 const params = new URLSearchParams(location.search);
 const win = params.get("w") ?? "main";
@@ -26,6 +28,8 @@ const view = params.get("view") ?? "library";
 const empty = params.get("empty") === "1";
 /** The after-call window (w=review): the Saved toast, the Ask-me chip, or both. */
 const after = params.get("after") ?? "both";
+/** Screen moments (v1.5) on the first recording, its project and the pill. */
+const screens = params.get("screens") === "1";
 
 try {
   localStorage.setItem("echoledger-theme", theme);
@@ -44,6 +48,47 @@ const ITEMS: LibraryItem[] = empty
       makeItem("5", { title: "Kick-off: Contoso website", source_app: "microsoft_teams", source_app_label: "Microsoft Teams", started_at: "2026-10-22T10:00:00Z", duration_ms: 3_120_000, transcript: preview("Our main goal for the new website is fewer support calls. Requirement one is a clear pricing page.") }),
     ];
 
+/** A made-up shared screen: a web page with a title, lines of text and a button, in the colours of `n`. */
+function painted(n: number, w: number, h: number): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const g = canvas.getContext("2d")!;
+  const hues = [215, 160, 28, 280];
+  const hue = hues[n % hues.length];
+  g.fillStyle = "#f6f7f9";
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = `hsl(${hue} 55% 42%)`;
+  g.fillRect(0, 0, w, h * 0.12);
+  g.fillStyle = "#ffffff";
+  g.font = `600 ${Math.round(h * 0.05)}px sans-serif`;
+  g.fillText(["Invoice #2041", "Checkout", "Launch plan", "Pricing"][n % 4], w * 0.04, h * 0.08);
+  g.fillStyle = "#ffffff";
+  g.fillRect(w * 0.04, h * 0.18, w * 0.6, h * 0.72);
+  g.fillStyle = "#c9ced6";
+  for (let i = 0; i < 7; i++) g.fillRect(w * 0.07, h * (0.25 + i * 0.08), w * (0.5 - (i % 3) * 0.08), h * 0.025);
+  g.fillStyle = `hsl(${hue} 60% 48%)`;
+  g.fillRect(w * 0.7, h * 0.2, w * 0.25, h * 0.08);
+  g.fillStyle = "#ffffff";
+  g.font = `600 ${Math.round(h * 0.035)}px sans-serif`;
+  g.fillText(["Pay now", "Place order", "Approve", "Choose plan"][n % 4], w * 0.73, h * 0.255);
+  return canvas.toDataURL("image/png");
+}
+
+const SCREENS: ScreenMoment[] = [
+  makeScreen(1, 13_000, { description: "Invoice #2041 with the Pay now button" }),
+  makeScreen(2, 66_000, { description: "The checkout page, shipping to Lahore" }),
+  makeScreen(3, 70_000, { description: "The launch plan with the November dates" }),
+];
+const PROJECT_SCREENS: ProjectScreen[] = [
+  ...SCREENS.map((sc) => ({ ...sc, session_id: "1", session_title: "Weekly sync with Northwind", session_started_at: "2026-10-26T09:30:00Z" })),
+  ...[makeScreen(1, 40_000, { id: "p1" }), makeScreen(2, 300_000, { id: "p2", description: "The pricing page" })].map((sc) => ({ ...sc, session_id: "5", session_title: "Kick-off: Contoso website", session_started_at: "2026-10-22T10:00:00Z" })),
+];
+const pictureOf = (url: string): string => {
+  const at = [...SCREENS, ...PROJECT_SCREENS].findIndex((sc) => sc.image_url === url || sc.thumb_url === url);
+  return painted(Math.max(0, at), url.includes("thumb") ? 480 : 1600, url.includes("thumb") ? 270 : 900);
+};
+
 function respond(cmd: string, args: Record<string, unknown> | undefined): unknown {
   const status = makeStatus({
     paired: view !== "pairing",
@@ -59,11 +104,19 @@ function respond(cmd: string, args: Record<string, unknown> | undefined): unknow
       return makeSettings({ onboardingDone: view !== "onboarding", appLock: view === "lock" });
     case "library_list":
     case "library_refresh":
-      return ITEMS;
+      return screens ? ITEMS.map((i, n) => (n === 0 ? { ...i, screen_count: SCREENS.length, client: { id: "c1", name: "Northwind" } } : { ...i, screen_count: 0 })) : ITEMS;
+    case "session_screens":
+      return { data: SCREENS };
+    case "client_screens":
+      return { data: PROJECT_SCREENS, next_cursor: "more" };
+    case "screen_image":
+      return pictureOf(String(args?.url ?? ""));
+    case "screens_status":
+      return { supported: true, platform: params.get("platform") ?? "windows", borderless: params.get("borderless") !== "0", permission: params.get("permission") !== "0", inPlan: true, onServer: true };
     case "transcript_detail":
       return makeTranscript({ segments: CALL_SEGMENTS });
     case "list_clients":
-      return { data: [{ id: "c1", name: "Northwind", color: "#8b5cf6", session_count: 12 }, { id: "c2", name: "Aria Studio", color: "#22d3ee", session_count: 4 }] };
+      return { data: [{ id: "c1", name: "Northwind", color: "#8b5cf6", session_count: 12, ...(screens ? { screens: true, parent_id: null, path: [], children_count: 0, nested_session_count: 12, ai_notes: false } : {}) }, { id: "c2", name: "Aria Studio", color: "#22d3ee", session_count: 4 }] };
     case "pending_list":
       return empty ? [] : [makePendingItem("pend-1", { firstLine: "Thanks for joining, shall we start with the invoice?" })];
     case "upload_list":
@@ -95,7 +148,7 @@ function respond(cmd: string, args: Record<string, unknown> | undefined): unknow
     case "dictation_history":
       return [];
     case "recording_state":
-      return makeRecordingState({ active: win === "pill", elapsedMs: 754_000, sourceApp: "google_meet", captions: true, levels: [0.55, 0.3] });
+      return makeRecordingState({ active: win === "pill", elapsedMs: 754_000, sourceApp: "google_meet", captions: true, levels: [0.55, 0.3], screens: screens ? { on: true, reason: null, count: 4 } : null });
     case "after_call_state":
       // The toast stays for the picture (an hour); the chip line starts at 6 of its 10 seconds.
       return win === "review"

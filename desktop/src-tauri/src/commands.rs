@@ -205,6 +205,11 @@ pub struct SettingsPatch {
     quiet_from: Option<String>,
     quiet_to: Option<String>,
     onboarding_done: Option<bool>,
+    screen_moments: Option<bool>,
+    /// `meeting_window` or `whole_screen`; anything else is refused.
+    screen_target: Option<String>,
+    /// Full replacement of the excluded apps.
+    screen_excluded_apps: Option<Vec<String>>,
 }
 
 /// A present key becomes `Some(value)`, so an explicit `null` reads as `Some(None)` and a missing key (via
@@ -247,6 +252,9 @@ impl SettingsPatch {
         if let Some(v) = &self.quiet_from && crate::activity::parse_hhmm(v).is_some() { s.quiet_from = v.clone(); }
         if let Some(v) = &self.quiet_to && crate::activity::parse_hhmm(v).is_some() { s.quiet_to = v.clone(); }
         if let Some(v) = self.onboarding_done { s.onboarding_done = v; }
+        if let Some(v) = self.screen_moments { s.screen_moments = v; }
+        if let Some(v) = &self.screen_target { s.screen_target = crate::settings::screen_target_or_default(Some(v)).to_string(); }
+        if let Some(v) = &self.screen_excluded_apps && let Ok(clean) = crate::screens::privacy::clean_excluded(v) { s.screen_excluded_apps = clean; }
     }
 }
 
@@ -292,6 +300,14 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         && apps.keys().any(|app| !crate::detect::classify::SourceApp::from_wire(app).is_some_and(|a| a.desktop_detects()))
     {
         return Err(AppError::msg("That app cannot be recorded automatically."));
+    }
+    if let Some(target) = &patch.screen_target
+        && ![crate::screens::privacy::MEETING_WINDOW, crate::screens::privacy::WHOLE_SCREEN].contains(&target.as_str())
+    {
+        return Err(AppError::msg("Choose the meeting window or the whole screen."));
+    }
+    if let Some(Err(problem)) = patch.screen_excluded_apps.as_deref().map(crate::screens::privacy::clean_excluded) {
+        return Err(AppError::msg(problem));
     }
     let state = app.state::<AppState>();
     let updated = state.update_settings(|s| patch.apply(s))?;
@@ -592,6 +608,8 @@ pub struct RecordingState {
     pub language: Option<String>,
     /// The recording's microphone is Bluetooth (v1.5): the pill says so when the recording starts.
     pub bluetooth_mic: bool,
+    /// Screen moments of the recording (v1.5): on, or paused and why, and how many were kept; none while off.
+    pub screens: Option<crate::screens::ScreensPill>,
 }
 
 /// `main:navigate`: which view the main window opens on.
@@ -623,6 +641,7 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
         hidden: state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst),
         language: info.as_ref().and_then(|i| state.recording_language(&i.client_ref)),
         bluetooth_mic: info.is_some() && state.bluetooth_mic.load(std::sync::atomic::Ordering::SeqCst),
+        screens: info.as_ref().and_then(|_| state.screens.pill()),
     }
 }
 
@@ -1056,7 +1075,7 @@ fn main_window_handle(app: &AppHandle) -> isize {
 }
 /// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
 pub const SESSION_PATCH_KEYS: [&str; 5] = ["title", "client_id", "pinned", "keep", "labels"];
-pub const CLIENT_PATCH_KEYS: [&str; 7] = ["name", "color", "avatar", "pinned", "language", "ai_notes", "parent_id"];
+pub const CLIENT_PATCH_KEYS: [&str; 8] = ["name", "color", "avatar", "pinned", "language", "ai_notes", "parent_id", "screens"];
 pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
 /// The server takes at most this many recordings per bulk action.
@@ -1374,6 +1393,100 @@ pub fn link_open(app: AppHandle, url: String) -> AppResult<()> {
     let link = crate::deep_link::app_link(&url).ok_or_else(|| AppError::msg("That is not an EchoLedger link."))?;
     app.opener().open_url(link, None::<&str>).map_err(|e| AppError::msg(e.to_string()))
 }
+
+// ---- Screen moments and the meeting pack (v1.5) ------------------------------------------------------------------
+
+/// What Settings → Screen moments says about this computer and the server.
+#[tauri::command]
+pub fn screens_status(state: State<'_, AppState>) -> crate::screens::ScreensStatus {
+    state.screens.status()
+}
+
+/// The pill's Screens chip: pauses or resumes screens for the running recording (the recording goes on).
+#[tauri::command]
+pub fn screens_pause(app: AppHandle, paused: bool) -> RecordingState {
+    app.state::<AppState>().screens.set_paused(paused);
+    let now = recording_state_now(&app);
+    let _ = app.emit("recording:state", &now);
+    now
+}
+
+/// macOS: asks for Screen Recording (the system asks once; after that only System Settings changes it, which opens
+/// then). True when it is allowed now; always true on Windows.
+#[tauri::command]
+pub fn screens_permission(app: AppHandle) -> bool {
+    use tauri_plugin_opener::OpenerExt;
+    let state = app.state::<AppState>();
+    let system = state.screens.system();
+    let granted = system.permission() || system.request_permission();
+    if !granted && let Some(url) = privacy_settings_url("screen", cfg!(target_os = "macos")) {
+        let _ = app.opener().open_url(url, None::<&str>);
+    }
+    granted
+}
+
+/// A recording's screens in time order, or `None` on a server (or plan) without screen moments.
+#[tauri::command]
+pub async fn session_screens(state: State<'_, AppState>, id: String) -> AppResult<Option<serde_json::Value>> {
+    ensure_unlocked(&state)?;
+    let answer = state.api()?.session_screens(&id).await;
+    state.screens.listed(answer)
+}
+
+/// A page of a project's screens (newest recording first, 60 a page), or `None` on a server (or plan) without them.
+#[tauri::command]
+pub async fn client_screens(state: State<'_, AppState>, id: String, include_subfolders: bool, cursor: Option<String>) -> AppResult<Option<serde_json::Value>> {
+    ensure_unlocked(&state)?;
+    let answer = state.api()?.client_screens(&id, include_subfolders, cursor.as_deref()).await;
+    state.screens.listed(answer)
+}
+
+/// Deletes one screen of a recording (the others keep their numbers until the list is read again).
+#[tauri::command]
+pub async fn screen_delete(state: State<'_, AppState>, session_id: String, screen: String) -> AppResult<()> {
+    ensure_unlocked(&state)?;
+    state.api()?.delete_screen(&session_id, &screen).await
+}
+
+/// A screen's picture as a `data:` URL, fetched through the pinned client from its signed link (the page shows no
+/// picture from anywhere else).
+#[tauri::command]
+pub async fn screen_image(state: State<'_, AppState>, url: String) -> AppResult<String> {
+    use base64::Engine as _;
+    ensure_unlocked(&state)?;
+    let (bytes, mime) = state.api()?.screen_image(&url).await?;
+    Ok(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes)))
+}
+
+/// Export → Meeting pack: `pdf` opens the server's print page of the pack in the browser (Save as PDF there shapes
+/// Urdu correctly), `zip` saves the pack where the person chooses (`None` when they cancel). The view on screen goes
+/// with it; `include_audio` adds the recording to the ZIP.
+#[tauri::command]
+pub async fn meeting_pack(app: AppHandle, id: String, format: String, view: Option<String>, include_audio: bool) -> AppResult<Option<String>> {
+    use tauri_plugin_opener::OpenerExt;
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let wire = match format.as_str() {
+        "pdf" => "html",
+        "zip" => "zip",
+        _ => return Err(AppError::msg("That export format is not available.")),
+    };
+    let view = view.filter(|v| EXPORT_VIEWS.contains(&v.as_str())).unwrap_or_else(|| "original".into());
+    let (bytes, filename) = match state.api()?.meeting_pack(&id, wire, Some(&view), include_audio && wire == "zip").await {
+        Err(e) if e.is_missing_route() => return Err(needs_newer_server("The meeting pack")),
+        Err(e) if e.code() == Some("nothing_to_export") => return Err(AppError::msg("The meeting pack needs the finished transcript. Try again once it is ready.")),
+        other => other?,
+    };
+    if wire == "html" {
+        let path = export_target(&std::env::temp_dir(), &filename);
+        std::fs::write(&path, bytes)?;
+        app.opener().open_path(path.to_string_lossy(), None::<&str>).map_err(|e| AppError::msg(e.to_string()))?;
+        return Ok(Some(path.to_string_lossy().into_owned()));
+    }
+    let Some(path) = crate::files::ask_save_path(&app, &filename, "Zip archive").await else { return Ok(None) };
+    std::fs::write(&path, bytes)?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
 #[tauri::command]
 pub async fn share_create(state: State<'_, AppState>, session_id: String, expires_in: u64, password: Option<String>, include_audio: bool) -> AppResult<serde_json::Value> {
     let password = password.filter(|p| !p.is_empty());
@@ -1671,12 +1784,14 @@ pub async fn permissions_status(state: State<'_, AppState>) -> AppResult<Permiss
 }
 
 /// The system settings page for a permission: `microphone`, `system_audio` (macOS screen and system audio
-/// recording) or `automation` (macOS).
+/// recording), `screen` (screen moments: macOS Screen Recording, Windows 11 borderless capture) or `automation`
+/// (macOS).
 pub fn privacy_settings_url(kind: &str, macos: bool) -> Option<&'static str> {
     match (kind, macos) {
         ("microphone", false) => Some("ms-settings:privacy-microphone"),
         ("microphone", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"),
-        ("system_audio", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"),
+        ("system_audio", true) | ("screen", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"),
+        ("screen", false) => Some("ms-settings:privacy-graphicscapturewithoutborder"),
         ("automation", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"),
         _ => None,
     }

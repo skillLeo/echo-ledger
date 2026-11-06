@@ -353,6 +353,11 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
     let config = app.config().app.windows.iter().find(|w| w.label == MAIN).cloned().unwrap_or_else(|| WindowConfig { label: MAIN.into(), ..WindowConfig::default() });
     let window = WebviewWindowBuilder::from_config(app, &config)?.build()?;
     crate::material::apply(&window);
+    // Built while screen moments capture a whole screen (Windows): hidden from screen captures before it first shows
+    // (once its page is ready).
+    if app.state::<crate::AppState>().screens.own_hidden() {
+        let _ = window.set_content_protected(true);
+    }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(MAIN_SHOW_FALLBACK).await;

@@ -7,6 +7,7 @@ import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from ".
 import { SelectRow, Toggle } from "./SettingsControls";
 import { AutoRecordApps, CaptionStyleCard, MicrophoneCard } from "./CaptureSettings";
 import { DictationCard } from "./DictationSettings";
+import { ScreenMomentsCard } from "./ScreenSettings";
 import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./SecuritySettings";
 import { conflictFor } from "../../lib/shortcutConflicts";
 import { getVersion } from "@tauri-apps/api/app";
@@ -30,7 +31,7 @@ export const GROUP_LABEL: Record<Group, string> = {
 };
 const GROUP_SUB: Record<Group, string> = {
   general: "This computer, look, lock, privacy, storage",
-  calls: "Call apps, after a call, captions, microphone",
+  calls: "Call apps, after a call, captions, microphone, screens",
   voice: "The dictation box, its words and history",
   shortcuts: "Keys for captions, saving, bookmarks, the app",
 };
@@ -236,6 +237,8 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
     { id: "auto-apps", group: "calls", title: "Auto-record apps", keywords: "whatsapp zoom teams meet apps", node: <AutoRecordApps settings={settings} patch={patch} /> },
     { id: "call-sites", group: "calls", title: "Call sites", keywords: "sites browser never record rules", node: <CallSites rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules: siteRules })} /> },
     { id: "microphone", group: "calls", title: "Microphone", keywords: "microphone device test permission silence far side", node: <MicrophoneCard settings={settings} patch={patch} disabled={!!status.recording || status.dictationActive} /> },
+    { id: "screen-moments", group: "calls", title: "Screen moments", keywords: "screen moments screenshots shared screen capture meeting window whole screen excluded apps password managers border screen recording permission",
+      node: <ScreenMomentsCard settings={settings} patch={patch} /> },
     { id: "captions", group: "calls", title: "Captions", keywords: "captions lines overlay screen sharing position corner", node: (
       <div className="card">
         <b>Captions</b>
