@@ -174,6 +174,23 @@ impl Screens {
         !self.plan_off.load(Ordering::SeqCst)
     }
 
+    /// The server answered `403 feature_not_in_plan`: nothing is captured until a config says the plan has screens.
+    pub fn plan_lacks_screens(&self) {
+        self.plan_off.store(true, Ordering::SeqCst);
+    }
+
+    /// A screen list as the pages show it: `None` hides screen moments on a server without them (`404 not_found`) or a
+    /// plan without them (`403 feature_not_in_plan`, which also stops the capture until a config says otherwise).
+    pub fn listed(&self, answer: crate::error::AppResult<serde_json::Value>) -> crate::error::AppResult<Option<serde_json::Value>> {
+        match answer {
+            Err(e) if e.code() == Some("feature_not_in_plan") => {
+                self.plan_lacks_screens();
+                Ok(None)
+            }
+            other => crate::commands::when_available(other),
+        }
+    }
+
     pub fn on_server(&self) -> bool {
         !self.server_missing.load(Ordering::SeqCst)
     }
@@ -338,7 +355,7 @@ pub async fn send(app: &AppHandle, api: &ApiClient) -> usize {
             store.recordings().iter().for_each(|r| store.forget(r));
         }
         Some(upload::Next::NotInPlan) => {
-            state.screens.plan_off.store(true, Ordering::SeqCst);
+            state.screens.plan_lacks_screens();
             store.recordings().iter().for_each(|r| store.forget(r));
         }
         _ => {}
@@ -413,4 +430,78 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, wake: &Wake) {
     }
     drop(sampler);
     show(None);
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::error::AppError;
+    use crate::net::models::ServerConfig;
+    use platform::{Grab, Target, Wanted};
+    use store::MemoryKeys;
+
+    /// A computer that cannot capture: these tests never reach a capture.
+    struct NoCapture;
+
+    impl ScreenSystem for NoCapture {
+        fn supported(&self) -> bool {
+            false
+        }
+        fn borderless(&self) -> bool {
+            false
+        }
+        fn permission(&self) -> bool {
+            false
+        }
+        fn request_permission(&self) -> bool {
+            false
+        }
+        fn find_target(&self, _: &Wanted<'_>) -> Result<Target, HoldReason> {
+            Err(HoldReason::NoWindow)
+        }
+        fn open(&self, _: Target) -> Result<Box<dyn Grab>, String> {
+            Err("no capture in tests".into())
+        }
+    }
+
+    fn screens() -> Screens {
+        Screens::new(Box::new(NoCapture), Box::new(MemoryKeys::default()))
+    }
+
+    fn server(status: u16, code: &str) -> AppError {
+        AppError::Server { status, message: "x".into(), code: Some(code.into()), retry_after_secs: None }
+    }
+
+    #[test]
+    fn a_plan_without_screen_moments_hides_the_lists_and_stops_the_capture() {
+        let s = screens();
+        assert!(s.in_plan());
+        assert_eq!(s.listed(Err(server(403, "feature_not_in_plan"))).unwrap(), None);
+        assert!(!s.in_plan(), "nothing is captured any more");
+        // A config whose plan has them again brings them back.
+        let mut config: ServerConfig = serde_json::from_str(include_str!("../../tests/fixtures/config.json")).unwrap();
+        config.plan = serde_json::from_value(json!({"key": "team", "features": {"screen_moments": true}})).unwrap();
+        s.note_config(&config);
+        assert!(s.in_plan());
+    }
+
+    #[test]
+    fn an_older_server_hides_the_lists_and_other_errors_stay_errors() {
+        let s = screens();
+        assert_eq!(s.listed(Err(server(404, "not_found"))).unwrap(), None);
+        assert_eq!(s.listed(Ok(json!({"data": []}))).unwrap(), Some(json!({"data": []})));
+        assert!(s.listed(Err(server(500, "server_error"))).is_err());
+        assert!(s.in_plan(), "only the plan's answer stops the capture");
+    }
+
+    #[test]
+    fn the_settings_page_reads_the_system_and_the_server() {
+        let s = screens();
+        let status = s.status();
+        assert!(!status.supported && !status.borderless && !status.permission, "asked of the system given, never of this computer's");
+        assert!(status.in_plan && status.on_server);
+        assert_eq!(s.pill(), None, "no recording, no chip");
+    }
 }

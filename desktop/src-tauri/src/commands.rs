@@ -1425,18 +1425,20 @@ pub fn screens_permission(app: AppHandle) -> bool {
     granted
 }
 
-/// A recording's screens in time order, or `None` on a server without screen moments.
+/// A recording's screens in time order, or `None` on a server (or plan) without screen moments.
 #[tauri::command]
 pub async fn session_screens(state: State<'_, AppState>, id: String) -> AppResult<Option<serde_json::Value>> {
     ensure_unlocked(&state)?;
-    when_available(state.api()?.session_screens(&id).await)
+    let answer = state.api()?.session_screens(&id).await;
+    state.screens.listed(answer)
 }
 
-/// A page of a project's screens (newest recording first, 60 a page), or `None` on a server without them.
+/// A page of a project's screens (newest recording first, 60 a page), or `None` on a server (or plan) without them.
 #[tauri::command]
 pub async fn client_screens(state: State<'_, AppState>, id: String, include_subfolders: bool, cursor: Option<String>) -> AppResult<Option<serde_json::Value>> {
     ensure_unlocked(&state)?;
-    when_available(state.api()?.client_screens(&id, include_subfolders, cursor.as_deref()).await)
+    let answer = state.api()?.client_screens(&id, include_subfolders, cursor.as_deref()).await;
+    state.screens.listed(answer)
 }
 
 /// Deletes one screen of a recording (the others keep their numbers until the list is read again).
