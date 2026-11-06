@@ -1399,7 +1399,13 @@ pub fn link_open(app: AppHandle, url: String) -> AppResult<()> {
 /// What Settings → Screen moments says about this computer and the server.
 #[tauri::command]
 pub fn screens_status(state: State<'_, AppState>) -> crate::screens::ScreensStatus {
-    state.screens.status()
+    let mut status = state.screens.status();
+    // The library says whether the server is older than screen moments, as the capture reads it (while the library is
+    // being refreshed it is not waited for).
+    if let Ok(library) = state.library.try_lock() {
+        status.on_server &= crate::screens::library_has_screens(&library.items);
+    }
+    status
 }
 
 /// The pill's Screens chip: pauses or resumes screens for the running recording (the recording goes on).

@@ -257,15 +257,16 @@ async fn project_keeps_screens(app: &AppHandle, client_id: &str) -> bool {
     }
 }
 
-/// Does the server have screen moments, as far as is known? It said no (`404 not_found`), or the library it sent
-/// has items and none of them carries `screen_count` (a server older than screen moments).
+/// Does the library the server sent come from a server with screen moments? Unknown (nothing listed yet) counts as
+/// yes; items none of which carries `screen_count` come from a server older than screen moments.
+pub fn library_has_screens(items: &[crate::net::models::LibraryItem]) -> bool {
+    items.is_empty() || items.iter().any(|i| i.rest.contains_key("screen_count"))
+}
+
+/// Does the server have screen moments, as far as is known? It said no (`404 not_found`), or its library says so.
 fn server_has_screens(app: &AppHandle) -> bool {
     let state = app.state::<crate::AppState>();
-    if !state.screens.on_server() {
-        return false;
-    }
-    let library = state.library.blocking_lock();
-    library.items.is_empty() || library.items.iter().any(|i| i.rest.contains_key("screen_count"))
+    state.screens.on_server() && library_has_screens(&state.library.blocking_lock().items)
 }
 
 /// A call recording started: its capture thread starts too (it keeps nothing until the rules allow it). Voice notes,
@@ -513,6 +514,16 @@ mod tests {
         *lock(&s.live.pill) = Some(ScreensPill { on: false, reason: Some(HoldReason::Minimised), count: 2 });
         s.set_paused(false);
         assert_eq!(lock(&s.live.pill).as_ref().and_then(|p| p.reason), Some(HoldReason::Minimised));
+    }
+
+    #[test]
+    fn a_library_without_screen_counts_comes_from_an_older_server() {
+        let item = |rest: serde_json::Value| -> crate::net::models::LibraryItem { serde_json::from_value(rest).unwrap() };
+        let old = item(json!({"id": "s1", "deleted": false, "updated_at": "2026-11-04T10:00:00Z", "title": "Kick-off"}));
+        let new = item(json!({"id": "s2", "deleted": false, "updated_at": "2026-11-04T10:00:00Z", "title": "Review", "screen_count": 0}));
+        assert!(library_has_screens(&[]), "nothing listed yet: not known, so not off");
+        assert!(!library_has_screens(std::slice::from_ref(&old)));
+        assert!(library_has_screens(&[old, new]));
     }
 
     #[test]
