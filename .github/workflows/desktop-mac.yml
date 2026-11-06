@@ -1,6 +1,8 @@
 # The Mac app (.dmg) cannot be built on Windows: this builds it on GitHub's macOS runners for Apple Silicon and
-# Intel, on every v* tag, on demand, and whenever the desktop app changes. Unsigned: the first open is
-# right-click → Open (docs/USER_GUIDE.md). The .dmg files are the run's artifacts.
+# Intel, on every v* tag, on demand, and whenever the desktop app changes. It is signed with the Developer ID
+# certificate and notarized when the Apple secrets exist, and unsigned otherwise (the first open is then right-click →
+# Open, docs/USER_GUIDE.md); the updater's .app.tar.gz and .sig are made when the updater key's secret exists
+# (docs/SIGNING.md). The .dmg files are the run's artifacts.
 name: Desktop (macOS)
 
 on:
@@ -24,6 +26,10 @@ jobs:
   build:
     name: ${{ matrix.label }}
     runs-on: macos-latest
+    env:
+      # Secrets cannot be read in a step's `if`: only whether they are set is passed on. Notarizing needs all of them.
+      HAS_APPLE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+      HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -69,14 +75,66 @@ jobs:
           cargo test --target ${{ matrix.target }}
           cargo clippy --all-targets --target ${{ matrix.target }} -- -D warnings
 
-      - uses: tauri-apps/tauri-action@v0
+      # The updater's package and .sig (docs/SIGNING.md): only with the updater key, never stored in the repo.
+      - name: Turn on the signed updater package
+        if: env.HAS_UPDATER_KEY == 'true'
+        run: echo "UPDATER_CONFIG=--config src-tauri/tauri.release.conf.json" >> "$GITHUB_ENV"
+
+      # The identity is read from the certificate unless the secret names it (an empty variable would be used as is).
+      - name: Name the signing identity
+        if: env.HAS_APPLE_SIGNING == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          if [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build (unsigned)
+        if: env.HAS_APPLE_SIGNING != 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: desktop
-          args: --target ${{ matrix.target }} --bundles dmg
+          args: --target ${{ matrix.target }} --bundles app,dmg ${{ env.UPDATER_CONFIG }}
+
+      # The Tauri bundler imports the certificate into a temporary keychain, signs with the hardened runtime and
+      # Entitlements.plist, sends the app to Apple's notary service and staples the ticket.
+      - name: Build, sign and notarize
+        if: env.HAS_APPLE_SIGNING == 'true'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          args: --target ${{ matrix.target }} --bundles app,dmg ${{ env.UPDATER_CONFIG }}
+
+      - name: Check the signature and the notarization
+        working-directory: desktop/src-tauri/target/${{ matrix.target }}/release/bundle
+        run: |
+          if [ "$HAS_APPLE_SIGNING" = "true" ]; then
+            codesign --verify --deep --strict --verbose=2 macos/EchoLedger.app
+            spctl --assess --type execute --verbose=4 macos/EchoLedger.app
+            xcrun stapler validate macos/EchoLedger.app
+            echo "Signed with the Developer ID certificate and notarized." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Unsigned build: no Apple signing secrets in this repository (docs/SIGNING.md)." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+          path: |
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
+            desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
           if-no-files-found: error
           retention-days: 30
