@@ -15,6 +15,7 @@ use App\Services\CredentialVault;
 use App\Services\PairingService;
 use App\Services\Screens\ScreenStore;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -43,9 +44,6 @@ const ENVELOPE_MISSING_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
  */
 const ENVELOPE_PENDING_CODES = [
     'budget_exceeded',
-    // Produced by the console and the invitation page (an invitation is not a device API route); WorkspaceInvitationsTest
-    // covers it through Invitations and PlanLimits, and its envelope is checked there.
-    'seat_limit_reached',
 ];
 
 /** @return array<string, array{0: int, 1: string}> the docs table as code => [status, code] */
@@ -230,6 +228,18 @@ function produceError(object $test, string $code): TestResponse
             $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id, 'device_id' => $test->device->id]);
 
             return $test->postJson("/api/sessions/{$session->id}/screens", ['at_ms' => 0, 'width' => 1, 'height' => 1, 'trigger' => 'manual']);
+        case 'seat_limit_reached':
+            // Only the console and the invitation page invite (no device route does): the plan's own refusal, answered
+            // by the API's error handler as a device would get it.
+            Plan::personal()->update(['seats' => 1]);
+            $workspaceId = (int) $test->device->workspace_id;
+            Route::middleware('api')->post('api/__test-seat', function () use ($workspaceId) {
+                app(PlanLimits::class)->assertSeat($workspaceId);
+
+                return response()->noContent();
+            });
+
+            return $test->postJson('/api/__test-seat');
         case 'too_many_labels':
             $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
 
