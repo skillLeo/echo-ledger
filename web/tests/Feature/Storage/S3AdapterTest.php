@@ -175,6 +175,19 @@ describe('over the wire', function () {
         ]);
     });
 
+    it('signs the host it sends when the bucket is in the host', function () {
+        Http::swap(new Factory);
+        Http::preventStrayRequests();
+        $server = new FakeS3Server(pathStyle: false);
+        $server->listen();
+        $adapter = $server->adapter();
+
+        $adapter->write('a b/c.elr', 'body', $this->config);
+
+        expect($adapter->read('a b/c.elr'))->toBe('body')
+            ->and(iterator_to_array($adapter->listContents('a b', true), false))->toHaveCount(1);
+    });
+
     it('refuses an endpoint that is no address', function () {
         expect(fn () => new S3Adapter('b', 'r', 'k', 's', 'http://', true))->toThrow(RuntimeException::class, 'RECORDINGS_S3_ENDPOINT');
     });

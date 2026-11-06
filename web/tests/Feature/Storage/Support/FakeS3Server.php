@@ -70,7 +70,8 @@ final class FakeS3Server
 
     public function listen(): void
     {
-        Http::fake(fn (Request $request) => str_contains((string) parse_url($request->url(), PHP_URL_HOST), self::HOST) ? $this->handle($request) : null);
+        // With the bucket in the host the address gets longer; any other host is left to the test's own fakes.
+        Http::fake(fn (Request $request) => str_ends_with((string) parse_url($request->url(), PHP_URL_HOST), self::HOST) ? $this->handle($request) : null);
     }
 
     /** The next $times requests of $method (on a key containing $match) are answered with $status. */

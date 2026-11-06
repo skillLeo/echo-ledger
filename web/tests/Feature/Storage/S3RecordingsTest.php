@@ -40,6 +40,7 @@ use Illuminate\Support\Sleep;
 use Illuminate\Testing\TestResponse;
 use League\Flysystem\UnableToDeleteFile;
 use League\Flysystem\UnableToReadFile;
+use League\Flysystem\UnableToWriteFile;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 use Tests\Feature\Storage\Support\FakeS3Server;
@@ -65,18 +66,18 @@ beforeEach(function () {
 });
 
 /** No plaintext or encrypted copy left in the temp directory, and nothing on the server's own recordings disk. */
-function expectNoLocalCopies(object $test): void
+function s3ExpectNoLocalCopies(object $test): void
 {
     expect($test->workFiles())->toBe([])
         ->and(File::allFiles((string) config('filesystems.disks.recordings.root')))->toBe([]);
 }
 
-function bucketFile(object $test, string $key): string
+function s3ObjectBody(object $test, string $key): string
 {
     return $test->bucket->objects[$key]['body'];
 }
 
-function plainOf(Recording $recording): string
+function s3PlainOf(Recording $recording): string
 {
     $path = app(ChunkedUploadService::class)->decryptToTemp($recording);
     try {
@@ -84,6 +85,33 @@ function plainOf(Recording $recording): string
     } finally {
         @unlink($path);
     }
+}
+
+function s3NoEnginePrep(): void
+{
+    app()->instance(AudioPrep::class, new class(app(SettingsRepository::class)) extends AudioPrep
+    {
+        public function available(): bool
+        {
+            return false;
+        }
+    });
+}
+
+/** @return array{id: string, size: int, missing: list<int>} */
+function s3StartRequestUpload(object $test, string $bytes, string $name): array
+{
+    $start = $test->postJson($test->linkPath.'/files', ['name' => $name, 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes), 'type' => ''])->assertCreated();
+
+    return ['id' => $start->json('upload_id'), 'size' => $start->json('chunk_size'), 'missing' => $start->json('missing_chunks')];
+}
+
+function s3SendRequestChunk(object $test, array $upload, int $index, string $bytes): TestResponse
+{
+    $chunk = substr($bytes, $index * $upload['size'], $upload['size']);
+    $server = ['CONTENT_TYPE' => 'application/octet-stream', 'HTTP_ACCEPT' => 'application/json', 'HTTP_UPLOAD_CHUNK_SHA256' => hash('sha256', $chunk)];
+
+    return $test->call('POST', $test->linkPath."/files/{$upload['id']}/chunks/{$index}", [], [], [], $server, $chunk);
 }
 
 describe('an upload', function () {
@@ -98,7 +126,7 @@ describe('an upload', function () {
             ->and($this->bucket->holds(S3_MARKER))->toBeFalse()
             ->and($this->workFiles())->toBe([]);
         foreach ($parts as $part) {
-            expect(bucketFile($this, $part))->toStartWith(RecordingCipher::MAGIC);
+            expect(s3ObjectBody($this, $part))->toStartWith(RecordingCipher::MAGIC);
         }
 
         $this->bucket->log = [];
@@ -110,11 +138,11 @@ describe('an upload', function () {
         $recording = Recording::query()->findOrFail($id);
         expect($recording->upload_status)->toBe(UploadStatus::Ready)
             ->and($this->bucket->keys())->toBe([$recording->stored_path])
-            ->and($recording->stored_size_bytes)->toBe(strlen(bucketFile($this, (string) $recording->stored_path)))
+            ->and($recording->stored_size_bytes)->toBe(strlen(s3ObjectBody($this, (string) $recording->stored_path)))
             ->and($this->bucket->holds(S3_MARKER))->toBeFalse()
-            ->and(bucketFile($this, (string) $recording->stored_path))->toStartWith(RecordingCipher::MAGIC)
-            ->and(plainOf($recording))->toBe($audio);
-        expectNoLocalCopies($this);
+            ->and(s3ObjectBody($this, (string) $recording->stored_path))->toStartWith(RecordingCipher::MAGIC)
+            ->and(s3PlainOf($recording))->toBe($audio);
+        s3ExpectNoLocalCopies($this);
     });
 
     it('says which chunks are missing from one listing, not a question per chunk', function () {
@@ -177,6 +205,42 @@ describe('an upload', function () {
 
         expect(fn () => app(ChunkedUploadService::class)->assemble($recording))->toThrow(RuntimeException::class);
         expect($this->workFiles())->toBe([])->and($recording->refresh()->stored_path)->toBeNull();
+    });
+
+    it('does not take a bucket that is down for missing chunks', function () {
+        $audio = Fixtures::audio(600_000);
+        $created = $this->createSession($audio)->assertSuccessful();
+        $id = (string) $created->json('recordings.0.id');
+        $this->uploadAll($id, $audio, (int) $created->json('recordings.0.upload.chunk_size_bytes'));
+
+        $this->bucket->failNext('GET', 503, 3);
+        expect($this->postJson("/api/recordings/{$id}/complete")->status())->toBeGreaterThanOrEqual(500);
+
+        $recording = Recording::query()->findOrFail($id);
+        expect($recording->upload_status)->toBe(UploadStatus::Uploading)
+            ->and($recording->received_chunks)->toBe([0, 1, 2])
+            ->and($this->bucket->keys("parts/{$id}/"))->toHaveCount(3);
+    });
+
+    it('keeps the parts and no plaintext when the bucket fails during assembly, and finishes on the next try', function () {
+        $audio = Fixtures::audio(600_000);
+        $created = $this->createSession($audio)->assertSuccessful();
+        $id = (string) $created->json('recordings.0.id');
+        $this->uploadAll($id, $audio, (int) $created->json('recordings.0.upload.chunk_size_bytes'));
+        $recording = Recording::query()->findOrFail($id);
+        $uploads = app(ChunkedUploadService::class);
+
+        $this->bucket->failNext('GET', 503, 3, "parts/{$id}/1.part");
+        expect(fn () => $uploads->assemble($recording))->toThrow(UnableToReadFile::class);
+        expect($this->workFiles())->toBe([])->and($this->bucket->keys("parts/{$id}/"))->toHaveCount(3);
+
+        $this->bucket->failNext('PUT', 503, 3, 'files/');
+        expect(fn () => $uploads->assemble($recording))->toThrow(UnableToWriteFile::class);
+        expect($this->workFiles())->toBe([])->and($this->bucket->keys("parts/{$id}/"))->toHaveCount(3)
+            ->and($recording->refresh()->stored_path)->toBeNull();
+
+        $uploads->assemble($recording);
+        expect(s3PlainOf($recording->refresh()))->toBe($audio)->and($this->bucket->keys('parts/'))->toBe([]);
     });
 
     it('still goes on when the bucket fails to remove the parts at the end, and the sweep removes them later', function () {
@@ -266,19 +330,8 @@ describe('playback', function () {
 });
 
 describe('engines', function () {
-    function noPrep(): void
-    {
-        app()->instance(AudioPrep::class, new class(app(SettingsRepository::class)) extends AudioPrep
-        {
-            public function available(): bool
-            {
-                return false;
-            }
-        });
-    }
-
     it('sends Groq the decrypted audio from a local copy, removed afterwards', function () {
-        noPrep();
+        s3NoEnginePrep();
         app(CredentialVault::class)->put('groq', 'api_key', 'gsk_test_key_1234567890');
         $audio = Fixtures::audio(4000, S3_MARKER);
         $session = $this->makeReadySession($this->device, $audio, ['language' => 'en', 'final_provider' => 'groq']);
@@ -296,12 +349,12 @@ describe('engines', function () {
         expect($sent)->toContain(S3_MARKER)
             ->and($transcript->refresh()->status)->toBe(TranscriptStatus::Completed)
             ->and($this->bucket->holds(S3_MARKER))->toBeFalse();
-        expectNoLocalCopies($this);
+        s3ExpectNoLocalCopies($this);
     });
 
     it('sends Gemini the decrypted audio from a local copy, removed afterwards', function () {
         Queue::fake();
-        noPrep();
+        s3NoEnginePrep();
         app(CredentialVault::class)->put('gemini', 'api_key', 'AIzaGeminiTestKey_1234567890abcdef');
         $audio = Fixtures::audio(4000, S3_MARKER);
         $session = $this->makeReadySession($this->device, $audio, ['language' => 'en', 'final_provider' => 'gemini']);
@@ -324,7 +377,7 @@ describe('engines', function () {
         (new TranscribeFinalJob($transcript->id))->handle(app(SttManager::class), app(ChunkedUploadService::class), app(TranscriptStore::class));
 
         expect($sent)->toContain(S3_MARKER)->and($this->bucket->holds(S3_MARKER))->toBeFalse();
-        expectNoLocalCopies($this);
+        s3ExpectNoLocalCopies($this);
     });
 
     it('gives ffmpeg a local file in the double check, and removes it', function () {
@@ -365,7 +418,7 @@ describe('engines', function () {
 
         expect(app(DoubleCheck::class)->run($transcript))->toMatchArray(['checked' => 1, 'failed' => 0])
             ->and(array_values(array_unique($prep->heard)))->toBe([$audio]);
-        expectNoLocalCopies($this);
+        s3ExpectNoLocalCopies($this);
     });
 });
 
@@ -380,7 +433,7 @@ describe('screens', function () {
         $store = app(ScreenStore::class);
         $sizes = 0;
         foreach ([$this->screen->image_path, $this->screen->thumb_path] as $key) {
-            $raw = bucketFile($this, (string) $key);
+            $raw = s3ObjectBody($this, (string) $key);
             expect($raw)->toStartWith(RecordingCipher::MAGIC)->not->toContain("\x89PNG")->not->toContain('WEBPVP8');
             $sizes += strlen($raw);
         }
@@ -409,7 +462,7 @@ describe('screens', function () {
 
         expect($written)->toHaveCount(2)
             ->and(app(ScreenStore::class)->picture($twin))->toBe($this->png)
-            ->and($twin->stored_bytes)->toBe(strlen(bucketFile($this, (string) $twin->image_path)) + strlen(bucketFile($this, (string) $twin->thumb_path)));
+            ->and($twin->stored_bytes)->toBe(strlen(s3ObjectBody($this, (string) $twin->image_path)) + strlen(s3ObjectBody($this, (string) $twin->thumb_path)));
         expect($this->workFiles())->toBe([]);
 
         app(ScreenStore::class)->delete($twin);
@@ -474,7 +527,7 @@ describe('a project file', function () {
 
         $workspace->extract($file->refresh());
         expect($file->refresh()->status)->toBe('ready')->and($file->text)->toContain(S3_MARKER);
-        expectNoLocalCopies($this);
+        s3ExpectNoLocalCopies($this);
 
         $workspace->deleteFile($file);
         expect($this->bucket->keys('client-files/'))->toBe([])
@@ -510,7 +563,7 @@ describe('the account export', function () {
         $export->refresh();
         $key = "exports/{$export->id}.zip.elr";
         expect($export->status)->toBe('ready')->and($export->path)->toBe($key)
-            ->and(bucketFile($this, $key))->toStartWith(RecordingCipher::MAGIC)
+            ->and(s3ObjectBody($this, $key))->toStartWith(RecordingCipher::MAGIC)
             ->and($this->bucket->holds(S3_MARKER))->toBeFalse()
             ->and(File::isDirectory(AccountExporter::workDirectory($export->id)))->toBeFalse()
             ->and($this->workFiles())->toBe([]);
@@ -540,27 +593,11 @@ describe('a request link', function () {
         $this->withHeaders(['Authorization' => '']);
     });
 
-    /** @return array{id: string, size: int} */
-    function startRequest(object $test, string $bytes, string $name): array
-    {
-        $start = $test->postJson($test->linkPath.'/files', ['name' => $name, 'size' => strlen($bytes), 'sha256' => hash('sha256', $bytes), 'type' => ''])->assertCreated();
-
-        return ['id' => $start->json('upload_id'), 'size' => $start->json('chunk_size'), 'missing' => $start->json('missing_chunks')];
-    }
-
-    function sendRequestChunk(object $test, array $upload, int $index, string $bytes): TestResponse
-    {
-        $chunk = substr($bytes, $index * $upload['size'], $upload['size']);
-        $server = ['CONTENT_TYPE' => 'application/octet-stream', 'HTTP_ACCEPT' => 'application/json', 'HTTP_UPLOAD_CHUNK_SHA256' => hash('sha256', $chunk)];
-
-        return $test->call('POST', $test->linkPath."/files/{$upload['id']}/chunks/{$index}", [], [], [], $server, $chunk);
-    }
-
     it('keeps a document\'s parts encrypted and files it in the project', function () {
         $text = str_repeat('Scope line of the works '.S3_MARKER."\n", 20_000);
-        $upload = startRequest($this, $text, 'scope.txt');
+        $upload = s3StartRequestUpload($this, $text, 'scope.txt');
         foreach ($upload['missing'] as $index) {
-            sendRequestChunk($this, $upload, $index, $text)->assertOk();
+            s3SendRequestChunk($this, $upload, $index, $text)->assertOk();
         }
 
         expect($this->bucket->keys("request-parts/{$upload['id']}/"))->toHaveCount(count($upload['missing']))
@@ -574,14 +611,14 @@ describe('a request link', function () {
         expect($this->bucket->keys('request-parts/'))->toBe([])
             ->and($this->bucket->keys())->toBe([$file->path])
             ->and($this->bucket->holds(S3_MARKER))->toBeFalse();
-        expectNoLocalCopies($this);
+        s3ExpectNoLocalCopies($this);
     });
 
     it('refuses a recording that is no sound by its first chunk, through the encryption', function () {
         $fake = str_repeat('Just some words, not sound. ', 20_000);
-        $upload = startRequest($this, $fake, 'voice.wav');
+        $upload = s3StartRequestUpload($this, $fake, 'voice.wav');
 
-        expect(sendRequestChunk($this, $upload, 0, $fake)->status())->toBe(422)
+        expect(s3SendRequestChunk($this, $upload, 0, $fake)->status())->toBe(422)
             ->and($this->bucket->keys('parts/'))->toBe([])
             ->and($this->workFiles())->toBe([]);
     });
@@ -646,7 +683,7 @@ describe('erasing', function () {
         $this->session->delete();
         app(RetentionPolicy::class)->restore($this->session->refresh());
 
-        expect(plainOf($this->recording->refresh()))->toBe($this->audio);
+        expect(s3PlainOf($this->recording->refresh()))->toBe($this->audio);
     });
 
     it('remembers what the bucket would not delete and retries until it goes', function () {
@@ -732,12 +769,12 @@ describe('recovering an interrupted assembly', function () {
     it('adopts a whole file', function () {
         expect(app(ChunkedUploadService::class)->adoptStoredFile($this->recording))->toBeTrue()
             ->and($this->recording->refresh()->upload_status)->toBe(UploadStatus::Ready)
-            ->and($this->recording->stored_size_bytes)->toBe(strlen(bucketFile($this, $this->key)))
+            ->and($this->recording->stored_size_bytes)->toBe(strlen(s3ObjectBody($this, $this->key)))
             ->and($this->workFiles())->toBe([]);
     });
 
     it('deletes a file that really is damaged', function () {
-        $this->bucket->objects[$this->key]['body'] = substr(bucketFile($this, $this->key), 0, 100);
+        $this->bucket->objects[$this->key]['body'] = substr(s3ObjectBody($this, $this->key), 0, 100);
 
         expect(app(ChunkedUploadService::class)->adoptStoredFile($this->recording))->toBeFalse()
             ->and($this->bucket->objects)->not->toHaveKey($this->key);
