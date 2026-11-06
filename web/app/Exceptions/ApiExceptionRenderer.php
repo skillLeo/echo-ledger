@@ -37,7 +37,7 @@ final class ApiExceptionRenderer
         CaptureSession::class => ['session_not_found', 'Session not found.'],
         Recording::class => ['recording_not_found', 'Recording not found.'],
         Transcript::class => ['transcript_not_found', 'Transcript not found.'],
-        Client::class => ['client_not_found', 'Client not found.'],
+        Client::class => ['client_not_found', 'Project not found.'],
     ];
 
     public function __invoke(Throwable $e, Request $request): ?JsonResponse

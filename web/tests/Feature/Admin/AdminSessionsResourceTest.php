@@ -55,7 +55,7 @@ it('shows a helpful empty state when there are no sessions', function () {
 
     $this->panelComponent(ListCaptureSessions::class)
         ->assertSee('No recordings yet')
-        ->assertSee('Pair a phone or desktop under Devices, or upload a voice note.');
+        ->assertSee('Sign in a phone or computer under Devices, or upload a voice note.');
 });
 
 it('lists the admin\'s sessions with source and app labels as text', function () {

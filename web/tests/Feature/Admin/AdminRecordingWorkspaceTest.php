@@ -71,7 +71,7 @@ describe('call notes', function () {
         Queue::fake();
         $session = recordingCall($this, null);
 
-        recordingPage($this, $session)->assertDontSee('Call notes')->call('writeNotes', 'en')->assertNotified('File this recording under a client first.');
+        recordingPage($this, $session)->assertDontSee('Call notes')->call('writeNotes', 'en')->assertNotified('File this recording under a project first.');
         Queue::assertNothingPushed();
         expect(CallNote::query()->count())->toBe(0);
     });
@@ -80,7 +80,7 @@ describe('call notes', function () {
         Queue::fake();
         app(CredentialVault::class)->forget('anthropic', 'api_key');
 
-        recordingPage($this, recordingCall($this, $this->client))->call('writeNotes', 'en')->assertNotified('Add your Anthropic key in API Credentials to use client notes and Ask.');
+        recordingPage($this, recordingCall($this, $this->client))->call('writeNotes', 'en')->assertNotified('Add your Anthropic key in API Credentials to use project notes and Ask.');
         Queue::assertNothingPushed();
     });
 });
@@ -106,7 +106,7 @@ describe('learning from edits', function () {
     it('offers nothing for a recording without a client, nor for a rule the client already has', function () {
         $loose = recordingCall($this, null);
         expect(recordingPage($this, $loose)->instance()->saveSegment(0, 'Send it to Acme Holdings today')['learn'])->toBe([])
-            ->and(recordingPage($this, $loose)->instance()->learnRule('a', 'b'))->toBe(['error' => 'File this recording under a client first.']);
+            ->and(recordingPage($this, $loose)->instance()->learnRule('a', 'b'))->toBe(['error' => 'File this recording under a project first.']);
 
         $this->client->update(['replacements' => [['from' => 'acme limited', 'to' => 'Acme Holdings']]]);
         $known = recordingCall($this, $this->client);
@@ -156,7 +156,7 @@ describe('organise chips', function () {
         $session = recordingCall($this, null);
 
         $html = recordingPage($this, $session)->html();
-        expect($html)->toContain("mountAction('fileUnder')")->toContain("mountAction('labels')")->toContain('No client');
+        expect($html)->toContain("mountAction('fileUnder')")->toContain("mountAction('labels')")->toContain('No project');
 
         recordingPage($this, $session)->callAction('fileUnder', data: ['client_id' => $this->client->id])->assertHasNoActionErrors();
         recordingPage($this, $session)->callAction('labels', data: ['labels' => ['Follow up', 'Invoice']])->assertHasNoActionErrors();

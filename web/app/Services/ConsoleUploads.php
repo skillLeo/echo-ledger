@@ -223,7 +223,7 @@ final class ConsoleUploads
         }
         $client = Client::query()->where('workspace_id', $workspaceId)->ofPerson()->find((string) $clientId);
         if (! $client instanceof Client) {
-            throw new ApiError(422, 'client_not_found', 'Choose one of your clients.', ['errors' => ['client_id' => ['Choose one of your clients.']]]);
+            throw new ApiError(422, 'client_not_found', 'Choose one of your projects.', ['errors' => ['client_id' => ['Choose one of your projects.']]]);
         }
 
         return $client;

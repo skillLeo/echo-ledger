@@ -49,7 +49,7 @@ class OnboardingChecklistWidget extends Widget
             'two_factor' => ['Turn on two-factor sign-in', 'Protects the console with an authenticator app or a passkey.', 'Open Security', Security::getUrl()],
             'provider_key' => ['Add a provider key', 'Needed for live captions and transcripts.', 'Open API Credentials', ApiCredentials::getUrl()],
             'cert_pins' => ['Set certificate pins', 'Lets phones and computers check that they talk to this server.', 'Open Settings', Settings::getUrl()],
-            'first_device' => ['Pair your first device', 'Scan the code from the phone or desktop app.', 'Open Devices', DeviceResource::getUrl()],
+            'first_device' => ['Sign in your first device', 'Scan the code from the phone or desktop app.', 'Open Devices', DeviceResource::getUrl()],
             'retention' => ['Choose how long to keep recordings', 'Pick a retention time and save it.', 'Open Settings', Settings::getUrl()],
         ];
 

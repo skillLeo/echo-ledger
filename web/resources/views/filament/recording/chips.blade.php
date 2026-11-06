@@ -1,5 +1,5 @@
 {{--
-    The recording's header chips, as the phone's Organise: the client it is filed under, its language (choose another
+    The recording's header chips, as the phone's Organise: the project it is filed under, its language (choose another
     to transcribe it again), its labels, Pin and Keep forever. Below them a banner only when something needs the person.
 --}}
 @php
@@ -18,7 +18,7 @@
 <div class="el-recording-chips" style="display: flex; flex-direction: column; gap: var(--space-3)">
     @if ($readOnly)
         <div class="el-chips" role="group" aria-label="Organise">
-            <span class="el-chip el-chip-static">@svg('heroicon-o-user', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No client' }}</span></span>
+            <span class="el-chip el-chip-static">@svg('heroicon-o-user', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No project' }}</span></span>
             <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ $language }}</span></span>
             @foreach ($labels as $label)
                 <span class="el-chip el-chip-static el-on">@svg('heroicon-o-tag', ['aria-hidden' => 'true'])<span>{{ $label }}</span></span>
@@ -27,8 +27,8 @@
     @else
         <div class="el-chips" role="group" aria-label="Organise">
             <button type="button" @class(['el-chip', 'el-on' => $session->client !== null]) wire:click="mountAction('fileUnder')"
-                aria-label="Client: {{ $session->client?->name ?? 'none' }}. Change">
-                @svg('heroicon-o-user', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No client' }}</span>@svg('heroicon-m-chevron-down', ['aria-hidden' => 'true', 'style' => 'width: 14px; height: 14px'])
+                aria-label="Project: {{ $session->client?->name ?? 'none' }}. Change">
+                @svg('heroicon-o-user', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No project' }}</span>@svg('heroicon-m-chevron-down', ['aria-hidden' => 'true', 'style' => 'width: 14px; height: 14px'])
             </button>
             @if ($canRetranscribe)
                 <button type="button" class="el-chip" wire:click="mountAction('retranscribe_as')" aria-label="Language: {{ $language }}. Transcribe again in another language">

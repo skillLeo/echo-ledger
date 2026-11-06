@@ -152,7 +152,7 @@ final class ProjectTree
         }
         $parent = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)->ofPerson()->find((string) $parentId);
         if (! $parent instanceof Client) {
-            throw new ApiError(404, 'client_not_found', 'Client not found.');
+            throw new ApiError(404, 'client_not_found', 'Project not found.');
         }
 
         return $parent;

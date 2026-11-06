@@ -48,7 +48,7 @@ final class CaptureSessionInfolist
                 TextEntry::make('started_at')->label('Started')->dateTime('M j, Y · g:i A')->columnSpan(2),
                 TextEntry::make('duration_ms')->label('Duration')
                     ->state(fn (CaptureSession $r): string => CaptureSessionsTable::duration($r->duration_ms) ?: '—'),
-                TextEntry::make('client.name')->label('Client')->placeholder('—'),
+                TextEntry::make('client.name')->label('Project')->placeholder('—'),
                 // Caller names (since v1.2): who the recording was with, and where the device saw the name.
                 TextEntry::make('caller_name')->label('With')->placeholder('—')->columnSpan(2)
                     ->formatStateUsing(fn (?string $state, CaptureSession $record): string => trim(($state ?? '').' '.($record->caller_number !== null ? '('.$record->caller_number.')' : '')))

@@ -11,15 +11,15 @@
             <div class="el-setting-row">
                 <div>
                     <h3 id="ai-heading" class="el-setting-title">AI notes</h3>
-                    <p class="el-muted" style="font-size: 14px">Notes after every call, the memory and suggested fixes. Off: no Claude request for this client.</p>
+                    <p class="el-muted" style="font-size: 14px">Notes after every call, the memory and suggested fixes. Off: no Claude request for this project.</p>
                 </div>
                 <button type="button" class="el-switch" role="switch" aria-checked="{{ $client->ai_notes ? 'true' : 'false' }}" aria-labelledby="ai-heading" wire:click="toggleAiNotes"></button>
             </div>
             <div class="el-budget" style="margin-top: var(--space-4)">
-                <p class="el-meta" data-ai-budget>AI this month: ${{ number_format($budget['spent_usd'], 2) }} of ${{ number_format($budget['budget_usd'], 2) }} · this client ${{ number_format($clientSpend, 2) }}</p>
+                <p class="el-meta" data-ai-budget>AI this month: ${{ number_format($budget['spent_usd'], 2) }} of ${{ number_format($budget['budget_usd'], 2) }} · this project ${{ number_format($clientSpend, 2) }}</p>
                 <div class="el-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $percent }}" aria-label="AI budget used this month"><span style="width: {{ $percent }}%"></span></div>
                 @unless ($configured)
-                    <p class="el-caption">Add your Anthropic key in <a class="el-link" href="{{ $credentialsUrl }}">API Credentials</a> to use client notes and Ask.</p>
+                    <p class="el-caption">Add your Anthropic key in <a class="el-link" href="{{ $credentialsUrl }}">API Credentials</a> to use project notes and Ask.</p>
                 @endunless
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4)" x-data="{ copied: null }">

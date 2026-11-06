@@ -27,7 +27,7 @@ final class DeviceController extends Controller
             'platform' => ['required', Rule::enum(DevicePlatform::class)],
             'app_version' => ['nullable', 'string', 'max:32'],
             'os_version' => ['nullable', 'string', 'max:32'],
-        ]);
+        ], [], ['pairing_code' => 'code']);
 
         [$device, $token] = $pairing->redeem($data['pairing_code'], $data, $request->ip());
         // A paired device is a new sign-in to its owner's account too (since v1.5).

@@ -61,9 +61,9 @@ final class CommandPalette implements GlobalSearchProvider
         $list = [
             ['Dashboard', Dashboard::getUrl(), 'home overview usage chart', true],
             ['Search recordings', Search::getUrl(), 'find transcript text words', Search::canAccess()],
-            ['Sessions', CaptureSessionResource::getUrl('index'), 'recordings calls library voice notes upload', CaptureSessionResource::canAccess()],
+            ['Library', CaptureSessionResource::getUrl('index'), 'recordings calls library voice notes upload', CaptureSessionResource::canAccess()],
             ['Projects', ClientResource::getUrl('index'), 'clients customers folders keyterms vocabulary corrections', ClientResource::canAccess()],
-            ['Devices', DeviceResource::getUrl('index'), 'phones computers pair unpair', DeviceResource::canAccess()],
+            ['Devices', DeviceResource::getUrl('index'), 'phones computers sign in out pair unpair', DeviceResource::canAccess()],
             ['Settings', Settings::getUrl(), 'retention language vocabulary bookmarks limit engines', Settings::canAccess()],
             ['API credentials', ApiCredentials::getUrl(), 'keys assemblyai elevenlabs azure whisper', ApiCredentials::canAccess()],
         ];

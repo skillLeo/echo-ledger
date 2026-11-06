@@ -24,7 +24,7 @@ beforeEach(function () {
     Filament::setCurrentPanel('admin');
 });
 
-/** Opens the "Pair a device" modal and returns [component, displayed code, modal html]. */
+/** Opens the "Sign in a device" modal and returns [component, displayed code, modal html]. */
 function adminOpenPairing($test): array
 {
     $list = $test->panelComponent(ListDevices::class)->mountAction('pair');
@@ -37,7 +37,7 @@ function adminOpenPairing($test): array
 it('renders the devices list and has no create or edit pages', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin/devices')->assertOk()->assertSee('Devices')->assertSee('Pair a device');
+    $this->get('/admin/devices')->assertOk()->assertSee('Devices')->assertSee('Sign in a device');
     $this->get('/admin/devices/create')->assertNotFound();
 });
 
@@ -45,8 +45,8 @@ it('shows an empty state with a hint about pairing', function () {
     $this->signInAsAdmin();
 
     $this->panelComponent(ListDevices::class)
-        ->assertSee('No devices paired')
-        ->assertSee('Use "Pair a device" to connect the EchoLedger phone or desktop app.');
+        ->assertSee('No devices signed in')
+        ->assertSee('Use "Sign in a device" to connect the EchoLedger phone or desktop app.');
 });
 
 it('lists each device with its type, platform, version, session count and last seen time', function () {
@@ -172,7 +172,7 @@ it('cannot revoke or rename another admin\'s device', function () {
     expect(unscoped(fn () => Device::query()->find($theirs->id)))->not->toBeNull();
 });
 
-// --- Pair a device --------------------------------------------------------------------------------------------
+// --- Sign in a device --------------------------------------------------------------------------------------------
 
 it('creates a one-time pairing code in XXXX-XXXX form when the dialog opens', function () {
     $admin = $this->signInAsAdmin();
@@ -184,7 +184,7 @@ it('creates a one-time pairing code in XXXX-XXXX form when the dialog opens', fu
     expect(DevicePairingCode::query()->first())
         ->user_id->toBe($admin->id)
         ->used_at->toBeNull();
-    expect($html)->toContain('Pairing QR code')
+    expect($html)->toContain('Sign-in QR code')
         ->toContain('The code is stored only as a hash and cannot be shown again.');
 });
 

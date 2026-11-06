@@ -94,7 +94,7 @@ class AdminPanelProvider extends PanelProvider
             // Self-hosted font and initials avatars: the console asks no third-party host for anything.
             ->font('Inter', provider: LocalInterFontProvider::class)
             ->defaultAvatarProvider(InitialsAvatarProvider::class)
-            // Ctrl / Cmd + K: pages, recordings (title and transcript) and clients.
+            // Ctrl / Cmd + K: pages, recordings (title and transcript) and projects.
             ->globalSearch(CommandPalette::class)
             ->globalSearchKeyBindings(['mod+k'])
             ->globalSearchFieldSuffix(fn (): string => 'Ctrl K')

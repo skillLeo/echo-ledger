@@ -73,7 +73,7 @@ final class CaptureSessionsTable
                 // only when it needs the person), kept as columns for the state they carry.
                 TextColumn::make('source_device')->label('Source')->hidden(),
                 TextColumn::make('source_app')->label('App')->hidden(),
-                TextColumn::make('client.name')->label('Client')->hidden(),
+                TextColumn::make('client.name')->label('Project')->hidden(),
                 TextColumn::make('labels.label')->label('Labels')->hidden(),
                 TextColumn::make('device.name')->label('Device')->state(fn (CaptureSession $r): string => self::deviceLabel($r))->hidden(),
                 TextColumn::make('status')->hidden(),
@@ -83,7 +83,7 @@ final class CaptureSessionsTable
             ->filters([
                 SelectFilter::make('source_device')->label('Source device')->options(SourceDevice::class)->multiple(),
                 SelectFilter::make('source_app')->label('Source app')->options(SourceApp::class)->multiple(),
-                SelectFilter::make('client')
+                SelectFilter::make('client')->label('Project')
                     ->relationship('client', 'name', fn (Builder $query): Builder => $query->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId()))
                     ->searchable()->preload(),
                 SelectFilter::make('status')->options(SessionStatus::class),
@@ -127,7 +127,7 @@ final class CaptureSessionsTable
             })
             ->emptyStateDescription(fn (HasTable $livewire, Table $table): string => $livewire->hasTableSearch() || $table->isFiltered()
                 ? 'Try other words, or clear the search and filters.'
-                : 'Calls, meetings and voice notes you capture will appear here. Pair a phone or desktop under Devices, or upload a voice note.')
+                : 'Calls, meetings and voice notes you capture will appear here. Sign in a phone or computer under Devices, or upload a voice note.')
             // C3: one clear next step in the empty state.
             ->emptyStateActions([
                 Action::make('clearSearchAndFilters')->label('Clear search and filters')->color('gray')
@@ -137,7 +137,7 @@ final class CaptureSessionsTable
                         $livewire->resetTableSearch();
                         $livewire->removeTableFilters();
                     }),
-                Action::make('pairDevice')->label('Pair a device')->icon(Heroicon::OutlinedDevicePhoneMobile)
+                Action::make('pairDevice')->label('Sign in a device')->icon(Heroicon::OutlinedDevicePhoneMobile)
                     ->visible(fn (HasTable $livewire, Table $table): bool => ! $livewire->hasTableSearch() && ! $table->isFiltered())
                     ->url(fn (): string => DeviceResource::getUrl('index')),
             ]);
@@ -161,8 +161,8 @@ final class CaptureSessionsTable
         };
 
         return [
-            BulkAction::make('move')->label('Move to client')->icon(Heroicon::OutlinedFolder)
-                ->schema([Select::make('client_id')->label('Client')->placeholder('No client')
+            BulkAction::make('move')->label('Move to project')->icon(Heroicon::OutlinedFolder)
+                ->schema([Select::make('client_id')->label('Project')->placeholder('No project')
                     ->options(fn (): array => Client::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all())])
                 ->action(fn (Collection $records, array $data) => $run($records, 'move', $data['client_id'] ?? null))
                 ->deselectRecordsAfterCompletion(),

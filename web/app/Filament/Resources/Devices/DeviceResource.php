@@ -62,7 +62,7 @@ class DeviceResource extends Resource
                 TextColumn::make('app_version')->label('App')->placeholder('—'),
                 TextColumn::make('capture_sessions_count')->label('Sessions')->badge()->color('gray'),
                 TextColumn::make('last_seen_at')->label('Last seen')->since()->placeholder('never'),
-                TextColumn::make('created_at')->label('Paired')->date(),
+                TextColumn::make('created_at')->label('Signed in')->date(),
             ])
             ->recordActions([
                 Action::make('rename')
@@ -76,8 +76,8 @@ class DeviceResource extends Resource
                     ->modalHeading('Revoke device')
                     ->modalDescription('The device loses access immediately. Its past recordings stay in the library.'),
             ])
-            ->emptyStateHeading('No devices paired')
-            ->emptyStateDescription('Use "Pair a device" to connect the EchoLedger phone or desktop app.');
+            ->emptyStateHeading('No devices signed in')
+            ->emptyStateDescription('Use "Sign in a device" to connect the EchoLedger phone or desktop app.');
     }
 
     public static function getPages(): array

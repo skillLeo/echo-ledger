@@ -28,10 +28,10 @@
         <p class="el-batch-title" x-text="'For ' + (waiting.length === 1 ? 'this file' : 'these ' + waiting.length + ' files')"></p>
         <div class="el-batch-fields">
             <label class="el-field">
-                <span>Client</span>
+                <span>Project</span>
                 <x-filament::input.wrapper>
                     <x-filament::input.select x-model="clientId">
-                        <option value="">No client</option>
+                        <option value="">No project</option>
                         @foreach ($config['clients'] as $client)
                             <option value="{{ $client['value'] }}">{{ $client['label'] }}</option>
                         @endforeach

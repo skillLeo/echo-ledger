@@ -52,7 +52,7 @@ class RecentlyDeleted extends Page implements HasTable
             ->description('Deleted recordings stay here for '.CaptureSession::BIN_HOURS.' hours, then their audio and transcripts are erased for good.')
             ->columns([
                 TextColumn::make('title')->label('Title')->state(fn (CaptureSession $r): string => $r->displayTitle())->limit(48),
-                TextColumn::make('client.name')->label('Client')->placeholder('—'),
+                TextColumn::make('client.name')->label('Project')->placeholder('—'),
                 TextColumn::make('started_at')->label('Recorded')->dateTime('M j, Y · g:i A'),
                 TextColumn::make('deleted_at')->label('Deleted')->since(),
                 TextColumn::make('erase_at')->label('Erased')

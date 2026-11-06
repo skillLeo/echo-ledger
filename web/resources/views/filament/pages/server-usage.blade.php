@@ -22,7 +22,7 @@
 
     @include('filament.pages.usage-trend', ['trend' => $trend])
 
-    <x-filament::section heading="By provider" description="Anthropic is Show as, client AI and screen descriptions together, with each use below it.">
+    <x-filament::section heading="By provider" description="Anthropic is Show as, project AI and screen descriptions together, with each use below it.">
         @if ($report['providers'] === [])
             <p style="opacity:.6">No usage in this period.</p>
         @else

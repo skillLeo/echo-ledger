@@ -68,7 +68,7 @@ describe('what makes a notification', function () {
 
         expect(kinds($this->owner))->toEqualCanonicalizing(['upload_failed', 'device_paired']);
         $paired = $this->owner->notifications()->get()->first(fn (DatabaseNotification $n): bool => ActivityFeed::kindOf($n) === 'device_paired');
-        expect($paired->data['title'])->toEndWith('paired');
+        expect($paired->data['title'])->toEndWith('signed in');
     });
 
     it('warns at the monthly threshold and when the limit is reached, once each per month', function () {

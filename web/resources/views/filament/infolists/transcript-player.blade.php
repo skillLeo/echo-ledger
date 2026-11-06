@@ -130,7 +130,7 @@
                 } catch (e) { this.error = 'The change could not be saved. Try again.'; }
                 this.saving = null;
             },
-            // Always write X as Y for this client? (after an edit of a client's recording)
+            // Always write X as Y for this project? (after an edit of a recording in a project)
             async teach(index, yes) {
                 const rule = this.learn[index];
                 this.learn = this.learn.filter((r, k) => k !== index);
@@ -434,7 +434,7 @@
             <span class="el-sr" role="status" aria-live="polite" x-text="copied === 'failed' ? 'Copy failed' : (copied ? 'Copied to the clipboard' : (saving !== null ? 'Saving' : ''))"></span>
         </div>
 
-        {{-- After an edit of a client's recording: teach the client the words that were wrong. --}}
+        {{-- After an edit of a recording in a project: teach the project the words that were wrong. --}}
         <template x-for="(r, ri) in learn" :key="'learn' + ri">
             <div class="el-learn" role="status">
                 <span>Always write “<strong x-text="r.from"></strong>” as “<strong x-text="r.to"></strong>” for <span x-text="r.client_name"></span>?</span>

@@ -39,7 +39,7 @@ class Plan extends Model
     public const FEATURE_LABELS = [
         'live_translate' => 'Live Translate',
         'screen_moments' => 'Screen moments',
-        'ai_notes' => 'AI notes (client notes, memory and Ask)',
+        'ai_notes' => 'AI notes (project notes, memory and Ask)',
         'connector' => 'Claude and ChatGPT connector',
     ];
 

@@ -22,9 +22,9 @@ class ListDevices extends ListRecords
     {
         return [
             Action::make('pair')
-                ->label('Pair a device')
+                ->label('Sign in a device')
                 ->icon(Heroicon::OutlinedQrCode)
-                ->modalHeading('Pair a phone or desktop')
+                ->modalHeading('Sign in a phone or computer')
                 ->modalDescription('Scan the QR code in the EchoLedger app, or type the code. It works once and expires in 10 minutes.')
                 // fillForm runs once on mount, so the code is generated exactly once per modal.
                 ->fillForm(function (PairingService $pairing): array {

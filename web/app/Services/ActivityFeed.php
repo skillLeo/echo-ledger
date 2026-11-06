@@ -67,7 +67,7 @@ final class ActivityFeed
             }
         });
         Screen::created(fn (Screen $s) => $feed()->planLimitChanged($s->workspace_id, self::LIMIT_STORAGE));
-        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->name} paired", 'It can now record, sync and see the library.', null, 'heroicon-o-device-phone-mobile'));
+        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->name} signed in", 'It can now record, sync and see the library.', null, 'heroicon-o-device-phone-mobile'));
         UsageLedgerEntry::created(fn (UsageLedgerEntry $e) => $feed()->budgetChanged($e));
     }
 
@@ -169,7 +169,7 @@ final class ActivityFeed
             }
             $name = $limit === self::LIMIT_STORAGE ? 'Storage' : 'AI credits';
             [$title, $body] = $kind === 'budget_reached'
-                ? ["{$name} of your plan used up", $limit === self::LIMIT_STORAGE ? 'New recordings stay on the device until there is room or the plan is bigger.' : 'Client notes and Ask wait until next month or a bigger plan.']
+                ? ["{$name} of your plan used up", $limit === self::LIMIT_STORAGE ? 'New recordings stay on the device until there is room or the plan is bigger.' : 'Project notes and Ask wait until next month or a bigger plan.']
                 : ["{$name} at {$warnAt}% of your plan", $limit === self::LIMIT_STORAGE ? Number::fileSize((int) $used, precision: 1).' used.' : '$'.number_format($used, 2).' used this month.'];
             $start = (string) UsagePeriod::current($settings)['start']->toIso8601String();
             foreach ($this->owners($workspaceId) as $user) {
