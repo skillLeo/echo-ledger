@@ -146,7 +146,7 @@ class PairingScreenTest : ScreenTest() {
         val body = Json.parseToJsonElement(server.requestsTo("POST", "/api/devices/register").single().bodyText()).jsonObject
         assertEquals("TEST-2345", body["pairing_code"]!!.jsonPrimitive.content)
         assertEquals(server.baseUrl, runBlocking { app.graph.settings.current().serverUrl })
-        assertTrue(vm.message.value.orEmpty().startsWith("Paired with"))
+        assertTrue(vm.message.value.orEmpty().startsWith("Signed in to"))
     }
 
     @Test

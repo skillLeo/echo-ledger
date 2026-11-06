@@ -1,10 +1,18 @@
 package com.echoledger.mobile.ui.design
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,6 +39,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +60,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.ui.LocalEchoColors
 import com.echoledger.mobile.ui.LocalEchoType
+import com.echoledger.mobile.ui.Motion
 import com.echoledger.mobile.ui.reduceMotion
 
 /** One bottom-bar tab: outlined icon when inactive, filled when active; [badge] is a count (Activity). */
@@ -147,7 +157,12 @@ fun RecordButton(recording: Boolean, onClick: () -> Unit, onLongPress: () -> Uni
     } else {
         1f
     }
-    val fill = if (recording) c.dangerStrong else c.accentStrong
+    val interaction = remember { MutableInteractionSource() }
+    val fill by animateColorAsState(
+        if (recording) c.dangerStrong else c.accentStrong,
+        tween(Motion.BASE, easing = Motion.Standard),
+        label = "record fill"
+    )
     Box(modifier.size(64.dp), contentAlignment = Alignment.Center) {
         if (recording) {
             Box(
@@ -161,6 +176,7 @@ fun RecordButton(recording: Boolean, onClick: () -> Unit, onLongPress: () -> Uni
         Box(
             Modifier
                 .size(64.dp)
+                .pressScale(interaction)
                 .shadow(
                     if (c.isDark) 0.dp else 8.dp,
                     CircleShape,
@@ -174,7 +190,7 @@ fun RecordButton(recording: Boolean, onClick: () -> Unit, onLongPress: () -> Uni
                 .clip(CircleShape)
                 .background(fill)
                 .combinedClickable(
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = interaction,
                     indication = null,
                     role = Role.Button,
                     onClick = onClick,
@@ -186,13 +202,38 @@ fun RecordButton(recording: Boolean, onClick: () -> Unit, onLongPress: () -> Uni
                 .semantics { contentDescription = if (recording) "Stop recording" else "Record" },
             contentAlignment = Alignment.Center
         ) {
-            if (recording) {
-                Box(Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).background(Color.White))
-            } else {
-                Icon(Icons.Rounded.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+            AnimatedContent(
+                targetState = recording,
+                transitionSpec = {
+                    val enter = fadeIn(tween(Motion.BASE)) + scaleIn(tween(Motion.BASE, easing = Motion.EaseOut), initialScale = 0.6f)
+                    enter togetherWith fadeOut(tween(Motion.FAST))
+                },
+                contentAlignment = Alignment.Center,
+                label = "record glyph"
+            ) { on ->
+                if (on) {
+                    Box(Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).background(Color.White))
+                } else {
+                    Icon(Icons.Rounded.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                }
             }
         }
     }
+}
+
+/**
+ * Which way a tab switch moves (since v1.5): towards where the new tab sits on the bottom bar, 1 to the right. A tab
+ * not on the bar (the Record screen) comes in from the right.
+ */
+fun tabDirection(order: List<String>, from: String, to: String): Int {
+    val target = order.indexOf(to)
+    return if (target >= 0 && target < order.indexOf(from)) -1 else 1
+}
+
+/** The switch between two tabs: the new one fades in, moving a short way from the side it sits on. */
+fun tabTransition(direction: Int): ContentTransform {
+    val slide = slideInHorizontally(tween(Motion.BASE, easing = Motion.EaseOut)) { width -> direction * width / 24 }
+    return (fadeIn(tween(Motion.BASE)) + slide) togetherWith fadeOut(tween(Motion.FAST))
 }
 
 /** The slim "Recording 02:14 ■" bar shown above the bottom bar while recording anywhere; tap opens the Live view. */

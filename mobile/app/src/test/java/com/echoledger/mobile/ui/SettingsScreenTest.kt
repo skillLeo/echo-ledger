@@ -337,19 +337,19 @@ class SettingsScreenTest : AppTest() {
     }
 
     @Test
-    fun `choosing a client for keyterms is saved and No client clears it`() {
+    fun `choosing a client for keyterms is saved and No project clears it`() {
         pairAndSettle()
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
         server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
         val refresh = vm.refresh()
         pumpUntil("clients") { refresh.isCompleted && vm.clients.value.size == 2 }
-        launch(open = "General/Client keyterms")
+        launch(open = "General/Project keyterms")
 
         compose.onNodeWithText("Acme Holdings").performClick()
         pumpUntil("client saved") { settings().clientId == "01JCLIENT0000000000000000A" }
         compose.onNodeWithText("Zed Logistics").performClick()
         pumpUntil("second client saved") { settings().clientId == "01JCLIENT0000000000000000B" }
-        compose.onNodeWithText("No client").performClick()
+        compose.onNodeWithText("No project").performClick()
         pumpUntil("client cleared") { settings().clientId == null }
     }
 
@@ -388,10 +388,10 @@ class SettingsScreenTest : AppTest() {
         runBlocking { app.graph.settings.update { it.copy(captionsEnabled = false) } }
         launch(open = "General/This phone")
 
-        compose.onNodeWithText("Unpair").performClick()
+        compose.onNodeWithText("Sign out").performClick()
         assertTrue("nothing changes before the user confirms", settings().paired)
-        compose.onNodeWithText("Unpair this phone? Recordings waiting to upload stay on the phone.").assertExists()
-        compose.onNode(hasText("Unpair") and hasAnyAncestor(isDialog())).performClick()
+        compose.onNodeWithText("Sign out of this phone? Recordings waiting to upload stay on the phone.").assertExists()
+        compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
         pumpUntil("unpaired") { !settings().paired }
 
         assertNull(runBlocking { app.graph.settings.token() })

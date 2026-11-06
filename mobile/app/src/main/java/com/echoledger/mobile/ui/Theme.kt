@@ -9,10 +9,10 @@ import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Storefront
 import androidx.compose.material.icons.outlined.Videocam
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -229,7 +229,7 @@ fun SourceApp.icon(): ImageVector = when (this) {
 
     SourceApp.VOICE_NOTE -> Icons.Outlined.Mic
 
-    SourceApp.OTHER -> Icons.Outlined.MoreHoriz
+    SourceApp.OTHER -> Icons.Rounded.MoreHoriz
 }
 
 /** "Remove animations" is on in the phone's accessibility settings: motion is skipped, states change at once. */

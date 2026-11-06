@@ -52,6 +52,7 @@ import com.echoledger.mobile.ui.EchoLedgerTheme
 import com.echoledger.mobile.ui.LocalEchoType
 import com.echoledger.mobile.ui.Motion
 import com.echoledger.mobile.ui.Space
+import com.echoledger.mobile.ui.design.SuccessCheck
 import com.echoledger.mobile.ui.design.tabular
 import com.echoledger.mobile.ui.formatDuration
 import com.echoledger.mobile.ui.reduceMotion
@@ -211,8 +212,6 @@ fun AfterCallChip(
     val still = reduceMotion()
     val shown = remember { Animatable(if (still) 1f else 0f) }
     LaunchedEffect(Unit) { if (!still) shown.animateTo(1f, tween(Motion.SLOW, easing = Motion.EaseOut)) }
-    val pop = remember { Animatable(if (still) 1f else 0.4f) }
-    LaunchedEffect(Unit) { if (!still) pop.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow)) }
     val duration = formatDuration(durationMs).ifEmpty { "0:00" }
     Column(
         Modifier
@@ -232,15 +231,7 @@ fun AfterCallChip(
         ) {
             val label = if (mode == DecisionPopup.Mode.SAVED) "Saved · $title · $duration" else "$title · $duration"
             if (mode == DecisionPopup.Mode.SAVED) {
-                Icon(
-                    Icons.Rounded.Check,
-                    contentDescription = null,
-                    tint = PillColors.accent,
-                    modifier = Modifier.padding(end = Space.s2).size(18.dp).graphicsLayer {
-                        scaleX = pop.value
-                        scaleY = pop.value
-                    }
-                )
+                SuccessCheck(PillColors.accent, Modifier.padding(end = Space.s2))
             }
             Text(
                 label,
@@ -254,7 +245,7 @@ fun AfterCallChip(
                     .clickable(
                         enabled = mode == DecisionPopup.Mode.ASK,
                         role = Role.Button,
-                        onClickLabel = "Rename or pick a client",
+                        onClickLabel = "Rename or pick a project",
                         onClick = onTitle
                     )
                     .padding(vertical = Space.s2)

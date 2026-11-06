@@ -21,13 +21,12 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Call
-import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ClosedCaption
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.FiberManualRecord
@@ -39,12 +38,13 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.PrivacyTip
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Subtitles
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -150,10 +150,10 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0) {
             value = query,
             onValueChange = { query = it.take(60) },
             label = { Text("Search settings") },
-            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = {
                 if (query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }) { Icon(Icons.Outlined.Close, contentDescription = "Clear search") }
+                    IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Close, contentDescription = "Clear search") }
                 }
             },
             singleLine = true,
@@ -177,7 +177,7 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0) {
                 }
                 Box(Modifier.padding(horizontal = Space.s2, vertical = Space.s4)) {
                     com.echoledger.mobile.ui.design.EchoButton(
-                        "Unpair this phone…",
+                        "Sign out of this phone…",
                         {
                             group = SettingsGroup.General.name
                             focus = "this-phone"
@@ -217,7 +217,7 @@ private fun ProfileCard(settings: AppSettings) {
         com.echoledger.mobile.ui.design.Avatar(name, size = 48.dp)
         Column(Modifier.padding(start = Space.s3).weight(1f)) {
             Text(name, style = type.titleS, color = Brand.Text)
-            Text(server?.let { "Paired with $it" } ?: "Not paired", style = type.labelM, color = Brand.Muted)
+            Text(server?.let { "Signed in to $it" } ?: "Not signed in", style = type.labelM, color = Brand.Muted)
             // Since v1.5: the workspace, this person's role there and the plan's minutes.
             settings.plan.membership()?.let { Text(it, style = type.labelM, color = Brand.Muted) }
             settings.plan.summary()?.let { Text(it, style = type.labelM, color = Brand.Muted) }
@@ -241,7 +241,7 @@ private fun SettingsRow(icon: ImageVector, title: String, summary: String, click
         onClick = onClick,
         trailing = {
             Icon(
-                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = null,
                 tint = Brand.Faint,
                 modifier = Modifier.size(20.dp)
@@ -277,7 +277,7 @@ private fun GeneralScreen(vm: MainViewModel, page: String?, onSetup: () -> Unit,
             entry?.title ?: SettingsGroup.General.label,
             large = false,
             navigation = {
-                com.echoledger.mobile.ui.design.BarIcon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", onBack, tint = Brand.Text)
+                com.echoledger.mobile.ui.design.BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = Brand.Text)
             }
         )
         if (entry != null) {
@@ -319,7 +319,7 @@ private fun generalSummary(id: String): String = when (id) {
     "appearance" -> "Theme and font"
     "this-phone" -> "Server, name, unpair"
     "transcription" -> "Language of new recordings"
-    "client" -> "Names and words for a client"
+    "client" -> "Names and words for a project"
     "notifications" -> "Activity and quiet hours"
     "app-lock" -> "Fingerprint or screen lock"
     "consent" -> "Telling people you record"
@@ -338,7 +338,7 @@ private fun SettingsGroupScreen(vm: MainViewModel, group: SettingsGroup, focus: 
             group.label,
             large = false,
             navigation = {
-                com.echoledger.mobile.ui.design.BarIcon(Icons.AutoMirrored.Outlined.ArrowBack, "Back", onBack, tint = Brand.Text)
+                com.echoledger.mobile.ui.design.BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = Brand.Text)
             }
         )
         Column(
@@ -493,12 +493,12 @@ private fun LiveCaptionsCard(vm: MainViewModel, settings: AppSettings) {
 private fun ClientKeytermsCard(vm: MainViewModel, settings: AppSettings) {
     val clients by vm.clients.collectAsState()
     SectionCard {
-        Text("Client keyterms", fontWeight = FontWeight.SemiBold)
-        Text("Names and jargon of the selected client improve accuracy.", color = Brand.Muted, fontSize = 12.sp)
+        Text("Project keyterms", fontWeight = FontWeight.SemiBold)
+        Text("Names and jargon of the selected project improve accuracy.", color = Brand.Muted, fontSize = 12.sp)
         (listOf(null) + clients).forEach { client ->
             Row(Modifier.fillMaxWidth().clickable { vm.updateSettings { it.copy(clientId = client?.id) } }.padding(vertical = 6.dp)) {
                 Text(if (settings.clientId == client?.id) "●  " else "○  ", color = Brand.Violet)
-                Text(client?.name ?: "No client")
+                Text(client?.name ?: "No project")
             }
         }
     }
@@ -544,13 +544,13 @@ private fun ThisPhoneCard(vm: MainViewModel, settings: AppSettings, onSetup: () 
             OutlinedButton(onClick = onSetup) { Text("Setup guide") }
             Button(onClick = {
                 confirmUnpair = true
-            }, colors = ButtonDefaults.buttonColors(containerColor = Brand.Danger)) { Text("Unpair") }
+            }, colors = ButtonDefaults.buttonColors(containerColor = Brand.Danger)) { Text("Sign out") }
         }
     }
     if (confirmUnpair) {
         ConfirmDialog(
-            text = "Unpair this phone? Recordings waiting to upload stay on the phone.",
-            confirmLabel = "Unpair",
+            text = "Sign out of this phone? Recordings waiting to upload stay on the phone.",
+            confirmLabel = "Sign out",
             onConfirm = {
                 confirmUnpair = false
                 vm.unpair()

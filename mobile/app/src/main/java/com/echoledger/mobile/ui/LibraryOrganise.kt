@@ -36,7 +36,7 @@ import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
 import kotlinx.coroutines.launch
 
-/** Client folder chips with "No client" and a field to create a new folder. */
+/** Client folder chips with "No project" and a field to create a new folder. */
 @Composable
 private fun FolderChooser(
     title: String,
@@ -49,19 +49,19 @@ private fun FolderChooser(
     var name by remember { mutableStateOf("") }
     Text(title, color = Brand.Muted, fontSize = 12.sp)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        FilterChip(selected = selected == null, onClick = { onPick(null) }, label = { Text("No client") })
+        FilterChip(selected = selected == null, onClick = { onPick(null) }, label = { Text("No project") })
         folders.forEach { c ->
             FilterChip(selected = selected == c.id, onClick = {
                 onPick(c.id)
             }, label = { Text("${Organise.badge(c.name, c.avatar)} · ${c.name}") })
         }
-        FilterChip(selected = creating, onClick = { creating = !creating }, label = { Text("New client…") })
+        FilterChip(selected = creating, onClick = { creating = !creating }, label = { Text("New project…") })
     }
     if (creating) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(name, {
                 name = it.take(120)
-            }, label = { Text("Client name") }, singleLine = true, modifier = Modifier.weight(1f))
+            }, label = { Text("Project name") }, singleLine = true, modifier = Modifier.weight(1f))
             TextButton(enabled = name.isNotBlank(), onClick = {
                 onCreate(name.trim())
                 name = ""

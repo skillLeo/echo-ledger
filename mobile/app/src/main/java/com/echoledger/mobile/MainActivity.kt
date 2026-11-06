@@ -40,7 +40,6 @@ import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -102,9 +101,12 @@ import com.echoledger.mobile.ui.WaitingScreen
 import com.echoledger.mobile.ui.applySecureScreen
 import com.echoledger.mobile.ui.capabilities
 import com.echoledger.mobile.ui.design.EchoBottomBar
+import com.echoledger.mobile.ui.design.EchoSnackbarHost
 import com.echoledger.mobile.ui.design.LocalSharedScopes
 import com.echoledger.mobile.ui.design.NavTab
 import com.echoledger.mobile.ui.design.RecordingStrip
+import com.echoledger.mobile.ui.design.tabDirection
+import com.echoledger.mobile.ui.design.tabTransition
 import com.echoledger.mobile.ui.formatDuration
 import com.echoledger.mobile.ui.isDarkTheme
 import com.echoledger.mobile.ui.lockAvailability
@@ -410,7 +412,7 @@ class MainActivity : FragmentActivity() {
             }
             Scaffold(
                 containerColor = Brand.Background,
-                snackbarHost = { SnackbarHost(snackbar) },
+                snackbarHost = { EchoSnackbarHost(snackbar) },
                 bottomBar = {
                     val selectingNow = librarySelecting && tab == TAB_LIBRARY
                     if (unlocked && settings.onboardingDone && settings.paired && openItem == null && !showSetup && sharedNotes == null &&
@@ -521,7 +523,7 @@ class MainActivity : FragmentActivity() {
                                     } else {
                                         AnimatedContent(
                                             targetState = tab,
-                                            transitionSpec = { fadeIn() togetherWith fadeOut() },
+                                            transitionSpec = { tabTransition(tabDirection(TAB_ORDER, initialState, targetState)) },
                                             label = "tab"
                                         ) { current ->
                                             when (current) {
@@ -646,6 +648,7 @@ private const val TAB_CLIENTS = "clients"
 private const val TAB_RECORD = "record"
 private const val TAB_ACTIVITY = "activity"
 private const val TAB_YOU = "you"
+private val TAB_ORDER = listOf(TAB_LIBRARY, TAB_CLIENTS, TAB_RECORD, TAB_ACTIVITY, TAB_YOU)
 
 /** Library · Clients · [record] · Activity · You (since v1.3). */
 private val MAIN_TABS = listOf(

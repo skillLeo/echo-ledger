@@ -54,7 +54,7 @@ class SettingsHubTest : ScreenTest() {
 
         mapOf(
             "General" to
-                listOf("Appearance", "Transcription", "Client keyterms", "Notifications", "Storage and retention", "Help & diagnostics"),
+                listOf("Appearance", "Transcription", "Project keyterms", "Notifications", "Storage and retention", "Help & diagnostics"),
             "Voice notes & files" to listOf("After sharing a voice note", "Voice keyboard"),
             "Calls & meetings" to listOf("Live captions while recording", "Caption style"),
             "Game translate" to listOf("Games", "Box style", "Monthly budget"),
@@ -91,7 +91,7 @@ class SettingsHubTest : ScreenTest() {
         compose.onNodeWithText("Quiet hours").assertIsDisplayed()
         // A General page goes back to the General list, then to You.
         compose.onNodeWithContentDescription("Back").performClick()
-        compose.onNodeWithText("Client keyterms").assertIsDisplayed()
+        compose.onNodeWithText("Project keyterms").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Search settings").assertIsDisplayed()
     }

@@ -151,7 +151,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 ).register(payload.code, name, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE)
             }
             finishSignIn(payload.url, payload.pins, response)
-            _message.value = "Paired with ${payload.url.removePrefix("https://")}"
+            _message.value = "Signed in to ${payload.url.removePrefix("https://")}"
         } catch (e: Exception) {
             _message.value = e.message ?: "Pairing failed"
         } finally {
@@ -448,7 +448,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         title: String? = null
     ): Boolean {
         val ok = withContext(Dispatchers.IO) {
-            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title) ?: error("Not paired") }
+            runCatching { graph.api()?.updateSession(id, pinned, clientId, clearClient, labels, keep, title) ?: error("Not signed in") }
                 .onFailure { _message.value = it.message ?: "The change could not be saved." }.isSuccess
         }
         if (ok) refresh()
@@ -458,7 +458,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** One action for the selected recordings; how many changed, or null (with a message) when it failed. */
     suspend fun bulk(ids: List<String>, action: String, clientId: String? = null, label: String? = null): Int? {
         val changed = withContext(Dispatchers.IO) {
-            runCatching { graph.api()?.bulk(ids.take(Organise.MAX_BULK), action, clientId, label) ?: error("Not paired") }
+            runCatching { graph.api()?.bulk(ids.take(Organise.MAX_BULK), action, clientId, label) ?: error("Not signed in") }
                 .onFailure { _message.value = it.message ?: "The change could not be saved." }.getOrNull()
         }
         if (changed != null) {
@@ -494,7 +494,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** A new client folder, added to the list right away. */
     suspend fun createClient(name: String): ClientDto? = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.createClient(name.trim()) }
-            .onFailure { _message.value = it.message ?: "The client could not be created." }.getOrNull()
+            .onFailure { _message.value = it.message ?: "The project could not be created." }.getOrNull()
             ?.also { created -> _clients.value = _clients.value.filterNot { it.id == created.id } + created }
     }
 
@@ -650,7 +650,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 .onFailure { _message.value = it.message ?: failed }.getOrNull()
         }
 
-    suspend fun workspace(clientId: String) = workspaceCall("The client's workspace could not be loaded.") { it.workspace(clientId) }
+    suspend fun workspace(clientId: String) = workspaceCall("The project's workspace could not be loaded.") { it.workspace(clientId) }
 
     suspend fun setAiNotes(clientId: String, on: Boolean) = workspaceCall("The setting could not be saved.") {
         it.setClientAiNotes(clientId, on)
@@ -735,7 +735,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Restores a recording from the bin and syncs it back into the library. */
     suspend fun restore(id: String): Boolean {
         val ok = withContext(Dispatchers.IO) {
-            runCatching { graph.api()?.restoreSession(id) ?: error("Not paired") }
+            runCatching { graph.api()?.restoreSession(id) ?: error("Not signed in") }
                 .onSuccess { _message.value = "Restored" }
                 .onFailure { _message.value = it.message ?: "The recording could not be restored." }.isSuccess
         }
@@ -745,7 +745,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Erases a binned recording now. */
     suspend fun eraseNow(id: String): Boolean = withContext(Dispatchers.IO) {
-        runCatching { graph.api()?.eraseFromBin(id) ?: error("Not paired") }
+        runCatching { graph.api()?.eraseFromBin(id) ?: error("Not signed in") }
             .onSuccess { _message.value = "Erased" }
             .onFailure { _message.value = it.message ?: "The recording could not be erased." }.isSuccess
     }
@@ -759,7 +759,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Revokes another paired device; false (with the server's reason) when it was refused. */
     suspend fun revokeDevice(id: String): Boolean = withContext(Dispatchers.IO) {
-        runCatching { graph.api()?.revokeDevice(id) ?: error("Not paired") }
+        runCatching { graph.api()?.revokeDevice(id) ?: error("Not signed in") }
             .onSuccess { _message.value = "Device revoked" }
             .onFailure { _message.value = it.message ?: "The device could not be revoked." }.isSuccess
     }
@@ -847,7 +847,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!yes) return@launch
         runCatching { graph.api()?.setClientLanguage(asked.clientId, asked.language) }
             .onSuccess { _clients.value = _clients.value.map { if (it.id == asked.clientId) it.copy(language = asked.language) else it } }
-            .onFailure { _message.value = it.message ?: "The client could not be updated." }
+            .onFailure { _message.value = it.message ?: "The project could not be updated." }
     }
 
     /** Keep or Discard; a [title] typed on the card is stored first, in the same step, so the upload always carries it. */

@@ -88,7 +88,7 @@ class MainViewModelTest : AppTest() {
         val message = awaitMessage()
         pumpUntil("the library to load") { vm.library.value.size == 2 && vm.clients.value.size == 2 }
 
-        assertTrue(message, message.startsWith("Paired with"))
+        assertTrue(message, message.startsWith("Signed in to"))
         val registration = server.requestsTo("POST", "/api/devices/register").single()
         val body = Json.parseToJsonElement(registration.bodyText()).jsonObject
         assertEquals("TEST-2345", body["pairing_code"]!!.jsonPrimitive.content)

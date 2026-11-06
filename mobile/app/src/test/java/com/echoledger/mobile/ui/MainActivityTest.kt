@@ -254,10 +254,10 @@ class MainActivityTest : AppTest() {
         awaitText("General")
         compose.onNodeWithText("General").performClick()
         compose.onNodeWithText("This phone").performClick()
-        awaitText("Unpair")
+        awaitText("Sign out")
 
-        compose.onNodeWithText("Unpair").performScrollTo().performClick()
-        compose.onNode(hasText("Unpair") and hasAnyAncestor(isDialog())).performClick()
+        compose.onNodeWithText("Sign out").performScrollTo().performClick()
+        compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
 
         awaitText("Sign in to EchoLedger")
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)

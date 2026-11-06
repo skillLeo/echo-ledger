@@ -64,13 +64,20 @@ colours stay off by default.
   dark uses surface steps and a 1 px border instead.
 
 ## Motion and haptics
+Since v1.5: a tab switch fades in and moves a short way from the side the tab sits on (200 ms); a row opens its recording
+with the app tile and title moving into place (300 ms); the record button changes colour and swaps mic and stop (200 ms)
+and gives under a press; the after-call chip rises (300 ms) and a confirmation carries a check that pops in
+(`SuccessCheck`, also in messages that confirm something). With Remove animations on, all of it is simply there.
 Press 120 ms · state 200 ms (standard easing) · enter 300 ms (decelerate) · exit 150 ms (accelerate) · springs for
 drag and the pill. Press feedback scales to 0.96. "Remove animations" turns motion off. Haptics on long-press,
 selection change, record start/stop and destructive confirm.
 
 ## Icons
-Material Icons, rounded where available, outlined when inactive and filled when active; 16 meta, 20 rows and chips, 24
-bars, 28 record. Source apps show the installed app's own icon (PackageManager) on a 12% tint; no bundled third-party
+One family (since v1.5): line glyphs with round ends wherever an icon is an action (back, close, search, stop, more,
+chevrons: `Icons.Rounded`, the same glyph on every screen), outlined when a thing is at rest (a list row, an inactive
+tab: `Icons.Outlined`), filled or on a tinted tile when it is active or selected (`Icons.Rounded`). The desktop and the
+console draw the same metaphors in line icons of the same weight. `MotionAndIconsTest` keeps the other Material sets out.
+16 meta, 20 rows and chips, 24 bars, 28 record. Source apps show the installed app's own icon (PackageManager) on a 12% tint; no bundled third-party
 logos.
 
 ## Controls

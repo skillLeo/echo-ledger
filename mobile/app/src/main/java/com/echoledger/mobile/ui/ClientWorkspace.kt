@@ -99,9 +99,9 @@ object ClientFiles {
         else -> mime
     }
 
-    /** "AI this month: $0.42 of $5.00 · this client $0.12". */
+    /** "AI this month: $0.42 of $5.00 · this project $0.12". */
     fun budget(spent: Double, budget: Double, client: Double): String =
-        String.format(Locale.ENGLISH, "AI this month: $%.2f of $%.2f · this client $%.2f", spent, budget, client)
+        String.format(Locale.ENGLISH, "AI this month: $%.2f of $%.2f · this project $%.2f", spent, budget, client)
 
     /** Memory kinds, in the order they are shown, with their headings. */
     val KINDS = listOf("decision" to "Decisions", "question" to "Open questions", "change" to "Changes", "scope" to "Scope")
@@ -908,7 +908,7 @@ fun SuggestedFixes(
     SectionCard {
         Text("Suggested fixes", style = type.titleM, color = c.text)
         Text(
-            "Words that sound like this client's names and terms. Nothing changes until you accept.",
+            "Words that sound like this project's names and terms. Nothing changes until you accept.",
             style = type.caption,
             color = c.textMuted
         )

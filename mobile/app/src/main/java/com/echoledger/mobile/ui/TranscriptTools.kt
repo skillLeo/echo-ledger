@@ -373,7 +373,7 @@ fun TranscriptionSection(vm: MainViewModel, settings: com.echoledger.mobile.data
             }) { Text("Add") }
         }
         Text(
-            if (settings.clientId != null) "Added to the selected client’s keyterms." else "Added for every recording.",
+            if (settings.clientId != null) "Added to the selected project’s keyterms." else "Added for every recording.",
             color = Brand.Muted,
             fontSize = 12.sp
         )

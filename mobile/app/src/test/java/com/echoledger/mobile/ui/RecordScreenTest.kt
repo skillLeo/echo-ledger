@@ -239,11 +239,11 @@ class RecordScreenTest : ScreenTest() {
         showWaiting()
 
         val client = vm.clients.value.first()
-        compose.onNodeWithContentDescription("Client: none").assertExists()
+        compose.onNodeWithContentDescription("Project: none").assertExists()
         vm.setPendingClient("call-1", client.id)
         pumpUntil("the card to show the client") {
             compose.mainClock.advanceTimeByFrame()
-            runCatching { compose.onNodeWithContentDescription("Client: ${client.name}").assertExists() }.isSuccess
+            runCatching { compose.onNodeWithContentDescription("Project: ${client.name}").assertExists() }.isSuccess
         }
 
         // Keep at once after typing: the title goes with the decision, not after it.

@@ -261,13 +261,13 @@ class LibraryOrganiseTest : ScreenTest() {
         }
         compose.onNodeWithContentDescription("Pin").performClick()
         compose.onNodeWithText("NO · Northwind").performClick()
-        compose.onNodeWithText("No client").performClick()
+        compose.onNodeWithText("No project").performClick()
         compose.onNodeWithContentDescription("Remove label Invoice").performClick()
         compose.onNodeWithText("+ Q4").performClick()
         compose.onNodeWithText("Add a label").performTextInput(" Follow up ")
         compose.onNodeWithText("Add").performClick()
-        compose.onNodeWithText("New client…").performClick()
-        compose.onNodeWithText("Client name").performTextInput("Globex")
+        compose.onNodeWithText("New project…").performClick()
+        compose.onNodeWithText("Project name").performTextInput("Globex")
         compose.onNodeWithText("Create").performClick()
 
         assertEquals(

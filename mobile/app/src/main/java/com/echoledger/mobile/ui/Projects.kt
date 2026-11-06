@@ -80,6 +80,7 @@ import com.echoledger.mobile.ui.design.ListPadding
 import com.echoledger.mobile.ui.design.RecordingRow
 import com.echoledger.mobile.ui.design.SectionHeader
 import com.echoledger.mobile.ui.design.SkeletonRow
+import com.echoledger.mobile.ui.design.SuccessCheck
 import com.echoledger.mobile.ui.design.rowTime
 import java.time.Instant
 import java.time.LocalDate
@@ -555,7 +556,10 @@ private fun SharedRow(
             ) {
                 EchoButton("Save to my library", onSave, kind = ButtonKind.Text)
             } else {
-                Text("Saved", style = type.labelM, color = Brand.Muted)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SuccessCheck(Brand.Muted, Modifier.padding(end = Space.s1), size = 14.dp)
+                    Text("Saved", style = type.labelM, color = Brand.Muted)
+                }
             }
             EchoButton("Remove", onRemove, kind = ButtonKind.Text)
         }

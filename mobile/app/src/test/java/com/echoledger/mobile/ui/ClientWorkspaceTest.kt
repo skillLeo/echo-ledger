@@ -93,7 +93,7 @@ class ClientWorkspaceTest : ScreenTest() {
         showWorkspace()
 
         compose.onNodeWithText("• Login").assertExists()
-        compose.onNodeWithText("AI this month: $0.42 of $5.00 · this client $0.12").assertExists()
+        compose.onNodeWithText("AI this month: $0.42 of $5.00 · this project $0.12").assertExists()
         compose.onNodeWithText("Launch on November 15").performClick()
         compose.onNodeWithText("• Hosting plan").performClick()
         compose.onNodeWithText("1:01 · verify").assertExists()

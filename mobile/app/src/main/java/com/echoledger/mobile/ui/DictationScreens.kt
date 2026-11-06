@@ -22,12 +22,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Backspace
-import androidx.compose.material.icons.automirrored.outlined.KeyboardReturn
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Backspace
+import androidx.compose.material.icons.automirrored.rounded.KeyboardReturn
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Mic
-import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -115,10 +115,10 @@ fun VoiceKeyboard(ui: DictationUi, holdToTalk: Boolean, needsMic: Boolean, keys:
             ) { Text("space", color = Brand.Muted) }
             MicButton(ui, holdToTalk, enabled = !needsMic, keys)
             IconButton(onClick = keys::backspace) {
-                Icon(Icons.AutoMirrored.Outlined.Backspace, contentDescription = "Delete", tint = Brand.Muted)
+                Icon(Icons.AutoMirrored.Rounded.Backspace, contentDescription = "Delete", tint = Brand.Muted)
             }
             IconButton(onClick = keys::enter) {
-                Icon(Icons.AutoMirrored.Outlined.KeyboardReturn, contentDescription = "Enter", tint = Brand.Muted)
+                Icon(Icons.AutoMirrored.Rounded.KeyboardReturn, contentDescription = "Enter", tint = Brand.Muted)
             }
         }
     }
@@ -169,7 +169,7 @@ private fun MicButton(ui: DictationUi, holdToTalk: Boolean, enabled: Boolean, ke
         contentAlignment = Alignment.Center
     ) {
         Icon(
-            if (ui.active) Icons.Outlined.Stop else Icons.Outlined.Mic,
+            if (ui.active) Icons.Rounded.Stop else Icons.Outlined.Mic,
             contentDescription = null,
             tint = if (enabled) Brand.Text else Brand.Muted
         )
@@ -201,7 +201,7 @@ private fun SwitchRow(title: String, hint: String?, checked: Boolean, onChange: 
 fun DictationSettingsPage(vm: MainViewModel, settings: AppSettings, history: DictationHistory, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back") }
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
             Text("Dictation", fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
         DictationSettingsContent(vm, settings, history)

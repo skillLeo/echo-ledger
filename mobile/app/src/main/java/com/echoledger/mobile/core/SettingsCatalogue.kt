@@ -30,7 +30,7 @@ object SettingsCatalogue {
         SettingsEntry("appearance", SettingsGroup.General, "Appearance", "theme dark light system colours wallpaper dynamic font typeface"),
         SettingsEntry("this-phone", SettingsGroup.General, "This phone", "account server unpair name certificate pinned setup guide"),
         SettingsEntry("transcription", SettingsGroup.General, "Transcription", "language english urdu arabic roman view vocabulary terms"),
-        SettingsEntry("client", SettingsGroup.General, "Client keyterms", "client names jargon accuracy"),
+        SettingsEntry("client", SettingsGroup.General, "Project keyterms", "client names jargon accuracy"),
         SettingsEntry("notifications", SettingsGroup.General, "Notifications", "quiet hours bell activity alerts"),
         SettingsEntry(
             "app-lock",

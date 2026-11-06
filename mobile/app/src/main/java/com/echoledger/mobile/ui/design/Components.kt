@@ -1,12 +1,15 @@
 package com.echoledger.mobile.ui.design
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -45,9 +48,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -75,6 +83,45 @@ import com.echoledger.mobile.ui.Motion
 import com.echoledger.mobile.ui.Radius
 import com.echoledger.mobile.ui.Space
 import com.echoledger.mobile.ui.reduceMotion
+
+/** A thing just worked (since v1.5): a check that pops in; with Remove animations on, it is simply there. */
+@Composable
+fun SuccessCheck(tint: Color, modifier: Modifier = Modifier, size: Dp = 18.dp) {
+    val still = reduceMotion()
+    val pop = remember { Animatable(if (still) 1f else 0.4f) }
+    LaunchedEffect(Unit) { if (!still) pop.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMediumLow)) }
+    Icon(
+        Icons.Rounded.Check,
+        contentDescription = null,
+        tint = tint,
+        modifier = modifier.size(size).graphicsLayer {
+            scaleX = pop.value
+            scaleY = pop.value
+        }
+    )
+}
+
+/** Messages that confirm something worked get the check; every other message stays plain. */
+fun isConfirmation(message: String): Boolean = CONFIRMATIONS.any { message.startsWith(it) }
+
+private val CONFIRMATIONS = listOf("Saved", "Copied", "Restored", "Renamed", "Added", "Moved", "Paired", "Shared", "Sent")
+
+/** The app's messages at the bottom of the screen; a confirmation carries [SuccessCheck]. */
+@Composable
+fun EchoSnackbarHost(state: SnackbarHostState) {
+    SnackbarHost(state) { data ->
+        if (isConfirmation(data.visuals.message)) {
+            Snackbar(Modifier.padding(Space.s3)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SuccessCheck(LocalContentColor.current, Modifier.padding(end = Space.s2))
+                    Text(data.visuals.message)
+                }
+            }
+        } else {
+            Snackbar(data, Modifier.padding(Space.s3))
+        }
+    }
+}
 
 /** Press feedback shared by every tappable surface: scales to 0.96 while held (none when animations are off). */
 @Composable

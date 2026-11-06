@@ -57,7 +57,7 @@ import com.echoledger.mobile.ui.design.EchoFilterChip
 enum class Facet(val label: String) {
     SOURCE("Source"),
     DATE("Date"),
-    CLIENT("Client"),
+    CLIENT("Project"),
     LANGUAGE("Language"),
     STATUS("Status"),
     LABELS("Labels")
@@ -135,7 +135,7 @@ private fun FacetSheet(
 
         Facet.DATE -> DATE_VIEWS.map { viewRow(it) }
 
-        Facet.CLIENT -> (listOf("" to "No client") + folders.map { it.id to it.name }).map { (id, name) ->
+        Facet.CLIENT -> (listOf("" to "No project") + folders.map { it.id to it.name }).map { (id, name) ->
             Triple(name, id in draft.folders) { draft = draft.copy(folders = draft.folders.toggle(id)) }
         }
 

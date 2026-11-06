@@ -556,20 +556,20 @@ fun KeepDiscardCard(
     }
 }
 
-/** "Client ▾" (or the client's name): picks the client a waiting call is filed under. */
+/** "Project ▾" (or the project's name): picks the project a waiting call is filed under. */
 @Composable
 internal fun ClientChip(clients: List<ClientDto>, clientId: String?, onClient: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     val chosen = clients.firstOrNull { it.id == clientId }
     Box {
         EchoFilterChip(
-            "${chosen?.name ?: "Client"} ▾",
+            "${chosen?.name ?: "Project"} ▾",
             active = chosen != null,
             onClick = { open = true },
-            modifier = Modifier.semantics { contentDescription = "Client: ${chosen?.name ?: "none"}" }
+            modifier = Modifier.semantics { contentDescription = "Project: ${chosen?.name ?: "none"}" }
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("No client") }, onClick = {
+            DropdownMenuItem(text = { Text("No project") }, onClick = {
                 open = false
                 onClient(null)
             })
