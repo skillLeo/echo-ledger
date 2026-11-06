@@ -85,7 +85,7 @@ fn title(label: &str) -> &'static str {
 /// `src/webview/webview_window.rs` (`focusable` 927, `content_protected` 952, `skip_taskbar` 641,
 /// `always_on_top` 615, `accept_first_mouse` 962).
 fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64), protected: bool) -> tauri::Result<WebviewWindow<R>> {
-    WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+    crate::smoke::isolate(WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into())))
         .title(title(label))
         .inner_size(size.0, size.1)
         .transparent(true)

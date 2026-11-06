@@ -318,3 +318,45 @@ fn the_installer_names_its_publisher() {
     assert_eq!(conf["bundle"]["publisher"], "SkillLeo");
     assert_eq!(conf["bundle"]["copyright"], "© 2026 SkillLeo");
 }
+
+// ---- The smoke test (Phase 1B) ---------------------------------------------------------------------------------
+
+/// lib.rs from its setup on: what runs in a smoke test is what stands before its early return.
+fn setup_source() -> String {
+    let source = std::fs::read_to_string(manifest_dir().join("src/lib.rs")).unwrap();
+    let start = source.find(".setup(move |app|").expect("the setup");
+    source[start..source.find(".on_window_event").unwrap()].to_string()
+}
+
+#[test]
+fn the_smoke_test_returns_before_anything_that_records_uploads_or_polls_starts() {
+    let setup = setup_source();
+    let leaves = setup.find("return Ok(());").expect("the smoke branch returns");
+    assert!(setup[..leaves].contains("smoke::drive(handle)"), "the branch runs the test");
+    for later in [
+        "updates::install_kept",
+        "shortcuts::register_all",
+        "detect::spawn_auto_mode",
+        "actions::spawn_upload_worker",
+        "actions::restore_pending",
+        "recovery::recover",
+        "commands::spawn_idle_lock",
+        "actions::spawn_activity_poll",
+        "updates::spawn_quiet_checks",
+        "state.api()",
+        "actions::handle_links",
+    ] {
+        let at = setup.find(later).unwrap_or_else(|| panic!("{later} is gone from the setup"));
+        assert!(at > leaves, "{later} would run in a smoke test");
+    }
+}
+
+#[test]
+fn the_smoke_test_does_not_hand_itself_over_to_a_running_app_or_touch_the_keychain() {
+    let source = std::fs::read_to_string(manifest_dir().join("src/lib.rs")).unwrap();
+    let guarded = source.find("if smoke_dir.is_none()").expect("the single-instance guard");
+    let plugin = source.find("tauri_plugin_single_instance::init").unwrap();
+    assert!(plugin > guarded && plugin < guarded + 200, "the single-instance plugin stays out of a smoke test");
+    assert!(source.contains("if smoke { Box::new(MemoryStore::default()) } else { Box::new(KeyringStore) }"));
+    assert!(source.contains("if smoke { Box::new(smoke::NoKeys) } else { Box::new(screens::store::KeychainKeys) }"));
+}

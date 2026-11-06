@@ -26,6 +26,7 @@ pub mod settings;
 pub mod sharing;
 pub mod shortcuts;
 pub mod skipped;
+pub mod smoke;
 pub mod stt;
 pub mod translate;
 pub mod tray;
@@ -41,7 +42,7 @@ use tauri_plugin_autostart::MacosLauncher;
 
 use error::{AppError, AppResult};
 use net::api::ApiClient;
-use net::keychain::{KeyringStore, TokenStore};
+use net::keychain::{KeyringStore, MemoryStore, TokenStore};
 use net::models::ServerConfig;
 use net::sync::{LibraryCache, paths};
 use settings::Settings;
@@ -110,9 +111,10 @@ pub struct AppState {
 }
 
 impl AppState {
-    fn load(data_dir: PathBuf) -> Self {
+    /// `smoke`: the smoke test's state, with nothing that reads the keychain.
+    fn load(data_dir: PathBuf, smoke: bool) -> Self {
         let settings = Settings::load(&data_dir.join("settings.json"));
-        let token_store: Box<dyn TokenStore> = Box::new(KeyringStore);
+        let token_store: Box<dyn TokenStore> = if smoke { Box::new(MemoryStore::default()) } else { Box::new(KeyringStore) };
         let token = token_store.load().unwrap_or_else(|e| {
             eprintln!("[echoledger] keychain unavailable: {e}");
             None
@@ -153,7 +155,7 @@ impl AppState {
             recording_language: Mutex::new(None),
             recording_language_marks: Mutex::new(None),
             recording_caller: Mutex::new(None),
-            screens: screens::Screens::new(Box::new(screens::platform::Native), Box::new(screens::store::KeychainKeys)),
+            screens: screens::Screens::new(Box::new(screens::platform::Native), if smoke { Box::new(smoke::NoKeys) } else { Box::new(screens::store::KeychainKeys) }),
             browser_sign_in: Mutex::new(None),
             recording_owner: Mutex::new(None),
             owner_checked: AtomicBool::new(false),
@@ -241,8 +243,13 @@ pub fn run() {
     // Explicit crypto provider before any TLS use (reqwest/websocket would otherwise disagree).
     let _ = rustls::crypto::ring::default_provider().install_default();
 
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))) // must be first
+    // The smoke test runs beside a running EchoLedger instead of handing itself over to it.
+    let smoke_dir = smoke::requested(std::env::args(), std::env::var(smoke::ENV).ok()).then(smoke::begin);
+    let mut builder = tauri::Builder::default();
+    if smoke_dir.is_none() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))); // must be first
+    }
+    let app = builder
         .plugin(shortcuts::plugin())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
         .plugin(tauri_plugin_notification::init())
@@ -255,11 +262,24 @@ pub fn run() {
         .manage(lifecycle::WindowLifecycle::default())
         .manage(shortcuts::Bindings::default())
         .manage(stt::captions::CaptionHub::default())
-        .setup(|app| {
-            let data_dir = app.path().app_data_dir()?;
+        .setup(move |app| {
+            let smoke_test = smoke_dir.is_some();
+            let data_dir = match smoke_dir {
+                Some(dir) => dir,
+                None => app.path().app_data_dir()?,
+            };
             std::fs::create_dir_all(paths::recordings(&data_dir))?;
-            app.manage(AppState::load(data_dir));
+            app.manage(AppState::load(data_dir, smoke_test));
             let handle = app.handle().clone();
+            // The smoke test opens the windows and quits (smoke.rs): nothing below this runs in it.
+            if smoke_test {
+                tray::create(&handle)?;
+                overlay::spawn_clickthrough_poll(handle.clone());
+                #[cfg(target_os = "macos")]
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                smoke::drive(handle);
+                return Ok(());
+            }
             let settings = app.state::<AppState>().settings();
             // An update downloaded by the last run installs now, before anything records (v1.5).
             updates::install_kept(&handle);

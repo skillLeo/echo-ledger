@@ -216,6 +216,12 @@ fn known(label: &str) -> Option<&'static str> {
     LABELS.into_iter().find(|l| *l == label)
 }
 
+/// Where these windows stand now (the smoke test waits on them).
+pub fn phases<'a>(app: &AppHandle, labels: &[&'a str]) -> Vec<(&'a str, Phase)> {
+    let slots = slots(app);
+    labels.iter().map(|label| (*label, slots.phase(label))).collect()
+}
+
 /// Puts `label` on screen for `reason`, building it first when it does not exist.
 pub fn show(app: &AppHandle, label: &'static str, reason: &'static str) {
     if slots(app).show(label, reason, Instant::now()) {
@@ -351,7 +357,7 @@ fn spawn_build(app: &AppHandle, label: &'static str) {
 /// The main window from tauri.conf.json (`"create": false`, hidden until its page is ready).
 fn build_main(app: &AppHandle) -> tauri::Result<()> {
     let config = app.config().app.windows.iter().find(|w| w.label == MAIN).cloned().unwrap_or_else(|| WindowConfig { label: MAIN.into(), ..WindowConfig::default() });
-    let window = WebviewWindowBuilder::from_config(app, &config)?.build()?;
+    let window = crate::smoke::isolate(WebviewWindowBuilder::from_config(app, &config)?).build()?;
     crate::material::apply(&window);
     // Built while screen moments capture a whole screen (Windows): hidden from screen captures before it first shows
     // (once its page is ready).
