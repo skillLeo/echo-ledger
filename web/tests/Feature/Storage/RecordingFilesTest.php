@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Jobs\AssembleRecordingJob;
 use App\Models\Recording;
 use App\Models\StorageDeletion;
 use App\Services\RecordingCipher;
@@ -79,6 +80,10 @@ describe('on the server\'s own disk', function () {
         expect(StorageDeletion::query()->count())->toBe(0);
     });
 
+    it('tells the device of a failed assembly at once, without waiting between tries', function () {
+        expect((new AssembleRecordingJob('NONE'))->backoff())->toBe([]);
+    });
+
     it('passes the storage check and leaves nothing', function () {
         expect(Artisan::call('recordings:check-storage'))->toBe(0)
             ->and(Artisan::output())->toContain("the server's own disk")->toContain('works');
@@ -97,6 +102,17 @@ describe('the storage check on a bucket', function () {
             ->and(Artisan::output())->toContain('object storage')->toContain('works')
             ->and($this->bucket->objects)->toBe([])
             ->and($this->bucket->requests('PUT storage-check/'))->toBe(1);
+    });
+
+    it('warns when the bucket keeps old versions, or will not say, and passes all the same', function () {
+        expect(Artisan::call('recordings:check-storage'))->toBe(0);
+        expect(Artisan::output())->not->toContain('old versions');
+
+        foreach (['Enabled', 'Suspended', null] as $versioning) {
+            $this->bucket->versioning = $versioning;
+            expect(Artisan::call('recordings:check-storage'))->toBe(0);
+            expect(Artisan::output())->toContain('works')->toContain('old versions')->toContain('docs/DEPLOY_VPS.md');
+        }
     });
 
     it('fails with what the bucket said, never the secret', function () {

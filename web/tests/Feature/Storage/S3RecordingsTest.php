@@ -3,9 +3,11 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
+use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Enums\UploadStatus;
+use App\Jobs\AssembleRecordingJob;
 use App\Jobs\ExtractClientFileJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\AccountExport;
@@ -13,14 +15,18 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientFile;
 use App\Models\Recording;
+use App\Models\RequestUpload;
 use App\Models\Screen;
 use App\Models\StorageDeletion;
+use App\Models\User;
+use App\Services\Accounts\AccountDeletion;
 use App\Services\Accounts\AccountExporter;
 use App\Services\ChunkedUploadService;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\ConsoleUploads;
 use App\Services\CredentialVault;
 use App\Services\DoubleCheck;
+use App\Services\Projects\ProjectTree;
 use App\Services\RecordingCipher;
 use App\Services\RetentionPolicy;
 use App\Services\Screens\ScreenStore;
@@ -32,17 +38,21 @@ use App\Stt\Audio\AudioPrep;
 use App\Stt\SttManager;
 use App\Stt\Support\WavFile;
 use Illuminate\Http\Client\Request as HttpRequest;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Sleep;
 use Illuminate\Testing\TestResponse;
+use League\Flysystem\FilesystemException;
 use League\Flysystem\UnableToDeleteFile;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToWriteFile;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
+use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 use Tests\Feature\Storage\Support\FakeS3Server;
 
 uses(InteractsWithDeviceApi::class);
@@ -87,6 +97,18 @@ function s3PlainOf(Recording $recording): string
     }
 }
 
+function s3PlainOfFile(ClientFile $file): string
+{
+    $plain = app(RecordingFiles::class)->decryptToMemory((string) $file->path, $file->id);
+    $plain->rewind();
+    $bytes = '';
+    while (! $plain->eof()) {
+        $bytes .= $plain->fread(1 << 20);
+    }
+
+    return $bytes;
+}
+
 function s3NoEnginePrep(): void
 {
     app()->instance(AudioPrep::class, new class(app(SettingsRepository::class)) extends AudioPrep
@@ -112,6 +134,24 @@ function s3SendRequestChunk(object $test, array $upload, int $index, string $byt
     $server = ['CONTENT_TYPE' => 'application/octet-stream', 'HTTP_ACCEPT' => 'application/json', 'HTTP_UPLOAD_CHUNK_SHA256' => hash('sha256', $chunk)];
 
     return $test->call('POST', $test->linkPath."/files/{$upload['id']}/chunks/{$index}", [], [], [], $server, $chunk);
+}
+
+/** `complete` sent again finishes a document, with one file and nothing left over. */
+function s3ExpectCompleteFinishes(object $test): void
+{
+    $test->postJson($test->complete)->assertOk()->assertJsonPath('status', 'ready');
+    $file = ClientFile::query()->withoutGlobalScopes()->where('client_id', $test->project->id)->sole();
+    expect($file->path)->not->toBeNull()
+        ->and($test->bucket->keys())->toBe([$file->path])
+        ->and(RequestUpload::query()->findOrFail($test->upload['id'])->client_file_id)->toBe($file->id)
+        ->and(s3PlainOfFile($file))->toBe($test->text);
+    s3ExpectNoLocalCopies($test);
+}
+
+/** One job of a real queue: the worker of the deploy notes, with its waits and its failed(). */
+function s3RunOneQueuedJob(): void
+{
+    Artisan::call('queue:work', ['connection' => 'database', '--once' => true, '--tries' => 3, '--sleep' => 0, '--memory' => 4096]);
 }
 
 describe('an upload', function () {
@@ -279,6 +319,64 @@ describe('an upload', function () {
 
         expect(ConsoleUploads::firstChunkIsMedia($media))->toBeTrue()
             ->and(ConsoleUploads::firstChunkIsMedia($notMedia))->toBeFalse()
+            ->and($this->workFiles())->toBe([]);
+    });
+});
+
+describe('a queued assembly', function () {
+    beforeEach(function () {
+        config(['queue.default' => 'database']);
+        $this->audio = Fixtures::audio(600_000, S3_MARKER);
+        $created = $this->createSession($this->audio)->assertSuccessful();
+        $this->id = (string) $created->json('recordings.0.id');
+        $this->uploadAll($this->id, $this->audio, (int) $created->json('recordings.0.upload.chunk_size_bytes'));
+        Recording::query()->findOrFail($this->id)->update(['upload_status' => UploadStatus::Assembling]);
+        AssembleRecordingJob::dispatch($this->id);
+    });
+
+    it('waits between its tries, so a few seconds of trouble cost nothing', function () {
+        $this->bucket->failNext('GET', 503, 3, "parts/{$this->id}/1.part");
+
+        s3RunOneQueuedJob();
+
+        $recording = Recording::query()->findOrFail($this->id);
+        expect($recording->upload_status)->toBe(UploadStatus::Assembling)
+            ->and($recording->received_chunks)->toBe([0, 1, 2])
+            ->and($this->bucket->keys("parts/{$this->id}/"))->toHaveCount(3)
+            ->and($this->workFiles())->toBe([])
+            ->and(DB::table('failed_jobs')->count())->toBe(0);
+
+        // Not before its wait is over.
+        $this->bucket->log = [];
+        s3RunOneQueuedJob();
+        expect($this->bucket->requests("GET parts/{$this->id}/"))->toBe(0);
+
+        $this->travel(61)->seconds();
+        s3RunOneQueuedJob();
+
+        expect($recording->refresh()->upload_status)->toBe(UploadStatus::Ready)
+            ->and(s3PlainOf($recording))->toBe($this->audio)
+            ->and($this->bucket->keys('parts/'))->toBe([]);
+    });
+
+    it('asks for the file again only after a trouble that outlasts every wait', function () {
+        $this->bucket->failNext('GET', 503, 9, "parts/{$this->id}/1.part");
+
+        s3RunOneQueuedJob();
+        $this->travel(61)->seconds();
+        s3RunOneQueuedJob();
+        expect($this->bucket->keys("parts/{$this->id}/"))->toHaveCount(3)
+            ->and(Recording::query()->findOrFail($this->id)->upload_status)->toBe(UploadStatus::Assembling);
+
+        $this->travel(301)->seconds();
+        s3RunOneQueuedJob();
+
+        $recording = Recording::query()->findOrFail($this->id);
+        expect($recording->upload_status)->toBe(UploadStatus::Failed)
+            ->and($recording->error)->toBe(ChunkedUploadService::NOT_FINISHED)
+            ->and($recording->received_chunks)->toBe([])
+            ->and($this->bucket->keys('parts/'))->toBe([])
+            ->and(DB::table('failed_jobs')->count())->toBe(1)
             ->and($this->workFiles())->toBe([]);
     });
 });
@@ -534,6 +632,92 @@ describe('a project file', function () {
             ->and(ClientFile::query()->withoutGlobalScopes()->find($file->id))->toBeNull();
     });
 
+    it('leaves no row behind when the bucket does not take a file, a picture neither, and adding it again adds one', function (string $name, string $mime, string $status) {
+        Queue::fake();
+        $project = Client::factory()->create(['user_id' => $this->device->user_id, 'name' => 'Acme']);
+        $plain = app(ChunkedUploadService::class)->tempPath('file');
+        file_put_contents($plain, 'Scope');
+        $workspace = app(ClientWorkspace::class);
+
+        $this->bucket->failNext('PUT', 503, 3, 'client-files/');
+        expect(fn () => $workspace->storeFile($project, $plain, $name, $mime, 5, $this->device->user_id))->toThrow(UnableToWriteFile::class);
+
+        Queue::assertNothingPushed();
+        expect(ClientFile::query()->withoutGlobalScopes()->count())->toBe(0)
+            ->and($this->bucket->keys())->toBe([])
+            // What it may have kept with only the answer lost.
+            ->and($this->bucket->requests('DELETE client-files/'))->toBe(1)
+            ->and(StorageDeletion::query()->count())->toBe(0);
+
+        $file = $workspace->storeFile($project, $plain, $name, $mime, 5, $this->device->user_id);
+        @unlink($plain);
+        expect(ClientFile::query()->withoutGlobalScopes()->sole()->id)->toBe($file->id)
+            ->and($file->status)->toBe($status)
+            ->and($this->bucket->keys())->toBe([$file->path]);
+    })->with([
+        'a document' => ['scope.txt', 'text/plain', 'extracting'],
+        'a picture' => ['plan.png', 'image/png', 'ready'],
+    ]);
+
+    it('remembers to erase a file it could not take when the bucket is down altogether', function () {
+        Queue::fake();
+        $project = Client::factory()->create(['user_id' => $this->device->user_id, 'name' => 'Acme']);
+        $plain = app(ChunkedUploadService::class)->tempPath('file');
+        file_put_contents($plain, 'Scope');
+
+        $this->bucket->dropNext('PUT', 3, 'client-files/');
+        $this->bucket->dropNext('DELETE', 3, 'client-files/');
+        expect(fn () => app(ClientWorkspace::class)->storeFile($project, $plain, 'scope.txt', 'text/plain', 5, $this->device->user_id))->toThrow(UnableToWriteFile::class);
+        @unlink($plain);
+
+        expect(ClientFile::query()->withoutGlobalScopes()->count())->toBe(0)
+            ->and(StorageDeletion::query()->sole()->path)->toStartWith("client-files/{$project->id}/");
+    });
+
+    it('reads a file\'s text on a later try when the bucket has trouble', function () {
+        config(['queue.default' => 'database']);
+        $project = Client::factory()->create(['user_id' => $this->device->user_id, 'name' => 'Acme']);
+        $plain = app(ChunkedUploadService::class)->tempPath('file');
+        file_put_contents($plain, 'Scope of the works');
+        $file = app(ClientWorkspace::class)->storeFile($project, $plain, 'scope.txt', 'text/plain', 18, $this->device->user_id);
+        @unlink($plain);
+
+        // First the question whether it is there, then the read itself.
+        $this->bucket->failNext('HEAD', 503, 3, 'client-files/');
+        s3RunOneQueuedJob();
+        expect($file->refresh()->status)->toBe('extracting');
+
+        $this->travel(61)->seconds();
+        $this->bucket->failNext('GET', 503, 3, 'client-files/');
+        s3RunOneQueuedJob();
+        expect($file->refresh()->status)->toBe('extracting')->and($this->workFiles())->toBe([]);
+
+        $this->travel(301)->seconds();
+        s3RunOneQueuedJob();
+        expect($file->refresh()->status)->toBe('ready')->and($file->text)->toBe('Scope of the works')
+            ->and(DB::table('failed_jobs')->count())->toBe(0);
+    });
+
+    it('says so when the file cannot be read after every try, and its page stops waiting', function () {
+        config(['queue.default' => 'database']);
+        $project = Client::factory()->create(['user_id' => $this->device->user_id, 'name' => 'Acme']);
+        $plain = app(ChunkedUploadService::class)->tempPath('file');
+        file_put_contents($plain, 'Scope of the works');
+        $file = app(ClientWorkspace::class)->storeFile($project, $plain, 'scope.txt', 'text/plain', 18, $this->device->user_id);
+        @unlink($plain);
+
+        $this->bucket->failNext('GET', 503, 9, 'client-files/');
+        foreach ([0, 61, 301] as $wait) {
+            $this->travel($wait)->seconds();
+            s3RunOneQueuedJob();
+        }
+
+        expect($file->refresh()->status)->toBe('failed')
+            ->and($file->error)->toBe(ClientWorkspace::UNREADABLE)
+            ->and(DB::table('failed_jobs')->count())->toBe(1)
+            ->and(DB::table('jobs')->where('payload', 'like', '%ExtractClientFileJob%')->count())->toBe(0);
+    });
+
     it('stays in the list when the bucket does not delete it, so it can be deleted again', function () {
         Queue::fake();
         $project = Client::factory()->create(['user_id' => $this->device->user_id, 'name' => 'Acme']);
@@ -614,6 +798,88 @@ describe('a request link', function () {
         s3ExpectNoLocalCopies($this);
     });
 
+    describe('when the bucket fails during complete', function () {
+        beforeEach(function () {
+            $this->text = str_repeat("Scope line of the works\n", 40_000);
+            $this->upload = s3StartRequestUpload($this, $this->text, 'scope.txt');
+            foreach ($this->upload['missing'] as $index) {
+                s3SendRequestChunk($this, $this->upload, $index, $this->text)->assertOk();
+            }
+            $this->parts = $this->bucket->keys("request-parts/{$this->upload['id']}/");
+            $this->complete = "{$this->linkPath}/files/{$this->upload['id']}/complete";
+        });
+
+        it('keeps the parts when a part cannot be read', function () {
+            $this->bucket->failNext('GET', 503, 3, $this->parts[0]);
+
+            expect($this->postJson($this->complete)->status())->toBeGreaterThanOrEqual(500);
+
+            expect($this->bucket->keys("request-parts/{$this->upload['id']}/"))->toBe($this->parts)
+                ->and(ClientFile::query()->withoutGlobalScopes()->count())->toBe(0)
+                ->and(RequestUpload::query()->findOrFail($this->upload['id'])->status)->toBe('uploading')
+                ->and($this->workFiles())->toBe([]);
+
+            s3ExpectCompleteFinishes($this);
+        });
+
+        it('keeps the parts when the finished file cannot be stored, with no row left behind', function () {
+            $this->bucket->failNext('PUT', 503, 3, 'client-files/');
+
+            expect($this->postJson($this->complete)->status())->toBeGreaterThanOrEqual(500);
+
+            expect($this->bucket->keys("request-parts/{$this->upload['id']}/"))->toBe($this->parts)
+                ->and(ClientFile::query()->withoutGlobalScopes()->count())->toBe(0)
+                ->and($this->bucket->keys('client-files/'))->toBe([])
+                ->and($this->workFiles())->toBe([]);
+
+            s3ExpectCompleteFinishes($this);
+        });
+
+        it('keeps the parts when the bucket cannot even list them', function () {
+            $this->bucket->failNext('GET', 503, 3);
+
+            expect($this->postJson($this->complete)->status())->toBeGreaterThanOrEqual(500);
+
+            expect($this->bucket->keys("request-parts/{$this->upload['id']}/"))->toBe($this->parts)
+                ->and(RequestUpload::query()->findOrFail($this->upload['id'])->received_chunks)->toBe($this->upload['missing']);
+
+            s3ExpectCompleteFinishes($this);
+        });
+    });
+
+    it('asks again for the parts of a document that are not in the bucket, as after moving to one', function () {
+        $text = str_repeat("Scope line of the works\n", 40_000);
+        $upload = s3StartRequestUpload($this, $text, 'scope.txt');
+        foreach ($upload['missing'] as $index) {
+            s3SendRequestChunk($this, $upload, $index, $text)->assertOk();
+        }
+        expect(count($upload['missing']))->toBeGreaterThan(2);
+        unset($this->bucket->objects["request-parts/{$upload['id']}/0.part"], $this->bucket->objects["request-parts/{$upload['id']}/2.part"]);
+
+        $this->postJson($this->linkPath."/files/{$upload['id']}/complete")->assertStatus(422)
+            ->assertJsonPath('code', 'upload_incomplete')->assertJsonPath('missing_chunks', [0, 2]);
+
+        s3SendRequestChunk($this, $upload, 0, $text)->assertOk();
+        s3SendRequestChunk($this, $upload, 2, $text)->assertOk();
+        $this->postJson($this->linkPath."/files/{$upload['id']}/complete")->assertOk()->assertJsonPath('status', 'ready');
+
+        expect(s3PlainOfFile(ClientFile::query()->withoutGlobalScopes()->sole()))->toBe($text);
+    });
+
+    it('adds a document once when the request stored it and died before it said so', function () {
+        $text = str_repeat("Scope line of the works\n", 40_000);
+        $upload = s3StartRequestUpload($this, $text, 'scope.txt');
+        foreach ($upload['missing'] as $index) {
+            s3SendRequestChunk($this, $upload, $index, $text)->assertOk();
+        }
+        $this->postJson($this->linkPath."/files/{$upload['id']}/complete")->assertOk();
+        RequestUpload::query()->whereKey($upload['id'])->update(['status' => 'uploading']);
+
+        $this->postJson($this->linkPath."/files/{$upload['id']}/complete")->assertOk()->assertJsonPath('status', 'ready');
+
+        expect(ClientFile::query()->withoutGlobalScopes()->count())->toBe(1);
+    });
+
     it('refuses a recording that is no sound by its first chunk, through the encryption', function () {
         $fake = str_repeat('Just some words, not sound. ', 20_000);
         $upload = s3StartRequestUpload($this, $fake, 'voice.wav');
@@ -648,6 +914,36 @@ describe('the sweep', function () {
         app(TempFileSweeper::class)->sweep();
 
         expect($this->bucket->keys("parts/{$id}/"))->toHaveCount(1);
+    });
+
+    it('goes on past a folder the bucket will not delete, and tries it again on the next run', function () {
+        $old = now()->subHours(25)->getTimestamp();
+        $this->bucket->objects['parts/01GONE/0.part'] = ['body' => 'x', 'modified' => $old];
+        $this->bucket->objects['parts/01ALSO/0.part'] = ['body' => 'x', 'modified' => $old];
+        $this->bucket->objects['request-parts/01OLD/0.part'] = ['body' => 'x', 'modified' => $old];
+        $this->bucket->objects['request-parts/01TOO/0.part'] = ['body' => 'x', 'modified' => $old];
+        $this->bucket->objects['files/due.elr'] = ['body' => 'x', 'modified' => $old];
+        StorageDeletion::query()->create(['path' => 'files/due.elr', 'next_attempt_at' => now()->subMinute()]);
+
+        $this->bucket->failNext('DELETE', 403, 1, 'parts/01GONE/');
+        $this->bucket->failNext('DELETE', 403, 1, 'request-parts/01OLD/');
+        expect(app(TempFileSweeper::class)->sweep())->toBe(3);
+
+        expect($this->bucket->keys())->toBe(['parts/01GONE/0.part', 'request-parts/01OLD/0.part'])
+            ->and(StorageDeletion::query()->count())->toBe(0);
+
+        expect(app(TempFileSweeper::class)->sweep())->toBe(2);
+        expect($this->bucket->keys())->toBe([]);
+    });
+
+    it('still retries what is due when the bucket cannot list the folders', function () {
+        $this->bucket->objects['files/due.elr'] = ['body' => 'x', 'modified' => now()->getTimestamp()];
+        StorageDeletion::query()->create(['path' => 'files/due.elr', 'next_attempt_at' => now()->subMinute()]);
+        $this->bucket->dropNext('GET', 6);
+
+        expect(app(TempFileSweeper::class)->sweep())->toBe(1);
+
+        expect($this->bucket->keys())->toBe([])->and(StorageDeletion::query()->count())->toBe(0);
     });
 
     it('removes copies a killed process left in the temp directory, also encrypted ones', function () {
@@ -740,6 +1036,55 @@ describe('erasing', function () {
         expect(StorageDeletion::query()->where('path', 'files/a.elr')->count())->toBe(1);
     });
 
+    it('erases an account with every file it had', function () {
+        Queue::fake();
+        Mail::fake();
+        $user = User::query()->findOrFail($this->device->user_id);
+        $project = Client::factory()->create(['user_id' => $user->id, 'name' => 'Acme']);
+        $plain = app(ChunkedUploadService::class)->tempPath('file');
+        file_put_contents($plain, 'Scope');
+        app(ClientWorkspace::class)->storeFile($project, $plain, 'scope.txt', 'text/plain', 5, $user->id);
+        @unlink($plain);
+        $this->bucket->objects['exports/old.zip.elr'] = ['body' => 'x', 'modified' => now()->getTimestamp()];
+        AccountExport::query()->create(['user_id' => $user->id, 'status' => 'ready', 'path' => 'exports/old.zip.elr', 'expires_at' => now()->addHour()]);
+        expect($this->bucket->keys())->toHaveCount(5);
+
+        app(AccountDeletion::class)->schedule($user->fresh());
+        $this->travel(AccountDeletion::GRACE_DAYS)->days();
+        $this->travel(1)->minutes();
+        expect(Artisan::call('echoledger:erase-accounts'))->toBe(0);
+
+        expect($this->bucket->keys())->toBe([])
+            ->and(unscoped(fn () => User::query()->find($user->id)))->toBeNull()
+            ->and(StorageDeletion::query()->count())->toBe(0);
+    });
+
+    it('erases a deleted project\'s files, and remembers one the bucket would not delete', function () {
+        Queue::fake();
+        $user = User::query()->findOrFail($this->device->user_id);
+        $add = function (Client $project) use ($user): ClientFile {
+            $plain = app(ChunkedUploadService::class)->tempPath('file');
+            file_put_contents($plain, 'Scope');
+            $file = app(ClientWorkspace::class)->storeFile($project, $plain, 'scope.txt', 'text/plain', 5, $user->id);
+            @unlink($plain);
+
+            return $file;
+        };
+        $gone = Client::factory()->create(['user_id' => $user->id, 'name' => 'Gone']);
+        $add($gone);
+        app(ProjectTree::class)->delete($gone);
+        expect($this->bucket->keys('client-files/'))->toBe([]);
+
+        $stuck = Client::factory()->create(['user_id' => $user->id, 'name' => 'Stuck']);
+        $file = $add($stuck);
+        $this->bucket->failNext('DELETE', 503, 3, 'client-files/');
+        app(ProjectTree::class)->delete($stuck);
+
+        expect(Client::query()->find($stuck->id))->toBeNull()
+            ->and($this->bucket->keys('client-files/'))->toBe([$file->path])
+            ->and(StorageDeletion::query()->sole()->path)->toBe($file->path);
+    });
+
     it('never blocks when even the list of folders fails', function () {
         $this->session->delete();
         $this->travel(CaptureSession::BIN_HOURS + 1)->hours();
@@ -749,6 +1094,39 @@ describe('erasing', function () {
 
         expect($this->session->refresh()->media_erased_at)->not->toBeNull()
             ->and($this->bucket->objects)->toBe([]);
+    });
+});
+
+describe('saving what a teammate sent', function () {
+    beforeEach(function () {
+        Mail::fake();
+        Queue::fake();
+        $this->audio = Fixtures::audio(3000, S3_MARKER);
+        $this->original = $this->makeReadySession($this->device, $this->audio, ['status' => SessionStatus::Completed]);
+        $this->postJson("/api/sessions/{$this->original->id}/send", ['to' => [($this->friend = Fx::user())->email]])->assertCreated();
+        app('auth')->forgetGuards();
+        [, $token] = $this->enroll($this->friend);
+        $this->asToken($token);
+        $this->sent = $this->getJson('/api/shared-with-me')->assertOk()->json('data.0.id');
+    });
+
+    it('makes a copy of its own in the bucket, encrypted again and independent', function () {
+        $before = $this->bucket->keys();
+        $copy = $this->postJson("/api/shared-with-me/{$this->sent}/save")->assertCreated()->json('session_id');
+
+        expect($this->bucket->keys())->toHaveCount(count($before) + 1)
+            ->and($this->bucket->holds(S3_MARKER))->toBeFalse();
+        $recording = unscoped(fn () => Recording::query()->where('capture_session_id', $copy)->sole());
+        expect(s3PlainOf($recording))->toBe($this->audio)->and($this->workFiles())->toBe([]);
+    });
+
+    it('leaves nothing behind when the bucket fails halfway', function () {
+        $before = $this->bucket->keys();
+        $this->bucket->failNext('PUT', 503, 3, 'files/');
+
+        expect($this->postJson("/api/shared-with-me/{$this->sent}/save")->status())->toBeGreaterThanOrEqual(500);
+
+        expect($this->bucket->keys())->toBe($before)->and($this->workFiles())->toBe([]);
     });
 });
 
@@ -786,6 +1164,59 @@ describe('recovering an interrupted assembly', function () {
         expect(app(ChunkedUploadService::class)->adoptStoredFile($this->recording))->toBeNull();
     });
 
+    describe('with the command', function () {
+        beforeEach(function () {
+            Queue::fake();
+            $this->travel(16)->minutes();
+        });
+
+        it('assembles again when every part is there', function () {
+            $this->recording->update(['received_chunks' => [0]]);
+            app(RecordingFiles::class)->putPart($this->recording->partsDirectory().'/0.part', $this->audio);
+            unset($this->bucket->objects[$this->key]);
+            $this->travel(16)->minutes();
+
+            expect(Artisan::call('recordings:recover'))->toBe(0);
+
+            Queue::assertPushed(AssembleRecordingJob::class, fn (AssembleRecordingJob $job): bool => $job->recordingId === $this->recording->id);
+            expect($this->recording->refresh()->upload_status)->toBe(UploadStatus::Assembling);
+        });
+
+        it('adopts the whole file when the parts are gone', function () {
+            expect(Artisan::call('recordings:recover'))->toBe(0);
+            expect(Artisan::output())->toContain('finished 1');
+
+            expect($this->recording->refresh()->upload_status)->toBe(UploadStatus::Ready)
+                ->and(s3PlainOf($this->recording))->toBe($this->audio)
+                ->and($this->workFiles())->toBe([]);
+        });
+
+        it('asks for the file again when nothing is left', function () {
+            unset($this->bucket->objects[$this->key]);
+
+            expect(Artisan::call('recordings:recover'))->toBe(0);
+            expect(Artisan::output())->toContain('failed 1');
+
+            expect($this->recording->refresh()->upload_status)->toBe(UploadStatus::Failed);
+        });
+
+        it('changes nothing while the bucket does not answer, and goes on when it does', function () {
+            $this->bucket->dropNext('GET', 3);
+            expect(Artisan::call('recordings:recover'))->toBe(0);
+            expect($this->recording->refresh()->upload_status)->toBe(UploadStatus::Assembling)
+                ->and($this->bucket->objects)->toHaveKey($this->key);
+
+            $this->bucket->failNext('GET', 503, 3, $this->key);
+            expect(Artisan::call('recordings:recover'))->toBe(0);
+            expect($this->recording->refresh()->upload_status)->toBe(UploadStatus::Assembling)
+                ->and($this->bucket->objects)->toHaveKey($this->key)
+                ->and($this->workFiles())->toBe([]);
+
+            expect(Artisan::call('recordings:recover'))->toBe(0);
+            expect($this->recording->refresh()->upload_status)->toBe(UploadStatus::Ready);
+        });
+    });
+
     it('never takes a network failure for a damaged file: the only copy stays', function () {
         $this->bucket->failNext('GET', 503, 3, $this->key);
         expect(fn () => app(ChunkedUploadService::class)->adoptStoredFile($this->recording))->toThrow(UnableToReadFile::class);
@@ -796,6 +1227,31 @@ describe('recovering an interrupted assembly', function () {
         expect($this->bucket->objects)->toHaveKey($this->key)
             ->and($this->workFiles())->toBe([]);
     });
+});
+
+it('gives the device the documented text when a final transcript fails on the bucket, never the address or the file', function () {
+    $session = $this->makeReadySession($this->device, Fixtures::audio(3000), ['status' => SessionStatus::Processing]);
+    $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Pending, 'language' => 'en']);
+    $recording = $session->recordings()->sole();
+
+    $this->bucket->dropNext('HEAD', 3);
+    try {
+        app(ChunkedUploadService::class)->decryptToTemp($recording);
+        $this->fail('It should not read.');
+    } catch (FilesystemException $e) {
+        (new TranscribeFinalJob($transcript->id))->failed($e);
+    }
+
+    $answer = $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()
+        ->assertJsonPath('status', 'failed')
+        ->assertJsonPath('error', TranscriptErrorCode::Interrupted->message())
+        ->assertJsonPath('error_code', 'interrupted');
+    expect($answer->getContent())->not->toContain(FakeS3Server::HOST)->not->toContain(FakeS3Server::BUCKET)->not->toContain((string) $recording->stored_path);
+
+    // What is no storage trouble keeps its own text, as before.
+    $other = $session->transcripts()->create(['kind' => TranscriptKind::Alternate, 'provider' => 'groq', 'status' => TranscriptStatus::Pending, 'language' => 'en']);
+    (new TranscribeFinalJob($other->id))->failed(new RuntimeException('Something else'));
+    expect($other->refresh()->error)->toBe('Something else');
 });
 
 it('reports no disk numbers for a bucket, as the API allows', function () {

@@ -356,7 +356,11 @@ final class RequestLinks
             };
         }
 
-        $missing = array_values(array_diff(range(0, $upload->total_chunks - 1), $upload->received_chunks ?? []));
+        // Stored by a request that died before it could say so: the file must not be added twice.
+        if ($upload->client_file_id !== null) {
+            return $this->received($upload);
+        }
+        $missing = $this->missingParts($upload);
         if ($missing !== []) {
             throw new ApiError(422, 'upload_incomplete', 'Upload is incomplete.', ['missing_chunks' => $missing]);
         }
@@ -379,10 +383,26 @@ final class RequestLinks
             $upload->update(['client_file_id' => $file->id]);
         } finally {
             @unlink($plain);
-            app(RecordingFiles::class)->eraseFolder($upload->partsDirectory());
         }
+        // Only now. A refusal and a file that fails its check remove the parts themselves; after any other failure (the
+        // bucket's, say) they stay, and `complete` can be sent again.
+        app(RecordingFiles::class)->eraseFolder($upload->partsDirectory());
 
         return $this->received($upload);
+    }
+
+    /**
+     * The chunks of a document not on the list or not stored: parts on the server's own disk are not moved when the files
+     * go to a bucket (docs/DEPLOY_VPS.md), and those are asked for again, as a recording's are.
+     *
+     * @return list<int>
+     */
+    private function missingParts(RequestUpload $upload): array
+    {
+        $received = array_flip($upload->received_chunks ?? []);
+        $stored = array_flip(app(RecordingFiles::class)->namesIn($upload->partsDirectory()));
+
+        return array_values(array_filter(range(0, $upload->total_chunks - 1), static fn (int $index): bool => ! isset($received[$index], $stored[$index.'.part'])));
     }
 
     /**

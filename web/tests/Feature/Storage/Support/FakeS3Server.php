@@ -9,6 +9,7 @@ use App\Services\Storage\S3Adapter;
 use App\Services\Storage\S3Signer;
 use Carbon\CarbonImmutable;
 use GuzzleHttp\Promise\PromiseInterface;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -39,7 +40,10 @@ final class FakeS3Server
     /** @var list<string> "METHOD key?query" of every request */
     public array $log = [];
 
-    /** @var list<array{method: string, status: int, match: string}> */
+    /** What a request for the bucket's versioning setting finds: a status, '' for never turned on, null when it is refused. */
+    public ?string $versioning = '';
+
+    /** @var list<array{method: string, status: int, match: string}> status 0: the connection fails */
     private array $failures = [];
 
     /** @var list<int> */
@@ -80,6 +84,12 @@ final class FakeS3Server
         for ($i = 0; $i < $times; $i++) {
             $this->failures[] = ['method' => $method, 'status' => $status, 'match' => $match];
         }
+    }
+
+    /** The next $times requests of $method (on a key containing $match) find no connection. */
+    public function dropNext(string $method, int $times = 1, string $match = ''): void
+    {
+        $this->failNext($method, 0, $times, $match);
     }
 
     /** The next $times object reads end after $bytes while the file is longer, as a dropped connection does. */
@@ -144,11 +154,12 @@ final class FakeS3Server
             if ($failure['method'] === $method && str_contains($key, $failure['match'])) {
                 array_splice($this->failures, $i, 1);
 
-                return Http::response(self::error('InternalError'), $failure['status']);
+                return $failure['status'] === 0 ? Factory::failedConnection()($request) : Http::response(self::error('InternalError'), $failure['status']);
             }
         }
 
         return match (true) {
+            $method === 'GET' && $key === '' && array_key_exists('versioning', $query) => $this->versioningSetting(),
             $method === 'GET' && $key === '' => $this->listing($query),
             $method === 'POST' && array_key_exists('uploads', $query) => $this->startUpload(),
             $method === 'POST' && isset($query['uploadId']) => $this->finishUpload($key, (string) $query['uploadId'], $body),
@@ -189,6 +200,16 @@ final class FakeS3Server
         }
 
         return hash_equals($this->signer->authorization($psr->getMethod(), $psr->getUri()->getPath(), implode('&', $pairs), $headers, $hash, $at), $psr->getHeaderLine('Authorization'));
+    }
+
+    private function versioningSetting(): PromiseInterface
+    {
+        if ($this->versioning === null) {
+            return Http::response(self::error('AccessDenied'), 403);
+        }
+        $status = $this->versioning === '' ? '' : '<Status>'.$this->versioning.'</Status>';
+
+        return Http::response('<?xml version="1.0" encoding="UTF-8"?><VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">'.$status.'</VersioningConfiguration>', 200);
     }
 
     /** @param  array<string, mixed>  $query */

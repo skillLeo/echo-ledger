@@ -85,8 +85,18 @@ php artisan recordings:check-storage
 - **Failed deletes:** a delete the bucket refuses after three tries is retried by `stt:reconcile` from
   the `storage_deletions` table (5 minutes, doubling up to 6 hours) until it goes. Upload parts a failed delete left are
   removed by the same command after 24 hours.
-- **Add one rule at the provider:** abort unfinished multipart uploads after a day. A file from 64 MB goes up in parts; a
-  server that dies halfway leaves them in the bucket, billed but not visible.
+- **A bucket that is down for a while:** assembling a finished upload tries again after 1 and after 5 more minutes, then
+  asks for the file again (a device keeps its audio until the recording is ready). Reading a project file's text tries as
+  often, then marks the file failed. A document sent through a request link keeps its parts: choosing the file again goes on.
+- **Add two rules at the provider:**
+  - Abort unfinished multipart uploads after a day. A file from 64 MB goes up in parts; a server that dies halfway leaves
+    them in the bucket, billed but not visible.
+  - **Old versions must go, or erasing does not erase.** Erasing sends a plain delete. On a bucket that keeps versions
+    that only hides the file: the old version stays, and this server's key still opens it. With versioning on, add a rule
+    that expires noncurrent versions and leftover delete markers after at most 30 days, the time the database backups are
+    kept. Backblaze B2 keeps every version unless told otherwise: set its lifecycle to "Keep only the last version". With
+    versioning off there is nothing to do. `recordings:check-storage` warns when versioning is on, or when the key may not
+    read that setting; it cannot see the rule, so check that at the provider.
 - **The console's "Server disk" meter disappears,** and `GET /api/storage` answers `null` for the disk fields: a bucket has
   no size to report. What the recordings take is still counted, from the database.
 
@@ -101,7 +111,8 @@ check a recording plays. Uploads that were under way ask for their parts again a
 folder until a backup of the bucket exists.
 
 Back up the bucket as well: `APP_KEY` and `ECHOLEDGER_RECORDINGS_KEY` never go there, so a copy of it is as safe as the
-bucket itself, and useless without those two keys.
+bucket itself, and useless without those two keys. A copy holds erased files for as long as it is kept: 30 days at most,
+as with the rule above.
 
 ## Claude and ChatGPT connector
 
@@ -173,7 +184,8 @@ server {
 - **Database:** every night, `mysqldump --single-transaction --routines --triggers`, compressed, copied to the
   backup provider and kept for 30 days.
 - **Recordings, screens and files** (when on the disk): every night with `restic` or `borg` to the backup provider.
-  They are already encrypted. Object storage gets bucket versioning instead.
+  They are already encrypted. Object storage gets bucket versioning instead, with the rule that removes old versions
+  after 30 days ("Add two rules at the provider" above).
 - **Keys:** keep `APP_KEY` and `ECHOLEDGER_RECORDINGS_KEY` offline in a password manager. A backup without the
   recordings key cannot be played. Losing `storage/oauth-*.key` only means making new ones: connected apps sign in again.
 - Restore one backup to a scratch database once a month, to know the backups work.

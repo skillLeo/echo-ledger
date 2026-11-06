@@ -33,8 +33,26 @@ final class TempFileSweeper
         $cutoffAt = now()->subMinutes(max(1, $olderThanMinutes));
         $cutoff = $cutoffAt->getTimestamp();
 
-        return $this->sweepTempDirectory($cutoff) + $this->sweepParts($cutoff, now()->subHours(self::ORPHANED_PARTS_HOURS)->getTimestamp())
-            + $this->sweepRequestUploads($cutoffAt) + app(RecordingFiles::class)->retryErasures();
+        return $this->step(fn (): int => $this->sweepTempDirectory($cutoff))
+            + $this->step(fn (): int => $this->sweepParts($cutoff, now()->subHours(self::ORPHANED_PARTS_HOURS)->getTimestamp()))
+            + $this->step(fn (): int => $this->sweepRequestUploads($cutoffAt))
+            + $this->step(fn (): int => app(RecordingFiles::class)->retryErasures());
+    }
+
+    /**
+     * A step that fails (a bucket that does not answer) must not cost the others their run; the next run tries it again.
+     *
+     * @param  callable(): int  $step
+     */
+    private function step(callable $step): int
+    {
+        try {
+            return $step();
+        } catch (Throwable $e) {
+            report($e);
+
+            return 0;
+        }
     }
 
     /**
@@ -68,8 +86,7 @@ final class TempFileSweeper
         }
         foreach ($disk->directories('request-parts') as $relative) {
             $upload = RequestUpload::query()->find(basename($relative), ['id', 'status']);
-            if (($upload === null || $upload->status !== 'uploading') && $files->newestChange($relative) < $cutoff->getTimestamp()) {
-                $disk->deleteDirectory($relative);
+            if (($upload === null || $upload->status !== 'uploading') && $files->newestChange($relative) < $cutoff->getTimestamp() && $files->eraseFolder($relative)) {
                 $removed++;
             }
         }
@@ -113,8 +130,7 @@ final class TempFileSweeper
             $orphaned = $recording === null || in_array($recording->upload_status, [UploadStatus::Failed, UploadStatus::Ready], true);
 
             if ($orphaned && $files->newestChange($relative) < $partsCutoff) {
-                $disk->deleteDirectory($relative);
-                $removed++;
+                $removed += $files->eraseFolder($relative) ? 1 : 0;
 
                 continue;
             }

@@ -11,6 +11,7 @@ use GuzzleHttp\Psr7\StreamWrapper;
 use GuzzleHttp\Psr7\Utils;
 use GuzzleHttp\Utils as GuzzleUtils;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\HttpClientException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -294,6 +295,21 @@ final class S3Adapter implements FilesystemAdapter
         }
     }
 
+    /**
+     * Whether the bucket keeps what a delete removes: `Enabled` or `Suspended` (versions made earlier stay), '' when it
+     * never kept versions, null when it will not say.
+     */
+    public function versioning(): ?string
+    {
+        try {
+            $response = $this->send('GET', '', ['versioning' => '']);
+
+            return $response->successful() ? (string) self::xml($response->body())->Status : null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     private function metadata(string $path, string $type): Response
     {
         try {
@@ -419,7 +435,13 @@ final class S3Adapter implements FilesystemAdapter
             $request = $request->withBody($body, 'application/octet-stream');
         }
 
-        return $request->send($method, $this->origin.$target.($queryString !== '' ? '?'.$queryString : ''));
+        try {
+            return $request->send($method, $this->origin.$target.($queryString !== '' ? '?'.$queryString : ''));
+        } catch (HttpClientException|TransferException $e) {
+            // The HTTP client's message holds the address, the bucket and the key, and on a streamed read a server path. A
+            // storage error can reach people (a job's failure, a transcript's error): that stays with the log, as `previous`.
+            throw new RuntimeException('The bucket could not be reached.', 0, $e);
+        }
     }
 
     /**

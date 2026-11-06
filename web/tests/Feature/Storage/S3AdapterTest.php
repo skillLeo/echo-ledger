@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Sleep;
 use League\Flysystem\Config;
 use League\Flysystem\FileAttributes;
+use League\Flysystem\FilesystemException;
 use League\Flysystem\UnableToCheckFileExistence;
 use League\Flysystem\UnableToDeleteFile;
 use League\Flysystem\UnableToReadFile;
@@ -303,6 +304,54 @@ describe('over the wire', function () {
             expect($e->getMessage())->toContain('HTTP 403')->not->toContain(FakeS3Server::KEY)->not->toContain('AWS4-HMAC');
         }
         expect(fn () => $this->adapter->read('missing.elr'))->toThrow(UnableToReadFile::class, 'NoSuchKey');
+    });
+
+    it('keeps the address, the bucket and the HTTP client\'s text out of a failed connection\'s message, and in the log\'s', function () {
+        $this->server->objects['files/a.elr'] = ['body' => 'body', 'modified' => 1];
+        $stream = fopen('php://memory', 'w+b');
+        $calls = [
+            'HEAD' => [fn () => $this->adapter->fileExists('files/a.elr'), fn () => $this->adapter->fileSize('files/a.elr')],
+            'GET' => [fn () => $this->adapter->read('files/a.elr'), fn () => $this->adapter->readStream('files/a.elr'),
+                fn () => $this->adapter->directoryExists('files'), fn () => iterator_to_array($this->adapter->listContents('files', true)), fn () => $this->adapter->deleteDirectory('files')],
+            'PUT' => [fn () => $this->adapter->write('files/a.elr', 'x', $this->config), fn () => $this->adapter->writeStream('files/a.elr', $stream, $this->config)],
+            'DELETE' => [fn () => $this->adapter->delete('files/a.elr')],
+        ];
+
+        foreach ($calls as $method => $list) {
+            foreach ($list as $call) {
+                $this->server->dropNext($method, 3);
+                try {
+                    $call();
+                    $this->fail('It should not work.');
+                } catch (FilesystemException $e) {
+                    expect($e->getMessage())->not->toContain(FakeS3Server::HOST)->not->toContain(FakeS3Server::BUCKET)->not->toContain('cURL')->not->toContain('http');
+                    // The log prints the chain.
+                    $chain = '';
+                    for ($previous = $e; $previous !== null; $previous = $previous->getPrevious()) {
+                        $chain .= $previous->getMessage()."\n";
+                    }
+                    expect($chain)->toContain('The bucket could not be reached.')->toContain(FakeS3Server::HOST);
+                }
+            }
+        }
+        fclose($stream);
+    });
+
+    it('tells whether the bucket keeps versions, and null when it will not say', function () {
+        expect($this->adapter->versioning())->toBe('');
+
+        $this->server->versioning = 'Enabled';
+        expect($this->adapter->versioning())->toBe('Enabled');
+
+        $this->server->versioning = 'Suspended';
+        expect($this->adapter->versioning())->toBe('Suspended');
+
+        $this->server->versioning = null;
+        expect($this->adapter->versioning())->toBeNull();
+
+        $this->server->versioning = 'Enabled';
+        $this->server->dropNext('GET', 3);
+        expect($this->adapter->versioning())->toBeNull();
     });
 
     it('sets no visibility: objects stay private', function () {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\Storage\RecordingFiles;
+use App\Services\Storage\S3Adapter;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -39,7 +40,20 @@ final class CheckRecordingsStorage extends Command
             return self::FAILURE;
         }
         $this->info('The recordings disk works.');
+        $this->warnAboutVersions($files);
 
         return self::SUCCESS;
+    }
+
+    /** A warning only: a rule at the provider can make it right, and a key need not be allowed to read this setting. */
+    private function warnAboutVersions(RecordingFiles $files): void
+    {
+        $adapter = $files->disk()->getAdapter();
+        $versioning = $adapter instanceof S3Adapter ? $adapter->versioning() : '';
+        if ($versioning === '') {
+            return;
+        }
+        $this->warn(($versioning === null ? 'The bucket would not say whether it keeps old versions.' : "The bucket keeps old versions (versioning: {$versioning}).")
+            .' Where it does, a delete leaves the file in the bucket: it needs the rule in docs/DEPLOY_VPS.md that removes them.');
     }
 }

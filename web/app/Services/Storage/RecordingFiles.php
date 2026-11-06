@@ -10,6 +10,7 @@ use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\FileAttributes;
 use League\Flysystem\Local\LocalFilesystemAdapter;
+use League\Flysystem\UnableToReadFile;
 use RuntimeException;
 use SplTempFileObject;
 use Throwable;
@@ -316,13 +317,19 @@ final class RecordingFiles
     /**
      * Deletes a folder of upload parts and never throws: the recording is safe by now, and TempFileSweeper removes
      * parts a failed delete left behind.
+     *
+     * @return bool whether it went
      */
-    public function eraseFolder(string $directory): void
+    public function eraseFolder(string $directory): bool
     {
         try {
             $this->disk()->deleteDirectory($directory);
+
+            return true;
         } catch (Throwable $e) {
             report($e);
+
+            return false;
         }
     }
 
@@ -394,7 +401,7 @@ final class RecordingFiles
         for ($try = 1; $try <= self::DOWNLOAD_TRIES; $try++) {
             $in = $disk->readStream($relative);
             if (! is_resource($in)) {
-                throw new RuntimeException('Cannot read '.$relative.' from the recordings disk.');
+                throw UnableToReadFile::fromLocation($relative, 'The bucket gave no file to read.');
             }
             $out = fopen($localPath, 'wb');
             try {
@@ -410,7 +417,7 @@ final class RecordingFiles
             }
         }
         // A connection that dropped halfway looks like a short file: it must not pass for a damaged recording.
-        throw new RuntimeException('The download of '.$relative.' was cut short.');
+        throw UnableToReadFile::fromLocation($relative, 'The download was cut short.');
     }
 
     /** Resolved lazily so that listing and deleting work even before the key is configured. */

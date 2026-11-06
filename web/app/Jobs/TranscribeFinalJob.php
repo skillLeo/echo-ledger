@@ -32,6 +32,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use League\Flysystem\FilesystemException;
 use Throwable;
 
 /**
@@ -260,7 +261,10 @@ final class TranscribeFinalJob implements ShouldQueue
     {
         $transcript = Transcript::query()->find($this->transcriptId);
         if ($transcript !== null && ! $transcript->status->isTerminal()) {
-            $error = mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000);
+            // A storage error names the file: the device gets the documented text, the log the rest.
+            $error = $exception instanceof FilesystemException
+                ? TranscriptErrorCode::Interrupted->message()
+                : mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000);
             // Since v1.5 a crashed run of an Urdu or Auto recording is an interrupted one: it waits and its engine is tried
             // again (EngineWait), and once the wait is over the next engine takes it as a backup (EngineFallbackJob).
             if ($transcript->kind === TranscriptKind::Final && EngineWait::forUrdu($transcript)) {

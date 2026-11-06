@@ -59,6 +59,9 @@ final class ClientWorkspace
 
     public const WORD_TOO_LARGE = 'This Word file is too large to read.';
 
+    /** A file's `error` when its stored original cannot be read. */
+    public const UNREADABLE = 'The file could not be read.';
+
     /** How many passages one question carries (about 8 000 tokens). */
     private const PASSAGES = 12;
 
@@ -484,7 +487,15 @@ final class ClientWorkspace
             'status' => $image ? 'ready' : 'extracting',
         ]);
         $relative = 'client-files/'.$client->id.'/'.$file->id.'.elr';
-        app(RecordingFiles::class)->encryptInto($plainPath, $relative, $file->id);
+        $files = app(RecordingFiles::class);
+        try {
+            $files->encryptInto($plainPath, $relative, $file->id);
+        } catch (Throwable $e) {
+            // No row without its file. A bucket may have kept what it was sent with only its answer lost: that goes too.
+            $files->erase($relative);
+            $file->delete();
+            throw $e;
+        }
         $file->forceFill(['path' => $relative])->save();
         if (! $image) {
             ExtractClientFileJob::dispatch($file->id);
@@ -517,7 +528,7 @@ final class ClientWorkspace
         $client = Client::query()->withoutGlobalScopes()->find($file->client_id);
         $bytes = $this->original($file);
         if ($client === null || $bytes === null) {
-            $file->forceFill(['status' => 'failed', 'error' => 'The file could not be read.'])->save();
+            $file->forceFill(['status' => 'failed', 'error' => self::UNREADABLE])->save();
 
             return;
         }
