@@ -63,15 +63,19 @@ final class SignUp
     }
 
     /**
-     * Makes the account with its personal workspace and joins the workspace it was invited to. An invitation or a
-     * verified Google address proves the email, so it starts confirmed; otherwise the confirmation email goes out.
+     * Makes the account with its personal workspace and joins the workspace it was invited to. An invitation's link or
+     * a verified Google address proves the email, so it starts confirmed; otherwise the confirmation email goes out.
+     * Without the link, a pending invitation for the address is used only when the address is proven (Google): typing
+     * an invited address on the sign-up page proves nothing, so that account neither starts confirmed nor joins.
      *
      * @param  array{name: string, email: string, password: string, google_id?: string|null}  $data  `password` already hashed or plain (the cast hashes)
      */
     public function create(array $data, ?WorkspaceInvitation $invitation = null, bool $emailVerified = false, string $via = 'password'): User
     {
         $email = Str::lower(trim($data['email']));
-        $invitation ??= $this->invitations->pendingFor($email);
+        if ($invitation === null && $emailVerified) {
+            $invitation = $this->invitations->pendingFor($email);
+        }
 
         return DB::transaction(function () use ($data, $email, $invitation, $emailVerified, $via): User {
             $user = new User(['name' => mb_substr(trim($data['name']) ?: Str::before($email, '@'), 0, 255), 'email' => $email, 'password' => $data['password']]);

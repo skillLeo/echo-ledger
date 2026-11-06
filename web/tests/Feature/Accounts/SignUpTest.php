@@ -125,6 +125,26 @@ it('signs up by invitation only for the invited address, joins the workspace and
     Mail::assertNotQueued(VerifyEmailMail::class);
 });
 
+it('does not let an open sign-up take an invited address without the invitation link', function () {
+    openSignUp();
+    $owner = Fx::user();
+    $workspace = Workspace::query()->findOrFail($owner->current_workspace_id);
+    $url = app(Invitations::class)->invite($workspace, $owner, 'bob@company.test', WorkspaceRole::Member);
+    parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+
+    // Someone who only knows the address types it in: the account is theirs to confirm, not the team's.
+    Livewire::test(Register::class)->fillForm(signUpForm(['email' => 'bob@company.test', 'name' => 'Not Bob']))->call('register')->assertHasNoFormErrors();
+
+    $user = User::query()->where('email', 'bob@company.test')->firstOrFail();
+    expect($user->hasVerifiedEmail())->toBeFalse()
+        ->and($workspace->fresh()->roleOf($user))->toBeNull()
+        ->and($user->current_workspace_id)->not->toBe($workspace->id)
+        ->and($user->workspaces()->count())->toBe(1)
+        ->and(WorkspaceInvitation::query()->firstOrFail()->accepted_at)->toBeNull()
+        ->and(app(Invitations::class)->find($query['invite']))->not->toBeNull();
+    Mail::assertQueued(VerifyEmailMail::class, fn (VerifyEmailMail $mail): bool => $mail->hasTo('bob@company.test'));
+});
+
 it('refuses an expired or used invitation link', function () {
     openSignUp(SignUp::INVITED);
     $owner = Fx::user();
