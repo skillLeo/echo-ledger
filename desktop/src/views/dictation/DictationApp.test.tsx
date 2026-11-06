@@ -61,15 +61,17 @@ describe("dictation box", () => {
     // What the core sends when it refuses: the box opens, the reason, and the state that ends it.
     await emitEvent("overlay:visibility", true);
     await pushChannelMessage({ kind: "clear" });
-    await pushChannelMessage({ kind: "status", live: false, recording: false, provider: null, message: "The microphone is off for EchoLedger, so dictation cannot hear you." });
+    await pushChannelMessage({ kind: "status", live: false, recording: false, provider: null, message: "The microphone is off for EchoLedger. Allow it in your computer's privacy settings." });
     await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle" });
     expect(screen.getByText("Dictation did not start")).toBeInTheDocument();
     expect(screen.getByText(/The microphone is off for EchoLedger/)).toBeInTheDocument();
     expect(screen.queryByText(/press the shortcut again/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("meter")).not.toBeInTheDocument(); // nothing is listening, and the reason has the room
 
     // The next press that does start says how to finish again.
     await emitEvent("overlay:visibility", true);
     expect(screen.getByText("Dictating — press the shortcut again to insert")).toBeInTheDocument();
+    expect(screen.getByRole("meter")).toBeInTheDocument();
   });
 
   it("shows the in-progress phrase and replaces it with each final turn", async () => {
@@ -122,8 +124,11 @@ describe("dictation box", () => {
     expect(Number(meter.getAttribute("aria-valuenow"))).toBeGreaterThan(0);
     expect((meter.firstElementChild as HTMLElement).style.transform).toBe("scaleX(0.8)");
     await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle" });
-    expect(meter).toHaveAttribute("aria-valuenow", "0");
-    expect((meter.firstElementChild as HTMLElement).style.transform).toBe("scaleX(0)");
+    // The next dictation's bar starts empty.
+    await emitEvent("overlay:visibility", true);
+    const next = screen.getByRole("meter", { name: "Microphone level" });
+    expect(next).toHaveAttribute("aria-valuenow", "0");
+    expect((next.firstElementChild as HTMLElement).style.transform).toBe("scaleX(0)");
   });
 
   it("plays the start and stop sounds only when they are on", async () => {

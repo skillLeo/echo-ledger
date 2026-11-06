@@ -125,7 +125,9 @@ const SCREENS = [
   }],
   // Phase 1B: what runs on a Mac and on an old Windows, and what a recording says about what it holds.
   ["controls-permission", "controls-permission", async (page) => page.waitForSelector("[data-testid=missing-permission]")],
+  ["controls-nothing", "controls-nothing", async (page) => page.waitForSelector("[data-testid=missing-permission]")],
   ["controls-device", "controls-device", async (page) => page.waitForSelector("[data-testid=device-notice]")],
+  ["controls-dictation-refused", "controls-dictation-refused", async (page) => page.getByText("Dictation did not start").waitFor()],
   ["record-permission-mac", "record-permission-mac", async (page) => page.waitForSelector("[data-testid=permission-banner]")],
   ["record-windows10", "record-windows10", async (page) => page.waitForSelector("[data-testid=whole-system-note]")],
   ["library-lost-mac", "library-lost-mac", async (page) => {

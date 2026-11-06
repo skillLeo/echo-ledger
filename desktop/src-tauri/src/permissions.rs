@@ -84,7 +84,8 @@ const NO_SYSTEM_AUDIO: &str = "System audio is off for EchoLedger: a recording w
 const NO_SCREEN: &str = "Screen Recording is off for EchoLedger: recordings will have their sound but no screen moments.";
 const NOTHING_TO_RECORD: &str = "The microphone and system audio are both off for EchoLedger, so there is nothing to record. Allow them in System Settings.";
 const NO_NOTE_MICROPHONE: &str = "The microphone is off for EchoLedger, so a voice note has nothing to record. Allow it in your computer's privacy settings.";
-pub const NO_DICTATION: &str = "The microphone is off for EchoLedger, so dictation cannot hear you. Allow it in your computer's privacy settings.";
+/// Short enough for the dictation box, which it is shown in.
+pub const NO_DICTATION: &str = "The microphone is off for EchoLedger. Allow it in your computer's privacy settings.";
 const NO_NOTE_SYSTEM_AUDIO: &str = "System audio is off for EchoLedger, so sound playing on this computer cannot be captured. Allow it in System Settings.";
 
 fn missing(kind: Kind, sentence: &str) -> Missing {

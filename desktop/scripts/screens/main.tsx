@@ -6,7 +6,8 @@
 // way to the dialog; "sign-in" is a computer not signed in, "-viewer" a viewer's, "library-update" an update ready. Phase 1B:
 // "-mac" is a Mac, "-windows10" a Windows without per-app capture, "onboarding-mac" the guided permissions,
 // "record-permission-mac" a permission off, "library-lost-mac" a permission macOS forgot, "settings-mac-check" the check's
-// results, "controls-permission" and "controls-device" what the pill says).
+// results, "controls-permission", "controls-nothing" and "controls-device" what the pill says, "controls-dictation-refused"
+// the dictation box with the microphone off).
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
@@ -45,6 +46,7 @@ const mac = screen.includes("-mac");
 const windows10 = screen.endsWith("-windows10");
 const onboarding = screen === "onboarding-mac";
 const NO_SYSTEM_AUDIO = { kind: "system_audio" as const, sentence: "System audio is off for EchoLedger: a recording will have your voice, not the other side of the call." };
+const NOTHING_TO_RECORD = "The microphone and system audio are both off for EchoLedger, so there is nothing to record. Allow them in System Settings.";
 // v1.5: projects, the Library's smart folders, sharing and moving open from the Library or the Projects page.
 const LIBRARY_SCREENS = ["shared", "share", "move"];
 const tab = screen.startsWith("library") || LIBRARY_SCREENS.includes(screen) ? "library"
@@ -149,7 +151,7 @@ const commands: Record<string, (args: Args) => unknown> = {
     sourceApp: "whatsapp",
     language: "ur",
     bluetoothMic: bluetooth,
-    missing: screen === "controls-permission" ? [NO_SYSTEM_AUDIO] : [],
+    missing: screen === "controls-permission" ? [NO_SYSTEM_AUDIO] : screen === "controls-nothing" ? [{ kind: "microphone", sentence: NOTHING_TO_RECORD }, { kind: "system_audio", sentence: NOTHING_TO_RECORD }] : [],
     deviceNote: screen === "controls-device" ? { text: "Microphone changed to AirPods Pro. Still recording.", warning: false } : null,
   }),
   // The after-call window: "Saved · … · Undo" over the Ask-me chip (its line at 6 of 10 s); both stay for the picture.
@@ -173,6 +175,18 @@ async function render() {
   if (!controls) {
     const { default: MainApp } = await import("../../src/views/main/MainApp");
     root.render(<React.StrictMode><MainApp /></React.StrictMode>);
+    return;
+  }
+  if (screen === "controls-dictation-refused") {
+    const { default: DictationApp } = await import("../../src/views/dictation/DictationApp");
+    const { emit } = await import("@tauri-apps/api/event");
+    root.render(<div className="screens-canvas"><div className="screens-window" style={{ width: 420, height: 110 }}><DictationApp /></div></div>);
+    // What the core sends when it refuses.
+    window.setTimeout(() => {
+      void emit("overlay:visibility", true);
+      captions?.onmessage({ kind: "status", live: false, recording: false, provider: null, message: "The microphone is off for EchoLedger. Allow it in your computer's privacy settings." });
+      void emit("dictation:state", { active: false, sounds: false, mode: "toggle" });
+    }, 300);
     return;
   }
   // The floating windows side by side on one canvas: the recording pill, the after-call toast and chip, and the captions.
