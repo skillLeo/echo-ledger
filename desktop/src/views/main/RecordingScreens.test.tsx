@@ -179,10 +179,19 @@ describe("screens on the recording page", () => {
   });
 
   it("reads no screens for a recording without any, and offers no pack on a server without them", async () => {
+    respond("screens_status", { supported: true, platform: "windows", borderless: true, permission: true, inPlan: true, onServer: false });
     await openRecording(withScreens(null));
     expect(callsOf("session_screens")).toEqual([]);
     expect(screen.queryByRole("list", { name: "Screens at this moment" })).not.toBeInTheDocument();
     expect(within(screen.getByRole("combobox", { name: "Export" })).queryByRole("group", { name: "With the screens" })).not.toBeInTheDocument();
+  });
+
+  it("offers the pack for a recording synced before the server was updated, once the server is known to have it", async () => {
+    // The cached item still has its old shape (no screen_count); the server's config says it has screen moments now.
+    respond("screens_status", { supported: true, platform: "windows", borderless: true, permission: true, inPlan: true, onServer: true });
+    await openRecording(withScreens(null));
+    expect(callsOf("session_screens")).toEqual([]);
+    expect(within(screen.getByRole("combobox", { name: "Export" })).getByRole("group", { name: "With the screens" })).toBeInTheDocument();
   });
 
   it("keeps the pack but reads no screens when a recording has none", async () => {

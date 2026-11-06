@@ -289,9 +289,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const { screens, reload: reloadScreens } = useSessionScreens(current && !readOnly ? current.id : null, current?.screen_count);
   const [screenOpen, setScreenOpen] = useState<number | null>(null);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  // The server has meeting packs: its config says so, or the recording carries `screen_count` (a recording synced
+  // before the server was updated keeps its old shape, so its item alone cannot say).
+  const [packServer, setPackServer] = useState(false);
   useEffect(() => {
     setScreenOpen(null);
     setGalleryOpen(false);
+    if (current?.id) api.screensStatus().then((s) => setPackServer(s.onServer)).catch(() => undefined);
   }, [current?.id]);
   // Transcript matches of a smart folder's own recordings only.
   const shownHits = useMemo(() => (smartFolder ? found.filter((r) => folderBase.some((i) => i.id === r.session.id)) : found), [smartFolder, found, folderBase]);
@@ -1214,7 +1218,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                           <button className="btn ghost" aria-pressed={panel === "speakers"} onClick={() => setPanel(panel === "speakers" ? null : "speakers")}>Speakers</button>
                           <button className="btn ghost" aria-pressed={panel === "history"} onClick={() => setPanel(panel === "history" ? null : "history")}>History</button>
                           <ExportMenu onExport={(format) => void exportAs(format)} viewLabel={exportView ? VIEW_LABELS[exportView] : null}
-                            onPack={current.screen_count !== undefined ? (format, withAudio) => void packAs(format, withAudio) : undefined} />
+                            onPack={current.screen_count !== undefined || packServer ? (format, withAudio) => void packAs(format, withAudio) : undefined} />
                         </div>
                       )}
                       {panel === "replace" && <ReplaceBar onReplace={replaceAll} onClose={() => setPanel(null)} />}

@@ -63,7 +63,8 @@ pub struct ScreensStatus {
     pub permission: bool,
     /// The workspace's plan has screen moments.
     pub in_plan: bool,
-    /// The server has screen moments (false once it answered that it has no such route).
+    /// The server has screen moments (false once its config showed it is older, or it answered that it has no such
+    /// route).
     pub on_server: bool,
 }
 
@@ -132,6 +133,10 @@ pub struct Screens {
     plan_off: AtomicBool,
     /// The server answered that it has no screen routes (`404 not_found`); for this run.
     server_missing: AtomicBool,
+    /// The last server config came from a server older than screen moments: it has no `plan`, which every v1.5 config
+    /// has. Read from each fresh config (at start and before each upload round), never from cached library items,
+    /// which keep the shape they had before the server was updated.
+    server_old: AtomicBool,
     running: Mutex<Option<Running>>,
     live: Arc<Live>,
 }
@@ -142,7 +147,16 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Screens {
     pub fn new(system: Box<dyn ScreenSystem>, keys: Box<dyn KeySource>) -> Self {
-        Self { system, keys, key: Mutex::new(None), plan_off: AtomicBool::new(false), server_missing: AtomicBool::new(false), running: Mutex::new(None), live: Arc::default() }
+        Self {
+            system,
+            keys,
+            key: Mutex::new(None),
+            plan_off: AtomicBool::new(false),
+            server_missing: AtomicBool::new(false),
+            server_old: AtomicBool::new(false),
+            running: Mutex::new(None),
+            live: Arc::default(),
+        }
     }
 
     /// The system's capture (Windows.Graphics.Capture, ScreenCaptureKit), or a stand-in in tests.
@@ -162,9 +176,11 @@ impl Screens {
         key.clone()
     }
 
-    /// A fresh server config: its plan says whether screen moments are in it. A server without plans says nothing, so
-    /// a `403 feature_not_in_plan` it answered stays in force.
+    /// A fresh server config: its plan says whether screen moments are in it. A config without a plan comes from a
+    /// server older than screen moments (plans and screens are both v1.5); it says nothing about the plan, so a
+    /// `403 feature_not_in_plan` it answered stays in force.
     pub fn note_config(&self, config: &ServerConfig) {
+        self.server_old.store(config.plan.is_none(), Ordering::SeqCst);
         if let Some(in_plan) = config.screens_in_plan() {
             self.plan_off.store(!in_plan, Ordering::SeqCst);
         }
@@ -191,8 +207,10 @@ impl Screens {
         }
     }
 
+    /// The server has screen moments, as far as is known: neither its config nor a `404 not_found` said otherwise.
+    /// Before the first config (offline at start) it counts as yes; a 404 from the first upload then ends it.
     pub fn on_server(&self) -> bool {
-        !self.server_missing.load(Ordering::SeqCst)
+        !self.server_missing.load(Ordering::SeqCst) && !self.server_old.load(Ordering::SeqCst)
     }
 
     /// The pill's chip while a recording captures screens (or could, once a pause ends).
@@ -255,18 +273,6 @@ async fn project_keeps_screens(app: &AppHandle, client_id: &str) -> bool {
             .unwrap_or(true),
         _ => true,
     }
-}
-
-/// Does the library the server sent come from a server with screen moments? Unknown (nothing listed yet) counts as
-/// yes; items none of which carries `screen_count` come from a server older than screen moments.
-pub fn library_has_screens(items: &[crate::net::models::LibraryItem]) -> bool {
-    items.is_empty() || items.iter().any(|i| i.rest.contains_key("screen_count"))
-}
-
-/// Does the server have screen moments, as far as is known? It said no (`404 not_found`), or its library says so.
-fn server_has_screens(app: &AppHandle) -> bool {
-    let state = app.state::<crate::AppState>();
-    state.screens.on_server() && library_has_screens(&state.library.blocking_lock().items)
 }
 
 /// A call recording started: its capture thread starts too (it keeps nothing until the rules allow it). Voice notes,
@@ -374,7 +380,6 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, wake: &Wake) {
     system.thread_init();
     let store = ScreenStore::in_dir(&state.data_dir);
     let key = state.screens.key();
-    let server = server_has_screens(app);
     let clock = Instant::now();
     let mut sampler = Sampler::new(system);
     let show = |pill: Option<ScreensPill>| *lock(&live.pill) = pill;
@@ -384,7 +389,7 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, wake: &Wake) {
             enabled: settings.screen_moments,
             call: true,
             plan: state.screens.in_plan(),
-            server: server && state.screens.on_server(),
+            server: state.screens.on_server(),
             project: live.project(),
             supported: true,
             keychain: key.is_some(),
@@ -517,13 +522,23 @@ mod tests {
     }
 
     #[test]
-    fn a_library_without_screen_counts_comes_from_an_older_server() {
-        let item = |rest: serde_json::Value| -> crate::net::models::LibraryItem { serde_json::from_value(rest).unwrap() };
-        let old = item(json!({"id": "s1", "deleted": false, "updated_at": "2026-11-04T10:00:00Z", "title": "Kick-off"}));
-        let new = item(json!({"id": "s2", "deleted": false, "updated_at": "2026-11-04T10:00:00Z", "title": "Review", "screen_count": 0}));
-        assert!(library_has_screens(&[]), "nothing listed yet: not known, so not off");
-        assert!(!library_has_screens(std::slice::from_ref(&old)));
-        assert!(library_has_screens(&[old, new]));
+    fn a_config_without_a_plan_comes_from_an_older_server() {
+        let s = screens();
+        assert!(s.on_server(), "no config yet (offline at start): not known, so not off");
+        let mut old: ServerConfig = serde_json::from_str(include_str!("../../tests/fixtures/config.json")).unwrap();
+        old.plan = None;
+        s.note_config(&old);
+        assert!(!s.on_server() && !s.status().on_server, "nothing is captured, and Settings says why");
+        assert!(s.in_plan(), "an older server says nothing about the plan");
+        // The server was updated: the next config has a plan, whatever the cached library items still look like.
+        let mut updated = old.clone();
+        updated.plan = serde_json::from_value(json!({"key": "personal", "features": {}})).unwrap();
+        s.note_config(&updated);
+        assert!(s.on_server());
+        // A 404 from the screen routes outlasts any config of this run.
+        s.server_missing.store(true, Ordering::SeqCst);
+        s.note_config(&updated);
+        assert!(!s.on_server());
     }
 
     #[test]
