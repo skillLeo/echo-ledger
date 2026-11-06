@@ -16,3 +16,6 @@ captures/
 *.jks
 *.keystore
 keystore.properties
+# JVM crash reports (a test JVM that crashed writes them next to the build)
+hs_err_pid*.log
+replay_pid*.log

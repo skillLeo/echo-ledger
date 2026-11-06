@@ -50,10 +50,10 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## Phase 3 — Screen moments
 
-- [ ] 3.1 Desktop capture (Windows Graphics Capture; Mac ScreenCaptureKit): meeting window by default, change detection (~1 fps, 64×36 luminance + perceptual hash, stable 1.5 s, WebP ~150 KB, pointing words, cap ~120/h), privacy (Screens on/pause in the pill, auto-pause when hidden, excluded apps, never outside a meeting, encrypted). *Accept:* Rust tests for the detector; **(mac)** a Meet call with screen share.
-- [ ] 3.2 In the transcript: thumbnails at their times, enlarge, gallery; OCR + one-line description (Haiku 5.5, toggle). *Accept:* web/desktop/phone tests.
-- [ ] 3.3 Meeting pack: PDF (title page + transcript with "[Screen N at mm:ss]" images) and ZIP (transcript.md + images/); Copy for AI with markers. *Accept:* export tests; the PDF read by Claude.
-- [ ] 3.4 Phone MediaProjection capture (optional; else backlog).
+- [ ] 3.1 Desktop capture (Windows Graphics Capture; Mac ScreenCaptureKit): meeting window by default, change detection (~1 fps, 64×36 luminance + perceptual hash, stable 1.5 s, WebP ~150 KB, pointing words, cap ~120/h), privacy (Screens on/pause in the pill, auto-pause when hidden, excluded apps, never outside a meeting, encrypted). *Accept:* Rust tests for the detector; **(mac)** a Meet call with screen share. **Built and merged** 2026-11-06 (Rust 1,014 on the Mac, 1,038 in Windows CI); the real capture waits for the Mac window (MANUAL_QA SM-*).
+- [x] 3.2 In the transcript: thumbnails at their times, enlarge, gallery; OCR + one-line description (Haiku 5.5, toggle). *Accept:* web/desktop/phone tests. **Merged** 2026-11-06 (web 72 new tests, desktop, phone since fb0f018); live with beta.4.
+- [ ] 3.3 Meeting pack: PDF (title page + transcript with "[Screen N at mm:ss]" images) and ZIP (transcript.md + images/); Copy for AI with markers. *Accept:* export tests; the PDF read by Claude. **Merged** 2026-11-06 (MeetingPackTest, desktop and phone exports); the PDF read by Claude after beta.4 with a real meeting.
+- [ ] 3.4 Phone MediaProjection capture (optional; else backlog). **Backlog** (v1.6): the phone shows screens from the computer; capturing on the phone needs Android's screen-capture prompt every meeting.
 
 ## Phase 4 — SaaS foundation
 

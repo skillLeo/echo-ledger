@@ -285,8 +285,7 @@ folders are listed above the tabs.
   a call and the moment, or a file and the page. Answers can be in English or Roman Urdu.
 - **Copy for AI** copies the brief, memory and latest call notes, ready to paste into your own ChatGPT or Claude
   project.
-- **Screens** shows what was on the shared screen in the project's meetings (see Screen moments, once your
-  computer app records them).
+- **Screens** shows what was on the shared screen in the project's meetings (see section 15b, Screen moments).
 - **AI notes** can be switched off per project. The console shows what the AI costs each month; the budget is $5
   unless you change it. Anthropic does not train its models on what EchoLedger sends.
 
@@ -400,6 +399,32 @@ on **Zero Data Retention** at Groq. Your administrator has the details per provi
 - The console **Usage** page shows the minutes and the cost for each month, per provider, device and client.
 - Your administrator sets a **monthly limit** in the console **Settings → Storage**. At 80% you get a message. At 100% new
   captions and new transcripts stop, but your recording carries on and is kept on your device.
+
+## 15b. Screen moments: what was on the screen (since v1.5)
+
+During a meeting, the computer app keeps what was on the shared screen at each moment, so you (and an AI reading
+the transcript) know what "this page" or "click here" meant.
+
+- **Turn it on** in the computer app: **Settings → Screen moments**. On a Mac, allow EchoLedger under **System
+  Settings → Privacy & Security → Screen & System Audio Recording**; macOS asks again about once a month. On
+  Windows 10 a thin yellow border shows around what is captured; Windows 11 shows none.
+- **What is kept:** only during a meeting EchoLedger detected, or a recording you started, and by default only the
+  meeting's window (Zoom, Teams, Google Meet in a browser, WhatsApp). A screen is kept when the picture changes and
+  settles, or at once when someone says "this page", "click here", "yeh dekhein" and the like. At most about 120 an
+  hour.
+- **Privacy:** the pill's monitor chip shows whether screens are on and pauses them with one tap. Screens pause by
+  themselves while the meeting window is minimised or hidden, and whenever an app on your excluded list is on the
+  screen (password managers are on it from the start). EchoLedger's own window is never in a screen. A project can
+  turn screens off for its meetings. Screens are encrypted on your computer until they are sent, and on your
+  server after that; they are deleted with their recording.
+- **In the transcript:** each screen sits under the line it was shown at ("Screen 7 · 14:32"). Click it to see it
+  large, read the text on it, and play from that moment. A project's **Screens** tab collects all of them.
+- **Text and descriptions:** your server reads each screen's text and writes one line about it (with Claude Haiku),
+  so search finds words that were only on a screen. Switch it off in the console: **Settings → Screen moments →
+  Describe screens**.
+- **For your AI:** **Copy for AI** adds a line like "[Screen 7 at 14:32: the invoice page]" at each screen.
+  **Export → Meeting pack** makes a PDF (the transcript with each screen at its moment; Claude and ChatGPT read both)
+  or a ZIP with the transcript, the pictures and, if you like, the audio.
 
 ## 16. Live Translate: games and videos
 

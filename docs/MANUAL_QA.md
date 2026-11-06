@@ -535,6 +535,11 @@ second person or device to share a screen, and a slide deck with a few slides.
 | SM-W4 | Whole screen with Bitwarden or KeePass on the same monitor. | Screens pause. |
 | SM-W5 | Switch Chrome to another tab during a Meet call. | Screens wait for the meeting tab. |
 | SM-W6 | A Windows 11 PC that still shows the border. | The **Windows Settings** button opens the borderless setting. |
+| SM-M10 | Mac: add `zoom.us` to Settings → Screen moments → excluded apps, then (separately) `Google Chrome` with a Meet tab open; meeting-window mode. | The pill says screens are paused for an excluded app; nothing is kept. |
+| SM-M11 | Mac, whole-screen mode, 1Password 7 open beside the meeting. | Screens pause. |
+| SM-W7 | Windows, whole-screen: Bitwarden mostly on monitor 2 with a strip on the meeting's monitor 1; then fully on monitor 2. | Paused, then resumed. |
+| SM-W8 | Windows, whole-screen, EchoLedger's main window open on the meeting's monitor (also opened during the capture). | Kept screens show what is behind it, never EchoLedger; Zoom's own share and Snipping Tool do not show it while screens are on, and do again after pausing or stopping. |
+| SM-X1 | Both: unplug the network, start a call filed under a project; plug it back in. | The chip says "starting" and nothing is kept; within about 30 s screens start if the project keeps them, and stay off if not. |
 
 ## Appendix B — Accessibility
 
