@@ -49,7 +49,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import com.echoledger.mobile.core.DeviceCheck
 import com.echoledger.mobile.core.OnboardingStep
+import com.echoledger.mobile.core.PhoneBrand
 import com.echoledger.mobile.recording.CaptureHealth
 import com.echoledger.mobile.recording.MicTestResult
 import kotlinx.coroutines.launch
@@ -207,6 +209,17 @@ private fun ColumnScope.PermissionsStep(vm: MainViewModel, onNext: () -> Unit, o
                 }
             }
         }
+        // Since v1.5: what this phone can do, said before anyone counts on it.
+        val settings by vm.settings.collectAsState()
+        val facts = remember(refresh, helper.connected, settings.plan) { context.phoneFacts(helper.connected, settings) }
+        Text(
+            "What works on this phone",
+            style = LocalEchoType.current.bodyL,
+            color = Brand.Text,
+            modifier = Modifier.padding(top = Space.s3)
+        )
+        DeviceCheck.rows(facts).filter { it.key != "memory" }.forEach { CheckRowView(it) }
+        BrandStepsCard(PhoneBrand.of(facts.manufacturer, facts.brand))
     }
 }
 

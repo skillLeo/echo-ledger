@@ -325,7 +325,7 @@ private fun generalSummary(id: String): String = when (id) {
     "consent" -> "Telling people you record"
     "devices" -> "Paired phones and computers"
     "storage" -> "Space used and how long things are kept"
-    "help" -> "Audio probe, capture test, diagnostics"
+    "help" -> "Device check, audio probe, capture test, diagnostics"
     else -> "Version, export and import settings"
 }
 

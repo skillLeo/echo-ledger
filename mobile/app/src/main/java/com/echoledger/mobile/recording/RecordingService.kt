@@ -107,6 +107,9 @@ class RecordingService : LifecycleService() {
         private const val INCOMING_LOOKBACK_MS = 60_000L
         private const val WATCHDOG_MS = 5_000L
 
+        /** A recorder that fails this many reads in a row has stopped for good (about half a second of failures). */
+        private const val MAX_FAILED_MIC_READS = 50
+
         @Volatile var isRecording = false
             private set
 
@@ -636,7 +639,7 @@ class RecordingService : LifecycleService() {
         CaptureLog.add(
             this,
             "capture start",
-            if (started) "helper recording (both sides)" else "helper refused: ${CaptureProblems.recent(this) ?: "no reason given"}"
+            if (started) "helper recording" else "helper refused: ${CaptureProblems.recent(this) ?: "no reason given"}"
         )
         pipe[1].close()
         if (!started) {
@@ -652,9 +655,26 @@ class RecordingService : LifecycleService() {
             }
             return
         }
-        // A phone line that gives both voices on one track is recorded as one channel (speakers told apart later).
-        if (phone) session.channels = runCatching { helper.captureChannels() }.getOrDefault(2).coerceIn(1, 2)
-        if (session.channels == 1) session.detail = "Both voices on one track · ${if (fromCall) "auto" else "manual"}"
+        // A phone line that gives both voices on one track is recorded as one channel (speakers told apart later); so
+        // is an app call below Android 14, which holds only your voice.
+        session.channels = runCatching { helper.captureChannels() }.getOrDefault(2).coerceIn(1, 2)
+        if (session.channels == 1) {
+            val what = if (phone) "Both voices on one track" else "Your voice only"
+            session.detail = "$what · ${if (fromCall) "auto" else "manual"}"
+        }
+        CaptureLog.add(
+            this,
+            "capture channels",
+            if (session.channels ==
+                2
+            ) {
+                "both sides apart"
+            } else if (phone) {
+                "one track"
+            } else {
+                "your voice only"
+            }
+        )
         if (fromCall && !recordingAskedCall) waitForAnswer(session, phone)
         session.readerThread = thread(name = "el-pipe-reader") {
             java.io.DataInputStream(ParcelFileDescriptor.AutoCloseInputStream(pipe[0])).use { input ->
@@ -724,17 +744,24 @@ class RecordingService : LifecycleService() {
             return
         }
         val frames = Pcm.CAPTURE_RATE / 100
-        val record = AudioRecord.Builder()
-            .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
-            .setAudioFormat(
-                AudioFormat.Builder().setSampleRate(
-                    Pcm.CAPTURE_RATE
-                ).setChannelMask(AudioFormat.CHANNEL_IN_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build()
-            )
-            .setBufferSizeInBytes(
-                AudioRecord.getMinBufferSize(Pcm.CAPTURE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) * 4
-            )
-            .build()
+        // Since v1.5: phone makers' audio can refuse a recorder in ways Android does not document. It is said and logged
+        // (CaptureProblems), never a crash.
+        val record = runCatching {
+            AudioRecord.Builder()
+                .setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                .setAudioFormat(
+                    AudioFormat.Builder().setSampleRate(
+                        Pcm.CAPTURE_RATE
+                    ).setChannelMask(AudioFormat.CHANNEL_IN_MONO).setEncoding(AudioFormat.ENCODING_PCM_16BIT).build()
+                )
+                .setBufferSizeInBytes(
+                    AudioRecord.getMinBufferSize(Pcm.CAPTURE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) * 4
+                )
+                .build()
+        }.getOrElse { failure ->
+            micFailed(session, failure)
+            return
+        }
         // The chosen microphone while connected (B5); the system's choice otherwise.
         CaptureHealth.preferredDevice(this, settings.inputDevice)?.let { record.setPreferredDevice(it) }
         session.readerThread = thread(name = "el-mic-reader") {
@@ -742,16 +769,44 @@ class RecordingService : LifecycleService() {
             try {
                 record.startRecording()
                 if (BluetoothMic.inUse(this@RecordingService, record)) session.bluetoothMic = true
+                var failedReads = 0
                 while (session.active) {
                     val n = record.read(shorts, 0, shorts.size)
-                    if (n > 0) session.consume(Pcm.toLittleEndianBytes(shorts.copyOf(n)), n * 2)
+                    if (n > 0) {
+                        failedReads = 0
+                        session.consume(Pcm.toLittleEndianBytes(shorts.copyOf(n)), n * 2)
+                    } else if (n < 0 && ++failedReads >= MAX_FAILED_MIC_READS) {
+                        CaptureProblems.record(
+                            this@RecordingService,
+                            "The microphone stopped giving sound (error $n). What was recorded until then is kept."
+                        )
+                        CaptureLog.add(this@RecordingService, "microphone stopped", "read error $n")
+                        break
+                    }
                 }
+            } catch (failure: RuntimeException) {
+                CaptureProblems.record(
+                    this@RecordingService,
+                    "The microphone could not start: ${failure.message ?: failure.javaClass.simpleName}"
+                )
+                CaptureLog.add(this@RecordingService, "microphone failed", failure.javaClass.simpleName)
             } finally {
                 runCatching { record.stop() }
                 record.release()
             }
         }
         afterStart(session)
+    }
+
+    /** A recorder this phone would not open: said in the log and to the person, and nothing is left running. */
+    private fun micFailed(session: Capture, failure: Throwable) {
+        val why = failure.message ?: failure.javaClass.simpleName
+        CaptureProblems.record(this, "The microphone could not start: $why")
+        CaptureLog.add(this, "microphone failed", failure.javaClass.simpleName)
+        session.cancel()
+        capture = null
+        Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = false)
+        settle()
     }
 
     private fun afterStart(session: Capture) {

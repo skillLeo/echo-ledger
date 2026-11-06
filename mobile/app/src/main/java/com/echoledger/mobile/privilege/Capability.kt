@@ -1,8 +1,12 @@
 package com.echoledger.mobile.privilege
 
+/** What an app call records on this phone (since v1.5). During a call Android gives ordinary apps no sound, so all of it goes through the helper. */
+enum class AppCallCapture { BOTH_SIDES, NEEDS_HELPER, VOICE_ONLY, VOICE_ONLY_NEEDS_HELPER, NONE, NOT_IN_THIS_BUILD }
+
 /**
  * What this device can do (pure, unit-tested). Far-party VoIP capture needs Android 14+ because the shell user only
- * holds CAPTURE_VOICE_COMMUNICATION_OUTPUT from API 34 (docs/research/android-capture.md).
+ * holds CAPTURE_VOICE_COMMUNICATION_OUTPUT from API 34; the microphone beside a call needs Android 11+, where the shell
+ * user first holds RECORD_AUDIO and CAPTURE_AUDIO_OUTPUT (docs/research/android-capture.md).
  */
 data class Capabilities(
     val sdkInt: Int,
@@ -13,8 +17,15 @@ data class Capabilities(
     /** False in the Google Play build (since v1.5): it has no capture helper, so no call auto-record. */
     val helperInBuild: Boolean = true
 ) {
-    val canCaptureCalls: Boolean get() = sdkInt >= MIN_CALL_CAPTURE_SDK && helperInBuild && helperConnected
-    val callCaptureSupportedByOs: Boolean get() = sdkInt >= MIN_CALL_CAPTURE_SDK
+    val appCalls: AppCallCapture
+        get() = when {
+            !helperInBuild -> AppCallCapture.NOT_IN_THIS_BUILD
+            sdkInt >= MIN_CALL_CAPTURE_SDK -> if (helperConnected) AppCallCapture.BOTH_SIDES else AppCallCapture.NEEDS_HELPER
+            sdkInt >= MIN_VOICE_ONLY_SDK -> if (helperConnected) AppCallCapture.VOICE_ONLY else AppCallCapture.VOICE_ONLY_NEEDS_HELPER
+            else -> AppCallCapture.NONE
+        }
+    val canCaptureCalls: Boolean get() = sdkInt >= MIN_VOICE_ONLY_SDK && helperInBuild && helperConnected
+    val callCaptureSupportedByOs: Boolean get() = sdkInt >= MIN_VOICE_ONLY_SDK
     val canRecordMic: Boolean get() = micPermission
     val canShowBubble: Boolean get() = overlayPermission
 
@@ -27,7 +38,11 @@ data class Capabilities(
     }
 
     companion object {
+        /** Both sides of an app call. */
         const val MIN_CALL_CAPTURE_SDK = 34
+
+        /** Your voice beside a call, through the helper. */
+        const val MIN_VOICE_ONLY_SDK = 30
 
         /** Why the Google Play build records no calls (mobile/DISTRIBUTION.md). */
         const val NOT_IN_THIS_BUILD =

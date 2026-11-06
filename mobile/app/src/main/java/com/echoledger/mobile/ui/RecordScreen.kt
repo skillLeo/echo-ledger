@@ -74,11 +74,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.calls.PostCallPrompt
+import com.echoledger.mobile.core.DeviceCheck
 import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.core.PlanState
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.notify.Notifications
+import com.echoledger.mobile.privilege.AppCallCapture
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.LiveRecording
 import com.echoledger.mobile.recording.RecordingService
@@ -115,12 +117,12 @@ fun RecordSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Surface) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.screen).padding(bottom = Space.s5)) {
             Text("New", style = LocalEchoType.current.titleM, color = Brand.Text, modifier = Modifier.padding(bottom = Space.s4))
-            val calls = when {
-                !capabilities.helperInBuild -> "Calls: website version only"
-                !capabilities.callCaptureSupportedByOs -> "Calls: needs Android 14"
-                !capabilities.helperConnected -> "Calls: set up first"
-                autoRecordOn -> "Calls: auto-record on"
-                else -> "Calls: ready"
+            val calls = when (capabilities.appCalls) {
+                AppCallCapture.NOT_IN_THIS_BUILD -> "Calls: website version only"
+                AppCallCapture.NONE -> "Calls: not on Android 10"
+                AppCallCapture.NEEDS_HELPER, AppCallCapture.VOICE_ONLY_NEEDS_HELPER -> "Calls: set up first"
+                AppCallCapture.VOICE_ONLY -> "Calls: your voice only"
+                AppCallCapture.BOTH_SIDES -> if (autoRecordOn) "Calls: auto-record on" else "Calls: ready"
             }
             Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
                 ModeTile(Icons.Rounded.Mic, "Voice & files", "Record or import", Modifier.weight(1f)) { onPick(RecordMode.VOICE) }
@@ -276,7 +278,7 @@ fun RecordScreen(
                 "Auto-record calls",
                 summary = when {
                     !capabilities.helperInBuild -> Capabilities.NOT_IN_THIS_BUILD
-                    !capabilities.callCaptureSupportedByOs -> "Requires Android 14 or later"
+                    !capabilities.callCaptureSupportedByOs -> "Needs Android 11 or newer"
                     !capabilities.helperConnected -> "Enable call capture in Setup first"
                     settings.afterCall == PostCallPrompt.ASK -> "A small chip asks after each call; kept after 10 s"
                     else -> "Answered calls are kept automatically; unanswered and short ones are skipped"
@@ -295,7 +297,11 @@ fun RecordScreen(
                     )
                 }
             )
-            if (!capabilities.helperConnected && capabilities.helperInBuild) {
+            // Since v1.5: what a call records on this phone is said before any call, not found out after one.
+            DeviceCheck.callLine(capabilities.appCalls)?.takeIf { capabilities.helperInBuild }?.let { line ->
+                InlineBanner(line, Modifier.padding(horizontal = Space.screen, vertical = Space.s2), kind = BannerKind.Info)
+            }
+            if (!capabilities.helperConnected && capabilities.helperInBuild && capabilities.callCaptureSupportedByOs) {
                 Box(Modifier.padding(horizontal = Space.screen)) { EchoButton("Open setup", onSetup, kind = ButtonKind.Secondary) }
             }
             // Calls waiting for a decision: one card, the list is one tap away (since 1.3.2).

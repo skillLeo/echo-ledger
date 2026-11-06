@@ -111,12 +111,14 @@ import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.calls.SkippedCalls
 import com.echoledger.mobile.core.Bookmarks
+import com.echoledger.mobile.core.DeviceCheck
 import com.echoledger.mobile.core.ItemStatus
 import com.echoledger.mobile.core.LibraryFilters
 import com.echoledger.mobile.core.LibraryQuery
 import com.echoledger.mobile.core.LibrarySort
 import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
+import com.echoledger.mobile.core.PhoneBrand
 import com.echoledger.mobile.core.SmartView
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
@@ -925,7 +927,7 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
             }
         }
         SectionCard {
-            Text("2 · Call capture (Android 14+)", fontWeight = FontWeight.SemiBold)
+            Text("2 · Call capture", fontWeight = FontWeight.SemiBold)
             if (!capabilities.helperInBuild) {
                 Text(
                     "${Capabilities.NOT_IN_THIS_BUILD} Call recordings from the Phone app or WhatsApp can still be shared to EchoLedger.",
@@ -933,12 +935,12 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
                     fontSize = 13.sp
                 )
             } else if (!capabilities.callCaptureSupportedByOs) {
-                Text(
-                    "This phone runs Android ${Build.VERSION.RELEASE}. Recording the other side of WhatsApp calls needs Android 14 or later.",
-                    color = Brand.Muted,
-                    fontSize = 13.sp
-                )
+                Text(DeviceCheck.callLine(capabilities.appCalls).orEmpty(), color = Brand.Muted, fontSize = 13.sp)
             } else {
+                // Since v1.5: below Android 14 the helper records your voice only, and the phone says so first.
+                if (capabilities.sdkInt < Capabilities.MIN_CALL_CAPTURE_SDK) {
+                    Text(DeviceCheck.callLine(capabilities.appCalls).orEmpty(), color = Brand.Warning, fontSize = 13.sp)
+                }
                 Text(
                     if (helper.connected) {
                         "Capture helper is running (${helper.source}, uid ${helper.helperUid})."
@@ -957,12 +959,16 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
                         fontSize = 13.sp
                     )
                 }
-                CaptureTestCard(vm)
+                CaptureTestCard(vm, farSide = capabilities.sdkInt >= Capabilities.MIN_CALL_CAPTURE_SDK)
                 val problem by com.echoledger.mobile.recording.CaptureProblems.last.collectAsState()
                 LaunchedEffect(Unit) { com.echoledger.mobile.recording.CaptureProblems.load(context) }
                 problem?.let {
                     Text("Last capture problem (${formatWhen(it.at.toString())}): ${it.message}", color = Brand.Danger, fontSize = 12.sp)
                 }
+                // Since v1.5: the paths differ per phone maker.
+                val brand = PhoneBrand.of(Build.MANUFACTURER, Build.BRAND)
+                Text("First, on ${brand.label}:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                brand.developerSteps.forEach { Text(it, color = Brand.Muted, fontSize = 13.sp) }
                 Text(
                     "Option A — Shizuku (recommended): install Shizuku, start it with Wireless debugging (one-time 6-digit pairing), then:",
                     fontSize = 13.sp
@@ -981,15 +987,8 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
             }
         }
         SectionCard {
-            Text("3 · Keep EchoLedger alive (Samsung / OEMs)", fontWeight = FontWeight.SemiBold)
-            Text(
-                "Settings → Apps → EchoLedger → Battery → Unrestricted. On Samsung also remove it from Sleeping apps. See dontkillmyapp.com for your phone.",
-                color = Brand.Muted,
-                fontSize = 13.sp
-            )
-            OutlinedButton(onClick = {
-                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")))
-            }) { Text("Open app settings") }
+            Text("3 · Keep EchoLedger alive", fontWeight = FontWeight.SemiBold)
+            BrandStepsCard(PhoneBrand.of(Build.MANUFACTURER, Build.BRAND))
         }
         SectionCard {
             Text("4 · Consent", fontWeight = FontWeight.SemiBold)
@@ -1224,7 +1223,7 @@ internal fun failureText(t: TranscriptDto): String {
 
 /** Setup → Call capture: the guided test and "Copy diagnostics". */
 @Composable
-private fun CaptureTestCard(vm: MainViewModel) {
+private fun CaptureTestCard(vm: MainViewModel, farSide: Boolean = true) {
     val clipboard = LocalClipboard.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val testing by vm.captureTesting.collectAsState()
@@ -1246,22 +1245,24 @@ private fun CaptureTestCard(vm: MainViewModel) {
         }
         // Since v1.3: proves the other side's path without a call (a soft beep played as a call and heard back).
         val farTest by vm.farSideTest.collectAsState()
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = { vm.runFarSideTest() }, enabled = farTest != "running") { Text("Test the other side") }
-            farTest?.takeIf { it != "running" }?.let {
-                Text(
-                    if (it.startsWith(
-                            "ok"
-                        )
-                    ) {
-                        "Works: the other side of calls can be recorded."
-                    } else {
-                        "Did not work: ${it.removePrefix("fail: ")}"
-                    },
-                    color = if (it.startsWith("ok")) Brand.Success else Brand.Danger,
-                    fontSize = 12.sp,
-                    modifier = Modifier.weight(1f)
-                )
+        if (farSide) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = { vm.runFarSideTest() }, enabled = farTest != "running") { Text("Test the other side") }
+                farTest?.takeIf { it != "running" }?.let {
+                    Text(
+                        if (it.startsWith(
+                                "ok"
+                            )
+                        ) {
+                            "Works: the other side of calls can be recorded."
+                        } else {
+                            "Did not work: ${it.removePrefix("fail: ")}"
+                        },
+                        color = if (it.startsWith("ok")) Brand.Success else Brand.Danger,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
         if (testing) {

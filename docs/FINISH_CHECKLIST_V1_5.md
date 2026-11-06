@@ -56,10 +56,10 @@ Mac:
 - [ ] A6 docs/MAC_TEST_CLOUD.md: renting a cloud Mac for a day, SSH + VNC, BlackHole for a simulated Meet call, the Mac check + Mac rows of MANUAL_QA; then fix what is found (N17).
 
 Android:
-- [ ] B1 Device check (onboarding, Help & diagnostics): voice notes/import, app calls both sides (Android 14+ and the helper, else "your voice only"), SIM calls, captions, Live Translate, with reasons and one-tap fixes; Copy report; opt-in upload (brand, model, Android, results) in the admin panel. *Accept:* tests.
-- [ ] B2 Honest fallbacks: "This phone can record only your voice in WhatsApp calls" up front; never a silent channel without saying so. *Accept:* tests.
-- [ ] B3 Background survival per brand (Xiaomi/HyperOS, Oppo/Realme/OnePlus, Vivo, Huawei/Honor, Pixel, Samsung): exact steps and deep links; the helper re-armed after the OS kills it; vendor audio quirks caught and reported. *Accept:* tests.
-- [ ] B4 Helper: Shizuku and the built-in wireless-debugging helper with a setup guide per brand. *Accept:* guide + tests.
+- [ ] B1 Device check (onboarding, Help & diagnostics): voice notes/import, app calls both sides (Android 14+ and the helper, else "your voice only"), SIM calls, captions, Live Translate, with reasons and one-tap fixes; Copy report; opt-in upload (brand, model, Android, results) in the admin panel. *Accept:* tests. **Built** (`DeviceCheckTest`, `DeviceCheckScreenTest`, `DeviceReportTest`); live with the next deploy and phone build.
+- [ ] B2 Honest fallbacks: "This phone can record only your voice in WhatsApp calls" up front; never a silent channel without saying so. *Accept:* tests. **Built**: said on the Record tab, in Setup and onboarding; Android 11-13 records your voice through the helper on one channel. Not yet run on a real Android 11-13 phone (N19).
+- [ ] B3 Background survival per brand (Xiaomi/HyperOS, Oppo/Realme/OnePlus, Vivo, Huawei/Honor, Pixel, Samsung): exact steps and deep links; the helper re-armed after the OS kills it; vendor audio quirks caught and reported. *Accept:* tests. **Built** (`core/PhoneBrand`); the deep links need real phones to prove (N19).
+- [ ] B4 Helper: Shizuku and the built-in wireless-debugging helper with a setup guide per brand. *Accept:* guide + tests. **Per-brand guide built** in Setup. The built-in helper does not exist yet (Shizuku or a computer's ADB today): needs libadb-android and a phone window.
 - [ ] B5 Firebase Test Lab smoke tests (Xiaomi, Oppo, Vivo, Pixel, Samsung A; Android 10/12/14/15/16): install, onboarding, voice note, library, settings; no crash or ANR; 360 dp and 1.3x fonts; results reported (N18).
 - [ ] B6 3 GB RAM phones stay smooth. *Accept:* a measured check (Test Lab or a profile).
 - [ ] B7 Teammate compatibility checklist in MANUAL_QA; device reports visible in the admin panel (N19).
