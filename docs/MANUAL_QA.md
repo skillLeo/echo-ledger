@@ -513,6 +513,29 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 | P15-12 | A recording with screen moments (from the desktop). | "Screen 7 · 14:32" rows between the lines; tap opens the screen with Play from here; Export → Meeting pack (PDF) prints with the screens. |
 | P15-13 | With Remove animations on (Accessibility), keep a call. | The chip and its check appear without moving. |
 
+### Screen moments v1.5 (desktop; the first run of the real capture)
+
+Use the CI build of the branch or the release (Actions → "Desktop (macOS)" or "Desktop (Windows)" → Artifacts), a
+second person or device to share a screen, and a slide deck with a few slides.
+
+| # | Check | Expected |
+|---|---|---|
+| SM-M1 | Mac: Settings → Screen moments on → **Allow Screen Recording**, approve in System Settings → Privacy & Security → Screen & System Audio Recording. | The app sees the permission without a restart; Settings explains that macOS asks again about once a month. |
+| SM-M2 | A Zoom call, then a Meet call in Chrome and in Safari, with the deck shared. | The pill's monitor chip says **Screens on**; "Screens on for this meeting" appears once. |
+| SM-M3 | Change slides and wait about 2 s; on a new slide say "look at this page". | A screen is kept after each change, and at once after the words. |
+| SM-M4 | Minimise the meeting window, then Cmd-H. | The chip says screens are paused while the window is minimised or hidden; they resume when it is back. |
+| SM-M5 | Whole screen; open 1Password on the meeting's display, then move it to another display. | Screens pause, then resume. |
+| SM-M6 | Tap the chip twice. | Paused by you, then on again. |
+| SM-M7 | Stop the recording and let it upload. | `~/Library/Application Support/com.echoledger.desktop/screens/` empties; the recording page shows thumbnails at their lines; viewer, Play from here, Copy for AI and both Meeting pack exports work; the phone shows the same screens. |
+| SM-M8 | A project with **Keep screen moments** off; record a meeting into it. | Nothing is kept. |
+| SM-M9 | Revoke the Screen Recording permission, record again. | The chip names the missing permission. |
+| SM-W1 | Windows: the same flow with Zoom, Teams, WhatsApp desktop, and Meet in Chrome and Edge. | As SM-M2 to SM-M8. |
+| SM-W2 | Windows 11, then Windows 10. | No yellow border on 11; on 10 the border shows and Settings says so. |
+| SM-W3 | Minimise the meeting window; move it to another virtual desktop. | Screens pause. |
+| SM-W4 | Whole screen with Bitwarden or KeePass on the same monitor. | Screens pause. |
+| SM-W5 | Switch Chrome to another tab during a Meet call. | Screens wait for the meeting tab. |
+| SM-W6 | A Windows 11 PC that still shows the border. | The **Windows Settings** button opens the borderless setting. |
+
 ## Appendix B — Accessibility
 
 | # | Check | Expected |
