@@ -261,6 +261,23 @@ describe('browser sign-in', function () {
         expect(DeviceSignInCode::query()->count())->toBe(0);
     });
 
+    it('sends a session the console has ended to the sign-in, with no approval page and no code', function () {
+        [, $challenge] = pkcePair();
+        $query = browserQuery($challenge);
+        $this->actingAs($this->person, 'web')->get('/device/sign-in?'.http_build_query($query))->assertOk();
+
+        // The password changes elsewhere: this session is one from before it, and the console already refuses it.
+        $this->person->forceFill(['password' => Hash::make('a-new-good-password-43')])->save();
+
+        $this->post('/device/sign-in', $query)->assertRedirect(route('filament.admin.auth.login'));
+        $this->assertGuest('web');
+        expect(DeviceSignInCode::query()->count())->toBe(0);
+
+        $this->withSession(['password_hash_web' => 'from before the change'])->actingAs($this->person, 'web')
+            ->get('/device/sign-in?'.http_build_query($query))->assertRedirect(route('filament.admin.auth.login'));
+        $this->assertGuest('web');
+    });
+
     it('refuses the code once the person left the workspace it was approved for', function () {
         $owner = Fx::user();
         $team = Workspace::query()->findOrFail($owner->current_workspace_id);
