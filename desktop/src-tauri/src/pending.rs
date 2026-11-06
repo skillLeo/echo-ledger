@@ -145,6 +145,10 @@ pub struct PendingDecision {
     /// When the after-call chip keeps it by itself ("Ask me", v1.5); none = it waits for Keep or Discard.
     #[serde(default)]
     keep_at: Option<DateTime<Utc>>,
+    /// The account it was made under, once another account signed in here (since v1.5); none = the account this
+    /// computer signs in as. Keep passes it on to the upload.
+    #[serde(default)]
+    pub owner: Option<crate::owner::Owner>,
 }
 
 impl PendingDecision {
@@ -182,6 +186,7 @@ impl PendingDecision {
             language_marks: input.language_marks,
             caller: input.caller,
             keep_at: None,
+            owner: None,
         }
     }
 
@@ -255,6 +260,7 @@ impl PendingDecision {
             language_marks: Vec::new(),
             caller: None,
             keep_at: None,
+            owner: None,
         }
     }
 
@@ -311,6 +317,7 @@ impl PendingDecision {
             language: self.language.clone(),
             language_marks: self.language_marks.clone(),
             caller: self.caller.clone(),
+            owner: self.owner.clone(),
             ..PendingUpload::default()
         }
     }

@@ -53,7 +53,7 @@ const APP_KEYS: readonly [string, string][] = [
 ];
 interface SettingsSection { id: string; group: Group; title: string; keywords: string; node: ReactNode }
 /** Signing this computer out (v1.5; "Unpair" before accounts): the token goes, the recordings waiting here stay. */
-const SIGN_OUT_CONFIRM = "Sign out of this computer? Recordings waiting to upload stay here until you sign in again.";
+const SIGN_OUT_CONFIRM = "Sign out of this computer? Recordings waiting to upload stay here and upload when you sign in again with this account, never into another one.";
 
 const AFTER_CALL: readonly (readonly [AfterCall, string])[] = [["keep", "Keep automatically"], ["ask", "Ask me"]];
 const AFTER_CALL_HINT: Record<AfterCall, string> = {

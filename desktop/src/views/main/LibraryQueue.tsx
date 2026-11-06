@@ -7,6 +7,8 @@ import {
   bulkNotice,
   discardAllConfirm,
   failedUploads,
+  heldLine,
+  heldUploads,
   importProgressText,
   importingUploads,
   pendingTitle,
@@ -40,7 +42,8 @@ const meta = (sourceApp: string, startedAt: string, durationMs: number, extra?: 
  * Cancel), and uploads that stopped and need the user (A5.1). The lists come from the core and follow its
  * `pending:changed` / `uploads:changed` events. Since v1.5 calls are kept (or asked about by the after-call chip) when
  * they end, so only recordings left waiting show, behind one slim line, "2 calls waiting · Review"; Review opens the
- * list. A recording whose chip still counts down is not listed.
+ * list. A recording whose chip still counts down is not listed. Since v1.5 recordings made while another account was
+ * signed in here wait for that account, with Discard.
  */
 export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify; focus?: PendingFocus | null; onFocusHandled?: () => void }) {
   const [all, setPending] = useState<PendingItem[]>([]);
@@ -253,6 +256,24 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     if (await perform(item.id, () => api.uploadDiscard(item.id), "Discarded")) setUploads((list) => list.filter((i) => i.id !== item.id));
   };
 
+  /** Every recording that waits for one account, after one confirmation. */
+  const discardHeld = async (items: UploadItem[]) => {
+    if (!window.confirm(discardAllConfirm(items.length))) return;
+    setBulkBusy(true);
+    let done = 0;
+    try {
+      for (const item of items) {
+        if (await perform(item.id, () => api.uploadDiscard(item.id))) {
+          setUploads((list) => list.filter((i) => i.id !== item.id));
+          done++;
+        }
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+    if (done > 0) notify(bulkNotice("Discarded", done));
+  };
+
   const cancelImport = async (item: UploadItem) => {
     if (await perform(item.id, () => api.uploadDiscard(item.id), "Import cancelled")) setUploads((list) => list.filter((i) => i.id !== item.id));
   };
@@ -260,7 +281,8 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
   const failed = failedUploads(uploads);
   const verifying = verifyingUploads(uploads);
   const importing = importingUploads(uploads);
-  if (pending.length === 0 && failed.length === 0 && verifying.length === 0 && importing.length === 0) return null;
+  const held = heldUploads(uploads);
+  if (pending.length === 0 && failed.length === 0 && verifying.length === 0 && importing.length === 0 && held.length === 0) return null;
 
   return (
     <div className="queue">
@@ -430,6 +452,36 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
           })}
         </section>
       )}
+      {held.map(([account, items]) => (
+        <section key={account} className="queue-section" aria-label={`Waiting for ${account}`} data-testid="held-uploads">
+          <div className="queue-head">
+            <HourglassIcon size={14} />
+            <h2 className="queue-label">Waiting for another account</h2>
+            <span className="queue-count">{items.length}</span>
+          </div>
+          <p className="small muted queue-meta">{heldLine(account, items.length)}</p>
+          {items.map((item) => {
+            const title = uploadTitle(item);
+            return (
+              <div key={item.id} role="group" aria-label={title} className="queue-item" data-testid={`upload-${item.id}`}>
+                <div className="row">
+                  <span className={`avatar desktop small app-${appKind(item.sourceApp)}`}><AppTileIcon app={item.sourceApp} size={18} /></span>
+                  <div className="item-main">
+                    <div className="queue-title">{title}</div>
+                    <div className="small muted queue-meta">{meta(item.sourceApp, item.startedAt, item.durationMs)}</div>
+                  </div>
+                  <button type="button" className="btn ghost compact" disabled={bulkBusy || busy === item.id} onClick={() => void discardUpload(item)}>Discard</button>
+                </div>
+              </div>
+            );
+          })}
+          {items.length > 1 && (
+            <div className="queue-actions">
+              <button type="button" className="btn compact" disabled={bulkBusy} onClick={() => void discardHeld(items)}>Discard all {items.length}</button>
+            </div>
+          )}
+        </section>
+      ))}
       {verifying.map((item) => (
         <div key={item.id} className="queue-item verifying" data-testid={`upload-${item.id}`}>
           <div className="row">

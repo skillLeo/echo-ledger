@@ -8,7 +8,7 @@ import { minutesLine, percentUsed, planFeatures, ROLE_LABEL, storageLine, viewer
 /** How often a data export that is being made is asked about. */
 export const EXPORT_POLL_MS = 5000;
 const SIGN_OUT_EVERYWHERE_CONFIRM =
-  "Sign out everywhere? Every computer, phone and browser signed in to your account is signed out, this computer too. Recordings waiting here upload once you sign in again.";
+  "Sign out everywhere? Every computer, phone and browser signed in to your account is signed out, this computer too. Recordings waiting here upload once you sign in again with this account.";
 
 type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 

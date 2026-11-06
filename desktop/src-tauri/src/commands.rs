@@ -51,6 +51,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let state = app.state::<AppState>();
     let settings = state.settings();
     let queue = UploadQueue::load(&paths::uploads(&state.data_dir));
+    // Recordings that wait for another account are not on their way (v1.5).
+    let active = queue.sendable(state.owner().as_ref()).len();
     let budget = {
         let config = state.server_config.lock().unwrap_or_else(|p| p.into_inner());
         BudgetState::from_usage(config.as_ref().and_then(|c| c.usage.as_ref()), state.budget_blocked.load(std::sync::atomic::Ordering::SeqCst))
@@ -60,7 +62,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let pill_hidden = state.pill_hidden.load(std::sync::atomic::Ordering::SeqCst);
     // Only recordings that wait for the person: one whose after-call chip counts down needs nothing (v1.5).
     let pending_decisions = DecisionFiles::in_dir(&state.data_dir).load().waiting();
-    let tray_state = crate::tray::tray_state(recording.is_some(), paused, pending_decisions, queue.failed(), budget == BudgetState::Reached, queue.active() > 0);
+    let tray_state = crate::tray::tray_state(recording.is_some(), paused, pending_decisions, queue.failed(), budget == BudgetState::Reached, active > 0);
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode };
     let mic_note = recording.as_ref().is_some_and(|r| r.mode == crate::audio::RecordingMode::MicNote);
     crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
@@ -73,7 +75,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
         captions_live: state.live.is_live(),
         dictation_active: crate::dictation::is_active(app),
         auto_mode: settings.auto_mode,
-        pending_uploads: queue.active(),
+        pending_uploads: active,
         upload_errors: queue.items.iter().filter(|i| !i.is_failed()).filter_map(|i| i.last_error.clone()).collect(),
         shortcut_errors: state.shortcut_errors.lock().unwrap().clone(),
         levels: state.capture.levels(),
@@ -131,12 +133,26 @@ fn this_platform() -> &'static str {
 }
 
 /// This computer's token from pairing or a sign-in (both answer like `POST /api/devices/register`): kept in the
-/// keychain, the server, pins and device remembered, the config applied, the queue and the library started.
+/// keychain, the server, pins and device remembered, the config applied, the queue and the library started. When the
+/// token is another account's than the last one here, what that account left in the queue is kept for it (`owner`).
 async fn adopt_registration(app: &AppHandle, api: &ApiClient, registered: crate::net::models::RegisterResponse, pins: Vec<String>) -> AppResult<AppStatus> {
     let state = app.state::<AppState>();
+    let final_pins = if registered.config.pins.is_empty() { pins } else { registered.config.pins.clone() };
+    // Whose token this is; an account that could not be read now is asked for again by the upload worker.
+    let account = ApiClient::new(api.base_url(), &final_pins, Some(registered.token.clone()))?.account().await;
+    state.owner_checked.store(account.is_ok(), std::sync::atomic::Ordering::SeqCst);
+    let incoming = crate::owner::Owner::new(api.base_url(), account.ok().flatten().as_ref().map(|a| a.email.as_str()));
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let outgoing = state.owner();
+        if crate::owner::hand_over(&state.data_dir, outgoing.as_ref(), &incoming)?
+            && let (Some(outgoing), Some(recording)) = (outgoing, state.capture.info())
+        {
+            *state.recording_owner.lock().unwrap_or_else(|p| p.into_inner()) = Some((recording.client_ref, outgoing));
+        }
+    }
     state.token_store.save(&registered.token).map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = Some(registered.token);
-    let final_pins = if registered.config.pins.is_empty() { pins } else { registered.config.pins.clone() };
     state.update_settings(|s| {
         s.server_url = Some(api.base_url().to_string());
         s.pins = final_pins.clone();
@@ -782,7 +798,7 @@ pub async fn list_clients(state: State<'_, AppState>) -> AppResult<serde_json::V
 #[tauri::command]
 pub fn upload_list(app: AppHandle) -> Vec<UploadItem> {
     let state = app.state::<AppState>();
-    UploadQueue::load(&paths::uploads(&state.data_dir)).ui_items()
+    UploadQueue::load(&paths::uploads(&state.data_dir)).ui_items(state.owner().as_ref())
 }
 
 /// Puts a failed upload back in the queue (one more automatic full restart is allowed again).

@@ -251,6 +251,7 @@ export function makeUploadItem(id = "up-1", overrides: Partial<UploadItem> = {})
     attempts: 0,
     imported: false,
     progress: null,
+    heldFor: null,
     ...overrides,
   };
 }

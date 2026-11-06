@@ -16,6 +16,7 @@ pub mod lock;
 pub mod material;
 pub mod net;
 pub mod overlay;
+pub mod owner;
 pub mod pending;
 pub mod plan;
 pub mod projects;
@@ -99,6 +100,11 @@ pub struct AppState {
     pub screens: screens::Screens,
     /// A browser sign-in waiting for its `echoledger://signed-in` link (v1.5), in memory only.
     pub browser_sign_in: Mutex<Option<account::BrowserSignIn>>,
+    /// The account the running recording was made under, when another account signed in while it ran (its client
+    /// reference and the account).
+    pub recording_owner: Mutex<Option<(String, owner::Owner)>>,
+    /// The server said who this computer is signed in as (or that it has no accounts) this run.
+    pub owner_checked: AtomicBool,
     /// Signed updates from the server (v1.5): the status, the one running job, the update ready to install.
     pub updates: updates::Updates,
 }
@@ -149,6 +155,8 @@ impl AppState {
             recording_caller: Mutex::new(None),
             screens: screens::Screens::new(Box::new(screens::platform::Native), Box::new(screens::store::KeychainKeys)),
             browser_sign_in: Mutex::new(None),
+            recording_owner: Mutex::new(None),
+            owner_checked: AtomicBool::new(false),
             updates: updates::Updates::default(),
         }
     }
@@ -179,6 +187,11 @@ impl AppState {
 
     pub fn is_paired(&self) -> bool {
         self.token.lock().map(|t| t.is_some()).unwrap_or(false) && self.lock_settings().server_url.is_some()
+    }
+
+    /// The account queued work without an owner belongs to (v1.5, see `owner`).
+    pub fn owner(&self) -> Option<owner::Owner> {
+        owner::current(&self.data_dir, self.lock_settings().server_url.as_deref())
     }
 
     pub fn api(&self) -> AppResult<ApiClient> {

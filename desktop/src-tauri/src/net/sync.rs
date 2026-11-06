@@ -145,4 +145,14 @@ pub mod paths {
     pub fn discards(data_dir: &std::path::Path) -> PathBuf {
         data_dir.join("discards.json")
     }
+
+    /// The account this computer signs in as (v1.5), kept after signing out until the next sign-in.
+    pub fn account(data_dir: &std::path::Path) -> PathBuf {
+        data_dir.join("account.json")
+    }
+
+    /// Usage reports and server deletions set aside for an account while another one is signed in (v1.5).
+    pub fn held(data_dir: &std::path::Path) -> PathBuf {
+        data_dir.join("held.json")
+    }
 }

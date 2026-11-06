@@ -118,6 +118,10 @@ pub struct PendingUpload {
     /// Percent of the current file's chunks the server holds, while it uploads.
     #[serde(default)]
     pub progress: Option<u8>,
+    /// The account it was made under, once another account signed in here (since v1.5, `owner`); none = the account
+    /// this computer signs in as.
+    #[serde(default)]
+    pub owner: Option<crate::owner::Owner>,
 }
 
 impl Default for PendingUpload {
@@ -152,6 +156,7 @@ impl Default for PendingUpload {
             imported: false,
             sha256: None,
             progress: None,
+            owner: None,
         }
     }
 }
@@ -203,6 +208,8 @@ pub struct UploadItem {
     pub imported: bool,
     /// Percent sent while `uploading`.
     pub progress: Option<u8>,
+    /// The account it waits for, when it was made while another account was signed in here (v1.5).
+    pub held_for: Option<String>,
 }
 
 impl From<&PendingUpload> for UploadItem {
@@ -218,6 +225,7 @@ impl From<&PendingUpload> for UploadItem {
             attempts: p.attempts,
             imported: p.imported,
             progress: p.progress,
+            held_for: None,
         }
     }
 }
@@ -849,8 +857,19 @@ impl UploadQueue {
         save_json(path, self)
     }
 
-    pub fn ui_items(&self) -> Vec<UploadItem> {
-        self.items.iter().map(UploadItem::from).collect()
+    /// The rows for the UI; `current` is the account signed in now (an item made under another one says which).
+    pub fn ui_items(&self, current: Option<&crate::owner::Owner>) -> Vec<UploadItem> {
+        self.items.iter().map(|i| UploadItem { held_for: crate::owner::held_for(i.owner.as_ref(), current), ..UploadItem::from(i) }).collect()
+    }
+
+    /// The items to send while `current` is signed in, oldest first: not failed, and not waiting for another account.
+    pub fn sendable(&self, current: Option<&crate::owner::Owner>) -> Vec<String> {
+        self.items.iter().filter(|i| !i.is_failed() && crate::owner::may_upload(i.owner.as_ref(), current)).map(PendingUpload::id).collect()
+    }
+
+    /// Items that wait for another account than `current` (failed ones included).
+    pub fn held(&self, current: Option<&crate::owner::Owner>) -> usize {
+        self.items.iter().filter(|i| !crate::owner::may_upload(i.owner.as_ref(), current)).count()
     }
 
     /// True when a queued import is this very file (its SHA-256).

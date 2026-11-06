@@ -844,6 +844,8 @@ export interface UploadItem {
   imported: boolean;
   /** Percent sent while `uploading`. */
   progress: number | null;
+  /** The account it waits for: it was made while another account was signed in here (since v1.5). */
+  heldFor?: string | null;
 }
 
 /** What one import did: files queued, already in the queue, of a type that cannot be imported, or unreadable. */

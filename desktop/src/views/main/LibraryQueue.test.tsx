@@ -565,6 +565,48 @@ describe("Uploads that need you", () => {
   });
 });
 
+describe("Waiting for another account (v1.5)", () => {
+  const held = (id: string, overrides: Partial<UploadItem> = {}) =>
+    makeUploadItem(id, { heldFor: "hassam@example.test", startedAt: local(10), ...overrides });
+
+  it("lists what was made while another account was signed in, says which, and nowhere else", async () => {
+    await renderLibrary([], [held("h1"), held("h2", { state: "failed", lastError: "x" }), held("h3", { state: "verifying" }), held("h4", { imported: true })]);
+    const section = screen.getByTestId("held-uploads");
+    expect(within(section).getByRole("heading", { name: "Waiting for another account" }).closest(".queue-head")).toHaveTextContent("4");
+    expect(section).toHaveTextContent(
+      "4 recordings made while signed in as hassam@example.test wait for that account. Sign out and sign in as hassam@example.test to upload them, or discard them.",
+    );
+    expect(screen.queryByRole("heading", { name: "Uploads that need you" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Importing" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Checking upload…")).not.toBeInTheDocument();
+    expect(within(uploadRow("h2")).queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+  });
+
+  it("names one recording in the singular and discards it after asking", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    await renderLibrary([], [held("h1", { title: "Board call" })]);
+    expect(screen.getByTestId("held-uploads")).toHaveTextContent("1 recording made while signed in as hassam@example.test waits for that account.");
+    expect(screen.queryByRole("button", { name: /Discard all/ })).not.toBeInTheDocument();
+    fireEvent.click(within(uploadRow("h1")).getByRole("button", { name: "Discard" }));
+    expect(confirm).toHaveBeenCalledWith(DISCARD);
+    await waitFor(() => expect(callsOf("upload_discard")).toEqual([{ id: "h1" }]));
+    await waitFor(() => expect(screen.queryByTestId("held-uploads")).not.toBeInTheDocument());
+  });
+
+  it("discards every recording of one account with one question, and keeps the other account's", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { notify } = await renderLibrary([], [held("h1"), held("h2"), held("s1", { heldFor: "sara@example.test" })]);
+    expect(screen.getAllByTestId("held-uploads")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Discard all 2" }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm).toHaveBeenCalledWith("Discard all 2 recordings? It can't be undone.");
+    await waitFor(() => expect(callsOf("upload_discard")).toEqual([{ id: "h1" }, { id: "h2" }]));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Discarded 2 recordings"));
+    expect(screen.getByRole("region", { name: "Waiting for sara@example.test" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Waiting for hassam@example.test" })).not.toBeInTheDocument();
+  });
+});
+
 describe("Importing", () => {
   const imported = (id: string, overrides: Partial<UploadItem> = {}) =>
     makeUploadItem(id, { imported: true, sourceApp: "voice_note", durationMs: 0, title: `Note ${id}`, ...overrides });
