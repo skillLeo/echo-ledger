@@ -63,7 +63,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let tray_state = crate::tray::tray_state(recording.is_some(), paused, pending_decisions, queue.failed(), budget == BudgetState::Reached, queue.active() > 0);
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode };
     let mic_note = recording.as_ref().is_some_and(|r| r.mode == crate::audio::RecordingMode::MicNote);
-    crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches);
+    crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
     AppStatus {
         paired: state.is_paired(),
         server_url: settings.server_url.clone(),

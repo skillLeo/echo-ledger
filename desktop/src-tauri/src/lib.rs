@@ -282,6 +282,8 @@ pub fn run() {
                 if let Ok(api) = state.api() {
                     if let Ok(config) = api.config().await {
                         state.apply_config(config);
+                        // The tray follows the role too: a viewer's menu has no recording lines.
+                        actions::emit_status(&startup);
                     }
                     let _ = commands::refresh_library_inner(&startup).await;
                     state.upload_notify.notify_one(); // send what is still queued from the last run
