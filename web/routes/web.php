@@ -10,6 +10,7 @@ use App\Http\Controllers\DownloadsController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
 use App\Http\Controllers\RequestLinkPageController;
+use App\Http\Controllers\ScreenMediaController;
 use App\Http\Controllers\SiteController;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +34,15 @@ Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
     ->middleware(['auth:web', EnsureWorkspaceMember::class])
     ->name('admin.recordings.stream');
+
+// Screen moments (v1.5): a picture or thumbnail from the signed link the API hands out (30 minutes, no token), and on
+// the console for the workspace's own recordings.
+Route::get('/screen-media/{screen}/{variant}', [ScreenMediaController::class, 'signed'])
+    ->whereUlid('screen')->whereIn('variant', ['image', 'thumb'])
+    ->middleware(['signed', 'throttle:uploads'])->name('screens.media');
+Route::get('/admin-media/screens/{screen}/{variant}', [ScreenMediaController::class, 'console'])
+    ->whereUlid('screen')->whereIn('variant', ['image', 'thumb'])
+    ->middleware(['auth:web', EnsureWorkspaceMember::class])->name('admin.screens.media');
 
 // Console exports of a transcript (download; `html` opens for printing to PDF).
 Route::get('/admin-export/transcripts/{transcript}/{format}', AdminExportController::class)

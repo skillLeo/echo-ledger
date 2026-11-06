@@ -16,7 +16,6 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -266,7 +265,7 @@ class ScreenStore
     {
         $image = @imagecreatefromstring((string) file_get_contents($plainPath));
         if ($image === false) {
-            throw new RuntimeException('The picture could not be read.');
+            throw new UnreadablePicture('The picture could not be read.');
         }
         $width = min(self::THUMB_WIDTH, imagesx($image));
         $height = max(1, (int) round(imagesy($image) * $width / max(1, imagesx($image))));
@@ -277,7 +276,7 @@ class ScreenStore
         imagecopyresampled($thumb, $image, 0, 0, 0, 0, $width, $height, imagesx($image), imagesy($image));
         unset($image);
         if (! imagewebp($thumb, $targetPath, 80)) {
-            throw new RuntimeException('The thumbnail could not be written.');
+            throw new UnreadablePicture('The thumbnail could not be written.');
         }
     }
 

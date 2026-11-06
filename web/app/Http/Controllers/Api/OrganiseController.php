@@ -189,6 +189,8 @@ final class OrganiseController extends Controller
             'language' => ['sometimes', 'nullable', 'string', 'max:16'],
             // Since v1.4: call notes and memory after each call for this client.
             'ai_notes' => ['sometimes', 'boolean'],
+            // Since v1.5: whether the desktop keeps screen moments of its meetings.
+            'screens' => ['sometimes', 'boolean'],
         ];
     }
 
@@ -213,6 +215,9 @@ final class OrganiseController extends Controller
         }
         if (array_key_exists('ai_notes', $data)) {
             $values['ai_notes'] = (bool) $data['ai_notes'];
+        }
+        if (array_key_exists('screens', $data)) {
+            $values['screens'] = (bool) $data['screens'];
         }
         if (array_key_exists('language', $data)) {
             $values['language'] = LanguageChoice::normalize($data['language']);

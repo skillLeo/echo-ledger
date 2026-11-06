@@ -197,7 +197,7 @@ final class LibrarySearch
     {
         $query = CaptureSession::query()->where('workspace_id', $workspaceId)
             ->where('status', '!=', SessionStatus::Recording->value)
-            ->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms']);
+            ->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms'])->withCount('screens');
         foreach (['client_id', 'source_app', 'source_device', 'status'] as $field) {
             if (! empty($filters[$field])) {
                 $query->where($field, $filters[$field]);

@@ -12,10 +12,14 @@ use App\Models\Workspace;
 use App\Services\ChunkedUploadService;
 use App\Services\CredentialVault;
 use App\Services\PairingService;
+use App\Services\Screens\ScreenStore;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
@@ -36,8 +40,6 @@ const ENVELOPE_MISSING_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
  */
 const ENVELOPE_PENDING_CODES = [
     'budget_exceeded',
-    // Phase 3: screen moments.
-    'too_many_screens',
     // Phase 4: signing in with an account, the account itself, plans.
     'otp_required', 'email_not_verified', 'owner_of_team', 'invalid_credentials', 'invalid_otp', 'invalid_code',
     'too_many_attempts', 'feature_not_in_plan', 'seat_limit_reached',
@@ -159,6 +161,18 @@ function produceError(object $test, string $code): TestResponse
             $test->createSession($test->bytes)->assertCreated();
 
             return $test->createSession($test->bytes, ['skip_duplicate' => true]);
+        case 'too_many_screens':
+            $session = $test->makeReadySession($test->device, $test->bytes, ['status' => SessionStatus::Completed]);
+            $now = now();
+            foreach (array_chunk(range(1, ScreenStore::MAX_PER_RECORDING), 200) as $chunk) {
+                DB::table('screens')->insert(array_map(fn (int $i): array => ['id' => (string) Str::ulid(), 'workspace_id' => $session->workspace_id,
+                    'capture_session_id' => $session->id, 'at_ms' => $i, 'width' => 1, 'height' => 1, 'trigger' => 'change', 'sha256' => hash('sha256', (string) $i),
+                    'mime' => 'image/png', 'bytes' => 1, 'created_at' => $now, 'updated_at' => $now], $chunk));
+            }
+            $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==');
+
+            return $test->post("/api/sessions/{$session->id}/screens", ['image' => UploadedFile::fake()->createWithContent('screen.png', $png), 'at_ms' => 0,
+                'width' => 1, 'height' => 1, 'trigger' => 'manual', 'sha256' => hash('sha256', $png)], ['Accept' => 'application/json']);
         case 'rule_not_found':
             return $test->deleteJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/rules/999');
         case 'rule_exists':

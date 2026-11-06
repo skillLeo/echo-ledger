@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\LiveTranslateTokenController;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Http\Controllers\Api\RecordingController;
 use App\Http\Controllers\Api\RequestLinkController;
+use App\Http\Controllers\Api\ScreenController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SecurityController;
 use App\Http\Controllers\Api\SessionController;
@@ -88,6 +89,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
             Route::post('sessions/{id}/retranscribe', [SessionController::class, 'retranscribe'])->name('api.sessions.retranscribe');
             Route::delete('sessions/{id}/markers/{marker}', [SessionController::class, 'destroyMarker'])->name('api.sessions.markers.destroy');
+            // Screen moments (v1.5): a screen comes off the recording's timeline (sending one is an upload route below).
+            Route::delete('sessions/{id}/screens/{screen}', [ScreenController::class, 'destroy'])->name('api.sessions.screens.destroy');
             Route::put('sessions/{id}/speakers', [TranscriptEditController::class, 'speakers'])->name('api.sessions.speakers');
             Route::post('sessions/{id}/shares', [ShareController::class, 'store'])->name('api.sessions.shares.store');
             Route::delete('shares/{id}', [ShareController::class, 'destroy'])->name('api.shares.destroy');
@@ -135,8 +138,15 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('clients/{id}/bundle', [ClientWorkspaceController::class, 'bundle'])->name('api.clients.bundle');
             Route::get('clients/{id}/rules', [FilingRuleController::class, 'index'])->name('api.clients.rules');
             Route::get('sessions/{id}/notes', [ClientWorkspaceController::class, 'notes'])->name('api.sessions.notes');
+            // Screen moments (v1.5): a recording's screens in time order, and a project's Screens tab.
+            Route::get('sessions/{id}/screens', [ScreenController::class, 'index'])->name('api.sessions.screens');
+            Route::get('clients/{id}/screens', [ScreenController::class, 'project'])->name('api.clients.screens');
         });
     });
+
+    // Screen moments (v1.5): pictures sent during a meeting count against the upload limit, not the general one.
+    Route::post('sessions/{id}/screens', [ScreenController::class, 'store'])
+        ->middleware(['abilities:sessions:write', 'throttle:uploads'])->name('api.sessions.screens.store');
 
     // Upload routes have their own, larger limit (a stricter limiter in front would make it unreachable).
     Route::middleware(['abilities:recordings:upload', 'throttle:uploads'])->group(function (): void {

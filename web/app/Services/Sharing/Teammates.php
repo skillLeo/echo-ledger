@@ -311,6 +311,8 @@ final class Teammates
     public function payloads(Collection $items, callable $sessionPayload): array
     {
         $items->loadMissing(['captureSession.transcripts', 'captureSession.markers:id,capture_session_id,tag,at_ms', 'captureSession.labels']);
+        // Since v1.5 each recording's screen_count, counted for all of them at once.
+        (new Collection($items->pluck('captureSession')->filter()->values()->all()))->loadCount('screens');
         /** @var Collection<int, Client> $projects */
         $projects = new Collection($items->where('kind', 'project')->pluck('client')->filter()->unique('id')->values()->all());
         $projects->loadCount('keyterms');

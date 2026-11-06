@@ -83,9 +83,8 @@ function registeredApiRoutes(): array
  * phase removes its own lines when it serves them; nothing else may be documented without a route.
  */
 const NOT_SERVED_YET = [
-    // Phase 3: screen moments and the meeting pack.
-    'POST /api/sessions/{}/screens', 'GET /api/sessions/{}/screens', 'DELETE /api/sessions/{}/screens/{}',
-    'GET /api/clients/{}/screens', 'GET /api/sessions/{}/pack',
+    // Phase 3: the meeting pack.
+    'GET /api/sessions/{}/pack',
     // Phase 4: signing in with an account, the account itself.
     'POST /api/auth/password', 'POST /api/auth/device/token', 'GET /api/account', 'DELETE /api/account',
     'POST /api/account/sign-out-everywhere', 'POST /api/account/export', 'GET /api/account/export/{}',
