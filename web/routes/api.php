@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\BinController;
 use App\Http\Controllers\Api\ClientWorkspaceController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
+use App\Http\Controllers\Api\DeviceReportController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FilingRuleController;
 use App\Http\Controllers\Api\LibraryController;
@@ -58,6 +59,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
     // Every authenticated route except the upload routes counts against the general per-device limit.
     Route::middleware('throttle:device')->group(function (): void {
         Route::post('devices/rotate-token', [DeviceController::class, 'rotateToken'])->name('api.devices.rotate');
+        Route::post('devices/report', DeviceReportController::class)->middleware(['abilities:config:read', 'throttle:device-report'])->name('api.devices.report');
 
         Route::get('config', [ConfigController::class, 'show'])->middleware('abilities:config:read')->name('api.config');
         Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');

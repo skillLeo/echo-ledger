@@ -21,6 +21,7 @@ function secDeviceGuardedRoutes(): array
 {
     return [
         'POST devices/rotate-token' => ['POST', '/api/devices/rotate-token', null],
+        'POST devices/report' => ['POST', '/api/devices/report', null],
         'GET config' => ['GET', '/api/config', 'config:read'],
         'GET clients' => ['GET', '/api/clients', 'library:read'],
         'DELETE clients/{id}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID, 'sessions:write'],

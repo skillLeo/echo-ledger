@@ -27,6 +27,7 @@ const ISO_API_BYPASS = [
     'api.auth.device.token' => 'signing in: the approved one-time code decides the workspace',
     'api.webhooks.stt' => 'provider callback: found by transcript id and verified signature',
     'api.recordings.audio' => 'signed, expiring URL issued to a device of the workspace',
+    'api.devices.report' => 'writes only about the calling device: no id in the request, the device decides the workspace',
 ];
 
 /** Named web routes outside Filament, each with the reason it is safe without a workspace. */

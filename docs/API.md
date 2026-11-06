@@ -169,6 +169,20 @@ Codes are 8 Crockford-base32 chars, displayed `7KQ2-M9XD`; the server ignores hy
 `200 {"token": "…", "token_expires_at": "…"}`; the old token is revoked immediately. The new token carries exactly the
 abilities of the token that asked for it, never more **(since v1.1)**.
 
+### `POST /api/devices/report` — `config:read`, throttled (10/hour/device) (since v1.5)
+The result of an app's device check (phone: Device check; Mac: Run Mac check), sent only when the person taps the
+button that sends it. Nothing is sent by itself. It holds no recordings, names or phone numbers. One report per device:
+a new one replaces the last. Any role may send one, a viewer too.
+```json
+{"platform": "android", "app_version": "1.5.0", "brand": "Xiaomi", "model": "23078PND5G", "os_version": "14",
+ "checks": [{"key": "app_calls", "state": "limited", "detail": "Your voice only: the other side needs Android 14."}]}
+```
+`platform` is an enumerated device platform; `brand`, `model`, `os_version` at most 64 characters, `app_version` 32;
+`checks`: 1 to 40, `key` lower-case letters, digits and `_` (at most 40), `state` is `ok`, `limited`, `off` or
+`failed`, `detail` at most 300 characters or null. `201 {"data": {"reported_at": "…"}}`; `422 validation_failed`;
+`429 rate_limited`. The console shows them under System → Device reports: the super admin every device's, owners and
+admins those of their workspace.
+
 ### Signing in with an account (since v1.5)
 People have their own accounts (email and password, or Google), and a phone or computer signs in to its owner's
 account instead of being paired by an admin. The device's token then acts for that person in their current
