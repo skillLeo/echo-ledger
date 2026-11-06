@@ -66,6 +66,11 @@ by reflection:
 Always sign updates with the same key. Android refuses an update whose signing certificate does not match the
 installed app.
 
+The same holds for debug builds: they are signed with the computer's own debug key, so a phone that has a debug build
+from one computer refuses an update built on another. Build on the second computer with the first one's debug
+keystore: `-Pecholedger.debugKeystore=<path to that debug.keystore>` (or the same line in your user
+`~/.gradle/gradle.properties`; never in the repository).
+
 ## Sideloading
 
 1. Copy the APK to the phone, or serve it over HTTPS from your EchoLedger server.

@@ -12,7 +12,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 | N3 | Gemini API key (paid tier) | Gemini as the Urdu challenger | aistudio.google.com → API keys, on a project with billing → enter it in the console: API Credentials → Gemini (not in chat). |
 | N4 | Screenshots of desktop bugs you've seen | Desktop bug sweep (1.3) | One message with the screenshots and a line each. |
 | N5 | Phone window, ~20 min (Phase 1) | Which "connected" signal works on the S25 | Say "phone free"; I install keeping data and ask for: one WhatsApp call that rings unanswered, one answered WhatsApp call (talk 20 s), one answered SIM call. |
-| N6 | Mac test (from v1.4) and macOS version | Mac call capture needs macOS 14.2+ | Apple menu → About This Mac; then MANUAL_QA "Mac app v1.4". |
+| N6 | Mac test (from v1.4) | Mac call capture needs macOS 14.2+ (this Mac has 27.3) | A Mac window of about 30 minutes: MANUAL_QA "Mac app v1.4" with the CI build (needs a free hour on this Mac and two test calls). |
 | N7 | Google sign-in client (Phase 4) | "Sign in with Google" | Steps come with Phase 4 (Google Cloud console → OAuth client for the console address). |
 | N8 | SMTP account and DNS (Phase 4) | Invitations, verification, reset and alert emails | Mail host, port, user and password into the console's email settings; add the SPF, DKIM and DMARC records from the docs checklist. |
 | N9 | A teammate test account (Phase 2, 4, 8) | Sharing and invitation tests | One email address (a teammate's or a second one of yours). |
@@ -22,6 +22,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 | N13 | Soniox credit | Live Translate | soniox.com → Billing → add funds. |
 | N14 | Back up the desktop updater key | Installed desktop apps only take updates signed with it; losing it means reinstalling by hand | Copy C:echoledger-keysdesktop-updater.key (made 2026-11-04, no password yet) to your password manager or an offline drive. Say if you want a password on it before the public release. |
 | N15 | Production SSH from the Mac | Deploys (backup, bundle, migrations) run over SSH; the Mac has the keys but no host entry, and trying keys against the server is not something I do on my own | Add the console server to `~/.ssh/config` as `Host skillleo-host` (HostName, Port, User and IdentityFile as on the Windows laptop), or tell me which key and I will add the entry; then say "ssh ready". |
+| N16 | Three files from the Windows laptop | (1) The phone takes updates only when they are signed like its installed app, which the laptop built: without the laptop's debug key every build from this Mac needs an uninstall (your recordings and settings on the phone would go). (2) The desktop updater's private key (N14) lives only there. | Copy to this Mac: `%USERPROFILE%\.android\debug.keystore` → `~/echoledger-keys/laptop-debug.keystore`; `C:\echoledger-keys\desktop-updater.key` and `.pub` → `~/echoledger-keys/`; optional, `C:\echoledger-releases\v1.5.0-beta.2\` → `~/echoledger-releases/`. Use a USB drive or AirDrop, not chat or e-mail. Then say "keys copied". |
 
 ## Step 0
 

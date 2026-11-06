@@ -62,6 +62,17 @@ android {
     }
 
     signingConfigs {
+        // Debug builds normally use this computer's own debug key. A phone that already has EchoLedger takes an update
+        // only when it is signed with the same key, so another computer can sign with the first one's debug keystore:
+        // gradle property echoledger.debugKeystore (user gradle.properties or -P, never in the repository).
+        getByName("debug") {
+            (project.findProperty("echoledger.debugKeystore") as String?)?.takeIf { it.isNotBlank() }?.let { path ->
+                storeFile = file(path)
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         create("release") {
             signingValue("storeFile", "ECHOLEDGER_KEYSTORE")?.let { path ->
                 storeFile = file(path)
