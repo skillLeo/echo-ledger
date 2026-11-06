@@ -478,8 +478,8 @@ Run these when the change touches the area, or before a release.
 
 ### Mac app v1.4 (about 30 minutes; paste the results back)
 
-First check the macOS version: Apple menu → **About This Mac**. Calls need 14.2 or newer (the process tap; 14.4+ is
-what the capture code was written against). Get the `.dmg` from the latest **Desktop (macOS)** run on GitHub
+First check the macOS version: Apple menu → **About This Mac**. The app needs 14.4 or newer and does not open on older
+versions. Get the `.dmg` from the latest **Desktop (macOS)** run on GitHub
 (Actions → the run → Artifacts: `EchoLedger-mac-apple-silicon` for M1–M4, `EchoLedger-mac-intel` for Intel).
 
 | # | Check | Expected |

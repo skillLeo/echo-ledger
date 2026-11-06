@@ -23,8 +23,8 @@ All three show the same library.
 
 ## 1b. Install the Mac app
 
-The Mac app is built for Apple Silicon Macs (M1 and newer) and Intel Macs, and opens on macOS 14.4 or newer. Recording
-the other side of a call needs **macOS 14.2 or newer** (Apple menu → **About This Mac** shows your version).
+The Mac app is built for Apple Silicon Macs (M1 and newer) and Intel Macs, and needs **macOS 14.4 or newer**, which also
+records both sides of a call (Apple menu → **About This Mac** shows your version).
 
 1. Open the `.dmg` file and drag **EchoLedger** into **Applications**.
 2. The app is not signed by Apple yet, so macOS stops it the first time. Open it once and close the message. Then open

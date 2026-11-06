@@ -48,11 +48,11 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 ## Phase 1B — Runs everywhere
 
 Mac:
-- [ ] A1 CI: Rust + frontend tests on Apple Silicon and Intel; the built .app is launched, opens its windows and quits cleanly (a crash fails the run); DMGs attached to each tag. *Accept:* both chips green.
-- [ ] A2 Help & diagnostics → Run Mac check: macOS version (14.2+), mic, system-audio and screen-recording permissions, 5 s mic test, 5 s system-audio tap test with a tone, meeting-app detection (Zoom, Teams, WhatsApp, Chrome, Safari, Edge, Arc), overlay + pill visible, a screen-moment capture; ✓/✗ with a fix each, Copy report, opt-in upload shown per device in the admin panel. *Accept:* tests with mocks; **(mac)** passes on a real Mac.
-- [ ] A3 Permissions: one guided onboarding step each with Open System Settings; macOS 15's monthly re-approval explained; a missing permission never crashes or silently records nothing (clear banner). *Accept:* tests.
-- [ ] A4 Unsigned builds: USER_GUIDE first launch on macOS 15+ (System Settings → Privacy & Security → Open Anyway); permissions re-checked at start after updates; the $99/yr Developer ID documented. *Accept:* docs + test.
-- [ ] A5 Parity: menu-bar icon, ⌘ shortcuts; pill, overlay and toast respect the notch and menu bar; dark/light, Retina, several displays; overlays over fullscreen windows and Spaces; start at login; updater. *Accept:* tests; **(mac)**.
+- [x] A1 CI: Rust + frontend tests on Apple Silicon and Intel; the built .app is launched, opens its windows and quits cleanly (a crash fails the run); DMGs attached to each tag. *Accept:* both chips green. **Done** (`--smoke-test`; macos-15 Apple M1 and macos-15-intel run everything, macOS 26 on both chips opens the DMG). The release job has not run yet: the first real `v*` tag proves it.
+- [ ] A2 Help & diagnostics → Run Mac check: macOS version (14.2+), mic, system-audio and screen-recording permissions, 5 s mic test, 5 s system-audio tap test with a tone, meeting-app detection (Zoom, Teams, WhatsApp, Chrome, Safari, Edge, Arc), overlay + pill visible, a screen-moment capture; ✓/✗ with a fix each, Copy report, opt-in upload shown per device in the admin panel. *Accept:* tests with mocks; **(mac)** passes on a real Mac. **Built** with mocks (`mac_check.rs`, MAC-15, MAC-16, MAC-30); the real Mac is N17.
+- [x] A3 Permissions: one guided onboarding step each with Open System Settings; macOS 15's monthly re-approval explained; a missing permission never crashes or silently records nothing (clear banner). *Accept:* tests. **Done**; a refused start reaches the person with the window closed (`refusal.rs`) and a running recording re-reads its permissions every 3 s. Real prompts wait for N17 (MAC-11 to MAC-14, MAC-28, MAC-29).
+- [x] A4 Unsigned builds: USER_GUIDE first launch on macOS 15+ (System Settings → Privacy & Security → Open Anyway); permissions re-checked at start after updates; the $99/yr Developer ID documented. *Accept:* docs + test. **Done**; MAC-1 proves the steps on a real DMG (N17).
+- [ ] A5 Parity: menu-bar icon, ⌘ shortcuts; pill, overlay and toast respect the notch and menu bar; dark/light, Retina, several displays; overlays over fullscreen windows and Spaces; start at login; updater. *Accept:* tests; **(mac)**. **Built** with tests (MAC-17 to MAC-24); how it looks and behaves on a real Mac is N17. Updater reviewed, no code changed.
 - [ ] A6 docs/MAC_TEST_CLOUD.md: renting a cloud Mac for a day, SSH + VNC, BlackHole for a simulated Meet call, the Mac check + Mac rows of MANUAL_QA; then fix what is found (N17). **Guide written**; the rental is N17.
 
 Android:
@@ -65,13 +65,13 @@ Android:
 - [ ] B7 Teammate compatibility checklist in MANUAL_QA; device reports visible in the admin panel (N19). **Built** (MANUAL_QA "Teammate phone check", System → Device reports); the phones are N19.
 
 Windows:
-- [ ] C1 Windows 10 below build 20348: the whole-system-audio fallback works and the UI says so. *Accept:* tests.
-- [ ] C2 CI smoke tests on Windows 10 and 11 runners. *Accept:* green, or the nearest runner GitHub still offers, noted.
-- [ ] C3 Bluetooth/USB headsets and switching audio devices mid-call keep the recording going. *Accept:* tests.
+- [x] C1 Windows 10 below build 20348: the whole-system-audio fallback works and the UI says so. *Accept:* tests. **Done** with faked build numbers; no CI runner is below 20348, so WIN-1 is the first real run.
+- [x] C2 CI smoke tests on Windows 10 and 11 runners. *Accept:* green, or the nearest runner GitHub still offers, noted. **Done**: GitHub has no Windows 10 client runner; green on Server 2022 (build 20348), Server 2025 (26100) and Windows 11 Arm (26200, x64 under emulation). The bare exe, not the installer.
+- [x] C3 Bluetooth/USB headsets and switching audio devices mid-call keep the recording going. *Accept:* tests. **Done** (`audio/devices.rs`, Mac and Windows, with fakes); real headsets: MAC-25, MAC-26, WIN-3 to WIN-5.
 
 Everywhere:
 - [ ] D Supported devices on the download page and in USER_GUIDE, saying what works where. *Accept:* page test. **Done** (`DownloadsTest`, USER_GUIDE "What works where"); live with the next deploy.
-- [ ] Acceptance: CI green on macOS (both chips) and Windows; the Mac check on a real Mac with a simulated Meet call and screen share; reports from 3 non-Samsung phones; docs updated.
+- [ ] Acceptance: CI green on macOS (both chips) and Windows; the Mac check on a real Mac with a simulated Meet call and screen share; reports from 3 non-Samsung phones; docs updated. **CI green and docs done**; the real Mac is N17, the phones N19.
 
 ## Phase 2 — Projects, smart folders, sharing
 
