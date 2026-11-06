@@ -305,6 +305,15 @@ fn a_device_that_never_comes_back_still_leaves_a_whole_file() {
     assert!(output.primary.exists());
 }
 
+#[test]
+fn a_resume_starts_on_fresh_devices_so_an_old_warning_does_not_stay() {
+    let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/actions.rs")).unwrap();
+    let resume = &source[source.find("pub async fn resume_recording").unwrap()..];
+    let resumed = resume.find("state.capture.resume()?").unwrap();
+    let reset = resume.find("device_status.lock()").expect("the resume forgets what it knew of the devices");
+    assert!(reset > resumed && reset < resumed + 200, "only once the new devices are open");
+}
+
 // ---- the device report ---------------------------------------------------------------------------------------------
 
 fn report() -> CheckReport {

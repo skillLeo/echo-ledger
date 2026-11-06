@@ -362,17 +362,24 @@ pub struct DeviceStatus {
 impl DeviceStatus {
     pub fn apply(&mut self, notice: &DeviceNotice, now: Instant) {
         match notice {
-            DeviceNotice::Moved { channel, name } => {
-                self.news = Some((moved_sentence(*channel, name.as_deref()), now));
-            }
+            DeviceNotice::Moved { channel, name } => self.tell(*channel, name.as_deref(), now),
             DeviceNotice::Lost { channel } => {
                 self.lost[channel.index()] = true;
                 self.news = None;
             }
             DeviceNotice::Back { channel, name } => {
                 self.lost[channel.index()] = false;
-                self.news = Some((moved_sentence(*channel, name.as_deref()), now));
+                self.tell(*channel, name.as_deref(), now);
             }
+        }
+    }
+
+    /// One line of news. A headset that takes over both sides at once is told by its microphone, which is what the
+    /// person is speaking into.
+    fn tell(&mut self, channel: Channel, name: Option<&str>, now: Instant) {
+        let same_moment = self.news.as_ref().is_some_and(|(_, at)| *at == now);
+        if channel == Channel::Mic || !same_moment {
+            self.news = Some((moved_sentence(channel, name), now));
         }
     }
 
@@ -673,9 +680,23 @@ mod tests {
         assert!(status.note(t0).unwrap().text.contains("until one returns"));
         status.apply(&DeviceNotice::Back { channel: Channel::Mic, name: None }, t0);
         assert!(status.note(t0).unwrap().text.contains("your voice only"));
-        status.apply(&DeviceNotice::Back { channel: Channel::System, name: Some("Speakers".into()) }, t0);
-        let note = status.note(t0).unwrap();
+        let later = t0 + Duration::from_secs(1);
+        status.apply(&DeviceNotice::Back { channel: Channel::System, name: Some("Speakers".into()) }, later);
+        let note = status.note(later).unwrap();
         assert!(!note.warning && note.text.contains("Speakers"));
+    }
+
+    #[test]
+    fn a_headset_taking_over_both_sides_is_told_by_its_microphone() {
+        let t0 = Instant::now();
+        let mut status = DeviceStatus::default();
+        status.apply(&DeviceNotice::Moved { channel: Channel::Mic, name: Some("AirPods Pro".into()) }, t0);
+        status.apply(&DeviceNotice::Moved { channel: Channel::System, name: Some("AirPods Pro".into()) }, t0);
+        assert!(status.note(t0).unwrap().text.starts_with("Microphone changed"));
+        // Later news of the other side is its own.
+        let later = t0 + Duration::from_secs(1);
+        status.apply(&DeviceNotice::Moved { channel: Channel::System, name: Some("HDMI".into()) }, later);
+        assert!(status.note(later).unwrap().text.starts_with("Sound output changed to HDMI"));
     }
 
     #[test]

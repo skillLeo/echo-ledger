@@ -50,8 +50,8 @@ const STATE_TEXT: Record<PermissionState, string> = {
 };
 
 /** The permissions as they stand: read when the window shows and again whenever it comes back into focus, which is what
- * coming back from System Settings looks like. */
-export function usePermissions(): [PermissionsStatus | null, (next: PermissionsStatus) => void] {
+ * coming back from System Settings looks like. `readAgain` asks for one more read when it changes. */
+export function usePermissions(readAgain?: string | null): [PermissionsStatus | null, (next: PermissionsStatus) => void] {
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
   const shown = useWindowShown();
   useEffect(() => {
@@ -64,7 +64,7 @@ export function usePermissions(): [PermissionsStatus | null, (next: PermissionsS
       alive = false;
       window.removeEventListener("focus", read);
     };
-  }, [shown]);
+  }, [shown, readAgain]);
   return [permissions, setPermissions];
 }
 
@@ -120,19 +120,7 @@ const SETTINGS_LABEL: Record<PermissionsStatus["platform"], string> = { macos: "
 
 /** Record page: what is missing and what a recording holds without it. */
 export function PermissionBanner({ recordingRef }: { recordingRef: string | null }) {
-  const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
-  const shown = useWindowShown();
-  useEffect(() => {
-    if (!shown) return;
-    let alive = true;
-    const read = () => api.permissionsStatus().then((p) => alive && setPermissions(p)).catch(() => undefined);
-    read();
-    window.addEventListener("focus", read);
-    return () => {
-      alive = false;
-      window.removeEventListener("focus", read);
-    };
-  }, [shown, recordingRef]);
+  const [permissions] = usePermissions(recordingRef);
   const missing: MissingPermission[] = permissions?.missing ?? [];
   if (missing.length === 0 || !permissions) return null;
   return (

@@ -928,6 +928,8 @@ pub async fn resume_recording(app: &AppHandle) -> AppResult<()> {
         return Err(AppError::msg("Nothing is paused."));
     }
     state.capture.resume()?;
+    // Fresh devices: a channel that was lost before the pause is told about again only if it still is.
+    *state.device_status.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
     if state.captions_on_resume.swap(false, Ordering::SeqCst)
         && let Err(e) = start_captions(app).await
     {
