@@ -799,6 +799,17 @@ export interface SearchResult {
 }
 
 /** A share link of a recording or (since v1.5) a project; `url` is only present right after it was made. */
+/** What this person sent of a recording or a project (`GET /api/sent`, since v1.5). */
+export interface SentItem {
+  id: string;
+  kind: "session" | "project";
+  to: { name: string | null; email: string | null } | null;
+  title: string | null;
+  note: string | null;
+  sent_at: string | null;
+  saved_at: string | null;
+}
+
 export interface ShareLink {
   id: string;
   /** The recording's; null for a project's link. */
@@ -1160,6 +1171,8 @@ export const api = {
   /** The links of a recording or a project; null on a server older than v1.5 (then `listShares` and `createShare`). */
   sharesOf: (sessionId: string | null, clientId: string | null = null) => invoke<{ data: ShareLink[] } | null>("shares_of", { sessionId, clientId }),
   /** How many people it was sent to. */
+  sentOf: (sessionId: string | null, clientId: string | null = null) => invoke<{ data: SentItem[] } | null>("sent_of", { sessionId, clientId }),
+  stopSharing: (id: string) => invoke<void>("stop_sharing", { id }),
   sendToTeammate: (kind: "session" | "project", id: string, to: string[], note: string | null = null) => invoke<number>("send_to_teammate", { kind, id, to, note }),
   /** null: the server has no Shared with me yet. */
   sharedWithMe: () => invoke<{ data: SharedItem[] } | null>("shared_with_me"),

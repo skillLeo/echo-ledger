@@ -661,7 +661,11 @@ internal fun ShareSheet(vm: MainViewModel, sessionId: String?, clientId: String?
     var links by remember { mutableStateOf<List<ShareLinkDto>>(emptyList()) }
     var working by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
-    LaunchedEffect(reload) { links = if (clientId != null) vm.projectShares(clientId) else vm.shares(sessionId!!) }
+    var sent by remember { mutableStateOf<List<com.echoledger.mobile.data.SentItemDto>>(emptyList()) }
+    LaunchedEffect(reload) {
+        links = if (clientId != null) vm.projectShares(clientId) else vm.shares(sessionId!!)
+        sent = vm.sentOf(sessionId, clientId)
+    }
     val ready = when (audience) {
         "password" -> password.length >= 6
         "people" -> LinkExpiry.emails(people).isNotEmpty()
@@ -752,11 +756,29 @@ internal fun ShareSheet(vm: MainViewModel, sessionId: String?, clientId: String?
                     }
                 }
             }
+            if (sent.isNotEmpty()) {
+                SectionHeader("Sent to")
+                sent.forEach { item ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.to?.name ?: item.to?.email.orEmpty(), style = type.bodyM, color = Brand.Text)
+                            Text(ShareText.sentMeta(item), style = type.caption, color = Brand.Muted)
+                        }
+                        EchoButton("Stop sharing", { scope.launch { if (vm.stopSharing(item.id)) reload++ } }, kind = ButtonKind.Text)
+                    }
+                }
+            }
         }
     }
 }
 
 internal object ShareText {
+    fun sentMeta(item: com.echoledger.mobile.data.SentItemDto): String = listOfNotNull(
+        item.to?.email.takeIf { item.to?.name != null },
+        item.sentAt?.let { "sent ${it.take(10)}" },
+        if (item.savedAt != null) "they saved a copy" else null
+    ).joinToString(" · ")
+
     fun audience(link: ShareLinkDto): String = when (link.audience) {
         "password" -> "Password"
         "people" -> "Only " + link.people.orEmpty().joinToString(", ").ifEmpty { "chosen people" }
@@ -788,7 +810,11 @@ internal fun SendSheet(vm: MainViewModel, sessionId: String?, clientId: String?,
             Text("Send $title to a teammate", style = type.titleS, color = Brand.Text)
             OutlinedTextField(to, { to = it }, label = { Text("Their emails") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(note, { note = it.take(500) }, label = { Text("Note (optional)") }, modifier = Modifier.fillMaxWidth())
-            Text("It appears in their Shared with me; they can save a copy to their library.", style = type.caption, color = Brand.Muted)
+            Text(
+                "It appears in their Shared with me; they can save a copy to their library. People without an account here will not receive it.",
+                style = type.caption,
+                color = Brand.Muted
+            )
             EchoButton(if (working) "Sending…" else "Send", {
                 working = true
                 scope.launch {

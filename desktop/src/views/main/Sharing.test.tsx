@@ -149,6 +149,30 @@ describe("the share dialog", () => {
 });
 
 describe("send to a teammate", () => {
+  it("lists who it was sent to and stops sharing with one of them", async () => {
+    respond("sent_of", { data: [{ id: "m1", kind: "session", to: { name: "Ana", email: "ana@example.com" }, title: "Call", note: null, sent_at: "2026-11-01T10:00:00Z", saved_at: "2026-11-02T10:00:00Z" }] });
+    respond("stop_sharing", undefined);
+    const props = await renderShare(session, { data: [] }, "send");
+    const list = await screen.findByRole("list", { name: "Sent to" });
+    expect(list).toHaveTextContent("Ana");
+    expect(list).toHaveTextContent("they saved a copy");
+    expect(callsOf("sent_of")).toEqual([{ sessionId: "s1", clientId: null }]);
+    respond("sent_of", { data: [] });
+    fireEvent.click(within(list).getByRole("button", { name: "Stop sharing" }));
+    await waitFor(() => expect(callsOf("stop_sharing")).toEqual([{ id: "m1" }]));
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Stopped sharing"));
+    await waitFor(() => expect(screen.queryByRole("list", { name: "Sent to" })).not.toBeInTheDocument());
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it("says plainly that someone without an account here gets nothing, and sending works on a server with no list", async () => {
+    respond("sent_of", null);
+    await renderShare({ kind: "project", id: "c1", name: "Acme" }, { data: [] }, "send");
+    expect(screen.getByText(/People without an account here will not receive it/)).toBeInTheDocument();
+    await waitFor(() => expect(callsOf("sent_of")).toEqual([{ sessionId: null, clientId: "c1" }]));
+    expect(screen.queryByRole("list", { name: "Sent to" })).not.toBeInTheDocument();
+  });
+
   it("sends with a note and closes", async () => {
     respond("send_to_teammate", 1);
     const props = await renderShare(session, { data: [] }, "send");

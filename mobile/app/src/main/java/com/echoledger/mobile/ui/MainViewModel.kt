@@ -571,6 +571,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         return true
     }
 
+    /** What you sent of this recording or project; empty on a server older than this list. */
+    suspend fun sentOf(sessionId: String?, clientId: String?): List<com.echoledger.mobile.data.SentItemDto> =
+        withContext(Dispatchers.IO) { runCatching { graph.api()?.sentOf(sessionId, clientId) }.getOrNull().orEmpty() }
+
+    suspend fun stopSharing(id: String): Boolean {
+        workspaceCall("It could not be stopped.") { it.stopSharing(id) } ?: return false
+        _message.value = "Stopped sharing"
+        return true
+    }
+
     suspend fun sharedWithMe(): List<com.echoledger.mobile.data.SharedItemDto>? =
         workspaceCall("Shared with me could not be loaded.") { it.sharedWithMe() }
 

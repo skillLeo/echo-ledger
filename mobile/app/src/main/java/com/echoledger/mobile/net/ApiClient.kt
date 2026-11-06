@@ -604,6 +604,17 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(request(path).post(body).build(), SentAnswer.serializer())!!.sent
     }
 
+    /** `GET /api/sent` (since v1.5): what you sent of this recording or project. */
+    suspend fun sentOf(sessionId: String?, clientId: String?): List<com.echoledger.mobile.data.SentItemDto> {
+        val query = if (clientId != null) "client_id=$clientId" else "session_id=$sessionId"
+        return call(request("sent?$query").get().build(), com.echoledger.mobile.data.SentListResponse.serializer())!!.data
+    }
+
+    /** `DELETE /api/sent/{id}` (since v1.5): stop sharing what you sent; a copy they saved stays theirs. */
+    suspend fun stopSharing(id: String) {
+        call(request("sent/$id").delete().build(), null as KSerializer<Unit>?)
+    }
+
     suspend fun sharedWithMe(): List<SharedItemDto> = call(request("shared-with-me").get().build(), SharedResponse.serializer())!!.data
 
     suspend fun saveShared(id: String): SavedSharedAnswer =

@@ -533,6 +533,25 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `GET /api/sent` (since v1.5): what this person sent of a recording or a project.
+    pub async fn sent(&self, session_id: Option<&str>, client_id: Option<&str>) -> AppResult<serde_json::Value> {
+        let mut query = Vec::new();
+        if let Some(id) = session_id {
+            query.push(("session_id", id));
+        }
+        if let Some(id) = client_id {
+            query.push(("client_id", id));
+        }
+        let resp = self.authed(self.http.get(self.url("sent")).query(&query))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `DELETE /api/sent/{id}` (since v1.5): stop sharing what was sent; a copy they saved stays theirs.
+    pub async fn stop_sharing(&self, id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("sent/{id}"))))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
     /// `GET /api/shared-with-me` (since v1.5): recordings and projects teammates sent.
     pub async fn shared_with_me(&self) -> AppResult<serde_json::Value> {
         let resp = self.authed(self.http.get(self.url("shared-with-me")))?.send().await?;

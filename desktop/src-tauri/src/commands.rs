@@ -1560,6 +1560,20 @@ pub async fn shares_of(state: State<'_, AppState>, session_id: Option<String>, c
     when_available(state.api()?.shares(session_id.as_deref(), client_id.as_deref()).await)
 }
 
+/// What this person sent of a recording or a project; `None` on a server older than this list.
+#[tauri::command]
+pub async fn sent_of(state: State<'_, AppState>, session_id: Option<String>, client_id: Option<String>) -> AppResult<Option<serde_json::Value>> {
+    ensure_unlocked(&state)?;
+    when_available(state.api()?.sent(session_id.as_deref(), client_id.as_deref()).await)
+}
+
+/// Stops sharing what was sent; a copy the person saved stays theirs.
+#[tauri::command]
+pub async fn stop_sharing(state: State<'_, AppState>, id: String) -> AppResult<()> {
+    ensure_unlocked(&state)?;
+    state.api()?.stop_sharing(&id).await
+}
+
 /// Sends a recording or a project to teammates with an account on this server, with a note; returns how many
 /// people it went to. An address without an account is named, and then nothing is sent.
 #[tauri::command]

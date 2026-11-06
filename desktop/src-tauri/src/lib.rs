@@ -489,6 +489,8 @@ pub fn run() {
             commands::share_link_create,
             commands::shares_of,
             commands::send_to_teammate,
+            commands::sent_of,
+            commands::stop_sharing,
             commands::shared_with_me,
             commands::shared_save,
             commands::shared_remove,

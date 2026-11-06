@@ -538,6 +538,21 @@ data class SharedItemDto(
 @Serializable
 data class SenderDto(val name: String? = null, val email: String? = null)
 
+/** What you sent of a recording or a project (`GET /api/sent`, since v1.5). */
+@Serializable
+data class SentItemDto(
+    val id: String,
+    val kind: String = "session",
+    val to: SenderDto? = null,
+    val title: String? = null,
+    val note: String? = null,
+    @SerialName("sent_at") val sentAt: String? = null,
+    @SerialName("saved_at") val savedAt: String? = null
+)
+
+@Serializable
+data class SentListResponse(val data: List<SentItemDto> = emptyList())
+
 @Serializable
 data class SharedResponse(val data: List<SharedItemDto> = emptyList())
 

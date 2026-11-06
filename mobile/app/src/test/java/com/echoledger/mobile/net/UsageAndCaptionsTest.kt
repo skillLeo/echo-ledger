@@ -75,6 +75,16 @@ class UsageAndCaptionsTest : AppTest() {
     }
 
     @Test
+    fun `a report refused because this device may not record is dropped, not retried for ever`() {
+        val queue = UsageQueue.of(app)
+        queue.add(report("rep-viewer01"))
+        server.on("POST", "/api/usage", FakeServer.json(403, """{"message":"Viewers cannot record.","code":"not_allowed"}"""))
+
+        assertEquals(ListenableWorker.Result.success(), runWorker<UsageWorker>())
+        assertTrue(queue.all().isEmpty())
+    }
+
+    @Test
     fun `reports stay queued while the server is unreachable`() {
         val queue = UsageQueue.of(app)
         queue.add(report("rep-waiting1"))

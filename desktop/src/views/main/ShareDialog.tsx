@@ -2,8 +2,8 @@
 // may open it (anyone with the link, with a password, or only the people named), downloads on or off, when it stops
 // working; the link is shown once to copy, and every link is listed with its views and Revoke. Send to a teammate: to
 // people with an account on this server, with a note. An older server gets the v1.1 link of a recording.
-import { useEffect, useId, useState } from "react";
-import { api, errorMessage, type ShareAudience, type ShareLink, type TranscriptView } from "../../lib/ipc";
+import { useCallback, useEffect, useId, useState } from "react";
+import { api, errorMessage, type SentItem, type ShareAudience, type ShareLink, type TranscriptView } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { audienceText, downloadText, EXPIRY_CHOICES, expiryTime, linkState, MAX_PEOPLE, parseEmails, viewsText, type ExpiryChoice } from "../../lib/sharing";
 import { CopyIcon, SendIcon } from "../../components/Icons";
@@ -227,6 +227,25 @@ function LinkPart({ target, links, view, notify, onMade }: {
 }
 
 function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: (text: string, error?: boolean) => void; onSent: () => void }) {
+  const [sentItems, setSentItems] = useState<SentItem[]>([]);
+  const loadSent = useCallback(async () => {
+    try {
+      const answer = await api.sentOf(target.kind === "session" ? target.id : null, target.kind === "project" ? target.id : null);
+      setSentItems(answer?.data ?? []);
+    } catch {
+      setSentItems([]); // the list is a help; sending still works without it
+    }
+  }, [target.id, target.kind]);
+  useEffect(() => { void loadSent(); }, [loadSent]);
+  const stop = async (item: SentItem) => {
+    try {
+      await api.stopSharing(item.id);
+      notify("Stopped sharing");
+      await loadSent();
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
   const [to, setTo] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -250,7 +269,7 @@ function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: (te
   return (
     <>
       <p className="small muted">
-        They find it in Shared with me, can play and read it, and save a copy of their own. They need an account on this server.
+        They find it in Shared with me, can play and read it, and save a copy of their own. People without an account here will not receive it.
       </p>
       <label htmlFor={toId} className="small muted">Their emails</label>
       <textarea id={toId} className="input" rows={2} placeholder="ana@example.com, omar@example.com" value={to} onChange={(e) => setTo(e.target.value)} />
@@ -261,6 +280,24 @@ function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: (te
       <div className="row">
         <button type="button" className="btn primary" disabled={busy || !ready} onClick={() => void send()}><SendIcon size={16} />{busy ? "Sending…" : "Send"}</button>
       </div>
+      {sentItems.length > 0 && (
+        <div className="share-links">
+          <b className="small">Sent to</b>
+          <ul className="links-list" aria-label="Sent to">
+            {sentItems.map((item) => (
+              <li key={item.id} className="link-row">
+                <div className="link-main">
+                  <span className="link-who">{item.to?.name ?? item.to?.email}</span>
+                  <span className="small muted">
+                    {[item.to?.name ? item.to?.email : null, item.sent_at ? `sent ${formatWhen(item.sent_at)}` : null, item.saved_at ? "they saved a copy" : null].filter(Boolean).join(" · ")}
+                  </span>
+                </div>
+                <button type="button" className="btn ghost danger compact" onClick={() => void stop(item)}>Stop sharing</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </>
   );
 }

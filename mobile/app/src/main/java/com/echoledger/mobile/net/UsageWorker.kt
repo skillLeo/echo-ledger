@@ -49,7 +49,7 @@ class UsageQueue(private val file: File) {
     }
 }
 
-/** Sends queued usage reports: 200/201 remove, 404/422 drop (a v1 server or a report it refuses), else retry later. */
+/** Sends queued usage reports: 200/201 remove, 403/404/422 drop (a viewer, a v1 server, a report it refuses), else retry later. */
 class UsageWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val graph = (applicationContext as EchoLedgerApp).graph
@@ -62,7 +62,7 @@ class UsageWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
             } catch (e: NotPairedException) {
                 return Result.success()
             } catch (e: ApiException) {
-                if (e.status == 404 || e.status == 422) queue.remove(report.reportId) else return Result.retry()
+                if (e.status == 403 || e.status == 404 || e.status == 422) queue.remove(report.reportId) else return Result.retry()
             } catch (e: IOException) {
                 return Result.retry()
             }
