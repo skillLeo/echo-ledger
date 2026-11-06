@@ -370,7 +370,7 @@ export default function PillApp() {
       {tray === "screens" && (
         <div className="mark-tray note" data-hit data-testid="screens-notice" role="status">
           <MonitorIcon size={14} />
-          <span className="mark-text">Screens on: EchoLedger keeps what the meeting shows</span>
+          <span className="mark-text">Screens on for this meeting</span>
           <button type="button" className="rec-text-btn" onClick={toggleScreens}>Pause</button>
         </div>
       )}

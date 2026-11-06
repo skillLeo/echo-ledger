@@ -500,7 +500,7 @@ describe("Screens chip (v1.5)", () => {
     await renderPill(makeRecordingState({ screens: { on: false, reason: "starting", count: 0 } }));
     expect(screen.queryByTestId("screens-notice")).not.toBeInTheDocument();
     await emitEvent("recording:state", on(0));
-    expect(screen.getByTestId("screens-notice")).toHaveTextContent("Screens on: EchoLedger keeps what the meeting shows");
+    expect(screen.getByTestId("screens-notice")).toHaveTextContent("Screens on for this meeting");
     fireEvent.click(within(screen.getByTestId("screens-notice")).getByRole("button", { name: "Pause" }));
     expect(screen.queryByTestId("screens-notice")).not.toBeInTheDocument();
     await flushAsync();
