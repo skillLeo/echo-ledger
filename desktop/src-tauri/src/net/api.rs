@@ -162,6 +162,16 @@ impl ApiClient {
         }
     }
 
+    /// `POST /api/devices/report` (since v1.5): a device check the person chose to send; returns when the server took it.
+    pub async fn device_report(&self, report: &DeviceReport) -> AppResult<String> {
+        let resp = self.authed(self.http.post(self.url("devices/report")))?.json(report).send().await?;
+        match Self::parse::<DeviceReportAnswer>(resp).await {
+            Ok(answer) => Ok(answer.data.reported_at),
+            Err(e) if e.is_missing_route() => Err(AppError::msg("This server does not take device reports yet. Copy the report instead.")),
+            Err(e) => Err(e),
+        }
+    }
+
     /// `POST /api/account/sign-out-everywhere` (since v1.5): every device and console session of the account, this
     /// computer's token included.
     pub async fn sign_out_everywhere(&self) -> AppResult<()> {

@@ -2,7 +2,7 @@ import { processName } from "./format";
 // Pure helpers behind the recording pill, the after-call toast and chip, and the ask chip (unit-tested in
 // controls.test.ts).
 import { SOURCE_APP_LABELS, formatDuration, timestamp } from "./format";
-import type { AskPayload, PendingItem, RecordingState } from "./ipc";
+import type { AskPayload, MissingPermission, PendingItem, RecordingState } from "./ipc";
 
 /** Display label of a `source_app` value; unknown values read as words instead of a raw id. */
 export function sourceLabel(app: string | null | undefined): string {
@@ -97,4 +97,13 @@ export function alwaysIgnoreLabel(ask: AskPayload): string {
 /** How long the ask chip stays: the payload's `seconds`, 8 when missing or invalid. */
 export function askSeconds(ask: AskPayload): number {
   return Number.isFinite(ask.seconds) && ask.seconds > 0 ? ask.seconds : 8;
+}
+
+/** What the pill and the captions say when the system does not let a recording use something (one short line). */
+export function missingShort(missing: MissingPermission[] | undefined): string | null {
+  const kinds = (missing ?? []).map((m) => m.kind);
+  if (kinds.includes("microphone") && kinds.includes("system_audio")) return "Nothing is being recorded: no permission.";
+  if (kinds.includes("microphone")) return "No microphone permission: recording the other side only.";
+  if (kinds.includes("system_audio")) return "No system audio permission: recording your voice only.";
+  return null;
 }

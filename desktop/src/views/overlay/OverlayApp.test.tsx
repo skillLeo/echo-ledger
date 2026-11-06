@@ -582,4 +582,14 @@ describe("caption style (B4)", () => {
     });
     expect(root(container)).not.toHaveClass("overlay-idle");
   });
+
+  it("says what a recording without a permission holds, and not once it ended", async () => {
+    await renderOverlay();
+    await emitEvent("overlay:visibility", true);
+    expect(screen.queryByTestId("caption-missing")).not.toBeInTheDocument();
+    await emitEvent("recording:state", { active: true, missing: [{ kind: "microphone", sentence: "x" }] });
+    expect(screen.getByTestId("caption-missing")).toHaveTextContent("No microphone permission: recording the other side only.");
+    await emitEvent("recording:state", { active: false, missing: [] });
+    expect(screen.queryByTestId("caption-missing")).not.toBeInTheDocument();
+  });
 });

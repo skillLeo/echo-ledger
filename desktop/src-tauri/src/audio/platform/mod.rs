@@ -115,6 +115,10 @@ pub trait CaptureBackend: Send {
     fn kind(&self) -> BackendKind;
     /// Stops all capture threads and waits for them to exit.
     fn stop(&mut self);
+    /// What happened to the devices since this was last asked (Phase 1B).
+    fn take_notices(&mut self) -> Vec<crate::audio::devices::DeviceNotice> {
+        Vec::new()
+    }
 }
 
 pub fn start(streams: Streams, tx: Sender<AudioChunk>) -> Result<Box<dyn CaptureBackend>, CaptureError> {
@@ -136,4 +140,34 @@ pub fn start(streams: Streams, tx: Sender<AudioChunk>) -> Result<Box<dyn Capture
 /// Pure gate (unit-tested): WASAPI process loopback needs Windows build ≥ 20348 (all Windows 11).
 pub const fn supports_process_loopback(build: u32) -> bool {
     build >= 20_348
+}
+
+/// What the app says on a Windows that has no per-app capture (Record page and Settings).
+pub const WHOLE_SYSTEM_SENTENCE: &str = "This Windows version records all sound playing on this computer, not just the call";
+
+/// Whether system audio here means everything playing on this computer (pure): below build 20348, or when the build
+/// could not be read, the backend uses endpoint loopback (`WindowsBackend::start`).
+pub const fn records_whole_system(build: Option<u32>) -> bool {
+    match build {
+        Some(build) => !supports_process_loopback(build),
+        None => true,
+    }
+}
+
+/// The sentence for a Windows build (pure): none where per-app capture works.
+pub fn system_audio_note_for(build: Option<u32>) -> Option<&'static str> {
+    records_whole_system(build).then_some(WHOLE_SYSTEM_SENTENCE)
+}
+
+/// The sentence for this computer: Windows below build 20348, or a recording that fell back to endpoint loopback
+/// because process loopback failed. Never on a Mac, whose tap always leaves EchoLedger out.
+pub fn system_audio_note() -> Option<&'static str> {
+    #[cfg(windows)]
+    {
+        if windows::fell_back() { Some(WHOLE_SYSTEM_SENTENCE) } else { system_audio_note_for(windows::os_build()) }
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
 }

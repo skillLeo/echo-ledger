@@ -1,5 +1,7 @@
 //! Tray / menu-bar icon: the app keeps running here when the main window is closed. The icon shows the app's state
-//! (A3.4): a coloured dot on the app icon while recording, paused, uploading or when something needs attention.
+//! (A3.4): on Windows a coloured dot on the app icon while recording, paused, uploading or when something needs
+//! attention. On a Mac the icon is a template image, so it follows light and dark menu bars; while recording it is a
+//! coloured tile of its own, and a dot in the template's ink means uploading or attention (`look`).
 
 use std::sync::Mutex;
 
@@ -70,9 +72,59 @@ pub fn dot_colour(state: TrayState) -> Option<[u8; 4]> {
     }
 }
 
+/// What the icon looks like in a state.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TrayLook {
+    /// macOS tints it for the menu bar (black and alpha only).
+    pub template: bool,
+    /// A tile behind the mark, and the mark's colour on it: a picture that reads on any menu bar without being tinted.
+    pub tile: Option<([u8; 4], [u8; 4])>,
+    pub dot: Option<[u8; 4]>,
+}
+
+/// The Mac's ink in a template image: only the alpha counts.
+const TEMPLATE_INK: [u8; 4] = [0, 0, 0, 0xFF];
+
+/// The look of a state: Windows keeps its coloured dots; a Mac stays a template image, except while recording, when a
+/// red tile (amber when paused) must show whatever the menu bar's colour.
+pub fn look(state: TrayState, macos: bool) -> TrayLook {
+    if !macos {
+        return TrayLook { template: false, tile: None, dot: dot_colour(state) };
+    }
+    match state {
+        TrayState::Idle => TrayLook { template: true, tile: None, dot: None },
+        TrayState::Recording => TrayLook { template: false, tile: Some(([0xE5, 0x48, 0x4D, 0xFF], [0xFF, 0xFF, 0xFF, 0xFF])), dot: None },
+        TrayState::Paused => TrayLook { template: false, tile: Some(([0xFF, 0xC5, 0x3D, 0xFF], [0x1C, 0x20, 0x24, 0xFF])), dot: None },
+        TrayState::Uploading | TrayState::Attention => TrayLook { template: true, tile: None, dot: Some(TEMPLATE_INK) },
+    }
+}
+
+/// Paints a rounded tile behind a mark that is black on transparent (pure): the mark's alpha decides how much of `ink`
+/// shows over `tile`.
+pub fn paint_tile(rgba: &mut [u8], width: u32, height: u32, tile: [u8; 4], ink: [u8; 4]) {
+    let radius = width.min(height) as f32 * 0.24;
+    let (w, h) = (width as f32, height as f32);
+    for y in 0..height {
+        for x in 0..width {
+            let at = ((y * width + x) * 4) as usize;
+            if at + 3 >= rgba.len() {
+                continue;
+            }
+            let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+            let (dx, dy) = ((radius - fx).max(fx - (w - radius)).max(0.0), (radius - fy).max(fy - (h - radius)).max(0.0));
+            let coverage = (radius + 0.5 - (dx * dx + dy * dy).sqrt()).clamp(0.0, 1.0);
+            let mark = rgba[at + 3] as f32 / 255.0;
+            for channel in 0..3 {
+                rgba[at + channel] = (tile[channel] as f32 * (1.0 - mark) + ink[channel] as f32 * mark).round() as u8;
+            }
+            rgba[at + 3] = (coverage * 255.0).round() as u8;
+        }
+    }
+}
+
 /// The tray's own picture (v1.5): the small mark of docs/design/brand (the brand's choice below 24 px), drawn for the
-/// menu bar's 18 pt at 2x on a Mac and for the notification area's 16 px at 2x on Windows. The window icon is the
-/// fallback if it ever fails to decode.
+/// menu bar's 18 pt at 2x on a Mac (black on transparent, `scripts/tray-icon.mjs`) and for the notification area's 16 px
+/// at 2x on Windows. The window icon is the fallback if it ever fails to decode.
 #[cfg(target_os = "macos")]
 const TRAY_PNG: &[u8] = include_bytes!("../icons/tray-macos.png");
 #[cfg(not(target_os = "macos"))]
@@ -204,6 +256,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip(tooltip(TrayState::Idle))
         .menu(&menu)
+        .icon_as_template(look(TrayState::Idle, cfg!(target_os = "macos")).template)
         .show_menu_on_left_click(false);
     if let Some(icon) = tray_base(app) {
         builder = builder.icon(icon);
@@ -216,6 +269,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 let result = match id.as_str() {
                     "open" => {
                         show_main(&app);
+                        Ok(())
+                    }
+                    crate::app_menu::SETTINGS => {
+                        crate::actions::navigate(&app, "settings", None, false);
                         Ok(())
                     }
                     "record" => crate::actions::toggle_recording(&app).await,
@@ -299,11 +356,15 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, p
         *last = Some(state);
         let _ = tray.set_tooltip(Some(tooltip(state)));
         if let Some(base) = tray_base(app) {
+            let shown = look(state, cfg!(target_os = "macos"));
             let mut rgba = base.rgba().to_vec();
-            if let Some(colour) = dot_colour(state) {
+            if let Some((tile, ink)) = shown.tile {
+                paint_tile(&mut rgba, base.width(), base.height(), tile, ink);
+            }
+            if let Some(colour) = shown.dot {
                 paint_dot(&mut rgba, base.width(), base.height(), colour);
             }
-            let _ = tray.set_icon(Some(Image::new_owned(rgba, base.width(), base.height())));
+            let _ = tray.set_icon_with_as_template(Some(Image::new_owned(rgba, base.width(), base.height())), shown.template);
         }
     }
     drop(last);
@@ -402,27 +463,88 @@ mod tests {
         assert!(labels(&recording).contains(&"Stop recording".to_string()));
     }
 
+    fn windows_icon() -> Image<'static> {
+        Image::from_bytes(include_bytes!("../icons/tray-windows.png")).unwrap().to_owned()
+    }
+
+    fn mac_icon() -> Image<'static> {
+        Image::from_bytes(include_bytes!("../icons/tray-macos.png")).unwrap().to_owned()
+    }
+
+    fn pixel(icon: &Image<'_>, x: u32, y: u32) -> [u8; 4] {
+        let at = ((y * icon.width() + x) * 4) as usize;
+        [icon.rgba()[at], icon.rgba()[at + 1], icon.rgba()[at + 2], icon.rgba()[at + 3]]
+    }
+
     #[test]
-    fn the_tray_draws_the_small_mark_at_the_tray_s_size() {
-        let icon = Image::from_bytes(TRAY_PNG).expect("the tray icon decodes");
-        let size = if cfg!(target_os = "macos") { 36 } else { 32 };
+    fn the_windows_tray_draws_the_small_mark_on_its_tile() {
+        let icon = windows_icon();
+        let size = 32;
         assert_eq!((icon.width(), icon.height()), (size, size));
-        let px = |x: u32, y: u32| {
-            let at = ((y * icon.width() + x) * 4) as usize;
-            [icon.rgba()[at], icon.rgba()[at + 1], icon.rgba()[at + 2], icon.rgba()[at + 3]]
-        };
         // A rounded tile: the corner is transparent, the top edge is brand indigo, the ledger line is white.
-        assert_eq!(px(0, 0)[3], 0);
-        assert_eq!(px(size / 2, 2), [0x3E, 0x63, 0xDD, 0xFF]);
-        assert!(px(size / 2, size * 45 / 64)[..3].iter().all(|&c| c > 0xF0));
-        for other in [include_bytes!("../icons/tray-macos.png").as_slice(), include_bytes!("../icons/tray-windows.png").as_slice()] {
-            assert!(Image::from_bytes(other).is_ok());
+        assert_eq!(pixel(&icon, 0, 0)[3], 0);
+        assert_eq!(pixel(&icon, size / 2, 2), [0x3E, 0x63, 0xDD, 0xFF]);
+        assert!(pixel(&icon, size / 2, size * 45 / 64)[..3].iter().all(|&c| c > 0xF0));
+    }
+
+    #[test]
+    fn the_mac_icon_is_a_template_image_at_2x() {
+        let icon = mac_icon();
+        assert_eq!((icon.width(), icon.height()), (36, 36), "18 pt at 2x: sharp on Retina");
+        let pixels = icon.rgba().as_chunks::<4>().0;
+        assert!(pixels.iter().all(|p| p[..3] == [0, 0, 0] || p[3] == 0), "only black and alpha: macOS tints it");
+        let drawn = pixels.iter().filter(|p| p[3] > 128).count();
+        assert!((80..700).contains(&drawn), "strokes, not a filled tile: {drawn} px");
+        assert_eq!(pixel(&icon, 0, 0)[3], 0, "the corners are empty");
+        assert_eq!(pixel(&icon, 35, 35)[3], 0);
+    }
+
+    #[test]
+    fn a_mac_icon_is_a_template_except_while_recording() {
+        assert_eq!(look(TrayState::Idle, true), TrayLook { template: true, tile: None, dot: None });
+        assert!(!look(TrayState::Recording, true).template, "a red picture must stay red");
+        assert!(look(TrayState::Recording, true).tile.is_some());
+        assert!(!look(TrayState::Paused, true).template);
+        for state in [TrayState::Uploading, TrayState::Attention] {
+            let shown = look(state, true);
+            assert!(shown.template && shown.tile.is_none());
+            assert_eq!(shown.dot, Some(TEMPLATE_INK), "a dot in the template's ink, tinted with the rest");
         }
     }
 
     #[test]
+    fn windows_keeps_its_coloured_dots() {
+        for state in [TrayState::Idle, TrayState::Recording, TrayState::Paused, TrayState::Uploading, TrayState::Attention] {
+            assert_eq!(look(state, false), TrayLook { template: false, tile: None, dot: dot_colour(state) });
+        }
+    }
+
+    #[test]
+    fn the_recording_tile_is_solid_with_a_white_mark_and_round_corners() {
+        let icon = mac_icon();
+        let mut rgba = icon.rgba().to_vec();
+        let (tile, ink) = look(TrayState::Recording, true).tile.unwrap();
+        paint_tile(&mut rgba, 36, 36, tile, ink);
+        let painted = Image::new_owned(rgba, 36, 36);
+        assert_eq!(pixel(&painted, 0, 0)[3], 0, "a rounded corner");
+        assert_eq!(pixel(&painted, 18, 2), tile, "the tile's own colour where the mark is not");
+        let strokes = painted.rgba().as_chunks::<4>().0.iter().filter(|p| p[..3] == ink[..3]).count();
+        assert!(strokes > 80, "the mark shows in white: {strokes} px");
+    }
+
+    #[test]
+    fn a_status_dot_on_the_template_is_cut_clear_of_the_mark() {
+        let icon = mac_icon();
+        let mut rgba = icon.rgba().to_vec();
+        paint_dot(&mut rgba, 36, 36, TEMPLATE_INK);
+        let at = ((30 * 36 + 30) * 4) as usize;
+        assert_eq!(&rgba[at..at + 4], &TEMPLATE_INK);
+        assert!(rgba.as_chunks::<4>().0.iter().all(|p| p[..3] == [0, 0, 0] || p[3] == 0), "still a template image");
+    }
+
+    #[test]
     fn a_status_dot_fits_the_tray_icon() {
-        let icon = Image::from_bytes(TRAY_PNG).unwrap();
+        let icon = windows_icon();
         let mut rgba = icon.rgba().to_vec();
         paint_dot(&mut rgba, icon.width(), icon.height(), [0xE5, 0x48, 0x4D, 0xFF]);
         let at = (((icon.height() - 6) * icon.width() + icon.width() - 6) * 4) as usize;

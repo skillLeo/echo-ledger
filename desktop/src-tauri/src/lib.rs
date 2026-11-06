@@ -4,6 +4,7 @@ pub mod account;
 mod actions;
 pub mod activity;
 pub mod after_call;
+pub mod app_menu;
 pub mod audio;
 mod commands;
 pub mod deep_link;
@@ -13,11 +14,13 @@ pub mod error;
 pub mod files;
 pub mod lifecycle;
 pub mod lock;
+pub mod mac_check;
 pub mod material;
 pub mod net;
 pub mod overlay;
 pub mod owner;
 pub mod pending;
+pub mod permissions;
 pub mod plan;
 pub mod projects;
 pub mod recovery;
@@ -108,6 +111,14 @@ pub struct AppState {
     pub owner_checked: AtomicBool,
     /// Signed updates from the server (v1.5): the status, the one running job, the update ready to install.
     pub updates: updates::Updates,
+    /// What the system does not let the running recording use, and what it holds without it (Phase 1B).
+    pub recording_missing: Mutex<Vec<permissions::Missing>>,
+    /// Which permissions were granted last time, and what the person has not been told is gone yet (Phase 1B).
+    pub permission_memory: Mutex<permissions::Memory>,
+    /// The devices of the running recording: a channel without one, or news of a change (Phase 1B).
+    pub device_status: Mutex<audio::devices::DeviceStatus>,
+    /// The last Mac check of this run (Phase 1B).
+    pub mac_check: Mutex<Option<mac_check::CheckReport>>,
 }
 
 impl AppState {
@@ -121,6 +132,7 @@ impl AppState {
         });
         let library = LibraryCache::load(&paths::library(&data_dir));
         let settings_locked = settings.app_lock && lock::LockFile::load(&paths::app_lock(&data_dir)).pin_hash.is_some();
+        let permission_memory = permissions::Memory::load(&permissions::Memory::path(&data_dir));
         Self {
             data_dir,
             settings: Mutex::new(settings),
@@ -160,6 +172,10 @@ impl AppState {
             recording_owner: Mutex::new(None),
             owner_checked: AtomicBool::new(false),
             updates: updates::Updates::default(),
+            recording_missing: Mutex::new(Vec::new()),
+            permission_memory: Mutex::new(permission_memory),
+            device_status: Mutex::new(audio::devices::DeviceStatus::default()),
+            mac_check: Mutex::new(None),
         }
     }
 
@@ -189,6 +205,21 @@ impl AppState {
 
     pub fn is_paired(&self) -> bool {
         self.token.lock().map(|t| t.is_some()).unwrap_or(false) && self.lock_settings().server_url.is_some()
+    }
+
+    /// What the system allows now, taken into the memory of what was granted (a permission that went is said once).
+    pub fn permissions_now(&self) -> permissions::Permissions {
+        let now = permissions::read();
+        if cfg!(target_os = "macos") {
+            let screens_wanted = self.lock_settings().screen_moments;
+            let mut memory = self.permission_memory.lock().unwrap_or_else(|p| p.into_inner());
+            let next = memory.observe(&now, screens_wanted);
+            if next != *memory {
+                next.save(&permissions::Memory::path(&self.data_dir));
+                *memory = next;
+            }
+        }
+        now
     }
 
     /// The account queued work without an owner belongs to (v1.5, see `owner`).
@@ -249,6 +280,11 @@ pub fn run() {
     if smoke_dir.is_none() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))); // must be first
     }
+    // ⌘, ⌘W ⌘Q and the Edit keys of a Mac. Windows has no app menu: its windows would grow a menu bar.
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.menu(app_menu::build);
+    }
     let app = builder
         .plugin(shortcuts::plugin())
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--autostart"])))
@@ -281,6 +317,8 @@ pub fn run() {
                 return Ok(());
             }
             let settings = app.state::<AppState>().settings();
+            // Without a Developer ID macOS may forget permissions at an update: looked at every start (Phase 1B).
+            app.state::<AppState>().permissions_now();
             // An update downloaded by the last run installs now, before anything records (v1.5).
             updates::install_kept(&handle);
 
@@ -406,7 +444,13 @@ pub fn run() {
             commands::input_devices,
             commands::test_capture,
             commands::permissions_status,
+            commands::permission_request,
+            commands::permission_notice_dismiss,
             commands::open_privacy_settings,
+            commands::mac_check_run,
+            commands::mac_check_last,
+            commands::mac_check_copy,
+            commands::mac_check_send,
             commands::search_library,
             commands::transcript_edit,
             commands::transcript_replace,

@@ -577,3 +577,47 @@ pub struct DeviceTranscript {
     pub language: Option<String>,
     pub segments: Vec<SegmentDto>,
 }
+
+/// `POST /api/devices/report` (since v1.5): what a device check found, sent only when the person chose to.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct DeviceReport {
+    pub platform: &'static str,
+    pub app_version: String,
+    pub brand: &'static str,
+    pub model: String,
+    pub os_version: String,
+    pub checks: Vec<DeviceReportCheck>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct DeviceReportCheck {
+    pub key: &'static str,
+    pub state: crate::mac_check::CheckState,
+    pub detail: Option<String>,
+}
+
+impl DeviceReport {
+    /// The Mac check's report in the server's form, cut to its limits (`brand`, `model`, `os_version` 64 characters,
+    /// `app_version` 32; the details already fit).
+    pub fn of_mac_check(report: &crate::mac_check::CheckReport) -> Self {
+        let cut = |text: &str, most: usize| text.chars().take(most).collect::<String>();
+        Self {
+            platform: "macos",
+            app_version: cut(&report.app_version, 32),
+            brand: "Apple",
+            model: cut(&report.model, 64),
+            os_version: cut(&report.os_version, 64),
+            checks: report.items.iter().map(|i| DeviceReportCheck { key: i.key, state: i.state, detail: Some(i.detail.clone()) }).collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DeviceReportAnswer {
+    pub data: DeviceReportReceipt,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct DeviceReportReceipt {
+    pub reported_at: String,
+}

@@ -233,9 +233,11 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
     if state.updates.is_installing() {
         return Err(AppError::msg(crate::updates::INSTALLING));
     }
+    let missing = checked_permissions(&state, RecordingMode::Call)?;
     let client_id = state.settings().client_id.clone();
     clear_captions(app); // a new recording never inherits the previous one's lines
     let info = state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
+    *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = missing;
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(auto, Ordering::SeqCst);
     on_recording_started(app, &info);
@@ -243,6 +245,15 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
         let _ = app.emit("app:error", e.to_string());
     }
     Ok(())
+}
+
+/// What the system lets a recording of `mode` use (Phase 1B): what will be missing from it, or the refusal when it would
+/// hold nothing. It never starts silently empty.
+fn checked_permissions(state: &crate::AppState, mode: RecordingMode) -> AppResult<Vec<crate::permissions::Missing>> {
+    match crate::permissions::check_start(mode, &state.permissions_now()) {
+        crate::permissions::StartCheck::Go(missing) => Ok(missing),
+        crate::permissions::StartCheck::Refuse(sentence) => Err(AppError::Message(sentence)),
+    }
 }
 
 /// Voice note while audio plays on this computer (system audio only).
@@ -269,8 +280,10 @@ async fn toggle_note(app: &AppHandle, mode: RecordingMode) -> AppResult<()> {
     if state.updates.is_installing() {
         return Err(AppError::msg(crate::updates::INSTALLING));
     }
+    let missing = checked_permissions(&state, mode)?;
     clear_captions(app);
     let info = state.capture.start(&paths::recordings(&state.data_dir), mode, "voice_note", state.settings().client_id.clone())?;
+    *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = missing;
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(false, Ordering::SeqCst);
     on_recording_started(app, &info);
@@ -295,6 +308,7 @@ fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     state.session_link.lock().unwrap_or_else(|p| p.into_inner()).start(&info.client_ref);
     state.pill_hidden.store(false, Ordering::SeqCst);
     state.captions_on_resume.store(false, Ordering::SeqCst);
+    *state.device_status.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
     crate::overlay::set_pill_visible(app, true);
     start_ticker(app);
     emit_status(app);
@@ -342,6 +356,8 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     crate::screens::on_recording_ended(app).await;
     let finished = state.capture.stop()?;
     state.bluetooth_mic.store(false, Ordering::SeqCst);
+    state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()).clear();
+    *state.device_status.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
     set_overlay_visible(app, OVERLAY, false);
     crate::overlay::set_pill_visible(app, false);
     *state.recording_started_at.lock().unwrap() = None;
@@ -956,9 +972,33 @@ fn start_ticker(app: &AppHandle) {
                 emit_recording_state(&app);
                 break;
             }
+            take_device_notices(&app);
             emit_recording_state(&app);
         }
     });
+}
+
+/// What the capture says about its devices (a headset came or went, Phase 1B) goes to the pill and the Record page; a
+/// new microphone is looked at again for Bluetooth.
+fn take_device_notices(app: &AppHandle) {
+    use crate::audio::devices::DeviceNotice;
+    let state = app.state::<crate::AppState>();
+    let notices = state.capture.take_device_notices();
+    if notices.is_empty() {
+        return;
+    }
+    let now = Instant::now();
+    {
+        let mut status = state.device_status.lock().unwrap_or_else(|p| p.into_inner());
+        for notice in &notices {
+            status.apply(notice, now);
+        }
+    }
+    let new_mic = notices.iter().any(|n| matches!(n, DeviceNotice::Moved { channel: crate::audio::types::Channel::Mic, .. } | DeviceNotice::Back { channel: crate::audio::types::Channel::Mic, .. }));
+    if new_mic && let Some(info) = state.capture.info() {
+        check_bluetooth_mic(app, &info);
+    }
+    emit_status(app);
 }
 
 /// Appends an item to `uploads.json` and wakes the upload worker. An import of a file that is already queued (same

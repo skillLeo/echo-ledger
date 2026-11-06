@@ -5,6 +5,7 @@ import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTa
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityUnread } from "./ActivityCentre";
 import { OnboardingView } from "./OnboardingView";
+import { PermissionLossNotice } from "./Permissions";
 import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MonitorIcon, MoonIcon, RecordIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
 import { BrandMark } from "../../components/BrandMark";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
@@ -524,6 +525,7 @@ export default function MainApp() {
       </aside>
       <main ref={contentRef} className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
         <UpdateBanner appStatus={status} notify={notify} />
+        {status.platform === "macos" && <PermissionLossNotice />}
         {status.budget === "reached" && (
           <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
         )}
