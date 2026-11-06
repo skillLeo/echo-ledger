@@ -39,6 +39,7 @@ use App\Stt\SttManager;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
@@ -50,6 +51,7 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use League\Flysystem\Filesystem;
@@ -82,8 +84,23 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(RecordingCipher::class, fn (): RecordingCipher => RecordingCipher::fromConfig());
     }
 
+    /**
+     * Every link this server makes starts with APP_URL, whatever Host a request names (reset, invitation and sign-in
+     * links go out by email). Local and tests keep the request's address: a phone on the desk reaches a laptop by its IP.
+     */
+    public static function useAppUrl(Application $app): void
+    {
+        if (! $app->environment('local') && ! $app->runningUnitTests()) {
+            $root = rtrim((string) config('app.url'), '/');
+            URL::forceRootUrl($root);
+            URL::forceScheme(parse_url($root, PHP_URL_SCHEME) ?: null);
+        }
+    }
+
     public function boot(): void
     {
+        self::useAppUrl($this->app);
+
         // RECORDINGS_DRIVER=s3 (config/filesystems.php). Laravel's own s3 driver needs the AWS SDK, which is not installed.
         Storage::extend('s3-compatible', function ($app, array $config): ObjectStorageDisk {
             foreach (['key', 'secret', 'region', 'bucket'] as $name) {

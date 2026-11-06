@@ -32,6 +32,9 @@ reconciler and the 30-day retention cleanup.
    DB_QUEUE_RETRY_AFTER=960
    SESSION_SECURE_COOKIE=true
    ```
+   **`APP_URL` must be exactly the address people and the apps use.** Every link this server makes starts with it, and
+   since v1.5 it answers only that host (no subdomains): with any other address, `www.` included, every request fails
+   with 400. Serving a second name? Redirect it to this one at the web server.
 4. `php artisan key:generate --force`
 5. `php artisan echoledger:key` — writes `ECHOLEDGER_RECORDINGS_KEY`.
    **Back this key up offline (password manager).** Without it every stored recording is unreadable. It is

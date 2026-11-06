@@ -22,6 +22,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'abilities' => CheckAbilities::class,
             'ability' => CheckForAnyAbility::class,
         ]);
+        // Only the address in APP_URL reaches the app, without subdomains, so a made-up Host header cannot end up in a
+        // link this server emails (the web server's half is in docs/DEPLOY_VPS.md). These are regular expressions, hence
+        // the anchors. Laravel skips this in local and in tests; Security/ReleaseReviewTest.php runs it as production does.
+        $middleware->trustHosts(fn (): array => ['^'.preg_quote((string) parse_url((string) config('app.url'), PHP_URL_HOST)).'$'], subdomains: false);
         // API clients and the connector's /mcp get 401 JSON; browsers go to the Filament login.
         $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*', 'mcp') ? null : route('filament.admin.auth.login'));
         // nosniff, Referrer-Policy, framing, HSTS and the console CSP on every answer.

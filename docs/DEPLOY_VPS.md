@@ -41,7 +41,8 @@ as they are: they unlock the stored recordings.
 ```
 QUEUE_CONNECTION=redis
 CACHE_STORE=redis
-SESSION_DRIVER=redis
+# Sessions stay in the database: "Sign out everywhere" and Profile → Devices read and delete them there, with Redis browsers stay signed in.
+SESSION_DRIVER=database
 REDIS_HOST=127.0.0.1
 REDIS_PASSWORD=<the Redis password>
 REDIS_PORT=6379
@@ -160,7 +161,24 @@ but no longer starts workers.
 
 ## Nginx
 
+The first block closes the connection for any address that is not yours, so a made-up `Host` header never reaches the
+app (the app refuses one too, and `APP_URL` must be the address in `server_name`: see `web/DEPLOY.md`).
+
 ```
+server {
+    listen 80 default_server;
+    listen 443 ssl http2 default_server;
+    server_name _;
+    ssl_reject_handshake on;          # no certificate for a name that is not yours
+    return 444;
+}
+
+server {
+    listen 80;
+    server_name <console host>;
+    return 301 https://<console host>$request_uri;
+}
+
 server {
     listen 443 ssl http2;
     server_name <console host>;
