@@ -65,7 +65,6 @@ Every addition below is marked **(since v1.1)**.
 | 404 | `file_not_found` | Since v1.4: the client file is unknown or already deleted | Refresh the workspace |
 | 404 | `suggestion_not_found` | Since v1.4: the suggested fix is unknown or was already accepted or dismissed | Refresh the transcript |
 | 404 | `rule_not_found` | Since v1.5: the filing rule is unknown or belongs to another project | Refresh the rules |
-| 404 | `recipient_not_found` | Since v1.5: an email to send to has no account on this server; nothing was sent | Check the address |
 | 409 | `rule_exists` | Since v1.5: another project already has a rule with that kind and value | Show which project has it |
 | 409 | `too_many_screens` | Since v1.5: a recording keeps at most 400 screen moments | Stop sending screens for this recording |
 | 401 | `otp_required` | Since v1.5: the account has two-factor sign-in; send `otp` | Ask for the code and send again |
@@ -370,8 +369,9 @@ Live Translate on the phone (Phase B: game voice chat and videos). Body `{"mode"
 Soniox directly and asks again before `expires_at`; no audio passes through the server and the account key never
 leaves it. The answer also carries `budget`: `{"used_usd": 0.9, "limit_usd": 10.0, "warn": false, "reached": false}`,
 Live Translate's own monthly budget (`live_translate.monthly_usd`, default $10; Game and Watch translate together,
-not counted in the transcription limit). Errors: `403 budget_exceeded` (Live Translate's budget is used up; send
-`"continue_over_budget": true` once the person chose to continue this month), `503 provider_not_configured` (no
+not counted in the transcription limit). Errors: `403 budget_exceeded` (Live Translate's budget is used up; a workspace owner or admin may send
+`"continue_over_budget": true` once they chose to continue this month, up to twice the budget; a member, or anyone past
+that, gets `403 budget_exceeded` whatever the flag says), `503 provider_not_configured` (no
 Soniox key), `502 provider_error` (Soniox refused: the message says whether the key, the credit or Soniox itself is
 the problem).
 
@@ -421,7 +421,11 @@ the problem).
 Idempotent streaming usage report. Devices send one report per streaming period: from the moment the provider
 sockets of a captions or dictation run open until they close (stop, pause, or the end of the recording). A pause
 or a restart starts a new period with a new `report_id`. Reports are queued on the device and retried until the
-server answers 200/201; a `422` report is dropped.
+server answers 200/201; a `422` report is dropped. Since v1.5 a report counts only for streaming this device was
+granted: the server notes each `stt/token` and `live-translate/token` it issues, and a device's reports since its first
+grant of the last 48 hours cannot add up to more than the time since that grant (5 minutes' slack). A report past that is
+stored with what was left, down to `streamed_ms: 0`, and still answers 200/201 so the device stops retrying. A viewer's
+device answers `403 not_allowed`.
 ```json
 // request
 {"report_id": "6c0d0b2e-2a4e-4c8e-9a9f-0c3f1f5b7d11", "use_case": "live_captions", "provider": "assemblyai",
@@ -733,8 +737,20 @@ Share links can now be for a project too, and say who may open them.
 
 ### Sending to a teammate (since v1.5)
 - `POST /api/sessions/{id}/send` and `POST /api/clients/{id}/send` — `sessions:write`: `{"to": ["ana@example.com"],
-  "note": "for tomorrow"}` (up to 20 emails of people with an account on this server; `note` ≤ 500) →
-  `201 {"sent": 1}`; an email with no account is `404 recipient_not_found` (nothing is sent).
+  "note": "for tomorrow"}` (up to 20 emails; `note` ≤ 500; throttled to 30 sends an hour per person) →
+  `201 {"sent": 2}`, the number of addresses asked. So that this route cannot be used to learn who has an account, an
+  address with no confirmed account on this server answers the same and simply receives nothing; apps say so ("People
+  without an account here will not receive it"). `recipient_not_found` is no longer answered.
+- **What a sent project holds:** the recordings in it (and in its subfolders) when it was sent, while they stay there.
+  A recording filed in it later is not sent until the project is sent again; its brief, notes and files stay current.
+  Saving a copy keeps it whatever happens next.
+- `GET /api/sent?session_id=…` or `?client_id=…` — `library:read`: what you sent of that recording or project, newest
+  first: `{"data": [{"id": "01JD…", "kind": "session" | "project", "to": {"name": "Ana", "email": "…"}, "title": "Call
+  with Omar", "note": "…", "sent_at": "…", "saved_at": null}]}`.
+- `DELETE /api/sent/{id}` — `sessions:write`: **stop sharing** what you sent → `204`; it leaves the person's list and
+  they can no longer open it. A copy they already saved stays theirs. Someone else's id is `404`.
+- Removing a person from a workspace ends what was sent to them from that workspace (copies they saved stay theirs) and
+  what they shared by link there. An account in its 7-day deletion grace serves no links until it cancels.
 - `GET /api/shared-with-me` — `library:read`: `{"data": [{"id": "01JD…", "kind": "session" | "project", "from":
   {"name": "Hassam", "email": "…"}, "note": "…", "title": "Call with Omar", "sent_at": "…", "saved_at": null,
   "session": <library item, read-only> | null, "client": <client> | null}]}`. Received recordings are also in the
