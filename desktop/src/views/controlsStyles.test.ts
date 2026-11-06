@@ -62,10 +62,11 @@ describe("recording pill styles", () => {
   });
 
   it("pulses the REC dot, but not with reduced motion", () => {
-    expect(styleOf("rec-dot", "pill-root").animationName).toBe("rec-pulse");
+    const ring = [...style.sheet!.cssRules].find((r): r is CSSStyleRule => r instanceof CSSStyleRule && r.selectorText === ".rec-dot::after");
+    expect(ring?.style.animationName).toBe("rec-pulse");
     const reduced = rulesIn("prefers-reduced-motion");
-    const dot = reduced.find((r) => r.selectorText === ".rec-dot");
-    expect(dot?.style.animation).toBe("none");
+    const still = reduced.find((r) => r.selectorText === ".rec-dot::after");
+    expect(still?.style.animation).toBe("none");
   });
 });
 

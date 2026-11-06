@@ -15,6 +15,7 @@ import {
   type TestResult,
 } from "../../lib/ipc";
 import { meterLevel } from "../../lib/controls";
+import { fillWidth } from "../../lib/motion";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { sourceAppLabel } from "../../lib/format";
 import { SourceAppIcon } from "../../components/Icons";
@@ -176,8 +177,8 @@ export function MicrophoneCard({ settings, patch, disabled }: { settings: Settin
       </div>
       {(testing || result) && (
         <div aria-live="polite">
-          <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(testing ? levels[0] : result?.micPeak ?? 0) * 100)}><div style={{ width: `${meterLevel(testing ? levels[0] : result?.micPeak ?? 0) * 100}%` }} /></div></div>
-          <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter" role="meter" aria-label="Computer sound level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(testing ? levels[1] : result?.systemPeak ?? 0) * 100)}><div style={{ width: `${meterLevel(testing ? levels[1] : result?.systemPeak ?? 0) * 100}%` }} /></div></div>
+          <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(testing ? levels[0] : result?.micPeak ?? 0) * 100)}><div style={fillWidth(meterLevel(testing ? levels[0] : result?.micPeak ?? 0))} /></div></div>
+          <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter" role="meter" aria-label="Computer sound level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(testing ? levels[1] : result?.systemPeak ?? 0) * 100)}><div style={fillWidth(meterLevel(testing ? levels[1] : result?.systemPeak ?? 0))} /></div></div>
           {result && (
             <>
               {testVerdict(result).map((line) => <p className="small" key={line}>{line}</p>)}

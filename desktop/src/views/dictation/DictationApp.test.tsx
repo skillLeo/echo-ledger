@@ -104,8 +104,10 @@ describe("dictation box", () => {
     expect(meter).toHaveAttribute("aria-valuenow", "0");
     await emitEvent("dictation:level", 0.2);
     expect(Number(meter.getAttribute("aria-valuenow"))).toBeGreaterThan(0);
+    expect((meter.firstElementChild as HTMLElement).style.transform).toBe("scaleX(0.8)");
     await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle" });
     expect(meter).toHaveAttribute("aria-valuenow", "0");
+    expect((meter.firstElementChild as HTMLElement).style.transform).toBe("scaleX(0)");
   });
 
   it("plays the start and stop sounds only when they are on", async () => {

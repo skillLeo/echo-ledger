@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from "react";
 import { api, errorMessage, type LockAfterMinutes, type LockStatus, type SecurityDevice, type SecurityEvent, type Settings, type SettingsPatch, type StorageInfo } from "../../lib/ipc";
 import { fileSize, formatWhen } from "../../lib/format";
+import { fillWidth } from "../../lib/motion";
 import { SelectRow, Toggle } from "./SettingsControls";
 import { SYSTEM_LABEL } from "./LockScreen";
 
@@ -142,7 +143,7 @@ export function StorageCard({ limitBytes = null }: { limitBytes?: number | null 
           </p>
           {used !== null && (
             <div className="flow-bar" role="meter" aria-label="Server disk used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(used * 100)}>
-              <span style={{ width: `${Math.round(used * 100)}%` }} />
+              <span style={fillWidth(used)} />
             </div>
           )}
           {used !== null && <p className="small muted">Server disk {Math.round(used * 100)}% used · {fileSize(info.disk_free_bytes ?? 0)} free.</p>}

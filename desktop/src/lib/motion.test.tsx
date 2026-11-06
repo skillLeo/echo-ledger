@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, renderHook, screen } from "@testing-library/react";
 import { fakeAnimations, prefersReducedMotion } from "../test/motion";
-import { aroundOf, EASE, enterView, isConfirmation, MOTION, MotionGroup, openFromRow, reducedMotion, snapshotRow, usePresence, viewDirection } from "./motion";
+import { aroundOf, EASE, enterView, fillHeight, fillWidth, isConfirmation, MOTION, MotionGroup, openFromRow, reducedMotion, snapshotRow, usePresence, viewDirection } from "./motion";
 
 /** Only transform and opacity move (and the transform's origin, which does not move anything). */
 const ALLOWED = new Set(["transform", "opacity", "transformOrigin", "offset", "easing", "composite"]);
@@ -167,6 +167,15 @@ describe("motion", () => {
     changes.disconnect();
     expect(screen.getByTestId("shown")).toBe(element);
     expect(element).toHaveClass("leaving");
+  });
+
+  it("fills a bar by scaling it, between empty and full, whatever the level says", () => {
+    expect(fillWidth(0.4)).toEqual({ transform: "scaleX(0.4)" });
+    expect(fillHeight(0.125)).toEqual({ transform: "scaleY(0.125)" });
+    expect(fillWidth(1.5)).toEqual({ transform: "scaleX(1)" });
+    expect(fillWidth(-1)).toEqual({ transform: "scaleX(0)" });
+    expect(fillWidth(Number.NaN)).toEqual({ transform: "scaleX(0)" });
+    expect(fillWidth(1 / 3)).toEqual({ transform: "scaleX(0.333)" });
   });
 
   it("gives the check to messages that confirm something, as the phone does", () => {

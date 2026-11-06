@@ -34,7 +34,7 @@ async function setup(status: Partial<AppStatus> = {}, users: MicUser[] = []) {
   return { run, ...view };
 }
 
-const meterWidths = (container: HTMLElement) => [...container.querySelectorAll<HTMLElement>(".meter > div")].map((el) => el.style.width);
+const meterFills = (container: HTMLElement) => [...container.querySelectorAll<HTMLElement>(".meter > div")].map((el) => el.style.transform);
 
 describe("RecordView main control", () => {
   beforeEach(() => resetTauriMock());
@@ -97,10 +97,10 @@ describe("RecordView main control", () => {
 
   it("scales the Me and Client meters from the audio levels and caps them at full", async () => {
     const quiet = await setup({ levels: [0, 0] });
-    expect(meterWidths(quiet.container)).toEqual(["0%", "0%"]);
+    expect(meterFills(quiet.container)).toEqual(["scaleX(0)", "scaleX(0)"]);
     quiet.unmount();
     const mixed = await setup({ levels: [0.1, 0.5] });
-    expect(meterWidths(mixed.container)).toEqual(["40%", "100%"]);
+    expect(meterFills(mixed.container)).toEqual(["scaleX(0.4)", "scaleX(1)"]);
     expect(screen.getByText("Me")).toBeInTheDocument();
     expect(screen.getByText("Client")).toBeInTheDocument();
   });

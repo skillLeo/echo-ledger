@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type PendingItem, type TranscriptionLanguage, type UploadItem } from "../../lib/ipc";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, learnPrompt, menuLabel, type LanguageChoice } from "../../lib/languages";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
+import { fillWidth } from "../../lib/motion";
 import {
   DISCARD_CONFIRM,
   bulkNotice,
@@ -416,7 +417,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                   <button type="button" className="btn ghost compact" disabled={busy === item.id} onClick={() => void cancelImport(item)}>Cancel</button>
                 </div>
                 <div className="meter import-meter" role="progressbar" aria-label={`Upload of ${title}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-                  <div style={{ width: `${percent}%` }} />
+                  <div style={fillWidth(percent / 100)} />
                 </div>
               </div>
             );

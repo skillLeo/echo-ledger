@@ -262,8 +262,10 @@ label.field { display: grid; gap: 6px; margin-bottom: var(--space-3); color: var
 .badge { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 var(--space-2); border-radius: var(--radius-tag); font-size: var(--text-xs); font-weight: 500; border: 0; background: rgba(0, 0, 0, 0); color: var(--text-muted); white-space: nowrap; }
 .badge.phone, .badge.desktop, .badge.web { color: var(--text-muted); }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); display: inline-block; flex: none; }
-.status-dot.live { background: var(--rec); box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.22); animation: pulse 1.6s infinite; }
-@keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(229, 72, 77, 0.05); } }
+.status-dot.live { position: relative; background: var(--rec); }
+/* Its ring is a shape that scales and fades, 3 px to 6 px around the dot: nothing is repainted while it records. */
+.status-dot.live::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; background: rgba(229, 72, 77, 0.22); pointer-events: none; animation: pulse 1.6s infinite; }
+@keyframes pulse { 50% { transform: scale(1.43); opacity: 0.23; } }
 
 /* Segmented control: 2-4 choices (the phone's SegmentedControl). */
 .segmented { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-full); background: var(--surface-2); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
@@ -368,7 +370,7 @@ select.chip option { color: var(--text); background: var(--surface); }
 .record-btn:hover { transform: scale(1.03); }
 .record-btn:active { transform: scale(0.96); }
 .meter { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; width: 160px; }
-.meter > div { height: 100%; background: var(--accent); transition: width 120ms linear; }
+.meter > div { height: 100%; background: var(--accent); transform-origin: 0 50%; transition: transform 120ms linear; }
 .dropzone { border: 1.5px dashed var(--border-strong); border-radius: var(--radius-md); padding: var(--space-5); text-align: center; color: var(--text-muted); background: transparent; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
 /* Settings rows: label (and hint) on the left, the control on the right, a divider between. */
@@ -691,7 +693,7 @@ audio.player { display: none; }
 
 /* Dictation flow bar (B14): the microphone level under the header. */
 .flow-bar { height: 3px; border-radius: 2px; background: var(--glass-hover); overflow: hidden; margin: 0 0 var(--space-2); }
-.flow-bar > span { display: block; height: 100%; background: var(--accent); transition: width 0.1s linear; }
+.flow-bar > span { display: block; height: 100%; background: var(--accent); transform-origin: 0 50%; transition: transform 0.1s linear; }
 .dictation-snippet { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Library organisation (B15): labels, pins, folders and bulk actions. */
@@ -822,7 +824,7 @@ audio.player { display: none; }
   /* States change at once: the ring stays still, the check and the record glyph are simply there. */
   .record-wrap.live::before { animation: none; opacity: 0.45; }
   .success-check, .record-glyph { animation: none; }
-  .spinner, .status-dot.live { animation: none; }
+  .spinner, .status-dot.live::after { animation: none; }
   .queue-item { transition: none; }
   .overlay-card { transition: none; }
   .flow-bar > span { transition: none; }

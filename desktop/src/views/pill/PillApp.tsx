@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState, type ScreenHoldReason, type ScreensPill } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
+import { fillHeight } from "../../lib/motion";
 import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
 import { elapsedAt, formatTimer, isTwoChannel, meterLevel, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { BLUETOOTH_NOTE } from "../../lib/microphone";
@@ -314,8 +315,8 @@ export default function PillApp() {
         )}
         {isTwoChannel(live.mode) && !confirming && (
           <span className="rec-meters" data-testid="pill-meters">
-            <span className="rec-meter me" title="Me" aria-hidden="true"><span style={{ height: `${Math.round(meterLevel(me) * 100)}%` }} /></span>
-            <span className="rec-meter client" title="Client" aria-hidden="true"><span style={{ height: `${Math.round(meterLevel(client) * 100)}%` }} /></span>
+            <span className="rec-meter me" title="Me" aria-hidden="true"><span style={fillHeight(meterLevel(me))} /></span>
+            <span className="rec-meter client" title="Client" aria-hidden="true"><span style={fillHeight(meterLevel(client))} /></span>
           </span>
         )}
         {confirming ? (

@@ -57,7 +57,7 @@ describe("recording pill", () => {
     expect(screen.getByTestId("pill-timer")).toHaveTextContent("1:05");
     expect(screen.getByText("Zoom")).toBeInTheDocument();
     const bars = screen.getByTestId("pill-meters").querySelectorAll(".rec-meter > span");
-    expect([...bars].map((b) => (b as HTMLElement).style.height)).toEqual(["40%", "80%"]);
+    expect([...bars].map((b) => (b as HTMLElement).style.transform)).toEqual(["scaleY(0.4)", "scaleY(0.8)"]);
     for (const name of ["Pause recording", "Stop recording", "Cancel recording", "Turn captions on", "Hide controls"]) {
       expect(button(name)).toHaveAttribute("title", name);
     }

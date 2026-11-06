@@ -5,6 +5,7 @@ import { explainMicUser, micTone } from "../../lib/explainer";
 import { DISCARD_CONFIRM } from "../../lib/pending";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { useWindowShown } from "../../lib/visibility";
+import { fillWidth } from "../../lib/motion";
 import { CaptionsIcon, CopyIcon, MicIcon, RecordIcon } from "../../components/Icons";
 import { RecordDotIcon, StopIcon } from "../../components/ControlIcons";
 import { LiveTranslateCard } from "./LiveTranslateCard";
@@ -153,8 +154,8 @@ export function RecordView({ status, run, onImport }: {
                 <button type="button" className="btn ghost compact danger" aria-label="Cancel recording" onClick={cancel}>Cancel</button>
               </div>
             )}
-            <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter"><div style={{ width: `${Math.min(100, mic * 400)}%` }} /></div></div>
-            <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter"><div style={{ width: `${Math.min(100, sys * 400)}%` }} /></div></div>
+            <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter"><div style={fillWidth(mic * 4)} /></div></div>
+            <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter"><div style={fillWidth(sys * 4)} /></div></div>
             {bluetooth && recording?.mode !== "voice_note" && (
               <p className="small muted bluetooth-note" data-testid="bluetooth-note" title={bluetooth.name}>{BLUETOOTH_NOTE} · {bluetooth.name}</p>
             )}
