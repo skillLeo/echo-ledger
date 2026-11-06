@@ -5,7 +5,9 @@ reconciler and the 30-day retention cleanup.
 
 ## Requirements
 - PHP **≥ 8.4.1** (the lock file enforces it) with `sodium`, `pdo_mysql` (or `pdo_sqlite`), `mbstring`, `intl`,
-  `fileinfo`, `zip`, `curl`, `openssl`, and since v1.5 `gd` with WebP (screen moment thumbnails).
+  `fileinfo`, `zip`, `curl`, `openssl`, and since v1.5 `gd` with WebP (screen moment thumbnails). `sodium` and `openssl`
+  are also what the Claude and ChatGPT connector signs its tokens with (`lcobucci/jwt`): check both with
+  `php -m | grep -E 'sodium|openssl'`.
 - MySQL 8 / MariaDB 10.6+ (or SQLite for single-user installs).
 - HTTPS on a public domain (providers deliver webhooks to `APP_URL`; devices pin its certificate). Passkeys are tied
   to the host of `APP_URL`: changing the domain later means adding passkeys again (passwords keep working).
@@ -40,8 +42,10 @@ reconciler and the 30-day retention cleanup.
    shows the recovery codes once — store them safely. Prefer this command to `db:seed` on a server; outside
    `APP_ENV=local` the seeder never uses the demo password (it needs `ADMIN_PASSWORD` with 12+ characters, or it
    prints a random one once).
-8. `php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan filament:optimize`
-9. In **Admin → API Credentials** paste the AssemblyAI API key and press **Generate** for the webhook secret.
+8. `php artisan passport:keys && chmod 600 storage/oauth-private.key storage/oauth-public.key`: the keys of the Claude
+   and ChatGPT connector, see below. Once only.
+9. `php artisan config:cache && php artisan route:cache && php artisan view:cache && php artisan filament:optimize`
+10. In **Admin → API Credentials** paste the AssemblyAI API key and press **Generate** for the webhook secret.
    In **Admin → Settings** pick providers per use-case and add the certificate pins (see below).
 
 ## Cron (the only background process)
@@ -97,6 +101,40 @@ be restored from the console's Recently deleted page for 48 hours.
 - **Members' console:** Settings → Privacy & security → Members can use the console (on by default); off, members
   and viewers are pointed to the apps.
 
+## Claude and ChatGPT connector (since v1.5)
+People add `https://YOUR_DOMAIN/mcp` in Claude or ChatGPT and read their recordings there (`docs/CONNECTOR.md`).
+- **Migrations `2026_11_23_000001` to `000005`:** Passport's four tables (clients, codes, access and refresh tokens) and
+  `connected_apps`. Nothing else changes. Rollback (`migrate:rollback --step=5`) drops them, so every app connected has
+  to be added again; the library is not touched.
+- **Keys, once, on the server:** `php artisan passport:keys`, then `chmod 600 storage/oauth-private.key
+  storage/oauth-public.key`. Run it as the user PHP runs as, or `chown` the two files to it: Passport refuses a key it
+  cannot read and one others can read. They are in `.gitignore`, never commit or upload them from elsewhere. Keep them
+  when you update. `--force` makes new ones, which signs every connected app out (nothing is lost; they sign in again).
+  Without the keys `/mcp` and the sign-in answer 500 and everything else works as before.
+- **`/.well-known/` on shared hosting:** the discovery addresses are answered by the app, and hosts often keep that
+  folder for themselves. When the project folder is the web root and a root `.htaccess` rewrites into `public/`, put this
+  next to the App Links line below:
+  ```
+  RewriteRule ^\.well-known/(oauth-protected-resource|oauth-authorization-server)(/.*)?$ public/.well-known/$1$2 [L]
+  ```
+- **Which apps may register:** only those that send the browser back to `https://claude.ai`, `https://claude.com`,
+  `https://chatgpt.com`, `https://chat.openai.com` or this machine (`localhost`, for Claude Code). When an app moves,
+  `MCP_REDIRECT_DOMAINS` in `.env` replaces the list (comma-separated, each with its scheme), followed by `php artisan
+  config:cache`.
+- **The plan:** the `connector` feature on System → Plans. AI notes (client notes, memory, Ask, the brief's remake) are
+  a feature of their own, off in a new plan; Roman Urdu and the other views, suggested fixes and screen descriptions
+  are never switched off.
+- **Clean-up:** the scheduler removes used and expired tokens (`passport:purge`) and apps that registered and never
+  connected (`echoledger:prune-oauth-clients`), daily.
+- **Checks:**
+  ```
+  php -m | grep -E 'sodium|openssl'
+  ls -l storage/oauth-*.key                                                # -rw------- for both
+  curl -s https://YOUR_DOMAIN/.well-known/oauth-authorization-server       # JSON, https addresses, S256 and mcp:use
+  curl -si -X POST https://YOUR_DOMAIN/mcp -H 'Accept: application/json' -H 'Content-Type: application/json' -d '{}' | head -n 12
+  ```
+  The last one answers `401` with a `WWW-Authenticate` header naming `/.well-known/oauth-protected-resource/mcp`.
+
 ## Certificate pins for the device apps
 Devices pin the server's public key (SPKI SHA-256), current + backup:
 ```
@@ -117,7 +155,8 @@ RewriteRule ^\.well-known/assetlinks\.json$ public/.well-known/assetlinks.json [
 Check: `curl -s https://<server>/.well-known/assetlinks.json` returns JSON naming `com.echoledger.mobile`.
 
 ## Updating
-Upload the new code, then: `php artisan migrate --force && php artisan optimize:clear && php artisan optimize`.
+Upload the new code, then: `php artisan migrate --force && php artisan optimize:clear && php artisan optimize`. The first
+update to v1.5 with the connector also needs its keys, once: see "Claude and ChatGPT connector" above.
 
 ## Local development (this repo)
 ```

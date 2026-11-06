@@ -102,6 +102,16 @@ describe('the server', function () {
         connectorMessage($this, $token, 'tools/call', ['name' => 'delete_recording', 'arguments' => (object) []])->assertStatus(400);
     });
 
+    it('takes what an MCP client sends after the handshake: the notification and the version header', function () {
+        $token = connectorConnect($this, Fx::user())['access'];
+        app('auth')->forgetGuards();
+
+        $this->postJson('/mcp', ['jsonrpc' => '2.0', 'method' => 'notifications/initialized'], ['Accept' => 'application/json, text/event-stream', 'Authorization' => "Bearer {$token}", 'MCP-Protocol-Version' => '2025-06-18'])->assertStatus(202);
+        app('auth')->forgetGuards();
+        $this->postJson('/mcp', ['jsonrpc' => '2.0', 'id' => 2, 'method' => 'tools/list'], ['Accept' => 'application/json, text/event-stream', 'Authorization' => "Bearer {$token}", 'MCP-Protocol-Version' => '2025-06-18'])
+            ->assertOk()->assertJsonCount(5, 'result.tools');
+    });
+
     it('turns away other HTTP methods, as Streamable HTTP without a server stream does', function () {
         $this->get('/mcp')->assertStatus(405);
         $this->delete('/mcp')->assertStatus(405);

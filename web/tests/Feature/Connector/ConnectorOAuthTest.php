@@ -3,10 +3,15 @@
 declare(strict_types=1);
 
 use App\Models\AuditEvent;
+use App\Filament\Auth\Login;
 use App\Models\ConnectedApp;
 use Carbon\CarbonInterval;
+use Filament\Auth\MultiFactor\App\AppAuthentication;
+use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Mail;
 use Laravel\Passport\Passport;
+use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 require_once __DIR__.'/Support/connector_helpers.php';
@@ -250,8 +255,45 @@ describe('the code flow with PKCE', function () {
 
         $this->person->forceFill(['deletes_at' => now()->addDays(7)])->save();
         $page = $this->actingAs($this->person, 'web')->get(connectorAuthorizeUrl($client, $challenge));
+        $page->assertForbidden()->assertSee('This account cannot connect an app')->assertSee('being deleted')->assertDontSee('auth_token');
 
-        $page->assertForbidden()->assertSee('This account cannot connect an app')->assertDontSee('auth_token');
+        $unconfirmed = Fx::user(['email_verified_at' => null]);
+        $this->actingAs($unconfirmed, 'web')->get(connectorAuthorizeUrl($client, $challenge))->assertForbidden()->assertSee('Confirm your email')->assertDontSee('auth_token');
+
+        $nowhere = withoutWorkspace(Fx::user());
+        $this->actingAs($nowhere, 'web')->get(connectorAuthorizeUrl($client, $challenge))->assertForbidden()->assertSee('no workspace')->assertDontSee('auth_token');
+    });
+
+    it('needs the two-step code before the person is signed in and asked', function () {
+        Filament::setCurrentPanel('admin');
+        $provider = AppAuthentication::make();
+        $provider->saveSecret($this->person, $secret = $provider->generateSecret());
+        $client = connectorRegister($this);
+        [, $challenge] = connectorPkce();
+        $url = connectorAuthorizeUrl($client, $challenge);
+        $this->get($url)->assertRedirect(route('filament.admin.auth.login'));
+
+        $login = Livewire::test(Login::class)
+            ->fillForm(['email' => $this->person->email, 'password' => 'password'])
+            ->call('authenticate');
+        $this->assertGuest('web');
+
+        $login->set('data.multiFactor.app.code', $provider->getCurrentCode($this->person, $secret))->call('authenticate')->assertHasNoErrors();
+        $this->assertAuthenticatedAs($this->person, 'web');
+        // The console's sign-in goes on to where the browser was going.
+        expect((string) $login->effects['redirect'])->toStartWith(url('/oauth/authorize?'));
+        $this->get($url)->assertOk()->assertSee('Allow Claude');
+    });
+
+    it('sends the form to Passport as the browser would, with the token and the method it needs', function () {
+        $client = connectorRegister($this);
+        [, $challenge] = connectorPkce();
+
+        $html = (string) $this->actingAs($this->person, 'web')->get(connectorAuthorizeUrl($client, $challenge))->assertOk()->getContent();
+
+        expect($html)->toContain('action="'.url('/oauth/authorize').'"')->toContain('name="_method" value="DELETE"')->toContain('name="_token"')
+            // The request's own details stay in the session, not in the page.
+            ->not->toContain($challenge)->not->toContain('state-1');
     });
 
     it('asks again for an app whose access ended, and not while it lasts', function () {
@@ -318,6 +360,14 @@ describe('tokens', function () {
         sleep(2);
 
         connectorRefresh($this, $connected['client'], $connected['refresh'])->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
+    });
+
+    it('keeps a wrong or expired token out of the log', function () {
+        Exceptions::fake();
+
+        connectorMessage($this, 'not-a-token', 'tools/list')->assertUnauthorized();
+
+        Exceptions::assertNothingReported();
     });
 
     it('never takes a device token for a person\'s, or the other way round', function () {

@@ -426,6 +426,14 @@ the transcript) know what "this page" or "click here" meant.
   **Export → Meeting pack** makes a PDF (the transcript with each screen at its moment; Claude and ChatGPT read both)
   or a ZIP with the transcript, the pictures and, if you like, the audio.
 
+## 15c. Ask Claude or ChatGPT about your recordings (since v1.5)
+
+Add EchoLedger as a connector in Claude or ChatGPT, and you can ask them things like "What did Omar ask for on Tuesday's
+call?". They read what you can open in the apps, and nothing else: they cannot record, change, share or delete
+anything. You disconnect them under **Profile → Connected apps**.
+
+How to add it, what the AI can and cannot see, and example questions: [Claude and ChatGPT connector](CONNECTOR.md).
+
 ## 16. Live Translate: games and videos
 
 Live Translate shows what is said in another app, translated, while you use it. It is for you, not for clients:

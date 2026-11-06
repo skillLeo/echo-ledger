@@ -63,6 +63,20 @@ RECORDINGS_S3_PATH_STYLE=true
 
 Leave `RECORDINGS_DRIVER` unset (or `local`) to keep them on the VPS disk.
 
+## Claude and ChatGPT connector
+
+The connector signs its tokens with a key pair in `storage/` (web/DEPLOY.md, "Claude and ChatGPT connector"). They do
+not come with `storage/app/private`. Copy them from the old server when you move, so nobody has to connect again:
+
+```
+rsync -a old-server:/path/to/web/storage/oauth-private.key old-server:/path/to/web/storage/oauth-public.key /var/www/echoledger/web/storage/
+chown www-data:www-data /var/www/echoledger/web/storage/oauth-*.key
+chmod 600 /var/www/echoledger/web/storage/oauth-*.key
+```
+
+On a new server with nothing to copy, run this once instead: `sudo -u www-data php artisan passport:keys`, then the same
+`chmod`. Never commit them. Nginx below already lets `/.well-known/` through to the app.
+
 ## Queue workers (Supervisor)
 
 `/etc/supervisor/conf.d/echoledger-worker.conf`:
@@ -121,7 +135,7 @@ server {
 - **Recordings, screens and files** (when on the disk): every night with `restic` or `borg` to the backup provider.
   They are already encrypted. Object storage gets bucket versioning instead.
 - **Keys:** keep `APP_KEY` and `ECHOLEDGER_RECORDINGS_KEY` offline in a password manager. A backup without the
-  recordings key cannot be played.
+  recordings key cannot be played. Losing `storage/oauth-*.key` only means making new ones: connected apps sign in again.
 - Restore one backup to a scratch database once a month, to know the backups work.
 
 ## Monitoring
@@ -139,7 +153,8 @@ server {
    for the device apps"). Make the VPS's TLS key first, add its pin to Settings → Device security on the **current**
    server, and wait until every device has synced once (a day). Otherwise the apps refuse the new server.
 3. Set up the VPS: the software above, the code at the same commit as production, `.env` (copied, with the changes
-   above), `composer install --no-dev --optimize-autoloader`, `public/build` uploaded, Nginx, Supervisor and cron.
+   above), `composer install --no-dev --optimize-autoloader`, `public/build` uploaded, the connector's keys (above),
+   Nginx, Supervisor and cron.
 4. **Rehearsal:** copy the database and `storage/app/private` from the shared host and run `php artisan migrate
    --force`, which should have nothing to do. Open the console through a hosts-file entry and play an old
    recording: that proves the recordings key works.

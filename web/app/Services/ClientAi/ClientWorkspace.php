@@ -9,6 +9,7 @@ use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Jobs\ExtractClientFileJob;
 use App\Jobs\MakeCallNotesJob;
+use App\Jobs\MakeSuggestedFixesJob;
 use App\Jobs\RefreshClientBriefJob;
 use App\Models\CallNote;
 use App\Models\CaptureSession;
@@ -165,7 +166,13 @@ final class ClientWorkspace
             }
             $session = CaptureSession::query()->withoutGlobalScopes()->find($transcript->capture_session_id);
             $client = $session !== null ? $this->projectOf($session) : null;
-            if ($session === null || $client === null || ! $client->ai_notes || ! app(PlanLimits::class)->allows($session->workspace_id, 'ai_notes')) {
+            if ($session === null || $client === null || ! $client->ai_notes) {
+                return;
+            }
+            // Since v1.5 a plan may leave the notes out, never the suggested fixes that otherwise come with them.
+            if (! app(PlanLimits::class)->allows($session->workspace_id, 'ai_notes')) {
+                MakeSuggestedFixesJob::dispatch($session->id);
+
                 return;
             }
             CallNote::query()->withoutGlobalScopes()->updateOrCreate(
@@ -539,7 +546,8 @@ final class ClientWorkspace
     private function briefAfterFiles(Client $client): void
     {
         $brief = ClientBrief::query()->withoutGlobalScopes()->where('client_id', $client->id)->first();
-        if ($brief?->edited !== true) {
+        // Without AI notes in the plan the brief stays as it is, rather than showing a failed remake nobody asked for.
+        if ($brief?->edited !== true && app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes')) {
             RefreshClientBriefJob::dispatch($client->id);
         }
     }

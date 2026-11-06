@@ -8,6 +8,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
+use League\OAuth2\Server\Exception\OAuthServerException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -30,6 +31,9 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(fn (Request $request) => $request->is('api/*', 'mcp') || $request->expectsJson());
         // Device API errors: {"message", "code", ...} with fixed messages (docs/API.md "Error codes").
         $exceptions->render(fn (Throwable $e, Request $request) => (new ApiExceptionRenderer)($e, $request));
+        // An expired or wrong token of the connector is an everyday answer (401), not a server error: Passport's guard
+        // would otherwise write each one to the log.
+        $exceptions->dontReport(OAuthServerException::class);
         // Never put secrets or audio into logs/flash data.
         $exceptions->dontFlash(['current_password', 'password', 'password_confirmation', 'pairing_code', 'token']);
     })->create();

@@ -90,7 +90,8 @@ class Plans extends Page implements HasTable
                             ->rule(fn (): Unique => Rule::unique('plans', 'key')),
                         ...$this->planFields(),
                     ])
-                    ->fillForm(fn (): array => ['price_usd' => 0, ...array_fill_keys(array_map(fn (string $f): string => "feature_{$f}", Plan::FEATURES), true)])
+                    // In-app AI is off in a new plan until someone switches it on (it costs money on every call).
+                    ->fillForm(fn (): array => ['price_usd' => 0, ...array_fill_keys(array_map(fn (string $f): string => "feature_{$f}", Plan::FEATURES), true), 'feature_ai_notes' => false])
                     ->action(function (array $data): void {
                         $plan = Plan::query()->create(['key' => $data['key'], ...self::fromForm($data)]);
                         app(AuditLog::class)->record('plan_created', (int) auth()->id(), $plan, "Plan {$plan->name} made");
