@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -149,7 +150,7 @@ fun AccountScreen(vm: MainViewModel, onBack: () -> Unit) {
         )
     }
     if (deleting) {
-        DeleteAccountDialog(vm, account?.twoFactor == true, onDone = { deletesAt ->
+        DeleteAccountDialog(vm, account?.twoFactor == true, account?.google == true, onDone = { deletesAt ->
             deleting = false
             if (deletesAt != null) account = account?.copy(deletesAt = deletesAt)
         })
@@ -157,7 +158,9 @@ fun AccountScreen(vm: MainViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun DeleteAccountDialog(vm: MainViewModel, twoFactor: Boolean, onDone: (String?) -> Unit) {
+private fun DeleteAccountDialog(vm: MainViewModel, twoFactor: Boolean, google: Boolean, onDone: (String?) -> Unit) {
+    val context = LocalContext.current
+    val settings by vm.settings.collectAsState()
     val scope = rememberCoroutineScope()
     var secret by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
@@ -177,6 +180,14 @@ private fun DeleteAccountDialog(vm: MainViewModel, twoFactor: Boolean, onDone: (
                     visualTransformation = if (twoFactor) VisualTransformation.None else PasswordVisualTransformation(),
                     modifier = Modifier.fillMaxWidth()
                 )
+                // Since v1.5: an account with neither a password nor a two-factor code (Google only) confirms on the web page.
+                AccountText.deletePage(settings.serverUrl)?.let { page ->
+                    Text(AccountText.deleteElsewhere(google), style = LocalEchoType.current.caption, color = Brand.Muted)
+                    TextButton(onClick = {
+                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page))) }
+                        onDone(null)
+                    }) { Text("Delete on the web page") }
+                }
             }
         },
         confirmButton = {
@@ -194,6 +205,15 @@ private fun DeleteAccountDialog(vm: MainViewModel, twoFactor: Boolean, onDone: (
 }
 
 internal object AccountText {
+    /** The server's public deletion page (the one Google Play links to); null before a server is known. */
+    fun deletePage(serverUrl: String?): String? = serverUrl?.trimEnd('/')?.takeIf { it.isNotBlank() }?.let { "$it/account/delete" }
+
+    fun deleteElsewhere(google: Boolean): String = if (google) {
+        "Signed in with Google and no password? Delete the account on the web page: sign in there with Google and confirm."
+    } else {
+        "No password or code to hand? Delete the account on the web page instead."
+    }
+
     fun workspace(a: AccountDto): String {
         val role = when (a.workspace?.role) {
             "owner" -> "Owner"
