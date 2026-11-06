@@ -2,7 +2,7 @@
 // with the server (revoke the others) and the recent audit log.
 import { useEffect, useId, useState } from "react";
 import { api, errorMessage, type LockAfterMinutes, type LockStatus, type SecurityDevice, type SecurityEvent, type Settings, type SettingsPatch, type StorageInfo } from "../../lib/ipc";
-import { formatWhen } from "../../lib/format";
+import { fileSize, formatWhen } from "../../lib/format";
 import { SelectRow, Toggle } from "./SettingsControls";
 import { SYSTEM_LABEL } from "./LockScreen";
 
@@ -120,20 +120,10 @@ export function SecurityCard(props: { settings: Settings; patch: (p: SettingsPat
     </>
   );
 }
-/** "1.5 GB" style sizes. */
-export function fileSize(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
-}
+export { fileSize };
 
 /** Settings → Storage and retention (B17): the storage meter and how long recordings are kept. */
-export function StorageCard() {
+export function StorageCard({ limitBytes = null }: { limitBytes?: number | null } = {}) {
   const [info, setInfo] = useState<StorageInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -146,7 +136,10 @@ export function StorageCard() {
       {error && <p className="small muted">{error}</p>}
       {info && (
         <>
-          <p className="small">Recordings on the server: {fileSize(info.recordings_bytes)} in {info.recordings_count} file{info.recordings_count === 1 ? "" : "s"}.</p>
+          <p className="small">
+            Recordings on the server: {fileSize(info.recordings_bytes)} in {info.recordings_count} file{info.recordings_count === 1 ? "" : "s"}
+            {limitBytes !== null ? ` of the ${fileSize(limitBytes)} your plan allows` : ""}.
+          </p>
           {used !== null && (
             <div className="flow-bar" role="meter" aria-label="Server disk used" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(used * 100)}>
               <span style={{ width: `${Math.round(used * 100)}%` }} />

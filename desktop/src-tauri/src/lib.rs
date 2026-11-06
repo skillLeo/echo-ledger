@@ -1,5 +1,6 @@
 //! EchoLedger desktop. Tray app: dual-channel capture, live captions overlay, dictation, auto mode, uploads.
 
+pub mod account;
 mod actions;
 pub mod activity;
 pub mod after_call;
@@ -15,7 +16,9 @@ pub mod lock;
 pub mod material;
 pub mod net;
 pub mod overlay;
+pub mod owner;
 pub mod pending;
+pub mod plan;
 pub mod projects;
 pub mod recovery;
 pub mod screens;
@@ -26,6 +29,7 @@ pub mod skipped;
 pub mod stt;
 pub mod translate;
 pub mod tray;
+pub mod updates;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -94,6 +98,15 @@ pub struct AppState {
     /// Screen moments (v1.5): the capture beside a call recording, the key that seals stored screens, what the plan
     /// and the server said.
     pub screens: screens::Screens,
+    /// A browser sign-in waiting for its `echoledger://signed-in` link (v1.5), in memory only.
+    pub browser_sign_in: Mutex<Option<account::BrowserSignIn>>,
+    /// The account the running recording was made under, when another account signed in while it ran (its client
+    /// reference and the account).
+    pub recording_owner: Mutex<Option<(String, owner::Owner)>>,
+    /// The server said who this computer is signed in as (or that it has no accounts) this run.
+    pub owner_checked: AtomicBool,
+    /// Signed updates from the server (v1.5): the status, the one running job, the update ready to install.
+    pub updates: updates::Updates,
 }
 
 impl AppState {
@@ -141,6 +154,10 @@ impl AppState {
             recording_language_marks: Mutex::new(None),
             recording_caller: Mutex::new(None),
             screens: screens::Screens::new(Box::new(screens::platform::Native), Box::new(screens::store::KeychainKeys)),
+            browser_sign_in: Mutex::new(None),
+            recording_owner: Mutex::new(None),
+            owner_checked: AtomicBool::new(false),
+            updates: updates::Updates::default(),
         }
     }
 
@@ -172,6 +189,11 @@ impl AppState {
         self.token.lock().map(|t| t.is_some()).unwrap_or(false) && self.lock_settings().server_url.is_some()
     }
 
+    /// The account queued work without an owner belongs to (v1.5, see `owner`).
+    pub fn owner(&self) -> Option<owner::Owner> {
+        owner::current(&self.data_dir, self.lock_settings().server_url.as_deref())
+    }
+
     pub fn api(&self) -> AppResult<ApiClient> {
         let settings = self.settings();
         let url = settings.server_url.ok_or(AppError::NotPaired)?;
@@ -189,6 +211,18 @@ impl AppState {
         self.budget_blocked.store(false, std::sync::atomic::Ordering::SeqCst);
         self.screens.note_config(&config);
         *self.server_config.lock().unwrap_or_else(|p| p.into_inner()) = Some(config);
+    }
+
+    /// What the workspace's plan and the person's role allow, from the last server config (v1.5).
+    pub fn plan_info(&self) -> plan::PlanInfo {
+        let config = self.server_config.lock().unwrap_or_else(|p| p.into_inner());
+        plan::PlanInfo::from_config(config.as_ref(), self.screens.in_plan())
+    }
+
+    /// A viewer's computer records nothing (v1.5): the sentence the app shows instead, or none when it may record.
+    pub fn viewer_refusal(&self) -> Option<String> {
+        let info = self.plan_info();
+        (!info.can_record()).then(|| account::viewer_sentence(info.workspace.as_deref()))
     }
 
     /// True when the last server config says the server speaks the v1.1 contract.
@@ -216,6 +250,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(overlay::HitRegions::default())
         .manage(lifecycle::WindowLifecycle::default())
         .manage(shortcuts::Bindings::default())
@@ -226,6 +261,8 @@ pub fn run() {
             app.manage(AppState::load(data_dir));
             let handle = app.handle().clone();
             let settings = app.state::<AppState>().settings();
+            // An update downloaded by the last run installs now, before anything records (v1.5).
+            updates::install_kept(&handle);
 
             tray::create(&handle)?;
             // C9: no window is built here. The main window and the overlays are built when first needed
@@ -249,6 +286,7 @@ pub fn run() {
             });
             commands::spawn_idle_lock(handle.clone());
             actions::spawn_activity_poll(handle.clone());
+            updates::spawn_quiet_checks(handle.clone());
 
             // Fetch server config (caption policy, pins rotation) and the library in the background.
             let startup = handle.clone();
@@ -257,6 +295,8 @@ pub fn run() {
                 if let Ok(api) = state.api() {
                     if let Ok(config) = api.config().await {
                         state.apply_config(config);
+                        // The tray follows the role too: a viewer's menu has no recording lines.
+                        actions::emit_status(&startup);
                     }
                     let _ = commands::refresh_library_inner(&startup).await;
                     state.upload_notify.notify_one(); // send what is still queued from the last run
@@ -268,10 +308,10 @@ pub fn run() {
             if !std::env::args().any(|a| a == "--autostart") {
                 tray::show_main(&handle);
             }
-            // Started by an echoledger://open link (Windows passes it on the command line, since v1.5).
-            if let Some(link) = deep_link::find_open_link(&std::env::args().collect::<Vec<_>>()) {
-                actions::open_app_link(&handle, link);
-            }
+            // Started by an echoledger://open or echoledger://signed-in link (Windows passes it on the command line, since
+            // v1.5). A sign-in link that starts the app finds no sign-in waiting (its verifier was in the memory of the
+            // run that opened the browser) and says so.
+            actions::handle_links(&handle, &std::env::args().collect::<Vec<_>>());
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -293,7 +333,20 @@ pub fn run() {
             commands::window_appearance,
             commands::set_window_theme,
             commands::pair_device,
+            commands::sign_in_password,
+            commands::sign_in_browser,
+            commands::sign_in_browser_cancel,
             commands::unpair,
+            commands::account_get,
+            commands::account_sign_out_everywhere,
+            commands::account_delete,
+            commands::account_export_start,
+            commands::account_export_status,
+            commands::account_export_open,
+            commands::server_page_open,
+            commands::update_status,
+            commands::update_check,
+            commands::update_install,
             commands::get_settings,
             commands::update_settings,
             commands::set_shortcut,
@@ -436,13 +489,12 @@ pub fn run() {
         .expect("error while building EchoLedger");
 
     app.run(|handle, event| {
-        // macOS hands an echoledger://open link to the running app as an opened URL (Info.plist registers the scheme).
+        // macOS hands an echoledger://open or echoledger://signed-in link to the running app as an opened URL (Info.plist
+        // registers the scheme).
         #[cfg(target_os = "macos")]
         if let RunEvent::Opened { urls, .. } = &event {
             let urls: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
-            if let Some(link) = deep_link::find_open_link(&urls) {
-                actions::open_app_link(handle, link);
-            }
+            actions::handle_links(handle, &urls);
         }
         if let RunEvent::ExitRequested { code, api, .. } = &event {
             // User-initiated exit (last window closed): stay in the tray. Programmatic exit (Quit) proceeds.

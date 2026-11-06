@@ -62,6 +62,9 @@ pub struct ServerConfig {
     /// The workspace's plan and its features (since v1.5).
     #[serde(default, deserialize_with = "lenient")]
     pub plan: Option<PlanDto>,
+    /// The device's workspace and its person's role there (since v1.5).
+    #[serde(default, deserialize_with = "lenient")]
+    pub workspace: Option<WorkspaceDto>,
 }
 
 /// `config.unsure` (docs/API.md "GET /api/config"): `[?word]` (brackets), `word(?)` (suffix) or plain (off) in copies,
@@ -133,15 +136,60 @@ impl ServerConfig {
     pub fn screens_in_plan(&self) -> Option<bool> {
         self.plan.as_ref().map(|p| p.features.get("screen_moments") != Some(&false))
     }
+
+    /// Whether the plan has `feature` (`live_translate`, `screen_moments`, `ai_notes`, `connector`): a server without
+    /// plans, or a plan that does not name the feature, leaves it on.
+    pub fn has_feature(&self, feature: &str) -> bool {
+        self.plan.as_ref().is_none_or(|p| p.features.get(feature) != Some(&false))
+    }
 }
 
-/// `config.plan` (since v1.5). Only the features are read here; a feature missing from the map is on.
+/// `config.plan` (since v1.5): the features (one missing from the map is on), the limits (`null` = no limit) and what
+/// the workspace used. A malformed limits or used block is dropped on its own, never the features.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct PlanDto {
     #[serde(default)]
     pub key: Option<String>,
     #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
     pub features: HashMap<String, bool>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub limits: Option<PlanLimits>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub used: Option<PlanUsed>,
+}
+
+/// `config.plan.limits` (since v1.5); `None` is no limit.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlanLimits {
+    #[serde(default)]
+    pub monthly_minutes: Option<f64>,
+    #[serde(default)]
+    pub storage_bytes: Option<u64>,
+    #[serde(default)]
+    pub retention_days: Option<u32>,
+    #[serde(default)]
+    pub seats: Option<u32>,
+}
+
+/// `config.plan.used` (since v1.5): this month's minutes and the storage the workspace holds.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlanUsed {
+    #[serde(default)]
+    pub minutes: Option<f64>,
+    #[serde(default)]
+    pub storage_bytes: Option<u64>,
+}
+
+/// `config.workspace` (since v1.5): the device's workspace and its person's role there (`owner`, `admin`, `member`
+/// or `viewer`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct WorkspaceDto {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub role: Option<String>,
 }
 
 /// The fields of `POST /api/sessions/{id}/screens` beside the image (since v1.5).
@@ -208,6 +256,65 @@ pub struct RegisterResponse {
     pub token: String,
     pub token_expires_at: Option<String>,
     pub config: ServerConfig,
+}
+
+/// What `POST /api/auth/password` sends besides the platform and versions (since v1.5).
+#[derive(Clone, Copy, Debug)]
+pub struct PasswordSignIn<'a> {
+    pub email: &'a str,
+    pub password: &'a str,
+    pub otp: Option<&'a str>,
+    pub name: &'a str,
+}
+
+/// The answer to a password sign-in: this computer's token (as from pairing), or a request for the two-factor code.
+#[derive(Clone, Debug)]
+pub enum PasswordAnswer {
+    SignedIn(Box<RegisterResponse>),
+    OtpRequired,
+}
+
+/// `GET /api/account` (since v1.5), handed to the account page as the server wrote it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AccountDto {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub email_verified: bool,
+    #[serde(default)]
+    pub two_factor: bool,
+    #[serde(default)]
+    pub google: bool,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub workspace: Option<AccountWorkspace>,
+    #[serde(default)]
+    pub deletes_at: Option<String>,
+}
+
+/// `account.workspace`: the device's workspace and the person's role in it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AccountWorkspace {
+    #[serde(default)]
+    pub id: serde_json::Value,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub role: String,
+}
+
+/// `POST /api/account/export` and `GET /api/account/export/{id}` (since v1.5).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AccountExport {
+    pub id: String,
+    pub status: String,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub expires_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

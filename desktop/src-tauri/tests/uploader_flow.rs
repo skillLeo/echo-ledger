@@ -1845,7 +1845,7 @@ fn upload_items_for_the_ui_use_camel_case_and_a_stable_id() {
     assert_eq!(
         ui,
         json!({"id": "9a1d", "sourceApp": "whatsapp", "title": "Standup", "startedAt": "2026-10-24T09:00:00+00:00",
-               "durationMs": 2530000, "state": "verifying", "lastError": null, "attempts": 0, "imported": false, "progress": null})
+               "durationMs": 2530000, "state": "verifying", "lastError": null, "attempts": 0, "imported": false, "progress": null, "heldFor": null})
     );
     let mut queue = UploadQueue { items: vec![item.clone(), item.clone()] };
     queue.items[1].state = states::FAILED.into();
@@ -1930,4 +1930,41 @@ async fn the_discard_queue_deletes_sessions_and_treats_404_as_done() {
         queue.push(id.to_string());
     }
     assert_eq!(queue.items, ["S3", "S4"]);
+}
+
+// ---- Whose recording it is (v1.5) ------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn a_recording_made_under_one_account_is_not_sent_after_another_signs_in() {
+    use desktop_lib::net::sync::paths;
+    use desktop_lib::owner::{Owner, hand_over};
+
+    let data = tempfile::tempdir().unwrap();
+    let recording = data.path().join("recordings").join("r1");
+    std::fs::create_dir_all(&recording).unwrap();
+    let primary = write_file(&recording, "recording.flac", 2_500, 7);
+    let (server, _) = Flow::new(1_000, vec![Slot::fresh("primary", 2_500)]).start();
+    let hassam = Owner::new(&server.base_url(), Some("hassam@example.test"));
+    let sara = Owner::new(&server.base_url(), Some("sara@example.test"));
+    hassam.save(data.path()).unwrap();
+    UploadQueue { items: vec![pending(&recording, primary)] }.save(&paths::uploads(data.path())).unwrap();
+
+    // Hassam signs out, Sara signs in on the same computer: the upload worker sends what `sendable` gives it.
+    assert!(hand_over(data.path(), Some(&hassam), &sara).unwrap());
+    let queue = UploadQueue::load(&paths::uploads(data.path()));
+    assert!(queue.sendable(Some(&sara)).is_empty(), "Hassam's recording does not go into Sara's library");
+    assert_eq!(queue.ui_items(Some(&sara))[0].held_for.as_deref(), Some("hassam@example.test"));
+    assert_eq!(queue.held(Some(&sara)), 1);
+    for id in queue.sendable(Some(&sara)) {
+        let mut item = queue.items.iter().find(|i| i.id() == id).unwrap().clone();
+        let _ = upload_with(&api(&server), &ServerConfig::default(), &mut item, UploadTiming::default(), &|_: &PendingUpload| {}).await;
+    }
+    assert!(server.requests().is_empty(), "nothing was sent");
+
+    // Hassam signs in again: it goes up as his.
+    assert!(hand_over(data.path(), Some(&sara), &hassam).unwrap());
+    let queue = UploadQueue::load(&paths::uploads(data.path()));
+    assert_eq!(queue.sendable(Some(&hassam)), ["r1"]);
+    assert_eq!(queue.ui_items(Some(&hassam))[0].held_for, None);
+    assert_eq!(upload(&api(&server), &queue.items[0]).await.unwrap(), SESSION_ID);
 }

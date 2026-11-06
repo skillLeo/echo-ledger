@@ -8,31 +8,33 @@ npm run tauri build            # Windows: NSIS installer (tauri.windows.conf.jso
 Prerequisites: Rust stable (MSVC on Windows) + Visual Studio Build Tools "Desktop development with C++";
 WebView2 (preinstalled on Windows 10 1803+). macOS: Xcode Command Line Tools; build on macOS 14.4+ hardware.
 
-## Windows code signing (Authenticode / SmartScreen)
-- Buy an OV/EV code-signing certificate (or use Azure Trusted Signing). Since 2024 EV no longer grants instant
-  SmartScreen reputation — reputation builds with downloads; signing still removes "Unknown publisher".
-- Configure `bundle.windows.certificateThumbprint`, `digestAlgorithm: "sha256"`, `timestampUrl` in
-  `tauri.windows.conf.json`, or a `signCommand` for cloud HSMs (Azure Key Vault / Trusted Signing).
-- Verify: `signtool verify /pa /v EchoLedger_*_x64-setup.exe`. Manual QA: install on a clean Windows 11 VM and
-  confirm SmartScreen shows the publisher name.
-
-## macOS signing + notarization
-- Needs an Apple Developer "Developer ID Application" certificate.
-- Env for `tauri build`: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, and either
-  `APPLE_ID` + `APPLE_PASSWORD` (app-specific) + `APPLE_TEAM_ID`, or `APPLE_API_ISSUER` + `APPLE_API_KEY` +
-  `APPLE_API_KEY_PATH`.
+## Code signing and notarization
+See `docs/SIGNING.md`: the certificate options and costs, the GitHub secrets the "Desktop (Windows)" and
+"Desktop (macOS)" workflows sign and notarize with when they exist (unsigned builds otherwise), and the checks.
 - Hardened runtime entitlements: `src-tauri/Entitlements.plist` (`com.apple.security.device.audio-input`).
 - `Info.plist` adds `NSMicrophoneUsageDescription` + `NSAudioCaptureUsageDescription` (system audio tap).
-- Verify: `spctl -a -vvv -t install EchoLedger.app` and `xcrun stapler validate EchoLedger.dmg`.
 
-## Signed auto-updates (optional, off by default)
-1. `npm run tauri signer generate -- -w ~/.tauri/echoledger.key` (keep the private key + password offline / in CI secrets).
-2. Put the **public** key contents in `tauri.conf.json → plugins.updater.pubkey`, set `endpoints` to an HTTPS URL
-   on your server (returns `204` when there is no update, or the JSON manifest), set
-   `bundle.createUpdaterArtifacts: true`.
-3. Build with `TAURI_SIGNING_PRIVATE_KEY` (+ `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). The `.sig` *contents* go in
-   the manifest `signature` field. `requireSignedVersion: true` binds each signature to its version.
-4. Signatures are verified on download and install and cannot be disabled. Never install while recording.
+## Signed auto-updates (since v1.5)
+The app looks for updates on the server it is signed in to: `<server>/downloads/desktop.json` (Tauri's static
+manifest, served by the web app from the builds `echoledger:publish-release` stored). It checks every 12 hours and on
+Settings → About → Check for updates, downloads a newer version through the server's pinned TLS (only from that same
+server), verifies its minisign signature against the public key in `tauri.conf.json → plugins.updater.pubkey`, and
+installs it the next time EchoLedger starts, or at once on "Restart now" (never while recording).
+
+- `requireSignedVersion: true`: each signature names the version it was made for (`tauri build` records it), so an
+  old signed package cannot be offered under a newer version number.
+- The private key (`desktop-updater.key`, made with `npx tauri signer generate --ci`) never enters the repo. The release
+  shell sets `TAURI_SIGNING_PRIVATE_KEY` to the key file's content and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` to an empty
+  string, then builds with the release config, which turns the updater artifacts on:
+  ```bash
+  npm run tauri build -- --config src-tauri/tauri.release.conf.json            # Windows: the NSIS installer + .sig
+  npm run tauri build -- --bundles app,dmg --config src-tauri/tauri.release.conf.json   # macOS: .app.tar.gz + .sig
+  ```
+  A build without that config (local tries, CI without the key) makes no `.sig` and is never offered as an update.
+- Publish: `php artisan echoledger:publish-release <installer> --platform=windows --app-version=1.5.1
+  --signature=<installer>.sig`; on the Mac `--platform=macos-arm|macos-intel` with the `.dmg` as the file,
+  `--updater-file=<EchoLedger.app.tar.gz>` and `--signature=<EchoLedger.app.tar.gz.sig>`.
+- Losing the private key means no more updates for installed apps (they only trust that key): keep the offline backup.
 
 ## Privacy checklist per release
 - No telemetry/analytics crates (`cargo tree | findstr /i "sentry analytics telemetry"` must be empty).

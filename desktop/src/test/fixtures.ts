@@ -7,6 +7,7 @@ import type {
   MicUser,
   NavigatePayload,
   PendingItem,
+  PlanInfo,
   RecordingInfo,
   RecordingState,
   SavedToast,
@@ -41,6 +42,28 @@ export function makeStatus(overrides: Partial<AppStatus> = {}): AppStatus {
     failedUploads: 0,
     trayState: "idle",
     budget: "ok",
+    plan: makePlan(),
+    ...overrides,
+  };
+}
+
+/** A v1.5 plan with every feature and no limits, the person a member of "Personal" (override what a test needs). */
+export function makePlan(overrides: Partial<PlanInfo> = {}): PlanInfo {
+  return {
+    known: true,
+    name: "Personal",
+    liveTranslate: true,
+    screenMoments: true,
+    aiNotes: true,
+    connector: true,
+    monthlyMinutes: null,
+    storageBytes: null,
+    retentionDays: null,
+    seats: null,
+    usedMinutes: 0,
+    usedStorageBytes: 0,
+    workspace: "Personal",
+    role: "owner",
     ...overrides,
   };
 }
@@ -228,6 +251,7 @@ export function makeUploadItem(id = "up-1", overrides: Partial<UploadItem> = {})
     attempts: 0,
     imported: false,
     progress: null,
+    heldFor: null,
     ...overrides,
   };
 }

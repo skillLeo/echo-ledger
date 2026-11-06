@@ -227,6 +227,12 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
     if !state.is_paired() {
         return Err(AppError::NotPaired);
     }
+    if let Some(refusal) = state.viewer_refusal() {
+        return Err(AppError::Message(refusal));
+    }
+    if state.updates.is_installing() {
+        return Err(AppError::msg(crate::updates::INSTALLING));
+    }
     let client_id = state.settings().client_id.clone();
     clear_captions(app); // a new recording never inherits the previous one's lines
     let info = state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
@@ -256,6 +262,12 @@ async fn toggle_note(app: &AppHandle, mode: RecordingMode) -> AppResult<()> {
     }
     if !state.is_paired() {
         return Err(AppError::NotPaired);
+    }
+    if let Some(refusal) = state.viewer_refusal() {
+        return Err(AppError::Message(refusal));
+    }
+    if state.updates.is_installing() {
+        return Err(AppError::msg(crate::updates::INSTALLING));
     }
     clear_captions(app);
     let info = state.capture.start(&paths::recordings(&state.data_dir), mode, "voice_note", state.settings().client_id.clone())?;
@@ -408,7 +420,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     let live_segments = state.captions.lock().unwrap().segments();
     let mode = finished.info.mode;
     let now = Utc::now();
-    let decision = PendingDecision::from_recording(
+    let mut decision = PendingDecision::from_recording(
         &finished,
         DecisionInput {
             auto,
@@ -422,6 +434,8 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             caller: take_caller(&state, &client_ref),
         },
     );
+    // Another account signed in while it ran: it stays the account's that made it.
+    decision.owner = take_recording_owner(&state, &client_ref);
     let output = &finished.output;
     if let Some(reason) = crate::skipped::reason(auto, mode, output.duration_ms, settings.skip_calls_shorter_than_s, output.speech_ms) {
         return skip_finished(app, decision, late, reason, now);
@@ -553,12 +567,21 @@ pub fn discard_decision(app: &AppHandle, id: &str) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        DecisionFiles::in_dir(&state.data_dir).discard(id)?;
+        let decision = DecisionFiles::in_dir(&state.data_dir).discard(id)?;
+        if let (Some(owner), Some(session)) = (held_owner(&state, decision.owner.as_ref()), decision.server_session_id()) {
+            crate::owner::hold_discard(&state.data_dir, owner, session)?;
+        }
     }
     crate::screens::forget(app, id);
     state.upload_notify.notify_one(); // the worker deletes a queued server session
     after_decision(app, id);
     Ok(())
+}
+
+/// The account a recording waits for, when it was made while another account was signed in here (v1.5): a deletion of
+/// its server session waits for that account too.
+fn held_owner<'a>(state: &crate::AppState, owner: Option<&'a crate::owner::Owner>) -> Option<&'a crate::owner::Owner> {
+    owner.filter(|o| !crate::owner::may_upload(Some(o), state.owner().as_ref()))
 }
 
 fn after_decision(app: &AppHandle, id: &str) {
@@ -725,6 +748,18 @@ pub fn pending_rename(app: &AppHandle, id: &str, title: &str) -> AppResult<pendi
     emit_pending(app);
     refresh_after_call(app);
     Ok(updated.item())
+}
+
+/// The account a finished recording was made under, when another account signed in while it ran (cleared with it).
+fn take_recording_owner(state: &crate::AppState, client_ref: &str) -> Option<crate::owner::Owner> {
+    let mut owner = state.recording_owner.lock().unwrap_or_else(|p| p.into_inner());
+    match owner.take() {
+        Some((r, o)) if r == client_ref => Some(o),
+        other => {
+            *owner = other;
+            None
+        }
+    }
 }
 
 /// Who a finished recording was with (cleared with it).
@@ -978,7 +1013,7 @@ pub fn queue_discard(app: &AppHandle, session_id: String) -> AppResult<()> {
 /// `uploads:changed` with the whole queue, oldest first.
 pub fn emit_uploads(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
-    let items = UploadQueue::load(&paths::uploads(&state.data_dir)).ui_items();
+    let items = UploadQueue::load(&paths::uploads(&state.data_dir)).ui_items(state.owner().as_ref());
     let _ = app.emit("uploads:changed", items);
 }
 
@@ -1019,7 +1054,13 @@ pub fn discard_upload(app: &AppHandle, id: &str) -> AppResult<()> {
         item
     };
     if let Some(session_id) = item.server_session() {
-        queue_discard(app, session_id)?;
+        match held_owner(&state, item.owner.as_ref()) {
+            Some(owner) => {
+                let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+                crate::owner::hold_discard(&state.data_dir, owner, &session_id)?;
+            }
+            None => queue_discard(app, session_id)?,
+        }
     }
     delete_local_audio(&item);
     crate::screens::forget(app, &item.id());
@@ -1179,7 +1220,9 @@ pub fn copy_last_minutes(app: &AppHandle, minutes: u64) -> AppResult<String> {
     Ok(text)
 }
 
-const UNPAIRED: &str = "This computer was unpaired on the server. Pair it again to upload.";
+/// A token the server no longer takes: the device was removed in the console, or the account signed out everywhere or
+/// asked to be deleted (since v1.5).
+const UNPAIRED: &str = "This computer was signed out on the server. Sign in again to upload.";
 
 /// Background worker: on notify / every 30 s it sends queued usage reports (v1.1 servers), deletes discarded
 /// server sessions, then uploads the queue oldest first; refreshes the library after uploads.
@@ -1216,9 +1259,10 @@ async fn run_upload_cycle(app: &AppHandle) {
     let data_dir = state.data_dir.clone();
     let (usage, discards, uploads, waiting) = {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        let uploads = UploadQueue::load(&paths::uploads(&data_dir)).items;
+        let uploads = UploadQueue::load(&paths::uploads(&data_dir));
         // Every recording still deciding, queued or skipped keeps its screens.
         let waiting: std::collections::HashSet<String> = uploads
+            .items
             .iter()
             .map(PendingUpload::id)
             .chain(DecisionFiles::in_dir(&data_dir).load().items.into_iter().map(|d| d.id))
@@ -1227,11 +1271,17 @@ async fn run_upload_cycle(app: &AppHandle) {
         (UsageQueue::load(&paths::usage(&data_dir)).items, DiscardQueue::load(&paths::discards(&data_dir)).items, uploads, waiting)
     };
     crate::screens::sweep(app, waiting);
-    // Failed items wait for Retry; v1 servers get no usage reports (kept until the server is upgraded).
-    let pending_uploads: Vec<String> = uploads.iter().filter(|i| !i.is_failed()).map(PendingUpload::id).collect();
+    // Failed items wait for Retry; v1 servers get no usage reports (kept until the server is upgraded). A recording made
+    // while another account was signed in here waits for that account (v1.5).
+    let mut current = state.owner();
+    let mut pending_uploads = uploads.sendable(current.as_ref());
+    // The account signed in here is not known yet (an install from before v1.5, or one the sign-in could not read):
+    // asked for before anything that may be another account's waits for good.
+    let unknown = current.as_ref().is_none_or(|c| c.email.is_none()) && !state.owner_checked.load(Ordering::SeqCst);
+    let others_waiting = uploads.held(current.as_ref()) > 0;
     let known_v1 = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().is_some_and(|c| !c.is_v1_1());
     let usage_to_send = !usage.is_empty() && !known_v1;
-    if pending_uploads.is_empty() && discards.is_empty() && !usage_to_send && !crate::screens::due(app) {
+    if pending_uploads.is_empty() && discards.is_empty() && !usage_to_send && !crate::screens::due(app) && !(unknown && others_waiting) {
         return;
     }
     let Ok(api) = state.api() else { return };
@@ -1249,6 +1299,11 @@ async fn run_upload_cycle(app: &AppHandle) {
             return;
         }
     };
+    if unknown {
+        current = crate::owner::learn(&state, &api).await;
+        pending_uploads = uploads.sendable(current.as_ref());
+        emit_uploads(app);
+    }
 
     if config.is_v1_1() && !usage.is_empty() {
         let drain = crate::net::uploader::drain_usage(&api, &usage).await;
@@ -1380,8 +1435,7 @@ const NOTIFIED_WINDOW: Duration = Duration::from_secs(600);
 /// show the window and open the link it was started with or, when a notification about a recording went out in the
 /// last ten minutes, that recording.
 pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {
-    if let Some(link) = crate::deep_link::find_open_link(args) {
-        open_app_link(app, link);
+    if handle_links(app, args) {
         return;
     }
     crate::tray::show_main(app);
@@ -1392,6 +1446,22 @@ pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {
         let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: Some(id), link: None };
         crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
     }
+}
+
+/// An `echoledger://signed-in` link (the browser sign-in coming back) or an `echoledger://open` link among `args`
+/// (v1.5); false when there is neither.
+pub fn handle_links(app: &AppHandle, args: &[String]) -> bool {
+    if let Some(link) = crate::account::find_signed_in_link(args) {
+        crate::tray::show_main(app);
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { crate::commands::finish_browser_sign_in(&app, link).await });
+        return true;
+    }
+    if let Some(link) = crate::deep_link::find_open_link(args) {
+        open_app_link(app, link);
+        return true;
+    }
+    false
 }
 
 /// Shows the main window with a share, project or request link to open in place (v1.5). The page resolves it once it

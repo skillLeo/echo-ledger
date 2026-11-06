@@ -2,8 +2,17 @@ import { useState } from "react";
 import { api, errorMessage, type AppStatus } from "../../lib/ipc";
 import { ShieldIcon } from "../../components/Icons";
 
-/** First run: pair with the owner's EchoLedger server using the one-time code (or pasted QR payload). */
-export function PairingView({ onPaired, notify }: { onPaired: (s: AppStatus) => void; notify: (t: string, e?: boolean) => void }) {
+/**
+ * Pair with an EchoLedger server using the one-time code (or pasted QR payload): servers older than accounts, and
+ * "Sign in a device" in the console (since v1.5). `notice` says why the sign-in screen sent the person here;
+ * `onUseAccount` goes back to it.
+ */
+export function PairingView({ onPaired, notify, notice, onUseAccount }: {
+  onPaired: (s: AppStatus) => void;
+  notify: (t: string, e?: boolean) => void;
+  notice?: string | null;
+  onUseAccount?: () => void;
+}) {
   const [serverUrl, setServerUrl] = useState("https://");
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -28,7 +37,8 @@ export function PairingView({ onPaired, notify }: { onPaired: (s: AppStatus) => 
       <form className="card" style={{ width: 440 }} onSubmit={submit}>
         <div className="brand" style={{ padding: "0 0 14px" }}><span className="brand-mark" />EchoLedger</div>
         <h1 className="page-title">Pair this computer</h1>
-        <p className="page-sub">In your EchoLedger admin, open <b>Devices → Pair a device</b>. Enter the server address and the code (or paste the QR text).</p>
+        <p className="page-sub">In your EchoLedger admin, open <b>Devices → Pair a device</b> (on a newer server, <b>Profile → Devices → Sign in a device</b>). Enter the server address and the code (or paste the QR text).</p>
+        {notice && <div className="notice small" role="status" style={{ marginBottom: 12 }}>{notice}</div>}
         {!isQr && (
           <label className="field">Server address
             <input className="input" value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="https://ledger.example.com" required />
@@ -43,6 +53,7 @@ export function PairingView({ onPaired, notify }: { onPaired: (s: AppStatus) => 
         <button className="btn primary" type="submit" disabled={busy} style={{ width: "100%", justifyContent: "center" }}>
           {busy ? "Pairing…" : "Pair"}
         </button>
+        {onUseAccount && <button type="button" className="btn ghost small sign-in-pair" onClick={onUseAccount}>Sign in with an account instead</button>}
         <p className="small muted row" style={{ marginTop: 14 }}><ShieldIcon size={14} />The access token is stored in your OS keychain. Speech-provider keys never leave your server.</p>
       </form>
     </div>

@@ -30,16 +30,25 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
 
 /// Answers whose `message` is written for people (plan limits and roles, the missing Anthropic key for the views, the
 /// client workspace's AI budget and key, docs/API.md): shown as they are.
-const PLAIN_CODES: [&str; 9] = ["budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable", "ai_budget_reached", "ai_unavailable", "no_client", "suggestion_not_found"];
+const PLAIN_CODES: [&str; 11] = [
+    "budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable", "ai_budget_reached", "ai_unavailable", "no_client",
+    "suggestion_not_found", "feature_not_in_plan", "seat_limit_reached",
+];
 
 /// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
 /// that know more (which project has the rule, which address has no account) say that instead.
-const CODE_TEXT: [(&str, &str); 5] = [
+const CODE_TEXT: [(&str, &str); 10] = [
     ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
     ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
     ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
     ("rule_not_found", "That filing rule is no longer there."),
     ("recipient_not_found", "One of these emails has no account on this server, so nothing was sent. Check the addresses."),
+    // Signing in and the account (since v1.5).
+    ("invalid_credentials", "The email or password is not right. Check both and try again."),
+    ("invalid_otp", "That code did not work. Type the 6-digit code your authenticator app shows now, or one of your recovery codes."),
+    ("email_not_verified", "Your email address is not verified yet. Open the link in the email EchoLedger sent you, then sign in again."),
+    ("invalid_code", "The browser sign-in did not finish: its code was wrong, already used or expired. Choose “Sign in in the browser” to start again."),
+    ("owner_of_team", "You own a workspace that has other members. Hand it over to one of them on the console's Workspace page first, then delete your account."),
 ];
 
 /// The app's own sentence for a v1.5 error code, when it has one.
@@ -51,6 +60,10 @@ fn server_text(status: u16, message: &str, code: Option<&str>, retry_after_secs:
     let message = message.trim();
     if let Some(text) = code.and_then(code_text) {
         return text.to_string();
+    }
+    if code == Some("too_many_attempts") {
+        let wait = retry_after_secs.map(crate::account::wait_text).unwrap_or_else(|| "a few minutes".into());
+        return format!("Too many sign-in attempts. Wait {wait}, then try again.");
     }
     match code {
         Some(c) if PLAIN_CODES.contains(&c) && !message.is_empty() => message.to_string(),
@@ -220,5 +233,20 @@ mod server_text_tests {
         let limited = AppError::Server { status: 429, message: String::new(), code: None, retry_after_secs: Some(30) };
         assert_eq!(limited.to_string(), "Server returned 429. Try again in 30 s.");
         assert_eq!(server(404, " Not found ", None).to_string(), "Server returned 404: Not found");
+    }
+
+    #[test]
+    fn sign_in_answers_read_as_plain_words() {
+        assert_eq!(server(422, "These credentials do not match our records.", Some("invalid_credentials")).to_string(), "The email or password is not right. Check both and try again.");
+        assert!(server(422, "Invalid code.", Some("invalid_otp")).to_string().starts_with("That code did not work."));
+        assert!(server(403, "Verify your email.", Some("email_not_verified")).to_string().starts_with("Your email address is not verified yet."));
+        assert!(server(422, "", Some("invalid_code")).to_string().contains("Sign in in the browser"));
+        assert!(server(409, "", Some("owner_of_team")).to_string().contains("Workspace page"));
+        let locked = |secs| AppError::Server { status: 429, message: "Too many attempts.".into(), code: Some("too_many_attempts".into()), retry_after_secs: secs };
+        assert_eq!(locked(Some(900)).to_string(), "Too many sign-in attempts. Wait 15 minutes, then try again.");
+        assert_eq!(locked(Some(30)).to_string(), "Too many sign-in attempts. Wait 30 seconds, then try again.");
+        assert_eq!(locked(None).to_string(), "Too many sign-in attempts. Wait a few minutes, then try again.");
+        assert_eq!(server(403, "Screen moments are not in your plan", Some("feature_not_in_plan")).to_string(), "Screen moments are not in your plan");
+        assert_eq!(server(403, "Your plan has 3 seats.", Some("seat_limit_reached")).to_string(), "Your plan has 3 seats.");
     }
 }

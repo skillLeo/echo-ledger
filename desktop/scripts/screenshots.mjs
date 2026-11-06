@@ -81,6 +81,18 @@ const SCREENS = [
     await page.waitForSelector(".share-sheet .links-list");
   }],
   ["record", "record", async (page) => page.waitForSelector(".record-btn")],
+  // v1.5: signing in, the account and plan, a viewer's Record page, an update ready to install.
+  ["sign-in", "sign-in", async (page) => page.waitForSelector("#sign-in-title")],
+  ["settings-account", "settings-account", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: /^Account/ }).click();
+    await page.waitForSelector("[data-testid=plan-card]");
+  }],
+  ["record-viewer", "record-viewer", async (page) => page.waitForSelector("[data-testid=viewer-notice]")],
+  ["library-update", "library-update", async (page) => {
+    await page.waitForSelector("[data-testid=update-banner]");
+    await page.waitForSelector(".segments .segment");
+  }],
   ["record-bluetooth", "record-bluetooth", async (page) => page.waitForSelector("[data-testid=bluetooth-note]")],
   ["activity", "activity", async (page) => {
     await page.waitForSelector(".activity-item");

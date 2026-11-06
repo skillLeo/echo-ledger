@@ -30,6 +30,8 @@ const empty = params.get("empty") === "1";
 const after = params.get("after") ?? "both";
 /** Screen moments (v1.5) on the first recording, its project and the pill. */
 const screens = params.get("screens") === "1";
+/** Recordings made while another account was signed in here wait for it (v1.5). */
+const held = params.get("held") === "1";
 
 try {
   localStorage.setItem("echoledger-theme", theme);
@@ -118,8 +120,14 @@ function respond(cmd: string, args: Record<string, unknown> | undefined): unknow
     case "list_clients":
       return { data: [{ id: "c1", name: "Northwind", color: "#8b5cf6", session_count: 12, ...(screens ? { screens: true, parent_id: null, path: [], children_count: 0, nested_session_count: 12, ai_notes: false } : {}) }, { id: "c2", name: "Aria Studio", color: "#22d3ee", session_count: 4 }] };
     case "pending_list":
-      return empty ? [] : [makePendingItem("pend-1", { firstLine: "Thanks for joining, shall we start with the invoice?" })];
+      return empty || held ? [] : [makePendingItem("pend-1", { firstLine: "Thanks for joining, shall we start with the invoice?" })];
     case "upload_list":
+      if (held) {
+        return [
+          makeUploadItem("held-1", { title: "Call with Omar", sourceApp: "whatsapp", startedAt: "2026-11-05T15:20:00Z", durationMs: 1_312_000, heldFor: "hassam@example.com" }),
+          makeUploadItem("held-2", { sourceApp: "google_meet", startedAt: "2026-11-05T11:00:00Z", durationMs: 2_410_000, heldFor: "hassam@example.com" }),
+        ];
+      }
       return empty ? [] : [makeUploadItem("up-1", { state: "failed", lastError: "No connection to the server", attempts: 3 })];
     case "lock_status":
       return { enabled: view === "lock", locked: view === "lock", hasPin: true, osMethod: "windows_hello", retryAfterSeconds: 0 };

@@ -270,27 +270,46 @@ fn this_release_is_version_1_5_0_beta_1() {
 }
 
 #[test]
-fn an_updater_when_configured_refuses_unsigned_releases() {
-    // v1.1 ships without the updater plugin (no endpoint, placeholder key, and it pulled in `zip` 4.6.1). When it
-    // comes back it must carry a real key and refuse unsigned releases.
+fn the_updater_carries_the_release_key_and_refuses_unsigned_releases() {
+    // v1.5: the lead's minisign key (its private half stays outside the repo); the endpoint is the signed-in server's
+    // /downloads/desktop.json, set at run time, so none is configured.
     let conf = tauri_conf();
     let updater = &conf["plugins"]["updater"];
-    if updater.is_null() {
-        return;
-    }
-    assert_eq!(updater["requireSignedVersion"], true);
+    assert_eq!(updater["requireSignedVersion"], true, "a signature must name the version it was made for");
     let key = updater["pubkey"].as_str().unwrap_or_default();
-    assert!(!key.is_empty() && !key.contains("REPLACE"), "placeholder updater key");
+    let decoded = String::from_utf8(base64::Engine::decode(&base64::engine::general_purpose::STANDARD, key).expect("base64 key")).unwrap();
+    assert!(decoded.starts_with("untrusted comment: minisign public key: FBF4156A0A9B5B35\n"), "{decoded}");
+    assert_eq!(updater["endpoints"], serde_json::json!([]), "the endpoint comes from the signed-in server");
+    assert!(updater.get("dangerousInsecureTransportProtocol").is_none() && updater.get("dangerousAcceptInvalidCerts").is_none());
+    assert_eq!(updater["windows"]["installMode"], "passive");
+    // The plugin reads the same block at start-up: a block it refuses would stop the app.
+    let read: tauri_plugin_updater::Config = serde_json::from_value(updater.clone()).expect("the updater plugin reads its block");
+    assert!(read.require_signed_version && !read.dangerous_insecure_transport_protocol && read.endpoints.is_empty());
+    assert_eq!(read.pubkey, key);
 }
 
 #[test]
-fn the_updater_plugin_is_not_built_in() {
+fn only_the_release_build_makes_signed_updater_packages() {
+    // Signing needs the private key, which only the release shell (or a CI secret) has: everyday builds make none.
+    assert_eq!(tauri_conf()["bundle"]["createUpdaterArtifacts"], false);
+    assert_eq!(json("tauri.release.conf.json"), serde_json::json!({"bundle": {"createUpdaterArtifacts": true}}));
+}
+
+#[test]
+fn the_updater_runs_from_rust_only_and_without_zip() {
+    // v1.1 dropped the plugin partly because it pulled in `zip`: it now comes without its default features (zip,
+    // system proxy), and no window may call it (the core checks, downloads and installs).
     let manifest = std::fs::read_to_string(manifest_dir().join("Cargo.toml")).unwrap();
-    assert!(!manifest.contains("tauri-plugin-updater"), "Cargo.toml still depends on the updater plugin");
-    for (file, needle) in [("src/lib.rs", "tauri_plugin_updater"), ("capabilities/default.json", "updater:")] {
-        let text = std::fs::read_to_string(manifest_dir().join(file)).unwrap();
-        assert!(!text.contains(needle), "{file} still refers to the updater");
+    let line = manifest.lines().find(|l| l.starts_with("tauri-plugin-updater")).expect("the updater plugin");
+    assert!(line.contains("default-features = false") && line.contains("\"rustls-tls\"") && !line.contains("zip"), "{line}");
+    let lock = std::fs::read_to_string(manifest_dir().join("Cargo.lock")).unwrap();
+    assert!(!lock.contains("name = \"zip\""), "zip is in Cargo.lock");
+    for (file, _) in capability_files() {
+        let text = std::fs::read_to_string(manifest_dir().join(&file)).unwrap();
+        assert!(!text.contains("updater:"), "{file} lets a window use the updater");
     }
+    let npm = std::fs::read_to_string(manifest_dir().join("../package.json")).unwrap();
+    assert!(!npm.contains("plugin-updater"), "no JavaScript half");
 }
 
 #[test]

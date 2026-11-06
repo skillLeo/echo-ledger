@@ -122,7 +122,10 @@ describe("Settings → Screen moments", () => {
 
   it("says when the plan, the server or this computer leaves screen moments out", async () => {
     const { card } = await setup({}, status({ inPlan: false }));
-    expect(within(card()).getByRole("status")).toHaveTextContent("Screen moments are not in your workspace's plan, so nothing is kept.");
+    expect(within(card()).getByRole("status")).toHaveTextContent("Screen moments are not in your workspace's plan, so nothing is captured or kept.");
+    // The capture's controls are hidden: there is nothing to switch on.
+    expect(within(card()).queryByRole("switch", { name: "Keep screen moments" })).not.toBeInTheDocument();
+    expect(within(card()).queryByText("Never capture these apps")).not.toBeInTheDocument();
     expect(screensBlocked(status({ onServer: false }))).toMatch(/does not have screen moments yet/);
     expect(screensBlocked(status({ supported: false }))).toMatch(/cannot capture the screen/);
     expect(screensBlocked(status())).toBeNull();

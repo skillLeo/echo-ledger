@@ -103,6 +103,8 @@ struct MenuShape {
     review: usize,
     captions: bool,
     auto: bool,
+    /// A viewer's computer records nothing (v1.5): the sentence the menu shows instead of the recording lines.
+    viewer: Option<String>,
 }
 
 #[derive(Default)]
@@ -122,9 +124,20 @@ fn item(id: &'static str, label: impl Into<String>) -> Entry {
     Entry::Item { id, label: label.into(), enabled: true, checked: None }
 }
 
-/// The menu for a state: open, then recording, then the two switches and the review queue, then quit.
+/// The menu for a state: open, then recording, then the two switches and the review queue, then quit. A viewer's menu
+/// has the viewer sentence (greyed out) where recording, captions and automatic recording were; a recording that was
+/// already running when the role changed can still be stopped.
 fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
     let mut entries = vec![item("open", "Open EchoLedger"), Entry::Separator];
+    if let Some(sentence) = shape.viewer.as_ref().filter(|_| !shape.recording) {
+        entries.push(Entry::Item { id: "viewer", label: sentence.clone(), enabled: false, checked: None });
+        if shape.review > 0 {
+            entries.push(item("review", format!("Review recordings ({})", shape.review)));
+        }
+        entries.push(Entry::Separator);
+        entries.push(item("quit", "Quit EchoLedger"));
+        return entries;
+    }
     entries.push(item("record", if shape.recording { "Stop recording" } else { "Start recording" }));
     entries.push(Entry::Item {
         id: "pause",
@@ -258,8 +271,9 @@ pub struct Switches {
 }
 
 /// Applies a new state to the tray: icon, tooltip and menu, each only when it changed. `mic_note`: the recording is a
-/// voice note spoken into the microphone.
-pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, pill_hidden: bool, pending: usize, switches: Switches) {
+/// voice note spoken into the microphone; `viewer`: the viewer sentence when this computer may not record.
+#[allow(clippy::too_many_arguments)]
+pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, pill_hidden: bool, pending: usize, switches: Switches, viewer: Option<String>) {
     let Some(cache) = app.try_state::<TrayCache>() else {
         return;
     };
@@ -290,6 +304,7 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, p
         review: pending,
         captions: switches.captions,
         auto: switches.auto,
+        viewer,
     };
     let mut current = cache.shape.lock().unwrap_or_else(|p| p.into_inner());
     if current.as_ref() != Some(&shape) {
@@ -329,7 +344,7 @@ mod tests {
 
     #[test]
     fn recording_menu_shows_its_state_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false };
+        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, viewer: None };
         let labels = labels(&shape);
         assert!(labels.contains(&"Stop recording".to_string()));
         assert!(labels.contains(&"Resume recording".to_string()));
@@ -360,6 +375,19 @@ mod tests {
         let shape = MenuShape { recording: true, show_controls: true, review: 1, ..MenuShape::default() };
         let ids: Vec<&str> = menu_entries(&shape).into_iter().filter_map(|e| match e { Entry::Item { id, .. } => Some(id), Entry::Separator => None }).collect();
         assert_eq!(ids, ["open", "record", "pause", "controls", "voice_note", "mic_note", "captions", "auto", "review", "quit"]);
+    }
+
+    #[test]
+    fn a_viewer_s_menu_offers_no_recording_and_says_why() {
+        let sentence = "You are a viewer in Acme team: you can open what is shared with you, not record.";
+        let shape = MenuShape { auto: true, review: 1, viewer: Some(sentence.into()), ..MenuShape::default() };
+        assert_eq!(labels(&shape), ["Open EchoLedger", "---", sentence, "Review recordings (1)", "---", "Quit EchoLedger"]);
+        let line = menu_entries(&shape).into_iter().find(|e| matches!(e, Entry::Item { id: "viewer", .. })).unwrap();
+        assert!(matches!(line, Entry::Item { enabled: false, .. }), "the sentence is not an action");
+
+        // A recording that ran before the role changed keeps its Stop line.
+        let recording = MenuShape { recording: true, ..shape };
+        assert!(labels(&recording).contains(&"Stop recording".to_string()));
     }
 
     #[test]

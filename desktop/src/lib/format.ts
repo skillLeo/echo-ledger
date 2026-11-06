@@ -220,3 +220,15 @@ export function processName(name: string): string {
   const base = (name.split(/[\\/]/).pop() ?? name).replace(/\.(exe|app)$/i, "");
   return PROCESS_NAMES[base.toLowerCase()] ?? base;
 }
+
+/** "1.5 GB" style sizes. */
+export function fileSize(bytes: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit++;
+  }
+  return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
+}

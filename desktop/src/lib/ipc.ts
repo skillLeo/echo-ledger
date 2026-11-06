@@ -49,6 +49,74 @@ export interface AppStatus {
   failedUploads: number;
   trayState: TrayState;
   budget: BudgetState;
+  /** What the workspace's plan and the person's role allow (since v1.5). */
+  plan: PlanInfo;
+}
+
+/** The plan and role (since v1.5); `known` is false on a server without plans (every feature on, no plan limits). */
+export interface PlanInfo {
+  known: boolean;
+  name: string | null;
+  liveTranslate: boolean;
+  screenMoments: boolean;
+  aiNotes: boolean;
+  connector: boolean;
+  /** Limits; null is no limit. */
+  monthlyMinutes: number | null;
+  storageBytes: number | null;
+  retentionDays: number | null;
+  seats: number | null;
+  usedMinutes: number | null;
+  usedStorageBytes: number | null;
+  workspace: string | null;
+  /** null when the server did not say (the app acts as a member). */
+  role: WorkspaceRole | null;
+}
+
+export type WorkspaceRole = "owner" | "admin" | "member" | "viewer";
+
+/** A sign-in with an account (since v1.5): signed in, the account wants its two-factor code, or the server only pairs. */
+export type SignInResult = "signed_in" | "otp_required" | "pairing_only";
+export interface SignInOutcome {
+  result: SignInResult;
+  status: AppStatus | null;
+}
+
+/** `GET /api/account` as the server writes it (since v1.5). */
+export interface Account {
+  name: string;
+  email: string;
+  email_verified: boolean;
+  two_factor: boolean;
+  google: boolean;
+  created_at: string | null;
+  workspace: { id: unknown; name: string; role: string } | null;
+  /** When the account will be deleted; null when it is not. */
+  deletes_at: string | null;
+}
+
+/** Signed updates from the server (since v1.5). */
+export type UpdatePhase = "idle" | "checking" | "up_to_date" | "downloading" | "ready" | "failed" | "unavailable";
+export interface UpdateStatus {
+  phase: UpdatePhase;
+  /** This app's version. */
+  current: string;
+  /** The new version, while it downloads and once it is ready. */
+  version: string | null;
+  notes: string | null;
+  /** The last check that reached the server (RFC 3339). */
+  checkedAt: string | null;
+  message: string | null;
+  /** 0 to 100 while downloading, when the size is known. */
+  progress: number | null;
+}
+
+/** Export my data (since v1.5): the ZIP is made on the server; `url` works for 24 hours once it is ready. */
+export interface AccountExport {
+  id: string;
+  status: "making" | "ready" | "failed";
+  url: string | null;
+  expires_at: string | null;
 }
 
 export interface Settings {
@@ -776,6 +844,8 @@ export interface UploadItem {
   imported: boolean;
   /** Percent sent while `uploading`. */
   progress: number | null;
+  /** The account it waits for: it was made while another account was signed in here (since v1.5). */
+  heldFor?: string | null;
 }
 
 /** What one import did: files queued, already in the queue, of a type that cannot be imported, or unreadable. */
@@ -937,9 +1007,17 @@ export interface EventPayloads {
   "dictation:level": number;
   "lock:changed": LockStatus;
   "activity:updated": number;
+  "signin:done": AppStatus;
+  "signin:failed": string;
+  /** A link of another browser sign-in (an earlier tab): what to say while this one keeps waiting. */
+  "signin:other": string;
+  "update:status": UpdateStatus;
 }
 
 export type AppEvent = keyof EventPayloads;
+
+/** The server's public pages the app opens in the browser (since v1.5). */
+export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads";
 
 export const api = {
   status: () => invoke<AppStatus>("app_status"),
@@ -947,6 +1025,29 @@ export const api = {
   setWindowTheme: (theme: "light" | "dark" | "system") => invoke<void>("set_window_theme", { theme }),
   pair: (serverUrl: string, code: string, deviceName: string) => invoke<AppStatus>("pair_device", { serverUrl, code, deviceName }),
   unpair: () => invoke<AppStatus>("unpair"),
+  // Signing in with an account and the account page (since v1.5).
+  signInPassword: (serverUrl: string, email: string, password: string, otp: string | null, deviceName: string) =>
+    invoke<SignInOutcome>("sign_in_password", { serverUrl, email, password, otp, deviceName }),
+  /** Opens the server's sign-in page in the browser; false (and no browser) when the server only pairs. The answer
+   * comes back as `signin:done` or `signin:failed` (`signin:other` for an earlier sign-in's link). */
+  signInBrowser: (serverUrl: string, deviceName: string) => invoke<boolean>("sign_in_browser", { serverUrl, deviceName }),
+  signInBrowserCancel: () => invoke<void>("sign_in_browser_cancel"),
+  /** null on a server without accounts. */
+  account: () => invoke<Account | null>("account_get"),
+  /** Every device and console session of the account, this computer too: the answer is the signed-out status. */
+  signOutEverywhere: () => invoke<AppStatus>("account_sign_out_everywhere"),
+  /** When the account will be deleted (in 7 days). */
+  deleteAccount: (password: string | null, otp: string | null) => invoke<string | null>("account_delete", { password, otp }),
+  startExport: () => invoke<AccountExport>("account_export_start"),
+  exportStatus: (id: string) => invoke<AccountExport>("account_export_status", { id }),
+  openExport: (url: string) => invoke<void>("account_export_open", { url }),
+  /** The server's Terms, Privacy, account deletion or downloads page in the browser. */
+  openServerPage: (page: ServerPage) => invoke<void>("server_page_open", { page }),
+  // Updates (since v1.5): checked every 12 hours and on request; `update:status` follows the check and the download.
+  updateStatus: () => invoke<UpdateStatus>("update_status"),
+  checkForUpdates: () => invoke<UpdateStatus>("update_check"),
+  /** "Restart now": installs the ready update and starts the new version. */
+  installUpdate: () => invoke<void>("update_install"),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),

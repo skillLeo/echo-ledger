@@ -25,6 +25,10 @@ tauri-plugin-positioner = { version = "=2.4.0", features = ["tray-icon"] }
 tauri-plugin-store = "=2.5.0"
 tauri-plugin-opener = "=2.7.2"
 tauri-plugin-clipboard-manager = "=2.5.0"
+# Signed updates (v1.5) from the signed-in server's /downloads/desktop.json; driven from Rust only (no JS half). Its own
+# TLS goes through the server's pins (configure_client); no zip (the NSIS installer is used as is) and no system proxy,
+# like the app's own client.
+tauri-plugin-updater = { version = "=2.14.1", default-features = false, features = ["rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2.0.21"

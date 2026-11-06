@@ -63,15 +63,34 @@ export function recordingTitle(title: string | null | undefined, sourceApp: stri
 export const pendingTitle = (item: PendingItem): string => recordingTitle(item.title, item.sourceApp, item.mode, item.callerName);
 export const uploadTitle = (item: UploadItem): string => recordingTitle(item.title, item.sourceApp);
 
+const ours = (items: readonly UploadItem[]): UploadItem[] => items.filter((i) => !i.heldFor);
+
 /** Uploads that stopped for good and wait for Retry or Discard, oldest first (the queue order). */
-export const failedUploads = (items: readonly UploadItem[]): UploadItem[] => items.filter((i) => i.state === "failed");
+export const failedUploads = (items: readonly UploadItem[]): UploadItem[] => ours(items).filter((i) => i.state === "failed");
 
 /** Uploads whose chunks are all sent and that wait for the server to verify the file. */
-export const verifyingUploads = (items: readonly UploadItem[]): UploadItem[] => items.filter((i) => i.state === "verifying");
+export const verifyingUploads = (items: readonly UploadItem[]): UploadItem[] => ours(items).filter((i) => i.state === "verifying");
 
 /** Imported files on their way up (recordings made here upload quietly; the sidebar says "Uploading…"). */
 export const importingUploads = (items: readonly UploadItem[]): UploadItem[] =>
-  items.filter((i) => i.imported && (i.state === "queued" || i.state === "uploading"));
+  ours(items).filter((i) => i.imported && (i.state === "queued" || i.state === "uploading"));
+
+/** Recordings made while another account was signed in here (v1.5), by the account they wait for, oldest first. */
+export function heldUploads(items: readonly UploadItem[]): [string, UploadItem[]][] {
+  const byAccount = new Map<string, UploadItem[]>();
+  for (const item of items) {
+    if (!item.heldFor) continue;
+    byAccount.set(item.heldFor, [...(byAccount.get(item.heldFor) ?? []), item]);
+  }
+  return [...byAccount.entries()];
+}
+
+/** "2 recordings made while signed in as sara@example.com wait for that account. …" */
+export function heldLine(account: string, count: number): string {
+  const made = count === 1 ? "1 recording made" : `${count} recordings made`;
+  const them = count === 1 ? "it" : "them";
+  return `${made} while signed in as ${account} ${count === 1 ? "waits" : "wait"} for that account. Sign out and sign in as ${account} to upload ${them}, or discard ${them}.`;
+}
 
 /** Where one import is: waiting its turn, or how much of it the server has. */
 export function importProgressText(item: UploadItem): string {

@@ -7,7 +7,8 @@ import { ActivityView, useActivityUnread } from "./ActivityCentre";
 import { OnboardingView } from "./OnboardingView";
 import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
-import { PairingView } from "./PairingView";
+import { SignInView } from "./SignInView";
+import { UpdateBanner } from "./UpdateSettings";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
 import { RecordView } from "./RecordView";
@@ -20,6 +21,7 @@ import { CommandPalette } from "./CommandPalette";
 import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
 import { fileDropClaim } from "../../lib/dropTarget";
+import { isViewer, viewerSentence } from "../../lib/plan";
 
 type Tab = MainTab;
 const TABS: readonly Tab[] = ["library", "projects", "record", "activity", "settings"];
@@ -107,9 +109,12 @@ export default function MainApp() {
   // Import: the files of the open import sheet, and whether files are being dragged over the window.
   const [importPaths, setImportPaths] = useState<string[] | null>(null);
   const [dragging, setDragging] = useState(false);
-  // Drops count only on the app itself, never on the lock screen, the pairing form or the first-run wizard.
+  // Drops count only on the app itself, never on the lock screen, the sign-in form or the first-run wizard.
   const acceptDrops = useRef(false);
   acceptDrops.current = !!status?.paired && restored && !lock?.locked && setupDone !== false;
+  // A viewer (v1.5) imports nothing: a drop or the Import button says why instead of opening the sheet.
+  const viewer = useRef<string | null>(null);
+  viewer.current = isViewer(status) ? viewerSentence(status?.plan.workspace) : null;
 
   // Files dropped anywhere on the window open the import sheet (the core no longer imports a drop by itself).
   useEffect(() => {
@@ -122,6 +127,7 @@ export default function MainApp() {
         if (paths.length === 0 || !acceptDrops.current) return;
         const claim = fileDropClaim();
         if (claim) claim(paths);
+        else if (viewer.current) setToast({ text: viewer.current, error: true });
         else setImportPaths(paths);
       },
     });
@@ -366,6 +372,10 @@ export default function MainApp() {
   const notify = (text: string, error = false) => setToast({ text, error });
   /** The Import button: the core's multi-select picker, then the sheet for the chosen files. */
   const pickImport = async () => {
+    if (viewer.current) {
+      notify(viewer.current, true);
+      return;
+    }
     try {
       const paths = await api.pickImportFiles();
       if (paths.length > 0) setImportPaths(paths);
@@ -386,8 +396,8 @@ export default function MainApp() {
     }
   };
 
-  // Rendered in every branch: a pairing error, or "unpaired on the server" arriving with the status that sends the
-  // window back to the pairing form, must stay visible (A6.DU1).
+  // Rendered in every branch: a pairing error, or "signed out on the server" arriving with the status that sends the
+  // window back to the sign-in form, must stay visible (A6.DU1).
   const toastView = toast && <div className={`toast ${toast.error ? "error" : ""}`} role="status">{toast.text}</div>;
 
   if (lock?.locked) {
@@ -411,7 +421,7 @@ export default function MainApp() {
   if (!status || !status.paired || !restored) {
     return (
       <main className="gate">
-        {status && !status.paired ? <PairingView onPaired={setStatus} notify={notify} /> : <div className="empty">Starting EchoLedger…</div>}
+        {status && !status.paired ? <SignInView onSignedIn={setStatus} notify={notify} serverUrl={status.serverUrl} /> : <div className="empty">Starting EchoLedger…</div>}
         {toastView}
       </main>
     );
@@ -490,6 +500,7 @@ export default function MainApp() {
         </div>
       </aside>
       <main className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
+        <UpdateBanner appStatus={status} notify={notify} />
         {status.budget === "reached" && (
           <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
         )}
@@ -507,7 +518,7 @@ export default function MainApp() {
         {tab === "projects" && (
           <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
             projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
-            requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} />
+            requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} />
         )}
         {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
         {tab === "activity" && (

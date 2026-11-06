@@ -120,23 +120,25 @@ describe("first-run wizard (B19)", () => {
     respond("update_settings", makeSettings());
   });
 
-  it("walks through permissions, pairing, a test and consent", async () => {
+  it("walks through permissions, signing in, a test and consent", async () => {
     respond("test_capture", { seconds: 10, micPeak: 0.4, systemPeak: 0, micHeard: true, systemHeard: false, wavBase64: "" });
     respond("open_privacy_settings", undefined);
     const onFinished = vi.fn();
     render(<OnboardingView status={makeStatus()} onStatus={vi.fn()} onFinished={onFinished} notify={vi.fn()} />);
     const steps = screen.getByRole("list", { name: "Setup steps" });
     expect(within(steps).getByText("Permissions")).toHaveAttribute("aria-current", "step");
+    expect(screen.getByTestId("consent-notice")).toHaveTextContent("Tell participants you are recording where required.");
     fireEvent.click(await screen.findByRole("button", { name: "Open settings" }));
     expect(callsOf("open_privacy_settings")).toEqual([{ kind: "microphone" }]);
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByText(/Paired with/)).toBeInTheDocument();
+    expect(screen.getByText(/Signed in to/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("button", { name: "Start the test" }));
     expect(await screen.findByText("Your microphone is working.")).toBeInTheDocument();
     expect(callsOf("test_capture")).toEqual([{ seconds: 10 }]);
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    fireEvent.click(screen.getByRole("checkbox", { name: /obtain consent/ }));
+    expect(screen.getByTestId("consent-notice")).toHaveTextContent("Call-recording laws differ by country. Tell participants you are recording where required.");
+    fireEvent.click(screen.getByRole("checkbox", { name: "I understand and will get consent where required" }));
     fireEvent.click(screen.getByRole("button", { name: "Start using EchoLedger" }));
     await waitFor(() => expect(onFinished).toHaveBeenCalled());
     expect(callsOf("update_settings")).toEqual([{ patch: { onboardingDone: true, consentAcknowledged: true } }]);

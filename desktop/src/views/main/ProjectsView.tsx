@@ -31,7 +31,7 @@ export function deletedText(name: string, answer: { moved_sessions?: number; mov
   return parts.join(" · ");
 }
 
-export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled }: {
+export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled, aiNotesInPlan = true }: {
   notify: Notify;
   /** Every project; null while they load. */
   projects: ClientFolder[] | null;
@@ -51,6 +51,8 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   requestFocus?: { id: string; seq: number } | null;
   /** The request link is shown: coming back to Projects later does not show it again. */
   onRequestFocusHandled?: () => void;
+  /** The plan has call notes, memory and Ask (`ai_notes`, since v1.5). */
+  aiNotesInPlan?: boolean;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -188,7 +190,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
     );
     return (
       <div className="project-page">
-        <ClientWorkspace key={project.id} client={project} projects={list} items={items} notify={notify} onOpenRecording={onOpenRecording}
+        <ClientWorkspace key={project.id} client={project} projects={list} items={items} notify={notify} onOpenRecording={onOpenRecording} aiNotesInPlan={aiNotesInPlan}
           onClientChanged={(next) => onChanged((all) => all.map((c) => (c.id === next.id ? { ...c, ...next } : c)))}
           onOpenProject={onOpenProject} menu={menu} actions={share || null} onMoveRecordings={(ids, target) => void dropMove(ids, target)}
           rules={nested ? <RulesSection project={project} notify={notify} /> : null} />

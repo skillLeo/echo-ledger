@@ -417,6 +417,8 @@ button.segment.active { background: var(--accent-soft); }
 .queue-title, .queue-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .queue-title { font-weight: 500; font-size: 16px; }
 .queue-error { overflow-wrap: anywhere; line-height: 1.5; font-size: var(--text-xs); }
+/* Why recordings wait for another account (v1.5): a sentence, so it wraps. */
+.queue-note { margin: 0; padding: 0 var(--space-1); line-height: 1.5; overflow-wrap: anywhere; }
 .queue-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .queue-actions.decide { display: grid; grid-template-columns: 1fr 1fr; }
 .queue-actions.decide .btn { height: 44px; font-size: 15px; }
@@ -1041,3 +1043,28 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .chip.excluded-app { cursor: default; gap: 2px; padding-right: 2px; }
 .chip-remove { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); cursor: pointer; }
 .chip-remove:hover { background: var(--surface-3); color: var(--text); }
+/* Sign in to EchoLedger (since v1.5): "or" between the password and the browser, the pairing link, the browser wait. */
+.sign-in-or { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; color: var(--text-muted); font-size: var(--text-xs); }
+.sign-in-or::before, .sign-in-or::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.sign-in-pair { display: flex; margin: var(--space-2) auto 0; }
+.sign-in-wait { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
+/* Settings → Account (since v1.5): the account's facts, the plan's limits next to the usage, deleting the account. */
+.account-facts { display: grid; gap: 0; margin: var(--space-2) 0; }
+.account-facts > div { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.account-facts dt { color: var(--text-muted); }
+.account-facts dd { margin: 0; text-align: end; overflow-wrap: anywhere; }
+.plan-limit { display: grid; gap: var(--space-1); padding: var(--space-2) 0; }
+.plan-limit .flow-bar { margin: 0; height: 6px; border-radius: 3px; }
+.plan-limit .flow-bar.warn > span { background: var(--warning); }
+.plan-limit .flow-bar.full > span { background: var(--danger); }
+.plan-features { margin: var(--space-2) 0; padding-inline-start: var(--space-4); display: grid; gap: 2px; font-size: var(--text-sm); }
+.plan-features li.off { color: var(--text-muted); }
+.account-delete { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--danger-soft); }
+/* The recording-consent notice (since v1.5): the setup's last step and Settings → Privacy & consent. */
+.consent-notice { display: grid; gap: var(--space-1); }
+.consent-notice p { margin: 0; }
+/* Updates (since v1.5): Settings → About's check, and the prompt once an update is ready. */
+.updates-panel { display: grid; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin: var(--space-2) 0; }
+.update-notes { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
+.banner.update-banner { background: var(--accent-soft); }
+.banner.update-banner > svg { color: var(--accent-text); }
