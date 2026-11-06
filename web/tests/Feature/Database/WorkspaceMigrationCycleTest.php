@@ -344,3 +344,61 @@ it('runs the v1.5 Phase 3 migration down and up again on a library with screen m
         @unlink((string) config('database.connections.cycle.database'));
     }
 });
+
+/** The v1.5 account migrations (accounts, data exports), and how many came after them (rolled back first). */
+const ACCOUNT_STEPS = 2;
+
+const AFTER_ACCOUNTS = 0;
+
+it('runs the v1.5 account migrations down and up again without touching the library', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    $seeded = seedPhase2Library($db);
+    $now = now();
+    $workspace = (int) $db->table('workspaces')->value('id');
+    $db->table('users')->where('id', $seeded['user'])->update(['google_id' => 'google-1', 'deletion_requested_at' => $now, 'deletes_at' => $now->copy()->addDays(7), 'notify_transcript_ready' => true]);
+    $db->table('device_sign_in_codes')->insert(['user_id' => $seeded['user'], 'workspace_id' => $workspace, 'code_hash' => str_repeat('a', 64), 'code_challenge' => str_repeat('b', 43),
+        'name' => 'Pixel', 'platform' => 'android', 'expires_at' => $now->copy()->addMinutes(5), 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('known_browsers')->insert(['user_id' => $seeded['user'], 'token_hash' => str_repeat('c', 64), 'label' => 'Chrome on Windows', 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('workspace_invitations')->insert(['workspace_id' => $workspace, 'email' => 'new@example.test', 'role' => 'member', 'token_hash' => str_repeat('d', 64),
+        'invited_by' => $seeded['user'], 'expires_at' => $now->copy()->addDays(7), 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('account_exports')->insert(['id' => (string) Str::ulid(), 'user_id' => $seeded['user'], 'status' => 'ready', 'path' => 'exports/x.zip.elr', 'created_at' => $now, 'updated_at' => $now]);
+
+    cycleArtisan('migrate:rollback', ['--step' => ACCOUNT_STEPS + AFTER_ACCOUNTS]);
+    $schema = $db->getSchemaBuilder();
+    foreach (['device_sign_in_codes', 'known_browsers', 'workspace_invitations', 'account_exports'] as $table) {
+        expect($schema->hasTable($table))->toBeFalse($table);
+    }
+    foreach (['google_id', 'deletion_requested_at', 'deletes_at', 'consent_seen_at', 'notify_transcript_ready'] as $column) {
+        expect($schema->hasColumn('users', $column))->toBeFalse($column);
+    }
+    expect($schema->hasColumn('devices', 'last_country'))->toBeFalse()
+        // Nothing else is lost: the people, their workspace, the library and its links.
+        ->and($db->table('users')->count())->toBe(2)
+        ->and($db->table('workspace_user')->count())->toBe(1)
+        ->and($db->table('capture_sessions')->count())->toBe(1)
+        ->and($db->table('clients')->count())->toBe(2)
+        ->and($db->table('share_links')->count())->toBe(3)
+        ->and($db->table('sent_items')->count())->toBe(1)
+        ->and($db->table('request_links')->count())->toBe(1);
+
+    cycleArtisan('migrate');
+    foreach (['device_sign_in_codes', 'known_browsers', 'workspace_invitations', 'account_exports'] as $table) {
+        expect($schema->hasTable($table))->toBeTrue($table)->and($db->table($table)->count())->toBe(0);
+    }
+    $owner = $db->table('users')->find($seeded['user']);
+    // Accounts that exist are past their sign-up: no consent notice for them, nothing being deleted, no Google link.
+    expect($owner->consent_seen_at)->not->toBeNull()
+        ->and($owner->deletes_at)->toBeNull()
+        ->and($owner->google_id)->toBeNull()
+        ->and((bool) $owner->notify_transcript_ready)->toBeFalse()
+        ->and($db->table('users')->whereNull('consent_seen_at')->count())->toBe(0);
+    // One Google account links to one account only.
+    $db->table('users')->where('id', $seeded['user'])->update(['google_id' => 'google-2']);
+    expect(fn () => $db->table('users')->where('id', '!=', $seeded['user'])->update(['google_id' => 'google-2']))->toThrow(QueryException::class);
+})->after(function () {
+    if (config('database.connections.cycle.driver') === 'sqlite') {
+        DB::disconnect('cycle');
+        @unlink((string) config('database.connections.cycle.database'));
+    }
+});
