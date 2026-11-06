@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
 use Laravel\Passport\Passport;
+use League\OAuth2\Server\AuthorizationServer;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -183,13 +184,23 @@ it('schedules the clean-ups', function () {
     expect(Artisan::output())->toContain('passport:purge')->toContain('echoledger:prune-oauth-clients');
 });
 
-it('keeps the keys out of git, private key readable by the owner only', function () {
+it('works from the key files of `passport:keys` with the 600 of the deploy notes, and keeps them out of git', function () {
     $dir = storage_path('framework/testing/oauth-keys-'.getmypid());
     File::ensureDirectoryExists($dir);
     Passport::loadKeysFrom($dir);
+    config(['passport.private_key' => null, 'passport.public_key' => null]);
     try {
         expect(Artisan::call('passport:keys', ['--length' => 2048]))->toBe(0);
         expect(substr(sprintf('%o', fileperms($dir.'/oauth-private.key')), -3))->toBe('600');
+        chmod($dir.'/oauth-public.key', 0600);
+
+        $connected = connectorConnect($this, $this->person);
+        connectorMessage($this, $connected['access'], 'tools/list')->assertOk();
+
+        // A key others can read is refused rather than used.
+        chmod($dir.'/oauth-private.key', 0644);
+        app()->forgetInstance(AuthorizationServer::class);
+        expect(fn () => app(AuthorizationServer::class))->toThrow(ErrorException::class, 'permissions are not correct');
     } finally {
         Passport::$keyPath = null;
         File::deleteDirectory($dir);

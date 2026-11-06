@@ -15,6 +15,7 @@ use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
 use App\Models\ConnectedApp;
 use App\Models\Plan;
+use App\Models\SentItem;
 use App\Models\Transcript;
 use App\Models\User;
 use App\Models\Workspace;
@@ -413,7 +414,6 @@ describe('what it may see', function () {
     it('shows the person\'s recordings of their current workspace only, and follows a switch', function () {
         $world = connectorWorld();
         $person = $world['person'];
-        $home = Workspace::query()->findOrFail($person->current_workspace_id);
         $team = Workspace::query()->findOrFail(Fx::user()->current_workspace_id);
         app(Workspaces::class)->addMember($team, $person);
         $inTeam = unscoped(fn () => Fx::session($person, null, ['title' => 'Team standup', 'workspace_id' => $team->id]));
@@ -428,8 +428,6 @@ describe('what it may see', function () {
         $text = connectorTool($this, $token, 'list_recent')['text'];
         expect($text)->toContain('Team standup')->not->toContain('Voice note');
         expect(connectorTool($this, $token, 'get_recording', ['id' => $world['call']->id])['error'])->toBeTrue();
-
-        app(Workspaces::class)->switchTo($person->fresh(), $home);
     });
 
     it('reads what a teammate sent the person, read-only, and nothing around it', function () {
@@ -473,6 +471,12 @@ describe('what it may see', function () {
 
         expect(connectorTool($this, $token, 'get_recording', ['id' => $sent->id]))->toBe(['text' => 'No recording with that id.', 'error' => true]);
         expect(connectorTool($this, $token, 'list_recent')['text'])->toBe('No recordings yet.');
+
+        unscoped(fn () => $sent->restore());
+        expect(connectorTool($this, $token, 'get_recording', ['id' => $sent->id])['error'])->toBeFalse();
+        unscoped(fn () => SentItem::query()->where('to_user_id', $person->id)->delete());
+        expect(connectorTool($this, $token, 'get_recording', ['id' => $sent->id]))->toBe(['text' => 'No recording with that id.', 'error' => true]);
+        expect(connectorTool($this, $token, 'search', ['query' => 'Kept'])['text'])->toBe('No recording matches that.');
     });
 
     it('lets a viewer read what was sent to them', function () {
