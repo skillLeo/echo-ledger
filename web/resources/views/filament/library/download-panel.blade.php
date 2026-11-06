@@ -46,4 +46,25 @@
             </p>
         </section>
     @endif
+
+    @if ($pack !== [])
+        {{-- Since v1.5: the transcript in the view above with each screen at its moment, for people and for AI. --}}
+        <section class="el-download-part" aria-label="Meeting pack">
+            <h3 class="el-download-heading">Meeting pack</h3>
+            @foreach ($pack as $view => $formats)
+                <div class="el-download-formats" data-pack-view="{{ $view }}" x-show="view === @js($view)" @if ($view !== $default) style="display: none" @endif>
+                    @foreach ($formats as $format)
+                        <x-filament::button tag="a" :href="$format['url']" :target="$format['print'] ? '_blank' : null" color="gray" size="sm"
+                            :rel="$format['print'] ? 'noopener' : null" icon="heroicon-o-rectangle-stack">
+                            {{ $format['label'] }}
+                        </x-filament::button>
+                    @endforeach
+                </div>
+            @endforeach
+            <p class="el-download-hint">
+                The transcript with {{ $screens === 1 ? 'its screen' : ($screens > 1 ? "its {$screens} screens" : 'its screens') }} placed at their moments, labelled “[Screen 7 at 14:32]” with what each shows.
+                The print page opens in a new tab with a Print button; the ZIP holds transcript.md and the pictures.
+            </p>
+        </section>
+    @endif
 </div>

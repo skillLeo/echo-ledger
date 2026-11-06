@@ -6,6 +6,7 @@ use App\Filament\Support\CommandPalette;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
+use App\Models\Screen;
 use App\Models\SessionLabel;
 use App\Models\SessionMarker;
 use App\Models\ShareLink;
@@ -64,6 +65,7 @@ const ISO_WEB_BYPASS = [
     'downloads.file' => 'a published build by its file name, server-wide',
     'passkeys.login.options' => 'sign-in, before any workspace',
     'passkeys.login' => 'sign-in, before any workspace',
+    'screens.media' => 'signed, expiring URL of a screen moment issued to a device of the workspace',
 ];
 
 const ISO_SECRETS = ['BOB-SECRET-TITLE', 'BOBSECRETTRANSCRIPT', 'BOB-SECRET-CLIENT', 'BOB-SECRET-DEVICE', 'BOBSECRETTERM', 'bobsecretlabel', 'BOBSECRETNOTE'];
@@ -84,6 +86,8 @@ function isoWorld(): array
     $transcript = Fx::transcript($session, 'BOBSECRETTRANSCRIPT spoken here');
     $marker = SessionMarker::query()->create(['capture_session_id' => $session->id, 'at_ms' => 1000, 'note' => 'BOBSECRETNOTE', 'source' => 'device']);
     SessionLabel::query()->create(['capture_session_id' => $session->id, 'label' => 'bobsecretlabel']);
+    $screen = Screen::query()->create(['workspace_id' => $session->workspace_id, 'capture_session_id' => $session->id, 'at_ms' => 1000, 'width' => 1, 'height' => 1,
+        'trigger' => 'manual', 'sha256' => str_repeat('b', 64), 'mime' => 'image/png', 'bytes' => 1, 'ocr_text' => 'BOBSECRETNOTE on the screen']);
     ['link' => $share, 'url' => $shareUrl] = app(ShareLinks::class)->create($session, 3600, null, false, 'Bob');
     $binned = Fx::session($bob, $device, ['title' => 'BOB-SECRET-TITLE binned']);
     $binned->delete();
@@ -92,13 +96,13 @@ function isoWorld(): array
     ['link' => $requestLink] = app(RequestLinks::class)->create($client->workspace_id, $bob->id, $client, 'BOB-SECRET-TITLE request', null, 20, 100);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl');
+    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
 function isoIds(array $b): array
 {
-    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id];
+    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id];
 }
 
 /**
@@ -198,6 +202,11 @@ function isoApiCases(array $b): array
         'api.recordings.show' => ['GET', "/api/recordings/{$b['upload']->id}", [], 404],
         'api.recordings.chunks' => ['POST', "/api/recordings/{$b['upload']->id}/chunks", [], 404],
         'api.recordings.complete' => ['POST', "/api/recordings/{$b['upload']->id}/complete", [], 404],
+        'api.sessions.screens.store' => ['POST', "/api/sessions/{$s}/screens", ['at_ms' => 0, 'width' => 1, 'height' => 1, 'trigger' => 'manual', 'sha256' => str_repeat('a', 64)], 404],
+        'api.sessions.screens' => ['GET', "/api/sessions/{$s}/screens", [], 404],
+        'api.sessions.screens.destroy' => ['DELETE', "/api/sessions/{$s}/screens/{$b['screen']->id}", [], 404],
+        'api.clients.screens' => ['GET', "/api/clients/{$b['client']->id}/screens", [], 404],
+        'api.sessions.pack' => ['GET', "/api/sessions/{$s}/pack?format=html", [], 404],
     ];
 }
 
@@ -258,6 +267,7 @@ it('never lets workspace A read, change or delete workspace B through the API', 
             ->and(Device::query()->find($b['device']->id))->not->toBeNull()
             ->and(ShareLink::query()->find($b['share']->id)?->revoked_at)->toBeNull()
             ->and(SessionMarker::query()->find($b['marker']->id))->not->toBeNull()
+            ->and(Screen::query()->find($b['screen']->id))->not->toBeNull()
             ->and($b['transcript']->fresh()->text)->toContain('BOBSECRETTRANSCRIPT');
     });
 });
@@ -269,6 +279,8 @@ it('answers 404 to workspace A on every console route outside Filament that take
     $cases = [
         'admin.recordings.stream' => ['GET', route('admin.recordings.stream', $b['recording']), [], 404],
         'admin.transcripts.export' => ['GET', route('admin.transcripts.export', [$b['transcript']->id, 'txt']), [], 404],
+        'admin.screens.media' => ['GET', route('admin.screens.media', [$b['screen']->id, 'image']), [], 404],
+        'admin.sessions.pack' => ['GET', route('admin.sessions.pack', [$b['session']->id, 'html']), [], 404],
         // Library → Upload: B's audio is not "already in the Library" of A, and B's client cannot be chosen.
         'admin.uploads.store' => ['POST', route('admin.uploads.store'), ['name' => 'x.wav', 'size' => 4096, 'sha256' => $b['recording']->sha256, 'client_id' => $b['client']->id], 422],
         'admin.uploads.show' => ['GET', route('admin.uploads.show', $upload), [], 404],

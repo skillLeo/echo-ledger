@@ -285,7 +285,7 @@ final class SessionController extends Controller
 
     public function show(Request $request, string $id): JsonResponse
     {
-        $session = $this->readableSession($request, $id)->loadMissing(['device', 'client'])->load(['transcripts', 'recordings', 'markers']);
+        $session = $this->readableSession($request, $id)->loadMissing(['device', 'client'])->load(['transcripts', 'recordings', 'markers'])->loadCount('screens');
         $item = (new LibraryItemResource($session))->toArray($request);
         $primary = $session->recordings->first(fn (Recording $r) => $r->role === RecordingRole::Primary);
 

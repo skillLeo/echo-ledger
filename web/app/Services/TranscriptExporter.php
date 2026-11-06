@@ -331,7 +331,8 @@ final class TranscriptExporter
         return $session->markers()->get()->all();
     }
 
-    private static function mdEscape(string $text): string
+    /** Markdown's own characters written as text (also the meeting pack's transcript.md). */
+    public static function mdEscape(string $text): string
     {
         return Str::of($text)->replaceMatches('/([\\\\`*_{}\[\]<>#|])/u', '\\\\$1')->toString();
     }

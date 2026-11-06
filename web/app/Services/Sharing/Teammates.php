@@ -20,6 +20,7 @@ use App\Models\User;
 use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
 use App\Services\Projects\ProjectTree;
+use App\Services\Screens\ScreenStore;
 use App\Services\Workspaces\PlanLimits;
 use App\Support\UrduText;
 use Illuminate\Database\Eloquent\Builder;
@@ -42,7 +43,7 @@ final class Teammates
     /** @var list<string> encrypted files written by the save in progress */
     private array $written = [];
 
-    public function __construct(private readonly ProjectTree $projects, private readonly ChunkedUploadService $uploads) {}
+    public function __construct(private readonly ProjectTree $projects, private readonly ChunkedUploadService $uploads, private readonly ScreenStore $screens) {}
 
     /**
      * Sends a recording or a project to every email. Unknown emails are `404 recipient_not_found` and nothing is
@@ -147,8 +148,9 @@ final class Teammates
 
     /**
      * Saves a copy into the workspace: a recording with its audio (encrypted again under the copy's id), final
-     * transcript, views and bookmarks, in the Inbox; a project with its subfolders and their recordings, at the top.
-     * `403 storage_limit_reached` when the copy does not fit the plan. The copy is independent of the original.
+     * transcript, views, bookmarks and screen moments, in the Inbox; a project with its subfolders and their
+     * recordings, at the top. `403 storage_limit_reached` when the copy does not fit the plan. The copy is independent
+     * of the original.
      *
      * @return array{session_id: string}|array{client_id: string}
      */
@@ -290,6 +292,10 @@ final class Teammates
         foreach ($original->markers()->get() as $marker) {
             SessionMarker::query()->create(['capture_session_id' => $copy->id, 'at_ms' => $marker->at_ms, 'tag' => $marker->tag, 'note' => $marker->note, 'source' => $marker->source]);
         }
+        // Screen moments (v1.5): each picture encrypted again under the copy's own screen.
+        foreach (ScreenStore::ordered($original->id)->get() as $screen) {
+            array_push($this->written, ...$this->screens->copy($screen, $copy));
+        }
 
         return $copy;
     }
@@ -305,6 +311,8 @@ final class Teammates
     public function payloads(Collection $items, callable $sessionPayload): array
     {
         $items->loadMissing(['captureSession.transcripts', 'captureSession.markers:id,capture_session_id,tag,at_ms', 'captureSession.labels']);
+        // Since v1.5 each recording's screen_count, counted for all of them at once.
+        (new Collection($items->pluck('captureSession')->filter()->values()->all()))->loadCount('screens');
         /** @var Collection<int, Client> $projects */
         $projects = new Collection($items->where('kind', 'project')->pluck('client')->filter()->unique('id')->values()->all());
         $projects->loadCount('keyterms');

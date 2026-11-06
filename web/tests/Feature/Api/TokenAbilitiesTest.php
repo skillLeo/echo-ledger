@@ -99,6 +99,11 @@ function abilityRoutes(): array
         'library' => ['GET', '/api/library', 'library:read'],
         'session detail' => ['GET', "/api/sessions/{$id}", 'library:read'],
         'transcript' => ['GET', "/api/transcripts/{$id}", 'library:read'],
+        'send a screen' => ['POST', "/api/sessions/{$id}/screens", 'sessions:write'],
+        'list screens' => ['GET', "/api/sessions/{$id}/screens", 'library:read'],
+        'delete a screen' => ['DELETE', "/api/sessions/{$id}/screens/{$id}", 'sessions:write'],
+        'project screens' => ['GET', "/api/clients/{$id}/screens", 'library:read'],
+        'meeting pack' => ['GET', "/api/sessions/{$id}/pack", 'library:read'],
     ];
 }
 

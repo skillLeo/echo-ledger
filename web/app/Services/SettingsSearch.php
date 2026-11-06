@@ -31,6 +31,7 @@ final class SettingsSearch
         'engine' => ['recording', 'Transcription engine', 'final transcript voice notes provider assemblyai elevenlabs azure whisper soniox accuracy'],
         'routing' => ['recording', 'Engine per language', 'language urdu arabic english auto other engine routing order fallback backup wait hours busy retry groq whisper soniox elevenlabs assemblyai gemini script'],
         'bookmarks' => ['recording', 'Bookmarks', 'tags markers one tap during a call'],
+        'screens' => ['recording', 'Screen moments', 'screens screenshots shared screen pictures meeting describe text description claude haiku search'],
         'assemblyai' => ['recording', 'AssemblyAI', 'region eu us streaming model final transcript models'],
         'groq' => ['recording', 'Groq (Whisper large-v3)', 'plan free developer rate requests audio seconds hour day pacing whisper'],
         'gemini' => ['recording', 'Google Gemini', 'gemini google model pro preview verbatim challenger'],

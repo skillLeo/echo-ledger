@@ -89,6 +89,8 @@ final class LibraryItemResource extends JsonResource
                 'final_progress' => TranscriptResource::progress($final),
             ],
             'marker_count' => $markers->count(),
+            // Since v1.5: screen moments kept during the meeting (counted with the query where it was asked for).
+            'screen_count' => (int) ($session->getAttribute('screens_count') ?? $session->screens()->count()),
             'tags' => $markers->pluck('tag')->filter()->unique()->values()->all(),
             'pinned' => (bool) $session->pinned,
             'keep' => (bool) $session->keep_forever,

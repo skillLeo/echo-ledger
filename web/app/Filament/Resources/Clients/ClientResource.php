@@ -107,6 +107,9 @@ class ClientResource extends Resource
                     ->helperText('One emoji or up to two letters, shown on the folder.')
                     ->dehydrateStateUsing(fn (?string $state): ?string => OrganiseController::avatar($state)),
                 Toggle::make('pinned')->label('Pin to the top')->inline(false),
+                // Since v1.5: off = the desktop keeps no screen moments of meetings filed here.
+                Toggle::make('screens')->label('Keep screen moments of its meetings')->default(true)->inline(false)
+                    ->helperText('The desktop app keeps what was on the shared screen at each moment. Off for projects whose screens should not be kept.'),
                 Select::make('language')->label('Language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false)
                     ->formatStateUsing(fn (?string $state): string => LanguageChoice::normalize($state) ?? '')
                     ->dehydrateStateUsing(fn (?string $state): ?string => LanguageChoice::normalize($state))

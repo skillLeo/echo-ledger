@@ -51,6 +51,8 @@ final class ConfigController extends Controller
             'language' => LanguageChoice::normalize($client->language),
             // Since v1.4: call notes and memory after each call for this client.
             'ai_notes' => (bool) ($client->ai_notes ?? true),
+            // Since v1.5: false = the desktop keeps no screen moments of meetings filed under it.
+            'screens' => (bool) ($client->screens ?? true),
             'keyterm_count' => (int) $client->getAttribute('keyterms_count'),
             'session_count' => (int) $client->getAttribute('capture_sessions_count'),
             'updated_at' => $client->updated_at?->toAtomString(),

@@ -12,6 +12,7 @@ use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\UsageLedgerEntry;
 use App\Services\LiveTranslate\LiveTranslateBudget;
+use App\Services\Screens\ScreenDescriptions;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Carbon;
 
@@ -140,7 +141,12 @@ final class UsageReport
         foreach ($providers as $key => $v) {
             $rows[] = [
                 'provider' => $key,
-                'label' => SttProviderKey::tryFrom($key)?->getLabel() ?? ($key === 'claude' ? 'Claude (Show as)' : $key),
+                'label' => SttProviderKey::tryFrom($key)?->getLabel() ?? match ($key) {
+                    'claude' => 'Claude (Show as)',
+                    // Since v1.5: the text and descriptions of screen moments.
+                    ScreenDescriptions::PROVIDER => 'Claude (screen moments)',
+                    default => $key,
+                },
                 'streaming_minutes' => $v['streaming_minutes'],
                 'final_minutes' => $v['final_minutes'],
                 'cost_usd' => $v['cost_usd'],
