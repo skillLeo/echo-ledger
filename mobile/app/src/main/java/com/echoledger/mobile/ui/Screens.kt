@@ -176,7 +176,7 @@ fun PairingScreen(vm: MainViewModel) {
     confirm?.let { payload ->
         AlertDialog(
             onDismissRequest = { confirm = null },
-            title = { Text("Pair with this server?") },
+            title = { Text("Sign in to this server?") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(payload.url.removePrefix("https://").removePrefix("http://"), fontWeight = FontWeight.SemiBold)
@@ -192,7 +192,7 @@ fun PairingScreen(vm: MainViewModel) {
                     url = payload.url
                     confirm = null
                     vm.pairWith(payload, name)
-                }) { Text("Pair") }
+                }) { Text("Sign in with code") }
             },
             dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } }
         )
@@ -266,7 +266,7 @@ fun PairingScreen(vm: MainViewModel) {
             ) {
                 Icon(Icons.Outlined.QrCodeScanner, contentDescription = null, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(10.dp))
-                Text(if (busy) "Pairing…" else "Scan QR code", fontSize = 16.sp)
+                Text(if (busy) "Signing in…" else "Scan QR code", fontSize = 16.sp)
             }
             if (cameraBlocked) {
                 Text(
@@ -276,20 +276,20 @@ fun PairingScreen(vm: MainViewModel) {
                 )
             }
             Text(
-                "or use a one-time pairing code",
+                "or use a one-time sign-in code",
                 color = Brand.Muted,
                 fontSize = 13.sp,
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             )
             // The pairing code uses the server address above (a pasted QR text carries its own).
-            OutlinedTextField(code, { code = it }, label = { Text("Pairing code") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(code, { code = it }, label = { Text("Sign-in code") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(name, {
                 name = it
             }, label = { Text("Name for this phone (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedButton(onClick = {
                 vm.pair(url, code, name)
             }, enabled = !busy && code.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-                Text(if (busy) "Pairing…" else "Pair")
+                Text(if (busy) "Signing in…" else "Sign in with code")
             }
             Text(
                 "Your access token is encrypted with the Android Keystore. Speech-provider keys never leave your server.",

@@ -59,7 +59,7 @@ class UndecidedKeepWorkerTest : AppTest() {
     fun `a Soniox refusal is remembered in short and cleared once translating works`() {
         assertEquals("Needs Soniox credit", TranslateStatus.shortReason("Soniox has no credit left. Add credit at console.soniox.com."))
         assertEquals("Budget used up", TranslateStatus.shortReason("This month's Live Translate budget is used up."))
-        assertNull(TranslateStatus.shortReason("Pair this phone first."))
+        assertNull(TranslateStatus.shortReason("Sign in on this phone first."))
 
         TranslateStatus.remember(app, "Soniox has no credit left.")
         assertEquals("Needs Soniox credit", TranslateStatus.blocked(app))

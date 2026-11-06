@@ -75,7 +75,7 @@ class PairingScreenTest : ScreenTest() {
         server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
     }
 
-    private fun typeCode(text: String) = compose.onNodeWithText("Pairing code").performTextInput(text)
+    private fun typeCode(text: String) = compose.onNodeWithText("Sign-in code").performTextInput(text)
 
     // ---- the form -------------------------------------------------------------------------------------------------------
 
@@ -89,7 +89,7 @@ class PairingScreenTest : ScreenTest() {
         compose.onNodeWithText("Scan QR code").performScrollTo().assertIsDisplayed()
         compose.onNode(hasSetTextAction() and hasText("https://")).assertIsDisplayed()
         compose.onNodeWithText("Server address").assertIsDisplayed()
-        compose.onNodeWithText("Pairing code").assertIsDisplayed()
+        compose.onNodeWithText("Sign-in code").assertIsDisplayed()
         compose.onNodeWithText("Name for this phone (optional)").assertIsDisplayed()
     }
 
@@ -123,14 +123,14 @@ class PairingScreenTest : ScreenTest() {
     @Test
     fun `Pair stays disabled until a code is typed and ignores a blank one`() {
         showPairing()
-        compose.onNodeWithText("Pair").assertIsNotEnabled()
+        compose.onNodeWithText("Sign in with code").assertIsNotEnabled()
 
         typeCode("   ")
-        compose.onNodeWithText("Pair").assertIsNotEnabled()
+        compose.onNodeWithText("Sign in with code").assertIsNotEnabled()
 
-        compose.onNodeWithText("Pairing code").performTextClearance()
+        compose.onNodeWithText("Sign-in code").performTextClearance()
         typeCode("TEST-2345")
-        compose.onNodeWithText("Pair").assertIsEnabled()
+        compose.onNodeWithText("Sign in with code").assertIsEnabled()
     }
 
     @Test
@@ -140,7 +140,7 @@ class PairingScreenTest : ScreenTest() {
 
         compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(server.baseUrl)
         typeCode("TEST-2345")
-        compose.onNodeWithText("Pair").performClick()
+        compose.onNodeWithText("Sign in with code").performClick()
         pumpUntil("pairing") { runBlocking { app.graph.settings.current().paired } && vm.message.value != null }
 
         val body = Json.parseToJsonElement(server.requestsTo("POST", "/api/devices/register").single().bodyText()).jsonObject
@@ -157,7 +157,7 @@ class PairingScreenTest : ScreenTest() {
         compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(server.baseUrl)
         typeCode("TEST-2345")
         compose.onNodeWithText("Name for this phone (optional)").performTextInput("Sam's Pixel")
-        compose.onNodeWithText("Pair").performClick()
+        compose.onNodeWithText("Sign in with code").performClick()
         pumpUntil("pairing") { server.requestsTo("POST", "/api/devices/register").isNotEmpty() }
 
         val body = Json.parseToJsonElement(server.requestsTo("POST", "/api/devices/register").single().bodyText()).jsonObject
@@ -171,7 +171,7 @@ class PairingScreenTest : ScreenTest() {
 
         typeCode("""{"v":1,"url":"${server.baseUrl}","code":"TEST2345","pins":[]}""")
 
-        compose.onNodeWithText("Pair").performClick()
+        compose.onNodeWithText("Sign in with code").performClick()
         pumpUntil("pairing") { runBlocking { app.graph.settings.current().paired } && vm.message.value != null }
         assertEquals(server.baseUrl, runBlocking { app.graph.settings.current().serverUrl })
     }
@@ -181,35 +181,35 @@ class PairingScreenTest : ScreenTest() {
         server.on(
             "POST",
             "/api/devices/register",
-            FakeServer.json(422, ServerFixtures.validationError("This pairing code is invalid, expired, or already used."))
+            FakeServer.json(422, ServerFixtures.validationError("This code is invalid, expired, or already used."))
         )
         showPairing()
 
         compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(server.baseUrl)
         typeCode("ZZZZ-ZZZZ")
-        compose.onNodeWithText("Pair").performClick()
+        compose.onNodeWithText("Sign in with code").performClick()
         pumpUntil("the error") { vm.message.value != null && !vm.busy.value }
         compose.waitForIdle()
 
-        assertEquals("This pairing code is invalid, expired, or already used.", vm.message.value)
-        compose.onNodeWithText("Pair").assertIsEnabled()
+        assertEquals("This code is invalid, expired, or already used.", vm.message.value)
+        compose.onNodeWithText("Sign in with code").assertIsEnabled()
         compose.onNodeWithText("Sign in to EchoLedger").assertIsDisplayed()
     }
 
     @Test
-    fun `both buttons show Pairing and are disabled while the registration is in flight`() {
+    fun `all three buttons say Signing in and are disabled while the registration is in flight`() {
         serveRegistration(delayMs = 800)
         showPairing()
         compose.onNode(hasSetTextAction() and hasText("https://")).performTextReplacement(server.baseUrl)
         typeCode("TEST-2345")
 
-        compose.onNodeWithText("Pair").performClick()
+        compose.onNodeWithText("Sign in with code").performClick()
         pumpUntil("busy") { vm.busy.value }
         compose.waitForIdle()
 
-        compose.onAllNodesWithText("Pairing…").assertCountEquals(2)
-        compose.onAllNodesWithText("Pairing…").onFirst().assertIsNotEnabled()
-        compose.onAllNodesWithText("Pairing…").onLast().assertIsNotEnabled()
+        compose.onAllNodesWithText("Signing in…").assertCountEquals(3)
+        compose.onAllNodesWithText("Signing in…").onFirst().assertIsNotEnabled()
+        compose.onAllNodesWithText("Signing in…").onLast().assertIsNotEnabled()
         pumpUntil("done") { !vm.busy.value }
     }
 
@@ -259,7 +259,7 @@ class PairingScreenTest : ScreenTest() {
 
         assertEquals("Camera access is needed to scan. You can still enter the server address and code by hand.", vm.message.value)
         compose.onAllNodesWithText("Tap Scan QR code to open the app settings", substring = true).assertCountEquals(0)
-        compose.onNodeWithText("Pairing code").assertIsDisplayed()
+        compose.onNodeWithText("Sign-in code").assertIsDisplayed()
     }
 
     @Test
@@ -273,7 +273,7 @@ class PairingScreenTest : ScreenTest() {
 
         assertTrue("no permission prompt when already granted", permissions.requested.isEmpty())
         pumpUntil("scanner or camera error") {
-            compose.onAllNodesWithText("Scan the pairing QR code").fetchSemanticsNodes().isNotEmpty() ||
+            compose.onAllNodesWithText("Scan the sign-in QR code").fetchSemanticsNodes().isNotEmpty() ||
                 vm.message.value?.startsWith("The camera could not be started") == true
         }
     }

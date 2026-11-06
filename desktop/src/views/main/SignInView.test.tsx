@@ -125,7 +125,7 @@ describe("SignInView: email and password", () => {
     fillAccount();
     fireEvent.click(signIn());
 
-    expect(await screen.findByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sign in with a code" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("This server does not sign in with accounts yet.");
     expect(screen.queryByRole("button", { name: "Sign in with an account instead" })).not.toBeInTheDocument();
   });
@@ -133,11 +133,11 @@ describe("SignInView: email and password", () => {
   it("offers the pairing code or QR for older servers, and the way back", async () => {
     respond("pair_device", makeStatus());
     const { onSignedIn } = setup();
-    fireEvent.click(screen.getByRole("button", { name: "Use a pairing code or QR instead" }));
-    expect(screen.getByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use a sign-in code or QR instead" }));
+    expect(screen.getByRole("heading", { name: "Sign in with a code" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/Server address/), { target: { value: "https://ledger.example.test" } });
-    fireEvent.change(screen.getByLabelText(/Pairing code/), { target: { value: "ABCD-1234" } });
-    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+    fireEvent.change(screen.getByLabelText(/Sign-in code/), { target: { value: "ABCD-1234" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with code" }));
     await waitFor(() => expect(onSignedIn).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole("button", { name: "Sign in with an account instead" }));
@@ -220,8 +220,8 @@ describe("SignInView: in the browser (Google, passkeys)", () => {
     setup();
     fireEvent.change(server(), { target: { value: "https://old.example.test" } });
     fireEvent.click(browserButton());
-    expect(await screen.findByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Pair this computer with a code from the console instead.");
+    expect(await screen.findByRole("heading", { name: "Sign in with a code" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Sign in with a code with a code from the console instead.");
   });
 
   it("shows a server that cannot be reached", async () => {

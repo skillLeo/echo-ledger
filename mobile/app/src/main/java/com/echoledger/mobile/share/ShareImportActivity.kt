@@ -46,7 +46,7 @@ class ShareImportActivity : ComponentActivity() {
         lifecycleScope.launch {
             val settings = graph.settings.current()
             if (!settings.paired) {
-                Toast.makeText(this@ShareImportActivity, "Open EchoLedger and pair this phone first", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@ShareImportActivity, "Open EchoLedger and sign in on this phone first", Toast.LENGTH_LONG).show()
                 finish()
                 return@launch
             }

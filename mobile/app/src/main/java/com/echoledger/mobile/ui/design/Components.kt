@@ -112,7 +112,7 @@ fun SuccessCheck(tint: Color, modifier: Modifier = Modifier, size: Dp = 18.dp) {
 /** Messages that confirm something worked get the check; every other message stays plain. */
 fun isConfirmation(message: String): Boolean = CONFIRMATIONS.any { message.startsWith(it) }
 
-private val CONFIRMATIONS = listOf("Saved", "Copied", "Restored", "Renamed", "Added", "Moved", "Paired", "Shared", "Sent")
+private val CONFIRMATIONS = listOf("Saved", "Copied", "Restored", "Renamed", "Added", "Moved", "Signed in", "Shared", "Sent")
 
 /** The app's messages at the bottom of the screen; a confirmation carries [SuccessCheck]. */
 @Composable

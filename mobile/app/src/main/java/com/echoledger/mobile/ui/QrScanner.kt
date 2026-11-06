@@ -122,7 +122,7 @@ fun QrScanner(accept: (String) -> Boolean, onResult: (String) -> Unit, onCancel:
                             val now = System.currentTimeMillis()
                             if (now - lastHintAt.get() > 2_000) {
                                 lastHintAt.set(now)
-                                mainExecutor.execute { if (!disposed) hint = "That isn't an EchoLedger pairing code" }
+                                mainExecutor.execute { if (!disposed) hint = "That isn't an EchoLedger sign-in code" }
                             }
                         } else if (delivered.compareAndSet(false, true)) {
                             mainExecutor.execute { if (!disposed) latestOnResult(text) }
@@ -153,9 +153,9 @@ fun QrScanner(accept: (String) -> Boolean, onResult: (String) -> Unit, onCancel:
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Scan the pairing QR code", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+            Text("Scan the sign-in QR code", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text(
-                "In your EchoLedger admin open Devices → Pair a device and point the camera at the code.",
+                "In the EchoLedger console open Profile → Devices → Sign in a device and point the camera at the code.",
                 color = Color.White.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center
             )

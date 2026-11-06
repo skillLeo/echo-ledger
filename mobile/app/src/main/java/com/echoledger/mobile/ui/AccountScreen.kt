@@ -76,7 +76,7 @@ fun AccountScreen(vm: MainViewModel, onBack: () -> Unit) {
             !loaded -> SkeletonRow()
 
             a == null -> InlineBanner(
-                "This phone is paired with the server, not signed in to an account (or the server is older).",
+                "This phone signed in with a one-time code, not an account (or the server is older).",
                 Modifier.padding(horizontal = Space.screen),
                 kind = BannerKind.Info,
                 action = "Retry",

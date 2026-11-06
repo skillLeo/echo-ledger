@@ -8,9 +8,9 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 const server = () => screen.getByLabelText(/Server address/) as HTMLInputElement;
-const code = () => screen.getByLabelText(/Pairing code/) as HTMLInputElement;
+const code = () => screen.getByLabelText(/Sign-in code/) as HTMLInputElement;
 const name = () => screen.getByLabelText(/Name for this computer/) as HTMLInputElement;
-const submit = () => screen.getByRole("button", { name: /^(Pair|Pairing…)$/ });
+const submit = () => screen.getByRole("button", { name: /^(Sign in with code|Signing in…)$/ });
 
 function setup() {
   const onPaired = vi.fn();
@@ -26,7 +26,7 @@ describe("PairingView", () => {
 
   it("explains the flow and starts with https:// in the server field and focus on the code", () => {
     setup();
-    expect(screen.getByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sign in with a code" })).toBeInTheDocument();
     expect(screen.getByText(/Devices → Pair a device/)).toBeInTheDocument();
     expect(server().value).toBe("https://");
     expect(code()).toHaveFocus();
@@ -44,7 +44,7 @@ describe("PairingView", () => {
 
     await waitFor(() => expect(onPaired).toHaveBeenCalledWith(paired));
     expect(callsOf("pair_device")).toEqual([{ serverUrl: "https://ledger.example.test/", code: "ABCD-1234", deviceName: "Studio PC" }]);
-    expect(notify).toHaveBeenCalledWith("Paired. Your library will sync now.");
+    expect(notify).toHaveBeenCalledWith("Signed in. Your library will sync now.");
   });
 
   it("sends an empty device name when the optional field is blank", async () => {
@@ -67,7 +67,7 @@ describe("PairingView", () => {
     await waitFor(() => expect(notify).toHaveBeenCalledWith("Server returned 422: The pairing code is invalid or has expired.", true));
     expect(onPaired).not.toHaveBeenCalled();
     expect(submit()).toBeEnabled();
-    expect(submit()).toHaveTextContent("Pair");
+    expect(submit()).toHaveTextContent("Sign in with code");
     expect(code().value).toBe("WRONG");
   });
 
@@ -88,10 +88,10 @@ describe("PairingView", () => {
     fireEvent.change(code(), { target: { value: "CODE-0001" } });
     fireEvent.click(submit());
 
-    await waitFor(() => expect(submit()).toHaveTextContent("Pairing…"));
+    await waitFor(() => expect(submit()).toHaveTextContent("Signing in…"));
     expect(submit()).toBeDisabled();
     finish(makeStatus());
-    await waitFor(() => expect(submit()).toHaveTextContent(/^Pair$/));
+    await waitFor(() => expect(submit()).toHaveTextContent(/^Sign in with code$/));
     expect(submit()).toBeEnabled();
   });
 

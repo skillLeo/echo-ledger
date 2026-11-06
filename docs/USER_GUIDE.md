@@ -101,7 +101,7 @@ line and a fix where there is one, plus the steps your phone's maker needs so Ec
 **Tested so far:** Samsung Galaxy S25 Ultra on Android 17. Other phones should work the same way, and this list grows as
 they are tested. Send your admin the report from Device check if something differs.
 
-## 3. Sign in or pair your devices
+## 3. Sign in on your devices
 
 **Sign in (phone, since v1.5).** On the phone's first screen, **Sign in to EchoLedger**: type the server address,
 your email and password, then the code from your authenticator app when it asks. **Sign in in the browser** does the
@@ -109,8 +109,8 @@ same with Google or a passkey: the browser opens, you sign in there, and the pho
 Your account's page on the phone (**You → Account**) exports your data, signs out every device, or deletes the
 account (you have 7 days to change your mind by signing in again).
 
-**Pairing** still works, also for older apps. It connects a device to your server with a one-time code; you need
-the web console.
+**Signing in with a code** also works, for older apps too. It connects a device to your server with a one-time code; you
+need the web console.
 
 1. In the console, open **Profile → Devices** and click **Sign in a device**. A code and a QR code appear. The code works for
    10 minutes and only once.
@@ -118,7 +118,7 @@ the web console.
 3. **Windows:** type the server address and the code.
 4. The library appears. Repeat for each device.
 
-To remove a device, open **Devices** in the console and revoke it. It is signed out at once.
+To remove a device, open **Profile → Devices** in the console and revoke it. It is signed out at once.
 
 ## 4. Record automatically
 

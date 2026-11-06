@@ -143,7 +143,7 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 |---|---|---|---|---|
 | ☐ | 68 | Install the APK. | The install finishes and the app opens to the setup guide. | A-01 |
 | ☐ | 69 | In the guide, allow the microphone, notifications, display over other apps and battery. | Each row says "Allowed" when you return. | O-4 |
-| ☐ | 70 | Tap **Scan QR code** and scan any other QR code first. | "That isn't an EchoLedger pairing code" and nothing is paired. | A-02 |
+| ☐ | 70 | Tap **Scan QR code** and scan any other QR code first. | "That isn't an EchoLedger sign-in code" and nothing is paired. | A-02 |
 | ☐ | 71 | Scan the QR code on **Profile → Devices → Sign in a device** (new code if needed). | The phone pairs and the guide moves on by itself. | O-5 |
 | ☐ | 72 | Run the 10-second test while you speak. | The meter moves and the result says the microphone works. | O-5 |
 | ☐ | 73 | Finish the guide. | The Library shows the recordings from Windows with Phone, Desktop and Web labels. | A-02 |

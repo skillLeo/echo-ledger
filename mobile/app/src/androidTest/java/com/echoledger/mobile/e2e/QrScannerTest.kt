@@ -39,7 +39,7 @@ class QrScannerTest : E2eTest() {
 
     private fun openPairingScreen() {
         Ui.launchApp()
-        Ui.awaitText("Pair this phone")
+        Ui.awaitText("Sign in to EchoLedger")
     }
 
     private fun answerCameraPrompt(vararg labels: String) {
@@ -57,9 +57,9 @@ class QrScannerTest : E2eTest() {
         Ui.clickText("Scan QR code")
         answerCameraPrompt("Don't allow", "Deny")
         Ui.awaitText("Camera access is needed to scan. You can still enter the server address and code by hand.", Ui.NORMAL)
-        assertTrue(Ui.has("Pair this phone") && Ui.has("Pairing code"))
+        assertTrue(Ui.has("Sign in to EchoLedger") && Ui.has("Sign-in code"))
         assertFalse(cameraGranted())
-        assertFalse("no scanner without permission", Ui.has("Scan the pairing QR code"))
+        assertFalse("no scanner without permission", Ui.has("Scan the sign-in QR code"))
     }
 
     @Ignore("NEW: runtime permission requests crash the app (androidx.fragment 1.2.5 rejects the activity result request code)")
@@ -68,7 +68,7 @@ class QrScannerTest : E2eTest() {
         openPairingScreen()
         Ui.clickText("Scan QR code")
         answerCameraPrompt("While using the app", "Only this time")
-        Ui.awaitText("Scan the pairing QR code", Ui.NORMAL)
+        Ui.awaitText("Scan the sign-in QR code", Ui.NORMAL)
         assertTrue(cameraGranted())
     }
 
@@ -77,12 +77,12 @@ class QrScannerTest : E2eTest() {
         grantCamera()
         openPairingScreen()
         Ui.clickText("Scan QR code")
-        Ui.awaitText("Scan the pairing QR code", Ui.NORMAL)
+        Ui.awaitText("Scan the sign-in QR code", Ui.NORMAL)
         Ui.snapshot("scanner")
         assertTrue(Ui.has("Cancel"))
         Ui.awaitCondition("the camera to open", Ui.NORMAL) { cameraInUseByTheApp() }
         Ui.device.pressBack()
-        Ui.awaitText("Pair this phone", Ui.NORMAL)
+        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
         Ui.awaitCondition("the camera to be released", Ui.NORMAL) { !cameraInUseByTheApp() }
         assertFalse(AppState.settings().paired)
     }
@@ -92,9 +92,9 @@ class QrScannerTest : E2eTest() {
         grantCamera()
         openPairingScreen()
         Ui.clickText("Scan QR code")
-        Ui.awaitText("Scan the pairing QR code", Ui.NORMAL)
+        Ui.awaitText("Scan the sign-in QR code", Ui.NORMAL)
         Ui.clickText("Cancel")
-        Ui.awaitText("Pair this phone", Ui.NORMAL)
+        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
         Ui.awaitCondition("the camera to be released", Ui.NORMAL) { !cameraInUseByTheApp() }
     }
 
@@ -103,12 +103,12 @@ class QrScannerTest : E2eTest() {
         grantCamera()
         openPairingScreen()
         Ui.clickText("Scan QR code")
-        Ui.awaitText("Scan the pairing QR code", Ui.NORMAL)
+        Ui.awaitText("Scan the sign-in QR code", Ui.NORMAL)
         Thread.sleep(4_000)
-        assertFalse("no confirmation without a pairing code in view", Ui.has("Pair with this server?"))
-        assertFalse(Ui.has("That isn't an EchoLedger pairing code"))
+        assertFalse("no confirmation without a pairing code in view", Ui.has("Sign in to this server?"))
+        assertFalse(Ui.has("That isn't an EchoLedger sign-in code"))
         Ui.device.pressBack()
-        Ui.awaitText("Pair this phone", Ui.NORMAL)
+        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
     }
 
     @Test
@@ -118,12 +118,12 @@ class QrScannerTest : E2eTest() {
         val code = Backend.pairingCode(viaFlaky = true)
         openPairingScreen()
         Ui.clickText("Scan QR code")
-        Ui.awaitText("Scan the pairing QR code", Ui.NORMAL)
+        Ui.awaitText("Scan the sign-in QR code", Ui.NORMAL)
         Ui.clickText("Cancel")
-        Ui.awaitText("Pair this phone", Ui.NORMAL)
-        Ui.fillField("Pairing code", code.payload)
+        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
+        Ui.fillField("Sign-in code", code.payload)
         Ui.hideKeyboard()
-        Ui.clickText("Pair")
+        Ui.clickText("Sign in with code")
         Ui.awaitDescription("Settings", Ui.LONG)
         assertEquals(code.url, AppState.settings().serverUrl)
     }

@@ -38,7 +38,7 @@ class ServerSideChangesTest : E2eTest() {
         Backend.revokeAllDevices()
         Library.sync()
         Ui.awaitText("This phone was signed out on the server. Sign in again.", Ui.LONG)
-        assertTrue("the cached library stays readable", Ui.has(SeedData.SILENT) || Ui.has("Pair this phone"))
+        assertTrue("the cached library stays readable", Ui.has(SeedData.SILENT) || Ui.has("Sign in to EchoLedger"))
     }
 
     @Ignore("A6.M8: a 401 does not return the phone to the unpaired state")
@@ -50,7 +50,7 @@ class ServerSideChangesTest : E2eTest() {
         Backend.revokeAllDevices()
         Library.sync()
         Ui.awaitText("This phone was signed out on the server. Sign in again.", Ui.LONG)
-        Ui.awaitText("Pair this phone", Ui.NORMAL)
+        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
     }
 
     @Test

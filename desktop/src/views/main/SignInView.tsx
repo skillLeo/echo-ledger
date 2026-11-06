@@ -7,7 +7,7 @@ import { PairingView } from "./PairingView";
 import { ShieldIcon } from "../../components/Icons";
 import { Wordmark } from "../../components/BrandMark";
 
-const PAIRING_ONLY = "This server does not sign in with accounts yet. Pair this computer with a code from the console instead.";
+const PAIRING_ONLY = "This server does not sign in with accounts yet. Sign in with a code with a code from the console instead.";
 const OTP_ASKED = "Your account has two-factor sign-in. Type the code your authenticator app shows, or a recovery code.";
 const BROWSER_WAIT = "Finish signing in in your browser. EchoLedger continues by itself when you are done.";
 const SIGNED_IN = "Signed in. Your library will sync now.";
@@ -142,7 +142,7 @@ export function SignInView({ onSignedIn, notify, serverUrl }: {
             <button className="btn" type="button" disabled={busy || !usableServer(server)} onClick={() => void browser()} style={{ width: "100%", justifyContent: "center" }}>
               Sign in in the browser (Google, passkeys)
             </button>
-            <button type="button" className="btn ghost small sign-in-pair" onClick={() => setPairing("chosen")}>Use a pairing code or QR instead</button>
+            <button type="button" className="btn ghost small sign-in-pair" onClick={() => setPairing("chosen")}>Use a sign-in code or QR instead</button>
           </>
         )}
         <p className="small muted row" style={{ marginTop: 14 }}><ShieldIcon size={14} />The access token is stored in your OS keychain. Your password is sent only to your server.</p>

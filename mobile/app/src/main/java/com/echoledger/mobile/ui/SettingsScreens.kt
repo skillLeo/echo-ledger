@@ -325,7 +325,7 @@ private fun generalSummary(id: String): String = when (id) {
     "notifications" -> "Activity and quiet hours"
     "app-lock" -> "Fingerprint or screen lock"
     "consent" -> "Telling people you record"
-    "devices" -> "Paired phones and computers"
+    "devices" -> "Signed-in phones and computers"
     "storage" -> "Space used and how long things are kept"
     "help" -> "Device check, audio probe, capture test, diagnostics"
     else -> "Version, export and import settings"

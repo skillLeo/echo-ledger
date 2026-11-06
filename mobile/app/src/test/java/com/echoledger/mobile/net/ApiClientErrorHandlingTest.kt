@@ -77,7 +77,7 @@ class ApiClientErrorHandlingTest {
         server.onAny(FakeServer.json(401, "{}"))
         val error = failure { it.config() }
         assertTrue(error is IOException)
-        assertEquals("This phone is not paired with an EchoLedger server.", error.message)
+        assertEquals("This phone is not signed in to an EchoLedger server.", error.message)
     }
 
     // ---- other 4xx ---------------------------------------------------------------------------------------------------

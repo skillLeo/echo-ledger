@@ -158,7 +158,7 @@ describe("privacy & security settings", () => {
     respond("device_revoke", undefined);
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<SecurityCard settings={makeSettings({ appLock: true })} patch={vi.fn(async () => true)} run={run} />);
-    const list = await screen.findByRole("list", { name: "Paired devices" });
+    const list = await screen.findByRole("list", { name: "Signed-in devices" });
     expect(within(list).getByText("this computer", { exact: false })).toBeInTheDocument();
     expect(within(list).getAllByRole("button", { name: "Revoke" })).toHaveLength(1);
     fireEvent.click(within(list).getByRole("button", { name: "Revoke" }));

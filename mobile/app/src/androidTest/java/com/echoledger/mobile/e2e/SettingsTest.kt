@@ -104,11 +104,11 @@ class SettingsTest : E2eTest() {
         Ui.openTab("Settings")
         Ui.clickText("Devices")
         Ui.clickText("Sign out")
-        Ui.awaitText("Pair this phone", Ui.NORMAL)
+        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
         assertNull(AppState.token())
         assertEquals(0, AppState.cachedLibrarySize())
         Ui.launchApp()
-        Ui.awaitText("Pair this phone")
+        Ui.awaitText("Sign in to EchoLedger")
         assertFalse(AppState.settings().paired)
     }
 }

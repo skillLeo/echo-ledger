@@ -24,7 +24,7 @@ export function PairingView({ onPaired, notify, notice, onUseAccount }: {
     setBusy(true);
     try {
       onPaired(await api.pair(serverUrl.trim(), code.trim(), name.trim()));
-      notify("Paired. Your library will sync now.");
+      notify("Signed in. Your library will sync now.");
     } catch (err) {
       notify(errorMessage(err), true);
     } finally {
@@ -37,22 +37,22 @@ export function PairingView({ onPaired, notify, notice, onUseAccount }: {
     <div style={{ display: "grid", placeItems: "center", height: "100%", padding: 24 }}>
       <form className="card" style={{ width: 440 }} onSubmit={submit}>
         <Wordmark />
-        <h1 className="page-title">Pair this computer</h1>
-        <p className="page-sub">In your EchoLedger admin, open <b>Devices → Pair a device</b> (on a newer server, <b>Profile → Devices → Sign in a device</b>). Enter the server address and the code (or paste the QR text).</p>
+        <h1 className="page-title">Sign in with a code</h1>
+        <p className="page-sub">In the EchoLedger console, open <b>Profile → Devices → Sign in a device</b> (on an older server, <b>Devices → Pair a device</b>). Enter the server address and the code (or paste the QR text).</p>
         {notice && <div className="notice small" role="status" style={{ marginBottom: 12 }}>{notice}</div>}
         {!isQr && (
           <label className="field">Server address
             <input className="input" value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="https://ledger.example.com" required />
           </label>
         )}
-        <label className="field">Pairing code
+        <label className="field">Sign-in code
           <input className="input" value={code} onChange={(e) => setCode(e.target.value)} placeholder="7KQ2-M9XD" autoFocus required />
         </label>
         <label className="field">Name for this computer (optional)
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Work laptop" />
         </label>
         <button className="btn primary" type="submit" disabled={busy} style={{ width: "100%", justifyContent: "center" }}>
-          {busy ? "Pairing…" : "Pair"}
+          {busy ? "Signing in…" : "Sign in with code"}
         </button>
         {onUseAccount && <button type="button" className="btn ghost small sign-in-pair" onClick={onUseAccount}>Sign in with an account instead</button>}
         <p className="small muted row" style={{ marginTop: 14 }}><ShieldIcon size={14} />The access token is stored in your OS keychain. Speech-provider keys never leave your server.</p>

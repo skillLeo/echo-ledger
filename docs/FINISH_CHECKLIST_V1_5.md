@@ -16,7 +16,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 | N7 | Google sign-in client (Phase 4) | "Sign in with Google" on the console, phone and computer | After the accounts deploy: console.cloud.google.com → APIs & Services → Credentials → Create OAuth client ID → **Web application**; Authorised redirect URI exactly `https://<console address>/auth/google/callback` (API Credentials → Google sign-in shows it); no JavaScript origins needed. OAuth consent screen: External, app name EchoLedger, a support email, the console domain as authorised domain, `https://<console address>/privacy` and `/terms` as policy links; scopes openid, email, profile only; publishing status **In production**. Paste the client ID and secret into API Credentials → Google sign-in (not in chat). |
 | N8 | SMTP account and DNS (Phase 4) | Invitations, verification, reset and alert emails | Mail host, port, user and password into the console's email settings; add the SPF, DKIM and DMARC records from the docs checklist. |
 | N9 | A teammate test account (Phase 2, 4, 8) | Sharing and invitation tests | One email address (a teammate's or a second one of yours). |
-| N10 | Review the legal drafts (Phase 4.7) | Terms and Privacy before anyone else signs up | Read the drafts and send changes. |
+| N10 | Review the legal drafts (Phase 4.7) | Terms and Privacy before anyone else signs up | Read the drafts and send changes. One point to decide: Privacy says files are erased after the 48-hour bin, but a nightly backup or a versioned bucket can keep them up to 30 days. Say whether it should state that. |
 | N11 | Paid accounts before a public release | Store and signing | Google Play $25 once; Apple Developer $99/year; Windows code-signing certificate; a VPS (about $10–20/month). |
 | N12 | Keystore (optional) | Signed APK | Path, alias and passwords at build time, or keep debug builds. |
 | N13 | Soniox credit | Live Translate | soniox.com → Billing → add funds. |
@@ -26,6 +26,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 | N17 | A real Mac test (Phase 1B A6) | The Mac check on a Mac with a simulated Meet call and screen share; permission dialogs need a person | Read docs/MAC_TEST_CLOUD.md (coming), rent the Mac, then say "Mac rented". You said you don't own a Mac, but this session runs on a Mac with macOS 27.3: if it stays available, tell me and the test can run here with no rental. |
 | N18 | Firebase project for Test Lab (Phase 1B B5) | Smoke tests on physical Xiaomi, Oppo, Vivo, Pixel and Samsung A-series phones | console.firebase.google.com → Add project (the free plan is enough) → then on this Mac `gcloud auth login` and tell me the project id. No key goes in chat. |
 | N19 | Three non-Samsung phones (Phase 1B acceptance) | Device reports from real phones | Ask teammates to install the APK, run Help & diagnostics → Device check and allow the upload (checklist in MANUAL_QA, coming); Test Lab results also count. |
+| N20 | Connect the real Claude and ChatGPT (Phase 6) | Only a real connection proves the return addresses and the first sign-in | After the deploy: the steps are in docs/CONNECTOR.md. Five minutes each; tell me if either refuses, with its message. |
 
 ## Step 0
 
@@ -106,15 +107,15 @@ Everywhere:
 
 ## Phase 6 — Claude / ChatGPT connector (MCP)
 
-- [ ] MCP server (laravel/mcp) with OAuth 2.1 via Passport (PKCE, dynamic client registration, scope `mcp:use`), per-user; read-only tools list_projects, search, get_recording (views + screen moments with signed image links), get_project_brief/notes, list_recent; rate-limited, audited. *Accept:* tool + auth tests; connected from Claude (custom connector) and documented.
-- [ ] In-app AI notes / memory / Ask optional per plan, off by default (Roman Urdu, suggested fixes and screen descriptions stay). *Accept:* tests. **Phone done** (project tabs and the recording page's call notes follow the plan, `SessionScreenTest`); desktop done with Phase 4; the server's `ai_notes` with web P4b.
+- [ ] MCP server (laravel/mcp) with OAuth 2.1 via Passport (PKCE, dynamic client registration, scope `mcp:use`), per-user; read-only tools list_projects, search, get_recording (views + screen moments with signed image links), get_project_brief/notes, list_recent; rate-limited, audited. *Accept:* tool + auth tests; connected from Claude (custom connector) and documented. **Built and merged**: 93+ tests over the real routes, consent asked every time, reuse of a token ends the connection, exact return addresses (docs/CONNECTOR.md). Not yet connected from the real Claude or ChatGPT: that needs the deploy and one real connection (N20).
+- [x] In-app AI notes / memory / Ask optional per plan, off by default (Roman Urdu, suggested fixes and screen descriptions stay). *Accept:* tests. **Phone done** (project tabs and the recording page's call notes follow the plan, `SessionScreenTest`); desktop done with Phase 4; the server's `ai_notes` with web P4b. Server done too: the New plan form starts with AI notes off, suggested fixes run on their own (`MakeSuggestedFixesJob`), a file upload on such a plan no longer marks the brief failed.
 
 ## Phase 7 — Brand, icons, motion, consistency
 
 - [x] Original logo (mark + wordmark, 16 px, light/dark), app icons (Android adaptive + themed, Windows, Mac), splash, docs/design/brand page. **Done** 2026-11-04 (docs/design/brand/README.md); phone screenshots re-recorded and the Mac icon looked at in the consistency pass.
-- [ ] One icon family across the apps. **Phone done** (`MotionAndIconsTest`); desktop and console with the Phase 7 helpers.
-- [ ] Motion (tabs, list → detail, record button, after-call chip, success), 60/120 fps, reduced motion respected. **Phone done**; desktop and console with the Phase 7 helpers.
-- [ ] Consistency pass with light/dark screenshots on phone, desktop and web. **Phone done** (project and Sign out wording, screens re-recorded); desktop and console with the Phase 7 helpers.
+- [x] One icon family across the apps. **Phone done** (`MotionAndIconsTest`); desktop and console with the Phase 7 helpers. Desktop and console done (`ConsoleIconsAndBrandTest`).
+- [x] Motion (tabs, list → detail, record button, after-call chip, success), 60/120 fps, reduced motion respected. **Phone done**; desktop and console with the Phase 7 helpers. Desktop and console done.
+- [x] Consistency pass with light/dark screenshots on phone, desktop and web. **Phone done** (project and Sign out wording, screens re-recorded); desktop and console with the Phase 7 helpers. Desktop and console done (108 console screenshots); a device signs in rather than pairs in all three, including the code field (`Sign-in code`). Old activity rows keep their old words until they age out.
 
 ## Phase 8 — Release + verify
 
@@ -123,4 +124,4 @@ Everywhere:
 - [ ] **(phone)** unanswered WhatsApp call skipped; connected call starts at pick-up; after-call chip; Projects auto-filing; teammate share; Google sign-in; test-account deletion.
 - [ ] **(mac)** screen moments in a Meet call with screen share; the meeting pack PDF in Claude.
 - [ ] Docs: USER_GUIDE, ADMIN_GUIDE, MANUAL_QA, HANDOFF; tag v1.5.0; push; final report.
-- [ ] Infrastructure: configurable queue/storage/cache drivers and docs/DEPLOY_VPS.md (nothing moved). **docs/DEPLOY_VPS.md written** (2026-11-04); the code switches it names (`QUEUE_VIA_SCHEDULER`, `RECORDINGS_DRIVER=s3`) come with web Phase 5.
+- [ ] Infrastructure: configurable queue/storage/cache drivers and docs/DEPLOY_VPS.md (nothing moved). **docs/DEPLOY_VPS.md written** (2026-11-04); the code switches are in: `QUEUE_VIA_SCHEDULER`, and `RECORDINGS_DRIVER=s3` with `recordings:check-storage` (73+ tests with a fake bucket that checks every signature; never run on a real bucket, the first check is on the chosen provider).

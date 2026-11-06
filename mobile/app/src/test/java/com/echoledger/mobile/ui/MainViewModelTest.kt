@@ -149,14 +149,14 @@ class MainViewModelTest : AppTest() {
         server.on(
             "POST",
             "/api/devices/register",
-            FakeServer.json(422, ServerFixtures.validationError("This pairing code is invalid, expired, or already used."))
+            FakeServer.json(422, ServerFixtures.validationError("This code is invalid, expired, or already used."))
         )
 
         vm.pair(server.baseUrl, "ZZZZ-ZZZZ", "")
         val message = awaitMessage()
         awaitNotBusy()
 
-        assertEquals("This pairing code is invalid, expired, or already used.", message)
+        assertEquals("This code is invalid, expired, or already used.", message)
         assertFalse(settings().paired)
         assertNull(storedToken())
         assertTrue(vm.library.value.isEmpty())

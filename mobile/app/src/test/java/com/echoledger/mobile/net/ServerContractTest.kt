@@ -757,8 +757,8 @@ class ServerContractTest {
     @Test
     fun `a bad pairing code reports the server's reason`() = runBlocking {
         for ((fixture, expected) in listOf(
-            "register_422_invalid_code" to "This pairing code is invalid, expired, or already used.",
-            "register_422_used_code" to "This pairing code is invalid, expired, or already used.",
+            "register_422_invalid_code" to "This code is invalid, expired, or already used.",
+            "register_422_used_code" to "This code is invalid, expired, or already used.",
             "register_422_validation" to "The pairing code field is required. (and 2 more errors)"
         )) {
             contractServer(Route("POST", Regex("/api/devices/register"), 422, raw(fixture)))

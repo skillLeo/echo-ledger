@@ -44,7 +44,7 @@ class SettingsCatalogueTest {
     @Test
     fun `the wizard steps run in order and stop at the ends`() {
         assertEquals(
-            listOf("Welcome", "Permissions", "Pair", "Test", "Done"),
+            listOf("Welcome", "Permissions", "Sign in", "Test", "Done"),
             OnboardingStep.entries.map { it.title }
         )
         assertEquals(OnboardingStep.Permissions, OnboardingStep.Welcome.next)

@@ -70,15 +70,15 @@ describe("MainApp start-up and pairing gate", () => {
     mockBackend({ paired: false, serverUrl: null, deviceName: null });
     respond("pair_device", makeStatus({ deviceName: "Studio PC" }));
     render(<MainApp />);
-    fireEvent.click(await screen.findByRole("button", { name: "Use a pairing code or QR instead" }));
-    await screen.findByRole("heading", { name: "Pair this computer" });
+    fireEvent.click(await screen.findByRole("button", { name: "Use a sign-in code or QR instead" }));
+    await screen.findByRole("heading", { name: "Sign in with a code" });
     fireEvent.change(screen.getByLabelText(/Server address/), { target: { value: "https://ledger.example.test" } });
-    fireEvent.change(screen.getByLabelText(/Pairing code/), { target: { value: "ABCD-1234" } });
-    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+    fireEvent.change(screen.getByLabelText(/Sign-in code/), { target: { value: "ABCD-1234" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with code" }));
 
     expect(await screen.findByRole("heading", { name: "Library" })).toBeInTheDocument();
     expect(screen.getByText("Studio PC")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Paired. Your library will sync now.");
+    expect(screen.getByRole("status")).toHaveTextContent("Signed in. Your library will sync now.");
   });
 
   // A6.DU1: pairing errors are never shown; MainApp returns the pairing form before it renders the toast.
@@ -86,14 +86,14 @@ describe("MainApp start-up and pairing gate", () => {
     mockBackend({ paired: false });
     respondWith("pair_device", () => Promise.reject("Server returned 422: The pairing code is invalid or has expired."));
     render(<MainApp />);
-    fireEvent.click(await screen.findByRole("button", { name: "Use a pairing code or QR instead" }));
-    await screen.findByRole("heading", { name: "Pair this computer" });
-    fireEvent.change(screen.getByLabelText(/Pairing code/), { target: { value: "NOPE" } });
-    fireEvent.click(screen.getByRole("button", { name: "Pair" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use a sign-in code or QR instead" }));
+    await screen.findByRole("heading", { name: "Sign in with a code" });
+    fireEvent.change(screen.getByLabelText(/Sign-in code/), { target: { value: "NOPE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with code" }));
     const toast = await screen.findByRole("status");
     expect(toast).toHaveTextContent("Server returned 422: The pairing code is invalid or has expired.");
     expect(toast).toHaveClass("toast", "error");
-    expect(screen.getByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sign in with a code" })).toBeInTheDocument();
   });
 
   it("goes back to the pairing form when the backend reports the device was unpaired", async () => {

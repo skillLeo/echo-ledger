@@ -91,7 +91,7 @@ export function DevicesCard({ run }: { run: Run }) {
     <div className="card devices-settings">
       <b>Devices</b>
       {overviewError && <p className="small muted">{overviewError}</p>}
-      <div className="site-list" role="list" aria-label="Paired devices">
+      <div className="site-list" role="list" aria-label="Signed-in devices">
         {devices.map((d) => (
           <div className="site-rule" role="listitem" key={d.id}>
             <div className="site-main">

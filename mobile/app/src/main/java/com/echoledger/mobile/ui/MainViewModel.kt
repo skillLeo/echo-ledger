@@ -153,7 +153,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             finishSignIn(payload.url, payload.pins, response)
             _message.value = "Signed in to ${payload.url.removePrefix("https://")}"
         } catch (e: Exception) {
-            _message.value = e.message ?: "Pairing failed"
+            _message.value = e.message ?: "Could not sign in"
         } finally {
             _busy.value = false
         }
@@ -646,7 +646,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Runs one workspace request; null (and the server's words as the message) when it failed. */
     private suspend fun <T> workspaceCall(failed: String, block: suspend (com.echoledger.mobile.net.ApiClient) -> T): T? =
         withContext(Dispatchers.IO) {
-            runCatching { block(graph.api() ?: error("Pair this phone first.")) }
+            runCatching { block(graph.api() ?: error("Sign in on this phone first.")) }
                 .onFailure { _message.value = it.message ?: failed }.getOrNull()
         }
 
@@ -1034,8 +1034,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 this,
                 com.echoledger.mobile.translate.SpeedPreset.of(speed),
                 fetchToken = {
-                    val api =
-                        graph.api() ?: throw com.echoledger.mobile.translate.TokenUnavailable("Pair this phone first.", permanent = true)
+                    val api = graph.api()
+                        ?: throw com.echoledger.mobile.translate.TokenUnavailable("Sign in on this phone first.", permanent = true)
                     try {
                         api.liveTranslateToken(mode.key, target, hints, continueOverBudget = prefs.budgetOverrideMonth == usage.month())
                     } catch (e: com.echoledger.mobile.net.ApiException) {
@@ -1111,6 +1111,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        const val NOT_A_PAIRING_QR = "That isn't an EchoLedger pairing code. In your admin open Devices → Pair a device."
+        const val NOT_A_PAIRING_QR = "That isn't an EchoLedger sign-in code. In the console open Profile → Devices → Sign in a device."
     }
 }

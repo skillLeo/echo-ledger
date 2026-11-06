@@ -204,7 +204,7 @@ class LiveTranslateService :
                 scope,
                 speed,
                 fetchToken = {
-                    val api = graph.api() ?: throw TokenUnavailable("Pair this phone with your EchoLedger server first.", permanent = true)
+                    val api = graph.api() ?: throw TokenUnavailable("Sign in on this phone first.", permanent = true)
                     try {
                         api.liveTranslateToken(tokenMode, target, hints, continueOverBudget = prefs.budgetOverrideMonth == usage.month())
                     } catch (e: ApiException) {

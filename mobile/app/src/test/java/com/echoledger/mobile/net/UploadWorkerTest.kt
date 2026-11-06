@@ -464,7 +464,7 @@ class UploadWorkerTest : AppTest() {
 
         val kept = recording()!!
         assertEquals("queued", kept.state)
-        assertEquals("This phone is not paired with an EchoLedger server.", kept.lastError)
+        assertEquals("This phone is not signed in to an EchoLedger server.", kept.lastError)
     }
 
     // ---- preconditions -------------------------------------------------------------------------------------------------------

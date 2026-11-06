@@ -60,7 +60,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 
-class NotPairedException : IOException("This phone is not paired with an EchoLedger server.")
+class NotPairedException : IOException("This phone is not signed in to an EchoLedger server.")
 
 const val EMPTY_ANSWER = "Your server sent an empty answer. Try again in a minute."
 const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. Check the server address in You → General → This phone, " +

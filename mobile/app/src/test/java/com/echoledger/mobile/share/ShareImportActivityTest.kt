@@ -220,7 +220,7 @@ class ShareImportActivityTest : AppTest() {
 
         assertTrue(activity.isFinishing)
         assertTrue(app.graph.recordings.all().isEmpty())
-        assertEquals("Open EchoLedger and pair this phone first", ShadowToast.getTextOfLatestToast())
+        assertEquals("Open EchoLedger and sign in on this phone first", ShadowToast.getTextOfLatestToast())
     }
 
     @Test

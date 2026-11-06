@@ -4,7 +4,7 @@ package com.echoledger.mobile.core
 enum class OnboardingStep(val title: String) {
     Welcome("Welcome"),
     Permissions("Permissions"),
-    Pair("Pair"),
+    Pair("Sign in"),
     Test("Test"),
     Done("Done");
 
