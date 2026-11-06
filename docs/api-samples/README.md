@@ -9,5 +9,15 @@ Each file is what the server really answers to one call, with tokens and signatu
   and fails if a model waits for a field the server never sends.
 - **Desktop:** `desktop/src-tauri/tests/api_samples.rs` reads the answers the desktop has typed models for.
 
+The other direction, what the apps send, is checked by running each app's real client against a real, disposable server.
+Both tests are skipped unless the server is named, and both change data, so use a throwaway database:
+
+```
+ECHOLEDGER_TEST_SERVER=http://127.0.0.1:8791 ECHOLEDGER_TEST_EMAIL=… ECHOLEDGER_TEST_PASSWORD=… \
+  ./gradlew testFullDebugUnitTest --tests '*LiveServerContractTest'     # in mobile/
+ECHOLEDGER_TEST_SERVER=… ECHOLEDGER_TEST_EMAIL=… ECHOLEDGER_TEST_PASSWORD=… \
+  cargo test --test live_server                                         # in desktop/src-tauri/
+```
+
 They exist because test fakes are written by hand and repeat what their author believes: a wrong type passed all of them
 and would have stopped every phone from signing in.
