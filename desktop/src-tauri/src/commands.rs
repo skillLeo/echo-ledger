@@ -350,6 +350,28 @@ pub fn server_page_open(app: AppHandle, page: String) -> AppResult<()> {
     app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))
 }
 
+// ---- Updates (v1.5) ----------------------------------------------------------------------------------------------
+
+/// Settings → About: where updates stand.
+#[tauri::command]
+pub fn update_status(state: State<'_, AppState>) -> crate::updates::UpdateStatus {
+    state.updates.status()
+}
+
+/// "Check for updates": the check (and the download of a newer version) runs on; `update:status` tells how it goes.
+#[tauri::command]
+pub fn update_check(app: AppHandle) -> crate::updates::UpdateStatus {
+    let job = app.clone();
+    tauri::async_runtime::spawn(async move { crate::updates::check(job, false).await });
+    app.state::<AppState>().updates.status()
+}
+
+/// "Restart now": installs the update that is ready and starts the new version (never while recording).
+#[tauri::command]
+pub async fn update_install(app: AppHandle) -> AppResult<()> {
+    crate::updates::install_now(&app).await
+}
+
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> Settings {
     state.settings()

@@ -28,6 +28,7 @@ pub mod skipped;
 pub mod stt;
 pub mod translate;
 pub mod tray;
+pub mod updates;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -98,6 +99,8 @@ pub struct AppState {
     pub screens: screens::Screens,
     /// A browser sign-in waiting for its `echoledger://signed-in` link (v1.5), in memory only.
     pub browser_sign_in: Mutex<Option<account::BrowserSignIn>>,
+    /// Signed updates from the server (v1.5): the status, the one running job, the update ready to install.
+    pub updates: updates::Updates,
 }
 
 impl AppState {
@@ -146,6 +149,7 @@ impl AppState {
             recording_caller: Mutex::new(None),
             screens: screens::Screens::new(Box::new(screens::platform::Native), Box::new(screens::store::KeychainKeys)),
             browser_sign_in: Mutex::new(None),
+            updates: updates::Updates::default(),
         }
     }
 
@@ -233,6 +237,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(overlay::HitRegions::default())
         .manage(lifecycle::WindowLifecycle::default())
         .manage(shortcuts::Bindings::default())
@@ -243,6 +248,8 @@ pub fn run() {
             app.manage(AppState::load(data_dir));
             let handle = app.handle().clone();
             let settings = app.state::<AppState>().settings();
+            // An update downloaded by the last run installs now, before anything records (v1.5).
+            updates::install_kept(&handle);
 
             tray::create(&handle)?;
             // C9: no window is built here. The main window and the overlays are built when first needed
@@ -266,6 +273,7 @@ pub fn run() {
             });
             commands::spawn_idle_lock(handle.clone());
             actions::spawn_activity_poll(handle.clone());
+            updates::spawn_quiet_checks(handle.clone());
 
             // Fetch server config (caption policy, pins rotation) and the library in the background.
             let startup = handle.clone();
@@ -324,6 +332,9 @@ pub fn run() {
             commands::account_export_status,
             commands::account_export_open,
             commands::server_page_open,
+            commands::update_status,
+            commands::update_check,
+            commands::update_install,
             commands::get_settings,
             commands::update_settings,
             commands::set_shortcut,

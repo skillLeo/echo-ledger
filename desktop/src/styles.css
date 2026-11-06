@@ -1061,3 +1061,8 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 /* The recording-consent notice (since v1.5): the setup's last step and Settings → Privacy & consent. */
 .consent-notice { display: grid; gap: var(--space-1); }
 .consent-notice p { margin: 0; }
+/* Updates (since v1.5): Settings → About's check, and the prompt once an update is ready. */
+.updates-panel { display: grid; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); margin: var(--space-2) 0; }
+.update-notes { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
+.banner.update-banner { background: var(--accent-soft); }
+.banner.update-banner > svg { color: var(--accent-text); }

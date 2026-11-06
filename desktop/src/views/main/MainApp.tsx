@@ -8,6 +8,7 @@ import { OnboardingView } from "./OnboardingView";
 import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
+import { UpdateBanner } from "./UpdateSettings";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
 import { RecordView } from "./RecordView";
@@ -499,6 +500,7 @@ export default function MainApp() {
         </div>
       </aside>
       <main className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
+        <UpdateBanner appStatus={status} notify={notify} />
         {status.budget === "reached" && (
           <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
         )}

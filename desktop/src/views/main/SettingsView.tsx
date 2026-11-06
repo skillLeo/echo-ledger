@@ -11,6 +11,7 @@ import { ScreenMomentsCard } from "./ScreenSettings";
 import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./SecuritySettings";
 import { AccountCard, PlanCard, YourDataCard, useAccount } from "./AccountSettings";
 import { ConsentNotice } from "./ConsentNotice";
+import { UpdatesPanel } from "./UpdateSettings";
 import { CONSENT_SWITCH } from "../../lib/consent";
 import { conflictFor } from "../../lib/shortcutConflicts";
 import { getVersion } from "@tauri-apps/api/app";
@@ -311,7 +312,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
       </div>
     ) },
     { id: "storage", group: "general", title: "Storage and retention", keywords: "storage disk retention deleted bin", node: <StorageCard limitBytes={status.plan.storageBytes} /> },
-    { id: "about", group: "general", title: "About", keywords: "version server export import backup settings file", node: <AboutCard status={status} run={run} onImported={setSettings} /> },
+    { id: "about", group: "general", title: "About", keywords: "version server updates check for updates restart export import backup settings file", node: <AboutCard status={status} run={run} onImported={setSettings} /> },
   ];
   const q = query.trim().toLowerCase();
   // Panels in their order (General first), the cards of a panel in the order they are listed.
@@ -373,6 +374,7 @@ function AboutCard({ status, run, onImported }: { status: AppStatus; run: <T>(fn
     <div className="card about-settings">
       <b>EchoLedger{version ? ` ${version}` : ""}</b>
       <p className="small muted">Server: {status.serverUrl ?? "not paired"}{status.pinned ? " (secure connection)" : " (connection not verified)"}</p>
+      <UpdatesPanel appStatus={status} />
       <div className="row organise-field">
         <button type="button" className="btn ghost" onClick={() => void run(api.exportSettings, "Settings saved in Downloads")}>Export settings</button>
         <label htmlFor={fileId} className="btn ghost">Import settings</label>

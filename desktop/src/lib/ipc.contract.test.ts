@@ -259,14 +259,14 @@ describe("wire types", () => {
     expect(sorted(tsUnionValues("ScreenTarget"))).toEqual(sorted(consts));
   });
 
-  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "SavedToast", "AfterCallState", "SkippedItem", "InputDevice", "AskPayload", "NavigatePayload", "ShareOptions", "RequestLinkOptions", "ScreensPill", "ScreensStatus", "PlanInfo", "SignInOutcome"])(
+  it.each(["SiteRule", "PillPosition", "PendingItem", "UploadItem", "RecordingState", "SavedToast", "AfterCallState", "SkippedItem", "InputDevice", "AskPayload", "NavigatePayload", "ShareOptions", "RequestLinkOptions", "ScreensPill", "ScreensStatus", "PlanInfo", "SignInOutcome", "UpdateStatus"])(
     "%s fields match the Rust struct",
     (name) => {
       expect(sorted(tsInterfaceKeys(name))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", name), name)));
     },
   );
 
-  it.each(["AfterCall", "SkipReason", "TrayState", "BudgetState", "IgnoreReason", "SignInResult"])(
+  it.each(["AfterCall", "SkipReason", "TrayState", "BudgetState", "IgnoreReason", "SignInResult", "UpdatePhase"])(
     "%s values match the serde names of the Rust enum",
     (name) => {
       expect(sorted(tsUnionValues(name))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", name), name)));

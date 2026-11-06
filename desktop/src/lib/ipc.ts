@@ -95,6 +95,22 @@ export interface Account {
   deletes_at: string | null;
 }
 
+/** Signed updates from the server (since v1.5). */
+export type UpdatePhase = "idle" | "checking" | "up_to_date" | "downloading" | "ready" | "failed" | "unavailable";
+export interface UpdateStatus {
+  phase: UpdatePhase;
+  /** This app's version. */
+  current: string;
+  /** The new version, while it downloads and once it is ready. */
+  version: string | null;
+  notes: string | null;
+  /** The last check that reached the server (RFC 3339). */
+  checkedAt: string | null;
+  message: string | null;
+  /** 0 to 100 while downloading, when the size is known. */
+  progress: number | null;
+}
+
 /** Export my data (since v1.5): the ZIP is made on the server; `url` works for 24 hours once it is ready. */
 export interface AccountExport {
   id: string;
@@ -991,6 +1007,7 @@ export interface EventPayloads {
   "activity:updated": number;
   "signin:done": AppStatus;
   "signin:failed": string;
+  "update:status": UpdateStatus;
 }
 
 export type AppEvent = keyof EventPayloads;
@@ -1022,6 +1039,11 @@ export const api = {
   openExport: (url: string) => invoke<void>("account_export_open", { url }),
   /** The server's Terms, Privacy, account deletion or downloads page in the browser. */
   openServerPage: (page: ServerPage) => invoke<void>("server_page_open", { page }),
+  // Updates (since v1.5): checked every 12 hours and on request; `update:status` follows the check and the download.
+  updateStatus: () => invoke<UpdateStatus>("update_status"),
+  checkForUpdates: () => invoke<UpdateStatus>("update_check"),
+  /** "Restart now": installs the ready update and starts the new version. */
+  installUpdate: () => invoke<void>("update_install"),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),
   setShortcut: (action: ShortcutAction, accelerator: string) => invoke<Settings>("set_shortcut", { action, accelerator }),

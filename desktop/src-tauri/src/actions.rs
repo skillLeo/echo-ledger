@@ -230,6 +230,9 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
     if let Some(refusal) = state.viewer_refusal() {
         return Err(AppError::Message(refusal));
     }
+    if state.updates.is_installing() {
+        return Err(AppError::msg(crate::updates::INSTALLING));
+    }
     let client_id = state.settings().client_id.clone();
     clear_captions(app); // a new recording never inherits the previous one's lines
     let info = state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
@@ -262,6 +265,9 @@ async fn toggle_note(app: &AppHandle, mode: RecordingMode) -> AppResult<()> {
     }
     if let Some(refusal) = state.viewer_refusal() {
         return Err(AppError::Message(refusal));
+    }
+    if state.updates.is_installing() {
+        return Err(AppError::msg(crate::updates::INSTALLING));
     }
     clear_captions(app);
     let info = state.capture.start(&paths::recordings(&state.data_dir), mode, "voice_note", state.settings().client_id.clone())?;
