@@ -183,7 +183,8 @@ pub struct SysWindow {
     pub id: isize,
     /// It belongs to the meeting app: a process of its tree (Windows), a window of its bundle (macOS).
     pub meeting: bool,
-    /// The screens it is on: its nearest monitor (Windows), every display its frame meets (macOS).
+    /// The screens it is on: every monitor (Windows) or display (macOS) its frame meets; on Windows the one it mostly
+    /// sits on comes first.
     pub displays: Vec<isize>,
     /// The app's bundle id (macOS), compared with the excluded apps beside its name.
     pub bundle: Option<String>,
@@ -204,13 +205,41 @@ pub struct Snapshot {
     pub main: Option<isize>,
 }
 
+/// A rectangle in screen pixels, as Windows gives a window's frame and a monitor (right and bottom exclusive).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Bounds {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+impl Bounds {
+    /// The two share at least one pixel (touching edges do not).
+    fn meets(&self, other: &Bounds) -> bool {
+        self.left < other.right && other.left < self.right && self.top < other.bottom && other.top < self.bottom
+    }
+}
+
+/// The monitors a window shows on (pure): `nearest`, the one it mostly sits on (whose screen a whole-screen capture of
+/// the meeting takes), first, then every other monitor its frame meets, so a vault dragged across two monitors counts
+/// on both.
+pub fn displays_of(frame: Bounds, nearest: isize, monitors: &[(isize, Bounds)]) -> Vec<isize> {
+    let mut out = vec![nearest];
+    out.extend(monitors.iter().filter(|(id, m)| *id != nearest && m.meets(&frame)).map(|(id, _)| *id));
+    out
+}
+
 /// The window or screen to capture, from what the system shows (pure; both backends decide with it). An excluded
-/// meeting app is never captured. The meeting window: the one [`pick_meeting_window`] picks, and nothing while it is
-/// minimised or hidden. The whole screen: the screen the meeting window is on, held as well while a known meeting's
-/// window is minimised or hidden (the screen would show whatever the person turned to instead), the main screen when no
-/// meeting is known (a recording started by hand); any excluded app showing on that screen holds the capture.
+/// meeting app is never captured, whether the list names its process tree (an image name or a bundle id) or one of its
+/// windows' app names (macOS: "zoom.us", "Google Chrome"). The meeting window: the one [`pick_meeting_window`] picks,
+/// and nothing while it is minimised or hidden. The whole screen: the screen the meeting window is on, held as well
+/// while a known meeting's window is minimised or hidden (the screen would show whatever the person turned to
+/// instead), the main screen when no meeting is known (a recording started by hand); any excluded app showing on that
+/// screen holds the capture.
 pub fn choose(wanted: &Wanted<'_>, snapshot: &Snapshot) -> Result<Target, HoldReason> {
-    if wanted.meeting.is_some_and(|m| is_excluded(&m.name, wanted.excluded)) {
+    let meeting_excluded = |m: &MeetingTree| is_excluded(&m.name, wanted.excluded) || snapshot.windows.iter().any(|w| w.meeting && w.excluded(wanted.excluded));
+    if wanted.meeting.is_some_and(meeting_excluded) {
         return Err(HoldReason::ExcludedApp);
     }
     let meeting_window = match wanted.meeting {
@@ -331,6 +360,49 @@ mod tests {
         let list = vec!["zoom".to_string()];
         assert_eq!(choose(&wanted(MEETING_WINDOW, Some(&zoom), &list), &windows_desktop()), Err(HoldReason::ExcludedApp));
         assert_eq!(choose(&wanted(WHOLE_SCREEN, Some(&zoom), &list), &windows_desktop()), Err(HoldReason::ExcludedApp));
+    }
+
+    #[test]
+    fn a_vault_across_two_monitors_counts_on_both() {
+        let left = Bounds { left: 0, top: 0, right: 1920, bottom: 1080 };
+        let right = Bounds { left: 1920, top: 0, right: 4480, bottom: 1440 };
+        let monitors = [(1, left), (2, right)];
+        // Mostly on monitor 2 (its nearest), a strip on monitor 1.
+        let across = Bounds { left: 1800, top: 100, right: 2600, bottom: 700 };
+        assert_eq!(displays_of(across, 2, &monitors), vec![2, 1]);
+        // Snapped to the right edge of monitor 1: touching monitor 2 is not being on it.
+        let snapped = Bounds { left: 960, top: 0, right: 1920, bottom: 1080 };
+        assert_eq!(displays_of(snapped, 1, &monitors), vec![1]);
+        // Off every monitor (a monitor just unplugged): the one Windows calls nearest.
+        assert_eq!(displays_of(Bounds { left: -5000, top: 0, right: -4000, bottom: 500 }, 1, &monitors), vec![1]);
+
+        let zoom = tree(SourceApp::Zoom, "Zoom.exe", false);
+        let mut desktop = windows_desktop();
+        desktop.windows[2].displays = displays_of(across, 2, &monitors);
+        assert_eq!(choose(&wanted(WHOLE_SCREEN, Some(&zoom), &excluded()), &desktop), Err(HoldReason::ExcludedApp), "its strip shows on the meeting's monitor");
+        desktop.windows[2].displays = displays_of(Bounds { left: 2000, ..across }, 2, &monitors);
+        assert_eq!(choose(&wanted(WHOLE_SCREEN, Some(&zoom), &excluded()), &desktop), Ok(Target::Display(1)), "moved fully onto monitor 2");
+    }
+
+    #[test]
+    fn an_excluded_meeting_app_is_known_by_its_windows_app_name_too() {
+        // macOS names the meeting app's tree by its bundle id; the person types the app's name.
+        let mut zoom_window = win(11, "zoom.us", "Zoom Meeting", true, 1);
+        zoom_window.bundle = Some("us.zoom.xos".into());
+        let desktop = Snapshot { windows: vec![zoom_window], main: Some(1) };
+        let zoom = tree(SourceApp::Zoom, "us.zoom.xos", false);
+        for (mode, target) in [(MEETING_WINDOW, Target::Window(11)), (WHOLE_SCREEN, Target::Display(1))] {
+            assert_eq!(choose(&wanted(mode, Some(&zoom), &excluded()), &desktop), Ok(target));
+            assert_eq!(choose(&wanted(mode, Some(&zoom), &["zoom.us".to_string()]), &desktop), Err(HoldReason::ExcludedApp), "{mode}");
+        }
+        let mut chrome = win(12, "Google Chrome", "Meet - abc-defg-hij", true, 1);
+        chrome.bundle = Some("com.google.Chrome".into());
+        let meet = tree(SourceApp::GoogleMeet, "com.google.Chrome", true);
+        let desktop = Snapshot { windows: vec![chrome], main: Some(1) };
+        assert_eq!(choose(&wanted(MEETING_WINDOW, Some(&meet), &excluded()), &desktop), Ok(Target::Window(12)));
+        assert_eq!(choose(&wanted(MEETING_WINDOW, Some(&meet), &["Google Chrome".to_string()]), &desktop), Err(HoldReason::ExcludedApp));
+        // An excluded app that is not the meeting's leaves the meeting window alone.
+        assert_eq!(choose(&wanted(MEETING_WINDOW, Some(&meet), &["Safari".to_string()]), &desktop), Ok(Target::Window(12)));
     }
 
     /// macOS: a Meet tab in Safari, 1Password (by its bundle id) and Teams, over two displays.

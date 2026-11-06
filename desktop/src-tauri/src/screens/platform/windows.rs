@@ -22,14 +22,14 @@ use windows::Win32::Graphics::Direct3D11::{
 };
 use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute};
 use windows::Win32::Graphics::Dxgi::IDXGIDevice;
-use windows::Win32::Graphics::Gdi::{HMONITOR, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY, MonitorFromPoint, MonitorFromWindow};
+use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITOR_DEFAULTTOPRIMARY, MonitorFromPoint, MonitorFromWindow};
 use windows::Win32::System::WinRT::Direct3D11::{CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess};
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 use windows::Win32::System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize};
 use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GWL_EXSTYLE, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic, IsWindowVisible, WS_EX_TOOLWINDOW};
 use windows::core::{BOOL, Interface, Ref};
 
-use super::{Frame, Grab, Snapshot, SysWindow, Target, Wanted, choose};
+use super::{Bounds, Frame, Grab, Snapshot, SysWindow, Target, Wanted, choose, displays_of};
 use crate::audio::platform::windows::{descends_from, os_build, parent_map, process_identity, resolve_root_with};
 use crate::screens::privacy::{HoldReason, WindowFacts, is_excluded};
 
@@ -66,8 +66,31 @@ fn borderless_allowed() -> bool {
 struct Win {
     hwnd: isize,
     pid: u32,
+    /// The monitor it mostly sits on.
     monitor: isize,
+    frame: Bounds,
     facts: WindowFacts,
+}
+
+fn bounds(r: &RECT) -> Bounds {
+    Bounds { left: r.left, top: r.top, right: r.right, bottom: r.bottom }
+}
+
+/// Every monitor with its rectangle, in the same pixels as the window frames (the app is per-monitor DPI aware).
+fn monitors_now() -> Vec<(isize, Bounds)> {
+    unsafe extern "system" fn each(monitor: HMONITOR, _: HDC, rect: *mut RECT, lparam: LPARAM) -> BOOL {
+        // SAFETY: `lparam` is the `&mut Vec` passed to EnumDisplayMonitors below, alive for the whole enumeration;
+        // `rect` is the monitor's rectangle for this call.
+        let out = unsafe { &mut *(lparam.0 as *mut Vec<(isize, Bounds)>) };
+        if let Some(r) = unsafe { rect.as_ref() } {
+            out.push((monitor.0 as isize, bounds(r)));
+        }
+        BOOL::from(true)
+    }
+
+    let mut out: Vec<(isize, Bounds)> = Vec::new();
+    let _ = unsafe { EnumDisplayMonitors(None, None, Some(each), LPARAM(&mut out as *mut Vec<(isize, Bounds)> as isize)) };
+    out
 }
 
 /// Every visible top-level window of other processes, with its state. Titles are read with `InternalGetWindowText`,
@@ -108,6 +131,7 @@ fn windows_now() -> Vec<Win> {
             hwnd: hwnd.0 as isize,
             pid,
             monitor: monitor.0 as isize,
+            frame: bounds(&rect),
             facts: WindowFacts { title, process: String::new(), visible: true, minimised, cloaked: cloaked != 0, area, tool: ex_style & WS_EX_TOOLWINDOW.0 != 0 },
         });
         BOOL::from(true)
@@ -138,7 +162,9 @@ pub fn find_target(wanted: &Wanted<'_>) -> Result<Target, HoldReason> {
         (Some(m), Some(parents)) => descends_from(pid, m.root_pid, parents) && resolve_root_with(pid, parents, identity) == m.root_pid,
         _ => false,
     };
-    let windows = wins.into_iter().map(|w| SysWindow { id: w.hwnd, meeting: in_tree(w.pid), displays: vec![w.monitor], bundle: None, facts: w.facts }).collect();
+    // A window across two monitors is on both: a vault's strip on the captured monitor holds the whole-screen capture.
+    let monitors = monitors_now();
+    let windows = wins.into_iter().map(|w| SysWindow { id: w.hwnd, meeting: in_tree(w.pid), displays: displays_of(w.frame, w.monitor, &monitors), bundle: None, facts: w.facts }).collect();
     choose(wanted, &Snapshot { windows, main: Some(primary_monitor()) })
 }
 

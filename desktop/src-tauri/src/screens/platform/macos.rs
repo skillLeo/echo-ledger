@@ -312,6 +312,23 @@ mod tests {
     }
 
     #[test]
+    fn zoom_or_chrome_on_the_excluded_list_by_its_app_name_is_never_captured() {
+        let snapshot = snapshot_of(desktop(), &displays(), 1, 530, Some("us.zoom.xos"));
+        for mode in [MEETING_WINDOW, WHOLE_SCREEN] {
+            let listed = vec!["zoom.us".to_string()];
+            let wanted = Wanted { mode, meeting: Some(&zoom()), excluded: &listed, site_rules: &[] };
+            assert_eq!(choose(&wanted, &snapshot), Err(HoldReason::ExcludedApp), "{mode}");
+        }
+        let chrome = vec![window(50, "Google Chrome", "com.google.Chrome", "Meet - abc-defg-hij", rect(100.0, 100.0, 1200.0, 800.0))];
+        let meet = MeetingTree { root_pid: 0, app: SourceApp::GoogleMeet, name: "com.google.Chrome".into(), browser: true };
+        let snapshot = snapshot_of(chrome, &displays(), 1, 530, Some("com.google.Chrome"));
+        let wanted = Wanted { mode: MEETING_WINDOW, meeting: Some(&meet), excluded: &excluded(), site_rules: &[] };
+        assert_eq!(choose(&wanted, &snapshot), Ok(Target::Window(50)));
+        let listed = vec!["Google Chrome".to_string()];
+        assert_eq!(choose(&Wanted { excluded: &listed, ..wanted }, &snapshot), Err(HoldReason::ExcludedApp));
+    }
+
+    #[test]
     fn a_minimised_zoom_meeting_pauses_the_capture() {
         let mut windows = desktop();
         windows.iter_mut().filter(|w| w.bundle == "us.zoom.xos").for_each(|w| w.on_screen = false);
@@ -336,6 +353,10 @@ mod tests {
         assert_eq!(choose(&wanted, &snapshot_of(windows.clone(), &displays(), 1, 530, Some("us.zoom.xos"))), Err(HoldReason::ExcludedApp));
         windows[2].on_screen = false;
         assert_eq!(choose(&wanted, &snapshot_of(windows, &displays(), 1, 530, Some("us.zoom.xos"))), Ok(Target::Display(2)));
+        // 1Password 7, still a common install, is its own app.
+        let mut seven = desktop();
+        seven[2] = window(20, "1Password 7", "com.agilebits.onepassword7", "1Password 7", rect(2000.0, 300.0, 700.0, 500.0));
+        assert_eq!(choose(&wanted, &snapshot_of(seven, &displays(), 1, 530, Some("us.zoom.xos"))), Err(HoldReason::ExcludedApp));
     }
 
     #[test]

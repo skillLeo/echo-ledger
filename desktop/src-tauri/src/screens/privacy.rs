@@ -14,8 +14,10 @@ pub const MEETING_WINDOW: &str = "meeting_window";
 pub const WHOLE_SCREEN: &str = "whole_screen";
 
 /// Apps never captured unless the person takes them off the list: password managers and the system keychains.
-pub const DEFAULT_EXCLUDED: [&str; 13] = [
+/// 1Password 7 for Mac is its own app name (its bundle id is com.agilebits.onepassword7).
+pub const DEFAULT_EXCLUDED: [&str; 14] = [
     "1Password",
+    "1Password 7",
     "Bitwarden",
     "KeePass",
     "KeePassXC",
@@ -254,7 +256,7 @@ mod tests {
 
     #[test]
     fn password_managers_are_excluded_by_default_by_any_of_their_names() {
-        for name in ["1Password.exe", "1password", "Bitwarden.exe", "KeePassXC.exe", "keepass.exe", "ProtonPass.exe", "Proton Pass", "KeeperPasswordManager.exe", "com.1password.1password", "com.bitwarden.desktop", "Keychain Access", "com.apple.Passwords"] {
+        for name in ["1Password.exe", "1password", "1Password 7", "Keeper Password Manager", "Bitwarden.exe", "KeePassXC.exe", "keepass.exe", "ProtonPass.exe", "Proton Pass", "KeeperPasswordManager.exe", "com.1password.1password", "com.bitwarden.desktop", "Keychain Access", "com.apple.Passwords"] {
             assert!(is_excluded(name, &excluded()), "{name}");
         }
         for name in ["Zoom.exe", "chrome.exe", "Teams.exe", "com.microsoft.teams2", "WhatsApp.exe", "", "notepad.exe"] {
