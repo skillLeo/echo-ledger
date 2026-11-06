@@ -48,8 +48,8 @@ type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark" | "lang
  * bookmark (from here or the shortcut) shows its tag presets and Undo for a few seconds, a call that has not heard
  * the other side for 30 s shows a warning, and a recording from a Bluetooth microphone says once that accuracy is lower
  * with it. While screen moments can be kept (v1.5) the Screens chip says whether they are on and pauses them in one
- * click; the first time they are on in a recording, "Screens on" shows under the pill for a few seconds. The window never takes
- * focus: every control works on click, and only the pill itself is reported as a hit region.
+ * click; the first time they are on in a recording, "Screens on" shows under the pill for a few seconds. The window
+ * never takes focus: every control works on click, and only the pill itself is reported as a hit region.
  */
 export default function PillApp() {
   const [rec, setRec] = useState<RecordingState | null>(null);

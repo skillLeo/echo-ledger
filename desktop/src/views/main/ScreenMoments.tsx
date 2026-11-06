@@ -43,16 +43,16 @@ export function useSessionScreens(sessionId: string | null, count: number | unde
 }
 
 /** A thumbnail with its label ("Screen 7 · 14:32"); a click opens the viewer. */
-export function ScreenThumb({ screen, onOpen, caption }: { screen: ScreenMoment; onOpen: () => void; caption?: string }) {
+export function ScreenThumb({ screen, onOpen }: { screen: ScreenMoment; onOpen: () => void }) {
   const { src, failed } = usePicture(screen.thumb_url);
   const label = screenLabel(screen);
   return (
     <button type="button" className="screen-thumb" onClick={onOpen} title={screen.description ?? label}
-      aria-label={`${caption ?? label}${screen.description ? `: ${screen.description}` : ""}`}>
+      aria-label={`${label}${screen.description ? `: ${screen.description}` : ""}`}>
       <span className="screen-thumb-img" aria-hidden="true">
         {src ? <img src={src} alt="" /> : failed ? <MonitorIcon size={20} /> : <span className="skeleton" />}
       </span>
-      <span className="screen-thumb-label">{caption ?? label}</span>
+      <span className="screen-thumb-label">{label}</span>
     </button>
   );
 }
