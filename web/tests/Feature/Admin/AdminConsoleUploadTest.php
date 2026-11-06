@@ -286,7 +286,7 @@ describe('duplicates', function () {
         expect(CaptureSession::query()->count())->toBe(1);
     });
 
-    it('skips a file someone else in the workspace is uploading right now', function () {
+    it('does not tell anyone what someone else in the workspace has: the same file from another person is new (since v1.5 libraries are private)', function () {
         $bytes = uplWav(4096);
         $member = User::factory()->create();
         $workspace = Workspace::query()->findOrFail($this->admin->current_workspace_id);
@@ -295,7 +295,7 @@ describe('duplicates', function () {
         uplStart($this, $bytes)->assertCreated();
 
         $this->actingAs($member->fresh(), 'web');
-        uplStart($this, $bytes)->assertStatus(409)->assertJson(['code' => 'duplicate_recording']);
+        uplStart($this, $bytes)->assertCreated();
     });
 
     it('does not count a deleted recording, another workspace\'s copy or a different file', function () {

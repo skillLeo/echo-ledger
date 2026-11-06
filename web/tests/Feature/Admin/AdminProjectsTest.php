@@ -143,9 +143,10 @@ describe('a project\'s page', function () {
         $member = withoutWorkspace(User::factory()->create());
         app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->admin->current_workspace_id), $member);
         $beta = adminProject($this->admin, 'Beta');
+        // Since v1.5 someone else's project is not there at all.
         $this->actingAs($member->refresh(), 'web');
-        $this->panelComponent(ViewClient::class, ['record' => $beta->id])->assertActionHidden('deleteProject');
-        $this->panelComponent(ListClients::class)->assertTableActionHidden('deleteProject', $beta);
+        $this->get(ViewClient::getUrl(['record' => $beta->id]))->assertNotFound();
+        $this->panelComponent(ListClients::class)->assertCanNotSeeTableRecords([$beta]);
     });
 
     it('adds and removes filing rules, and says when another project has one', function () {

@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\TranscriptEditController;
 use App\Http\Controllers\Api\TranscriptViewsController;
 use App\Http\Controllers\Api\UsageController;
 use App\Http\Controllers\Api\VocabularyController;
+use App\Http\Middleware\EnsureCanRecord;
 use App\Http\Middleware\TouchDevice;
 use Illuminate\Support\Facades\Route;
 
@@ -63,14 +64,15 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
         Route::get('security', [SecurityController::class, 'index'])->middleware('abilities:config:read')->name('api.security');
         Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
 
-        Route::post('stt/token', SttTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token'])->name('api.stt.token');
+        Route::post('stt/token', SttTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token', EnsureCanRecord::class])->name('api.stt.token');
         Route::post('live-translate/token', LiveTranslateTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token'])->name('api.live-translate.token');
         Route::post('usage', [UsageController::class, 'store'])->middleware('abilities:stt:token')->name('api.usage.store');
 
         Route::middleware('abilities:sessions:write')->group(function (): void {
-            Route::post('sessions', [SessionController::class, 'store'])->name('api.sessions.store');
+            // Since v1.5 a viewer's device records and uploads nothing (403 not_allowed).
+            Route::post('sessions', [SessionController::class, 'store'])->middleware(EnsureCanRecord::class)->name('api.sessions.store');
             Route::post('sessions/{id}/finish', [SessionController::class, 'finish'])->name('api.sessions.finish');
-            Route::post('sessions/{id}/recordings', [SessionController::class, 'addRecording'])->name('api.sessions.recordings');
+            Route::post('sessions/{id}/recordings', [SessionController::class, 'addRecording'])->middleware(EnsureCanRecord::class)->name('api.sessions.recordings');
             Route::post('sessions/{id}/transcripts', [SessionController::class, 'storeTranscript'])->name('api.sessions.transcripts');
             Route::delete('sessions/{id}', [SessionController::class, 'destroy'])->name('api.sessions.destroy');
             Route::patch('sessions/{id}', [OrganiseController::class, 'update'])->name('api.sessions.update');
@@ -115,7 +117,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('shared-with-me/{id}/save', [TeammateController::class, 'save'])->name('api.shared.save');
             Route::delete('shared-with-me/{id}', [TeammateController::class, 'destroy'])->name('api.shared.destroy');
             // Request links (v1.5): a public page others send files through.
-            Route::post('request-links', [RequestLinkController::class, 'store'])->name('api.request-links.store');
+            Route::post('request-links', [RequestLinkController::class, 'store'])->middleware(EnsureCanRecord::class)->name('api.request-links.store');
             Route::delete('request-links/{id}', [RequestLinkController::class, 'destroy'])->name('api.request-links.destroy');
             Route::post('vocabulary/keyterms', [VocabularyController::class, 'addKeyterm'])->name('api.vocabulary.keyterms');
             Route::post('vocabulary/replacements', [VocabularyController::class, 'addReplacement'])->name('api.vocabulary.replacements');
@@ -164,12 +166,12 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
 
     // Screen moments (v1.5): pictures sent during a meeting count against the upload limit, not the general one.
     Route::post('sessions/{id}/screens', [ScreenController::class, 'store'])
-        ->middleware(['abilities:sessions:write', 'throttle:uploads'])->name('api.sessions.screens.store');
+        ->middleware(['abilities:sessions:write', 'throttle:uploads', EnsureCanRecord::class])->name('api.sessions.screens.store');
 
     // Upload routes have their own, larger limit (a stricter limiter in front would make it unreachable).
     Route::middleware(['abilities:recordings:upload', 'throttle:uploads'])->group(function (): void {
         Route::get('recordings/{id}', [RecordingController::class, 'show'])->name('api.recordings.show');
-        Route::post('recordings/{id}/chunks', [RecordingController::class, 'chunk'])->name('api.recordings.chunks');
-        Route::post('recordings/{id}/complete', [RecordingController::class, 'complete'])->name('api.recordings.complete');
+        Route::post('recordings/{id}/chunks', [RecordingController::class, 'chunk'])->middleware(EnsureCanRecord::class)->name('api.recordings.chunks');
+        Route::post('recordings/{id}/complete', [RecordingController::class, 'complete'])->middleware(EnsureCanRecord::class)->name('api.recordings.complete');
     });
 });

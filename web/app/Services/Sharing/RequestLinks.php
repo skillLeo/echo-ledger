@@ -10,13 +10,13 @@ use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\SttUseCase;
 use App\Enums\UploadStatus;
+use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Recording;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
-use App\Models\Scopes\WorkspaceScope;
 use App\Models\Workspace;
 use App\Services\ChunkedUploadService;
 use App\Services\ClientAi\ClientWorkspace;
@@ -113,15 +113,22 @@ final class RequestLinks
         return url('/r/'.$token);
     }
 
-    /** A link that can take files now, found by its token whoever is signed in; null for anything else. */
+    /**
+     * A link that can take files now, found by its token whoever is signed in; null for anything else. Since v1.5
+     * also null once its person no longer records in its workspace (a viewer now, or no longer in it).
+     */
     public function usable(string $token): ?RequestLink
     {
         if (preg_match('/^[A-Za-z0-9_-]{43}$/', $token) !== 1) {
             return null;
         }
-        $link = RequestLink::query()->withoutGlobalScope(WorkspaceScope::class)->where('token_hash', hash('sha256', $token))->first();
+        $link = RequestLink::acrossPeople()->where('token_hash', hash('sha256', $token))->first();
+        if (! $link instanceof RequestLink || ! $link->isActive()) {
+            return null;
+        }
+        $role = DB::table('workspace_user')->where('workspace_id', $link->workspace_id)->where('user_id', $link->user_id)->value('role');
 
-        return $link instanceof RequestLink && $link->isActive() ? $link : null;
+        return is_string($role) && WorkspaceRole::tryFrom($role)?->records() === true ? $link : null;
     }
 
     public function revoke(RequestLink $link): void
@@ -136,7 +143,7 @@ final class RequestLinks
     {
         $project = $link->client;
 
-        return $project instanceof Client && $project->workspace_id === $link->workspace_id ? $project : null;
+        return $project instanceof Client && $project->workspace_id === $link->workspace_id && $project->user_id === $link->user_id ? $project : null;
     }
 
     // ---- Uploads ---------------------------------------------------------------------------------------------------
@@ -206,7 +213,7 @@ final class RequestLinks
      */
     private function assertRoom(RequestLink $link, int $incoming): void
     {
-        $links = RequestLink::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $link->workspace_id)->select('id');
+        $links = RequestLink::acrossPeople()->where('workspace_id', $link->workspace_id)->select('id');
         $coming = (int) RequestUpload::query()->whereIn('request_link_id', $links)->where('status', 'uploading')
             ->where('updated_at', '>=', now()->subHours(self::ABANDONED_HOURS))
             // A recording already put together is counted as stored.
@@ -230,7 +237,7 @@ final class RequestLinks
                 'chunk_size_bytes' => $chunkSize, 'total_chunks' => max(1, (int) ceil($size / $chunkSize)), 'received_chunks' => [],
             ]);
         }
-        $session = CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->create([
+        $session = CaptureSession::acrossPeople()->create([
             'workspace_id' => $link->workspace_id,
             'user_id' => $link->user_id,
             'device_id' => null,
@@ -423,7 +430,7 @@ final class RequestLinks
             return;
         }
         $session = $recording === null ? null
-            : CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereKey($recording->capture_session_id)->first();
+            : CaptureSession::acrossPeople()->whereKey($recording->capture_session_id)->first();
         if ($session !== null && $session->status === SessionStatus::Uploading) {
             $session->delete();
         }

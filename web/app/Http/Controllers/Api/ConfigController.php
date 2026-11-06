@@ -30,7 +30,7 @@ final class ConfigController extends Controller
         /** @var Device $device */
         $device = $request->user();
 
-        return response()->json(['data' => $projects->payloads($device->workspace_id)]);
+        return response()->json(['data' => $projects->payloads($device->workspace_id, $device->user_id)]);
     }
 
     /**

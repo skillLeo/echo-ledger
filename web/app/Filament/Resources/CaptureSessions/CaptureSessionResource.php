@@ -52,6 +52,8 @@ class CaptureSessionResource extends Resource
     {
         return parent::getEloquentQuery()
             ->where('workspace_id', CurrentWorkspace::id())
+            // Since v1.5 a person's recordings are theirs alone, owners and admins included.
+            ->where('user_id', CurrentWorkspace::userId())
             ->with(['device', 'client', 'finalTranscript', 'primaryRecording']);
     }
 

@@ -197,7 +197,7 @@ describe('deleting a project', function () {
         expect(array_column($inbox, 'id'))->toContain($call->id);
     });
 
-    it('lets only owners delete, and answers 404 for another workspace or a second delete', function () {
+    it('lets only its maker delete, and answers 404 for another person, another workspace or a second delete', function () {
         $owner = User::query()->findOrFail($this->owner);
         $workspace = Workspace::query()->findOrFail($owner->current_workspace_id);
         $member = withoutWorkspace(User::factory()->create());
@@ -205,7 +205,7 @@ describe('deleting a project', function () {
         [, $memberToken] = $this->enroll($member->refresh());
         $acme = project($this, 'Acme');
 
-        $this->asToken($memberToken)->deleteJson("/api/clients/{$acme->id}")->assertForbidden()->assertJsonPath('code', 'not_allowed');
+        $this->asToken($memberToken)->deleteJson("/api/clients/{$acme->id}")->assertNotFound()->assertJsonPath('code', 'client_not_found');
         expect($acme->fresh())->not->toBeNull();
 
         $foreign = Client::factory()->create(['user_id' => User::factory()]);

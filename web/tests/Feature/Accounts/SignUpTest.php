@@ -157,7 +157,7 @@ it('refuses an expired or used invitation link', function () {
         ->and(app(Invitations::class)->find('not-a-token'))->toBeNull();
 });
 
-it('invites an address without an account from the Workspace page while sign-up is open, and tells an existing account it was added', function () {
+it('invites an address without an account from the Workspace page while sign-up is open, and asks an existing account to join by a signed link', function () {
     openSignUp(SignUp::INVITED);
     $owner = Fx::user();
     $existing = Fx::user();
@@ -170,7 +170,8 @@ it('invites an address without an account from the Workspace page while sign-up 
 
     expect(User::query()->where('email', 'new.person@example.test')->exists())->toBeFalse()
         ->and(WorkspaceInvitation::query()->where('email', 'new.person@example.test')->exists())->toBeTrue()
-        ->and(Workspace::query()->findOrFail($owner->current_workspace_id)->roleOf($existing))->toBe(WorkspaceRole::Member);
+        ->and(WorkspaceInvitation::query()->where('email', $existing->email)->exists())->toBeTrue()
+        ->and(Workspace::query()->findOrFail($owner->current_workspace_id)->roleOf($existing))->toBeNull();
     Mail::assertQueued(InvitationMail::class, fn (InvitationMail $mail): bool => $mail->hasTo('new.person@example.test') && $mail->signUp);
     Mail::assertQueued(InvitationMail::class, fn (InvitationMail $mail): bool => $mail->hasTo($existing->email) && ! $mail->signUp);
 });

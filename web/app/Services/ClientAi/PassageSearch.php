@@ -56,7 +56,7 @@ final class PassageSearch
     private function calls(Client $client): array
     {
         $zone = $this->settings->displayTimezone();
-        $sessions = CaptureSession::query()->withoutGlobalScopes()->where('client_id', $client->id)->with('finalTranscript')
+        $sessions = CaptureSession::query()->withoutGlobalScopes()->where('client_id', $client->id)->where('user_id', $client->user_id)->with('finalTranscript')
             ->latest('started_at')->limit(60)->get();
         $out = [];
         foreach ($sessions as $rank => $session) {

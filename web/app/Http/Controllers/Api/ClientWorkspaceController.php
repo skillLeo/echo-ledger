@@ -16,6 +16,7 @@ use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
 use App\Models\Device;
 use App\Services\ClientAi\ClientWorkspace;
+use App\Services\Workspaces\PlanLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -66,7 +67,7 @@ final class ClientWorkspaceController extends Controller
     public function refreshBrief(Request $request, string $id): JsonResponse
     {
         $client = $this->client($request, $id);
-        $this->workspace->assertCanSpend($client->workspace_id);
+        $this->workspace->assertCanWriteNotes($client->workspace_id);
         $brief = ClientBrief::query()->firstOrNew(['client_id' => $client->id]);
         $brief->fill(['workspace_id' => $client->workspace_id, 'sections' => $brief->sections ?? ClientBrief::emptySections(), 'status' => 'working', 'error' => null])->save();
         RefreshClientBriefJob::dispatch($client->id, true);
@@ -78,6 +79,7 @@ final class ClientWorkspaceController extends Controller
     public function storeMemory(Request $request, string $id): JsonResponse
     {
         $client = $this->client($request, $id);
+        app(PlanLimits::class)->assertFeature($client->workspace_id, 'ai_notes');
         $data = $request->validate([
             'kind' => ['required', Rule::in(ClientMemoryItem::KINDS)],
             'text' => ['required', 'string', 'max:500'],
@@ -191,7 +193,7 @@ final class ClientWorkspaceController extends Controller
             throw new ApiError(409, 'no_client', 'File this recording under a client first.');
         }
         $data = $request->validate(['language' => ['sometimes', Rule::in(['en', 'roman_urdu'])]]);
-        $this->workspace->assertCanSpend($session->workspace_id);
+        $this->workspace->assertCanWriteNotes($session->workspace_id);
         $note = CallNote::query()->updateOrCreate(['capture_session_id' => $session->id], [
             'workspace_id' => $session->workspace_id,
             'client_id' => $session->client_id,
@@ -227,7 +229,7 @@ final class ClientWorkspaceController extends Controller
 
     private function client(Request $request, string $id): Client
     {
-        $client = Client::query()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
+        $client = Client::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
         if (! $client instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }
@@ -237,7 +239,7 @@ final class ClientWorkspaceController extends Controller
 
     private function session(Request $request, string $id): CaptureSession
     {
-        $session = CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
+        $session = CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }

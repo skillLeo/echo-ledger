@@ -288,7 +288,7 @@ class ViewCaptureSession extends ViewRecord
             return;
         }
         try {
-            app(ClientWorkspace::class)->assertCanSpend($session->workspace_id);
+            app(ClientWorkspace::class)->assertCanWriteNotes($session->workspace_id);
         } catch (ApiError $e) {
             Notification::make()->title($e->getMessage())->warning()->send();
 
@@ -339,7 +339,7 @@ class ViewCaptureSession extends ViewRecord
             ->fillForm(fn (): array => ['client_id' => $this->session()->client_id])
             ->schema([
                 Select::make('client_id')->label('Client')->placeholder('No client')
-                    ->options(fn (): array => Client::query()->where('workspace_id', $this->session()->workspace_id)->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all()),
+                    ->options(fn (): array => Client::query()->where('workspace_id', $this->session()->workspace_id)->where('user_id', $this->session()->user_id)->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all()),
             ])
             ->modalSubmitActionLabel('Save')
             ->action(function (array $data): void {

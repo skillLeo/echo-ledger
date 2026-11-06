@@ -120,6 +120,8 @@ class ScreenStore
                     'image_path' => $imagePath,
                     'thumb_path' => $thumbPath,
                     'bytes' => (int) filesize($plainPath),
+                    // Since v1.5 the plan's storage counts what the two encrypted files take.
+                    'stored_bytes' => self::sizeOf($imagePath) + self::sizeOf($thumbPath),
                 ]);
                 $screen->id = $id;
                 $screen->save();
@@ -260,6 +262,7 @@ class ScreenStore
                 'capture_session_id' => $copy->id,
                 'image_path' => $written['image'],
                 'thumb_path' => $written['thumb'] ?? null,
+                'stored_bytes' => self::sizeOf($written['image']) + self::sizeOf($written['thumb'] ?? null),
                 ...$original->only(['at_ms', 'width', 'height', 'trigger', 'sha256', 'mime', 'bytes', 'ocr_text', 'description', 'search_text', 'described_at']),
             ]);
             $screen->id = $id;
@@ -331,5 +334,16 @@ class ScreenStore
     private function cipher(): RecordingCipher
     {
         return app(RecordingCipher::class);
+    }
+
+    /** Bytes a file takes on the recordings disk, 0 when it is not there. */
+    private static function sizeOf(?string $path): int
+    {
+        if ($path === null) {
+            return 0;
+        }
+        $full = Storage::disk('recordings')->path($path);
+
+        return is_file($full) ? (int) filesize($full) : 0;
     }
 }

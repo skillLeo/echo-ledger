@@ -221,7 +221,7 @@ final class SharingActions
             ->modalHeading(fn (Client $record): string => 'Delete “'.$record->name.'”?')
             ->modalDescription('Its recordings are not deleted: they go to the Inbox. Its subfolders move up a level. Its files, brief, notes, memory, rules and share links are deleted.')
             ->modalSubmitActionLabel('Delete project')
-            ->visible(fn (Client $record): bool => ($user = auth()->user()) instanceof User && app(ProjectTree::class)->canDelete($user, $record->workspace_id))
+            ->visible(fn (Client $record): bool => ($user = auth()->user()) instanceof User && app(ProjectTree::class)->canDelete($user, $record))
             ->action(function (Client $record) use ($after): void {
                 $user = auth()->user();
                 try {
@@ -249,7 +249,7 @@ final class SharingActions
         $workspace = (int) CurrentWorkspace::id();
         $tree = app(ProjectTree::class);
         $exclude = $moving !== null ? $tree->withDescendants($moving) : [];
-        $nodes = Client::query()->where('workspace_id', $workspace)->get(['id', 'parent_id', 'name'])
+        $nodes = Client::query()->where('workspace_id', $workspace)->where('user_id', CurrentWorkspace::userId())->get(['id', 'parent_id', 'name'])
             ->mapWithKeys(fn (Client $c): array => [$c->id => ['parent_id' => $c->parent_id, 'name' => $c->name]])->all();
         $options = [];
         foreach ($nodes as $id => $node) {

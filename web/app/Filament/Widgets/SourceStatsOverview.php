@@ -22,7 +22,7 @@ class SourceStatsOverview extends StatsOverviewWidget
 
     protected function getStats(): array
     {
-        $base = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id());
+        $base = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId());
         $counts = (clone $base)->toBase()->selectRaw('source_device, count(*) as c')->groupBy('source_device')->pluck('c', 'source_device');
 
         $stats = [];

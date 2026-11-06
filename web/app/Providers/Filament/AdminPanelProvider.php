@@ -63,6 +63,8 @@ class AdminPanelProvider extends PanelProvider
             // Since v1.5: the Terms and the Privacy Policy under every page and the sign-in page.
             ->renderHook(PanelsRenderHook::FOOTER, fn (): View => view('filament.legal-links'))
             ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_END, fn (): View => view('filament.legal-links'))
+            // Since v1.5: the workspace switcher at the top of the sidebar, for people in more than one.
+            ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, fn (): View => view('filament.workspace-switcher'))
             // C6: a quiet notice while the browser is offline.
             ->renderHook(PanelsRenderHook::BODY_END, fn (): View => view('filament.offline-banner'))
             ->profile(EditProfile::class, isSimple: false)

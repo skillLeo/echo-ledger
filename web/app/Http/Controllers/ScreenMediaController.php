@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Models\CaptureSession;
-use App\Models\Scopes\WorkspaceScope;
 use App\Models\Screen;
 use App\Services\Screens\ScreenStore;
 use App\Services\Workspaces\CurrentWorkspace;
@@ -25,7 +24,7 @@ final class ScreenMediaController extends Controller
     {
         $model = Screen::query()->withoutGlobalScopes()->find($screen);
         $session = $model instanceof Screen
-            ? CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->find($model->capture_session_id) : null;
+            ? CaptureSession::acrossPeople()->find($model->capture_session_id) : null;
         abort_if(! $session instanceof CaptureSession, 404);
 
         return $this->send($model, $variant === 'thumb');
@@ -36,7 +35,7 @@ final class ScreenMediaController extends Controller
     {
         $model = Screen::query()->withoutGlobalScopes()->find($screen);
         $session = $model instanceof Screen
-            ? CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->find($model->capture_session_id) : null;
+            ? CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->find($model->capture_session_id) : null;
         abort_if(! $session instanceof CaptureSession, 404);
 
         return $this->send($model, $variant === 'thumb');

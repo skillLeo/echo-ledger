@@ -7,7 +7,6 @@ namespace App\Services\Sharing;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
-use App\Models\Scopes\WorkspaceScope;
 use App\Models\SentItem;
 use App\Services\Projects\ProjectTree;
 use App\Services\ShareLinks;
@@ -67,12 +66,13 @@ final class LinkResolver
         }
         if ($sessionId !== null) {
             // One recording of the project's page (/p/{token}/{recording}).
-            $session = CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)
+            $session = CaptureSession::acrossPeople()->where('user_id', $project->user_id)
                 ->whereIn('client_id', $this->projects->withDescendants($project))->find($sessionId);
 
             return $session instanceof CaptureSession ? $this->recordingAnswer($device, $session) : null;
         }
-        if ($project->workspace_id === $device->workspace_id) {
+        // Since v1.5 a project opens in place only for the person who made it; anyone else's is a Shared with me item.
+        if ($project->workspace_id === $device->workspace_id && $project->user_id === $device->user_id) {
             return ['kind' => 'project', 'client_id' => $project->id];
         }
         $item = SentItem::query()->where('to_user_id', $device->user_id)->where('kind', 'project')->where('client_id', $project->id)->first();
@@ -85,18 +85,18 @@ final class LinkResolver
     {
         $link = $this->requests->usable($token);
 
-        return $link !== null && $link->workspace_id === $device->workspace_id ? ['kind' => 'request', 'request_link_id' => $link->id] : null;
+        return $link !== null && $link->workspace_id === $device->workspace_id && $link->user_id === $device->user_id ? ['kind' => 'request', 'request_link_id' => $link->id] : null;
     }
 
     /**
-     * A recording of the device's workspace opens in place (`session`); one a teammate sent its person (itself, or
-     * inside a sent project) is that person's Shared with me item (`shared`), since it is not in their library.
+     * The person's own recording opens in place (`session`); one a teammate sent them (itself, or inside a sent
+     * project) is their Shared with me item (`shared`), since it is not in their library.
      *
      * @return array<string, string>|null
      */
     private function recordingAnswer(Device $device, CaptureSession $session): ?array
     {
-        if ($session->workspace_id === $device->workspace_id && ! $session->trashed()) {
+        if ($session->workspace_id === $device->workspace_id && $session->user_id === $device->user_id && ! $session->trashed()) {
             return ['kind' => 'session', 'session_id' => $session->id];
         }
         if ($this->teammates->readable($device->user, $session->id) === null) {
@@ -116,7 +116,7 @@ final class LinkResolver
             return $direct;
         }
         foreach ($items->where('kind', 'project') as $item) {
-            $project = Client::query()->withoutGlobalScope(WorkspaceScope::class)->find($item->client_id);
+            $project = Client::acrossPeople()->find($item->client_id);
             if ($project instanceof Client && in_array($session->client_id, $this->projects->withDescendants($project), true)) {
                 return $item;
             }

@@ -264,7 +264,7 @@ final class LibrarySearch
      */
     private function filtered(int $workspaceId, array $filters): Builder
     {
-        $query = CaptureSession::query()->where('workspace_id', $workspaceId)
+        $query = CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson()
             ->where('status', '!=', SessionStatus::Recording->value)
             ->with(['device', 'client', 'transcripts', 'markers:id,capture_session_id,tag,at_ms'])->withCount('screens');
         foreach (['client_id', 'source_app', 'source_device', 'status'] as $field) {

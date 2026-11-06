@@ -108,7 +108,7 @@ final class LibraryOrganiser
     {
         $counts = [];
         foreach (self::VIEWS as $view) {
-            $query = CaptureSession::query()->where('workspace_id', $workspaceId);
+            $query = CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson();
             if ($view !== 'waiting') {
                 $query->where('status', '!=', SessionStatus::Recording->value);
             }
@@ -154,7 +154,7 @@ final class LibraryOrganiser
         $counts = [];
         foreach (self::FOLDERS as $folder) {
             $counts[$folder] = $folder === 'shared' ? 0
-                : $this->applyFolder(CaptureSession::query()->where('workspace_id', $workspaceId)
+                : $this->applyFolder(CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson()
                     ->where('status', '!=', SessionStatus::Recording->value), $folder)->count();
         }
 
@@ -164,7 +164,7 @@ final class LibraryOrganiser
     /** How many of the workspace's recordings wait for Keep or Discard (the Library's chip, since v1.5). */
     public function waitingCount(int $workspaceId): int
     {
-        return $this->applyView(CaptureSession::query()->where('workspace_id', $workspaceId), 'waiting', $this->settings->displayTimezone())->count();
+        return $this->applyView(CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson(), 'waiting', $this->settings->displayTimezone())->count();
     }
 
     /**
@@ -175,7 +175,7 @@ final class LibraryOrganiser
     public function waitingSummary(int $workspaceId, ?string $zone = null): ?string
     {
         $zone ??= $this->settings->displayTimezone();
-        $stats = $this->applyView(CaptureSession::query()->where('workspace_id', $workspaceId), 'waiting', $zone)->toBase()
+        $stats = $this->applyView(CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson(), 'waiting', $zone)->toBase()
             ->selectRaw('COUNT(*) AS waiting, MIN(started_at) AS oldest, SUM(duration_ms) AS total_ms')->first();
         $count = (int) ($stats->waiting ?? 0);
         if ($stats === null || $count === 0) {
@@ -199,7 +199,7 @@ final class LibraryOrganiser
     public function labels(int $workspaceId): array
     {
         return SessionLabel::query()
-            ->whereHas('captureSession', fn (Builder $q) => $q->where('workspace_id', $workspaceId))
+            ->whereHas('captureSession', fn (Builder $q) => $q->where('workspace_id', $workspaceId)->ofPerson())
             ->selectRaw('label, COUNT(*) as aggregate')->groupBy('label')->orderBy('label')->get()
             ->map(fn (SessionLabel $l): array => ['label' => $l->label, 'count' => (int) $l->getAttribute('aggregate')])
             ->values()->all();
@@ -270,7 +270,7 @@ final class LibraryOrganiser
      */
     public function bulk(int $workspaceId, array $ids, string $action, ?string $clientId = null, ?string $label = null, ?User $actor = null): int
     {
-        $sessions = CaptureSession::query()->where('workspace_id', $workspaceId)->whereIn('id', array_slice(array_values(array_unique($ids)), 0, self::MAX_BULK))->get();
+        $sessions = CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson()->whereIn('id', array_slice(array_values(array_unique($ids)), 0, self::MAX_BULK))->get();
         if ($action === 'delete' && $actor !== null) {
             // A member deletes only what they recorded; the rest is skipped like a foreign id (B20 roles).
             $sessions = $sessions->filter(fn (CaptureSession $s): bool => app(Workspaces::class)->canDeleteSession($actor, $s))->values();
@@ -327,7 +327,7 @@ final class LibraryOrganiser
         if ($clientId === null || $clientId === '') {
             return null;
         }
-        $client = Client::query()->where('workspace_id', $workspaceId)->find((string) $clientId);
+        $client = Client::query()->where('workspace_id', $workspaceId)->ofPerson()->find((string) $clientId);
         if (! $client instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }
@@ -345,7 +345,7 @@ final class LibraryOrganiser
      */
     public function exportZip(int $workspaceId, array $ids, string $format, ?string $view = null): array
     {
-        $sessions = CaptureSession::query()->where('workspace_id', $workspaceId)->whereIn('id', array_slice(array_values(array_unique($ids)), 0, self::MAX_BULK))
+        $sessions = CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson()->whereIn('id', array_slice(array_values(array_unique($ids)), 0, self::MAX_BULK))
             ->with(['finalTranscript', 'client'])->orderBy('started_at')->get();
         $path = tempnam(sys_get_temp_dir(), 'el-export-');
         if ($path === false) {

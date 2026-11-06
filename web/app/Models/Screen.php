@@ -27,6 +27,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $image_path
  * @property string|null $thumb_path
  * @property int $bytes
+ * @property int|null $stored_bytes the encrypted picture and thumbnail on disk (since v1.5; null for older screens)
  * @property string|null $ocr_text the text Claude read on the picture
  * @property string|null $description one sentence about what the screen shows
  * @property string|null $search_text
@@ -47,7 +48,7 @@ class Screen extends Model
 
     protected $fillable = [
         'workspace_id', 'capture_session_id', 'at_ms', 'width', 'height', 'trigger', 'sha256', 'mime', 'image_path', 'thumb_path',
-        'bytes', 'ocr_text', 'description', 'search_text', 'described_at',
+        'bytes', 'stored_bytes', 'ocr_text', 'description', 'search_text', 'described_at',
     ];
 
     /** @return BelongsTo<CaptureSession, $this> */
@@ -69,6 +70,7 @@ class Screen extends Model
             'width' => 'integer',
             'height' => 'integer',
             'bytes' => 'integer',
+            'stored_bytes' => 'integer',
             'described_at' => 'datetime',
         ];
     }

@@ -127,7 +127,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 19;
+const LATER_MIGRATIONS = 20;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
@@ -203,7 +203,7 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
 const PHASE2_STEPS = 5;
 
 /** Migrations that came after them (rolled back first); add yours here as for LATER_MIGRATIONS. */
-const AFTER_PHASE2 = 4;
+const AFTER_PHASE2 = 5;
 
 /** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
 function seedPhase2Library(Connection $db): array
@@ -301,7 +301,7 @@ it('refuses to roll projects back while one person has two projects of the same 
 /** The v1.5 Phase 3 migration (screen moments), and how many came after it (rolled back first). */
 const PHASE3_STEPS = 1;
 
-const AFTER_PHASE3 = 2;
+const AFTER_PHASE3 = 3;
 
 it('runs the v1.5 Phase 3 migration down and up again on a library with screen moments', function () {
     $db = cycleConnection();
@@ -348,7 +348,7 @@ it('runs the v1.5 Phase 3 migration down and up again on a library with screen m
 /** The v1.5 account migrations (accounts, data exports), and how many came after them (rolled back first). */
 const ACCOUNT_STEPS = 2;
 
-const AFTER_ACCOUNTS = 0;
+const AFTER_ACCOUNTS = 1;
 
 it('runs the v1.5 account migrations down and up again without touching the library', function () {
     $db = cycleConnection();
@@ -396,6 +396,68 @@ it('runs the v1.5 account migrations down and up again without touching the libr
     // One Google account links to one account only.
     $db->table('users')->where('id', $seeded['user'])->update(['google_id' => 'google-2']);
     expect(fn () => $db->table('users')->where('id', '!=', $seeded['user'])->update(['google_id' => 'google-2']))->toThrow(QueryException::class);
+})->after(function () {
+    if (config('database.connections.cycle.driver') === 'sqlite') {
+        DB::disconnect('cycle');
+        @unlink((string) config('database.connections.cycle.database'));
+    }
+});
+
+/** The v1.5 plans, roles and privacy migration; add later ones to the count as for LATER_MIGRATIONS. */
+const AFTER_PLANS = 0;
+
+it('runs the v1.5 plans and roles migration down and up again without touching the library', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    $seeded = seedPhase2Library($db);
+    $now = now();
+    $workspace = (int) $db->table('workspaces')->value('id');
+    $free = (int) $db->table('plans')->where('key', 'free')->value('id');
+    expect($free)->toBeGreaterThan(0)
+        // Every feature and no limits on Personal; the placeholders on Free.
+        ->and($db->table('plans')->where('key', 'personal')->value('monthly_minutes'))->toBeNull()
+        ->and(json_decode((string) $db->table('plans')->where('key', 'personal')->value('features'), true))->toBe(['live_translate' => true, 'screen_moments' => true, 'ai_notes' => true, 'connector' => true])
+        ->and((int) $db->table('plans')->where('key', 'free')->value('monthly_minutes'))->toBe(300)
+        ->and((int) $db->table('plans')->where('key', 'free')->value('seats'))->toBe(1);
+    // A rule made before the migration was back-filled to its project's maker when the seed ran after it; do it by hand here.
+    $db->table('filing_rules')->update(['user_id' => $seeded['user']]);
+    $viewer = $db->table('users')->where('email', 'friend@example.test')->value('id');
+    $db->table('workspace_user')->insert(['workspace_id' => $workspace, 'user_id' => $viewer, 'role' => 'viewer', 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('workspaces')->where('id', $workspace)->update(['plan_id' => $free]);
+    $db->table('screens')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $workspace, 'capture_session_id' => $seeded['session'], 'at_ms' => 1, 'width' => 1, 'height' => 1,
+        'trigger' => 'manual', 'sha256' => str_repeat('e', 64), 'mime' => 'image/png', 'bytes' => 10, 'stored_bytes' => 40, 'created_at' => $now, 'updated_at' => $now]);
+
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_PLANS]);
+    $schema = $db->getSchemaBuilder();
+    foreach (['price_usd', 'retention_days', 'seats', 'ai_credits_usd', 'features'] as $column) {
+        expect($schema->hasColumn('plans', $column))->toBeFalse($column);
+    }
+    expect($schema->hasColumn('filing_rules', 'user_id'))->toBeFalse()
+        ->and($schema->hasColumn('screens', 'stored_bytes'))->toBeFalse()
+        // Free is gone and its workspaces are on Personal, with the B20 limits back; the viewer acts as a member.
+        ->and($db->table('plans')->where('key', 'free')->exists())->toBeFalse()
+        ->and((int) $db->table('workspaces')->where('id', $workspace)->value('plan_id'))->toBe((int) $db->table('plans')->where('key', 'personal')->value('id'))
+        ->and((int) $db->table('plans')->where('key', 'personal')->value('monthly_minutes'))->toBe(30000)
+        ->and($db->table('workspace_user')->where('user_id', $viewer)->value('role'))->toBe('member')
+        // Nothing else is lost.
+        ->and($db->table('capture_sessions')->count())->toBe(1)
+        ->and($db->table('clients')->count())->toBe(2)
+        ->and($db->table('screens')->count())->toBe(1)
+        ->and($db->table('filing_rules')->count())->toBe(1);
+    // The B20 rule again: one rule per workspace.
+    $rule = ['workspace_id' => $workspace, 'client_id' => $seeded['acme'], 'kind' => 'app', 'value' => 'zoom', 'match_value' => 'zoom', 'created_at' => $now, 'updated_at' => $now];
+    expect(fn () => $db->table('filing_rules')->insert($rule))->toThrow(QueryException::class);
+
+    cycleArtisan('migrate');
+    expect($db->table('plans')->where('key', 'free')->exists())->toBeTrue()
+        ->and($db->table('plans')->where('key', 'personal')->value('monthly_minutes'))->toBeNull()
+        // The rule went back to its project's maker, and the same person cannot have it twice.
+        ->and((int) $db->table('filing_rules')->value('user_id'))->toBe($seeded['user'])
+        ->and(fn () => $db->table('filing_rules')->insert([...$rule, 'user_id' => $seeded['user']]))->toThrow(QueryException::class);
+    // Another person may have the same rule; then the rollback refuses to pick one of them and changes nothing.
+    $db->table('filing_rules')->insert([...$rule, 'user_id' => $viewer]);
+    expect(fn () => cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_PLANS]))->toThrow(RuntimeException::class, 'remove one of them');
+    expect($schema->hasColumn('filing_rules', 'user_id'))->toBeTrue();
 })->after(function () {
     if (config('database.connections.cycle.driver') === 'sqlite') {
         DB::disconnect('cycle');

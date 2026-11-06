@@ -71,7 +71,7 @@ class ClientResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->withCount(['keyterms', 'captureSessions', 'children'])
+        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->withCount(['keyterms', 'captureSessions', 'children'])
             ->withMax('captureSessions', 'started_at');
     }
 

@@ -152,7 +152,7 @@ final class SessionController extends Controller
         $found = Recording::query()
             ->where('role', RecordingRole::Primary->value)
             ->where('sha256', $sha)
-            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id))
+            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id))
             ->value('capture_session_id');
 
         return is_string($found) ? $found : null;
@@ -543,7 +543,7 @@ final class SessionController extends Controller
         /** @var Device $device */
         $device = $request->user();
 
-        return CaptureSession::query()->where('workspace_id', $device->workspace_id)->findOrFail($id);
+        return CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->findOrFail($id);
     }
 
     /**
@@ -554,7 +554,7 @@ final class SessionController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $own = CaptureSession::query()->where('workspace_id', $device->workspace_id)->find($id);
+        $own = CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if ($own instanceof CaptureSession) {
             return $own;
         }

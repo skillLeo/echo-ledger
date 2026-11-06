@@ -86,7 +86,7 @@ class RequestLinksPage extends Page implements HasTable
         $tz = app(SettingsRepository::class)->displayTimezone();
 
         return $table
-            ->query(fn (): Builder => RequestLink::query()->where('workspace_id', CurrentWorkspace::id())->with('client'))
+            ->query(fn (): Builder => RequestLink::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->with('client'))
             ->defaultSort('created_at', 'desc')
             ->columns([
                 TextColumn::make('title')->label('Title')->limit(60)->searchable(),

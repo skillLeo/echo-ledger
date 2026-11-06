@@ -22,7 +22,7 @@ final class AdminExportController extends Controller
         abort_unless(in_array($format, TranscriptExporter::FORMATS, true), 404);
         $model = Transcript::query()->find($transcript);
         $session = $model instanceof Transcript
-            ? CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->find($model->capture_session_id)
+            ? CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->find($model->capture_session_id)
             : null;
         abort_if(! $session instanceof CaptureSession || $model->status !== TranscriptStatus::Completed, 404);
         // Since v1.2: ?view=roman|english exports a Show as view (when it is ready) instead of the original words.

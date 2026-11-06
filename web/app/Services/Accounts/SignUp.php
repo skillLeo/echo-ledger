@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Accounts;
 
+use App\Exceptions\ApiError;
+use App\Models\Plan;
 use App\Models\User;
 use App\Models\WorkspaceInvitation;
 use App\Services\AuditLog;
@@ -83,9 +85,14 @@ final class SignUp
                 'google_id' => $data['google_id'] ?? null,
                 'email_verified_at' => $emailVerified || ($invitation !== null && $this->invitations->matches($invitation, $email)) ? now() : null,
             ])->save();
-            $this->workspaces->createFor($user);
+            // Since v1.5 a new account's own workspace is on the Free plan.
+            $this->workspaces->createFor($user, 'Personal', Plan::free());
             if ($invitation !== null && $this->invitations->matches($invitation, $email)) {
-                $this->invitations->accept($invitation, $user);
+                try {
+                    $this->invitations->accept($invitation, $user);
+                } catch (ApiError) {
+                    // The team filled its seats meanwhile: the account is made all the same, without joining it.
+                }
             }
             $this->audit->record('account_created', $user->id, $user, $via === 'google' ? 'Account made with Google' : 'Account made', ['via' => $via]);
 

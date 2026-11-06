@@ -50,7 +50,7 @@ class Shares extends Page implements HasTable
         $tz = app(SettingsRepository::class)->displayTimezone();
 
         return $table
-            ->query(fn (): Builder => ShareController::workspaceLinks((int) CurrentWorkspace::id())->with(['captureSession', 'client']))
+            ->query(fn (): Builder => ShareController::workspaceLinks((int) CurrentWorkspace::id(), (int) CurrentWorkspace::userId())->with(['captureSession', 'client']))
             ->defaultSort('created_at', 'desc')
             ->description('Links to your recordings and projects. Revoking one stops it at once; the address is shown only when it is made.')
             ->columns([

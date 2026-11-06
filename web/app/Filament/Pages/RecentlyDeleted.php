@@ -44,7 +44,7 @@ class RecentlyDeleted extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table
-            ->query(fn (): Builder => CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->whereNull('media_erased_at')
+            ->query(fn (): Builder => CaptureSession::onlyTrashed()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->whereNull('media_erased_at')
                 ->where('deleted_at', '>', now()->subHours(CaptureSession::BIN_HOURS)))
             ->defaultSort('deleted_at', 'desc')
             ->description('Deleted recordings stay here for '.CaptureSession::BIN_HOURS.' hours, then their audio and transcripts are erased for good.')

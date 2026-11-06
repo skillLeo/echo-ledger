@@ -25,7 +25,7 @@ final class TeammateController extends Controller
     public function sendSession(Request $request, string $id): JsonResponse
     {
         $device = $this->device($request);
-        $session = CaptureSession::query()->where('workspace_id', $device->workspace_id)->find($id);
+        $session = CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
@@ -37,7 +37,7 @@ final class TeammateController extends Controller
     public function sendProject(Request $request, string $id): JsonResponse
     {
         $device = $this->device($request);
-        $project = Client::query()->where('workspace_id', $device->workspace_id)->find($id);
+        $project = Client::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if (! $project instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }

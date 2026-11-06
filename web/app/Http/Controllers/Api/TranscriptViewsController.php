@@ -43,7 +43,7 @@ final class TranscriptViewsController extends Controller
         /** @var Device $device */
         $device = $request->user();
         $transcript = Transcript::query()
-            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->whereNull('deleted_at'))
+            ->whereHas('captureSession', fn ($q) => $q->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->whereNull('deleted_at'))
             ->find($id);
         if (! $transcript instanceof Transcript && $readOnly) {
             $transcript = Transcript::query()->whereIn('capture_session_id', app(Teammates::class)->sharedSessions($device->user)->select('capture_sessions.id'))->find($id);

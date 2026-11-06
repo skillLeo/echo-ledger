@@ -38,7 +38,7 @@ final class OrganiseController extends Controller
             // Since v1.1.2: the recording's language (null / auto = automatic); used by its next final transcript.
             'language' => ['sometimes', 'nullable', 'string', 'max:16'],
         ]);
-        $session = CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
+        $session = CaptureSession::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
         if (! $session instanceof CaptureSession) {
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
@@ -166,7 +166,7 @@ final class OrganiseController extends Controller
 
     private function client(Request $request, string $id): Client
     {
-        $client = Client::query()->where('workspace_id', $this->device($request)->workspace_id)->find($id);
+        $client = Client::query()->where('workspace_id', $this->device($request)->workspace_id)->where('user_id', $this->device($request)->user_id)->find($id);
         if (! $client instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }

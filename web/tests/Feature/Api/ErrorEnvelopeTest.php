@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
+use App\Enums\WorkspaceRole;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Plan;
@@ -42,8 +43,9 @@ const ENVELOPE_MISSING_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
  */
 const ENVELOPE_PENDING_CODES = [
     'budget_exceeded',
-    // Phase 4: plans.
-    'feature_not_in_plan', 'seat_limit_reached',
+    // Produced by the console and the invitation page (an invitation is not a device API route); WorkspaceInvitationsTest
+    // covers it through Invitations and PlanLimits, and its envelope is checked there.
+    'seat_limit_reached',
 ];
 
 /** @return array<string, array{0: int, 1: string}> the docs table as code => [status, code] */
@@ -217,12 +219,17 @@ function produceError(object $test, string $code): TestResponse
 
             return $test->flushHeaders()->postJson('/api/devices/register', ['pairing_code' => $code, 'name' => 'Second', 'platform' => 'android']);
         case 'not_allowed':
-            $member = withoutWorkspace(User::factory()->create());
-            app(Workspaces::class)->addMember(Workspace::query()->findOrFail($test->device->workspace_id), $member);
-            [, $memberToken] = $test->enroll($member->fresh());
-            $theirs = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
+            // Since v1.5 someone else's recording is a 404; a viewer's device is what `not_allowed` is left for.
+            $viewer = withoutWorkspace(User::factory()->create());
+            app(Workspaces::class)->addMember(Workspace::query()->findOrFail($test->device->workspace_id), $viewer, WorkspaceRole::Viewer);
+            [, $viewerToken] = $test->enroll($viewer->fresh());
 
-            return $test->asToken($memberToken)->deleteJson("/api/sessions/{$theirs->id}");
+            return $test->asToken($viewerToken)->createSession($test->bytes);
+        case 'feature_not_in_plan':
+            Plan::personal()->update(['features' => ['screen_moments' => false]]);
+            $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id, 'device_id' => $test->device->id]);
+
+            return $test->postJson("/api/sessions/{$session->id}/screens", ['at_ms' => 0, 'width' => 1, 'height' => 1, 'trigger' => 'manual']);
         case 'too_many_labels':
             $session = CaptureSession::factory()->create(['user_id' => $test->device->user_id]);
 
@@ -290,8 +297,9 @@ it('produces each documented code with its status, a message and nothing interna
 
     $response->assertStatus($status)->assertJsonPath('code', $code);
     expect($response->json('message'))->toBeString()->not->toBe('');
-    // Since v1.5 rule_exists names the project that has the rule and recipient_not_found the emails with no account.
-    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id', 'client_id', 'client_name', 'emails']))->toBe([]);
+    // Since v1.5 rule_exists names the project that has the rule, recipient_not_found the emails with no account and
+    // feature_not_in_plan the feature.
+    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id', 'client_id', 'client_name', 'emails', 'feature']))->toBe([]);
     expectNoInternals($response);
 })->with(array_diff_key(documentedErrorCodes(), array_flip(ENVELOPE_PENDING_CODES)));
 

@@ -44,7 +44,7 @@ final class CommandPalette implements GlobalSearchProvider
                 $results->category('Recordings', $recordings);
             }
         }
-        $clients = Client::query()->where('workspace_id', CurrentWorkspace::id())->where('name', 'like', '%'.str_replace(['%', '_'], ['\%', '\_'], $query).'%')
+        $clients = Client::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->where('name', 'like', '%'.str_replace(['%', '_'], ['\%', '\_'], $query).'%')
             ->orderBy('name')->limit(5)->get()
             ->map(fn (Client $c): GlobalSearchResult => new GlobalSearchResult($c->name, ClientResource::getUrl('edit', ['record' => $c])))->all();
         if ($clients !== []) {

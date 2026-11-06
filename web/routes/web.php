@@ -9,6 +9,7 @@ use App\Http\Controllers\AdminPackController;
 use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\Auth\DeviceSignInController;
 use App\Http\Controllers\Auth\GoogleController;
+use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
 use App\Http\Controllers\LegalController;
@@ -17,6 +18,7 @@ use App\Http\Controllers\PublicShareController;
 use App\Http\Controllers\RequestLinkPageController;
 use App\Http\Controllers\ScreenMediaController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\WorkspaceSwitchController;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
 
@@ -110,6 +112,16 @@ Route::middleware('throttle:google')->prefix('/auth/google')->name('auth.google.
 });
 
 // Your account (v1.5): /account/delete without the app (Google Play links to it), and the "Export my data" link.
+// Workspace invitations (v1.5): a signed link for one address, 7 days, once.
+Route::middleware(['signed', 'throttle:account'])->group(function (): void {
+    Route::get('/invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
+    Route::post('/invitations/{token}', [InvitationController::class, 'accept'])->middleware('auth:web')->name('invitations.accept');
+});
+
+// The console's workspace switcher (v1.5): only a workspace the person belongs to.
+Route::post('/admin-workspaces/{workspace}/switch', WorkspaceSwitchController::class)->whereNumber('workspace')
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, 'throttle:account'])->name('admin.workspaces.switch');
+
 Route::middleware('throttle:account')->group(function (): void {
     Route::get('/account/delete', [AccountPageController::class, 'deletePage'])->name('account.delete');
     Route::post('/account/delete', [AccountPageController::class, 'delete'])->middleware('auth:web')->name('account.delete.store');

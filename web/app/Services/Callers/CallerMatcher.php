@@ -7,7 +7,6 @@ namespace App\Services\Callers;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientContact;
-use App\Models\Scopes\WorkspaceScope;
 use App\Stt\LanguageChoice;
 
 /**
@@ -62,13 +61,14 @@ final class CallerMatcher
     }
 
     /**
-     * The contact (and its client) the caller is, or only the client when the name is the client's own name.
+     * The contact (and its client) the caller is, or only the client when the name is the client's own name. Since
+     * v1.5 only among the projects of the person whose recording it is.
      *
      * @return array{contact: ClientContact|null, client: Client|null}
      */
-    public function match(int $workspaceId, ?string $name, ?string $number): array
+    public function match(int $workspaceId, ?string $name, ?string $number, ?int $userId = null): array
     {
-        $clients = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId);
+        $clients = Client::acrossPeople()->where('workspace_id', $workspaceId)->when($userId !== null, fn ($q) => $q->where('user_id', $userId));
         $digits = self::digits($number);
         if ($digits !== null) {
             $contact = ClientContact::query()->where('phone_digits', $digits)->whereIn('client_id', (clone $clients)->select('id'))->oldest('id')->first();
@@ -119,7 +119,7 @@ final class CallerMatcher
         if ($name === null && $number === null) {
             return;
         }
-        $match = $this->match($session->workspace_id, $name, $number);
+        $match = $this->match($session->workspace_id, $name, $number, $session->user_id);
         $session->forceFill([
             'caller_name' => $name ?? $match['contact']?->name,
             'caller_number' => $number,
@@ -151,7 +151,7 @@ final class CallerMatcher
         if ($session->client_id === null || $session->caller_name === null || in_array($session->caller_source, ['window_title', 'calendar'], true)) {
             return null;
         }
-        $match = $this->match($session->workspace_id, $session->caller_name, $session->caller_number);
+        $match = $this->match($session->workspace_id, $session->caller_name, $session->caller_number, $session->user_id);
         if ($match['client'] !== null) {
             return null;
         }

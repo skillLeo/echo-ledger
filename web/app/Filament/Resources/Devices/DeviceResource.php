@@ -6,7 +6,9 @@ namespace App\Filament\Resources\Devices;
 
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Models\Device;
+use App\Models\User;
 use App\Services\Workspaces\CurrentWorkspace;
+use App\Services\Workspaces\Workspaces;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -37,7 +39,12 @@ class DeviceResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())->withCount('captureSessions');
+        // Owners and admins see every device of the workspace (to revoke one); members and viewers their own.
+        $user = auth()->user();
+        $manages = $user instanceof User && app(Workspaces::class)->roleOf($user, (int) CurrentWorkspace::id())?->manages() === true;
+
+        return parent::getEloquentQuery()->where('workspace_id', CurrentWorkspace::id())
+            ->when(! $manages, fn (Builder $q) => $q->where('user_id', (int) CurrentWorkspace::userId()))->withCount('captureSessions');
     }
 
     public static function table(Table $table): Table

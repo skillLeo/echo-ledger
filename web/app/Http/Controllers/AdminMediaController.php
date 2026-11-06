@@ -33,7 +33,7 @@ final class AdminMediaController extends Controller
     public function __invoke(Recording $recording): BinaryFileResponse
     {
         // Same answer as an unknown id: a workspace must not learn that another workspace's recording exists.
-        $session = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->find($recording->capture_session_id);
+        $session = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->find($recording->capture_session_id);
         abort_if(! $session instanceof CaptureSession || ! $recording->isReady(), 404);
 
         $response = RecordingController::streamDecrypted($recording);

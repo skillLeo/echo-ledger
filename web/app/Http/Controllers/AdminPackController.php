@@ -22,7 +22,7 @@ final class AdminPackController extends Controller
     public function __invoke(string $session, string $format, MeetingPack $pack): BinaryFileResponse
     {
         abort_unless(in_array($format, MeetingPack::FORMATS, true), 404);
-        $model = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->find($session);
+        $model = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->find($session);
         abort_if(! $model instanceof CaptureSession, 404);
         $view = request()->query('view');
         $view = is_string($view) && in_array($view, MeetingPack::VIEWS, true) ? $view : null;

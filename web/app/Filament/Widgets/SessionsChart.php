@@ -31,6 +31,7 @@ class SessionsChart extends ChartWidget
         $start = now($zone)->subDays(13)->startOfDay();
         $rows = CaptureSession::query()
             ->where('workspace_id', CurrentWorkspace::id())
+            ->where('user_id', CurrentWorkspace::userId())
             ->where('started_at', '>=', $start->copy()->utc())
             ->get(['started_at', 'source_device']);
 

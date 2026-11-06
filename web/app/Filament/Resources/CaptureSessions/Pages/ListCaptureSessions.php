@@ -209,7 +209,7 @@ class ListCaptureSessions extends ListRecords
         return [
             'store' => route('admin.uploads.store'),
             'csrf' => csrf_token(),
-            'clients' => Client::query()->where('workspace_id', CurrentWorkspace::id())->orderByDesc('pinned')->orderBy('name')
+            'clients' => Client::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->orderByDesc('pinned')->orderBy('name')
                 ->get(['id', 'name'])->map(fn (Client $c): array => ['value' => $c->id, 'label' => $c->name])->values()->all(),
             'languages' => LanguageChoice::selectOptions(),
             'extensions' => array_keys(ConsoleUploads::EXTENSIONS),

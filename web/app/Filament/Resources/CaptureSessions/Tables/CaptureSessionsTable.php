@@ -83,7 +83,7 @@ final class CaptureSessionsTable
                 SelectFilter::make('source_device')->label('Source device')->options(SourceDevice::class)->multiple(),
                 SelectFilter::make('source_app')->label('Source app')->options(SourceApp::class)->multiple(),
                 SelectFilter::make('client')
-                    ->relationship('client', 'name', fn (Builder $query): Builder => $query->where('workspace_id', CurrentWorkspace::id()))
+                    ->relationship('client', 'name', fn (Builder $query): Builder => $query->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId()))
                     ->searchable()->preload(),
                 SelectFilter::make('status')->options(SessionStatus::class),
                 SelectFilter::make('tag')->label('Bookmark tag')
@@ -161,7 +161,7 @@ final class CaptureSessionsTable
         return [
             BulkAction::make('move')->label('Move to client')->icon(Heroicon::OutlinedFolder)
                 ->schema([Select::make('client_id')->label('Client')->placeholder('No client')
-                    ->options(fn (): array => Client::query()->where('workspace_id', CurrentWorkspace::id())->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all())])
+                    ->options(fn (): array => Client::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all())])
                 ->action(fn (Collection $records, array $data) => $run($records, 'move', $data['client_id'] ?? null))
                 ->deselectRecordsAfterCompletion(),
             BulkAction::make('label')->label('Add label')->icon(Heroicon::OutlinedTag)

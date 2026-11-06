@@ -16,6 +16,7 @@ use App\Services\Projects\ProjectTree;
 use App\Services\Screens\ScreenStore;
 use App\Services\Screens\UnreadablePicture;
 use App\Services\Sharing\Teammates;
+use App\Services\Workspaces\PlanLimits;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
@@ -47,6 +48,8 @@ final class ScreenController extends Controller
     public function store(Request $request, string $id): JsonResponse
     {
         $session = $this->ownSession($request, $id);
+        // Since v1.5 the plan decides: 403 feature_not_in_plan, the desktop keeps recording without screens.
+        app(PlanLimits::class)->assertFeature($session->workspace_id, 'screen_moments');
         $upload = $request->file('image');
         if ($upload instanceof UploadedFile && (in_array($upload->getError(), [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
             || ($upload->isValid() && (int) $upload->getSize() > ScreenStore::MAX_BYTES))) {
@@ -116,7 +119,7 @@ final class ScreenController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $client = Client::query()->where('workspace_id', $device->workspace_id)->find($id);
+        $client = Client::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if (! $client instanceof Client) {
             throw new ApiError(404, 'client_not_found', 'Client not found.');
         }
@@ -126,6 +129,7 @@ final class ScreenController extends Controller
         $query = Screen::query()->withoutGlobalScope(WorkspaceScope::class)
             ->join('capture_sessions', 'capture_sessions.id', '=', 'screens.capture_session_id')
             ->where('capture_sessions.workspace_id', $device->workspace_id)
+            ->where('capture_sessions.user_id', $device->user_id)
             ->whereIn('capture_sessions.client_id', $folders)
             ->whereNull('capture_sessions.deleted_at')
             ->where('capture_sessions.status', '!=', SessionStatus::Recording->value)
@@ -237,7 +241,7 @@ final class ScreenController extends Controller
         /** @var Device $device */
         $device = $request->user();
 
-        return CaptureSession::query()->where('workspace_id', $device->workspace_id)->findOrFail($id);
+        return CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->findOrFail($id);
     }
 
     /** The workspace's recording, or one a teammate sent this person (read-only); anything else as an unknown id. */
@@ -245,7 +249,7 @@ final class ScreenController extends Controller
     {
         /** @var Device $device */
         $device = $request->user();
-        $own = CaptureSession::query()->where('workspace_id', $device->workspace_id)->find($id);
+        $own = CaptureSession::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
         if ($own instanceof CaptureSession) {
             return $own;
         }

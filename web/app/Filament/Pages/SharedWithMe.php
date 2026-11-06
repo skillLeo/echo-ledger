@@ -18,6 +18,7 @@ use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\Teammates;
 use App\Services\TranscriptExporter;
 use App\Services\Workspaces\CurrentWorkspace;
+use App\Services\Workspaces\Workspaces;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
@@ -77,6 +78,8 @@ class SharedWithMe extends Page implements HasTable
                     ->modalSubmitAction(false)->modalCancelActionLabel('Close')
                     ->modalContent(fn (SentItem $item): View => view('filament.pages.shared-preview', $this->preview($item))),
                 Action::make('save')->label('Save to my library')->icon(Heroicon::OutlinedArrowDownTray)
+                    // Since v1.5 a viewer opens what is shared with them and keeps no library.
+                    ->visible(fn (): bool => app(Workspaces::class)->roleOf($this->person(), (int) CurrentWorkspace::id())?->records() === true)
                     ->requiresConfirmation()
                     ->modalHeading('Save a copy?')
                     ->modalDescription(fn (SentItem $item): string => $item->kind === 'project'

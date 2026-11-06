@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToWorkspace;
+use App\Models\Concerns\OwnedByMaker;
 use Database\Factories\ClientFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -34,7 +35,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Client extends Model
 {
     /** @use HasFactory<ClientFactory> */
-    use BelongsToWorkspace, HasFactory, HasUlids;
+    use BelongsToWorkspace, HasFactory, HasUlids, OwnedByMaker;
 
     /** Projects nest at most this many levels (docs/API.md "Projects", `too_deep`). */
     public const MAX_DEPTH = 4;

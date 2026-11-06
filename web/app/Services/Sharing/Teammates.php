@@ -14,6 +14,7 @@ use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Recording;
 use App\Models\Scopes\WorkspaceScope;
+use App\Models\Screen;
 use App\Models\SentItem;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
@@ -24,6 +25,7 @@ use App\Services\ChunkedUploadService;
 use App\Services\Projects\ProjectTree;
 use App\Services\Screens\ScreenStore;
 use App\Services\Workspaces\PlanLimits;
+use App\Services\Workspaces\Workspaces;
 use App\Support\UrduText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -123,13 +125,19 @@ final class Teammates
     {
         $items = SentItem::query()->where('to_user_id', $person->id)->get(['kind', 'capture_session_id', 'client_id']);
         $sessionIds = $items->where('kind', 'session')->pluck('capture_session_id')->filter()->values()->all();
+        // Since v1.5 a project's recordings are those its maker filed in it: each sent project opens only its maker's.
         $projectIds = [];
-        foreach (Client::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('id', $items->where('kind', 'project')->pluck('client_id')->filter())->get() as $project) {
-            array_push($projectIds, ...$this->projects->withDescendants($project));
+        foreach (Client::acrossPeople()->whereIn('id', $items->where('kind', 'project')->pluck('client_id')->filter())->get() as $project) {
+            $projectIds[$project->user_id] = [...($projectIds[$project->user_id] ?? []), ...$this->projects->withDescendants($project)];
         }
 
-        return CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)
-            ->where(fn (Builder $q) => $q->whereIn('id', $sessionIds)->orWhereIn('client_id', $projectIds))
+        return CaptureSession::acrossPeople()
+            ->where(function (Builder $q) use ($sessionIds, $projectIds): void {
+                $q->whereIn('id', $sessionIds);
+                foreach ($projectIds as $maker => $ids) {
+                    $q->orWhere(fn (Builder $p) => $p->where('user_id', $maker)->whereIn('client_id', $ids));
+                }
+            })
             ->where('status', '!=', SessionStatus::Recording->value);
     }
 
@@ -164,11 +172,15 @@ final class Teammates
      */
     public function save(User $person, int $workspaceId, SentItem $item): array
     {
+        // Since v1.5 a viewer opens what was sent to them but keeps no library: `403 not_allowed`.
+        app(Workspaces::class)->assertCanRecord($person, $workspaceId);
         $sessions = $item->kind === 'project' && $item->client !== null
-            ? CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('client_id', $this->projects->withDescendants($item->client))
+            ? CaptureSession::acrossPeople()->where('user_id', $item->client->user_id)->whereIn('client_id', $this->projects->withDescendants($item->client))
                 ->where('status', '!=', SessionStatus::Recording->value)->get()
-            : CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereKey($item->capture_session_id)->get();
-        $bytes = (int) Recording::query()->whereIn('capture_session_id', $sessions->modelKeys())->whereNotNull('stored_path')->sum('stored_size_bytes');
+            : CaptureSession::acrossPeople()->whereKey($item->capture_session_id)->get();
+        // The audio and, since v1.5, the screen moments: the copy takes as much room as the original.
+        $bytes = (int) Recording::query()->whereIn('capture_session_id', $sessions->modelKeys())->whereNotNull('stored_path')->sum('stored_size_bytes')
+            + (int) Screen::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('capture_session_id', $sessions->modelKeys())->sum(DB::raw('COALESCE(stored_bytes, bytes)'));
 
         $this->written = [];
         try {
@@ -217,17 +229,17 @@ final class Teammates
      */
     private function copyTree(Client $project, ?string $parentId, int $workspaceId, User $person, array $map = []): array
     {
-        $copy = Client::query()->withoutGlobalScope(WorkspaceScope::class)->create([
+        $copy = Client::acrossPeople()->create([
             'workspace_id' => $workspaceId,
             'user_id' => $person->id,
             'parent_id' => $parentId,
-            'name' => $this->projects->freeName($workspaceId, $parentId, $project->name),
+            'name' => $this->projects->freeName($workspaceId, $parentId, $project->name, null, $person->id),
             'color' => $project->color,
             'avatar' => $project->avatar,
             'language' => $project->language,
         ]);
         $map[$project->id] = $copy->id;
-        foreach (Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('parent_id', $project->id)->orderBy('name')->get() as $child) {
+        foreach (Client::acrossPeople()->where('parent_id', $project->id)->orderBy('name')->get() as $child) {
             if (! isset($map[$child->id])) {
                 $map = $this->copyTree($child, $copy->id, $workspaceId, $person, $map);
             }
@@ -238,7 +250,7 @@ final class Teammates
 
     private function copySession(CaptureSession $original, int $workspaceId, User $person, ?string $clientId): CaptureSession
     {
-        $project = $original->client_id !== null ? Client::query()->withoutGlobalScope(WorkspaceScope::class)->find($original->client_id) : null;
+        $project = $original->client_id !== null ? Client::acrossPeople()->find($original->client_id) : null;
         $copy = new CaptureSession([
             'workspace_id' => $workspaceId,
             'user_id' => $person->id,
@@ -361,15 +373,17 @@ final class Teammates
     private function projectCounts(Collection $projects): array
     {
         $trees = [];
-        foreach ($projects->groupBy('workspace_id') as $workspaceId => $inWorkspace) {
-            $parents = $this->projects->parents((int) $workspaceId);
+        // One tree per maker in a workspace (since v1.5 projects are private to whoever made them).
+        foreach ($projects->groupBy(fn (Client $p): string => $p->workspace_id.':'.$p->user_id) as $inWorkspace) {
+            $first = $inWorkspace->first();
+            $parents = $this->projects->parents($first->workspace_id, $first->user_id);
             foreach ($inWorkspace as $project) {
                 $trees[$project->id] = ['ids' => [$project->id, ...ProjectTree::below($project->id, $parents)],
                     'children' => count(array_filter($parents, fn (?string $parent): bool => $parent === $project->id))];
             }
         }
         $ids = array_values(array_unique(array_merge([], ...array_column($trees, 'ids'))));
-        $perFolder = $ids === [] ? [] : CaptureSession::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('client_id', $ids)
+        $perFolder = $ids === [] ? [] : CaptureSession::acrossPeople()->whereIn('client_id', $ids)
             ->where('status', '!=', SessionStatus::Recording->value)->groupBy('client_id')->selectRaw('client_id, COUNT(*) AS recordings')
             ->pluck('recordings', 'client_id')->map(fn ($n): int => (int) $n)->all();
 
