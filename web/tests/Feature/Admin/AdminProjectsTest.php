@@ -22,9 +22,11 @@ use App\Models\ShareLink;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\ActivityFeed;
+use App\Services\SettingsRepository;
 use App\Services\ShareLinks;
 use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\Workspaces;
+use Carbon\CarbonImmutable;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Support\Str;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
@@ -200,6 +202,19 @@ describe('sharing in the console', function () {
         $acme = adminProject($this->admin, 'Acme');
         $this->panelComponent(ViewClient::class, ['record' => $acme->id])->callAction('share', data: ['audience' => 'public', 'expires' => '86400'])->assertHasNoActionErrors();
         expect(ShareLink::query()->where('client_id', $acme->id)->sole()->kind())->toBe('project');
+    });
+
+    it('says on Shares when a link stops working, to the minute, in the display time zone', function () {
+        $session = CaptureSession::factory()->create(['user_id' => $this->admin->id]);
+        app(SettingsRepository::class)->set('display.timezone', 'Asia/Karachi');
+        ['link' => $hour] = app(ShareLinks::class)->create($session, 3600, null, false, 'Sam');
+        ['link' => $always] = app(ShareLinks::class)->create($session, 3600, null, false, 'Sam');
+        $hour->forceFill(['expires_at' => CarbonImmutable::parse('2030-03-05 22:40:00', 'UTC')])->save();
+        $always->forceFill(['expires_at' => null])->save();
+
+        $this->panelComponent(Shares::class)->assertCanSeeTableRecords([$hour, $always])
+            ->assertSeeInOrder(['Mar 6, 2030', '3:40 AM'])
+            ->assertSee('Never');
     });
 
     it('lists the workspace\'s links on Shares, revokes one, and shows no other workspace\'s', function () {

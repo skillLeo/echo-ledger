@@ -19,9 +19,12 @@ use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SharingActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\Device;
+use App\Services\ActivityFeed;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Str;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
@@ -44,6 +47,12 @@ function iconPath(string $name): string
     preg_match('/\bd="([^"]+)"/', svg($name)->contents(), $path);
 
     return $path[1];
+}
+
+/** What an Activity row's tile draws, found by the row's title. */
+function activityTile(string $html, string $title): string
+{
+    return Str::afterLast(Str::before($html, $title), 'el-tile ');
 }
 
 /** The blocks of the console's theme whose selector draws an svg: selector => [width, height]. */
@@ -128,6 +137,39 @@ describe('the icons map', function () {
             expect($app->getIcon())->toBe(Heroicon::OutlinedChatBubbleLeftRight)
                 ->and(RecordingRow::appIcon($app))->toBe('heroicon-s-chat-bubble-left-right');
         }
+        expect(SourceApp::WhatsAppWeb->getIcon())->toBe(Heroicon::OutlinedGlobeAlt)
+            ->and(RecordingRow::appIcon(SourceApp::WhatsAppWeb))->toBe('heroicon-s-globe-alt');
+    });
+
+    it('draws what signed in: a computer for a laptop, a phone for a phone, in the bell and on Activity', function () {
+        $admin = $this->signInAsAdmin();
+        Device::factory()->desktop()->for($admin)->create(['name' => 'Work laptop']);
+        Device::factory()->for($admin)->create(['name' => 'Pixel']);
+        $stored = fn (string $name): ?string => $admin->notifications()->get()
+            ->first(fn (DatabaseNotification $n): bool => $n->data['title'] === "{$name} signed in")?->data['icon'];
+
+        expect($stored('Work laptop'))->toBe('heroicon-o-computer-desktop')
+            ->and($stored('Pixel'))->toBe('heroicon-o-device-phone-mobile');
+        $html = $this->panelComponent(Activity::class)->html();
+
+        expect(activityTile($html, 'Work laptop signed in'))->toContain(iconPath('heroicon-o-computer-desktop'))
+            ->and(activityTile($html, 'Pixel signed in'))->toContain(iconPath('heroicon-o-device-phone-mobile'));
+    });
+
+    it('keeps a phone on a device row from before, and each other kind on its own picture', function () {
+        $admin = $this->signInAsAdmin();
+        $feed = app(ActivityFeed::class);
+        $feed->post($admin, 'device_paired', 'Old row', 'x', null, 'heroicon-o-device-phone-mobile');
+        $feed->post($admin, 'device_paired', 'No picture', 'x', null, 'heroicon-o-bell');
+        $feed->post($admin, 'transcript_ready', 'Ready', 'x', null, 'heroicon-o-document-text');
+        $feed->post($admin, 'transcript_failed', 'Failed', 'x', null, 'heroicon-o-exclamation-triangle');
+
+        $html = $this->panelComponent(Activity::class)->html();
+
+        expect(activityTile($html, 'Old row'))->toContain(iconPath('heroicon-o-device-phone-mobile'))
+            ->and(activityTile($html, 'No picture'))->toContain(iconPath('heroicon-o-device-phone-mobile'))
+            ->and(activityTile($html, 'Ready'))->toContain(iconPath('heroicon-s-check-circle'))
+            ->and(activityTile($html, 'Failed'))->toContain(iconPath('heroicon-o-exclamation-circle'));
     });
 
     it('draws the Library film and the folder in the sidebar and the bottom bar, solid only where you are', function () {

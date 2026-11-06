@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use App\Filament\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Models\Device;
 use App\Services\AuditLog;
+use Filament\Tables\Filters\SelectFilter;
 use Illuminate\Support\Facades\Blade;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
@@ -79,6 +81,62 @@ function wordingHits(string $word, array $allowed): array
     return $hits;
 }
 
+/**
+ * The controls in [$code] named after [$word] with no label of their own: Filament then writes the label from the name
+ * (SelectFilter::make('client') reads "Client"), which no search of the strings finds. A View is a template's name.
+ */
+function unlabelledControls(string $code, string $word): array
+{
+    $tokens = array_values(array_filter(PhpToken::tokenize($code), fn (PhpToken $t): bool => ! $t->isIgnorable()));
+    $hits = [];
+    foreach ($tokens as $i => $token) {
+        if (! $token->is('make') || ! ($tokens[$i - 1] ?? null)?->is(T_DOUBLE_COLON) || ! ($tokens[$i + 1] ?? null)?->is('(')
+            || ! ($tokens[$i + 2] ?? null)?->is(T_CONSTANT_ENCAPSED_STRING) || $tokens[$i - 2]->is('View')) {
+            continue;
+        }
+        $name = trim($tokens[$i + 2]->text, "'\"");
+        if (preg_match($word, $name) !== 1) {
+            continue;
+        }
+        // Along the chain: past make(...), then every ->method(...) that follows.
+        $methods = [];
+        $at = $i + 1;
+        while (true) {
+            $depth = 0;
+            do {
+                $depth += $tokens[$at]->is('(') ? 1 : ($tokens[$at]->is(')') ? -1 : 0);
+                $at++;
+            } while ($depth > 0);
+            if (! ($tokens[$at] ?? null)?->is([T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR])) {
+                break;
+            }
+            $methods[] = $tokens[$at + 1]->text;
+            $at += 2;
+        }
+        if (array_intersect($methods, ['label', 'hiddenLabel']) === []) {
+            $hits[] = "{$tokens[$i - 2]->text}::make('{$name}') on line {$token->line}";
+        }
+    }
+
+    return $hits;
+}
+
+/** The same, for all of app/: file => hits. */
+function unlabelledControlsInApp(string $word): array
+{
+    $hits = [];
+    foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(app_path(), FilesystemIterator::SKIP_DOTS)) as $file) {
+        if (str_ends_with($file->getFilename(), '.php')) {
+            $found = unlabelledControls((string) file_get_contents($file->getPathname()), $word);
+            if ($found !== []) {
+                $hits[substr($file->getPathname(), strlen(base_path()) + 1)] = $found;
+            }
+        }
+    }
+
+    return $hits;
+}
+
 describe('the word for a folder', function () {
     it('is project in every string people read; client stays only for the other person on a call', function () {
         $hits = wordingHits('/(?<![\w\-$.])clients?(?![\w\-])/i', [
@@ -118,6 +176,29 @@ describe('the word for a folder', function () {
             ->and(preg_match('/(?<![\w\-$.])clients?(?![\w\-])/i', 'var(--client)'))->toBe(0);
     });
 
+    it('leaves no control to name itself client', function () {
+        expect(unlabelledControlsInApp('/client/i'))->toBe([]);
+    });
+
+    it('finds a control with no label, wherever the chain goes', function () {
+        $find = fn (string $code): array => unlabelledControls("<?php\n{$code}", '/client/i');
+
+        expect($find("SelectFilter::make('client')->options(['a' => strlen('b')])->query(fn () => null);"))->toBe(["SelectFilter::make('client') on line 2"])
+            ->and($find("TextColumn::make('client.name');"))->toBe(["TextColumn::make('client.name') on line 2"])
+            ->and($find("Select::make('client_id')\n  ->options(fn () => pick('label'))\n  ->searchable();"))->toBe(["Select::make('client_id') on line 2"])
+            ->and($find("SelectFilter::make('client')\n  ->options(['a' => strlen('b')])\n  ->label('Project');"))->toBe([])
+            ->and($find("TextEntry::make('client.name')->hiddenLabel();"))->toBe([])
+            ->and($find("View::make('client.tab');"))->toBe([])
+            ->and($find("SelectFilter::make('status');"))->toBe([]);
+    });
+
+    it('labels the Library\'s project filter itself, because Filament would write Client', function () {
+        $this->signInAsAdmin();
+
+        expect(SelectFilter::make('client')->getLabel())->toBe('Client')
+            ->and($this->panelComponent(ListCaptureSessions::class)->instance()->getTable()->getFilter('client')->getLabel())->toBe('Project');
+    });
+
     it('shows project on the pages', function () {
         $this->signInAsAdmin();
 
@@ -135,6 +216,10 @@ describe('the words for a device', function () {
         ]);
 
         expect($hits)->toBe([]);
+    });
+
+    it('leaves no control to name itself after pairing', function () {
+        expect(unlabelledControlsInApp('/(?<![a-z])(?:un)?pair/i'))->toBe([]);
     });
 
     it('tells the device making the request to sign out of it, under the same code', function () {

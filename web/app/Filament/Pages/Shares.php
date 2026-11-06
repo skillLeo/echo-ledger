@@ -72,7 +72,9 @@ class Shares extends Page implements HasTable
                     ->state(fn (ShareLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isActive() ? 'Active' : 'Expired'))
                     ->color(fn (string $state): string => $state === 'Active' ? 'success' : 'gray'),
                 TextColumn::make('allow_download')->label('Downloads')->state(fn (ShareLink $link): string => $link->allow_download ? 'Allowed' : 'Read and listen'),
-                TextColumn::make('expires_at')->label('Expires')->date('M j, Y', $tz)->placeholder('Never'),
+                // The hour on a line of its own: a link can last an hour, and the row keeps room for Revoke.
+                TextColumn::make('expires_at')->label('Expires')->date('M j, Y', $tz)->placeholder('Never')
+                    ->description(fn (ShareLink $link): ?string => $link->expires_at?->setTimezone($tz)->format('g:i A')),
                 TextColumn::make('view_count')->label('Views')->numeric()->sortable(),
                 TextColumn::make('last_viewed_at')->label('Last opened')->since()->placeholder('Never'),
                 TextColumn::make('created_at')->label('Made')->since()->sortable(),

@@ -103,7 +103,7 @@ class Activity extends Page
                 'time' => $at === null ? '' : ($at->gte($today) ? $at->format('g:i A') : $at->format('M j')),
                 'full_time' => $at?->format('M j, Y · g:i A') ?? '',
                 'tone' => self::tone($item['kind']),
-                'icon' => self::icon($item['kind']),
+                'icon' => self::icon($item['kind'], $notification->data['icon'] ?? null),
             ];
             $group = ! $item['read'] && in_array($item['kind'], self::NEEDS_ACTION, true) ? 'needs'
                 : ($at !== null && $at->gte($today) ? 'today' : 'earlier');
@@ -127,13 +127,14 @@ class Activity extends Page
         };
     }
 
-    private static function icon(?string $kind): string
+    private static function icon(?string $kind, mixed $stored): string
     {
         return match ($kind) {
             'transcript_ready' => 'heroicon-s-check-circle',
             'transcript_failed' => 'heroicon-o-exclamation-circle',
             'upload_failed' => 'heroicon-o-arrow-up-tray',
-            'device_paired' => 'heroicon-o-device-phone-mobile',
+            // The row knows what signed in; one written before it did stays a phone.
+            'device_paired' => $stored === 'heroicon-o-computer-desktop' ? $stored : 'heroicon-o-device-phone-mobile',
             'budget_warn', 'budget_reached' => 'heroicon-o-chart-bar',
             'shared_with_you' => 'heroicon-o-users',
             default => 'heroicon-o-bell',
