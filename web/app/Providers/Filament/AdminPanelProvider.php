@@ -60,6 +60,9 @@ class AdminPanelProvider extends PanelProvider
             // Sign in with Google (since v1.5), once API Credentials → Google sign-in is filled in.
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn (): View => view('filament.auth.google-login'))
             ->renderHook(PanelsRenderHook::AUTH_REGISTER_FORM_AFTER, fn (): View => view('filament.auth.google-login', ['label' => 'Sign up with Google']))
+            // Since v1.5: the Terms and the Privacy Policy under every page and the sign-in page.
+            ->renderHook(PanelsRenderHook::FOOTER, fn (): View => view('filament.legal-links'))
+            ->renderHook(PanelsRenderHook::SIMPLE_LAYOUT_END, fn (): View => view('filament.legal-links'))
             // C6: a quiet notice while the browser is offline.
             ->renderHook(PanelsRenderHook::BODY_END, fn (): View => view('filament.offline-banner'))
             ->profile(EditProfile::class, isSimple: false)

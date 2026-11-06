@@ -11,6 +11,7 @@ use App\Http\Controllers\Auth\DeviceSignInController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
 use App\Http\Controllers\RequestLinkPageController;
@@ -22,11 +23,14 @@ use Illuminate\Support\Facades\Route;
 // Console routes outside Filament's pages need a confirmed email too (since v1.5), like the panel's own pages.
 $consoleVerified = 'verified:filament.admin.auth.email-verification.prompt';
 
-// The public site (since v1.5): the landing page, the downloads page and the apps' update manifests (docs/API.md
+// The public site (since v1.5): the landing page, the downloads page, the legal pages and the apps' update manifests (docs/API.md
 // "Public pages and app downloads"). Nothing here shows anyone's data; throttled per IP.
 Route::middleware('throttle:site')->group(function (): void {
     Route::get('/', [SiteController::class, 'home'])->name('site.home');
     Route::get('/downloads', [DownloadsController::class, 'page'])->name('downloads');
+    // The legal pages (drafts for review), linked from the site, the console and the apps.
+    Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
+    Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
     Route::get('/downloads/android.json', [DownloadsController::class, 'android'])->name('downloads.android');
     Route::get('/downloads/desktop.json', [DownloadsController::class, 'desktop'])->name('downloads.desktop');
     Route::get('/downloads/files/{name}', [DownloadsController::class, 'file'])

@@ -77,6 +77,8 @@ const ISO_WEB_BYPASS = [
     'account.delete' => 'deleting one\'s own account: the signed-in person only, no workspace data',
     'account.delete.store' => 'deleting one\'s own account: the signed-in person only, no workspace data',
     'account.export.download' => 'signed, expiring link of one person\'s own data export',
+    'legal.terms' => 'public legal page: no workspace data',
+    'legal.privacy' => 'public legal page: no workspace data',
 ];
 
 const ISO_MISSING_EXPORT = '01ARZ3NDEKTSV4RRFFQ69G5FAV';

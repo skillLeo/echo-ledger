@@ -29,6 +29,8 @@ class UserFactory extends Factory
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
+            // Has seen the recording-consent notice (since v1.5); newAccount() has not.
+            'consent_seen_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
         ];
@@ -42,6 +44,12 @@ class UserFactory extends Factory
                 app(Workspaces::class)->createFor($user);
             }
         });
+    }
+
+    /** An account just made: it has not seen the recording-consent notice yet. */
+    public function newAccount(): static
+    {
+        return $this->state(fn (array $attributes) => ['consent_seen_at' => null]);
     }
 
     /**

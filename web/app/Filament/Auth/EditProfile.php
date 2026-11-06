@@ -15,6 +15,7 @@ use App\Services\AuditLog;
 use App\Services\PairingService;
 use App\Services\SettingsRepository;
 use App\Services\WebSessions;
+use App\Support\RecordingConsent;
 use chillerlan\QRCode\QRCode;
 use Filament\Actions\Action;
 use Filament\Auth\Pages\EditProfile as BaseEditProfile;
@@ -52,6 +53,9 @@ class EditProfile extends BaseEditProfile
             ...Arr::wrap($this->getMultiFactorAuthenticationContentComponent()),
             $this->googleSection(),
             $this->devicesSection(),
+            Section::make('Recording consent')->schema([
+                Text::make(RecordingConsent::TEXT.' '.RecordingConsent::APPS),
+            ]),
             $this->emailsSection(),
             $this->dataSection(),
         ]);
