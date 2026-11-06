@@ -768,18 +768,27 @@ unless a share link of the recording allows downloads.
   `height`, `trigger` (`change` = the picture changed and settled, `words` = someone said "this page", "click
   here", "yeh dekhein" …, `manual` = the person pressed the button) and `sha256` (of the image; the same image twice
   for one recording is `200` with the existing screen, not a copy). → `201 {"data": <screen>}`. At most 400 screens
-  per recording (`409 too_many_screens`); a recording in the undo bin is `404 session_not_found`.
+  per recording (`409 too_many_screens`); a recording in the undo bin is `404 session_not_found`. `at_ms` may be at
+  most the recording's length (else its audio's, else the time since it started) plus 60 s; `width` and `height` are
+  1 to 16384; a picture over 25 megapixels is refused (`422`). The server needs PHP's GD with WebP and an upload
+  limit of at least 4 MB (web/DEPLOY.md).
 - A screen: `{"id": "01JE…", "index": 7, "at_ms": 872000, "width": 1920, "height": 1080, "trigger": "change",
   "ocr_text": "Invoice #2041 …" | null, "description": "The client's invoice page with the Pay button" | null,
   "image_url": "…", "thumb_url": "…", "created_at": "…"}`. `index` numbers the screens of the recording in time
   order from 1 ("Screen 7"). `image_url` and `thumb_url` are signed links valid for 30 minutes (thumbnails are 480 px
-  wide); fetch them with no token.
+  wide), on the web route `/screen-media/{screen}/image|thumb` (like `/s/` links, not under `/api/`): fetch them with no
+  token; they start no session and set no cookie. The picture keeps the type it was sent in (WebP, PNG or JPEG).
 - `GET /api/sessions/{id}/screens` — `library:read` → `200 {"data": [<screen>]}` in time order;
   `DELETE /api/sessions/{id}/screens/{screen}` — `sessions:write` → `204` (the others keep their numbers until the
   list is read again, then they are renumbered).
 - Text and a one-line description per screen (`ocr_text`, `description`) are made on the server with Claude Haiku
   5.5 when Settings → Screen moments → "Describe screens" is on (the default); they make screens searchable
   (`GET /api/search` also finds screen text) and are billed to the workspace's AI usage. Off: both stay `null`.
+  A screen hit in `GET /api/search` has the line-hit shape plus `"kind": "screen"` and `screen_id`: `speaker`
+  "Screen 7", `start_ms` = `end_ms` = `at_ms`, `segment_index` = minus the screen number, `transcript_id` the
+  recording's final (else live) transcript, so apps that only know line hits open the recording at that moment.
+- A recording a teammate sent: its screens can be listed and seen like its transcript, never sent or deleted, and
+  its meeting pack is `404` (as every export of a sent recording).
 - `GET /api/clients/{id}/screens?include_subfolders=0|1&cursor=` — `library:read` → `200 {"data": [<screen> +
   "session_id", "session_title", "session_started_at"], "next_cursor": "…" | null}`: the project's Screens tab, newest
   recording first and each recording's screens in time order, 60 per page.
@@ -795,8 +804,9 @@ unless a share link of the recording allows downloads.
     made today (the print dialog's "Save as PDF"), so Urdu letters are shaped correctly; Claude and ChatGPT read PDF
     pages as text and images.
   - `zip`: `transcript.md` (the same order, each screen as a Markdown image titled "Screen 7 at 14:32" that points to
-    `images/screen-07.webp`, with its description), the `images/` folder, and with `include_audio=1` the recording's
-    audio.
+    `images/screen-07.webp` (`.png` or `.jpg` for a screen sent in that type; three digits past 99 screens), with its
+    description), the `images/` folder, and with `include_audio=1` the recording's audio, stored uncompressed in the
+    ZIP. Past 20 MB of pictures the `html` pack embeds every screen's 480 px thumbnail instead.
   - `409 nothing_to_export` without a finished transcript. Names like `GET /api/transcripts/{id}/export`.
 - "Copy for AI" (in the apps) puts `[Screen N at mm:ss: <description>]` lines between the transcript lines at the
   screens' moments; the apps build it from `GET /api/sessions/{id}/screens`.
