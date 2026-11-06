@@ -41,6 +41,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Passport\Passport;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -57,6 +58,9 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ScreenDescriber::class, ClaudeScreenDescriber::class);
         // Caches each member's role for one request (C9: no query per table row).
         $this->app->scoped(Workspaces::class);
+        // Passport is here for the Claude/ChatGPT connector (v1.5 Phase 6), which registers the OAuth routes it needs
+        // itself; none of Passport's own routes are served before then.
+        Passport::ignoreRoutes();
         $this->app->scoped(SttManager::class);
         $this->app->bind(RecordingCipher::class, fn (): RecordingCipher => RecordingCipher::fromConfig());
     }
