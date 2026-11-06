@@ -36,6 +36,7 @@ final class SettingsTransfer
         'accuracy.double_check_clients',
         'client_ai.monthly_usd',
         'claude.model',
+        'screens.describe',
         'views.default_ur',
         'views.default_en',
         'views.default_ar',

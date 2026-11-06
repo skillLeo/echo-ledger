@@ -128,6 +128,7 @@ class Settings extends Page
             'double_check_clients' => (bool) ($all['accuracy.double_check_clients'] ?? true),
             'client_ai_monthly_usd' => (float) ($all['client_ai.monthly_usd'] ?? 5.0),
             'claude_model' => (string) ($all['claude.model'] ?? 'claude-sonnet-5-5'),
+            'screens_describe' => (bool) ($all['screens.describe'] ?? true),
             'live_translate_game_target' => (string) ($all['live_translate.game_target'] ?? 'en'),
             'live_translate_game_spoken' => array_values(array_intersect(array_keys(self::LIVE_TRANSLATE_LANGUAGES), (array) ($all['live_translate.game_spoken'] ?? ['ar', 'en']))),
             'live_translate_game_speed' => (string) ($all['live_translate.game_speed'] ?? 'fastest'),
@@ -326,6 +327,13 @@ class Settings extends Page
                                 ->helperText('Up to 12 tags of at most 40 characters. Leave empty for the defaults.')
                                 ->nestedRecursiveRules(['string', 'max:40'])
                                 ->rules(['array', 'max:12']),
+                        ]),
+                    // Since v1.5: what the desktop keeps of a shared screen during a meeting.
+                    $this->section('screens')
+                        ->description('The desktop keeps what was on the shared screen at each moment of a meeting, encrypted with the recording and erased with it. A project can turn them off on its Settings.')
+                        ->schema([
+                            Toggle::make('screens_describe')->label('Describe screens')
+                                ->helperText('Claude Haiku reads the text on each screen and writes one line about it (key on API Credentials → Anthropic), so screens are found by search and placed in Copy for AI and the meeting pack. Billed to AI usage: well under a tenth of a US cent a screen. Off: screens are kept without text.'),
                         ]),
                     $this->section('assemblyai')->collapsible()->columns(2)->schema([
                         Select::make('assemblyai_region')->label('Data region')->options(['us' => 'US (default)', 'eu' => 'EU'])->required(),
@@ -631,6 +639,7 @@ class Settings extends Page
             'accuracy.double_check_clients' => (bool) ($state['double_check_clients'] ?? true),
             'client_ai.monthly_usd' => max(0.0, min(1000.0, (float) ($state['client_ai_monthly_usd'] ?? 5.0))),
             'claude.model' => in_array($state['claude_model'] ?? null, array_keys(self::CLAUDE_MODELS), true) ? $state['claude_model'] : 'claude-sonnet-5-5',
+            'screens.describe' => (bool) ($state['screens_describe'] ?? true),
             'views.default_ur' => in_array($state['views_default_ur'] ?? null, ['original', 'roman', 'urdu', 'english'], true) ? $state['views_default_ur'] : 'roman',
             'views.default_en' => in_array($state['views_default_en'] ?? null, ['original', 'urdu'], true) ? $state['views_default_en'] : 'original',
             'views.default_ar' => in_array($state['views_default_ar'] ?? null, ['original', 'english', 'urdu'], true) ? $state['views_default_ar'] : 'original',

@@ -7,6 +7,8 @@ namespace App\Services;
 use App\Enums\SessionStatus;
 use App\Enums\TranscriptKind;
 use App\Models\CaptureSession;
+use App\Models\Scopes\WorkspaceScope;
+use App\Models\Screen;
 use App\Models\Transcript;
 use App\Support\UrduText;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,9 +17,10 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Full-text search over titles and transcripts (docs/API.md "GET /api/search", since v1.1). MySQL / MariaDB use the
- * FULLTEXT index on `transcripts.text` in boolean mode; terms too short for it, a query the index answers with
- * nothing, and other databases use LIKE. Every hit points at a segment, so clients can jump to that moment.
+ * Full-text search over titles, transcripts and (since v1.5) screen moments (docs/API.md "GET /api/search", since
+ * v1.1). MySQL / MariaDB use the FULLTEXT indexes on the folded `search_text` in boolean mode; terms too short for
+ * them, a query the indexes answer with nothing, and other databases use LIKE. Every hit points at a segment or a
+ * screen's moment, so clients can jump to that moment.
  */
 final class LibrarySearch
 {
@@ -44,12 +47,15 @@ final class LibrarySearch
         $folded = array_values(array_unique(array_map(UrduText::fold(...), $terms)));
         $base = $this->filtered($workspaceId, $filters);
         $this->engine = 'like';
+        // Since v1.5 the text and description of screen moments are searched too, like transcripts.
         $matching = (clone $base)->where(fn (Builder $q) => $q
             ->whereHas('transcripts', fn (Builder $t) => $this->likeAll($t, 'search_text', $folded))
+            ->orWhereHas('screens', fn (Builder $s) => $this->likeAll($s, 'search_text', $folded))
             ->orWhere(fn (Builder $title) => $this->likeAll($title, 'title', $terms)));
         if ($this->fulltextUsable($folded)) {
             $fulltext = (clone $base)->where(fn (Builder $q) => $q
                 ->whereHas('transcripts', fn (Builder $t) => $t->whereFullText('search_text', self::booleanQuery($folded), ['mode' => 'boolean']))
+                ->orWhereHas('screens', fn (Builder $s) => $s->whereFullText('search_text', self::booleanQuery($folded), ['mode' => 'boolean']))
                 ->orWhere(fn (Builder $title) => $this->likeAll($title, 'title', $terms)));
             // The engine is chosen for the whole query, never per page, so paging stays consistent.
             if ((clone $fulltext)->exists()) {
@@ -61,9 +67,10 @@ final class LibrarySearch
 
         $more = $sessions->count() > $limit;
         $items = $sessions->take($limit)->values();
+        $screens = $this->matchingScreens($items->map(fn (CaptureSession $s): string => $s->id)->all(), $folded);
         $hits = [];
         foreach ($items as $session) {
-            $hits[$session->id] = self::hitsFor($session, $terms);
+            $hits[$session->id] = self::hitsFor($session, $terms, $screens[$session->id] ?? []);
         }
 
         return ['items' => $items, 'hits' => $hits, 'more' => $more];
@@ -91,12 +98,18 @@ final class LibrarySearch
 
     /**
      * Up to [MAX_HITS] segments of the session's transcripts (final first) that contain every term, with a snippet and
-     * the character ranges to highlight. A title-only match has no hits.
+     * the character ranges to highlight, then (since v1.5) its screen moments whose text or description does. A
+     * title-only match has no hits.
+     *
+     * A screen's hit has the shape of a line's, so the apps show it and play from its moment as they do for lines:
+     * `kind` "screen", `speaker` "Screen 7", `start_ms` = `end_ms` = its moment, `segment_index` minus its number (it
+     * is no line of the transcript), `screen_id`, and `transcript_id` the recording's transcript ("" without one).
      *
      * @param  list<string>  $terms
+     * @param  list<array{id: string, index: int, at_ms: int, text: string}>  $screens  the session's screens that matched
      * @return array{hits: list<array<string, mixed>>, count: int}
      */
-    public static function hitsFor(CaptureSession $session, array $terms): array
+    public static function hitsFor(CaptureSession $session, array $terms, array $screens = []): array
     {
         $transcripts = $session->transcripts->sortBy(fn (Transcript $t): int => $t->kind === TranscriptKind::Final ? 0 : 1);
         $hits = [];
@@ -126,8 +139,64 @@ final class LibrarySearch
                 }
             }
         }
+        $first = $transcripts->first();
+        $transcriptId = $first instanceof Transcript ? $first->id : '';
+        foreach ($screens as $screen) {
+            if (! self::containsAll($screen['text'], $terms)) {
+                continue;
+            }
+            $count++;
+            if (count($hits) < self::MAX_HITS) {
+                [$snippet, $ranges] = self::snippet($screen['text'], $terms);
+                $hits[] = [
+                    'transcript_id' => $transcriptId,
+                    'kind' => 'screen',
+                    'screen_id' => $screen['id'],
+                    'segment_index' => -$screen['index'],
+                    'start_ms' => $screen['at_ms'],
+                    'end_ms' => $screen['at_ms'],
+                    'speaker' => 'Screen '.$screen['index'],
+                    'snippet' => $snippet,
+                    'highlights' => $ranges,
+                ];
+            }
+        }
 
         return ['hits' => $hits, 'count' => $count];
+    }
+
+    /**
+     * The screens of these sessions whose folded text holds every term, numbered in their recording's time order, as
+     * text to show: the description, then the screen's text on one line.
+     *
+     * @param  list<string>  $sessionIds
+     * @param  list<string>  $folded
+     * @return array<string, list<array{id: string, index: int, at_ms: int, text: string}>>
+     */
+    private function matchingScreens(array $sessionIds, array $folded): array
+    {
+        if ($sessionIds === [] || $folded === []) {
+            return [];
+        }
+        $matches = Screen::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('capture_session_id', $sessionIds)
+            ->where(fn (Builder $q) => $this->likeAll($q, 'search_text', $folded))
+            ->orderBy('at_ms')->orderBy('id')->get(['id', 'capture_session_id', 'at_ms', 'ocr_text', 'description']);
+        if ($matches->isEmpty()) {
+            return [];
+        }
+        $index = [];
+        $counter = [];
+        foreach (Screen::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('capture_session_id', $matches->pluck('capture_session_id')->unique()->all())
+            ->orderBy('at_ms')->orderBy('id')->get(['id', 'capture_session_id']) as $row) {
+            $index[$row->id] = $counter[$row->capture_session_id] = ($counter[$row->capture_session_id] ?? 0) + 1;
+        }
+        $out = [];
+        foreach ($matches as $screen) {
+            $text = implode(' · ', array_filter([$screen->description, trim((string) preg_replace('/\s+/u', ' ', (string) $screen->ocr_text))], fn (?string $t): bool => $t !== null && $t !== ''));
+            $out[$screen->capture_session_id][] = ['id' => $screen->id, 'index' => $index[$screen->id] ?? 1, 'at_ms' => $screen->at_ms, 'text' => $text];
+        }
+
+        return $out;
     }
 
     /**

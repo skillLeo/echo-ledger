@@ -56,6 +56,7 @@ final class SettingsRepository
         'accuracy.double_check' => false,                // a second engine hears the unsure lines again (DoubleCheck)
         'accuracy.double_check_clients' => true,         // since v1.4: always for recordings filed under a client
         'client_ai.monthly_usd' => 5.0,                  // since v1.4: Claude spend of client workspaces per month
+        'screens.describe' => true,                      // since v1.5: Claude Haiku reads each screen moment's text and describes it
         'groq.model' => 'whisper-large-v3',              // not turbo (docs: console.groq.com/docs/model/whisper-large-v3)
         'groq.plan' => GroqPacer::DEFAULT_PLAN,          // since v1.5: free | developer, the limits Groq requests are paced under
         'gemini.model' => GeminiDriver::DEFAULT_MODEL,   // since v1.5 (docs: aistudio.google.com/docs/models, 2026-11-04)
