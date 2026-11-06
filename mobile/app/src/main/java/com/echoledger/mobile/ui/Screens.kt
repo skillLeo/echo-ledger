@@ -36,7 +36,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -201,8 +200,8 @@ fun PairingScreen(vm: MainViewModel) {
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Spacer(Modifier.height(40.dp))
-            Box(Modifier.size(44.dp).clip(CircleShape).background(Brand.Gradient))
-            Text("Sign in to EchoLedger", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            AppMark(44.dp)
+            Text("Sign in to EchoLedger", style = LocalEchoType.current.display, color = Brand.Text)
             // Since v1.5: the phone signs in to its owner's account (email and password, or the browser for Google).
             val otpNeeded by vm.otpNeeded.collectAsState()
             var email by rememberSaveable { mutableStateOf("") }

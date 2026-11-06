@@ -61,7 +61,7 @@ Android:
 - [ ] B3 Background survival per brand (Xiaomi/HyperOS, Oppo/Realme/OnePlus, Vivo, Huawei/Honor, Pixel, Samsung): exact steps and deep links; the helper re-armed after the OS kills it; vendor audio quirks caught and reported. *Accept:* tests. **Built** (`core/PhoneBrand`); the deep links need real phones to prove (N19).
 - [ ] B4 Helper: Shizuku and the built-in wireless-debugging helper with a setup guide per brand. *Accept:* guide + tests. **Per-brand guide built** in Setup. The built-in helper does not exist yet (Shizuku or a computer's ADB today): needs libadb-android and a phone window.
 - [ ] B5 Firebase Test Lab smoke tests (Xiaomi, Oppo, Vivo, Pixel, Samsung A; Android 10/12/14/15/16): install, onboarding, voice note, library, settings; no crash or ANR; 360 dp and 1.3x fonts; results reported (N18). **Script ready** (`tools/testlab.sh`); needs N18. The free plan allows 5 physical runs a day.
-- [ ] B6 3 GB RAM phones stay smooth. *Accept:* a measured check (Test Lab or a profile).
+- [ ] B6 3 GB RAM phones stay smooth. *Accept:* a measured check (Test Lab or a profile). **Partly**: emulators with 3 GB open the first screens without trouble; nothing measured yet on a real phone or on signed-in screens.
 - [ ] B7 Teammate compatibility checklist in MANUAL_QA; device reports visible in the admin panel (N19). **Built** (MANUAL_QA "Teammate phone check", System → Device reports); the phones are N19.
 
 Windows:
