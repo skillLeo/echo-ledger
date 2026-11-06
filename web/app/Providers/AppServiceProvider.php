@@ -18,6 +18,7 @@ use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Services\Accounts\AccountSessions;
 use App\Services\Accounts\KnownBrowsers;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
@@ -38,6 +39,7 @@ use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
@@ -134,6 +136,13 @@ class AppServiceProvider extends ServiceProvider
         });
         // Since v1.5: a console sign-in from a browser the account has not used before emails the account.
         Event::listen(Login::class, [KnownBrowsers::class, 'handle']);
+        // "Forgot password?" is how someone takes an account back (Filament's reset page fires this): whoever else was in
+        // it is out, on browsers, devices and connected apps. Changing the password on the profile keeps the rest.
+        Event::listen(PasswordReset::class, function (PasswordReset $event): void {
+            if ($event->user instanceof User) {
+                app(AccountSessions::class)->signOutEverywhere($event->user);
+            }
+        });
         // The account emails carry text people typed (a note, a title, a workspace or device name): with secured
         // encoding a "[link](…)" in it stays text, so nobody can put their own link in an email this server signs.
         Markdown::withSecuredEncoding();

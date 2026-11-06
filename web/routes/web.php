@@ -19,13 +19,16 @@ use App\Http\Controllers\RequestLinkPageController;
 use App\Http\Controllers\ScreenMediaController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\WorkspaceSwitchController;
+use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\EnsureConsoleAccess;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Filament\Http\Middleware\AuthenticateSession;
 use Illuminate\Support\Facades\Route;
 
-// Console routes outside Filament's pages need a confirmed email too (since v1.5), like the panel's own pages.
+// Console routes outside Filament's pages check what the panel's own pages check (since v1.5): a session the password
+// change has ended, a confirmed email, the current workspace, and an account being deleted reaching only "Keep my account".
 $consoleVerified = 'verified:filament.admin.auth.email-verification.prompt';
+$console = ['auth:web', AuthenticateSession::class, $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class, AccountGate::class];
 
 // The public site (since v1.5): the landing page, the downloads page, the legal pages and the apps' update manifests (docs/API.md
 // "Public pages and app downloads"). Nothing here shows anyone's data; throttled per IP.
@@ -47,7 +50,7 @@ Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app
 
 // Decrypted playback for the admin transcript player (HTTP Range supported).
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
-    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])
+    ->middleware($console)
     ->name('admin.recordings.stream');
 
 // Screen moments (v1.5): a picture or thumbnail from the signed link the API hands out (30 minutes, no token), and on
@@ -59,21 +62,21 @@ Route::get('/screen-media/{screen}/{variant}', [ScreenMediaController::class, 's
     ->middleware(['signed', 'throttle:uploads'])->name('screens.media');
 Route::get('/admin-media/screens/{screen}/{variant}', [ScreenMediaController::class, 'console'])
     ->whereUlid('screen')->whereIn('variant', ['image', 'thumb'])
-    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])->name('admin.screens.media');
+    ->middleware($console)->name('admin.screens.media');
 
 // Console exports of a transcript (download; `html` opens for printing to PDF).
 Route::get('/admin-export/transcripts/{transcript}/{format}', AdminExportController::class)
-    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])
+    ->middleware($console)
     ->name('admin.transcripts.export');
 
 // Export → Meeting pack (v1.5): the transcript with its screens; `html` opens with a Print button, `zip` downloads.
 Route::get('/admin-export/sessions/{session}/pack/{format}', AdminPackController::class)
     ->whereUlid('session')->whereIn('format', ['html', 'zip'])
-    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])
+    ->middleware($console)
     ->name('admin.sessions.pack');
 
 // Library → Upload: the browser's chunked, resumable uploads (the devices' chunk path, behind the console session).
-Route::middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class.':full', 'throttle:uploads'])
+Route::middleware(['auth:web', AuthenticateSession::class, $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class.':full', AccountGate::class, 'throttle:uploads'])
     ->prefix('/admin-upload/recordings')->name('admin.uploads.')->group(function (): void {
         Route::post('/', [ConsoleUploadController::class, 'store'])->name('store');
         Route::get('/{recording}', [ConsoleUploadController::class, 'show'])->name('show');
@@ -105,8 +108,9 @@ Route::middleware('throttle:request-upload')->prefix('/r/{token}/files')->name('
 });
 
 // Sign in with Google (v1.5): Socialite's redirect and callback, then "confirm it is you" when Google's address matches
-// an account not linked yet, or the account has two-step sign-in. Throttled per IP.
-Route::middleware('throttle:google')->prefix('/auth/google')->name('auth.google.')->group(function (): void {
+// an account not linked yet, or the account has two-step sign-in. Throttled per IP. A session the password change has
+// ended links nothing and confirms nothing here.
+Route::middleware([AuthenticateSession::class, 'throttle:google'])->prefix('/auth/google')->name('auth.google.')->group(function (): void {
     Route::get('/redirect', [GoogleController::class, 'redirect'])->name('redirect');
     Route::get('/callback', [GoogleController::class, 'callback'])->name('callback');
     Route::get('/confirm', [GoogleController::class, 'confirmForm'])->name('confirm');
@@ -115,16 +119,16 @@ Route::middleware('throttle:google')->prefix('/auth/google')->name('auth.google.
 
 // Your account (v1.5): /account/delete without the app (Google Play links to it), and the "Export my data" link.
 // Workspace invitations (v1.5): a signed link for one address, 7 days, once.
-Route::middleware(['signed', 'throttle:account'])->group(function (): void {
+Route::middleware([AuthenticateSession::class, 'signed', 'throttle:account'])->group(function (): void {
     Route::get('/invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
     Route::post('/invitations/{token}', [InvitationController::class, 'accept'])->middleware('auth:web')->name('invitations.accept');
 });
 
 // The console's workspace switcher (v1.5): only a workspace the person belongs to.
 Route::post('/admin-workspaces/{workspace}/switch', WorkspaceSwitchController::class)->whereNumber('workspace')
-    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, 'throttle:account'])->name('admin.workspaces.switch');
+    ->middleware(['auth:web', AuthenticateSession::class, $consoleVerified, EnsureWorkspaceMember::class, AccountGate::class, 'throttle:account'])->name('admin.workspaces.switch');
 
-Route::middleware('throttle:account')->group(function (): void {
+Route::middleware([AuthenticateSession::class, 'throttle:account'])->group(function (): void {
     Route::get('/account/delete', [AccountPageController::class, 'deletePage'])->name('account.delete');
     Route::post('/account/delete', [AccountPageController::class, 'delete'])->middleware('auth:web')->name('account.delete.store');
 });

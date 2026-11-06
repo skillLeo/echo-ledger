@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Mail;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
@@ -14,9 +15,10 @@ use Illuminate\Queue\SerializesModels;
 /**
  * The emails EchoLedger sends to people (since v1.5): Markdown templates in resources/views/mail, styled with the
  * console's theme (resources/views/vendor/mail), always queued. They carry plain strings only, never a model, so a
- * queued email cannot leak more than it shows; secrets and recordings never go into an email.
+ * queued email cannot leak more than it shows; secrets and recordings never go into an email. Reset, invitation and
+ * export links stay encrypted while they wait in `jobs` and `failed_jobs`.
  */
-abstract class AccountMail extends Mailable implements ShouldQueue
+abstract class AccountMail extends Mailable implements ShouldBeEncrypted, ShouldQueue
 {
     use Queueable, SerializesModels;
 

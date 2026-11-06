@@ -8,6 +8,8 @@ use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Device;
+use App\Models\DevicePairingCode;
+use App\Models\DeviceSignInCode;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
@@ -187,6 +189,9 @@ final class Workspaces
                     $device->tokens()->delete();
                     $device->delete();
                 });
+            // A code made a minute ago would otherwise still bring a device in afterwards.
+            DevicePairingCode::query()->withoutGlobalScopes()->where('workspace_id', $workspace->id)->where('user_id', $user->getKey())->delete();
+            DeviceSignInCode::query()->withoutGlobalScopes()->where('workspace_id', $workspace->id)->where('user_id', $user->getKey())->delete();
             if ((int) $user->current_workspace_id === $workspace->id) {
                 $user->forceFill(['current_workspace_id' => null])->save();
                 $this->current($user);

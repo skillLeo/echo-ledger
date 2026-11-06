@@ -112,8 +112,11 @@ final class LibraryController extends Controller
         $page = $query->orderByDesc('updated_at')->orderByDesc('id')
             ->cursorPaginate((int) ($data['limit'] ?? 50), ['*'], 'cursor', $cursor);
 
+        // The sender's project and device stay theirs here too, as in GET /api/sessions/{id}.
+        $items = $shared ? $page->getCollection()->map(fn (CaptureSession $session): CaptureSession => Teammates::readOnly($session)) : $page->getCollection();
+
         return response()->json([
-            'data' => LibraryItemResource::collection($page->getCollection())->resolve($request),
+            'data' => LibraryItemResource::collection($items)->resolve($request),
             'next_cursor' => $page->nextCursor()?->encode(),
             'server_time' => $serverTime->toAtomString(),
         ]);

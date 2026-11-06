@@ -51,6 +51,9 @@ final class GoogleController extends Controller
             $signedIn && $request->query('intent') === 'confirm' => 'confirm',
             default => 'sign-in',
         };
+        if ($intent === 'link' && $this->unconfirmed(Auth::guard('web')->user())) {
+            return $this->notLinked();
+        }
         $request->session()->put('google.intent', $intent);
         $provider = $this->google->provider();
         // Confirming it is you: Google asks which account, rather than taking whichever is open in the browser.
@@ -83,7 +86,7 @@ final class GoogleController extends Controller
         }
 
         if ($intent === 'link' && $signedIn instanceof User) {
-            return $this->linkSignedIn($signedIn, $profile['id']);
+            return $this->unconfirmed($signedIn) ? $this->notLinked() : $this->linkSignedIn($signedIn, $profile['id']);
         }
         if ($confirming) {
             return $this->confirmSignedIn($request, $signedIn, $profile['id']);
@@ -153,6 +156,20 @@ final class GoogleController extends Controller
         }
 
         return $this->signIn($request, $user);
+    }
+
+    /**
+     * Whoever signed up with an address they never confirmed may not be its owner: a Google account linked now would
+     * still sign in after the real owner took the address over with "Forgot password?".
+     */
+    private function unconfirmed(mixed $user): bool
+    {
+        return $user instanceof User && ! $user->hasVerifiedEmail();
+    }
+
+    private function notLinked(): Response
+    {
+        return $this->message('Confirm your email first', 'A Google account can be linked once the email of this account is confirmed. Nothing changed.');
     }
 
     private function linkSignedIn(User $user, string $googleId): RedirectResponse

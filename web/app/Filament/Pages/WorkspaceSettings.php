@@ -273,7 +273,7 @@ class WorkspaceSettings extends Page implements HasTable
         }
         app(Invitations::class)->tellAdded($workspace, $this->user(), $user);
         app(AuditLog::class)->record('member_added', $this->user()->id, $workspace, "Added {$email} to {$workspace->name}");
-        Notification::make()->title('One-time password for '.$email)
+        Notification::make()->title('One-time password for '.e($email))
             ->body("{$password}\nShare it privately; they can change it on their profile after signing in.")
             ->persistent()->warning()->send();
     }
@@ -287,7 +287,8 @@ class WorkspaceSettings extends Page implements HasTable
 
             return false;
         }
-        Notification::make()->title($done)->success()->send();
+        // Toasts render their title as HTML: a person's or a workspace's name is text.
+        Notification::make()->title(e($done))->success()->send();
 
         return true;
     }
