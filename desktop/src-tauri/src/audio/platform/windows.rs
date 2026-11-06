@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 use wasapi::{AudioClient, DeviceEnumerator, Direction, Role, SampleType, StreamMode, WaveFormat, initialize_mta};
 
 use super::{CaptureBackend, Streams, supports_process_loopback};
-use crate::audio::devices::{DeviceLog, DeviceNotice, Reopener, STALL_AFTER, fall_back_to_endpoint};
+use crate::audio::devices::{DeviceLog, DeviceNotice, Reopener, fall_back_to_endpoint, packet_limit};
 use crate::audio::types::{AudioChunk, BackendKind, CaptureError, Channel, TARGET_RATE};
 
 /// Windows build number via RtlGetVersion (GetVersionEx lies to unmanifested apps).
@@ -96,8 +96,12 @@ fn capture_loop(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx:
     let mut use_process_loopback = process_loopback;
     let mut reopener = Reopener::new(channel);
     while !stop.load(Ordering::SeqCst) {
-        let result = run_stream(channel, use_process_loopback, stop, tx, &mut |name| {
-            if let Some(notice) = reopener.opened(Instant::now(), name) {
+        let result = run_stream(channel, use_process_loopback, stop, tx, &mut |news: StreamNews| {
+            let notice = match news {
+                StreamNews::Opened { id, name } => reopener.opened_on(Instant::now(), id, name),
+                StreamNews::Delivering => reopener.delivering(),
+            };
+            if let Some(notice) = notice {
                 log.push(notice);
             }
         });
@@ -105,6 +109,11 @@ fn capture_loop(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx:
             Ok(()) => break, // stopped normally
             Err(err) => {
                 eprintln!("[echoledger] {channel:?} capture error: {err}; reopening");
+                if err == NO_AUDIO
+                    && let Some(notice) = reopener.stalled(Instant::now())
+                {
+                    log.push(notice);
+                }
                 let (wait, notice) = reopener.failed(Instant::now());
                 if let Some(notice) = notice {
                     log.push(notice);
@@ -120,9 +129,20 @@ fn capture_loop(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx:
     }
 }
 
-/// One stream until `stop` (`Ok`) or until its device goes or should change (`Err`). `opened` is told once it runs, with
-/// the device's name when there is one.
-fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &Sender<AudioChunk>, opened: &mut dyn FnMut(Option<String>)) -> Result<(), String> {
+/// What a stream tells `capture_loop` while it runs.
+enum StreamNews {
+    /// It runs, on this device when it has one of its own.
+    Opened { id: Option<String>, name: Option<String> },
+    /// Its first packet arrived.
+    Delivering,
+}
+
+/// The error of a microphone stream that stayed open and delivered nothing.
+const NO_AUDIO: &str = "no audio from the microphone";
+
+/// One stream until `stop` (`Ok`) or until its device goes or should change (`Err`). `news` is told once it runs and when
+/// its first packet arrives.
+fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &Sender<AudioChunk>, news: &mut dyn FnMut(StreamNews)) -> Result<(), String> {
     let format = WaveFormat::new(32, 32, &SampleType::Float, TARGET_RATE as usize, 1, None);
     let mode = StreamMode::EventsShared { autoconvert: true, buffer_duration_hns: 0 };
     let enumerator = DeviceEnumerator::new().map_err(|e| e.to_string())?;
@@ -160,11 +180,12 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
     let event = client.set_get_eventhandle().map_err(|e| e.to_string())?;
     let capture = client.get_audiocaptureclient().map_err(|e| e.to_string())?;
     client.start_stream().map_err(|e| e.to_string())?;
-    opened(device_name);
+    news(StreamNews::Opened { id: device_id.clone(), name: device_name });
 
     let mut queue: VecDeque<u8> = VecDeque::new();
     let mut last_device_check = Instant::now();
     let mut last_packet = Instant::now();
+    let mut delivered = false;
     let result = (|| -> Result<(), String> {
         while !stop.load(Ordering::SeqCst) {
             // Follow device changes (headset unplug / Bluetooth switch, a chosen microphone going or coming back) for
@@ -197,14 +218,19 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
                 // Timeout: no packets (silence on endpoint loopback); the timeline fills the gap. A device that was
                 // removed sends no more events either: asking for the next packet is what reports it.
                 capture.get_next_packet_size().map_err(|e| e.to_string())?;
-                // A microphone delivers packets even in silence, so none for a while means it died quietly.
-                if channel == Channel::Mic && last_packet.elapsed() >= STALL_AFTER {
-                    return Err("no audio from the microphone".into());
+                // A microphone delivers packets even in silence, so none for a while means it died quietly. A new stream
+                // has longer for its first one, so a device that is slow to wake is not torn down.
+                if channel == Channel::Mic && last_packet.elapsed() >= packet_limit(delivered) {
+                    return Err(NO_AUDIO.into());
                 }
                 continue;
             }
             while capture.get_next_packet_size().map_err(|e| e.to_string())?.unwrap_or(0) > 0 {
                 last_packet = Instant::now();
+                if !delivered {
+                    delivered = true;
+                    news(StreamNews::Delivering);
+                }
                 let start = queue.len();
                 let info = capture.read_from_device_to_deque(&mut queue).map_err(|e| e.to_string())?;
                 if info.flags.silent {

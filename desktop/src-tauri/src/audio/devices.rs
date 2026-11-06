@@ -24,7 +24,8 @@ pub const LOST_AFTER: Duration = Duration::from_secs(3);
 pub const HEALTHY_AFTER: Duration = Duration::from_secs(10);
 /// A running stream that delivers nothing for this long has stalled (a device died without telling anyone).
 pub const STALL_AFTER: Duration = Duration::from_secs(4);
-/// A new stream's first packet may take longer: macOS's own permission prompt can hold it back.
+/// A new stream's first packet may take longer: macOS's own permission prompt can hold it back, and a device can be slow
+/// to wake.
 pub const FIRST_PACKET_WITHIN: Duration = Duration::from_secs(10);
 /// How long "Microphone changed to …" stays.
 pub const MOVED_NOTE_FOR: Duration = Duration::from_secs(8);
@@ -50,6 +51,11 @@ impl DeviceNotice {
             DeviceNotice::Back { channel, .. } => format!("{channel:?} capture has a device again"),
         }
     }
+}
+
+/// How long an open stream may deliver nothing before it counts as stalled: `delivered` is whether it ever did.
+pub fn packet_limit(delivered: bool) -> Duration {
+    if delivered { STALL_AFTER } else { FIRST_PACKET_WITHIN }
 }
 
 /// What the capture threads have to say until the core next asks (once a second while recording).
@@ -81,11 +87,40 @@ pub struct Reopener {
     open_since: Option<Instant>,
     opened_before: bool,
     failures: u32,
+    /// The device the last stream opened on, for a channel that says (`opened_on`).
+    device: Option<String>,
+    /// Since when streams have opened and delivered nothing, until one does.
+    stalled_since: Option<Instant>,
+    said_stalled: bool,
 }
 
 impl Reopener {
     pub fn new(channel: Channel) -> Self {
-        Self { channel, wait: FIRST_RETRY, down_since: None, said_lost: false, open_since: None, opened_before: false, failures: 0 }
+        Self { channel, wait: FIRST_RETRY, down_since: None, said_lost: false, open_since: None, opened_before: false, failures: 0, device: None, stalled_since: None, said_stalled: false }
+    }
+
+    /// The stream is open on device `id` (none for a stream with no device of its own). Opened again on the same device
+    /// is no news, only a passing error or a stall: nothing changed for the person.
+    pub fn opened_on(&mut self, now: Instant, id: Option<String>, name: Option<String>) -> Option<DeviceNotice> {
+        let moved = self.device != id;
+        self.device = id;
+        self.opened(now, name).filter(|notice| moved || matches!(notice, DeviceNotice::Back { .. }))
+    }
+
+    /// An open stream delivered nothing for its whole limit. Once may be a hiccup; streams that keep delivering nothing
+    /// are the same as no device, even though each one opens: said once, until audio arrives.
+    pub fn stalled(&mut self, now: Instant) -> Option<DeviceNotice> {
+        let since = *self.stalled_since.get_or_insert(now);
+        (!self.said_stalled && now.saturating_duration_since(since) >= STALL_AFTER).then(|| {
+            self.said_stalled = true;
+            DeviceNotice::Lost { channel: self.channel }
+        })
+    }
+
+    /// Audio is arriving: a stall is over, and said to be if it was said to have begun.
+    pub fn delivering(&mut self) -> Option<DeviceNotice> {
+        self.stalled_since = None;
+        std::mem::take(&mut self.said_stalled).then_some(DeviceNotice::Back { channel: self.channel, name: None })
     }
 
     /// The stream is open. The first open says nothing; later ones say where the channel went.
@@ -236,8 +271,7 @@ impl<S> Supervisor<S> {
         if host.rate_moved(stream) {
             return Some(Change::Rate);
         }
-        let limit = if self.last_packets == 0 { FIRST_PACKET_WITHIN } else { STALL_AFTER };
-        (now.saturating_duration_since(self.last_packet_at) >= limit).then_some(Change::Stalled)
+        (now.saturating_duration_since(self.last_packet_at) >= packet_limit(self.last_packets != 0)).then_some(Change::Stalled)
     }
 
     /// The channels this recording records.
@@ -423,6 +457,94 @@ mod tests {
         assert_eq!((wait, notice), (FIRST_RETRY, None), "a quick switch waits a moment and says nothing yet");
         let back = r.opened(t0 + Duration::from_secs(61), Some("AirPods".into()));
         assert_eq!(back, Some(DeviceNotice::Moved { channel: Channel::Mic, name: Some("AirPods".into()) }));
+    }
+
+    #[test]
+    fn opened_again_on_the_same_device_says_nothing() {
+        let t0 = Instant::now();
+        let mic = || Some("{mic-1}".to_string());
+        let mut r = Reopener::new(Channel::Mic);
+        assert_eq!(r.opened_on(t0, mic(), Some("USB Mic".into())), None, "the first open");
+        let _ = r.failed(t0 + Duration::from_secs(60));
+        assert_eq!(r.opened_on(t0 + Duration::from_secs(61), mic(), Some("USB Mic".into())), None, "a stall or a passing error is not \"changed to USB Mic\"");
+
+        // A real change still says where it went, and going back does too.
+        let _ = r.failed(t0 + Duration::from_secs(120));
+        let moved = r.opened_on(t0 + Duration::from_secs(121), Some("{mic-2}".into()), Some("AirPods".into()));
+        assert_eq!(moved, Some(DeviceNotice::Moved { channel: Channel::Mic, name: Some("AirPods".into()) }));
+        let _ = r.failed(t0 + Duration::from_secs(180));
+        let again = r.opened_on(t0 + Duration::from_secs(181), mic(), Some("USB Mic".into()));
+        assert_eq!(again, Some(DeviceNotice::Moved { channel: Channel::Mic, name: Some("USB Mic".into()) }));
+    }
+
+    #[test]
+    fn a_stream_with_no_device_of_its_own_has_nothing_to_say_when_it_opens_again() {
+        let t0 = Instant::now();
+        let mut r = Reopener::new(Channel::System);
+        assert_eq!(r.opened_on(t0, None, None), None);
+        let _ = r.failed(t0 + Duration::from_secs(60));
+        assert_eq!(r.opened_on(t0 + Duration::from_secs(61), None, None), None);
+    }
+
+    #[test]
+    fn a_device_lost_for_a_while_comes_back_with_its_news_even_if_it_is_the_same_one() {
+        let t0 = Instant::now();
+        let mic = || Some("{mic-1}".to_string());
+        let mut r = Reopener::new(Channel::Mic);
+        let _ = r.opened_on(t0, mic(), None);
+        let _ = r.failed(t0 + Duration::from_secs(60));
+        let (_, lost) = r.failed(t0 + Duration::from_secs(64));
+        assert_eq!(lost, Some(DeviceNotice::Lost { channel: Channel::Mic }));
+        let back = r.opened_on(t0 + Duration::from_secs(65), mic(), Some("USB Mic".into()));
+        assert_eq!(back, Some(DeviceNotice::Back { channel: Channel::Mic, name: Some("USB Mic".into()) }));
+    }
+
+    #[test]
+    fn a_stream_has_longer_for_its_first_packet_than_for_the_next() {
+        assert_eq!(packet_limit(false), FIRST_PACKET_WITHIN);
+        assert_eq!(packet_limit(true), STALL_AFTER);
+        assert!(FIRST_PACKET_WITHIN > STALL_AFTER);
+    }
+
+    /// A microphone that opens every time and never delivers: the same id each time, so no "changed", and no silent
+    /// recording either.
+    #[test]
+    fn a_microphone_that_keeps_delivering_nothing_is_said_once_and_its_return_too() {
+        let t0 = Instant::now();
+        let mic = || Some("{mic-1}".to_string());
+        let mut r = Reopener::new(Channel::Mic);
+        assert_eq!(r.opened_on(t0, mic(), None), None);
+        assert_eq!(r.delivering(), None, "audio from the start: nothing to say");
+
+        // It stops delivering: the first stall may be a hiccup.
+        let first = t0 + Duration::from_secs(60);
+        assert_eq!(r.stalled(first), None);
+        let _ = r.failed(first);
+        assert_eq!(r.opened_on(first + Duration::from_secs(1), mic(), None), None);
+
+        // Still nothing from the next stream: now it is said, once.
+        let second = first + FIRST_PACKET_WITHIN;
+        assert_eq!(r.stalled(second), Some(DeviceNotice::Lost { channel: Channel::Mic }));
+        let _ = r.failed(second);
+        assert_eq!(r.opened_on(second + Duration::from_secs(1), mic(), None), None, "opening is not audio");
+        assert_eq!(r.stalled(second + FIRST_PACKET_WITHIN), None, "no nagging");
+
+        // Audio again.
+        assert_eq!(r.delivering(), Some(DeviceNotice::Back { channel: Channel::Mic, name: None }));
+        assert_eq!(r.delivering(), None, "once");
+
+        // A hiccup later is a fresh start.
+        let later = second + Duration::from_secs(300);
+        assert_eq!(r.stalled(later), None);
+    }
+
+    #[test]
+    fn a_stall_that_ends_before_it_was_said_stays_unsaid() {
+        let t0 = Instant::now();
+        let mut r = Reopener::new(Channel::Mic);
+        assert_eq!(r.stalled(t0), None);
+        assert_eq!(r.delivering(), None);
+        assert_eq!(r.stalled(t0 + FIRST_PACKET_WITHIN), None, "the count starts again");
     }
 
     #[test]
