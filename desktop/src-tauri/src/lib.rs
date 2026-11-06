@@ -24,6 +24,7 @@ pub mod permissions;
 pub mod plan;
 pub mod projects;
 pub mod recovery;
+pub mod refusal;
 pub mod screens;
 pub mod settings;
 pub mod sharing;

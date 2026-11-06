@@ -355,3 +355,27 @@ fn long_fields_are_cut_to_the_server_s_limits() {
     let body = DeviceReport::of_mac_check(&long);
     assert_eq!((body.model.chars().count(), body.os_version.chars().count(), body.app_version.chars().count()), (64, 64, 32));
 }
+
+// ---- A refusal with the window closed --------------------------------------------------------------------------------
+
+/// The closed main window hears no `app:error`, so nothing that refuses a start may send only that.
+#[test]
+fn what_is_refused_goes_through_the_helper_that_reaches_a_closed_window() {
+    let actions = include_str!("../src/actions.rs");
+    let shortcut = &actions[actions.find("pub async fn on_shortcut").unwrap()..actions.find("/// `recording:marked`").unwrap()];
+    for (name, source) in [("on_shortcut", shortcut), ("auto mode", include_str!("../src/detect/mod.rs")), ("the tray", include_str!("../src/tray.rs"))] {
+        assert!(source.contains("refusal::say"), "{name} tells the person through the helper");
+        assert!(!source.contains("app:error"), "{name} sends nothing straight to a page that may be gone");
+    }
+    assert!(actions.contains("refusal::say(app, \"No sound was captured"), "a recording that saved nothing is said too");
+}
+
+#[test]
+fn dictation_refused_opens_its_box_to_say_why() {
+    let dictation = include_str!("../src/dictation/mod.rs");
+    let start = &dictation[dictation.find("pub async fn start").unwrap()..];
+    let refused = &start[start.find("Access::Denied").unwrap()..start.find("dictation_text").unwrap()];
+    assert!(refused.contains("set_overlay_visible(app, DICTATION, true)"));
+    assert!(refused.contains("NO_DICTATION"));
+    assert!(refused.contains("emit_state(app, false)"), "the box hides by itself after a few seconds");
+}

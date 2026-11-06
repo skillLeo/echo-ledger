@@ -306,8 +306,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                     _ => Ok(()),
                 };
                 if let Err(e) = result {
-                    use tauri::Emitter;
-                    let _ = app.emit("app:error", e.to_string());
+                    let recording = app.state::<crate::AppState>().capture.is_recording();
+                    crate::refusal::say(&app, &e.to_string(), crate::refusal::asked_by_menu(&id, recording));
                 }
                 crate::actions::emit_status(&app);
             });

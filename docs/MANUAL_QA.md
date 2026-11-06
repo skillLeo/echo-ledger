@@ -516,6 +516,7 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 | MAC-25 | During a recording: connect AirPods; switch input and output in the menu bar; pull a USB headset; turn the AirPods off. | The pill says what changed and goes on; a device gone says what the recording holds until one returns. In the file nothing is at the wrong speed and the gap is silence, not a cut. |
 | MAC-26 | Press Stop during MAC-25 and on a plain recording. | Stop answers at once (it used to be able to hang); Audio MIDI Setup shows no extra device. |
 | MAC-27 | Terminal, with EchoLedger running and signed in: `/Applications/EchoLedger.app/Contents/MacOS/echoledger-desktop --smoke-test; echo $?` | A second icon for a moment, 0, and the running app, its data and its sign-in untouched. |
+| MAC-28 | Close the main window and turn off the microphone and system audio. Press the record shortcut; click **Record** in the menu-bar icon; close the window again and join a meeting with auto-record on; press the dictation shortcut in a text field. | The shortcut and the menu open the window with the reason in it and the banner. The meeting gets a system notification saying why, and no window jumps in front of it (this is also the first proof that an unsigned build's notifications arrive). Dictation's box says the microphone is off and that dictation did not start, then hides. |
 
 ### Windows v1.5, what only a real PC can prove (Phase 1B; CI ran the smoke test on Server 2022, Server 2025 and Windows 11 on Arm)
 
@@ -527,6 +528,7 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 | WIN-4 | Settings → Microphone: choose the USB microphone, pull it during a recording, plug it back. | Moves to the default and says so; moves back when it returns. |
 | WIN-5 | Unplug every microphone during a call. | "No microphone: recording the other side only" until one returns; the file is whole. |
 | WIN-6 | `"%LOCALAPPDATA%\EchoLedger\echoledger-desktop.exe" --smoke-test` from a command prompt, with EchoLedger running, then `echo %ERRORLEVEL%`. | 0; the running app and its sign-in untouched. |
+| WIN-7 | Close the main window and turn off the microphone in Windows Settings → Privacy → Microphone. Click **Record a voice note** in the tray; press the dictation shortcut in a text field. | The tray click opens the window with the reason in it. Dictation's box says the microphone is off and that dictation did not start, then hides. |
 
 ### Phone v1.5 (phone windows; the S25, installed with `pm install -r`, data kept)
 

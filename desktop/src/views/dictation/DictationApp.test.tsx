@@ -56,6 +56,22 @@ describe("dictation box", () => {
     }
   });
 
+  it("says the microphone is off and that dictation did not start, not that it is dictating (Phase 1B)", async () => {
+    await renderDictation();
+    // What the core sends when it refuses: the box opens, the reason, and the state that ends it.
+    await emitEvent("overlay:visibility", true);
+    await pushChannelMessage({ kind: "clear" });
+    await pushChannelMessage({ kind: "status", live: false, recording: false, provider: null, message: "The microphone is off for EchoLedger, so dictation cannot hear you." });
+    await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle" });
+    expect(screen.getByText("Dictation did not start")).toBeInTheDocument();
+    expect(screen.getByText(/The microphone is off for EchoLedger/)).toBeInTheDocument();
+    expect(screen.queryByText(/press the shortcut again/)).not.toBeInTheDocument();
+
+    // The next press that does start says how to finish again.
+    await emitEvent("overlay:visibility", true);
+    expect(screen.getByText("Dictating — press the shortcut again to insert")).toBeInTheDocument();
+  });
+
   it("shows the in-progress phrase and replaces it with each final turn", async () => {
     const { container } = await renderDictation();
     await pushChannelMessage({ kind: "partial", channel: 1, speaker: "Me", text: "send the inv" });

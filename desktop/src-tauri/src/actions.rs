@@ -71,7 +71,8 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
     };
     if let Err(e) = result {
         eprintln!("[echoledger] {action:?}: {e}");
-        let _ = app.emit("app:error", e.to_string());
+        let recording = app.state::<crate::AppState>().capture.is_recording();
+        crate::refusal::say(&app, &e.to_string(), crate::refusal::asked_by_shortcut(action, pressed, recording));
     }
 }
 
@@ -428,7 +429,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
-        let _ = app.emit("app:error", "No sound was captured, so nothing was saved. Check your microphone and the audio device, then try again.");
+        crate::refusal::say(app, "No sound was captured, so nothing was saved. Check your microphone and the audio device, then try again.", crate::refusal::Asked::Other);
         return Ok(());
     }
 

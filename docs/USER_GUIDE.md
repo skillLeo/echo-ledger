@@ -43,7 +43,8 @@ the other side of a call needs **macOS 14.2 or newer** (Apple menu → **About T
 
 **If a permission is off,** nothing crashes and nothing records silently: the Record page, the recording pill and the
 captions say what is missing and what the recording holds without it (only your voice, or only the other side). A
-recording that would hold nothing does not start and says why.
+recording that would hold nothing does not start and says why, even with the window closed: a shortcut or the menu-bar
+icon opens the window with the reason, and a meeting that cannot be recorded gets a notification.
 
 **Updates and permissions.** Because the app is not signed with an Apple Developer ID yet, macOS may forget its
 permissions after an update. EchoLedger looks at them every time it starts; if one that was allowed has gone, it says so

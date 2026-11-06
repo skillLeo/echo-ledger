@@ -252,7 +252,7 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
                 if let Err(e) = crate::actions::start_call_recording(&app, source.as_str(), true).await {
                     eprintln!("[echoledger] auto-mode start failed: {e}");
                     // A call that is not being recorded is never silent about it (Phase 1B).
-                    let _ = tauri::Emitter::emit(&app, "app:error", e.to_string());
+                    crate::refusal::say(&app, &e.to_string(), crate::refusal::asked_by_meeting(&e));
                 }
             });
         }
