@@ -69,6 +69,10 @@ export default function ReviewApp() {
     const timer = window.setTimeout(() => setKept(null), KEPT_MS);
     return () => window.clearTimeout(timer);
   }, [kept]);
+  // A new chip ends the kept one's moment: whatever leaves after it is not the kept one.
+  useEffect(() => {
+    if (state.ask) lastKept.current = null;
+  }, [state.ask]);
   const saved = usePresence(state.saved);
   const chip = usePresence(state.ask ?? kept);
   const chipKept = !state.ask && !!kept && chip.item?.id === kept.id;
