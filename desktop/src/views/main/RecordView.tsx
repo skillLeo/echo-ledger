@@ -6,9 +6,10 @@ import { DISCARD_CONFIRM } from "../../lib/pending";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { useWindowShown } from "../../lib/visibility";
 import { fillWidth } from "../../lib/motion";
-import { CaptionsIcon, CopyIcon, MicIcon, RecordIcon } from "../../components/Icons";
+import { AlertIcon, CaptionsIcon, CopyIcon, MicIcon, RecordIcon } from "../../components/Icons";
 import { RecordDotIcon, StopIcon } from "../../components/ControlIcons";
 import { LiveTranslateCard } from "./LiveTranslateCard";
+import { PermissionBanner } from "./Permissions";
 import { isViewer, viewerSentence } from "../../lib/plan";
 
 /**
@@ -127,6 +128,8 @@ export function RecordView({ status, run, onImport }: {
     <>
       <h1 className="page-title">Record</h1>
       <p className="page-sub">Two channels: your microphone is "Me", the other side of the call is "Client".</p>
+      <PermissionBanner recordingRef={recording?.clientRef ?? null} />
+      {status.systemAudioNote && <div className="banner warn" role="status" data-testid="whole-system-note"><AlertIcon size={16} /><span>{status.systemAudioNote}.</span></div>}
       <div className="card">
         <div className="record-hero">
           {/* The record control (since v1.5, as on the phone): its colour changes over 200 ms, it gives a little under a
@@ -156,6 +159,9 @@ export function RecordView({ status, run, onImport }: {
             )}
             <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter"><div style={fillWidth(mic * 4)} /></div></div>
             <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter"><div style={fillWidth(sys * 4)} /></div></div>
+            {recording && status.deviceNote && (
+              <p className={`small ${status.deviceNote.warning ? "warning-text" : "muted"}`} role="status" data-testid="device-note">{status.deviceNote.text}</p>
+            )}
             {bluetooth && recording?.mode !== "voice_note" && (
               <p className="small muted bluetooth-note" data-testid="bluetooth-note" title={bluetooth.name}>{BLUETOOTH_NOTE} · {bluetooth.name}</p>
             )}

@@ -6,6 +6,7 @@
 //! the same channel and the recorder re-anchors its timeline, so the paused span leaves no gap in the file.
 
 pub mod clock;
+pub mod devices;
 pub mod dsp;
 pub mod health;
 pub mod mock;
@@ -197,6 +198,11 @@ impl CaptureController {
         let heard = *active.link.system_heard.lock().unwrap_or_else(|p| p.into_inner());
         let since = heard.map_or(active.running_since, |h| h.max(active.running_since));
         Some(Instant::now().saturating_duration_since(since).as_millis() as u64)
+    }
+
+    /// What the capture has to say about its devices since it was last asked (a headset came or went, Phase 1B).
+    pub fn take_device_notices(&self) -> Vec<devices::DeviceNotice> {
+        self.lock().as_mut().and_then(|a| a.backend.as_mut()).map(|b| b.take_notices()).unwrap_or_default()
     }
 
     /// Forgets the client of the current recording when it is `client_id` (deleted on the server, A6.DR7).

@@ -108,15 +108,16 @@ describe("Settings → Screen moments", () => {
     respond("screens_permission", false);
     const { card } = await setup({}, status({ platform: "macos", permission: false }));
     expect(within(card()).queryByTestId("screens-border-note")).not.toBeInTheDocument();
-    expect(within(card()).getByTestId("screens-permission-note")).toHaveTextContent("from macOS 15 again about once a month");
+    expect(within(card()).getByTestId("screens-permission-note")).toHaveTextContent("From macOS 15, macOS asks again about once a month");
     fireEvent.click(within(card()).getByRole("button", { name: "Allow Screen Recording" }));
     await flushAsync();
     expect(callsOf("screens_permission")).toHaveLength(1);
     expect(within(card()).getByTestId("screens-permission-note")).toHaveTextContent("System Settings → Privacy & Security → Screen & System Audio Recording");
+    expect(within(card()).getByRole("button", { name: "Open System Settings" })).toBeInTheDocument();
     respond("screens_permission", true);
     fireEvent.click(within(card()).getByRole("button", { name: "Allow Screen Recording" }));
     await flushAsync();
-    expect(within(card()).getByTestId("screens-permission-note")).toHaveTextContent("Allowed. macOS 15 and later ask again about once a month");
+    expect(within(card()).getByTestId("screens-permission-note")).toHaveTextContent("From macOS 15, macOS asks again about once a month");
     expect(within(card()).queryByRole("button", { name: "Allow Screen Recording" })).not.toBeInTheDocument();
   });
 

@@ -303,10 +303,10 @@ where
     }
 }
 
-/// A call recording started: its capture thread starts too (it keeps nothing until the rules allow it). Voice notes,
-/// dictation and tests never capture.
+/// A call recording started: its capture thread starts too (it keeps nothing until the rules allow it). Voice notes and
+/// dictation never capture. The sound tests never come here, and a real call that starts during one keeps its moments.
 pub fn on_recording_started(app: &AppHandle, info: &RecordingInfo) {
-    if info.mode != RecordingMode::Call || app.state::<crate::AppState>().capture_test.load(Ordering::SeqCst) {
+    if info.mode != RecordingMode::Call {
         return;
     }
     let state = app.state::<crate::AppState>();

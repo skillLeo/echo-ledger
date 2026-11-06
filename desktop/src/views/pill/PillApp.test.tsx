@@ -519,4 +519,73 @@ describe("Screens chip (v1.5)", () => {
     });
     expect(screen.queryByTestId("screens-notice")).not.toBeInTheDocument();
   });
+
+  describe("what a missing permission or a device means for the recording (since v1.5)", () => {
+    const noSystem = [{ kind: "system_audio" as const, sentence: "System audio is off for EchoLedger: a recording will have your voice, not the other side of the call." }];
+
+    it("says what the recording holds, can be dismissed, and is back for the next recording", async () => {
+      await renderPill(makeRecordingState({ missing: noSystem }));
+      await emitEvent("pill:visibility", true);
+      const warning = screen.getByTestId("missing-permission");
+      expect(warning).toHaveTextContent("No system audio: recording your voice only");
+      expect(warning).toHaveAttribute("title", noSystem[0].sentence);
+      fireEvent.click(within(warning).getByRole("button", { name: "Dismiss warning" }));
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+      await emitEvent("recording:state", makeRecordingState({ active: false }));
+      await emitEvent("recording:state", makeRecordingState({ missing: noSystem }));
+      await emitEvent("pill:visibility", true);
+      expect(screen.getByTestId("missing-permission")).toBeInTheDocument();
+    });
+
+    it("hears a prompt answered after the start, and says more when more goes during the recording", async () => {
+      const noMic = [{ kind: "microphone" as const, sentence: "The microphone is off for EchoLedger: a recording will have the other side of the call, not your voice." }];
+      await renderPill(makeRecordingState({ missing: [] }));
+      await emitEvent("pill:visibility", true);
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+
+      await emitEvent("recording:state", makeRecordingState({ missing: noMic }));
+      expect(screen.getByTestId("missing-permission")).toHaveTextContent("No microphone: recording the other side");
+
+      // Dismissed, then the other side goes too: that is new.
+      fireEvent.click(within(screen.getByTestId("missing-permission")).getByRole("button", { name: "Dismiss warning" }));
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+      await emitEvent("recording:state", makeRecordingState({ missing: [...noMic, { kind: "system_audio", sentence: "Both off." }] }));
+      expect(screen.getByTestId("missing-permission")).toHaveTextContent("Nothing is being recorded: no permission");
+
+      // Allowed after all: the line goes.
+      await emitEvent("recording:state", makeRecordingState({ missing: [] }));
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+    });
+
+    it("says a note without its one side records nothing", async () => {
+      await renderPill(makeRecordingState({ mode: "mic_note", missing: [{ kind: "microphone", sentence: "No note." }] }));
+      await emitEvent("pill:visibility", true);
+      expect(screen.getByTestId("missing-permission")).toHaveTextContent("Nothing is being recorded: no permission");
+    });
+
+    it("says nothing when the recording has everything", async () => {
+      await renderPill(makeRecordingState({ missing: [] }));
+      await emitEvent("pill:visibility", true);
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+    });
+
+    it("says when a microphone changes and when one is gone", async () => {
+      await renderPill(makeRecordingState({ deviceNote: { text: "Microphone changed to AirPods Pro. Still recording.", warning: false } }));
+      await emitEvent("pill:visibility", true);
+      expect(screen.getByTestId("device-notice")).toHaveTextContent("AirPods Pro");
+      expect(screen.getByTestId("device-notice")).toHaveClass("note");
+      await emitEvent("recording:state", makeRecordingState({ deviceNote: { text: "No microphone: recording the other side only.", warning: true } }));
+      expect(screen.getByTestId("device-notice")).toHaveClass("warn");
+      expect(screen.getByRole("alert")).toHaveTextContent("other side only");
+      await emitEvent("recording:state", makeRecordingState({ deviceNote: null }));
+      expect(screen.queryByTestId("device-notice")).not.toBeInTheDocument();
+    });
+
+    it("a device gone comes before a permission note, and a bookmark before both", async () => {
+      await renderPill(makeRecordingState({ missing: noSystem, deviceNote: { text: "No microphone: recording the other side only.", warning: true } }));
+      await emitEvent("pill:visibility", true);
+      expect(screen.getByTestId("device-notice")).toBeInTheDocument();
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+    });
+  });
 });

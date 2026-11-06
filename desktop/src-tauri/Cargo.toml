@@ -95,11 +95,14 @@ windows-future = "0.3.2"
 objc2 = "0.6.5"
 objc2-core-audio = "0.3.2"
 objc2-core-audio-types = "0.3.2"
-objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSValue", "NSUUID", "NSString", "NSError"] }
+objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSValue", "NSUUID", "NSString", "NSError", "NSProcessInfo", "NSGeometry", "NSURL"] }
 objc2-core-foundation = { version = "0.3.2", features = ["CFString", "CFDictionary", "CFArray", "CFNumber", "CFData", "CFCGTypes"] }
 block2 = "0.6.2"
 dispatch2 = "0.3.1"
 objc2-local-authentication = { version = "0.3.2", features = ["LAContext", "LAError", "block2"] }
+# AppKit for the overlays' level and Spaces, the displays' usable areas and the Mac check's installed apps (already in the
+# tree through tao and wry).
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "objc2-core-foundation", "NSResponder", "NSScreen", "NSWindow", "NSWorkspace", "NSGraphics"] }
 # Screen moments (v1.5): screenshots of the meeting window or display, and the Screen Recording permission.
 objc2-screen-capture-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "libc", "objc2-core-foundation", "objc2-core-graphics", "SCShareableContent", "SCStream", "SCScreenshotManager"] }
 objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGImage", "CGDataProvider", "CGDirectDisplay", "CGWindow"] }

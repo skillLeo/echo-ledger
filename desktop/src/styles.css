@@ -798,6 +798,23 @@ audio.player { display: none; }
 .steps li.done::before { display: none; }
 .step-check { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--success) 15%, transparent); }
 .onboarding-actions { margin-top: var(--space-4); }
+/* One permission: what it is for, how it stands, and the way to System Settings (since v1.5). */
+.permission-step { display: grid; gap: var(--space-2); }
+.permission-step + .permission-step { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+.permission-step p { margin: 0; }
+.permission-state { display: flex; align-items: center; gap: var(--space-2); }
+.permission-actions { gap: var(--space-2); flex-wrap: wrap; }
+.permission-banner { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }
+.permission-banner .banner { margin-bottom: 0; }
+/* The Mac check's results: a mark, the sentence, the button that fixes it. */
+.mac-check .check-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+.check-row { display: flex; align-items: flex-start; gap: var(--space-2); }
+.check-mark { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-full); margin-top: 1px; }
+.check-row.ok .check-mark { color: var(--success); }
+.check-row.limited .check-mark { color: var(--warning); }
+.check-row.off .check-mark, .check-row.failed .check-mark { color: var(--danger); }
+.check-main { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.check-row > .btn { flex: none; }
 
 /* Loading placeholders (C6): a quiet shimmer while a list loads (the phone's SkeletonRow). */
 .skeleton-item { cursor: default; gap: var(--space-2); padding-block: var(--space-3); }

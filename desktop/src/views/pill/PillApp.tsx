@@ -4,7 +4,7 @@ import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type M
 import { useHitRegions } from "../../lib/hitRegions";
 import { fillHeight } from "../../lib/motion";
 import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
-import { elapsedAt, formatTimer, isTwoChannel, meterLevel, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
+import { elapsedAt, formatTimer, isTwoChannel, meterLevel, missingShort, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { BLUETOOTH_NOTE } from "../../lib/microphone";
 import { CaptionsIcon, MicIcon, MonitorIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon, WarningIcon } from "../../components/ControlIcons";
@@ -69,6 +69,8 @@ export default function PillApp() {
   const [screensNotice, setScreensNotice] = useState(false);
   /** "Screens on" was shown for this recording (once each). */
   const screensShown = useRef(false);
+  /** The person dismissed what a missing permission means for this recording. */
+  const [missingDismissed, setMissingDismissed] = useState(false);
   const busy = useRef<Action | null>(null);
   /** Set while Stop, Cancel or Hide runs, so a late once-a-second event cannot bring the pill back. */
   const closing = useRef(false);
@@ -90,6 +92,7 @@ export default function PillApp() {
       setBluetooth(false);
       screensShown.current = false;
       setScreensNotice(false);
+      setMissingDismissed(false);
       return;
     }
     if (state.bluetoothMic && !bluetoothShown.current) {
@@ -181,7 +184,12 @@ export default function PillApp() {
     return () => window.clearTimeout(timer);
   }, [screensNotice]);
 
-  const tray = mark ? "mark" : farSide && running ? "warn" : bluetooth && shown ? "bluetooth" : screensNotice && shown && live?.screens?.on ? "screens" : null;
+  // Dismissed is for what was on the line: something new going missing during the recording is said again.
+  const missingKinds = (live?.missing ?? []).map((m) => m.kind).join();
+  useEffect(() => setMissingDismissed(false), [missingKinds]);
+  const missing = shown && !missingDismissed ? missingShort(live?.missing, live?.mode) : null;
+  const deviceNote = shown ? live?.deviceNote ?? null : null;
+  const tray = mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : screensNotice && shown && live?.screens?.on ? "screens" : null;
   useHitRegions([shown, confirming, tray]);
 
   /** Runs one command at a time; on failure shows the message and resyncs with the core. */
@@ -366,6 +374,19 @@ export default function PillApp() {
           <WarningIcon size={14} />
           <span className="mark-text">Not hearing the other side for {farSide.seconds} s. Check the call's speaker or device.</span>
           <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setFarSide(null)}><MinimizeIcon size={14} /></button>
+        </div>
+      )}
+      {tray === "device" && deviceNote && (
+        <div className={`mark-tray ${deviceNote.warning ? "warn" : "note"}`} data-hit data-testid="device-notice" role={deviceNote.warning ? "alert" : "status"} title={deviceNote.text}>
+          {deviceNote.warning ? <WarningIcon size={14} /> : <MicIcon size={14} />}
+          <span className="mark-text">{deviceNote.text}</span>
+        </div>
+      )}
+      {tray === "missing" && missing && (
+        <div className="mark-tray warn" data-hit data-testid="missing-permission" role="alert" title={live?.missing?.[0]?.sentence}>
+          <WarningIcon size={14} />
+          <span className="mark-text">{missing}</span>
+          <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setMissingDismissed(true)}><MinimizeIcon size={14} /></button>
         </div>
       )}
       {tray === "screens" && (

@@ -1,8 +1,11 @@
 # The Mac app (.dmg) cannot be built on Windows: this builds it on GitHub's macOS runners for Apple Silicon and
-# Intel, on every v* tag, on demand, and whenever the desktop app changes. It is signed with the Developer ID
-# certificate and notarized when the Apple secrets exist, and unsigned otherwise (the first open is then right-click →
-# Open, docs/USER_GUIDE.md); the updater's .app.tar.gz and .sig are made when the updater key's secret exists
-# (docs/SIGNING.md). The .dmg files are the run's artifacts.
+# Intel, on every v* tag, on demand, and whenever the desktop app changes. Each chip runs on its own real runner
+# (macos-15 is Apple Silicon, macos-15-intel is Intel): all Rust and front-end tests, the build, then the built app's
+# smoke test (--smoke-test, src-tauri/src/smoke.rs), which also runs from the .dmg on macOS 26. It is signed with the
+# Developer ID certificate and notarized when the Apple secrets exist, and unsigned otherwise (the first open then goes
+# through System Settings → Privacy & Security → Open Anyway, docs/USER_GUIDE.md); the updater's .app.tar.gz and .sig
+# are made when the updater key's secret exists (docs/SIGNING.md). The .dmg files are the run's artifacts, and on a v*
+# tag they are attached to that tag's GitHub Release.
 name: Desktop (macOS)
 
 on:
@@ -25,7 +28,7 @@ concurrency:
 jobs:
   build:
     name: ${{ matrix.label }}
-    runs-on: macos-latest
+    runs-on: ${{ matrix.runner }}
     env:
       # Secrets cannot be read in a step's `if`: only whether they are set is passed on. Notarizing needs all of them.
       HAS_APPLE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
@@ -35,13 +38,13 @@ jobs:
       matrix:
         include:
           - target: aarch64-apple-darwin
+            runner: macos-15
             label: Apple Silicon
             artifact: EchoLedger-mac-apple-silicon
-            checks: true
           - target: x86_64-apple-darwin
+            runner: macos-15-intel
             label: Intel
             artifact: EchoLedger-mac-intel
-            checks: false
     defaults:
       run:
         working-directory: desktop
@@ -66,13 +69,23 @@ jobs:
 
       - run: npm ci
 
+      - name: What this runner is
+        run: |
+          sw_vers
+          echo "$(uname -m), $(sysctl -n machdep.cpu.brand_string)"
+          echo "$(sw_vers -productVersion) on $(uname -m): tests, build and smoke test" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Front end tests and types
+        run: |
+          npx vitest run --maxWorkers=2 --testTimeout=30000
+          npx tsc --noEmit
+
       # The macOS-only code (Core Audio tap, Touch ID, bundle-id detection, the ScreenCaptureKit screen moments) is
-      # compiled and checked only here.
+      # compiled and checked only here. Native on both chips, so the tests run on the chip they are for.
       - name: Rust tests and clippy (macOS code)
-        if: matrix.checks
         working-directory: desktop/src-tauri
         run: |
-          cargo test --target ${{ matrix.target }}
+          cargo test --no-fail-fast --target ${{ matrix.target }}
           cargo clippy --all-targets --target ${{ matrix.target }} -- -D warnings
 
       # The updater's package and .sig (docs/SIGNING.md): only with the updater key, never stored in the repo.
@@ -129,6 +142,9 @@ jobs:
             echo "Unsigned build: no Apple signing secrets in this repository (docs/SIGNING.md)." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      - name: Smoke test of the built app
+        run: sh scripts/smoke-mac.sh src-tauri/target/${{ matrix.target }}/release/bundle/macos/EchoLedger.app
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
@@ -138,3 +154,66 @@ jobs:
             desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz.sig
           if-no-files-found: error
           retention-days: 30
+
+  # The newest macOS GitHub offers, each chip: the .dmg a person downloads opens, and its app passes the smoke test.
+  smoke:
+    name: Smoke test, ${{ matrix.label }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-26
+            label: macOS 26 Apple Silicon
+            artifact: EchoLedger-mac-apple-silicon
+          - runner: macos-26-intel
+            label: macOS 26 Intel
+            artifact: EchoLedger-mac-intel
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: desktop/scripts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: downloaded
+
+      - name: Open the .dmg and run the smoke test
+        run: |
+          sw_vers
+          uname -m
+          echo "$(sw_vers -productVersion) on $(uname -m): the .dmg's smoke test" >> "$GITHUB_STEP_SUMMARY"
+          dmg=$(find downloaded -name '*.dmg' | head -1)
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint /tmp/echoledger-dmg
+          cp -R /tmp/echoledger-dmg/EchoLedger.app "$RUNNER_TEMP/EchoLedger.app"
+          hdiutil detach /tmp/echoledger-dmg
+          sh desktop/scripts/smoke-mac.sh "$RUNNER_TEMP/EchoLedger.app"
+
+  # A v* tag's GitHub Release gets both .dmg files (the release is made when the tag has none yet). Nothing else in this
+  # workflow can write to the repository.
+  release:
+    name: Attach the .dmg files to the release
+    needs: [build, smoke]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: EchoLedger-mac-*
+          path: downloaded
+
+      - name: Attach to the release of this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          case "$TAG" in *-*) prerelease=--prerelease ;; *) prerelease= ;; esac
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --verify-tag --title "EchoLedger $TAG" --notes "Desktop builds of $TAG." $prerelease
+          find downloaded -name '*.dmg' -print0 | xargs -0 gh release upload "$TAG" --clobber
+          echo "Attached to $TAG:" >> "$GITHUB_STEP_SUMMARY"
+          find downloaded -name '*.dmg' -exec basename {} \; >> "$GITHUB_STEP_SUMMARY"

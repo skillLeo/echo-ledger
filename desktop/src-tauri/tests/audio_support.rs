@@ -148,7 +148,13 @@ fn process_loopback_needs_windows_build_20348_or_later() {
 #[cfg(windows)]
 mod windows_apis {
     use desktop_lib::audio::platform::windows::os_build;
+    use desktop_lib::audio::platform::{system_audio_note, system_audio_note_for};
     use desktop_lib::detect::{detect_call_app, mic_users};
+
+    #[test]
+    fn the_sentence_follows_this_computer_s_build() {
+        assert_eq!(system_audio_note(), system_audio_note_for(os_build()));
+    }
 
     #[test]
     fn the_os_build_is_readable_and_modern() {

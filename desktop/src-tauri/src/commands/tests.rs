@@ -109,6 +109,10 @@ fn privacy_settings_open_the_right_system_page() {
     assert!(privacy_settings_url("system_audio", true).unwrap().contains("Privacy_ScreenCapture"));
     assert_eq!(privacy_settings_url("system_audio", false), None, "Windows needs no permission for system audio");
     assert_eq!(privacy_settings_url("camera", true), None);
+    // The Mac check's other two panes, which Windows does not have.
+    assert_eq!(privacy_settings_url("sound", true), Some("x-apple.systempreferences:com.apple.Sound-Settings.extension"));
+    assert_eq!(privacy_settings_url("software_update", true), Some("x-apple.systempreferences:com.apple.Software-Update-Settings.extension"));
+    assert_eq!(privacy_settings_url("sound", false), None);
 }
 
 #[test]

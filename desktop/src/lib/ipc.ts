@@ -51,6 +51,10 @@ export interface AppStatus {
   budget: BudgetState;
   /** What the workspace's plan and the person's role allow (since v1.5). */
   plan: PlanInfo;
+  /** This Windows version has no per-app capture: the sentence to show (since v1.5). */
+  systemAudioNote?: string | null;
+  /** The running recording's devices (since v1.5). */
+  deviceNote?: DeviceNote | null;
 }
 
 /** The plan and role (since v1.5); `known` is false on a server without plans (every feature on, no plan limits). */
@@ -312,10 +316,60 @@ export interface TestResult {
   wavBase64: string;
 }
 
+/** A permission the guided steps and the Mac check name (since v1.5). */
+export type PermissionKind = "microphone" | "system_audio" | "screen";
+/** A pane of the system's settings the app can open. */
+export type SettingsPane = PermissionKind | "automation" | "sound" | "software_update";
+
+/** Something the system does not let EchoLedger use, and what a recording holds without it. */
+export interface MissingPermission {
+  kind: PermissionKind;
+  sentence: string;
+}
+
 export interface PermissionsStatus {
   microphone: PermissionState;
+  /** This Mac's sound and Screen Recording (since v1.5); `allowed` on Windows. */
+  systemAudio?: PermissionState;
+  screen?: PermissionState;
   browserAutomation: boolean;
   platform: "windows" | "macos" | "other";
+  /** What is off now and what a recording holds without it (since v1.5). */
+  missing?: MissingPermission[];
+  /** A permission that was granted has gone: one calm sentence, until dismissed or granted again. */
+  lost?: string | null;
+}
+
+/** One line about the running recording's devices (since v1.5): one that is gone, or news of a change. */
+export interface DeviceNote {
+  text: string;
+  warning: boolean;
+}
+
+/** Help & diagnostics → Run Mac check (since v1.5). */
+export type CheckState = "ok" | "limited" | "off" | "failed";
+export interface CheckItem {
+  key: string;
+  title: string;
+  state: CheckState;
+  detail: string;
+  /** A button to the System Settings pane that fixes it. */
+  fix: { label: string; settings: SettingsPane } | null;
+}
+export interface CheckProgress {
+  index: number;
+  total: number;
+  line: string;
+  done: CheckItem[];
+}
+export interface CheckReport {
+  items: CheckItem[];
+  stopped: string | null;
+  finishedAt: string;
+  appVersion: string;
+  osVersion: string;
+  model: string;
+  sentAt: string | null;
 }
 
 /** `capture:far_side`: the other side has been silent for `seconds` (`silent`) or is heard again. */
@@ -873,6 +927,10 @@ export interface RecordingState {
   bluetoothMic: boolean;
   /** Screen moments of the recording (v1.5); null while they are off for it. */
   screens: ScreensPill | null;
+  /** What the system does not let this recording use (since v1.5). */
+  missing?: MissingPermission[];
+  /** One of its devices is gone, or changed a moment ago (since v1.5). */
+  deviceNote?: DeviceNote | null;
 }
 
 /** Why screen moments are paused (since v1.5): by the person, the recording paused, the meeting window minimised or
@@ -1002,6 +1060,7 @@ export interface EventPayloads {
   "main:navigate": NavigatePayload;
   "recording:marked": MarkPayload;
   "capture:far_side": FarSidePayload;
+  "mac_check:progress": CheckProgress;
   "capture:test_level": [number, number];
   "dictation:state": { active: boolean; sounds: boolean; mode: DictationMode };
   "dictation:level": number;
@@ -1177,7 +1236,13 @@ export const api = {
   inputDevices: () => invoke<InputDevice[]>("input_devices"),
   testCapture: (seconds?: number) => invoke<TestResult>("test_capture", { seconds: seconds ?? null }),
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
-  openPrivacySettings: (kind: "microphone" | "system_audio" | "automation" | "screen") => invoke<void>("open_privacy_settings", { kind }),
+  openPrivacySettings: (kind: SettingsPane) => invoke<void>("open_privacy_settings", { kind }),
+  permissionRequest: (kind: PermissionKind) => invoke<PermissionsStatus>("permission_request", { kind }),
+  permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
+  macCheckRun: () => invoke<CheckReport>("mac_check_run"),
+  macCheckLast: () => invoke<CheckReport | null>("mac_check_last"),
+  macCheckCopy: () => invoke<void>("mac_check_copy"),
+  macCheckSend: () => invoke<string>("mac_check_send"),
   searchLibrary: (query: SearchQuery) => invoke<SearchResult>("search_library", { query }),
   /** The edited transcript; for a client's recording `learn` lists words to offer "Always write X as Y" for (v1.4). */
   editTranscript: (id: string, index: number, text: string) => invoke<TranscriptDetail & { learn?: LearnOffer[] }>("transcript_edit", { id, index, text }),

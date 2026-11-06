@@ -118,7 +118,7 @@ const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
 };
 
 /** Settings → Microphone and capture health (B5). */
-export function MicrophoneCard({ settings, patch, disabled }: { settings: Settings; patch: Patch; disabled: boolean }) {
+export function MicrophoneCard({ settings, patch, disabled, systemAudioNote }: { settings: Settings; patch: Patch; disabled: boolean; systemAudioNote?: string | null }) {
   const [devices, setDevices] = useState<InputDevice[]>([]);
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
   const [testing, setTesting] = useState(false);
@@ -195,10 +195,14 @@ export function MicrophoneCard({ settings, patch, disabled }: { settings: Settin
       </div>
       {permissions?.platform === "macos" && (
         <div className="toggle">
-          <div><div>Screen and system audio recording</div><div className="small muted">Needed to hear the other side of calls.</div></div>
+          <div>
+            <div>Screen and system audio recording</div>
+            <div className="small muted" data-testid="system-audio-permission">{permissions.systemAudio === "denied" ? "Off: recordings have your voice, not the other side of the call" : permissions.systemAudio === "allowed" ? "Allowed: needed to hear the other side of calls" : "Needed to hear the other side of calls. macOS asks the first time you record."}</div>
+          </div>
           <button type="button" className="btn ghost" onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Open settings</button>
         </div>
       )}
+      {systemAudioNote && <p className="small warning-text" data-testid="whole-system-note">{systemAudioNote}.</p>}
       <Toggle label="Warn me when the other side is silent" hint="Shows a warning on the recording pill if a call has not heard the other side for 30 seconds." on={settings.farSideWarning} onChange={(farSideWarning) => void patch({ farSideWarning })} />
     </div>
   );

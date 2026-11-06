@@ -1,7 +1,10 @@
 # Builds and checks the Windows desktop app on GitHub's Windows runners, so the Windows-only code (WASAPI capture,
 # Windows Graphics Capture, Windows Hello, the installer) is compiled and tested even when the work happens on a Mac.
 # The installer is signed when the code-signing certificate's secrets exist and unsigned otherwise; the updater's
-# package and .sig are made when the updater key's secret exists (docs/SIGNING.md).
+# package and .sig are made when the updater key's secret exists (docs/SIGNING.md). The built app then runs its smoke
+# test (--smoke-test, src-tauri/src/smoke.rs) on every Windows runner GitHub offers: Server 2022 (build 20348, the
+# Windows 10 family; GitHub has no Windows 10 client runner), Server 2025, and Windows 11 on Arm (the x64 app under
+# Windows' own emulation).
 name: Desktop (Windows)
 
 on:
@@ -118,3 +121,46 @@ jobs:
             desktop/src-tauri/target/release/bundle/nsis/*.exe.sig
           if-no-files-found: error
           retention-days: 30
+
+      # The app itself, for the smoke test on the other runners.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EchoLedger-windows-x64-app
+          path: desktop/src-tauri/target/release/echoledger-desktop.exe
+          if-no-files-found: error
+          retention-days: 3
+
+  smoke:
+    name: Smoke test, ${{ matrix.label }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            label: Server 2022 (build 20348)
+          - runner: windows-2025
+            label: Server 2025
+          - runner: windows-11-arm
+            label: Windows 11 Arm (x64 app under emulation)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: desktop/scripts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: EchoLedger-windows-x64-app
+          path: app
+
+      - name: Run the smoke test
+        shell: pwsh
+        run: ./desktop/scripts/smoke-windows.ps1 -Exe (Resolve-Path app/echoledger-desktop.exe).Path
+
+      - name: Run it again as a person would on their own PC, without the runner's folder
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path app/echoledger-desktop.exe).Path
+          Remove-Item Env:RUNNER_TEMP
+          ./desktop/scripts/smoke-windows.ps1 -Exe $exe

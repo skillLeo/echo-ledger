@@ -71,7 +71,8 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
     };
     if let Err(e) = result {
         eprintln!("[echoledger] {action:?}: {e}");
-        let _ = app.emit("app:error", e.to_string());
+        let recording = app.state::<crate::AppState>().capture.is_recording();
+        crate::refusal::say(&app, &e.to_string(), crate::refusal::asked_by_shortcut(action, pressed, recording));
     }
 }
 
@@ -233,9 +234,11 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
     if state.updates.is_installing() {
         return Err(AppError::msg(crate::updates::INSTALLING));
     }
+    let missing = checked_permissions(&state, RecordingMode::Call)?;
     let client_id = state.settings().client_id.clone();
     clear_captions(app); // a new recording never inherits the previous one's lines
     let info = state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
+    *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = missing;
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(auto, Ordering::SeqCst);
     on_recording_started(app, &info);
@@ -243,6 +246,15 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
         let _ = app.emit("app:error", e.to_string());
     }
     Ok(())
+}
+
+/// What the system lets a recording of `mode` use (Phase 1B): what will be missing from it, or the refusal when it would
+/// hold nothing. It never starts silently empty.
+fn checked_permissions(state: &crate::AppState, mode: RecordingMode) -> AppResult<Vec<crate::permissions::Missing>> {
+    match crate::permissions::check_start(mode, &state.permissions_now()) {
+        crate::permissions::StartCheck::Go(missing) => Ok(missing),
+        crate::permissions::StartCheck::Refuse(sentence) => Err(AppError::Message(sentence)),
+    }
 }
 
 /// Voice note while audio plays on this computer (system audio only).
@@ -269,8 +281,10 @@ async fn toggle_note(app: &AppHandle, mode: RecordingMode) -> AppResult<()> {
     if state.updates.is_installing() {
         return Err(AppError::msg(crate::updates::INSTALLING));
     }
+    let missing = checked_permissions(&state, mode)?;
     clear_captions(app);
     let info = state.capture.start(&paths::recordings(&state.data_dir), mode, "voice_note", state.settings().client_id.clone())?;
+    *state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()) = missing;
     *state.recording_started_at.lock().unwrap() = Some(Instant::now());
     state.auto_started.store(false, Ordering::SeqCst);
     on_recording_started(app, &info);
@@ -295,6 +309,7 @@ fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     state.session_link.lock().unwrap_or_else(|p| p.into_inner()).start(&info.client_ref);
     state.pill_hidden.store(false, Ordering::SeqCst);
     state.captions_on_resume.store(false, Ordering::SeqCst);
+    *state.device_status.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
     crate::overlay::set_pill_visible(app, true);
     start_ticker(app);
     emit_status(app);
@@ -342,6 +357,8 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     crate::screens::on_recording_ended(app).await;
     let finished = state.capture.stop()?;
     state.bluetooth_mic.store(false, Ordering::SeqCst);
+    state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()).clear();
+    *state.device_status.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
     set_overlay_visible(app, OVERLAY, false);
     crate::overlay::set_pill_visible(app, false);
     *state.recording_started_at.lock().unwrap() = None;
@@ -412,7 +429,7 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
-        let _ = app.emit("app:error", "No sound was captured, so nothing was saved. Check your microphone and the audio device, then try again.");
+        crate::refusal::say(app, "No sound was captured, so nothing was saved. Check your microphone and the audio device, then try again.", crate::refusal::Asked::Other);
         return Ok(());
     }
 
@@ -912,6 +929,8 @@ pub async fn resume_recording(app: &AppHandle) -> AppResult<()> {
         return Err(AppError::msg("Nothing is paused."));
     }
     state.capture.resume()?;
+    // Fresh devices: a channel that was lost before the pause is told about again only if it still is.
+    *state.device_status.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
     if state.captions_on_resume.swap(false, Ordering::SeqCst)
         && let Err(e) = start_captions(app).await
     {
@@ -948,6 +967,8 @@ fn start_ticker(app: &AppHandle) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        let mut shown_note = None;
+        let mut ticks = 0_u32;
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
             let state = app.state::<crate::AppState>();
@@ -956,9 +977,66 @@ fn start_ticker(app: &AppHandle) {
                 emit_recording_state(&app);
                 break;
             }
+            ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(READ_PERMISSIONS_EVERY) {
+                read_recording_permissions(&app);
+            }
+            take_device_notices(&app);
+            // The Record page hears of a device note when it comes and when it goes (news lasts a few seconds).
+            let note = state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(Instant::now());
+            if note != shown_note {
+                shown_note = note;
+                emit_status(&app);
+            }
             emit_recording_state(&app);
         }
     });
+}
+
+/// Seconds between looks at what a running recording may use.
+const READ_PERMISSIONS_EVERY: u32 = 3;
+
+/// What the running recording is missing, read again (Phase 1B): the prompt that settles "not asked yet" comes after the
+/// start, and a permission can be turned off during a recording. The pill and the captions hear it with the next
+/// `recording:state`, and the Record page reads the permissions when that changes. Asked beside the ticker, so it never
+/// waits for the system.
+fn read_recording_permissions(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<crate::AppState>();
+        let Some(info) = state.capture.info() else { return };
+        let next = crate::permissions::missing_during(info.mode, &state.permissions_now());
+        // The same recording: a very short one may have ended while the system was asked.
+        if state.capture.info().is_some_and(|i| i.client_ref == info.client_ref) {
+            let mut missing = state.recording_missing.lock().unwrap_or_else(|p| p.into_inner());
+            if *missing != next {
+                eprintln!("[echoledger] capture: what this recording may use changed; {} kind(s) missing now", next.len());
+                *missing = next;
+            }
+        }
+    });
+}
+
+/// What the capture says about its devices (a headset came or went, Phase 1B) goes to the pill and the Record page; a
+/// new microphone is looked at again for Bluetooth.
+fn take_device_notices(app: &AppHandle) {
+    use crate::audio::devices::DeviceNotice;
+    let state = app.state::<crate::AppState>();
+    let notices = state.capture.take_device_notices();
+    if notices.is_empty() {
+        return;
+    }
+    let now = Instant::now();
+    {
+        let mut status = state.device_status.lock().unwrap_or_else(|p| p.into_inner());
+        for notice in &notices {
+            status.apply(notice, now);
+        }
+    }
+    let new_mic = notices.iter().any(|n| matches!(n, DeviceNotice::Moved { channel: crate::audio::types::Channel::Mic, .. } | DeviceNotice::Back { channel: crate::audio::types::Channel::Mic, .. }));
+    if new_mic && let Some(info) = state.capture.info() {
+        check_bluetooth_mic(app, &info);
+    }
 }
 
 /// Appends an item to `uploads.json` and wakes the upload worker. An import of a file that is already queued (same

@@ -4,6 +4,7 @@ import { announceReady, api, listenTo, subscribeCaptions, type CaptionEvent, typ
 import { useHitRegions } from "../../lib/hitRegions";
 import { CloseIcon, CopyIcon, GripIcon } from "../../components/Icons";
 import { devanagariToUrdu } from "../../lib/devanagari";
+import { missingShort } from "../../lib/controls";
 
 /** Final lines kept for scrolling back; older ones are dropped. */
 export const MAX_CAPTION_LINES = 200;
@@ -95,6 +96,8 @@ export default function OverlayApp() {
   const [idle, setIdle] = useState(false);
   const [following, setFollowing] = useState(true);
   const [scrollBucket, setScrollBucket] = useState(0);
+  /** What the running recording misses because the system does not allow it (one short line). */
+  const [missing, setMissing] = useState<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const followingRef = useRef(true);
 
@@ -132,6 +135,14 @@ export default function OverlayApp() {
     });
     return () => {
       alive = false;
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
+
+  // Captions of one side alone would look like the other side said nothing: the line says why.
+  useEffect(() => {
+    const un = listenTo("recording:state", (state) => setMissing(state.active ? missingShort(state.missing, state.mode) : null));
+    return () => {
       un.then((f) => f()).catch(() => undefined);
     };
   }, []);
@@ -226,6 +237,7 @@ export default function OverlayApp() {
           onScroll={onScroll}
           style={{ maxHeight: `calc(${lines} * var(--caption-line-height))` }}
         >
+          {missing && <div className="caption-line small caption-message" data-testid="caption-missing">{missing}</div>}
           {state.message && <div className="caption-line small caption-message">{state.message}</div>}
           {state.lines.length === 0 && partials.length === 0 && !state.message && <div className="caption-line partial">Listening…</div>}
           {state.lines.map((line) => (
