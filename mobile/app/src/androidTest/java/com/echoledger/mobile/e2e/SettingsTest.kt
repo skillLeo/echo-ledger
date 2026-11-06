@@ -103,7 +103,7 @@ class SettingsTest : E2eTest() {
         Library.awaitLoaded()
         Ui.openTab("Settings")
         Ui.clickText("Devices")
-        Ui.clickText("Unpair")
+        Ui.clickText("Sign out")
         Ui.awaitText("Pair this phone", Ui.NORMAL)
         assertNull(AppState.token())
         assertEquals(0, AppState.cachedLibrarySize())

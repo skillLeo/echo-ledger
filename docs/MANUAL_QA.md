@@ -107,7 +107,7 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 | ☐ | 50 | Choose **Export → Word**. | A .docx lands in Downloads and opens. | T-D2 |
 | ☐ | 51 | Choose **Print or save as PDF**. | The print page opens in the browser and saves as a PDF. | T-D2 |
 | ☐ | 52 | Press **Ctrl+K**, type "settings", then type a word from the transcript. | "Go to Settings" opens Settings. The word opens the recording at that moment. | T-D4 |
-| ☐ | 53 | Pin the recording, choose a client (or **New client…**) and add a label. | The star and label show on the card at once. | O-D2 |
+| ☐ | 53 | Pin the recording, choose a project (or **New project…**) and add a label. | The star and label show on the card at once. | O-D2 |
 | ☐ | 54 | Open **Filters** and tick the "Show" boxes one at a time, then the "Recorded on" boxes; also try the client and label lists. | Each lists only its recordings, the counts match, ticked boxes add up inside a group, and the menu closes with Esc, the X button or a click outside. | O-D1 |
 | ☐ | 55 | Delete a recording, open **Recently deleted** and restore it. | It comes back with its audio and transcript. | R-2 |
 
@@ -223,7 +223,7 @@ calls auto-record on/off · Keep / Discard (card, notification, Calls view) · p
 library search, filters, select, move, label, delete, restore (⋮ → Recently deleted) · pin · keep forever ·
 open a recording, play, ±10 s, speed, skip silences · copy, copy with timestamps, Copy for AI, export, share link ·
 re-transcribe as · views (Roman Urdu, اردو, English, Original) · rename speakers (console) · clients and keyterms ·
-app lock · appearance and phone font · dictation keyboard settings · storage and retention · devices and unpair ·
+app lock · appearance and phone font · dictation keyboard settings · storage and retention · devices and sign out ·
 export / import settings · capture test, test the other side, copy diagnostics.
 
 | ☐ | # | Do this | You should see | Ref |
@@ -291,7 +291,7 @@ export / import settings · capture test, test the other side, copy diagnostics.
 | ☐ | 121 | Set retention to 7 days and mark one old recording **Keep**. On the server run `php artisan recordings:retention`. | Old recordings move to **Recently deleted**. The kept one stays. | R-1 |
 | ☐ | 122 | Open the old share link of a deleted recording. | "Not found". | R-3 |
 | ☐ | 123 | Set retention back to 30 days. | Saved. | — |
-| ☐ | 124 | Open **Devices** and revoke the phone. | The phone shows "This phone was unpaired on the server. Pair it again." Its waiting uploads stay. | A-42, V-A9 |
+| ☐ | 124 | Open **Devices** and revoke the phone. | The phone shows "This phone was signed out on the server. Sign in again." Its waiting uploads stay. | A-42, V-A9 |
 | ☐ | 125 | Pair the phone again. | The library loads again. | A-42 |
 
 ---

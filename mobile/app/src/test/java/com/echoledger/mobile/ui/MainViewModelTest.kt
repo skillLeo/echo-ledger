@@ -339,7 +339,7 @@ class MainViewModelTest : AppTest() {
         val job = vm.refresh()
         pumpUntil("refresh to finish") { job.isCompleted }
 
-        assertEquals("This phone was unpaired on the server. Pair it again.", vm.message.value)
+        assertEquals("This phone was signed out on the server. Sign in again.", vm.message.value)
     }
 
     @Test

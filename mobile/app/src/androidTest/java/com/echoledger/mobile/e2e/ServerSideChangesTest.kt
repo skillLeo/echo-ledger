@@ -37,7 +37,7 @@ class ServerSideChangesTest : E2eTest() {
         Library.awaitLoaded()
         Backend.revokeAllDevices()
         Library.sync()
-        Ui.awaitText("This phone was unpaired on the server. Pair it again.", Ui.LONG)
+        Ui.awaitText("This phone was signed out on the server. Sign in again.", Ui.LONG)
         assertTrue("the cached library stays readable", Ui.has(SeedData.SILENT) || Ui.has("Pair this phone"))
     }
 
@@ -49,7 +49,7 @@ class ServerSideChangesTest : E2eTest() {
         Library.awaitLoaded()
         Backend.revokeAllDevices()
         Library.sync()
-        Ui.awaitText("This phone was unpaired on the server. Pair it again.", Ui.LONG)
+        Ui.awaitText("This phone was signed out on the server. Sign in again.", Ui.LONG)
         Ui.awaitText("Pair this phone", Ui.NORMAL)
     }
 

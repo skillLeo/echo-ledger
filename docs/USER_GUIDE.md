@@ -494,7 +494,7 @@ nothing is recorded or kept unless you switch saving on.
   made and kept.
 - When the limit is raised, open the recording in the console and choose **Transcribe again**.
 
-**"This computer was signed out on the server"** (or "This phone was unpaired on the server")
+**"This computer was signed out on the server"** (or "This phone was signed out on the server")
 - The device was signed out: revoked in the console or under **Profile → Devices**, or by **Sign out everywhere**.
   Sign in again (section 3). Recordings waiting to upload stay on the device.
 

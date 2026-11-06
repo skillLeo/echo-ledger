@@ -343,7 +343,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             graph.library.clear()
             graph.invalidateApi()
             WidgetStateStore.refresh(getApplication())
-            _message.value = "This phone was unpaired on the server. Pair it again."
+            _message.value = "This phone was signed out on the server. Sign in again."
         } catch (e: Exception) {
             _offline.value = true
             _message.value = "Offline — showing the last synced library"
