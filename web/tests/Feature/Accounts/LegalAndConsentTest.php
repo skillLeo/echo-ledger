@@ -26,7 +26,7 @@ it('serves the Terms and the Privacy Policy as marked drafts, phone-sized, witho
 it('lists every processor of recordings and what each receives', function () {
     $page = (string) $this->get('/privacy')->getContent();
 
-    foreach (['AssemblyAI', 'Groq', 'Anthropic', 'Google Gemini', 'ElevenLabs', 'Soniox', 'hosting provider'] as $processor) {
+    foreach (['AssemblyAI', 'Groq', 'Anthropic', 'Google Gemini', 'ElevenLabs', 'Soniox', 'Microsoft Azure Speech', 'hosting provider'] as $processor) {
         expect($page)->toContain($processor);
     }
     expect($page)->toContain('What it receives')->toContain(RecordingConsent::TEXT);

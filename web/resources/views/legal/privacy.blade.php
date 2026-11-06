@@ -27,11 +27,13 @@
                     <tr><td>Google Gemini (Google Cloud, paid tier)</td><td>The audio of a recording, uploaded for one request and deleted right after.</td><td>Transcripts, when the operator chose it for a language.</td></tr>
                     <tr><td>ElevenLabs</td><td>The audio of a recording, or the live audio while captions run.</td><td>Transcripts and live captions, when chosen.</td></tr>
                     <tr><td>Soniox</td><td>The audio of a recording; for Live Translate, the sound your phone plays, sent by the phone itself with a key valid for minutes.</td><td>Transcripts and Live Translate.</td></tr>
+                    <tr><td>Microsoft Azure Speech</td><td>The audio of a recording, or the live audio while captions or dictation run.</td><td>Transcripts, live captions and dictation, when the operator chose it.</td></tr>
                     <tr><td>Anthropic (Claude)</td><td>The text of a transcript; for projects, the text of the project's files and notes and your questions; for screen moments, the pictures of the screen.</td><td>The Roman Urdu, Urdu and English views, suggested fixes, call notes, briefs and Ask, and reading the text on shared screens.</td></tr>
                     <tr><td>The hosting provider of this server</td><td>Everything the server stores, encrypted where described above, on its machines.</td><td>Running the server and its backups.</td></tr>
                 </tbody>
             </table>
         </div>
+        <p>Self-hosted engines (whisper.cpp, Parakeet) run on servers of the operator and send audio nowhere else.</p>
         <p>Other services see less: Google, when you sign in with Google, learns that you signed in; the email provider of this server carries the emails it sends you (confirmations, sign-in alerts, invitations and the like).</p>
 
         <h2>Who sees your recordings</h2>
