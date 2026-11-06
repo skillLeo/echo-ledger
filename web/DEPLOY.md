@@ -110,8 +110,8 @@ be restored from the console's Recently deleted page for 48 hours.
 - **Migration `2026_11_25_000001`:** a sent project keeps the list of recordings it holds (`sent_items.session_ids`).
   Projects sent before this keep what they hold at that moment; nothing is deleted. Rollback (`migrate:rollback
   --step=1`) drops the column, and a sent project shows whatever is filed in it again.
-- **Restart the workers** (`php artisan queue:restart`) so they encrypt queued emails and read the new usage rules. Emails
-  already waiting in the queue are still sent.
+- **Restart the workers on a VPS** (`php artisan queue:restart`; on shared hosting they restart by themselves). Account
+  emails are now encrypted in the queue; those already waiting are still sent.
 - **Usage reports count only after a token.** The record of which device was given a token is in the cache: clearing the
   cache (`cache:clear`) makes the reports of streams open at that moment count as 0, until the device's next token.
 
