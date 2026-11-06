@@ -285,10 +285,42 @@ describe("motion (C5)", () => {
   it("every transition uses a motion token, except level meters that follow the signal", () => {
     for (const [file, source] of [["styles.css", css], ["controls.css", controls]] as const) {
       for (const [, value] of source.matchAll(/transition:\s*([^;]+);/g)) {
-        const meter = /\b(width|height) [\d.]+(ms|s) linear\b/.test(value);
+        const meter = /^transform [\d.]+(ms|s) linear$/.test(value.trim());
         expect(meter || value.trim() === "none" || value.includes("var(--motion-"), `${file}: transition: ${value}`).toBe(true);
       }
     }
+  });
+
+  it("animates only transform and opacity in every keyframes, so nothing lays out or repaints while it moves", () => {
+    let seen = 0;
+    for (const [file, source] of [["styles.css", css], ["controls.css", controls]] as const) {
+      for (const [, name, body] of source.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)) {
+        seen++;
+        const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]);
+        expect(props.every((p) => ["transform", "opacity", "translate", "scale"].includes(p)), `${file} @keyframes ${name}: ${props}`).toBe(true);
+      }
+    }
+    // The pulses that run all through a recording are among them.
+    expect(seen).toBeGreaterThanOrEqual(14);
+    expect(css).toMatch(/@keyframes pulse\b/);
+    expect(controls).toMatch(/@keyframes rec-pulse\b/);
+  });
+
+  it("moves no layout property in a transition, the level meters included", () => {
+    for (const [file, source] of [["styles.css", css], ["controls.css", controls]] as const) {
+      for (const [, value] of source.matchAll(/transition:\s*([^;]+);/g)) {
+        expect(value, `${file}: transition: ${value}`).not.toMatch(/(^|,\s*)(width|height|grid-template-columns|top|left|margin|padding)\b/);
+      }
+    }
+  });
+
+  it("keeps the record ring, the check and the record glyph still with reduced motion", () => {
+    const reduced = media("(prefers-reduced-motion: reduce)").filter((r): r is CSSStyleRule => r instanceof CSSStyleRule);
+    const still = (selector: string) => reduced.some((r) => r.selectorText.split(",").map((x) => x.trim()).includes(selector) && r.style.getPropertyValue("animation") === "none");
+    expect(still(".record-wrap.live::before")).toBe(true);
+    expect(still(".status-dot.live::after")).toBe(true);
+    expect(still(".success-check")).toBe(true);
+    expect(still(".record-glyph")).toBe(true);
   });
 
   it("turns motion off with reduced motion", () => {

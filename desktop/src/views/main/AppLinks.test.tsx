@@ -117,8 +117,11 @@ describe("app links", () => {
     respond("request_links", { data: [{ id: "rq1", title: "Voice notes for Acme", client_id: null, expires_at: null, max_files: null, max_mb: null, received: 2, revoked_at: null }] });
     await renderApp();
     await open("https://ledger.example.test/r/tok");
-    expect(await screen.findByRole("dialog", { name: "Request files" })).toBeInTheDocument();
+    const sheet = await screen.findByRole("dialog", { name: "Request files" });
+    expect(sheet).toBeInTheDocument();
     expect(await screen.findByText("Voice notes for Acme")).toBeInTheDocument();
+    // It opens with the page switch: outside the page that moves, so it covers the window from the first frame.
+    expect(sheet.closest("main")).toBeNull();
   });
 
   it("shows a request link once: coming back to Projects later does not open it again", async () => {

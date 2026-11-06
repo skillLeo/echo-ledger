@@ -299,11 +299,30 @@ pub fn set_pill_visible(app: &AppHandle, visible: bool) {
     }
 }
 
-/// The after-call toast and chip (v1.5): the window shows `state`; with nothing in it the window may go.
+/// How long the after-call window stays once it has nothing left to show (v1.5): long enough for the toast or chip
+/// to leave (150 ms) and for a kept chip's check (0.9 s) before the window goes.
+const AFTER_CALL_GRACE: Duration = Duration::from_millis(1200);
+/// Counts what the after-call window was asked to show, so only the last empty state hides it.
+static AFTER_CALL_SHOWN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Whether the empty state numbered `asked` is still the last one shown when its grace is over.
+fn still_empty(asked: u64) -> bool {
+    AFTER_CALL_SHOWN.load(std::sync::atomic::Ordering::SeqCst) == asked
+}
+
+/// The after-call toast and chip (v1.5): the window shows `state`; with nothing in it the window goes after
+/// [AFTER_CALL_GRACE], unless something new is shown first.
 pub fn show_after_call(app: &AppHandle, state: &crate::after_call::AfterCallState) {
+    let asked = AFTER_CALL_SHOWN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
     if state.is_empty() {
         lifecycle::emit(app, REVIEW, "aftercall:state", state);
-        lifecycle::hide(app, REVIEW, "after_call");
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(AFTER_CALL_GRACE).await;
+            if still_empty(asked) {
+                lifecycle::hide(&app, REVIEW, "after_call");
+            }
+        });
     } else {
         lifecycle::show(app, REVIEW, "after_call");
         lifecycle::emit(app, REVIEW, "aftercall:state", state);
@@ -324,6 +343,17 @@ pub fn hide_ask(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_last_empty_after_call_state_hides_the_window() {
+        let first = AFTER_CALL_SHOWN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        assert!(still_empty(first));
+        // Something new was shown during the grace: the old empty state no longer hides the window.
+        let second = AFTER_CALL_SHOWN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        assert!(!still_empty(first));
+        assert!(still_empty(second));
+        assert!(AFTER_CALL_GRACE >= Duration::from_millis(900 + 150), "room for the kept check and the exit");
+    }
 
     #[test]
     fn the_click_through_poll_slows_down_when_every_overlay_is_idle() {

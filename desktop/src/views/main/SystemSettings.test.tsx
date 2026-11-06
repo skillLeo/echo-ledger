@@ -110,7 +110,7 @@ describe("system-style settings", () => {
     fireEvent.change(screen.getByLabelText("Import settings"), { target: { files: [file] } });
     await waitFor(() => expect(callsOf("settings_import")).toHaveLength(1));
     expect(JSON.parse(callsOf("settings_import")[0].text as string).settings.captionLines).toBe(2);
-    expect(screen.getByText("The file has your preferences only, never the pairing, keys or PIN.")).toBeInTheDocument();
+    expect(screen.getByText("The file has your preferences only, never the sign-in, keys or PIN.")).toBeInTheDocument();
   });
 });
 

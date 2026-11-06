@@ -356,18 +356,18 @@ describe("Waiting recordings: rename", () => {
 });
 
 describe("Waiting recordings: assign client", () => {
-  const clientSelect = (id: string) => within(row(id)).getByRole("combobox", { name: "Client" });
+  const clientSelect = (id: string) => within(row(id)).getByRole("combobox", { name: "Project" });
 
-  it("loads the clients once and offers No client first", async () => {
+  it("loads the clients once and offers No project first", async () => {
     await renderLibrary([makePendingItem("p1"), makePendingItem("p2")]);
     expect(callsOf("list_clients")).toHaveLength(0);
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Assign client" }));
-    await waitFor(() => expect([...(clientSelect("p1") as HTMLSelectElement).options].map((o) => o.text)).toEqual(["No client", "Acme Holdings", "Northwind"]));
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Choose project" }));
+    await waitFor(() => expect([...(clientSelect("p1") as HTMLSelectElement).options].map((o) => o.text)).toEqual(["No project", "Acme Holdings", "Northwind"]));
     expect(clientSelect("p1")).toHaveValue("");
-    expect(within(row("p1")).getByRole("button", { name: "Assign client" })).toHaveAttribute("aria-expanded", "true");
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Assign client" }));
-    expect(within(row("p1")).queryByRole("combobox", { name: "Client" })).not.toBeInTheDocument();
-    fireEvent.click(within(row("p2")).getByRole("button", { name: "Assign client" }));
+    expect(within(row("p1")).getByRole("button", { name: "Choose project" })).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Choose project" }));
+    expect(within(row("p1")).queryByRole("combobox", { name: "Project" })).not.toBeInTheDocument();
+    fireEvent.click(within(row("p2")).getByRole("button", { name: "Choose project" }));
     expect(clientSelect("p2")).toBeInTheDocument();
     expect(callsOf("list_clients")).toHaveLength(1);
   });
@@ -375,12 +375,12 @@ describe("Waiting recordings: assign client", () => {
   it("assigns the chosen client and shows its name", async () => {
     await renderLibrary([makePendingItem("p1")]);
     respondWith("pending_assign_client", ({ id, clientId }) => makePendingItem(id as string, { clientId: clientId as string, clientName: "Northwind" }));
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Assign client" }));
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Choose project" }));
     await waitFor(() => expect(within(clientSelect("p1")).getByRole("option", { name: "Northwind" })).toBeInTheDocument());
     fireEvent.change(clientSelect("p1"), { target: { value: "c2" } });
     await waitFor(() => expect(callsOf("pending_assign_client")).toEqual([{ id: "p1", clientId: "c2" }]));
     await waitFor(() => expect(within(row("p1")).getByText(/· Northwind$/)).toBeInTheDocument());
-    expect(within(row("p1")).queryByRole("combobox", { name: "Client" })).not.toBeInTheDocument();
+    expect(within(row("p1")).queryByRole("combobox", { name: "Project" })).not.toBeInTheDocument();
   });
 
   it("the language chip sets the language Keep uses and offers to remember it for the client", async () => {
@@ -398,10 +398,10 @@ describe("Waiting recordings: assign client", () => {
     await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { language: "ur" } }]));
   });
 
-  it("sends an explicit null for No client", async () => {
+  it("sends an explicit null for No project", async () => {
     await renderLibrary([makePendingItem("p1", { clientId: "c1", clientName: "Acme Holdings" })]);
     respondWith("pending_assign_client", ({ id }) => makePendingItem(id as string));
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Assign client" }));
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Choose project" }));
     await waitFor(() => expect(clientSelect("p1")).toHaveValue("c1"));
     fireEvent.change(clientSelect("p1"), { target: { value: "" } });
     await waitFor(() => expect(callsOf("pending_assign_client")).toHaveLength(1));
@@ -410,18 +410,18 @@ describe("Waiting recordings: assign client", () => {
 
   it("keeps a client the server no longer lists selectable by its cached name", async () => {
     await renderLibrary([makePendingItem("p1", { clientId: "gone", clientName: "Old client" })]);
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Assign client" }));
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Choose project" }));
     await waitFor(() => expect(within(clientSelect("p1")).getByRole("option", { name: "Acme Holdings" })).toBeInTheDocument());
     expect(clientSelect("p1")).toHaveValue("gone");
     expect(within(clientSelect("p1")).getByRole("option", { name: "Old client" })).toBeInTheDocument();
   });
 
-  it("reports when the client list cannot be loaded and still offers No client", async () => {
+  it("reports when the client list cannot be loaded and still offers No project", async () => {
     const { notify } = await renderLibrary([makePendingItem("p1")]);
     fail("list_clients", "Network error: offline");
-    fireEvent.click(within(row("p1")).getByRole("button", { name: "Assign client" }));
+    fireEvent.click(within(row("p1")).getByRole("button", { name: "Choose project" }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith("Network error: offline", true));
-    expect([...(clientSelect("p1") as HTMLSelectElement).options].map((o) => o.text)).toEqual(["No client"]);
+    expect([...(clientSelect("p1") as HTMLSelectElement).options].map((o) => o.text)).toEqual(["No project"]);
   });
 });
 

@@ -136,6 +136,7 @@ describe("microphone and capture health (B5)", () => {
     await emitEvent("capture:test_level", [0.25, 0.05]);
     expect(screen.getByRole("meter", { name: "Microphone level" })).toHaveAttribute("aria-valuenow", "100");
     expect(screen.getByRole("meter", { name: "Computer sound level" })).toHaveAttribute("aria-valuenow", "20");
+    expect((screen.getByRole("meter", { name: "Computer sound level" }).firstElementChild as HTMLElement).style.transform).toBe("scaleX(0.2)");
     finish(result);
     expect(await screen.findByText("Your microphone is working.")).toBeInTheDocument();
     expect(screen.getByText(/No sound from this computer was captured/)).toBeInTheDocument();

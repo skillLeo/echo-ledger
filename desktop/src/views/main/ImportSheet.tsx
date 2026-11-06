@@ -67,9 +67,9 @@ export function ImportSheet({ paths, notify, onClose }: {
           })}
         </ul>
         <div className="row organise-field">
-          <label htmlFor={clientField} className="small muted">Client</label>
+          <label htmlFor={clientField} className="small muted">Project</label>
           <select id={clientField} className="select" value={clientId} disabled={busy} onChange={(e) => setClientId(e.target.value)}>
-            <option value="">No client</option>
+            <option value="">No project</option>
             {sortFolders(clients).map((c) => <option key={c.id} value={c.id}>{`${folderBadge(c)} · ${c.name}`}</option>)}
           </select>
         </div>
@@ -80,7 +80,7 @@ export function ImportSheet({ paths, notify, onClose }: {
             <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}</optgroup>
           </select>
         </div>
-        <p className="small muted">The client and language apply to every file. Files already in your Library are skipped.</p>
+        <p className="small muted">The project and language apply to every file. Files already in your Library are skipped.</p>
         <div className="row sheet-actions">
           <span className="spacer" />
           <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>Cancel</button>

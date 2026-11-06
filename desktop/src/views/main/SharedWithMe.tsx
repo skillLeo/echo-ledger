@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessage, type SharedItem } from "../../lib/ipc";
 import { formatDuration, formatWhen } from "../../lib/format";
 import { AppTileIcon, appKind, FolderIcon, UsersIcon } from "../../components/Icons";
+import { SuccessCheck } from "../../components/SuccessCheck";
 
 /** "From Hassam · Oct 30 · 4:05 pm" */
 export function sentLine(item: Pick<SharedItem, "from" | "sent_at">): string {
@@ -116,7 +117,7 @@ export function SharedWithMe({ notify, openId, onOpen, onSaved, focusId = null }
             <div className="row shared-actions">
               {session && <button type="button" className="btn compact" aria-pressed={openId === item.id} onClick={() => onOpen(item)}>Open</button>}
               {item.saved_at ? (
-                <span className="small muted">Saved to your {item.kind === "project" ? "projects" : "Library"}</span>
+                <span className="small muted saved-line"><SuccessCheck size={14} />Saved to your {item.kind === "project" ? "projects" : "Library"}</span>
               ) : (
                 <button type="button" className="btn primary compact" disabled={busy === item.id} onClick={() => void save(item)}>Save to my library</button>
               )}

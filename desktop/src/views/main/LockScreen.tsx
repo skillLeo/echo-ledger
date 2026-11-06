@@ -1,6 +1,7 @@
 // The app lock screen (plan B16): Windows Hello or Touch ID, or the PIN. Recording and uploads keep running behind it.
 import { useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage, type LockStatus } from "../../lib/ipc";
+import { BrandMark } from "../../components/BrandMark";
 
 export const SYSTEM_LABEL = { windows_hello: "Use Windows Hello", touch_id: "Use Touch ID" } as const;
 
@@ -65,6 +66,7 @@ export function LockScreen({ status, onUnlocked }: { status: LockStatus; onUnloc
   return (
     <main className="gate lock-screen">
       <div className="card lock-card" role="dialog" aria-modal="true" aria-labelledby={`${pinId}-title`}>
+        <BrandMark size={40} />
         <h1 id={`${pinId}-title`} className="page-title">EchoLedger is locked</h1>
         <p className="small muted">Recording and uploads keep running while the app is locked.</p>
         {status.osMethod && (

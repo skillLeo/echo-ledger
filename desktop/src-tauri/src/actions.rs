@@ -1136,7 +1136,7 @@ pub(crate) fn forget_client(app: &AppHandle, client_id: &str) {
         emit_pending(app);
         refresh_after_call(app);
     }
-    let _ = app.emit("app:toast", "The selected client was removed on the server, so no client is set now.");
+    let _ = app.emit("app:toast", "The project chosen for keyterms was removed on the server, so no project is set now.");
 }
 
 /// Imports files (the Import button or a drop on the main window), one recording each, with one client and language

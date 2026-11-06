@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { RecordView } from "./RecordView";
 import type { AppStatus, MicUser } from "../../lib/ipc";
@@ -34,10 +34,24 @@ async function setup(status: Partial<AppStatus> = {}, users: MicUser[] = []) {
   return { run, ...view };
 }
 
-const meterWidths = (container: HTMLElement) => [...container.querySelectorAll<HTMLElement>(".meter > div")].map((el) => el.style.width);
+const meterFills = (container: HTMLElement) => [...container.querySelectorAll<HTMLElement>(".meter > div")].map((el) => el.style.transform);
 
 describe("RecordView main control", () => {
   beforeEach(() => resetTauriMock());
+
+  it("shows Record as a filled dot, a recording as stop, and breathes a ring only while it records (v1.5)", async () => {
+    const idle = await setup();
+    const glyph = () => idle.container.querySelector(".record-glyph svg")!;
+    expect(glyph().querySelector("circle")).toHaveAttribute("fill", "currentColor");
+    expect(screen.getByTestId("record-wrap")).not.toHaveClass("live");
+    idle.unmount();
+    await setup({ recording: makeRecording() });
+    expect(document.querySelector(".record-glyph rect")).toHaveAttribute("fill", "currentColor");
+    expect(screen.getByTestId("record-wrap")).toHaveClass("live");
+    cleanup();
+    await setup({ recording: makeRecording(), paused: true });
+    expect(screen.getByTestId("record-wrap")).not.toHaveClass("live");
+  });
 
   it("offers REC when idle and starts a recording on click", async () => {
     const { run } = await setup();
@@ -83,10 +97,10 @@ describe("RecordView main control", () => {
 
   it("scales the Me and Client meters from the audio levels and caps them at full", async () => {
     const quiet = await setup({ levels: [0, 0] });
-    expect(meterWidths(quiet.container)).toEqual(["0%", "0%"]);
+    expect(meterFills(quiet.container)).toEqual(["scaleX(0)", "scaleX(0)"]);
     quiet.unmount();
     const mixed = await setup({ levels: [0.1, 0.5] });
-    expect(meterWidths(mixed.container)).toEqual(["40%", "100%"]);
+    expect(meterFills(mixed.container)).toEqual(["scaleX(0.4)", "scaleX(1)"]);
     expect(screen.getByText("Me")).toBeInTheDocument();
     expect(screen.getByText("Client")).toBeInTheDocument();
   });

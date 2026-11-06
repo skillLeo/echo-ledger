@@ -75,6 +75,7 @@ describe("keep, the undo bin and storage (B17)", () => {
     render(<StorageCard />);
     expect(await screen.findByText("Recordings on the server: 3.0 GB in 42 files.")).toBeInTheDocument();
     expect(screen.getByRole("meter", { name: "Server disk used" })).toHaveAttribute("aria-valuenow", "75");
+    expect((screen.getByRole("meter", { name: "Server disk used" }).firstElementChild as HTMLElement).style.transform).toBe("scaleX(0.75)");
     expect(screen.getByText(/deleted after 14 days unless kept/)).toBeInTheDocument();
   });
 });

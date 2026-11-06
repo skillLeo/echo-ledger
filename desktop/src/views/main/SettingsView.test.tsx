@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { SettingsView } from "./SettingsView";
+import { SettingsView, signedInLine } from "./SettingsView";
 import { errorMessage, type AppStatus, type Settings, type SiteRule } from "../../lib/ipc";
 import { callsOf, emitEvent, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeRecording, makeSettings, makeSiteRule, makeStatus } from "../../test/fixtures";
@@ -71,12 +71,12 @@ describe("SettingsView loading", () => {
     respondWith("list_clients", () => Promise.reject("Server returned 500: oops"));
     render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
     await screen.findByRole("heading", { name: "Settings" });
-    expect(screen.getByRole("option", { name: "No client" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "No project" })).toBeInTheDocument();
   });
 
-  it("shows the paired server and whether the certificate is pinned", async () => {
+  it("shows the server it is signed in to and whether the certificate is pinned", async () => {
     await setup({}, { serverUrl: "https://ledger.example.test", pinned: true });
-    expect(screen.getByText(/Connected to ledger\.example\.test\s+· secure connection/)).toBeInTheDocument();
+    expect(screen.getByText(/^Signed in to ledger\.example\.test\s+· secure connection/)).toBeInTheDocument();
   });
 
   it("says when the certificate is not pinned", async () => {
@@ -84,10 +84,19 @@ describe("SettingsView loading", () => {
     expect(screen.getByText(/· connection not verified/)).toBeInTheDocument();
   });
 
-  it("shows the device name next to the unpair button", async () => {
-    await setup({}, { deviceName: "Studio PC" });
+  it("shows the device name and the server it is signed in to next to Sign out (v1.5: no more Unpair)", async () => {
+    await setup({}, { deviceName: "Studio PC", serverUrl: "https://ledger.example.test" });
     expect(screen.getByText("Studio PC")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
+    expect(screen.getByTestId("signed-in-to")).toHaveTextContent("Signed in to ledger.example.test");
+    expect(screen.getByRole("button", { name: "Sign out of this computer…" })).toBeInTheDocument();
+    expect(screen.queryByText(/unpair/i)).not.toBeInTheDocument();
+  });
+
+  it("says Signed in to the server's host, or Not signed in", () => {
+    expect(signedInLine("https://ledger.example.test")).toBe("Signed in to ledger.example.test");
+    expect(signedInLine("https://ledger.example.test:8443/")).toBe("Signed in to ledger.example.test:8443");
+    expect(signedInLine(null)).toBe("Not signed in");
+    expect(signedInLine("not a url")).toBe("Signed in to not a url");
   });
 });
 
@@ -151,15 +160,15 @@ describe("SettingsView selects", () => {
   it("lists the server's clients, selects one and can clear the choice", async () => {
     await setup({ clientId: null });
     await screen.findByRole("option", { name: "Acme Holdings" });
-    const select = screen.getByDisplayValue("No client");
-    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["No client", "Acme Holdings", "Northwind"]);
+    const select = screen.getByDisplayValue("No project");
+    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["No project", "Acme Holdings", "Northwind"]);
 
     fireEvent.change(select, { target: { value: "c2" } });
     await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
     expect(callsOf("update_settings")[0]).toEqual({ patch: { clientId: "c2" } });
   });
 
-  it("sends clientId null when 'No client' is chosen", async () => {
+  it("sends clientId null when 'No project' is chosen", async () => {
     await setup({ clientId: "c1" });
     await screen.findByRole("option", { name: "Acme Holdings" });
     const select = screen.getByDisplayValue("Acme Holdings");
@@ -169,18 +178,18 @@ describe("SettingsView selects", () => {
   });
 
   // A6.DU4: the key must reach the core as an explicit null (clear), never be dropped (keep the stored client).
-  it("keeps clientId as an explicit null in the serialised command and shows No client afterwards", async () => {
+  it("keeps clientId as an explicit null in the serialised command and shows No project afterwards", async () => {
     await setup({ clientId: "c1" });
     echoSettings(makeSettings({ clientId: "c1" }));
     await screen.findByRole("option", { name: "Acme Holdings" });
-    const select = screen.getByLabelText("Client keyterms") as HTMLSelectElement;
+    const select = screen.getByLabelText("Project keyterms") as HTMLSelectElement;
     expect(select.value).toBe("c1");
     fireEvent.change(select, { target: { value: "" } });
     await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
     // Command arguments travel to Rust as JSON: null survives JSON.stringify, undefined would drop the key.
     expect(JSON.stringify(callsOf("update_settings")[0])).toBe('{"patch":{"clientId":null}}');
     await waitFor(() => expect(select.value).toBe(""));
-    expect(screen.getByDisplayValue("No client")).toBe(select);
+    expect(screen.getByDisplayValue("No project")).toBe(select);
   });
 
   // A6.DU4 (core side, DESKTOP-CORE): plain serde turns `"clientId": null` into `None` for an Option<Option<String>>
@@ -217,8 +226,8 @@ describe("SettingsView selects", () => {
     await screen.findByRole("option", { name: "Acme Holdings" });
     expect(screen.getByRole("combobox", { name: "Caption position" })).toHaveValue("bottom_right");
     expect(screen.getByRole("combobox", { name: "Dictation output" })).toHaveValue("type");
-    const client = screen.getByRole("combobox", { name: "Client keyterms" });
-    expect(client).toHaveAccessibleDescription("Names and jargon from this client boost accuracy.");
+    const client = screen.getByRole("combobox", { name: "Project keyterms" });
+    expect(client).toHaveAccessibleDescription("Names and jargon of the selected project improve accuracy.");
   });
 
   it("describes a switch with its hint", async () => {
@@ -335,7 +344,7 @@ describe("SettingsView unpair", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const { onUnpaired } = await setup();
     respond("unpair", makeStatus({ paired: false }));
-    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out of this computer…" }));
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Sign out of this computer?"));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(callsOf("unpair")).toHaveLength(0);
@@ -347,7 +356,7 @@ describe("SettingsView unpair", () => {
     const { onUnpaired } = await setup();
     const unpaired = makeStatus({ paired: false, deviceName: null, serverUrl: null });
     respond("unpair", unpaired);
-    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out of this computer…" }));
     await waitFor(() => expect(onUnpaired).toHaveBeenCalledWith(unpaired));
     expect(callsOf("unpair")).toHaveLength(1);
   });
@@ -356,7 +365,7 @@ describe("SettingsView unpair", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { onUnpaired, errors } = await setup();
     respondWith("unpair", () => Promise.reject("Keychain error: access denied"));
-    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out of this computer…" }));
     await waitFor(() => expect(errors).toEqual(["Keychain error: access denied"]));
     expect(onUnpaired).not.toHaveBeenCalled();
   });

@@ -40,7 +40,7 @@ describe("dictation box", () => {
     try {
       await emitEvent("overlay:visibility", true);
       await emitEvent("dictation:state", { active: true, sounds: false, mode: "toggle" });
-      await pushChannelMessage({ kind: "status", live: false, recording: false, provider: null, message: "This computer is not paired with an EchoLedger server yet." });
+      await pushChannelMessage({ kind: "status", live: false, recording: false, provider: null, message: "This computer is not signed in to an EchoLedger server yet." });
       await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle" });
       await act(async () => void vi.advanceTimersByTime(ENDED_MESSAGE_MS - 100));
       expect(root(container)).not.toHaveClass("overlay-hidden");
@@ -104,8 +104,10 @@ describe("dictation box", () => {
     expect(meter).toHaveAttribute("aria-valuenow", "0");
     await emitEvent("dictation:level", 0.2);
     expect(Number(meter.getAttribute("aria-valuenow"))).toBeGreaterThan(0);
+    expect((meter.firstElementChild as HTMLElement).style.transform).toBe("scaleX(0.8)");
     await emitEvent("dictation:state", { active: false, sounds: false, mode: "toggle" });
     expect(meter).toHaveAttribute("aria-valuenow", "0");
+    expect((meter.firstElementChild as HTMLElement).style.transform).toBe("scaleX(0)");
   });
 
   it("plays the start and stop sounds only when they are on", async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type MeetingPackFormat, type ScreenMoment, type LibraryItem, type SearchResult, type SharedItem, type SmartFolder, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
 import { folderLabel, inFolderHere } from "../../lib/folders";
@@ -11,13 +11,14 @@ import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { AlertIcon, AppTileIcon, appKind, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, ShareIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
+import { AlertIcon, AppTileIcon, appKind, CloseIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
 import { filterByClient, filterByLabel, folderBadge, foldersOf, inSmartView, libraryLabels, smartViewCounts } from "../../lib/organise";
 import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./LibraryOrganise";
 import { useWindowShown } from "../../lib/visibility";
+import { MotionGroup, openFromRow, snapshotRow, type RowSnapshot } from "../../lib/motion";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcribingText, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
@@ -285,6 +286,17 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     : filtered.find((i) => i.id === selected) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? null;
   // A recording a teammate sent can be played and read, not changed.
   const readOnly = !!current && current === sharedSession;
+  // The recording page opening from its row (since v1.5): the row clicked last, until the page shows it.
+  const detailRef = useRef<HTMLDivElement>(null);
+  const opening = useRef<RowSnapshot | null>(null);
+  const pageMotion = useMemo(() => new MotionGroup(), []);
+  useLayoutEffect(() => {
+    const from = opening.current;
+    if (!from || !current || current.id !== from.id || !detailRef.current) return;
+    opening.current = null;
+    openFromRow(pageMotion, detailRef.current, from);
+  }, [current, pageMotion]);
+  useEffect(() => () => pageMotion.stop(), [pageMotion]);
   // Screen moments (since v1.5): read when the recording has any; each sits after the line of its moment.
   const { screens, reload: reloadScreens } = useSessionScreens(current && !readOnly ? current.id : null, current?.screen_count);
   const [screenOpen, setScreenOpen] = useState<number | null>(null);
@@ -902,15 +914,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         <label className="searchbox">
           <SearchIcon size={18} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search recordings and transcripts" aria-label="Search recordings" />
-          {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search">×</button>}
+          {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><CloseIcon size={16} /></button>}
         </label>
       </div>
       <div className="chips library-chips">
         <LibraryFilters state={filters} onChange={setFilters} counts={viewCounts} tags={tags} showBookmarks={anyBookmarks || filters.tags.size > 0} />
         {(folders.length > 0 || folder !== null) && (
-          <select className={`chip ${folder !== null ? "active" : ""}`} value={folder ?? "*"} onChange={(e) => setFolder(e.target.value === "*" ? null : e.target.value)} aria-label="Client folder">
-            <option value="*">All clients</option>
-            <option value="">No client</option>
+          <select className={`chip ${folder !== null ? "active" : ""}`} value={folder ?? "*"} onChange={(e) => setFolder(e.target.value === "*" ? null : e.target.value)} aria-label="Filter by project">
+            <option value="*">All projects</option>
+            <option value="">No project</option>
             {folders.map((cl) => <option key={cl.id} value={cl.id}>{`${folderBadge(cl)} · ${cl.name}`}</option>)}
           </select>
         )}
@@ -1005,7 +1017,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   item.marker_count ? `${item.marker_count} bookmark${item.marker_count === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ");
                 const avatar = (
                   <span className={`avatar ${item.source_device ?? "web"} app-${appKind(item.source_app)}`}>
-                    <AppTileIcon app={item.source_app} />
+                    <AppTileIcon app={item.source_app} data-motion="tile" />
                     <span className="avatar-device" title={item.source_device_label}><DeviceBadgeIcon source={item.source_device} /></span>
                   </span>
                 );
@@ -1028,12 +1040,20 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     <button type="button" className={`item ${item.id === selected ? "selected" : ""} ${selecting && picked.has(item.id) ? "picked" : ""}`}
                       aria-current={!selecting && item.id === selected ? "true" : undefined} aria-pressed={selecting ? picked.has(item.id) : undefined}
                       onPointerDown={(e) => startDrag(e, item)}
-                      onClick={() => { if (dragJustEnded()) return; if (selecting) togglePicked(item.id); else setSelected(item.id); }}>
+                      onClick={(e) => {
+                        if (dragJustEnded()) return;
+                        if (selecting) togglePicked(item.id);
+                        else {
+                          // The recording page opens from this row: its title and tile move from here (lib/motion.ts).
+                          opening.current = item.id === selected ? null : snapshotRow(item.id, e.currentTarget);
+                          setSelected(item.id);
+                        }
+                      }}>
                       <div className="row">
                         {avatar}
                         <div className="item-main">
                           <div className="item-line">
-                            <span className="item-title">{item.title}</span>
+                            <span className="item-title" data-motion="title">{item.title}</span>
                             {item.pinned && <span className="pin-star" aria-label="Pinned"><PinIcon size={14} /></span>}
                             <span className="item-time">{rowTime(item.started_at)}</span>
                           </div>
@@ -1062,7 +1082,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             </div>
           ))}
         </div>
-        <div className="detail card">
+        <div className="detail card" ref={detailRef}>
           {!current && (
             <div className="empty-state">
               <span className="empty-icon"><LibraryIcon size={26} /></span>
@@ -1079,7 +1099,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 <div className="detail-head">
                   <div className="detail-actions">
                     <div className="detail-sources">
-                      <SourceAppBadge app={current.source_app} label={current.source_app_label} />
+                      <SourceAppBadge app={current.source_app} label={current.source_app_label} motion="tile" />
                       <SourceDeviceBadge source={current.source_device} label={current.source_device_label} />
                     </div>
                     <span className="spacer" />
@@ -1088,15 +1108,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <button type="button" className="btn ghost icon-only" aria-label="Find in this transcript" aria-pressed={findOpen} title="Find in this transcript (Ctrl+F)" onClick={() => setFindOpen(!findOpen)}><SearchIcon size={18} /></button>
                     )}
                     {playbackUrl && !readOnly && <button type="button" className="btn ghost icon-only" aria-label="Save audio" onClick={() => void saveAudio()} title="Save the recording's audio file on this computer"><DownloadIcon size={18} /></button>}
-                    {!readOnly && <button className="btn ghost icon-only" aria-label="Share" title="Share a view-only link" aria-pressed={panel === "share"} onClick={() => setPanel(panel === "share" ? null : "share")}><ShareIcon size={18} /></button>}
+                    {!readOnly && <button className="btn ghost icon-only" aria-label="Share" title="Share a view-only link" aria-pressed={panel === "share"} onClick={() => setPanel(panel === "share" ? null : "share")}><LinkIcon size={18} /></button>}
                     {!readOnly && <button className="btn danger ghost icon-only" aria-label="Delete" title="Delete this recording" onClick={() => remove(current.id)}><TrashIcon size={18} /></button>}
                   </div>
                   {readOnly ? (
-                    <h2 className="detail-title">{current.title}</h2>
+                    <h2 className="detail-title" data-motion="title">{current.title}</h2>
                   ) : renaming?.id === current.id && renaming.where === "detail" ? (
                     <TitleEditor className="detail-title-input" initial={current.title ?? ""} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
                   ) : (
-                    <h2 className="detail-title">
+                    <h2 className="detail-title" data-motion="title">
                       <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{current.title}</button>
                     </h2>
                   )}

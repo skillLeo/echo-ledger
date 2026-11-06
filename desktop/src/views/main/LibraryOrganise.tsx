@@ -7,7 +7,8 @@ import { formatWhen } from "../../lib/format";
 import { MAX_LABEL_CHARS, withLabel } from "../../lib/organise";
 import { projectLabel, projectTree, visibleRows } from "../../lib/projects";
 import { MAX_TITLE_CHARS } from "../../lib/importFiles";
-import { DotsIcon, PinIcon } from "../../components/Icons";
+import { CloseIcon, PinIcon } from "../../components/Icons";
+import { ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
 import { MoveRecordingsDialog } from "./ProjectDialogs";
 import { FiledByLine } from "./FilingRules";
 
@@ -149,7 +150,7 @@ export function RowMenu({ title, pinned, onRename, onMove, onPin, onDelete }: {
   return (
     <div className="row-menu" ref={box}>
       <button type="button" className="row-menu-btn" aria-label={`More for ${title}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <DotsIcon size={16} />
+        <MoreIcon size={16} />
       </button>
       {open && (
         <div ref={pop} className={`row-menu-pop card${up ? " up" : ""}`} role="menu" aria-label={`Actions for ${title}`}>
@@ -215,7 +216,7 @@ export function OrganisePanel({ item, clients, knownLabels, notify, onClientCrea
           {labels.map((l) => (
             <span role="listitem" key={l} className="chip label-chip">
               {l}
-              <button type="button" className="chip-remove" aria-label={`Remove label ${l}`} disabled={busy} onClick={() => void save({ labels: labels.filter((x) => x !== l) })}>×</button>
+              <button type="button" className="chip-remove" aria-label={`Remove label ${l}`} disabled={busy} onClick={() => void save({ labels: labels.filter((x) => x !== l) })}><CloseIcon size={12} /></button>
             </span>
           ))}
           <span role="listitem" className="label-add">
@@ -296,7 +297,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
           <button type="button" className="btn ghost small" disabled={busy} onClick={() => setMoving(true)}>Move…</button>
           {moving && <MoveRecordingsDialog ids={ids} projects={clients} notify={notify} onClose={() => setMoving(false)} onProjectCreated={onClientCreated} />}
           <details className="bulk-menu">
-            <summary className="btn ghost small">Label</summary>
+            <summary className="btn ghost small">Label<ChevronDownIcon size={14} /></summary>
             <div className="bulk-pop card">
               <label htmlFor={labelId} className="sr-only">Label</label>
               <input id={labelId} className="input small" placeholder="Label" list={listId} maxLength={MAX_LABEL_CHARS} value={label} disabled={busy} onChange={(e) => setLabel(e.target.value)} />
@@ -309,7 +310,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
           </details>
           <button type="button" className="btn ghost small" disabled={busy} onClick={() => void run("pin")}>Pin</button>
           <details className="bulk-menu">
-            <summary className="btn ghost small">More</summary>
+            <summary className="btn ghost small">More<ChevronDownIcon size={14} /></summary>
             <div className="bulk-pop card">
               <button type="button" className="btn ghost small" disabled={busy} onClick={() => void run("unpin")}>Unpin</button>
               <button type="button" className="btn ghost small" disabled={busy} onClick={() => void run("keep")}>Keep forever</button>

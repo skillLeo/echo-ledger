@@ -55,7 +55,7 @@ describe("Import button", () => {
     // Each file becomes its own recording, titled from its file name.
     expect(within(dialog).getByText("PTT-20261030-WA0003")).toBeInTheDocument();
     expect(within(dialog).getByText("Call with Acme Oct")).toBeInTheDocument();
-    fireEvent.change(within(dialog).getByLabelText("Client"), { target: { value: "c1" } });
+    fireEvent.change(within(dialog).getByLabelText("Project"), { target: { value: "c1" } });
     fireEvent.change(within(dialog).getByLabelText("Language"), { target: { value: "ur" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Import 2 files" }));
     await flushAsync();
@@ -101,7 +101,7 @@ describe("Dropping files on the window", () => {
     await emitEvent("tauri://drag-drop", { paths: [NOTE, VIDEO], position: { x: 10, y: 10 } });
     expect(document.querySelector(".drop-hint")).not.toBeInTheDocument();
     const dialog = screen.getByRole("dialog", { name: "Import 2 files" });
-    expect(within(dialog).getByLabelText("Client")).toHaveValue("");
+    expect(within(dialog).getByLabelText("Project")).toHaveValue("");
     expect(within(dialog).getByLabelText("Language")).toHaveValue("");
     fireEvent.click(within(dialog).getByRole("button", { name: "Import 2 files" }));
     await flushAsync();
@@ -148,11 +148,11 @@ describe("The import sheet", () => {
     expect(screen.getByRole("button", { name: "Import 2 files" })).toBeEnabled();
   });
 
-  it("offers No client first, then the client folders with pinned ones on top, and every language", async () => {
+  it("offers No project first, then the client folders with pinned ones on top, and every language", async () => {
     render(<ImportSheet paths={[NOTE]} notify={notify} onClose={onClose} />);
     await flushAsync();
-    const clients = within(screen.getByLabelText("Client")).getAllByRole("option").map((o) => o.textContent);
-    expect(clients).toEqual(["No client", "AH · Acme Holdings", "NO · Northwind"]);
+    const clients = within(screen.getByLabelText("Project")).getAllByRole("option").map((o) => o.textContent);
+    expect(clients).toEqual(["No project", "AH · Acme Holdings", "NO · Northwind"]);
     const languages = within(screen.getByLabelText("Language")).getAllByRole("option").map((o) => o.textContent);
     expect(languages.slice(0, 4)).toEqual(["Auto (English / Urdu / Arabic)", "English only", "Urdu (with English words)", "Arabic (with English words)"]);
     expect(languages).toContain("French");
@@ -178,7 +178,7 @@ describe("The import sheet", () => {
     fail("list_clients", "Network error: offline");
     render(<ImportSheet paths={[NOTE]} notify={notify} onClose={onClose} />);
     await flushAsync();
-    expect(within(screen.getByLabelText("Client")).getAllByRole("option").map((o) => o.textContent)).toEqual(["No client"]);
+    expect(within(screen.getByLabelText("Project")).getAllByRole("option").map((o) => o.textContent)).toEqual(["No project"]);
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
     await flushAsync();
     expect(callsOf("import_voice_notes")).toEqual([{ pathsList: [NOTE], clientId: null, language: null }]);

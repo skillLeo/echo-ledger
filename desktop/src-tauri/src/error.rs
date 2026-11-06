@@ -4,7 +4,7 @@
 pub enum AppError {
     #[error("{0}")]
     Message(String),
-    #[error("This computer is not paired with an EchoLedger server yet.")]
+    #[error("This computer is not signed in to an EchoLedger server yet.")]
     NotPaired,
     #[error("Network error: {0}")]
     Network(String),

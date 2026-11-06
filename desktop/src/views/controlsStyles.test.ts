@@ -62,10 +62,11 @@ describe("recording pill styles", () => {
   });
 
   it("pulses the REC dot, but not with reduced motion", () => {
-    expect(styleOf("rec-dot", "pill-root").animationName).toBe("rec-pulse");
+    const ring = [...style.sheet!.cssRules].find((r): r is CSSStyleRule => r instanceof CSSStyleRule && r.selectorText === ".rec-dot::after");
+    expect(ring?.style.animationName).toBe("rec-pulse");
     const reduced = rulesIn("prefers-reduced-motion");
-    const dot = reduced.find((r) => r.selectorText === ".rec-dot");
-    expect(dot?.style.animation).toBe("none");
+    const still = reduced.find((r) => r.selectorText === ".rec-dot::after");
+    expect(still?.style.animation).toBe("none");
   });
 });
 
@@ -108,16 +109,28 @@ describe("after-call styles", () => {
     expect(styleOf("after-duration", "after-pill").fontVariantNumeric).toBe("tabular-nums");
   });
 
-  it("slides in over 180 ms ease-out from 12 px below, like the ask chip", () => {
+  it("rises in over 300 ms, decelerating, from 12 px below, like the ask chip (v1.5: the phone's enter)", () => {
     for (const className of ["after-pill", "ask-chip"]) {
       const s = styleOf(className, "review-root");
       expect(s.animationName).toBe("ctl-slide-in");
-      expect(s.animationDuration).toBe("180ms");
-      expect(s.animationTimingFunction).toBe("ease-out");
+      expect(s.animationDuration).toBe("var(--motion-slow)");
+      expect(s.animationTimingFunction).toBe("var(--ease-out)");
     }
     const keyframes = [...style.sheet!.cssRules].find((r): r is CSSKeyframesRule => r instanceof CSSKeyframesRule && r.name === "ctl-slide-in");
     expect(keyframes?.cssRules[0].cssText.replace(/\s+/g, " ")).toContain("transform: translateY(12px)");
     expect(keyframes?.cssRules[0].cssText).toContain("opacity: 0");
+  });
+
+  it("leaves over 150 ms, accelerating, moving down and fading, and takes no clicks while it goes", () => {
+    const leaving = styleOf("after-pill leaving", "review-root");
+    expect(leaving.animationName).toBe("ctl-slide-out");
+    expect(leaving.animationDuration).toBe("var(--motion-fast)");
+    expect(leaving.animationTimingFunction).toBe("var(--ease-in)");
+    expect(leaving.pointerEvents).toBe("none");
+    const keyframes = [...style.sheet!.cssRules].find((r): r is CSSKeyframesRule => r instanceof CSSKeyframesRule && r.name === "ctl-slide-out");
+    const last = keyframes?.cssRules[keyframes.cssRules.length - 1].cssText.replace(/\s+/g, " ");
+    expect(last).toContain("translateY(8px)");
+    expect(last).toContain("opacity: 0");
   });
 
   it("counts the chip down with a thin line that starts from what is left", () => {
