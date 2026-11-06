@@ -149,7 +149,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(88);
+    expect($guarded)->toBe(89);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {
