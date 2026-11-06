@@ -32,6 +32,15 @@ it('lists every processor of recordings and what each receives', function () {
     expect($page)->toContain('What it receives')->toContain(RecordingConsent::TEXT);
 });
 
+it('says what the server does: a team workspace shares its library with its members, a personal one is private', function () {
+    $privacy = (string) $this->get('/privacy')->getContent();
+    $terms = (string) $this->get('/terms')->getContent();
+
+    expect($privacy)->toContain('Your personal workspace is yours alone')->toContain('each member sees the recordings')
+        ->not->toContain('never the content')->not->toContain('Only you, until you share them')
+        ->and($terms)->toContain('Those in a team workspace are shared with all its members')->not->toContain('also inside a team workspace');
+});
+
 it('throttles the legal pages with the rest of the public site (429)', function () {
     foreach (range(1, 60) as $_) {
         $this->get('/terms');
