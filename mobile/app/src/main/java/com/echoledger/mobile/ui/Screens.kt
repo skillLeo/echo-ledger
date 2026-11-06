@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package com.echoledger.mobile.ui
 
 import android.Manifest
@@ -20,6 +22,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -734,7 +738,10 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                             if (t.kind == "final" && t.status == "completed" && available.isNotEmpty()) {
                                 ShowAsRow(available, showAs, views) { chooseView(it) }
                             }
-                            Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(Space.s2),
+                                verticalArrangement = Arrangement.spacedBy(Space.s2)
+                            ) {
                                 EchoButton("Copy text", {
                                     copy(withTimestamps = false)
                                 }, kind = ButtonKind.Secondary, icon = Icons.Rounded.ContentCopy)

@@ -203,11 +203,13 @@ fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0) {
     }
 }
 
-/** This phone (its name and initials), the server it is paired with, and since when the app knows it. */
+/** Who is signed in here (a phone paired without an account shows its own name), the server, the workspace and the plan. */
 @Composable
 private fun ProfileCard(settings: AppSettings) {
     val type = LocalEchoType.current
-    val name = settings.deviceName?.takeIf { it.isNotBlank() } ?: "This phone"
+    val name = settings.account?.email?.takeIf { it.isNotBlank() }
+        ?: settings.deviceName?.takeIf { it.isNotBlank() }
+        ?: "This phone"
     val server = settings.serverUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() ?: it }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s2).clip(RoundedCornerShape(Radius.md))
@@ -317,7 +319,7 @@ private fun GeneralScreen(vm: MainViewModel, page: String?, onSetup: () -> Unit,
 
 private fun generalSummary(id: String): String = when (id) {
     "appearance" -> "Theme and font"
-    "this-phone" -> "Server, name, unpair"
+    "this-phone" -> "Server, name, sign out"
     "transcription" -> "Language of new recordings"
     "client" -> "Names and words for a project"
     "notifications" -> "Activity and quiet hours"

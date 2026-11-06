@@ -22,9 +22,9 @@ data class PlanState(
     /** A viewer opens what is shared with them and records nothing. */
     val viewer: Boolean get() = role == "viewer"
 
-    /** "Free · 120 of 300 min this month", "Personal", or null before the server said. */
+    /** "Free plan · 120 of 300 min this month", "Personal plan", or null before the server said. */
     fun summary(): String? {
-        val plan = name?.takeIf { it.isNotBlank() } ?: return null
+        val plan = name?.takeIf { it.isNotBlank() }?.let { "$it plan" } ?: return null
         val limit = monthlyMinutes ?: return plan
         return "$plan · ${usedMinutes ?: 0} of $limit min this month"
     }

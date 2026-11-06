@@ -19,10 +19,12 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -34,6 +36,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -57,6 +60,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +70,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -73,6 +80,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -706,26 +714,44 @@ fun Avatar(name: String, modifier: Modifier = Modifier, size: Dp = 32.dp) {
 
 // ---- Choice --------------------------------------------------------------------------------------------------
 
-/** 2-4 choices side by side (40 dp): the chosen one sits on a raised surface. */
+/**
+ * Choices side by side (40 dp): the chosen one sits on a raised surface. They share the width while every word fits; on a
+ * narrow phone or at large text the row scrolls instead of cutting them ("Recordi"), and the chosen one is brought into view.
+ */
 @Composable
 fun SegmentedControl(options: List<String>, selected: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
     val c = LocalEchoColors.current
-    Row(modifier.fillMaxWidth().height(40.dp).clip(CircleShape).background(c.surface2).padding(Space.s0 + Space.s0 / 2)) {
-        options.forEachIndexed { index, label ->
-            val on = index == selected
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .height(34.dp)
-                    .clip(CircleShape)
-                    .background(if (on) c.surface else Color.Transparent)
-                    .then(if (on && !c.isDark) Modifier.border(1.dp, c.border, CircleShape) else Modifier)
-                    .combinedClickable(role = Role.Tab, onClick = { onSelect(index) })
-                    .semantics { this.selected = on },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(label, style = LocalEchoType.current.labelM, color = if (on) c.text else c.textMuted, maxLines = 1)
+    val style = LocalEchoType.current.labelM
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    BoxWithConstraints(modifier.fillMaxWidth().height(40.dp).clip(CircleShape).background(c.surface2).padding(Space.s0 + Space.s0 / 2)) {
+        val share = constraints.maxWidth / options.size.coerceAtLeast(1)
+        val margin = with(density) { (Space.s3 * 2).roundToPx() }
+        val fits = remember(options, share, style, density) {
+            options.all {
+                measurer.measure(it, style, maxLines = 1).size.width + margin <=
+                    share
+            }
+        }
+        val scroll = rememberScrollState()
+        val starts = remember { mutableStateMapOf<Int, Int>() }
+        LaunchedEffect(selected, fits) { if (!fits) starts[selected]?.let { scroll.animateScrollTo(it) } }
+        Row(if (fits) Modifier.fillMaxWidth() else Modifier.horizontalScroll(scroll)) {
+            options.forEachIndexed { index, label ->
+                val on = index == selected
+                Box(
+                    (if (fits) Modifier.weight(1f) else Modifier.onPlaced { starts[index] = it.positionInParent().x.toInt() })
+                        .height(34.dp)
+                        .clip(CircleShape)
+                        .background(if (on) c.surface else Color.Transparent)
+                        .then(if (on && !c.isDark) Modifier.border(1.dp, c.border, CircleShape) else Modifier)
+                        .combinedClickable(role = Role.Tab, onClick = { onSelect(index) })
+                        .semantics { this.selected = on }
+                        .padding(horizontal = Space.s3),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label, style = style, color = if (on) c.text else c.textMuted, maxLines = 1, softWrap = false)
+                }
             }
         }
     }
