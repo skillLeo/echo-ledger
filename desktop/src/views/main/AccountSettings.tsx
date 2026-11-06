@@ -86,10 +86,25 @@ function LimitRow({ label, text, percent }: { label: string; text: string; perce
   );
 }
 
+/** A plan that sets no retention leaves it to the server (its own "Recordings are deleted after" setting): asked only then. */
+function useServerRetention(needed: boolean): number | null {
+  const [days, setDays] = useState<number | null>(null);
+  useEffect(() => {
+    if (!needed) return;
+    let alive = true;
+    api.storage().then((info) => alive && setDays(info.retention_days), () => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [needed]);
+  return days;
+}
+
 /** The plan: its name, the limits next to the usage, and what it includes. */
 export function PlanCard({ status }: { status: AppStatus }) {
   const plan = status.plan;
   const storage = storageLine(plan);
+  const serverDays = useServerRetention(plan.known && plan.retentionDays === null);
   return (
     <div className="card plan-card" data-testid="plan-card">
       <div className="row"><b>Plan</b><span className="spacer" />{plan.known && plan.name && <span className="chip small">{plan.name}</span>}</div>
@@ -98,7 +113,7 @@ export function PlanCard({ status }: { status: AppStatus }) {
       {storage && <LimitRow label="Storage" text={storage} percent={percentUsed(plan.usedStorageBytes, plan.storageBytes)} />}
       {plan.known && (
         <>
-          <div className="toggle"><span>Recordings kept</span><span className="small muted">{plan.retentionDays === null ? "Until you delete them" : `${plan.retentionDays} days`}</span></div>
+          <div className="toggle"><span>Recordings kept</span><span className="small muted">{plan.retentionDays === null ? (serverDays === null ? "As the server is set" : `${serverDays} days`) : `${plan.retentionDays} days`}</span></div>
           <div className="toggle"><span>People in the workspace</span><span className="small muted">{plan.seats === null ? "No limit" : `Up to ${plan.seats}`}</span></div>
           <ul className="plan-features" aria-label="In your plan">
             {planFeatures(plan).map(([name, on]) => (
@@ -211,7 +226,9 @@ export function YourDataCard({ account, onAccount }: { account: Account; onAccou
             </button>
           )}
           {deleteError && <div className="notice error small" role="alert">{deleteError}</div>}
+          <p className="small muted">{account.google ? "Signed in with Google and no password? Delete the account on the web page: sign in there with Google and confirm." : "No password or code to hand? Delete the account on the web page instead."}</p>
           <div className="row">
+            <button type="button" className="btn ghost compact" onClick={() => void api.openServerPage("account/delete").catch(() => undefined)}>Delete on the web page</button>
             <span className="spacer" />
             <button type="button" className="btn ghost" onClick={() => { setDeleting(false); setSecret(""); setDeleteError(null); }}>Cancel</button>
             <button type="submit" className="btn danger" disabled={busy || !secret.trim()}>{busy ? "Deleting…" : "Delete my account"}</button>

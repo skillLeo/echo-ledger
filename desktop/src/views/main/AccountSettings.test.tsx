@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { SettingsView } from "./SettingsView";
 import { RecordView } from "./RecordView";
-import { EXPORT_POLL_MS } from "./AccountSettings";
+import { EXPORT_POLL_MS, PlanCard } from "./AccountSettings";
 import { StorageCard } from "./SecuritySettings";
 import { errorMessage, type Account, type AppStatus } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
@@ -181,6 +181,21 @@ describe("Settings → Account → Your data", () => {
     expect(screen.queryByRole("form", { name: "Confirm deleting your account" })).not.toBeInTheDocument();
   });
 
+  it("offers the web page to an account that has no password to confirm with", async () => {
+    respond("server_page_open", undefined);
+    await openAccount(makeAccount({ google: true }));
+
+    fireEvent.click(within(region("Your data")).getByRole("button", { name: "Delete my account…" }));
+    const form = screen.getByRole("form", { name: "Confirm deleting your account" });
+    expect(within(form).getByText(/Signed in with Google and no password\?/)).toBeInTheDocument();
+    fireEvent.click(within(form).getByRole("button", { name: "Delete on the web page" }));
+
+    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "account/delete" }]));
+    expect(callsOf("account_delete")).toEqual([]);
+    // Opening the page leaves the form as it was: nothing is deleted until the person confirms there.
+    expect(screen.getByRole("form", { name: "Confirm deleting your account" })).toBeInTheDocument();
+  });
+
   it("confirms with a two-factor code instead, and shows a refusal in plain words", async () => {
     fail("account_delete", "You own a workspace that has other members. Hand it over to one of them on the console's Workspace page first, then delete your account.");
     await openAccount(makeAccount({ two_factor: true }));
@@ -228,6 +243,25 @@ describe("Settings → Account → Plan", () => {
     expect(percentUsed(700, 600)).toBe(100);
     expect(percentUsed(5, null)).toBeNull();
     expect(viewerSentence(null)).toBe("You are a viewer in this workspace: you can open what is shared with you, not record.");
+  });
+
+  it("says how long the server keeps recordings when the plan sets no limit of its own", async () => {
+    respond("storage_info", { recordings_bytes: 0, recordings_count: 0, disk_free_bytes: null, disk_total_bytes: null, retention_days: 30 });
+    render(<PlanCard status={makeStatus({ plan: makePlan({ name: "Free", retentionDays: null }) })} />);
+    expect(await within(screen.getByTestId("plan-card")).findByText("30 days")).toBeInTheDocument();
+    expect(screen.queryByText("Until you delete them")).not.toBeInTheDocument();
+  });
+
+  it("names the server's setting when it cannot say how long, and asks the server only when the plan sets none", async () => {
+    fail("storage_info", "Network error");
+    render(<PlanCard status={makeStatus({ plan: makePlan({ name: "Free", retentionDays: null }) })} />);
+    await waitFor(() => expect(callsOf("storage_info")).toHaveLength(1));
+    expect(within(screen.getByTestId("plan-card")).getByText("As the server is set")).toBeInTheDocument();
+    cleanup();
+
+    render(<PlanCard status={makeStatus({ plan: makePlan({ name: "Team", retentionDays: 90 }) })} />);
+    expect(within(screen.getByTestId("plan-card")).getByText("90 days")).toBeInTheDocument();
+    expect(callsOf("storage_info")).toHaveLength(1);
   });
 
   it("explains an older server's plan", async () => {
