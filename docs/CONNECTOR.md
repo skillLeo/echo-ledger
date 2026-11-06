@@ -45,11 +45,13 @@ To use it, start a chat, open the **+** menu, choose **Developer mode** and pick
 
 The name in the question is the one the app gave itself when it registered, so it may read a little differently. Below
 it, the page says where the browser goes next: `claude.ai` or `chatgpt.com`. If you did not start this yourself just
-now, or the address looks wrong, press **Cancel**.
+now, or the address looks wrong, press **Cancel**. EchoLedger asks every time an app connects, also one you allowed
+before.
 
 ## What the AI can see
 
-Exactly what you can open in the apps, in your **current workspace** (the one chosen under Profile → Workspace):
+Exactly what you can open in the apps: what is yours in your **current workspace** (the one chosen under Profile →
+Workspace), and what teammates sent you, whichever workspace you are in:
 
 - your own recordings: title, date, length, people, project and app;
 - their transcripts, with what was on the screen at each moment, the text on those screens and a picture of each (the
@@ -61,7 +63,8 @@ Exactly what you can open in the apps, in your **current workspace** (the one ch
 ## What the AI cannot see or do
 
 - Anything of anyone else in your workspace, the owner's and admins' included, unless they sent it to you.
-- Other workspaces. Switch workspace, and it reads the new one from its next question.
+- Other workspaces, except what someone there sent you. Switch workspace, and it reads the new one from its next
+  question.
 - The audio, or the contents of the files in a project (only their names).
 - Recordings in the undo bin.
 - It cannot change anything: no recording, editing, sharing or deleting. It also never starts anything that costs
@@ -74,7 +77,8 @@ recordings you are happy to send them.
 
 Open the console, then **Profile → Connected apps**, and press **Disconnect** next to the app. It loses access at once.
 The list shows when each app was connected and last used. **Sign out everywhere**, on the same page, disconnects
-every app too.
+every app too. To use it again, press **Connect** in Claude or ChatGPT: EchoLedger asks you first, as it did the first
+time.
 
 Removing the connector inside Claude or ChatGPT does not end its access on your server: use Disconnect for that.
 
@@ -101,4 +105,6 @@ asked for and how much came back. Your words and the transcript are not kept the
 | "This account cannot connect an app" | The page says why: confirm your email, or choose Keep my account if it is being deleted. |
 | A picture link no longer opens | Links last 30 minutes. Ask for the recording again. |
 | It stops working after a long break | A connection that is not used for 30 days signs out. Press **Connect** in Claude or ChatGPT and allow it again. |
+| It asks you to connect again out of the blue, and **Security** shows "App disconnected: used token came back" | A sign-in token the app had already used came back, so EchoLedger ended the connection in case someone else has a copy. Press **Connect** and allow it again. If it keeps happening, tell whoever runs your server. |
+| After pressing **Connect**, a page of code with `invalid_client` | The app's registration is gone: one that never finished connecting is removed after a day. Remove the connector in Claude or ChatGPT and add it again. |
 | Claude or ChatGPT says the connector could not register or sign in | Ask whoever runs your server to look at web/DEPLOY.md, "Claude and ChatGPT connector". |

@@ -12,7 +12,7 @@ final class PruneOAuthClients extends Command
 {
     protected $signature = 'echoledger:prune-oauth-clients';
 
-    protected $description = 'Delete connector apps that registered more than a week ago and never connected';
+    protected $description = 'Delete connector apps that registered more than a day ago and never connected';
 
     public function handle(ConnectedApps $apps): int
     {

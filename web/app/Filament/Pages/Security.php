@@ -122,7 +122,7 @@ class Security extends Page implements HasTable
                 TextColumn::make('created_at')->label('When')->dateTime('M j, Y · g:i A'),
                 TextColumn::make('event')->label('Event')->badge()->formatStateUsing(fn (string $state): string => AuditLog::label($state))
                     ->color(fn (string $state): string => match ($state) {
-                        'login_failed', 'session_deleted', 'device_revoked', 'mfa_disabled', 'passkey_removed' => 'danger',
+                        'login_failed', 'session_deleted', 'device_revoked', 'mfa_disabled', 'passkey_removed', 'connector_token_reused' => 'danger',
                         'credentials_changed', 'password_changed', 'share_created', 'connector_connected' => 'warning',
                         default => 'gray',
                     }),

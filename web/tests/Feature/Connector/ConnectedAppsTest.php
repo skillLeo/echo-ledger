@@ -63,7 +63,7 @@ it('disconnects: its access and refresh tokens stop at once, and the row and the
 
     connectorMessage($this, $connected['access'], 'tools/list')->assertUnauthorized();
     connectorRefresh($this, $connected['client'], $connected['refresh'])->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
-    expect(ConnectedApp::query()->count())->toBe(0)
+    expect(ConnectedApp::query()->connected()->count())->toBe(0)
         ->and(Passport::token()->newQuery()->where('revoked', false)->count())->toBe(0)
         ->and(Passport::refreshToken()->newQuery()->where('revoked', false)->count())->toBe(0);
     $row = AuditEvent::query()->where('event', 'connector_disconnected')->sole();
@@ -142,7 +142,23 @@ it('disconnects every app when the person signs out everywhere', function () {
 
     connectorMessage($this, $connected['access'], 'tools/list')->assertUnauthorized();
     connectorRefresh($this, $connected['client'], $connected['refresh'])->assertStatus(400);
-    expect(ConnectedApp::query()->count())->toBe(0);
+    expect(ConnectedApp::query()->connected()->count())->toBe(0);
+    app('auth')->forgetGuards();
+    $this->actingAs($this->person->fresh(), 'web')->get('/admin/profile')->assertOk()->assertSee('No app is connected');
+});
+
+it('can connect again after signing out everywhere, with the same app', function () {
+    $connected = connectorConnect($this, $this->person);
+    app(AccountSessions::class)->signOutEverywhere($this->person->fresh());
+    $this->travelTo(now()->addDays(8));
+    Artisan::call('passport:purge', ['--revoked' => true]);
+    Artisan::call('echoledger:prune-oauth-clients');
+
+    [$verifier, $challenge] = connectorPkce();
+    $code = connectorAllow($this, $this->person->fresh(), $connected['client'], $challenge);
+
+    connectorExchange($this, $connected['client'], $code, $verifier)->assertOk();
+    expect(ConnectedApp::query()->connected()->count())->toBe(1);
 });
 
 it('ends every connection when the account is erased', function () {
@@ -156,15 +172,63 @@ it('ends every connection when the account is erased', function () {
         ->and(Passport::refreshToken()->newQuery()->where('revoked', false)->count())->toBe(0);
 });
 
-it('removes apps that registered long ago and never connected, and no others', function () {
+it('removes apps that registered over a day ago and never connected, and no others', function () {
     $old = connectorRegister($this, 'Never connected');
     $recent = connectorRegister($this, 'Just registered');
     $used = connectorConnect($this, $this->person, 'Connected')['client'];
-    Passport::client()->newQuery()->whereKey([$old, $used])->update(['created_at' => now()->subDays(8)]);
+    Passport::client()->newQuery()->whereKey([$old, $used])->update(['created_at' => now()->subHours(25)]);
+    Passport::client()->newQuery()->whereKey($recent)->update(['created_at' => now()->subHours(23)]);
 
     expect(Artisan::call('echoledger:prune-oauth-clients'))->toBe(0);
 
     expect(Passport::client()->newQuery()->pluck('id')->sort()->values()->all())->toBe(collect([$recent, $used])->sort()->values()->all());
+});
+
+it('keeps an app that was connected and disconnected, so pressing Connect in it asks the person again', function () {
+    $connected = connectorConnect($this, $this->person);
+    $this->actingAs($this->person->fresh(), 'web');
+    Livewire::test(EditProfile::class)->call('disconnectApp', ConnectedApp::query()->sole()->id)->assertNotified('App disconnected');
+    $this->travelTo(now()->addDays(8));
+    Artisan::call('passport:purge', ['--revoked' => true]);
+
+    expect(Artisan::call('echoledger:prune-oauth-clients'))->toBe(0)
+        ->and(Artisan::output())->toContain('Removed 0');
+
+    // The app kept its client id.
+    [$verifier, $challenge] = connectorPkce();
+    app('auth')->forgetGuards();
+    $this->actingAs($this->person->fresh(), 'web')->get(connectorAuthorizeUrl($connected['client'], $challenge))->assertOk()->assertSee('Allow Claude');
+    $code = connectorAllow($this, $this->person->fresh(), $connected['client'], $challenge);
+    $tokens = connectorExchange($this, $connected['client'], $code, $verifier)->assertOk()->json();
+
+    connectorMessage($this, $tokens['access_token'], 'tools/list')->assertOk();
+    app('auth')->forgetGuards();
+    $page = $this->actingAs($this->person->fresh(), 'web')->get('/admin/profile')->assertOk();
+    $page->assertSee('Claude')->assertSee('Disconnect')->assertSee('Connected '.now()->format('M j, Y'))->assertSee('not used yet');
+    expect(ConnectedApp::query()->connected()->count())->toBe(1)
+        ->and(AuditEvent::query()->where('event', 'connector_connected')->count())->toBe(2);
+});
+
+it('does not list a disconnected app, and pressing Disconnect on it again does nothing', function () {
+    connectorConnect($this, $this->person);
+    $id = ConnectedApp::query()->sole()->id;
+    $apps = app(ConnectedApps::class);
+
+    expect($apps->disconnect($this->person, $id))->toBeTrue()
+        ->and($apps->disconnect($this->person, $id))->toBeFalse()
+        ->and($apps->forUser($this->person))->toHaveCount(0)
+        ->and(AuditEvent::query()->where('event', 'connector_disconnected')->count())->toBe(1);
+});
+
+it('removes an app nobody is left on once its only person is erased', function () {
+    $connected = connectorConnect($this, $this->person);
+    app(AccountEraser::class)->erase($this->person->fresh());
+    Passport::client()->newQuery()->whereKey($connected['client'])->update(['created_at' => now()->subDays(2)]);
+    Artisan::call('passport:purge', ['--revoked' => true]);
+
+    Artisan::call('echoledger:prune-oauth-clients');
+
+    expect(Passport::client()->newQuery()->whereKey($connected['client'])->exists())->toBeFalse();
 });
 
 it('purges old tokens with Passport\'s own command, which needs no device-code table', function () {

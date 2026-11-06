@@ -71,6 +71,7 @@ final class AuditLog
         // Since v1.5: the Claude and ChatGPT connector.
         'connector_connected' => 'App connected',
         'connector_disconnected' => 'App disconnected',
+        'connector_token_reused' => 'App disconnected: used token came back',
         'connector_tool_call' => 'Read by a connected app',
     ];
 
