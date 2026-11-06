@@ -50,10 +50,29 @@ updates**.
 record calls, because Google Play does not allow the capture helper that hears the other side. To record calls, use
 the version from your server's Downloads page.
 
-**WhatsApp calls** need Android 14 or newer and a one-time setup. In **Settings → Devices → This phone**, open the **Setup guide** and follow the steps (Shizuku or a computer with ADB). You do this once. After a phone restart, the guide
+**WhatsApp calls** need a one-time setup, and Android 14 or newer to hear both sides (see "What works where" below). In **Settings → Devices → This phone**, open the **Setup guide** and follow the steps (Shizuku or a computer with ADB). You do this once. After a phone restart, the guide
 shows how to turn it on again.
 
 **Voice notes** need no setup. In WhatsApp, press and hold a voice note, tap **Share**, then choose EchoLedger.
+
+## What works where
+
+| | Voice notes and import | Calls and meetings |
+|---|---|---|
+| **Mac**, Apple Silicon or Intel, macOS 14.4 or newer (the app does not open on older versions) | Yes | Both sides. |
+| **Windows 11** | Yes | Both sides. EchoLedger hears only the call's app. |
+| **Windows 10** | Yes | Both sides, but it records all sound playing on the computer, not just the call. |
+| **Android 14 or newer**, with the capture helper | Yes | App calls: both sides. SIM calls: where the phone maker allows it. |
+| **Android 11 to 13**, with the capture helper | Yes | App calls: **only your voice**. SIM calls: where the phone maker allows it. |
+| **Android 11 or newer, no helper** | Yes | Not recorded: during a call Android gives other apps no sound. |
+| **Android 10** | Yes | Not recorded. |
+| **Google Play version** | Yes | Not recorded: use the version from your server's Downloads page. |
+
+To see what your phone can do, open **You → General → Help & diagnostics → Device check**. It gives the reason for each
+line and a fix where there is one, plus the steps your phone's maker needs so EchoLedger keeps running in the background.
+
+**Tested so far:** Samsung Galaxy S25 Ultra on Android 17. Other phones should work the same way, and this list grows as
+they are tested. Send your admin the report from Device check if something differs.
 
 ## 3. Sign in or pair your devices
 

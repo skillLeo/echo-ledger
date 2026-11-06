@@ -526,6 +526,25 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 | AC-7 | Settings → Account → Delete my account… → **Delete on the web page**. | The browser opens the public page of this server. Cancelling in the app leaves everything as it was. |
 | AC-8 | First build from the signing workflow (when a certificate exists). | Windows shows the publisher's name, not "Unknown publisher"; the Mac build opens without a Gatekeeper warning. |
 
+### Teammate phone check (any Android 10+ phone; about 15 minutes)
+
+Send this to a teammate with a phone that is not a Samsung. It needs an account on the server, the website APK and one
+short test call. Nothing here changes what is already on the phone, other than installing EchoLedger.
+
+| # | Check | Expected |
+|---|---|---|
+| TP-1 | Install the APK and open it. | No crash. The second setup step lists "What works on this phone" with a reason for each line. |
+| TP-2 | Sign in, then You → General → Help & diagnostics → Device check → **Send to my admin**. | "Sent to your admin". The report shows in the console under System → Device reports. |
+| TP-3 | Follow "Keep EchoLedger running on …": tap **Open settings**. | The phone maker's own screen opens, or this app's page; the steps match what the phone shows. Note any that differ. |
+| TP-4 | Record a 20-second voice note and open it in the Library. | It plays and gets a transcript. |
+| TP-5 | Android 11 or newer: set up the helper with Setup's steps for this brand. | The Developer options path matches this phone, and the helper says it is running. |
+| TP-6 | With the helper, a WhatsApp call to a friend; talk for 20 seconds. | Android 14+: both voices. Android 11 to 13: **your voice only**, labelled so, with no silent track. |
+| TP-7 | Without the helper, a WhatsApp call. | Nothing recorded, and the Record tab said so before the call. |
+| TP-8 | Leave the phone alone for an hour with auto-record on, then repeat TP-6. | The call still records, without opening the app first. |
+| TP-9 | Settings → Display: largest text. Open the Library, Record and Device check. | Nothing is cut off or overlaps. |
+
+Send back the brand, model, Android version and the rows that differ.
+
 ### Screen moments v1.5 (desktop; the first run of the real capture)
 
 Use the CI build of the branch or the release (Actions → "Desktop (macOS)" or "Desktop (Windows)" → Artifacts), a
