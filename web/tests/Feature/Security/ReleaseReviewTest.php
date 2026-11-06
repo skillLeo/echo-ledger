@@ -10,6 +10,7 @@ use App\Filament\Auth\Login;
 use App\Filament\Pages\AccountBeingDeleted;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
+use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Mail\AccountMail;
 use App\Mail\DeletionScheduledMail;
 use App\Mail\ExportReadyMail;
@@ -19,44 +20,56 @@ use App\Mail\ResetPasswordMail;
 use App\Mail\ShareReceivedMail;
 use App\Mail\TranscriptReadyMail;
 use App\Mail\VerifyEmailMail;
+use App\Models\AuditEvent;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ConnectedApp;
 use App\Models\Device;
 use App\Models\DevicePairingCode;
-use App\Models\DeviceSignInCode;
 use App\Models\Plan;
 use App\Models\Screen;
+use App\Models\SentItem;
 use App\Models\Setting;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Providers\AppServiceProvider;
+use App\Services\Accounts\AccountDeletion;
 use App\Services\Accounts\Invitations;
 use App\Services\Accounts\SignInGuard;
 use App\Services\Accounts\SignUp;
 use App\Services\CredentialVault;
+use App\Services\MailSettings;
 use App\Services\PairingService;
 use App\Services\SettingsRepository;
+use App\Services\ShareLinks;
+use App\Services\Sharing\RequestLinks;
 use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use Filament\Actions\Testing\TestAction;
+use Filament\Auth\Notifications\NoticeOfEmailChangeRequest;
+use Filament\Auth\Notifications\VerifyEmailChange;
 use Filament\Auth\Pages\PasswordReset\ResetPassword;
 use Filament\Facades\Filament;
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Http\Middleware\TrustHosts;
 use Illuminate\Http\Request;
+use Illuminate\Notifications\SendQueuedNotifications;
+use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Jobs\SyncJob;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use Symfony\Component\Mailer\SentMessage;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -408,20 +421,18 @@ it('M8 clears the failures after a good sign-in', function () {
 
 // ---- m1: a removed person's pairing and sign-in codes end with them ----------------------------------------------------
 
-it('m1 drops the person\'s codes when they are removed from the workspace', function () {
+it('m1 drops the person\'s pairing codes when they are removed from the workspace', function () {
     $owner = Fx::user();
     $member = Fx::user();
     [$team] = reviewTeam($owner, $member);
     $member->forceFill(['current_workspace_id' => $team->id])->save();
     $code = app(PairingService::class)->createCode($member);
-    DeviceSignInCode::query()->withoutGlobalScopes()->create(['user_id' => $member->id, 'workspace_id' => $team->id, 'code_hash' => hash('sha256', 'x'), 'code_challenge' => 'y', 'name' => 'n', 'platform' => 'android', 'expires_at' => now()->addMinutes(5)]);
     $own = app(Workspaces::class)->createFor($member, 'Own', Plan::personal());
     $kept = DevicePairingCode::query()->withoutGlobalScopes()->create(['user_id' => $member->id, 'workspace_id' => $own->id, 'code_hash' => hash('sha256', 'kept'), 'expires_at' => now()->addMinutes(5)]);
 
     app(Workspaces::class)->removeMember($team, $member);
 
     expect(DevicePairingCode::query()->withoutGlobalScopes()->where('workspace_id', $team->id)->count())->toBe(0)
-        ->and(DeviceSignInCode::query()->withoutGlobalScopes()->where('workspace_id', $team->id)->count())->toBe(0)
         ->and(DevicePairingCode::query()->withoutGlobalScopes()->whereKey($kept->id)->exists())->toBeTrue();
     $this->api()->postJson('/api/devices/register', ['pairing_code' => $code, 'name' => 'back', 'platform' => 'android'])->assertStatus(422);
 });
@@ -654,4 +665,378 @@ it('m6 stops everyone at twice the budget, flag or not', function () {
     liveTranslateSpent($team->id, $owner, 0.01);
     $this->api($token)->postJson('/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en', 'continue_over_budget' => true])
         ->assertForbidden()->assertJsonPath('code', 'budget_exceeded');
+});
+
+// ---- M3: an address counts once the link sent to it is opened ---------------------------------------------------------
+
+/** The profile's Save with a new address, as the page does it; returns the verify link sent to that address. */
+function changeEmailOnProfile(User $user, string $to): string
+{
+    Notification::fake();
+    Livewire::test(EditProfile::class)->fillForm(['email' => $to, 'currentPassword' => 'old-password-1234'])->call('save')->assertHasNoFormErrors();
+    $url = '';
+    Notification::assertSentOnDemand(VerifyEmailChange::class, function (VerifyEmailChange $mail, array $channels, object $notifiable) use ($to, &$url): bool {
+        $url = $mail->url;
+
+        return $notifiable->routes['mail'] === $to;
+    });
+
+    return $url;
+}
+
+it('M3 leaves the address as it is until the link sent to the new one is opened, and tells the old one', function () {
+    $user = Fx::user(['email' => 'ana@corp.test', 'password' => 'old-password-1234']);
+    $this->actingAs($user, 'web');
+
+    $url = changeEmailOnProfile($user, 'ceo@corp.test');
+
+    expect($user->fresh()->email)->toBe('ana@corp.test')
+        ->and($user->fresh()->hasVerifiedEmail())->toBeTrue()
+        ->and($url)->toStartWith('https://echoledger.test/admin/');
+    Notification::assertSentTo($user, NoticeOfEmailChangeRequest::class, fn (NoticeOfEmailChangeRequest $mail): bool => $mail->newEmail === 'ceo@corp.test');
+});
+
+it('M3 changes the address when its link is opened, confirmed, and keeps the devices signed in', function () {
+    $user = Fx::user(['email' => 'ana@corp.test', 'password' => 'old-password-1234']);
+    $token = Fx::token(Fx::device($user));
+    $this->actingAs($user, 'web');
+    $url = changeEmailOnProfile($user, 'ana.new@corp.test');
+
+    $this->get($url)->assertRedirect();
+
+    expect($user->fresh()->email)->toBe('ana.new@corp.test')->and($user->fresh()->hasVerifiedEmail())->toBeTrue();
+    $this->api($token)->getJson('/api/account')->assertOk();
+});
+
+it('M3 opens the link for no one but the account it is for', function () {
+    $user = Fx::user(['email' => 'ana@corp.test', 'password' => 'old-password-1234']);
+    $this->actingAs($user, 'web');
+    $url = changeEmailOnProfile($user, 'ceo@corp.test');
+    Auth::guard('web')->logout();
+    app('auth')->forgetGuards();
+
+    $this->get($url)->assertRedirect(Filament::getPanel('admin')->getLoginUrl());
+    $this->actingAs(Fx::user(), 'web')->get($url)->assertForbidden();
+
+    expect($user->fresh()->email)->toBe('ana@corp.test');
+});
+
+it('M3 sends both emails through the mail manager, and a running worker uses the latest Settings → Email for them', function () {
+    $user = Fx::user(['email' => 'ana@corp.test', 'password' => 'old-password-1234']);
+    $this->actingAs($user, 'web');
+    Livewire::test(EditProfile::class)->fillForm(['email' => 'ana.new@corp.test', 'currentPassword' => 'old-password-1234'])->call('save')->assertHasNoFormErrors();
+
+    $sent = collect(app('mail.manager')->mailer()->getSymfonyTransport()->messages())
+        ->map(fn (SentMessage $message): string => $message->getEnvelope()->getRecipients()[0]->getAddress());
+    expect($sent->sort()->values()->all())->toBe(['ana.new@corp.test', 'ana@corp.test']);
+
+    app(MailSettings::class)->apply();
+    app(SettingsRepository::class)->setMany(['mail.host' => 'relay.example.com', 'mail.port' => 587]);
+    event(new JobProcessing('sync', new SyncJob(app(), (string) json_encode(['data' => ['commandName' => SendQueuedNotifications::class]]), 'sync', 'default')));
+    expect(config('mail.default'))->toBe('smtp')->and(config('mail.mailers.smtp.host'))->toBe('relay.example.com');
+});
+
+it('M3 sends nothing to an address nobody confirmed, and its old device token reads nothing', function () {
+    Mail::fake();
+    $sender = Fx::user();
+    $attacker = Fx::user(['email' => 'attacker@evil.test']);
+    $attackerToken = Fx::token(Fx::device($attacker));
+    $attacker->update(['email' => 'ceo@corp.test']); // however it got there: the model hook takes the confirmation away
+    expect($attacker->fresh()->hasVerifiedEmail())->toBeFalse();
+    $device = Fx::device($sender);
+    $session = Fx::session($sender, $device);
+    $transcript = Fx::transcript($session, 'Board salary numbers.');
+
+    $this->api(Fx::token($device))->postJson("/api/sessions/{$session->id}/send", ['to' => ['ceo@corp.test']])->assertCreated()->assertExactJson(['sent' => 1]);
+
+    expect($this->api($attackerToken)->getJson('/api/shared-with-me')->assertOk()->json('data'))->toBe([]);
+    $this->api($attackerToken)->getJson("/api/transcripts/{$transcript->id}")->assertNotFound();
+    Mail::assertNotQueued(ShareReceivedMail::class);
+});
+
+// ---- m4: sending does not tell who has an account ----------------------------------------------------------------------
+
+it('m4 answers the same for an unknown address, an unconfirmed one and a real one', function () {
+    Mail::fake();
+    $sender = Fx::user();
+    Fx::user(['email' => 'real@corp.test']);
+    Fx::user(['email' => 'unconfirmed@corp.test', 'email_verified_at' => null]);
+    $device = Fx::device($sender);
+    $session = Fx::session($sender, $device);
+    $token = Fx::token($device);
+
+    $answers = array_map(function (string $to) use ($token, $session): array {
+        $response = $this->api($token)->postJson("/api/sessions/{$session->id}/send", ['to' => [$to]]);
+
+        return [$response->getStatusCode(), $response->getContent()];
+    }, ['real@corp.test', 'unconfirmed@corp.test', 'nobody@corp.test']);
+
+    expect($answers[0])->toBe([201, '{"sent":1}'])->and($answers[1])->toBe($answers[0])->and($answers[2])->toBe($answers[0]);
+    Mail::assertQueuedCount(1);
+    Mail::assertQueued(ShareReceivedMail::class, fn (ShareReceivedMail $mail): bool => $mail->hasTo('real@corp.test'));
+});
+
+it('m4 counts the addresses asked, and logs only who really received it', function () {
+    Mail::fake();
+    $sender = Fx::user();
+    Fx::user(['email' => 'real@corp.test']);
+    $device = Fx::device($sender);
+    $session = Fx::session($sender, $device);
+    $token = Fx::token($device);
+
+    $this->api($token)->postJson("/api/sessions/{$session->id}/send", ['to' => ['nobody@corp.test']])->assertCreated();
+    expect(AuditEvent::query()->where('event', 'sent_to_teammate')->count())->toBe(0);
+
+    $this->api($token)->postJson("/api/sessions/{$session->id}/send", ['to' => ['real@corp.test', 'REAL@corp.test', 'nobody@corp.test']])->assertCreated()->assertExactJson(['sent' => 2]);
+    $summary = AuditEvent::query()->where('event', 'sent_to_teammate')->sole()->summary;
+    expect($summary)->toContain('real@corp.test')->not->toContain('nobody@corp.test');
+});
+
+it('m4 says in the console\'s send dialog who will not receive it', function () {
+    $user = Fx::user();
+    $session = Fx::session($user, Fx::device($user));
+    $this->actingAs($user, 'web');
+
+    $modal = Livewire::test(ViewCaptureSession::class, ['record' => $session->id])->mountAction('send');
+
+    expect(implode('', array_map('strval', (array) ($modal->effects['partials'] ?? []))))->toContain('People without an account here will not receive it.');
+});
+
+// ---- M4: stop sharing; a sent project holds what was in it --------------------------------------------------------------
+
+/** Ana's project with one recording, sent to Bob; both in one team, each with a token. */
+function sentProject(): array
+{
+    Mail::fake();
+    $ana = Fx::user(['email' => 'ana@corp.test', 'name' => 'Ana']);
+    $bob = Fx::user(['email' => 'bob@corp.test', 'name' => 'Bob']);
+    [$team, $anaDevice] = reviewTeam($ana);
+    app(Workspaces::class)->addMember($team, $bob);
+    $bobDevice = Device::factory()->create(['user_id' => $bob->id, 'workspace_id' => $team->id]);
+    $project = Client::acrossPeople()->create(['workspace_id' => $team->id, 'user_id' => $ana->id, 'name' => 'Acme']);
+    $before = reviewSession($ana, $team->id, ['client_id' => $project->id, 'title' => 'Sent with it']);
+    $transcript = Fx::transcript($before, 'Words sent.');
+    $anaToken = Fx::token($anaDevice);
+    test()->api($anaToken)->postJson("/api/clients/{$project->id}/send", ['to' => ['bob@corp.test']])->assertCreated();
+
+    return [
+        'ana' => $ana, 'bob' => $bob, 'team' => $team, 'project' => $project, 'before' => $before, 'transcript' => $transcript,
+        'anaToken' => $anaToken, 'bobToken' => Fx::token($bobDevice), 'item' => SentItem::query()->sole(),
+    ];
+}
+
+it('M4 keeps a recording filed later out of a sent project until the project is sent again', function () {
+    $w = sentProject();
+    $later = reviewSession($w['ana'], $w['team']->id, ['client_id' => $w['project']->id, 'title' => 'Severance talk']);
+    $laterTranscript = Fx::transcript($later, 'Fire Bob next week.');
+
+    $this->api($w['bobToken'])->getJson("/api/transcripts/{$later->id}")->assertNotFound();
+    $this->api($w['bobToken'])->getJson("/api/transcripts/{$laterTranscript->id}")->assertNotFound();
+    $this->api($w['bobToken'])->getJson("/api/sessions/{$later->id}")->assertNotFound();
+    $this->api($w['bobToken'])->getJson("/api/transcripts/{$w['transcript']->id}")->assertOk();
+    $listed = $this->api($w['bobToken'])->getJson('/api/library?folder=shared')->assertOk()->json('data');
+    expect(array_column($listed, 'id'))->toBe([$w['before']->id]);
+    $this->api($w['bobToken'])->getJson('/api/shared-with-me')->assertOk()
+        ->assertJsonPath('data.0.client.session_count', 1)->assertJsonPath('data.0.client.nested_session_count', 1);
+
+    $this->api($w['anaToken'])->postJson("/api/clients/{$w['project']->id}/send", ['to' => ['bob@corp.test']])->assertCreated();
+
+    $this->api($w['bobToken'])->getJson("/api/transcripts/{$laterTranscript->id}")->assertOk();
+    $this->api($w['bobToken'])->getJson('/api/shared-with-me')->assertOk()->assertJsonPath('data.0.client.nested_session_count', 2);
+    expect(SentItem::query()->count())->toBe(1);
+});
+
+it('M4 opens a recording only while it stays in the sent project', function () {
+    $w = sentProject();
+    unscoped(fn () => $w['before']->update(['client_id' => null]));
+
+    $this->api($w['bobToken'])->getJson("/api/transcripts/{$w['transcript']->id}")->assertNotFound();
+    $this->api($w['bobToken'])->getJson('/api/shared-with-me')->assertOk()->assertJsonPath('data.0.client.nested_session_count', 0);
+});
+
+it('M4 keeps a recording moved from one sent project to another out of both lists: each has its own', function () {
+    $w = sentProject();
+    $other = Client::acrossPeople()->create(['workspace_id' => $w['team']->id, 'user_id' => $w['ana']->id, 'name' => 'Other']);
+    $this->api($w['anaToken'])->postJson("/api/clients/{$other->id}/send", ['to' => ['bob@corp.test']])->assertCreated();
+    $held = reviewSession($w['ana'], $w['team']->id, ['client_id' => $w['project']->id, 'title' => 'Filed later']);
+    Fx::transcript($held, 'Filed later.');
+    unscoped(fn () => $w['before']->update(['client_id' => $other->id]));
+
+    $this->api($w['bobToken'])->getJson("/api/transcripts/{$w['transcript']->id}")->assertNotFound();
+    expect($this->api($w['bobToken'])->getJson('/api/library?folder=shared')->assertOk()->json('data'))->toBe([]);
+});
+
+it('M4 saves a copy of what the project held when sent, not what was filed later', function () {
+    $w = sentProject();
+    Fx::readyRecording($w['before'], 'audio');
+    $later = reviewSession($w['ana'], $w['team']->id, ['client_id' => $w['project']->id, 'title' => 'Severance talk']);
+    Fx::readyRecording($later, 'audio');
+
+    $copy = $this->api($w['bobToken'])->postJson("/api/shared-with-me/{$w['item']->id}/save")->assertCreated()->json('client_id');
+
+    $titles = CaptureSession::acrossPeople()->where('user_id', $w['bob']->id)->where('client_id', $copy)->pluck('title')->all();
+    expect($titles)->toBe(['Sent with it']);
+});
+
+it('M4 lists what you sent, newest first, in the documented shape', function () {
+    $w = sentProject();
+    Fx::user(['email' => 'carol@corp.test', 'name' => 'Carol']);
+    $this->travel(1)->minutes();
+    $this->api($w['anaToken'])->postJson("/api/clients/{$w['project']->id}/send", ['to' => ['carol@corp.test'], 'note' => 'For tomorrow'])->assertCreated();
+
+    $data = $this->api($w['anaToken'])->getJson("/api/sent?client_id={$w['project']->id}")->assertOk()->json('data');
+
+    expect(array_column(array_column($data, 'to'), 'email'))->toBe(['carol@corp.test', 'bob@corp.test'])
+        ->and(array_keys($data[0]))->toBe(['id', 'kind', 'to', 'title', 'note', 'sent_at', 'saved_at'])
+        ->and($data[0])->toMatchArray(['kind' => 'project', 'to' => ['name' => 'Carol', 'email' => 'carol@corp.test'], 'title' => 'Acme', 'note' => 'For tomorrow', 'saved_at' => null]);
+    $this->api($w['anaToken'])->getJson('/api/sent')->assertUnprocessable();
+    // What someone else sent, and another recording: nothing.
+    expect($this->api($w['bobToken'])->getJson("/api/sent?client_id={$w['project']->id}")->assertOk()->json('data'))->toBe([])
+        ->and($this->api($w['anaToken'])->getJson("/api/sent?session_id={$w['before']->id}")->assertOk()->json('data'))->toBe([]);
+});
+
+it('M4 stops sharing: gone from their list, unopenable, 404 for anyone else, a saved copy stays', function () {
+    $w = sentProject();
+    Fx::readyRecording($w['before'], 'audio');
+    $copy = $this->api($w['bobToken'])->postJson("/api/shared-with-me/{$w['item']->id}/save")->assertCreated()->json('client_id');
+
+    $this->api($w['bobToken'])->deleteJson("/api/sent/{$w['item']->id}")->assertNotFound();
+    expect(SentItem::query()->count())->toBe(1);
+
+    $this->api($w['anaToken'])->deleteJson("/api/sent/{$w['item']->id}")->assertNoContent();
+
+    expect($this->api($w['bobToken'])->getJson('/api/shared-with-me')->assertOk()->json('data'))->toBe([])
+        ->and($this->api($w['bobToken'])->getJson('/api/library?folder=shared')->assertOk()->json('data'))->toBe([])
+        ->and(Client::acrossPeople()->whereKey($copy)->exists())->toBeTrue();
+    $this->api($w['bobToken'])->getJson("/api/transcripts/{$w['transcript']->id}")->assertNotFound();
+    $this->api($w['anaToken'])->deleteJson("/api/sent/{$w['item']->id}")->assertNotFound();
+});
+
+it('M4 ends what was sent to a person when they are removed, from that workspace only, and a saved copy stays', function () {
+    $w = sentProject();
+    Fx::readyRecording($w['before'], 'audio');
+    $copy = $this->api($w['bobToken'])->postJson("/api/shared-with-me/{$w['item']->id}/save")->assertCreated()->json('client_id');
+    $elsewhere = Fx::user();
+    $device = Fx::device($elsewhere);
+    $private = Fx::session($elsewhere, $device);
+    app(Teammates::class)->send($elsewhere, $private, ['bob@corp.test'], null);
+
+    app(Workspaces::class)->removeMember($w['team'], $w['bob']);
+
+    expect(SentItem::query()->pluck('capture_session_id')->all())->toBe([$private->id])
+        ->and(Client::acrossPeople()->whereKey($copy)->exists())->toBeTrue();
+    $bobNow = Fx::token(Fx::device($w['bob']->fresh()));
+    $this->api($bobNow)->getJson("/api/transcripts/{$w['transcript']->id}")->assertNotFound();
+});
+
+it('M4 lists Sent to on the recording\'s and the project\'s page, with Stop sharing', function () {
+    $w = sentProject();
+    $session = reviewSession($w['ana'], $w['team']->id, ['title' => 'One call']);
+    app(Teammates::class)->send($w['ana'], $session, ['bob@corp.test'], 'Note for Bob');
+    $w['ana']->forceFill(['current_workspace_id' => $w['team']->id])->save();
+    $this->actingAs($w['ana']->fresh(), 'web');
+    $html = fn ($page): string => implode('', array_map('strval', (array) ($page->effects['partials'] ?? [])));
+
+    $page = Livewire::test(ViewCaptureSession::class, ['record' => $session->id])->mountAction('sentTo');
+    expect($html($page))->toContain('bob@corp.test')->toContain('Stop sharing')->toContain('Note for Bob');
+    $item = SentItem::query()->where('capture_session_id', $session->id)->sole();
+    $page->call('stopSharing', $item->id)->assertNotified('Stopped sharing with Bob');
+    expect(SentItem::query()->whereKey($item->id)->exists())->toBeFalse();
+
+    $page = Livewire::test(ViewClient::class, ['record' => $w['project']->id])->mountAction('sentTo');
+    expect($html($page))->toContain('bob@corp.test')->toContain('Stop sharing');
+    $page->call('stopSharing', $w['item']->id)->assertNotified('Stopped sharing with Bob');
+    expect(SentItem::query()->count())->toBe(0);
+});
+
+it('M4 stops nobody else\'s sharing from the console', function () {
+    $w = sentProject();
+    $w['bob']->forceFill(['current_workspace_id' => $w['team']->id])->save();
+    $session = reviewSession($w['bob'], $w['team']->id);
+    $this->actingAs($w['bob']->fresh(), 'web');
+
+    Livewire::test(ViewCaptureSession::class, ['record' => $session->id])->call('stopSharing', $w['item']->id);
+
+    expect(SentItem::query()->whereKey($w['item']->id)->exists())->toBeTrue();
+});
+
+// ---- m2: links of someone removed, or whose account is being deleted -----------------------------------------------------
+
+function makeLinks(User $person, int $workspaceId): array
+{
+    $session = reviewSession($person, $workspaceId, ['title' => 'Client call']);
+    $project = Client::acrossPeople()->create(['workspace_id' => $workspaceId, 'user_id' => $person->id, 'name' => 'Project '.Str::random(6)]);
+    $open = ['audience' => 'public', 'include_audio' => true, 'allow_download' => false, 'expires_at' => null];
+
+    return [
+        's' => unscoped(fn () => app(ShareLinks::class)->make($session, $open, 'x')),
+        'p' => unscoped(fn () => app(ShareLinks::class)->make($project, $open, 'x')),
+        'r' => app(RequestLinks::class)->create($workspaceId, $person->id, null, null, null, 5, 5),
+    ];
+}
+
+it('m2 revokes the links and request links a removed person made there, and only there, for good', function () {
+    $owner = Fx::user();
+    $member = Fx::user();
+    [$team] = reviewTeam($owner, $member);
+    $links = makeLinks($member, $team->id);
+    $ownersLinks = makeLinks($owner, $team->id);
+    $elsewhere = makeLinks($member, (int) $member->current_workspace_id);
+    app('auth')->forgetGuards();
+
+    foreach ($links as $link) {
+        $this->get($link['url'])->assertOk();
+    }
+
+    app(Workspaces::class)->removeMember($team, $member);
+    app('auth')->forgetGuards();
+
+    foreach ($links as $link) {
+        $this->get($link['url'])->assertNotFound();
+        expect($link['link']->fresh()->revoked_at)->not->toBeNull();
+    }
+    foreach ([...$ownersLinks, ...$elsewhere] as $link) {
+        $this->get($link['url'])->assertOk();
+    }
+
+    // Coming back does not bring them back.
+    app(Workspaces::class)->addMember($team, $member->fresh());
+    $this->get($links['s']['url'])->assertNotFound();
+    $this->get($links['r']['url'])->assertNotFound();
+});
+
+it('m2 serves no link while its maker\'s account is being deleted, and serves it again if they keep the account', function () {
+    Mail::fake();
+    $user = Fx::user();
+    $links = makeLinks($user, (int) $user->current_workspace_id);
+    app('auth')->forgetGuards();
+
+    app(AccountDeletion::class)->schedule($user);
+    app('auth')->forgetGuards();
+    foreach ($links as $link) {
+        $this->get($link['url'])->assertNotFound();
+    }
+
+    app(AccountDeletion::class)->cancel($user->fresh());
+    app('auth')->forgetGuards();
+    foreach ($links as $link) {
+        $this->get($link['url'])->assertOk();
+    }
+});
+
+it('m2 still shows a link as active in its maker\'s list without asking about the account per row', function () {
+    $user = Fx::user();
+    $device = Fx::device($user);
+    foreach (range(1, 3) as $i) {
+        makeLinks($user, (int) $user->current_workspace_id);
+    }
+    $token = Fx::token($device);
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $answer = $this->api($token)->getJson('/api/shares')->assertOk();
+    $asked = collect(DB::getQueryLog())->filter(fn (array $q): bool => str_contains($q['query'], 'deletes_at'))->count();
+    DB::disableQueryLog();
+
+    expect(array_unique(array_column($answer->json('data'), 'active')))->toBe([true])->and($asked)->toBeLessThanOrEqual(1);
 });

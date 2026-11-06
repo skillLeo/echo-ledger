@@ -50,6 +50,8 @@ function abilityRoutes(): array
         'list every share link' => ['GET', '/api/shares', 'library:read'],
         'send recording' => ['POST', "/api/sessions/{$id}/send", 'sessions:write'],
         'send project' => ['POST', "/api/clients/{$id}/send", 'sessions:write'],
+        'what you sent' => ['GET', '/api/sent', 'library:read'],
+        'stop sharing' => ['DELETE', "/api/sent/{$id}", 'sessions:write'],
         'shared with me' => ['GET', '/api/shared-with-me', 'library:read'],
         'save shared item' => ['POST', "/api/shared-with-me/{$id}/save", 'sessions:write'],
         'remove shared item' => ['DELETE', "/api/shared-with-me/{$id}", 'sessions:write'],

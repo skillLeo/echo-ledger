@@ -13,6 +13,7 @@ use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SharingActions;
+use App\Filament\Support\StopsSharing;
 use App\Jobs\RefreshClientBriefJob;
 use App\Models\CallNote;
 use App\Models\CaptureSession;
@@ -54,7 +55,7 @@ use Livewire\WithFileUploads;
  */
 class ViewClient extends ViewRecord
 {
-    use WithFileUploads;
+    use StopsSharing, WithFileUploads;
 
     protected static string $resource = ClientResource::class;
 
@@ -143,6 +144,7 @@ class ViewClient extends ViewRecord
                     ->url(fn (): string => ClientResource::getUrl('create', ['parent' => $this->client()->id]))
                     ->visible(fn (): bool => $this->depth() < Client::MAX_DEPTH),
                 SharingActions::send(fn (): Client => $this->client()),
+                SharingActions::sentTo(fn (): Client => $this->client()),
                 SharingActions::renameProject(),
                 SharingActions::moveProject(),
                 EditAction::make()->label('Settings')->icon(Heroicon::OutlinedCog6Tooth),

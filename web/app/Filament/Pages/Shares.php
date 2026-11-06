@@ -69,7 +69,7 @@ class Shares extends Page implements HasTable
                 TextColumn::make('audience')->label('Who can open it')->wrap()
                     ->state(fn (ShareLink $link): string => SharingActions::audienceLabel($link)),
                 TextColumn::make('state')->label('Status')->badge()
-                    ->state(fn (ShareLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isActive() ? 'Active' : 'Expired'))
+                    ->state(fn (ShareLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isOpen() ? 'Active' : 'Expired'))
                     ->color(fn (string $state): string => $state === 'Active' ? 'success' : 'gray'),
                 TextColumn::make('allow_download')->label('Downloads')->state(fn (ShareLink $link): string => $link->allow_download ? 'Allowed' : 'Read and listen'),
                 // The hour on a line of its own: a link can last an hour, and the row keeps room for Revoke.
@@ -97,7 +97,7 @@ class Shares extends Page implements HasTable
                         'views' => $link->views()->latest('viewed_at')->limit(200)->get(), 'tz' => $tz,
                     ])),
                 Action::make('revoke')->label('Revoke')->icon(Heroicon::OutlinedNoSymbol)->color('danger')
-                    ->visible(fn (ShareLink $link): bool => $link->isActive())
+                    ->visible(fn (ShareLink $link): bool => $link->isOpen())
                     ->requiresConfirmation()->modalDescription('The link stops working at once.')
                     ->action(fn (ShareLink $link) => app(ShareLinks::class)->revoke($link)),
             ])

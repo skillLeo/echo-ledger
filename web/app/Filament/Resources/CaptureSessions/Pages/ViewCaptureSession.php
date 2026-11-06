@@ -14,6 +14,7 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SharingActions;
+use App\Filament\Support\StopsSharing;
 use App\Http\Controllers\AdminMediaController;
 use App\Jobs\MakeCallNotesJob;
 use App\Models\CallNote;
@@ -66,6 +67,8 @@ use RuntimeException;
 
 class ViewCaptureSession extends ViewRecord
 {
+    use StopsSharing;
+
     protected static string $resource = CaptureSessionResource::class;
 
     /** Transcript files offered under Download, in this order; PDF is the print page the browser saves as PDF. */
@@ -421,6 +424,7 @@ class ViewCaptureSession extends ViewRecord
             ActionGroup::make([
                 CaptureSessionsTable::renameAction(),
                 SharingActions::send(fn (): CaptureSession => $this->session()),
+                SharingActions::sentTo(fn (): CaptureSession => $this->session()),
                 $this->retryAction(),
                 $this->retranscribeAsAction(),
                 $this->secondEngineAction(),

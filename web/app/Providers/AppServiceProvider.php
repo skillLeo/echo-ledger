@@ -49,6 +49,7 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Mail\MailManager;
 use Illuminate\Mail\Markdown;
 use Illuminate\Mail\SendQueuedMailable;
+use Illuminate\Notifications\SendQueuedNotifications;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
@@ -130,7 +131,8 @@ class AppServiceProvider extends ServiceProvider
         // The activity centre (B18).
         ActivityFeed::listen();
         Event::listen(JobProcessing::class, function (JobProcessing $event): void {
-            if (($event->job->payload()['data']['commandName'] ?? null) === SendQueuedMailable::class) {
+            // Filament's mails for changing an email are queued notifications.
+            if (in_array($event->job->payload()['data']['commandName'] ?? null, [SendQueuedMailable::class, SendQueuedNotifications::class], true)) {
                 app(MailSettings::class)->apply();
             }
         });
@@ -181,6 +183,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('search', fn (Request $request) => Limit::perMinute(60)->by('search:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Ask costs money on every question: at most 20 a minute for a device.
         RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Send to a teammate: 30 sends an hour per person, whichever of their devices sends (an email goes to each address).
+        RateLimiter::for('send', function (Request $request) {
+            $device = $request->user();
+
+            return Limit::perHour(30)->by('send:'.($device instanceof Device ? $device->user_id : $request->ip()));
+        });
         RateLimiter::for('share', fn (Request $request) => Limit::perMinute(120)->by('share:'.$request->ip()));
         RateLimiter::for('share-password', fn (Request $request) => Limit::perMinute(10)->by('share-pw:'.$request->ip().'|'.(string) $request->route('token')));
         // Request links (v1.5): no account, so every upload call is counted per address (chunks of a few MB each).

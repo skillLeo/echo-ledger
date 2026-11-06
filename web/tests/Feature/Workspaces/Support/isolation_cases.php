@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\Screen;
+use App\Models\SentItem;
 use App\Models\SessionLabel;
 use App\Models\SessionMarker;
 use App\Models\Workspace;
@@ -117,15 +118,16 @@ function isoWorld(bool $sameWorkspace = false): array
     $uploading = Fx::session($bob, $device, ['title' => 'BOB-SECRET-TITLE uploading']);
     $upload = Fx::pendingRecording($uploading, str_repeat('b', 2048), 1024);
     ['link' => $requestLink] = app(RequestLinks::class)->create($client->workspace_id, $bob->id, $client, 'BOB-SECRET-TITLE request', null, 20, 100);
+    $sent = SentItem::query()->create(['workspace_id' => $session->workspace_id, 'from_user_id' => $bob->id, 'to_user_id' => Fx::user()->id, 'kind' => 'session', 'capture_session_id' => $session->id, 'title' => 'BOB-SECRET-TITLE sent', 'sent_at' => now()]);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen');
+    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
 function isoIds(array $b): array
 {
-    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id];
+    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id];
 }
 
 /**
@@ -188,6 +190,9 @@ function isoApiCases(array $b): array
         'api.shares' => ['GET', '/api/shares', [], 'list'],
         'api.sessions.send' => ['POST', "/api/sessions/{$s}/send", ['to' => [$b['bob']->email]], 404],
         'api.clients.send' => ['POST', "/api/clients/{$b['client']->id}/send", ['to' => [$b['bob']->email]], 404],
+        // What was sent is the sender's own list: Bob's to someone is not Alice's to read or take back.
+        'api.sent' => ['GET', "/api/sent?session_id={$s}", [], fn (TestResponse $r): bool => $r->status() === 200 && $r->json('data') === []],
+        'api.sent.destroy' => ['DELETE', "/api/sent/{$b['sent']->id}", [], 404],
         // Shared with me is the person's own list: nothing of B was sent to A.
         'api.shared' => ['GET', '/api/shared-with-me', [], 'list'],
         'api.shared.save' => ['POST', "/api/shared-with-me/{$s}/save", [], 404],

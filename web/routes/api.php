@@ -117,8 +117,10 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             // Share links for a project (v1.5): its recordings behind one link.
             Route::post('clients/{id}/shares', [ShareController::class, 'storeForProject'])->middleware($own)->name('api.clients.shares.store');
             // Sending to a teammate (v1.5): a recording or project to accounts on this server; save a copy of one sent to you.
-            Route::post('sessions/{id}/send', [TeammateController::class, 'sendSession'])->middleware($own)->name('api.sessions.send');
-            Route::post('clients/{id}/send', [TeammateController::class, 'sendProject'])->middleware($own)->name('api.clients.send');
+            Route::post('sessions/{id}/send', [TeammateController::class, 'sendSession'])->middleware([$own, 'throttle:send'])->name('api.sessions.send');
+            Route::post('clients/{id}/send', [TeammateController::class, 'sendProject'])->middleware([$own, 'throttle:send'])->name('api.clients.send');
+            // Stop sharing stays open to everyone, like taking back a link: it only narrows who sees a recording.
+            Route::delete('sent/{id}', [TeammateController::class, 'stopSharing'])->name('api.sent.destroy');
             Route::post('shared-with-me/{id}/save', [TeammateController::class, 'save'])->middleware(EnsureCanRecord::class.':saveShared')->name('api.shared.save');
             Route::delete('shared-with-me/{id}', [TeammateController::class, 'destroy'])->name('api.shared.destroy');
             // Request links (v1.5): a public page others send files through.
@@ -149,6 +151,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('transcripts/{id}/views', [TranscriptViewsController::class, 'show'])->name('api.transcripts.views');
             Route::get('sessions/{id}/shares', [ShareController::class, 'index'])->name('api.sessions.shares');
             Route::get('shares', [ShareController::class, 'all'])->name('api.shares');
+            Route::get('sent', [TeammateController::class, 'sent'])->name('api.sent');
             Route::get('shared-with-me', [TeammateController::class, 'index'])->name('api.shared');
             Route::get('request-links', [RequestLinkController::class, 'index'])->name('api.request-links');
             // Links in the apps (v1.5): what a /s/, /p/ or /r/ link is for this device, to open it in place.

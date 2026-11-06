@@ -52,24 +52,27 @@ final class Teammates
     public function __construct(private readonly ProjectTree $projects, private readonly ChunkedUploadService $uploads, private readonly ScreenStore $screens) {}
 
     /**
-     * Sends a recording or a project to every email. Unknown emails are `404 recipient_not_found` and nothing is
-     * sent. Sending the same thing to someone again refreshes their item (new note, at the top of the list).
+     * Sends a recording or a project to every email; a project with the list of the recordings it holds now. Sending the
+     * same thing to someone again refreshes their item (new note, at the top of the list, today's recordings). Only a
+     * confirmed account receives it: an address anyone could have typed into a profile is not a person yet.
+     *
+     * The answer is the number of addresses asked, whoever has an account, so this cannot be used to find out who does.
      *
      * @param  list<string>  $emails
      */
     public function send(User $sender, CaptureSession|Client $target, array $emails, ?string $note): int
     {
         $wanted = array_slice(array_values(array_unique(array_map(fn (string $e): string => mb_strtolower(trim($e)), $emails))), 0, self::MAX_RECIPIENTS);
-        $people = User::query()->whereIn(DB::raw('LOWER(email)'), $wanted)->get();
-        $missing = array_values(array_diff($wanted, $people->map(fn (User $u): string => mb_strtolower($u->email))->all()));
-        if ($missing !== [] || $wanted === []) {
-            throw new ApiError(404, 'recipient_not_found', 'No account on this server has the email '.implode(', ', $missing ?: $wanted).'. Nothing was sent.', ['emails' => $missing]);
+        $people = User::query()->whereIn(DB::raw('LOWER(email)'), $wanted)->whereNotNull('email_verified_at')->get();
+        if ($people->isEmpty()) {
+            return count($wanted);
         }
         $note = $note !== null && trim($note) !== '' ? mb_substr(trim($note), 0, 500) : null;
         $kind = $target instanceof Client ? 'project' : 'session';
         $title = mb_substr($target instanceof Client ? $target->name : $target->displayTitle(), 0, 200);
 
         DB::transaction(function () use ($sender, $target, $people, $note, $kind, $title): void {
+            $held = $target instanceof Client ? $this->heldBy($target) : null;
             foreach ($people as $person) {
                 $item = SentItem::query()->firstOrNew([
                     'to_user_id' => $person->id,
@@ -77,7 +80,7 @@ final class Teammates
                     'capture_session_id' => $target instanceof CaptureSession ? $target->id : null,
                     'client_id' => $target instanceof Client ? $target->id : null,
                 ]);
-                $item->fill(['workspace_id' => $target->workspace_id, 'from_user_id' => $sender->id, 'title' => $title, 'note' => $note, 'sent_at' => now()])->save();
+                $item->fill(['workspace_id' => $target->workspace_id, 'from_user_id' => $sender->id, 'session_ids' => $held, 'title' => $title, 'note' => $note, 'sent_at' => now()])->save();
                 app(ActivityFeed::class)->sharedWithYou($person, "{$sender->name} sent you {$title}", $note ?? 'Open it in Shared with me.', $target instanceof CaptureSession ? $target->id : null);
             }
         });
@@ -87,7 +90,67 @@ final class Teammates
         }
         app(AuditLog::class)->record('sent_to_teammate', $sender->id, $target, 'Sent '.($kind === 'project' ? 'project ' : '').$title.' to '.Str::limit($people->pluck('email')->implode(', '), 160, '…'));
 
-        return $people->count();
+        return count($wanted);
+    }
+
+    /**
+     * What a project holds as a person it is sent to can open it: its maker's recordings in it and its subfolders, none
+     * deleted or still being recorded.
+     *
+     * @return list<string>
+     */
+    private function heldBy(Client $project): array
+    {
+        return $this->inProject($project)->pluck('id')->all();
+    }
+
+    /** @return Builder<CaptureSession> */
+    private function inProject(Client $project): Builder
+    {
+        return CaptureSession::acrossPeople()->where('user_id', $project->user_id)->whereIn('client_id', $this->projects->withDescendants($project))
+            ->where('status', '!=', SessionStatus::Recording->value);
+    }
+
+    /**
+     * What the person sent of a recording or a project in the workspace, newest first (`GET /api/sent`, the console's
+     * Sent to).
+     *
+     * @return Collection<int, SentItem>
+     */
+    public function sentOf(User $sender, int $workspaceId, ?string $sessionId, ?string $projectId): Collection
+    {
+        return SentItem::query()->where('from_user_id', $sender->id)->where('workspace_id', $workspaceId)
+            ->when($sessionId !== null, fn (Builder $q) => $q->where('kind', 'session')->where('capture_session_id', $sessionId))
+            ->when($projectId !== null, fn (Builder $q) => $q->where('kind', 'project')->where('client_id', $projectId))
+            ->with('recipient')->orderByDesc('sent_at')->orderByDesc('id')->get();
+    }
+
+    /** One thing the person sent from the workspace, or null (someone else's or an unknown id: the same 404). */
+    public function sentItem(User $sender, int $workspaceId, string $id): ?SentItem
+    {
+        $item = SentItem::query()->where('from_user_id', $sender->id)->where('workspace_id', $workspaceId)->find($id);
+
+        return $item instanceof SentItem ? $item : null;
+    }
+
+    /** @return array<string, mixed> one row of `GET /api/sent` */
+    public static function sentPayload(SentItem $item): array
+    {
+        return [
+            'id' => $item->id,
+            'kind' => $item->kind,
+            'to' => ['name' => $item->recipient->name, 'email' => $item->recipient->email],
+            'title' => $item->title,
+            'note' => $item->note,
+            'sent_at' => $item->sent_at->toAtomString(),
+            'saved_at' => $item->saved_at?->toAtomString(),
+        ];
+    }
+
+    /** Stop sharing: it leaves the person's list and they can no longer open it; a copy they saved stays theirs. */
+    public function stopSharing(SentItem $item): void
+    {
+        $item->delete();
     }
 
     /**
@@ -118,25 +181,31 @@ final class Teammates
 
     /**
      * Every recording the person may read because it was sent to them: sent on its own, or in a sent project or one
-     * of its subfolders; not deleted and no longer recording. Workspace scope does not apply (the sender's workspace).
+     * of its subfolders; not deleted and no longer recording. A project's are those its maker filed in it that are in
+     * it still and were in it when it was sent: nothing filed later joins until it is sent again. Workspace scope does
+     * not apply (the sender's workspace).
      *
      * @return Builder<CaptureSession>
      */
     public function sharedSessions(User $person): Builder
     {
-        $items = SentItem::query()->where('to_user_id', $person->id)->get(['kind', 'capture_session_id', 'client_id']);
+        $items = SentItem::query()->where('to_user_id', $person->id)->get(['kind', 'capture_session_id', 'client_id', 'session_ids']);
         $sessionIds = $items->where('kind', 'session')->pluck('capture_session_id')->filter()->values()->all();
-        // Since v1.5 a project's recordings are those its maker filed in it: each sent project opens only its maker's.
-        $projectIds = [];
-        foreach (Client::acrossPeople()->whereIn('id', $items->where('kind', 'project')->pluck('client_id')->filter())->get() as $project) {
-            $projectIds[$project->user_id] = [...($projectIds[$project->user_id] ?? []), ...$this->projects->withDescendants($project)];
+        $projects = Client::acrossPeople()->whereIn('id', $items->where('kind', 'project')->pluck('client_id')->filter())->get()->keyBy('id');
+        // One condition per sent project: a recording moved between two of them is in neither one's list and tree at once.
+        $sent = [];
+        foreach ($items->where('kind', 'project') as $item) {
+            $project = $projects->get($item->client_id);
+            if ($project instanceof Client) {
+                $sent[] = [$project->user_id, $this->projects->withDescendants($project), $item->session_ids ?? []];
+            }
         }
 
         return CaptureSession::acrossPeople()
-            ->where(function (Builder $q) use ($sessionIds, $projectIds): void {
+            ->where(function (Builder $q) use ($sessionIds, $sent): void {
                 $q->whereIn('id', $sessionIds);
-                foreach ($projectIds as $maker => $ids) {
-                    $q->orWhere(fn (Builder $p) => $p->where('user_id', $maker)->whereIn('client_id', $ids));
+                foreach ($sent as [$maker, $folders, $held]) {
+                    $q->orWhere(fn (Builder $p) => $p->where('user_id', $maker)->whereIn('client_id', $folders)->whereIn('id', $held));
                 }
             })
             ->where('status', '!=', SessionStatus::Recording->value);
@@ -176,8 +245,7 @@ final class Teammates
         // Since v1.5 a viewer opens what was sent to them but keeps no library: `403 not_allowed`.
         app(Workspaces::class)->assertCanRecord($person, $workspaceId);
         $sessions = $item->kind === 'project' && $item->client !== null
-            ? CaptureSession::acrossPeople()->where('user_id', $item->client->user_id)->whereIn('client_id', $this->projects->withDescendants($item->client))
-                ->where('status', '!=', SessionStatus::Recording->value)->get()
+            ? $this->inProject($item->client)->whereIn('id', $item->session_ids ?? [])->get()
             : CaptureSession::acrossPeople()->whereKey($item->capture_session_id)->get();
         // The audio and, since v1.5, the screen moments: the copy takes as much room as the original.
         $bytes = (int) Recording::query()->whereIn('capture_session_id', $sessions->modelKeys())->whereNotNull('stored_path')->sum('stored_size_bytes')
@@ -337,7 +405,7 @@ final class Teammates
         /** @var Collection<int, Client> $projects */
         $projects = new Collection($items->where('kind', 'project')->pluck('client')->filter()->unique('id')->values()->all());
         $projects->loadCount('keyterms');
-        $counts = $this->projectCounts($projects);
+        $counts = $this->projectCounts($projects, $items->where('kind', 'project')->mapWithKeys(fn (SentItem $item): array => [(string) $item->client_id => $item->session_ids ?? []])->all());
 
         return array_values($items->map(function (SentItem $item) use ($sessionPayload, $projects, $counts): array {
             $client = $item->kind === 'project' && $item->client !== null ? $projects->find($item->client->id) : null;
@@ -366,12 +434,14 @@ final class Teammates
 
     /**
      * Each project's subfolders and its recordings, directly in it and with its subfolders', counted as the recipient
-     * can open them (not those still being recorded): one query for the tree of each workspace, one for the counts.
+     * can open them (in it still, and when it was sent, and not being recorded): one query for the tree of each
+     * workspace, one for the counts.
      *
      * @param  Collection<int, Client>  $projects
+     * @param  array<string, list<string>>  $held  each project's list of when it was sent
      * @return array<string, array{children: int, direct: int, nested: int}>
      */
-    private function projectCounts(Collection $projects): array
+    private function projectCounts(Collection $projects, array $held): array
     {
         $trees = [];
         // One tree per maker in a workspace (since v1.5 projects are private to whoever made them).
@@ -384,12 +454,12 @@ final class Teammates
             }
         }
         $ids = array_values(array_unique(array_merge([], ...array_column($trees, 'ids'))));
-        $perFolder = $ids === [] ? [] : CaptureSession::acrossPeople()->whereIn('client_id', $ids)
-            ->where('status', '!=', SessionStatus::Recording->value)->groupBy('client_id')->selectRaw('client_id, COUNT(*) AS recordings')
-            ->pluck('recordings', 'client_id')->map(fn ($n): int => (int) $n)->all();
+        $folderOf = $ids === [] ? [] : CaptureSession::acrossPeople()->whereIn('client_id', $ids)->whereIn('id', array_values(array_unique(array_merge([], ...array_values($held)))))
+            ->where('status', '!=', SessionStatus::Recording->value)->pluck('client_id', 'id')->all();
 
         $counts = [];
         foreach ($trees as $id => $tree) {
+            $perFolder = array_count_values(array_intersect_key($folderOf, array_flip($held[$id] ?? [])));
             $counts[$id] = [
                 'children' => $tree['children'],
                 'direct' => $perFolder[$id] ?? 0,

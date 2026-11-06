@@ -117,7 +117,7 @@ final class LinkResolver
         }
         foreach ($items->where('kind', 'project') as $item) {
             $project = Client::acrossPeople()->find($item->client_id);
-            if ($project instanceof Client && in_array($session->client_id, $this->projects->withDescendants($project), true)) {
+            if ($project instanceof Client && in_array($session->id, $item->session_ids ?? [], true) && in_array($session->client_id, $this->projects->withDescendants($project), true)) {
                 return $item;
             }
         }

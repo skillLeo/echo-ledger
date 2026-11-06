@@ -276,6 +276,7 @@ it('keeps the shape of every answer the apps read', function () {
     $record('client_share_create', $api()->postJson("/api/clients/{$projectId}/shares", ['audience' => 'public', 'allow_download' => false]));
     $record('shares_by_client', $api()->getJson("/api/shares?client_id={$projectId}"));
     $record('send', $api()->postJson("/api/sessions/{$session->id}/send", ['to' => ['teammate@example.test'], 'note' => 'Please look.']));
+    $record('sent', $api()->getJson("/api/sent?session_id={$session->id}"));
     $record('request_link_create', $api()->postJson('/api/request-links', ['title' => 'Send me the file']));
     $record('request_links', $api()->getJson('/api/request-links'));
 

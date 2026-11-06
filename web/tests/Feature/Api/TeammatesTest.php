@@ -93,11 +93,10 @@ describe('sending', function () {
         expect(collect($activity)->firstWhere('kind', 'shared_with_you'))->toMatchArray(['title' => "Ana <b>Boss</b> sent you {$title}", 'body' => $note]);
     });
 
-    it('sends nothing when one email has no account', function () {
-        $this->postJson("/api/sessions/{$this->call->id}/send", ['to' => ['omar@example.com', 'nobody@example.com']])->assertNotFound()
-            ->assertJsonPath('code', 'recipient_not_found')->assertJsonPath('emails', ['nobody@example.com']);
+    it('answers the number of addresses asked, and only an account receives it', function () {
+        $this->postJson("/api/sessions/{$this->call->id}/send", ['to' => ['omar@example.com', 'nobody@example.com']])->assertCreated()->assertExactJson(['sent' => 2]);
 
-        expect(SentItem::query()->count())->toBe(0)->and(sharedNotices($this->omar))->toBe(0);
+        expect(SentItem::query()->count())->toBe(1)->and(sharedNotices($this->omar))->toBe(1);
     });
 
     it('validates the body and answers 404 for another workspace', function () {
