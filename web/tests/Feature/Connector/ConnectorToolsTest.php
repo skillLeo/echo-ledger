@@ -160,6 +160,17 @@ describe('search', function () {
             ->toContain('[1:00] Omar: Please send the pelican invoice');
     });
 
+    it('finds an email address, on every database', function () {
+        $world = connectorWorld();
+        $token = connectorConnect($this, $world['person'])['access'];
+        $mail = Fx::session($world['person'], $world['device'], ['title' => 'Support call']);
+        Fx::transcript($mail, 'Write to omar@acme.com about it');
+
+        $answer = connectorTool($this, $token, 'search', ['query' => 'omar@acme.com']);
+
+        expect($answer['error'])->toBeFalse()->and($answer['text'])->toContain($mail->id)->toContain('omar@acme.com');
+    });
+
     it('finds screen text and titles', function () {
         $world = connectorWorld();
         $token = connectorConnect($this, $world['person'])['access'];

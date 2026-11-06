@@ -12,6 +12,7 @@ use App\Models\Screen;
 use App\Models\Transcript;
 use App\Support\UrduText;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -69,9 +70,14 @@ final class LibrarySearch
                 ->orWhereHas('screens', fn (Builder $s) => $s->whereFullText('search_text', self::booleanQuery($folded), ['mode' => 'boolean']))
                 ->orWhere(fn (Builder $title) => $this->likeAll($title, 'title', $terms)));
             // The engine is chosen for the whole query, never per page, so paging stays consistent.
-            if ((clone $fulltext)->exists()) {
-                $matching = $fulltext;
-                $this->engine = 'fulltext';
+            try {
+                if ((clone $fulltext)->exists()) {
+                    $matching = $fulltext;
+                    $this->engine = 'fulltext';
+                }
+            } catch (QueryException $e) {
+                // LIKE still finds the words; the log shows what the boolean query got wrong.
+                report($e);
             }
         }
         $sessions = $this->page($matching, $limit, $page);
@@ -344,14 +350,16 @@ final class LibrarySearch
     }
 
     /**
-     * Boolean-mode query: every term required, phrases quoted.
+     * Boolean-mode query: every term required. Only plain words go in bare: inside a word `@`, `-`, `*` and the like are
+     * operators, which is a syntax error for an email address and "not this word" for "well-known". A quoted phrase
+     * finds the same words in order.
      *
      * @param  list<string>  $terms
      */
     public static function booleanQuery(array $terms): string
     {
         return implode(' ', array_map(
-            fn (string $t): string => str_contains($t, ' ') ? '+"'.str_replace('"', '', $t).'"' : '+'.$t,
+            fn (string $t): string => preg_match('/^[\p{L}\p{N}\p{M}]+$/u', $t) === 1 ? '+'.$t : '+"'.str_replace('"', '', $t).'"',
             $terms,
         ));
     }

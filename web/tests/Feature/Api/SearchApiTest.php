@@ -8,7 +8,10 @@ use App\Enums\TranscriptStatus;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\LibrarySearch;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Exceptions;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
 uses(InteractsWithDeviceApi::class);
@@ -183,4 +186,50 @@ describe('snippets and terms', function () {
         expect(LibrarySearch::terms('Invoice "due date" invoice +friday -'))->toBe(['Invoice', 'due date', 'friday'])
             ->and(LibrarySearch::booleanQuery(['invoice', 'due date']))->toBe('+invoice +"due date"');
     });
+
+    it('quotes any word holding a sign the boolean query would read as an operator', function () {
+        expect(LibrarySearch::booleanQuery(['omar@acme.com', 'well-known', 'a*b', 'c++', 'a"b']))->toBe('+"omar@acme.com" +"well-known" +"a*b" +"c++" +"ab"')
+            // Letters and digits of any script, with their marks, stay plain words.
+            ->and(LibrarySearch::booleanQuery(['invoice2041', 'رسید', 'کِیا', 'हिंदी']))->toBe('+invoice2041 +رسید +کِیا +हिंदी');
+    });
+});
+
+describe('words with signs in them', function () {
+    it('finds an email address and a hyphenated word, on every database', function () {
+        $hit = searchable($this, 'Kickoff', [['Client', 'Write to omar@acme.com about the well-known issue.']]);
+        searchable($this, 'Standup', [['Me', 'Nothing about that.']]);
+
+        foreach (['omar@acme.com', 'well-known', 'omar@acme.com well-known', '"omar@acme.com"'] as $query) {
+            $response = $this->getJson('/api/search?q='.urlencode($query))->assertOk();
+            expect($response->json('data'))->toHaveCount(1, $query)->and($response->json('data.0.session.id'))->toBe($hit->id);
+        }
+    });
+
+    it('answers every kind of punctuation without an error', function () {
+        Exceptions::fake();
+        searchable($this, 'Kickoff', [['Client', 'Nothing special here.']]);
+
+        foreach (['foo@bar', 'x-y', 'a*b', '(a)b', '<a>b', 'a~b', 'a"b', 'a+b', 'c++', '50%', 'rock&roll', "don't", 'a@b@c', '@@@', '+++', '---', 'a.b', 'a,b', 'a:b', 'a/b', 'a\\b'] as $query) {
+            $this->getJson('/api/search?q='.urlencode($query))->assertOk();
+        }
+
+        Exceptions::assertNothingReported();
+    });
+
+    it('falls back to LIKE when the FULLTEXT query itself fails, and logs it', function () {
+        Exceptions::fake();
+        $hit = searchable($this, 'Kickoff', [['Client', 'The invoice is due.']]);
+        $broken = true;
+        DB::connection()->beforeExecuting(function (string $query) use (&$broken): void {
+            if ($broken && stripos($query, 'against') !== false) {
+                throw new QueryException('mariadb', $query, [], new RuntimeException('syntax error'));
+            }
+        });
+
+        $response = $this->getJson('/api/search?q=invoice')->assertOk();
+        $broken = false;
+
+        expect($response->json('data.0.session.id'))->toBe($hit->id)->and($response->json('engine'))->toBe('like');
+        Exceptions::assertReported(QueryException::class);
+    })->skip(fn () => ! in_array(DB::connection()->getDriverName(), ['mysql', 'mariadb'], true), 'Only MySQL and MariaDB have the FULLTEXT index.');
 });
