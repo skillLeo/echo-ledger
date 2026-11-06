@@ -71,11 +71,11 @@ describe("library organisation (B15)", () => {
 
   it("filters by client folder and by label", async () => {
     await renderLibrary();
-    fireEvent.change(screen.getByRole("combobox", { name: "Client folder" }), { target: { value: "c1" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "c1" } });
     expect(titles()).toEqual(["Kickoff"]);
-    fireEvent.change(screen.getByRole("combobox", { name: "Client folder" }), { target: { value: "" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "" } });
     expect(titles()).toEqual(["Briefing", "Old call"]);
-    fireEvent.change(screen.getByRole("combobox", { name: "Client folder" }), { target: { value: "*" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "*" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Label" }), { target: { value: "Invoice" } });
     expect(titles()).toEqual(["Kickoff"]);
   });

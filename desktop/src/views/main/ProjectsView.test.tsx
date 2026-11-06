@@ -358,7 +358,7 @@ describe("Notes", () => {
     respond("client_update", { data: { ...PROJECTS[0], ai_notes: false } });
     await renderProjects();
     tab("Notes");
-    expect(screen.getByTestId("ai-budget")).toHaveTextContent("AI this month: $0.42 of $5.00 · this client $0.12");
+    expect(screen.getByTestId("ai-budget")).toHaveTextContent("AI this month: $0.42 of $5.00 · this project $0.12");
     const toggle = screen.getByRole("switch", { name: "AI notes" });
     expect(toggle).toHaveAttribute("aria-checked", "true");
     fireEvent.click(toggle);
@@ -600,7 +600,7 @@ describe("Ask", () => {
 
 describe("workspace helpers", () => {
   it("writes the budget line and the source labels", () => {
-    expect(budgetLine({ configured: true, spent_usd: 0.4, budget_usd: 5, client_spent_usd: 0.123 })).toBe("AI this month: $0.40 of $5.00 · this client $0.12");
+    expect(budgetLine({ configured: true, spent_usd: 0.4, budget_usd: 5, client_spent_usd: 0.123 })).toBe("AI this month: $0.40 of $5.00 · this project $0.12");
     expect(citationLabel({ type: "call", title: "Kick-off", at_ms: 61_000 })).toBe("Kick-off · 1:01");
     expect(citationLabel({ type: "file", title: "scope.pdf", page: 3 })).toBe("scope.pdf · page 3");
   });

@@ -17,7 +17,7 @@ const EMPTY: AfterCallState = { saved: null, ask: null };
  * The `review` window (360 x 168, bottom-right, near the tray): what shows after a call (v1.5) and the ask chip for an
  * unrecognised app. "Keep automatically" shows a one-line toast, "Saved · Call with Omar · 4:12 · Undo", for 6 s; "Ask
  * me" shows a pill-size chip with the title, ✓ and ✕ that keeps the recording by itself after 10 s (a thin line counts
- * down), and its title opens the recording in the main window to rename it or pick a client. The core decides what is
+ * down), and its title opens the recording in the main window to rename it or pick a project. The core decides what is
  * shown (`aftercall:state`); the window never takes focus, so everything works on click and only what is visible is
  * reported as a hit region. The ask chip is time-critical (a call is starting), so it shows in front of the others.
  */
@@ -152,7 +152,7 @@ function KeepChip({ item, onGone }: { item: PendingItem; onGone: (id: string) =>
       {error ? (
         <span className="after-text error" role="alert" title={error}>{error}</span>
       ) : (
-        <button type="button" className="after-title-btn" title="Rename or choose a client" aria-label={`${title}: rename or choose a client`}
+        <button type="button" className="after-title-btn" title="Rename or choose a project" aria-label={`${title}: rename or choose a project`}
           onClick={() => void act(() => api.pendingOpen(item.id, true))}>
           <span className="after-title" dir="auto">{title}</span>
           <span className="after-sep" aria-hidden="true">·</span>

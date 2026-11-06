@@ -146,7 +146,7 @@ describe("Ask-me chip", () => {
 
   it("the title opens the recording in the main window with its title field", async () => {
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
-    fireEvent.click(button(/rename or choose a client/));
+    fireEvent.click(button(/rename or choose a project/));
     await waitFor(() => expect(callsOf("pending_open")).toEqual([{ id: "p1", rename: true }]));
     await flushAsync();
     expect(chip()).not.toBeInTheDocument();

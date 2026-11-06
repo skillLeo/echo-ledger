@@ -40,9 +40,9 @@ export const MEMORY_GROUPS: readonly [MemoryKind, string][] = [["decision", "Dec
 export const CLIENT_FILE_TYPES = ["pdf", "docx", "txt", "md"] as const;
 
 const money = (usd: number) => `$${(Number.isFinite(usd) ? usd : 0).toFixed(2)}`;
-/** "AI this month: $0.42 of $5.00 · this client $0.12" */
+/** "AI this month: $0.42 of $5.00 · this project $0.12" */
 export function budgetLine(ai: Workspace["ai"]): string {
-  return `AI this month: ${money(ai.spent_usd)} of ${money(ai.budget_usd)} · this client ${money(ai.client_spent_usd)}`;
+  return `AI this month: ${money(ai.spent_usd)} of ${money(ai.budget_usd)} · this project ${money(ai.client_spent_usd)}`;
 }
 
 /** Whether anything in the workspace is still being written or read on the server. */
@@ -150,7 +150,7 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
       await navigator.clipboard.writeText(text);
       notify("Copied the brief, memory and recent call notes for AI");
     } catch (e) {
-      notify(typeof e === "string" ? e : "Could not copy the client's context", true);
+      notify(typeof e === "string" ? e : "Could not copy the project's context", true);
     }
   };
 
@@ -369,7 +369,7 @@ function Brief({ ws, clientId, notify, onChange, onReload, canMake = true }: { w
     }
   };
   const makeAgain = async () => {
-    if (brief?.edited && !window.confirm("Write the brief again from the client's files and call notes? Your edits are replaced.")) return;
+    if (brief?.edited && !window.confirm("Write the brief again from the project's files and call notes? Your edits are replaced.")) return;
     setBusy(true);
     try {
       const { data } = await api.refreshClientBrief(clientId);
@@ -687,7 +687,7 @@ function Files({ ws, clientId, notify, onChange }: { ws: Workspace; clientId: st
     }
   };
   const remove = async (file: ClientFile) => {
-    if (!window.confirm(`Remove ${file.name} from this client?`)) return;
+    if (!window.confirm(`Remove ${file.name} from this project?`)) return;
     try {
       await api.deleteClientFile(clientId, file.id);
       onChange({ ...ws, files: ws.files.filter((f) => f.id !== file.id) });
@@ -709,7 +709,7 @@ function Files({ ws, clientId, notify, onChange }: { ws: Workspace; clientId: st
       {pasting && (
         <form className="card" style={{ marginTop: 12, display: "grid", gap: 10 }} onSubmit={(e) => { e.preventDefault(); void paste(); }}>
           <input className="input" aria-label="Name" placeholder="Name (for example: House rules)" maxLength={120} value={pasteName} onChange={(e) => setPasteName(e.target.value)} />
-          <textarea className="input" aria-label="Instructions" rows={6} maxLength={100_000} placeholder="Paste the client's instructions, rules or notes" value={pasteText} onChange={(e) => setPasteText(e.target.value)} />
+          <textarea className="input" aria-label="Instructions" rows={6} maxLength={100_000} placeholder="Paste instructions, rules or notes for this project" value={pasteText} onChange={(e) => setPasteText(e.target.value)} />
           <div className="row">
             <button type="submit" className="btn primary" disabled={busy || !pasteText.trim()}>Save instructions</button>
             <button type="button" className="btn ghost" onClick={() => setPasting(false)}>Cancel</button>
@@ -785,7 +785,7 @@ function Ask({ ws, clientId, onOpenRecording }: { ws: Workspace; clientId: strin
             <button type="button" aria-pressed={language === "roman_urdu"} onClick={() => setLanguage("roman_urdu")}>Roman Urdu</button>
           </span>
           <span className="spacer" />
-          <span className="small muted">Answers come from this client's calls and files.</span>
+          <span className="small muted">Answers come from this project's calls and files.</span>
           <button type="submit" className="btn primary" disabled={!ready || asking}>{asking ? <span className="spinner" aria-hidden="true" /> : <SendIcon size={16} />}Ask</button>
         </div>
       </form>

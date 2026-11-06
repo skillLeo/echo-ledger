@@ -55,6 +55,18 @@ interface SettingsSection { id: string; group: Group; title: string; keywords: s
 /** Signing this computer out (v1.5; "Unpair" before accounts): the token goes, the recordings waiting here stay. */
 const SIGN_OUT_CONFIRM = "Sign out of this computer? Recordings waiting to upload stay here and upload when you sign in again with this account, never into another one.";
 
+/** "Signed in to ledger.example.com" (the server's host, as on the phone), or "Not signed in". */
+export function signedInLine(serverUrl: string | null | undefined): string {
+  if (!serverUrl) return "Not signed in";
+  let host = serverUrl;
+  try {
+    host = new URL(serverUrl).host || serverUrl;
+  } catch {
+    // Not a URL: shown as stored.
+  }
+  return `Signed in to ${host}`;
+}
+
 const AFTER_CALL: readonly (readonly [AfterCall, string])[] = [["keep", "Keep automatically"], ["ask", "Ask me"]];
 const AFTER_CALL_HINT: Record<AfterCall, string> = {
   keep: "Each call is saved at once. A small “Saved · Undo” shows near the tray for a few seconds.",
@@ -203,17 +215,17 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
       { id: "your-data", group: "account", title: "Your data", keywords: "export my data download zip delete my account",
         node: <YourDataCard account={account} onAccount={setAccount} /> },
     ] satisfies SettingsSection[] : []),
-    { id: "general", group: "general", title: "General", keywords: "start sign in login autostart language transcription client keyterms", node: (
+    { id: "general", group: "general", title: "General", keywords: "start sign in login autostart language transcription project client keyterms", node: (
       <div className="card">
         <b>General</b>
         <Toggle label="Start EchoLedger when I sign in" on={settings.autostart} onChange={(v) => patch({ autostart: v })} />
         <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={220}
           onChange={(v) => patch({ transcriptionLanguage: v === "" ? null : v })} />
         <div className="toggle">
-          <div><label htmlFor="settings-client">Client keyterms</label><div id="settings-client-hint" className="small muted">Names and jargon from this client boost accuracy.</div></div>
-          {/* "No client" sends clientId: null (clears it); a missing key would keep the stored client (A6.DU4). */}
+          <div><label htmlFor="settings-client">Project keyterms</label><div id="settings-client-hint" className="small muted">Names and jargon of the selected project improve accuracy.</div></div>
+          {/* "No project" sends clientId: null (clears it); a missing key would keep the stored client (A6.DU4). */}
           <select id="settings-client" aria-describedby="settings-client-hint" className="input" style={{ width: 220 }} value={settings.clientId ?? ""} onChange={(e) => patch({ clientId: e.target.value || null })}>
-            <option value="">No client</option>
+            <option value="">No project</option>
             {clients.map((cl) => <option key={cl.id} value={cl.id}>{cl.name}</option>)}
           </select>
         </div>
@@ -306,8 +318,8 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
     { id: "devices", group: "general", title: "Devices", keywords: "devices revoke paired activity audit", node: <DevicesCard run={run} /> },
     { id: "this-device", group: "general", title: "This computer", keywords: "sign out unpair device name", node: (
       <div className="card">
-        <div className="row"><div><b>Device</b><div className="small muted">{status.deviceName}</div></div><span className="spacer" />
-          <button className="btn danger" onClick={async () => { if (window.confirm(SIGN_OUT_CONFIRM)) { const s = await run(api.unpair); if (s) onUnpaired(s); } }}>Sign out</button>
+        <div className="row"><div><b>{status.deviceName}</b><div className="small muted" data-testid="signed-in-to">{signedInLine(status.serverUrl)}</div></div><span className="spacer" />
+          <button className="btn danger" onClick={async () => { if (window.confirm(SIGN_OUT_CONFIRM)) { const s = await run(api.unpair); if (s) onUnpaired(s); } }}>Sign out of this computer…</button>
         </div>
       </div>
     ) },
@@ -373,14 +385,14 @@ function AboutCard({ status, run, onImported }: { status: AppStatus; run: <T>(fn
   return (
     <div className="card about-settings">
       <b>EchoLedger{version ? ` ${version}` : ""}</b>
-      <p className="small muted">Server: {status.serverUrl ?? "not paired"}{status.pinned ? " (secure connection)" : " (connection not verified)"}</p>
+      <p className="small muted">{signedInLine(status.serverUrl)}{status.serverUrl ? (status.pinned ? " (secure connection)" : " (connection not verified)") : ""}</p>
       <UpdatesPanel appStatus={status} />
       <div className="row organise-field">
         <button type="button" className="btn ghost" onClick={() => void run(api.exportSettings, "Settings saved in Downloads")}>Export settings</button>
         <label htmlFor={fileId} className="btn ghost">Import settings</label>
         <input id={fileId} type="file" accept="application/json,.json" className="sr-only" aria-label="Import settings" onChange={(e) => void importFile(e.target.files?.[0])} />
       </div>
-      <p className="small muted">The file has your preferences only, never the pairing, keys or PIN.</p>
+      <p className="small muted">The file has your preferences only, never the sign-in, keys or PIN.</p>
     </div>
   );
 }

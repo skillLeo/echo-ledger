@@ -207,7 +207,7 @@ export function SpeakersPanel({ labels, names, hasClient, onSave, onClose }: {
             onChange={(e) => setDraft({ ...draft, [label]: e.target.value })} />
         </label>
       ))}
-      {hasClient && <label className="check small"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />Use these names for this client’s next recordings</label>}
+      {hasClient && <label className="check small"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />Use these names for this project’s next recordings</label>}
       <div className="row">
         <button type="submit" className="btn">Save names</button>
         <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>

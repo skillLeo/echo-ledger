@@ -241,7 +241,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
   const answerLearn = async (yes: boolean) => {
     const asked = learn;
     setLearn(null);
-    if (yes && asked) await perform(asked.itemId, () => api.updateClient(asked.clientId, { language: asked.language }), "Saved for this client");
+    if (yes && asked) await perform(asked.itemId, () => api.updateClient(asked.clientId, { language: asked.language }), "Saved for this project");
   };
 
   const retry = async (item: UploadItem) => {
@@ -360,14 +360,14 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                     {assigning === item.id && (
                       <select
                         className="input queue-client"
-                        aria-label="Client"
+                        aria-label="Project"
                         autoFocus
                         value={item.clientId ?? ""}
                         onChange={(e) => void assign(item, e.target.value)}
                         onBlur={() => setAssigning(null)}
                         onKeyDown={(e) => e.key === "Escape" && setAssigning(null)}
                       >
-                        <option value="">No client</option>
+                        <option value="">No project</option>
                         {!knownClient && <option value={item.clientId ?? ""}>{item.clientName ?? item.clientId}</option>}
                         {(clients ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
@@ -380,7 +380,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
                           {MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{o.label}</option>)}
                         </optgroup>
                       </select>
-                      <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Assign client</button>
+                      <button type="button" className="btn ghost compact" disabled={isBusy} aria-expanded={assigning === item.id} onClick={() => toggleAssign(item)}>Choose project</button>
                       <button type="button" className="btn ghost compact" disabled={isBusy} onClick={() => setRename({ id: item.id, text: item.title ?? "" })}>Rename</button>
                     </div>
                     {/* As on the phone's card: Discard on the left, Keep (the one primary action) on the right. */}

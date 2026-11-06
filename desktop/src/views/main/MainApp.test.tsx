@@ -430,7 +430,7 @@ describe("MainApp action runner", () => {
     await renderPaired();
     respond("unpair", makeStatus({ paired: false, serverUrl: null, deviceName: null }));
     fireEvent.click(nav("Settings"));
-    fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out of this computer…" }));
     expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
   });
 });

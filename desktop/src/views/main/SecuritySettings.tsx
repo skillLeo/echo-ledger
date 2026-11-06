@@ -146,7 +146,7 @@ export function StorageCard({ limitBytes = null }: { limitBytes?: number | null 
             </div>
           )}
           {used !== null && <p className="small muted">Server disk {Math.round(used * 100)}% used · {fileSize(info.disk_free_bytes ?? 0)} free.</p>}
-          <p className="small muted">Recordings are deleted after {info.retention_days} days unless kept or their client keeps them longer. Deleted recordings can be restored for 48 hours.</p>
+          <p className="small muted">Recordings are deleted after {info.retention_days} days unless kept or their project keeps them longer. Deleted recordings can be restored for 48 hours.</p>
         </>
       )}
     </div>
