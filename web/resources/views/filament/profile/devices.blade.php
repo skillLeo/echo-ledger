@@ -29,7 +29,7 @@
             <div class="row">
                 <div class="grow">
                     <div>{{ $browser['browser'] }} @if ($browser['current'])<span class="badge">This browser</span>@endif</div>
-                    <div class="muted">{{ $browser['ip'] ?? 'Unknown address' }} · active {{ $browser['last_active']->diffForHumans() }}</div>
+                    <div class="muted">{{ $browser['ip'] ?? 'Unknown address' }}@if ($browser['country']) · {{ $browser['country'] }}@endif · active {{ $browser['last_active']->diffForHumans() }}</div>
                 </div>
                 @unless ($browser['current'])
                     <x-filament::button size="sm" color="gray" wire:click="signOutBrowser(@js($browser['id']))">Sign out</x-filament::button>

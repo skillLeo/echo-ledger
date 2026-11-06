@@ -6,6 +6,7 @@ namespace App\Filament\Auth;
 
 use App\Exceptions\ApiError;
 use App\Models\Device;
+use App\Models\KnownBrowser;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Accounts\AccountExports;
@@ -15,6 +16,7 @@ use App\Services\AuditLog;
 use App\Services\PairingService;
 use App\Services\SettingsRepository;
 use App\Services\WebSessions;
+use App\Support\ClientCountry;
 use App\Support\RecordingConsent;
 use chillerlan\QRCode\QRCode;
 use Filament\Actions\Action;
@@ -170,8 +172,27 @@ class EditProfile extends BaseEditProfile
                 'country' => $d->last_country,
             ])->all(),
             'browsersAvailable' => WebSessions::available(),
-            'browsers' => app(WebSessions::class)->list($this->account()->id, session()->getId()),
+            'browsers' => $this->browsersWithCountry(),
         ];
+    }
+
+    /**
+     * The console browsers with the country of their address when the server's proxy named it: this browser's from
+     * the request, the others' from the account's last console sign-in from that address (KnownBrowsers).
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function browsersWithCountry(): array
+    {
+        $browsers = app(WebSessions::class)->list($this->account()->id, session()->getId());
+        $countries = KnownBrowser::query()->where('user_id', $this->account()->id)->whereNotNull('country')
+            ->whereIn('ip', array_values(array_filter(array_column($browsers, 'ip'))))
+            ->orderByDesc('last_used_at')->get(['ip', 'country'])->unique('ip')->pluck('country', 'ip');
+
+        return array_map(fn (array $browser): array => [
+            ...$browser,
+            'country' => $browser['current'] ? (ClientCountry::of(request()) ?? $countries[$browser['ip']] ?? null) : ($countries[$browser['ip']] ?? null),
+        ], $browsers);
     }
 
     public function revokeDevice(string $id): void

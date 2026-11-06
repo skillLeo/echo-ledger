@@ -6,6 +6,7 @@ use App\Filament\Auth\EditProfile;
 use App\Models\AuditEvent;
 use App\Models\Device;
 use App\Models\DevicePairingCode;
+use App\Models\KnownBrowser;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Accounts\AccountSessions;
@@ -139,6 +140,18 @@ it('signs out everywhere from the API, the asking device included (204)', functi
         ->and(DB::table('sessions')->where('user_id', $member->id)->count())->toBe(0);
     app('auth')->forgetGuards();
     $this->asToken($token)->getJson('/api/config')->assertUnauthorized();
+});
+
+it('shows a console browser\'s country from the account\'s last sign-in at that address', function () {
+    config(['session.driver' => 'database']);
+    $member = Fx::user();
+    plantBrowser($member, str_repeat('d', 40));
+    KnownBrowser::query()->create(['user_id' => $member->id, 'token_hash' => str_repeat('e', 64), 'label' => 'Chrome on Windows', 'ip' => '203.0.113.5', 'country' => 'AE', 'last_used_at' => now()]);
+    // Another account's sign-in from the same address says nothing about this one.
+    KnownBrowser::query()->create(['user_id' => Fx::user()->id, 'token_hash' => str_repeat('f', 64), 'label' => 'Firefox', 'ip' => '203.0.113.5', 'country' => 'PK', 'last_used_at' => now()->addMinute()]);
+    $this->actingAs($member, 'web');
+
+    $this->get('/admin/profile')->assertOk()->assertSeeText('203.0.113.5 · AE · active')->assertDontSeeText('203.0.113.5 · PK');
 });
 
 it('shows the device\'s country when the server\'s proxy names it', function () {
