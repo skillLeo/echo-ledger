@@ -293,13 +293,10 @@ pub fn run() {
             if !std::env::args().any(|a| a == "--autostart") {
                 tray::show_main(&handle);
             }
-            // Started by an echoledger://open link (Windows passes it on the command line, since v1.5). A sign-in link
-            // never starts the app usefully: its verifier was in the memory of the run that opened the browser.
-            if let Some(link) = deep_link::find_open_link(&std::env::args().collect::<Vec<_>>()) {
-                actions::open_app_link(&handle, link);
-            } else if account::find_signed_in_link(&std::env::args().collect::<Vec<_>>()).is_some() {
-                actions::handle_links(&handle, &std::env::args().collect::<Vec<_>>());
-            }
+            // Started by an echoledger://open or echoledger://signed-in link (Windows passes it on the command line, since
+            // v1.5). A sign-in link that starts the app finds no sign-in waiting (its verifier was in the memory of the
+            // run that opened the browser) and says so.
+            actions::handle_links(&handle, &std::env::args().collect::<Vec<_>>());
             Ok(())
         })
         .on_window_event(|window, event| match event {
