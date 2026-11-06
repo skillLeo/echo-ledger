@@ -127,6 +127,8 @@ class AppServiceProvider extends ServiceProvider
             ->response(fn (Request $request, array $headers) => response()->json(['message' => 'Too many sign-in attempts. Try again later.', 'code' => 'too_many_attempts'], 429, $headers)));
         RateLimiter::for('auth-token', fn (Request $request) => Limit::perMinute(10)->by('auth-token:'.$request->ip()));
         RateLimiter::for('device-sign-in', fn (Request $request) => Limit::perMinute(30)->by('device-sign-in:'.$request->ip()));
+        // The public account pages (since v1.5): /account/delete and the export download.
+        RateLimiter::for('account', fn (Request $request) => Limit::perMinute(30)->by('account:'.$request->ip()));
         // Sign in with Google (since v1.5): the redirect, Google's answer and the "confirm it is you" step.
         RateLimiter::for('google', fn (Request $request) => Limit::perMinute(20)->by('google:'.$request->ip()));
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by('hook:'.$request->ip()));

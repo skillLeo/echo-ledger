@@ -74,7 +74,12 @@ const ISO_WEB_BYPASS = [
     'auth.google.confirm.store' => 'sign-in with Google, before any workspace',
     'device.sign-in' => 'the apps\' browser sign-in: the signed-in person approves a device for their own account',
     'device.sign-in.approve' => 'the apps\' browser sign-in: the signed-in person approves a device for their own account',
+    'account.delete' => 'deleting one\'s own account: the signed-in person only, no workspace data',
+    'account.delete.store' => 'deleting one\'s own account: the signed-in person only, no workspace data',
+    'account.export.download' => 'signed, expiring link of one person\'s own data export',
 ];
+
+const ISO_MISSING_EXPORT = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
 
 const ISO_SECRETS = ['BOB-SECRET-TITLE', 'BOBSECRETTRANSCRIPT', 'BOB-SECRET-CLIENT', 'BOB-SECRET-DEVICE', 'BOBSECRETTERM', 'bobsecretlabel', 'BOBSECRETNOTE'];
 
@@ -217,6 +222,10 @@ function isoApiCases(array $b): array
         'api.sessions.pack' => ['GET', "/api/sessions/{$s}/pack?format=html", [], 404],
         // Your account (v1.5): only the device's own person, never workspace B. Signing out everywhere ends this
         // device's token too, so it comes last.
+        'api.account' => ['GET', '/api/account', [], 'list'],
+        'api.account.destroy' => ['DELETE', '/api/account', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
+        'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
+        'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],
         'api.account.sign-out-everywhere' => ['POST', '/api/account/sign-out-everywhere', [], fn (TestResponse $r): bool => $r->status() === 204],
     ];
 }

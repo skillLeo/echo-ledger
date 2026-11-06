@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\AccountPageController;
 use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
 use App\Http\Controllers\AdminPackController;
@@ -103,6 +104,15 @@ Route::middleware('throttle:google')->prefix('/auth/google')->name('auth.google.
     Route::get('/confirm', [GoogleController::class, 'confirmForm'])->name('confirm');
     Route::post('/confirm', [GoogleController::class, 'confirm'])->name('confirm.store');
 });
+
+// Your account (v1.5): /account/delete without the app (Google Play links to it), and the "Export my data" link.
+Route::middleware('throttle:account')->group(function (): void {
+    Route::get('/account/delete', [AccountPageController::class, 'deletePage'])->name('account.delete');
+    Route::post('/account/delete', [AccountPageController::class, 'delete'])->middleware('auth:web')->name('account.delete.store');
+});
+// Signed for its 24 hours and fetched without a session, as the apps download it too.
+Route::get('/account/export/{export}/download', [AccountPageController::class, 'download'])
+    ->whereUlid('export')->withoutMiddleware('web')->middleware(['signed', 'throttle:account'])->name('account.export.download');
 
 // The apps' browser sign-in (v1.5, docs/API.md "Signing in with an account"): PKCE S256, the approval page behind the
 // console's sign-in, then the app's echoledger://signed-in link with a one-time code.

@@ -8,10 +8,12 @@ use App\Exceptions\ApiError;
 use App\Models\Device;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Accounts\AccountExports;
 use App\Services\Accounts\AccountSessions;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\AuditLog;
 use App\Services\PairingService;
+use App\Services\SettingsRepository;
 use App\Services\WebSessions;
 use chillerlan\QRCode\QRCode;
 use Filament\Actions\Action;
@@ -51,7 +53,44 @@ class EditProfile extends BaseEditProfile
             $this->googleSection(),
             $this->devicesSection(),
             $this->emailsSection(),
+            $this->dataSection(),
         ]);
+    }
+
+    /** "Export my data" (one ZIP, emailed, 24 hours) and "Delete my account" (the public page Google Play links to). */
+    private function dataSection(): Section
+    {
+        return Section::make('Your data')
+            ->schema([
+                Text::make(fn (): string => $this->exportStatus()),
+                Actions::make([
+                    Action::make('exportData')->label('Export my data')->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
+                        ->modalDescription('One ZIP with every recording\'s audio, its transcripts in each view that was made, the screens, and your projects\' files and notes. It is made in the background; the link comes by email and works for 24 hours.')
+                        ->modalSubmitActionLabel('Make the export')
+                        ->action(function (): void {
+                            app(AccountExports::class)->start($this->account());
+                            Notification::make()->title('Your export is being made')->body('The link comes by email.')->success()->send();
+                        }),
+                    Action::make('downloadExport')->label('Download my export')->icon(Heroicon::OutlinedDocumentArrowDown)->color('gray')
+                        ->visible(fn (): bool => app(AccountExports::class)->latest($this->account())?->downloadable() === true)
+                        ->url(fn (): ?string => app(AccountExports::class)->latest($this->account())?->downloadUrl()),
+                    Action::make('deleteAccount')->label('Delete my account')->icon(Heroicon::OutlinedTrash)->color('danger')->link()
+                        ->url(fn (): string => route('account.delete')),
+                ])->key('data-actions'),
+            ]);
+    }
+
+    private function exportStatus(): string
+    {
+        $export = app(AccountExports::class)->latest($this->account());
+
+        return match (true) {
+            $export === null => 'Download a copy of everything you keep here, or delete your account.',
+            $export->status === 'making' => 'Your export is being made. The link comes by email.',
+            $export->downloadable() => 'Your export is ready until '.$export->expires_at?->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, g:i A').'.',
+            $export->status === 'failed' => 'The last export could not be made. Try again.',
+            default => 'Your last export has expired. Make a new one any time.',
+        };
     }
 
     /** Emails that are a choice (sign-in alerts, invitations and the like always come). */

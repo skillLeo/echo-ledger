@@ -14,6 +14,7 @@ use App\Filament\Support\CommandPalette;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
 use App\Filament\Support\Palette;
+use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Filament\Enums\ThemeMode;
 use Filament\Http\Middleware\Authenticate;
@@ -121,6 +122,8 @@ class AdminPanelProvider extends PanelProvider
                 Authenticate::class,
                 // B20: the current workspace is checked on every page and Livewire request.
                 EnsureWorkspaceMember::class,
+                // Since v1.5: an account being deleted reaches only "Keep my account".
+                AccountGate::class,
             ], isPersistent: true);
     }
 }

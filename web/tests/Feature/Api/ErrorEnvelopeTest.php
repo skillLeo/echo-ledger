@@ -42,8 +42,8 @@ const ENVELOPE_MISSING_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
  */
 const ENVELOPE_PENDING_CODES = [
     'budget_exceeded',
-    // Phase 4: the account itself, plans.
-    'owner_of_team', 'feature_not_in_plan', 'seat_limit_reached',
+    // Phase 4: plans.
+    'feature_not_in_plan', 'seat_limit_reached',
 ];
 
 /** @return array<string, array{0: int, 1: string}> the docs table as code => [status, code] */
@@ -261,6 +261,11 @@ function produceError(object $test, string $code): TestResponse
             }
 
             return $test->withServerVariables(['REMOTE_ADDR' => '198.51.100.77'])->postJson('/api/auth/password', ['email' => 'locked@example.test', 'password' => 'wrong-password-1', 'name' => 'Phone', 'platform' => 'android']);
+        case 'owner_of_team':
+            $teammate = withoutWorkspace(User::factory()->create());
+            app(Workspaces::class)->addMember(Workspace::query()->findOrFail($test->device->workspace_id), $teammate);
+
+            return $test->deleteJson('/api/account', ['password' => 'password']);
         case 'invalid_code':
             app('auth')->forgetGuards();
 

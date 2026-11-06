@@ -59,6 +59,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
         Route::post('devices/rotate-token', [DeviceController::class, 'rotateToken'])->name('api.devices.rotate');
 
         Route::get('config', [ConfigController::class, 'show'])->middleware('abilities:config:read')->name('api.config');
+        Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');
         Route::get('security', [SecurityController::class, 'index'])->middleware('abilities:config:read')->name('api.security');
         Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
 
@@ -93,8 +94,9 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->name('api.sessions.notes.make');
             Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->name('api.transcripts.suggestions');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
-            // Your account (v1.5): sign out every device and console session.
+            // Your account (v1.5): sign out every device and console session; delete the account after 7 days.
             Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
+            Route::delete('account', [AccountController::class, 'destroy'])->name('api.account.destroy');
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->name('api.sessions.restore');
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->name('api.bin.destroy');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
@@ -154,6 +156,9 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::get('clients/{id}/screens', [ScreenController::class, 'project'])->name('api.clients.screens');
             // Meeting pack (v1.5): the transcript with its screens, a page to print or a ZIP.
             Route::get('sessions/{id}/pack', [PackController::class, 'show'])->name('api.sessions.pack');
+            // Your account (v1.5): "Export my data", one ZIP made in the background.
+            Route::post('account/export', [AccountController::class, 'export'])->name('api.account.export');
+            Route::get('account/export/{id}', [AccountController::class, 'exportStatus'])->name('api.account.export.show');
         });
     });
 

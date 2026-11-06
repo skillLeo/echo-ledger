@@ -4,16 +4,46 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
+use App\Models\AccountExport;
 use App\Models\Device;
 use App\Models\User;
+use App\Models\Workspace;
+use App\Services\Accounts\AccountDeletion;
+use App\Services\Accounts\AccountExports;
 use App\Services\Accounts\AccountSessions;
+use App\Services\Workspaces\Workspaces;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
 /** Your account (since v1.5, docs/API.md "Your account"): the device's owner, as the device acts for them. */
 final class AccountController extends Controller
 {
+    /** GET /api/account — `config:read`. */
+    public function show(Request $request, Workspaces $workspaces): JsonResponse
+    {
+        $device = $this->device($request);
+        $user = $this->owner($request);
+        $workspace = Workspace::query()->find($device->getAttribute('workspace_id'));
+
+        return response()->json([
+            'name' => $user->name,
+            'email' => $user->email,
+            'email_verified' => $user->hasVerifiedEmail(),
+            'two_factor' => $user->hasTwoFactor(),
+            'google' => $user->google_id !== null,
+            'created_at' => $user->created_at?->toAtomString(),
+            'workspace' => $workspace === null ? null : [
+                'id' => $workspace->id,
+                'name' => $workspace->name,
+                'role' => $workspaces->roleOf($user, $workspace->id)?->value,
+            ],
+            'deletes_at' => $user->deletes_at?->toAtomString(),
+        ]);
+    }
+
     /** POST /api/account/sign-out-everywhere — every device (this one included) and console session of the account. */
     public function signOutEverywhere(Request $request, AccountSessions $sessions): Response
     {
@@ -22,11 +52,47 @@ final class AccountController extends Controller
         return response()->noContent();
     }
 
-    private function owner(Request $request): User
+    /** DELETE /api/account — `{"password"}` or `{"otp"}`; erased after 7 days unless "Keep my account" is chosen. */
+    public function destroy(Request $request, AccountDeletion $deletion): JsonResponse
+    {
+        $data = $request->validate([
+            'password' => ['required_without:otp', 'nullable', 'string', 'max:4096'],
+            'otp' => ['required_without:password', 'nullable', 'string', 'max:64'],
+        ]);
+        $user = $this->owner($request);
+        $deletion->confirm($user, $data['password'] ?? null, $data['otp'] ?? null);
+        $deletesAt = $deletion->schedule($user);
+
+        return response()->json(['deletes_at' => $deletesAt->toAtomString()], 202);
+    }
+
+    /** POST /api/account/export — `library:read`: one ZIP of everything the account owns, made in the background. */
+    public function export(Request $request, AccountExports $exports): JsonResponse
+    {
+        return response()->json($exports->start($this->owner($request))->toApi(), 202);
+    }
+
+    /** GET /api/account/export/{id} — `library:read`. */
+    public function exportStatus(Request $request, string $id): JsonResponse
+    {
+        $export = AccountExport::query()->where('user_id', $this->device($request)->user_id)->find($id);
+        if (! $export instanceof AccountExport) {
+            throw new ApiError(404, 'not_found', 'Not found.');
+        }
+
+        return response()->json($export->toApi());
+    }
+
+    private function device(Request $request): Device
     {
         /** @var Device $device */
         $device = $request->user();
 
-        return User::query()->findOrFail($device->user_id);
+        return $device;
+    }
+
+    private function owner(Request $request): User
+    {
+        return User::query()->findOrFail($this->device($request)->user_id);
     }
 }
