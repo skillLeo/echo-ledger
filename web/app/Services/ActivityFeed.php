@@ -155,12 +155,11 @@ final class ActivityFeed
         try {
             $limits = app(PlanLimits::class);
             $plan = $limits->plan($workspaceId);
-            [$used, $max] = $limit === self::LIMIT_STORAGE
-                ? [(float) $limits->storageUsed($workspaceId), $plan->storage_bytes]
-                : [app(ClientWorkspace::class)->budget($workspaceId)['spent_usd'], $plan->aiCredits()];
+            $max = $limit === self::LIMIT_STORAGE ? $plan->storage_bytes : $plan->aiCredits();
             if ($max === null || $max <= 0) {
                 return;
             }
+            $used = $limit === self::LIMIT_STORAGE ? (float) $limits->storageUsed($workspaceId) : app(ClientWorkspace::class)->budget($workspaceId)['spent_usd'];
             $settings = app(SettingsRepository::class);
             $warnAt = $settings->warnPercent();
             $percent = $used / $max * 100;

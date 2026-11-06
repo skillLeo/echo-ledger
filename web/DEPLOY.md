@@ -79,6 +79,21 @@ be restored from the console's Recently deleted page for 48 hours.
   `openid`, `email` and `profile`.
 - **Sign-up:** Settings → Privacy & security → Who can sign up stays *Nobody* until accounts are opened to the public.
 
+## Plans, roles and privacy (since v1.5)
+- **Migration `2026_11_22_000001`:** plans get price, retention days, seats, AI credits and features; Personal (every
+  workspace made before) loses the B20 limits it still had at their defaults and has every feature; a Free plan is
+  added for new sign-ups (placeholder numbers: 300 minutes, 5 GB, 30 days, 1 seat, US$1 of AI, no Live Translate and
+  no AI notes). Filing rules become each person's. Nothing of the library changes. Rollback (`migrate:rollback
+  --step=1`) moves Free workspaces to Personal, gives Personal its B20 limits back, turns admins and viewers into
+  members, and refuses while two people of one workspace have the same filing rule (it names them).
+- **Privacy:** after this deploy owners and admins no longer see their members' recordings and projects. On a
+  one-person server nothing changes.
+- **Plans page and Server usage:** System → Plans makes, edits and assigns plans; System → Server usage has the
+  costs per provider, workspace and person with its own price table (Prices). Check the Free plan's numbers before
+  opening sign-up.
+- **Members' console:** Settings → Privacy & security → Members can use the console (on by default); off, members
+  and viewers are pointed to the apps.
+
 ## Certificate pins for the device apps
 Devices pin the server's public key (SPKI SHA-256), current + backup:
 ```

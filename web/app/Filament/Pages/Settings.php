@@ -848,7 +848,7 @@ class Settings extends Page
         $plan = app(PlanLimits::class)->plan((int) CurrentWorkspace::id());
         $count = $plan->workspaces()->count();
 
-        return "The \"{$plan->name}\" plan of this workspace".($count > 1 ? " (shared by {$count} workspaces)" : '').'. Leave a limit empty for none. No billing: this only caps use.';
+        return "The \"{$plan->name}\" plan of this workspace".($count > 1 ? " (shared by {$count} workspaces)" : '').'. Leave a limit empty for none. No billing: this only caps use. Every plan, its features and which workspace is on it: System → Plans.';
     }
 
     /**

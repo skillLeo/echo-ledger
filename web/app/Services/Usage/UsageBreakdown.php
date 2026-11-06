@@ -140,10 +140,14 @@ final class UsageBreakdown
         $zone = $this->settings->displayTimezone();
         $start = Carbon::now($zone)->startOfMonth();
         $rows = [];
+        $prices = $this->prices();
         for ($i = $months - 1; $i >= 0; $i--) {
             $month = $start->copy()->subMonthsNoOverflow($i);
-            $totals = $this->report($month, $month->copy()->addMonthNoOverflow(), $workspaceId, $userId)['totals'];
-            $rows[] = ['month' => $month->format('Y-m'), 'label' => $month->format('M Y'), 'minutes' => $totals['minutes'], 'cost_usd' => $totals['cost_usd']];
+            $totals = ['minutes' => 0.0, 'input_tokens' => 0, 'output_tokens' => 0, 'cost_usd' => 0.0];
+            foreach ($this->rows($month, $month->copy()->addMonthNoOverflow(), $workspaceId, $userId) as $row) {
+                $totals = self::add($totals, $this->line($row, self::providerOf((string) $row->provider), $prices));
+            }
+            $rows[] = ['month' => $month->format('Y-m'), 'label' => $month->format('M Y'), 'minutes' => round($totals['minutes'], 1), 'cost_usd' => round($totals['cost_usd'], 4)];
         }
 
         return $rows;
