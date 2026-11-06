@@ -34,8 +34,10 @@ class DeviceCheckTest {
         assertEquals(AppCallCapture.BOTH_SIDES, caps(36).appCalls)
         assertEquals(AppCallCapture.NEEDS_HELPER, caps(34, helper = false).appCalls)
         assertEquals(AppCallCapture.VOICE_ONLY, caps(33).appCalls)
-        assertEquals(AppCallCapture.VOICE_ONLY, caps(30).appCalls)
-        assertEquals(AppCallCapture.VOICE_ONLY_NEEDS_HELPER, caps(30, helper = false).appCalls)
+        assertEquals(AppCallCapture.VOICE_ONLY, caps(31).appCalls)
+        assertEquals(AppCallCapture.VOICE_ONLY_NEEDS_HELPER, caps(31, helper = false).appCalls)
+        // Android 11 refuses the helper's recorder unless a shell activity is in front, which would interrupt the call.
+        assertEquals(AppCallCapture.NONE, caps(30).appCalls)
         assertEquals(AppCallCapture.NONE, caps(29).appCalls)
         assertEquals(AppCallCapture.NOT_IN_THIS_BUILD, caps(36, inBuild = false).appCalls)
     }

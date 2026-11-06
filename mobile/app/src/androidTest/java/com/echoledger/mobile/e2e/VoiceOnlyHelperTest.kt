@@ -27,7 +27,7 @@ class VoiceOnlyHelperTest {
 
     @Test
     fun theHelperRecordsYourVoiceOnOneChannelBelowAndroid14() {
-        assumeTrue("Android 11 to 13 only", Build.VERSION.SDK_INT in 30..33)
+        assumeTrue("Android 12 and 13 only", Build.VERSION.SDK_INT in 31..33)
         val connection = app.graph.helper
         val deadline = System.currentTimeMillis() + HANDOFF_WAIT_MS
         while (connection.helper == null && System.currentTimeMillis() < deadline) Thread.sleep(500)

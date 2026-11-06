@@ -49,8 +49,8 @@
             <li><strong>Windows 11:</strong> both sides of calls, hearing only the call's app.</li>
             <li><strong>Windows 10:</strong> both sides of calls, but it records all sound playing on the computer.</li>
             <li><strong>Android 14 or newer</strong> with the capture helper: both sides of app calls.</li>
-            <li><strong>Android 11 to 13</strong> with the capture helper: only your voice in app calls.</li>
-            <li><strong>Android 10, or no helper:</strong> voice notes and imports, no calls: during a call Android gives other apps no sound.</li>
+            <li><strong>Android 12 and 13</strong> with the capture helper: only your voice in app calls.</li>
+            <li><strong>Android 10 and 11, or no helper:</strong> voice notes and imports, no calls: during a call Android gives other apps no sound.</li>
             <li><strong>Google Play version:</strong> voice notes and imports, no calls.</li>
         </ul>
         <p class="muted" style="margin: 12px 0 0; font-size: 14px;">Tested so far on phones: Samsung Galaxy S25 Ultra. In the app, Help &amp; diagnostics → Device check says what your phone can do.</p>

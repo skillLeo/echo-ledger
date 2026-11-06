@@ -143,7 +143,7 @@ class SetupScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `on Android 10 call capture is explained as unsupported`() {
+    fun `on Android 10 and 11 call capture is explained as unsupported`() {
         showSetup(caps(sdk = 29))
 
         compose.onNodeWithText("2 · Call capture").assertIsDisplayed()
@@ -152,7 +152,7 @@ class SetupScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `from Android 11 to 13 the helper is offered and says it records your voice only`() {
+    fun `on Android 12 and 13 the helper is offered and says it records your voice only`() {
         showSetup(caps(sdk = 33))
 
         compose.onNodeWithText("only your voice in WhatsApp calls", substring = true).assertIsDisplayed()

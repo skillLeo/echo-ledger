@@ -63,9 +63,9 @@ shows how to turn it on again.
 | **Windows 11** | Yes | Both sides. EchoLedger hears only the call's app. |
 | **Windows 10** | Yes | Both sides, but it records all sound playing on the computer, not just the call. |
 | **Android 14 or newer**, with the capture helper | Yes | App calls: both sides. SIM calls: where the phone maker allows it. |
-| **Android 11 to 13**, with the capture helper | Yes | App calls: **only your voice**. SIM calls: where the phone maker allows it. |
-| **Android 11 or newer, no helper** | Yes | Not recorded: during a call Android gives other apps no sound. |
-| **Android 10** | Yes | Not recorded. |
+| **Android 12 and 13**, with the capture helper | Yes | App calls: **only your voice**. SIM calls: where the phone maker allows it. |
+| **Android 12 or newer, no helper** | Yes | Not recorded: during a call Android gives other apps no sound. |
+| **Android 10 and 11** | Yes | Not recorded. |
 | **Google Play version** | Yes | Not recorded: use the version from your server's Downloads page. |
 
 To see what your phone can do, open **You → General → Help & diagnostics → Device check**. It gives the reason for each

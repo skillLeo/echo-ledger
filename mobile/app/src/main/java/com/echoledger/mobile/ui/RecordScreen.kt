@@ -119,7 +119,7 @@ fun RecordSheet(
             Text("New", style = LocalEchoType.current.titleM, color = Brand.Text, modifier = Modifier.padding(bottom = Space.s4))
             val calls = when (capabilities.appCalls) {
                 AppCallCapture.NOT_IN_THIS_BUILD -> "Calls: website version only"
-                AppCallCapture.NONE -> "Calls: not on Android 10"
+                AppCallCapture.NONE -> "Calls: needs Android 12"
                 AppCallCapture.NEEDS_HELPER, AppCallCapture.VOICE_ONLY_NEEDS_HELPER -> "Calls: set up first"
                 AppCallCapture.VOICE_ONLY -> "Calls: your voice only"
                 AppCallCapture.BOTH_SIDES -> if (autoRecordOn) "Calls: auto-record on" else "Calls: ready"
@@ -278,7 +278,7 @@ fun RecordScreen(
                 "Auto-record calls",
                 summary = when {
                     !capabilities.helperInBuild -> Capabilities.NOT_IN_THIS_BUILD
-                    !capabilities.callCaptureSupportedByOs -> "Needs Android 11 or newer"
+                    !capabilities.callCaptureSupportedByOs -> "Needs Android 12 or newer"
                     !capabilities.helperConnected -> "Enable call capture in Setup first"
                     settings.afterCall == PostCallPrompt.ASK -> "A small chip asks after each call; kept after 10 s"
                     else -> "Answered calls are kept automatically; unanswered and short ones are skipped"

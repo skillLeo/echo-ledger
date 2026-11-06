@@ -40,7 +40,7 @@ data class PhoneFacts(
  * The device check (since v1.5, plan Phase 1B): what works on this phone and why, in the same words on the Record tab,
  * in onboarding and in Help & diagnostics. It says what the app really does on this Android version: during a call
  * Android gives ordinary apps no microphone sound, so without the capture helper an app call records nothing at all,
- * and from Android 11 to 13 the helper records your voice only.
+ * and on Android 12 and 13 the helper records your voice only.
  */
 object DeviceCheck {
     private const val NO_SOUND = "Without it Android gives other apps no sound during a call."
@@ -59,7 +59,7 @@ object DeviceCheck {
             "With the capture helper this phone can record only your voice in WhatsApp calls: the other side needs Android 14 or newer. $NO_SOUND"
 
         AppCallCapture.NONE ->
-            "This phone cannot record WhatsApp calls: Android 10 gives other apps no sound during a call. Voice notes work."
+            "This phone cannot record WhatsApp calls: its Android version gives other apps no sound during a call. Voice notes work."
 
         AppCallCapture.NOT_IN_THIS_BUILD -> Capabilities.NOT_IN_THIS_BUILD
     }
@@ -118,7 +118,7 @@ object DeviceCheck {
                 "sim_calls",
                 "SIM calls",
                 CheckState.OFF,
-                "Recording SIM calls needs Android 11 or newer."
+                "Recording SIM calls needs Android 12 or newer."
             )
 
             !caps.helperConnected ->

@@ -18,13 +18,13 @@ class CaptureDecisionsTest {
         Capabilities(sdk, helper, mic, notif, overlay)
 
     @Test
-    fun `call capture starts at Android 11 with the helper, and both sides at Android 14`() {
+    fun `call capture starts at Android 12 with the helper, and both sides at Android 14`() {
         (29..37).forEach { sdk ->
-            assertEquals("sdk $sdk", sdk >= 30, caps(sdk).callCaptureSupportedByOs)
-            assertEquals("sdk $sdk with helper", sdk >= 30, caps(sdk, helper = true).canCaptureCalls)
+            assertEquals("sdk $sdk", sdk >= 31, caps(sdk).callCaptureSupportedByOs)
+            assertEquals("sdk $sdk with helper", sdk >= 31, caps(sdk, helper = true).canCaptureCalls)
             assertFalse("sdk $sdk without helper", caps(sdk, helper = false).canCaptureCalls)
         }
-        assertEquals(30, Capabilities.MIN_VOICE_ONLY_SDK)
+        assertEquals(31, Capabilities.MIN_VOICE_ONLY_SDK)
         assertEquals(34, Capabilities.MIN_CALL_CAPTURE_SDK)
     }
 

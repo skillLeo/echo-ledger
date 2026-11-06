@@ -5,8 +5,9 @@ enum class AppCallCapture { BOTH_SIDES, NEEDS_HELPER, VOICE_ONLY, VOICE_ONLY_NEE
 
 /**
  * What this device can do (pure, unit-tested). Far-party VoIP capture needs Android 14+ because the shell user only
- * holds CAPTURE_VOICE_COMMUNICATION_OUTPUT from API 34; the microphone beside a call needs Android 11+, where the shell
- * user first holds RECORD_AUDIO and CAPTURE_AUDIO_OUTPUT (docs/research/android-capture.md).
+ * holds CAPTURE_VOICE_COMMUNICATION_OUTPUT from API 34; the microphone beside a call needs Android 12+. The shell user
+ * holds RECORD_AUDIO and CAPTURE_AUDIO_OUTPUT from Android 11 (docs/research/android-capture.md), but Android 11 refuses
+ * its recorder unless a shell activity is in the foreground (seen on an emulator), which would interrupt the call.
  */
 data class Capabilities(
     val sdkInt: Int,
@@ -42,7 +43,7 @@ data class Capabilities(
         const val MIN_CALL_CAPTURE_SDK = 34
 
         /** Your voice beside a call, through the helper. */
-        const val MIN_VOICE_ONLY_SDK = 30
+        const val MIN_VOICE_ONLY_SDK = 31
 
         /** Why the Google Play build records no calls (mobile/DISTRIBUTION.md). */
         const val NOT_IN_THIS_BUILD =

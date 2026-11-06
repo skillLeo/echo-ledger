@@ -32,8 +32,8 @@ class CapabilitiesTest {
     )
 
     @Test
-    fun `call capture needs Android 11 and a connected helper`() {
-        assertFalse(caps(29, helper = true).canCaptureCalls)
+    fun `call capture needs Android 12 and a connected helper`() {
+        assertFalse(caps(30, helper = true).canCaptureCalls)
         assertTrue(caps(33, helper = true).canCaptureCalls)
         assertFalse(caps(34, helper = false).canCaptureCalls)
         assertTrue(caps(34, helper = true).canCaptureCalls)

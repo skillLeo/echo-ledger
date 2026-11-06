@@ -138,16 +138,16 @@ class RecordScreenTest : ScreenTest() {
     // ---- auto-record ------------------------------------------------------------------------------------------------------
 
     @Test
-    fun `auto record is unavailable on Android 10, and it says why`() {
+    fun `auto record is unavailable on Android 10 and 11, and it says why`() {
         showRecord(caps(sdk = 29, helper = true), RecordMode.CALLS)
 
-        compose.onNodeWithText("Needs Android 11 or newer").assertIsDisplayed()
+        compose.onNodeWithText("Needs Android 12 or newer").assertIsDisplayed()
         compose.onNodeWithText("This phone cannot record WhatsApp calls", substring = true).assertExists()
         autoSwitch().assertIsNotEnabled()
     }
 
     @Test
-    fun `from Android 11 to 13 the Record tab says up front that a call records your voice only`() {
+    fun `on Android 12 and 13 the Record tab says up front that a call records your voice only`() {
         showRecord(caps(sdk = 33, helper = true), RecordMode.CALLS)
 
         compose.onNodeWithText("This phone can record only your voice in WhatsApp calls", substring = true).assertExists()
