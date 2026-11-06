@@ -194,23 +194,53 @@ recording page. The new name shows on all your devices. A call waiting for Keep 
 **Export** saves a transcript as a file: Word, PDF (use **Print or save as PDF**), plain text, Markdown, SRT or
 VTT subtitles, or JSON. Urdu and Hindi text keep the right shape and direction.
 
-**Share** makes a link that anyone can open without an account.
+**Share** makes a link to a recording or a whole project.
 
-1. Open the recording and choose **Share**.
-2. Pick how long the link works: **1 hour**, **1 day** or **7 days**.
-3. Add a password if you want one. Choose whether the link can play the audio.
+1. Open the recording (or the project) and choose **Share**.
+2. Choose who may open it:
+   - **Anyone with the link**;
+   - **Anyone with the link and a password**;
+   - **Only people I choose**: type their emails. They sign in to the console with one of those emails, and their
+     email must be confirmed.
+3. Choose whether people may **download** the audio and the transcript, and when the link stops working (or
+   never).
 4. Copy the link. It is shown only once.
 
-You can revoke a link at any time and it stops working at once. The recording page lists every time a link was
-opened.
+A project's link shows its recordings, newest first; each opens like a recording's link. You can revoke a link at
+any time and it stops working at once. **Shares** (in the console) and the share sheet in the apps list every link
+with its views and when it was last opened.
 
-## 11. Clients and vocabulary
+**Send to a teammate** puts a recording or a project in the **Shared with me** folder of someone with an account on
+your server. Type their email and, if you like, a note. They can play and read it but not change it, and **Save to
+my library** gives them their own copy, which stays even if you delete yours.
 
-- **Clients** are folders for the people you work with. Give each one a colour and a picture or letters, and
-  pin the important ones. Choose a client for a recording, or set a default client in **Settings**.
+**Request files** makes a link anyone can use to send you voice notes, recordings or documents, without an account.
+Choose a project (or the Inbox), when the link stops working, and how many files and megabytes it takes. Audio and
+video become recordings; PDF, Word, text and pictures go to the project's Files. Other file types are refused.
+
+**Links open in the app.** On a phone with EchoLedger, a share, project or request link of your server opens in the
+app. A page in the browser offers **Open in EchoLedger**.
+
+## 11. Projects and vocabulary
+
+**Projects** (called Clients before v1.5) are folders for the people and work you record: a project keeps its
+contacts, notes and instructions, files and recordings together. A project can hold folders of its own, up to four
+levels (for example Acme › Invoices). Give each one a colour and a picture or letters, and pin the important ones.
+
+- **Smart folders** sort the Library for you, without copying anything: **Inbox** (recordings in no project),
+  **WhatsApp**, **WhatsApp Business**, **Google Meet**, **Zoom**, **Teams**, **Phone**, **Voice notes**,
+  **Imported** and **Shared with me**. The Library itself still shows everything, newest first.
+- **Filing rules** put new recordings in a project by themselves. A call with one of the project's contacts goes
+  there first; then a rule on the title ("the title contains Acme"); then a rule on the app ("every Zoom call").
+  Everything else waits in the Inbox. A rule never moves a recording that is already in a project. Add rules on the
+  project's page.
+- **Moving:** drag recordings onto a project in the sidebar (computer and console), or choose **Move** (all apps,
+  also for several selected recordings).
+- **Deleting a project** keeps its recordings: they go to the Inbox, and its folders move up a level.
+- **A recording's project:** choose one on the recording's page, or set a default project in **Settings**.
 - **Labels** are your own words on a recording, such as "contract". Select several recordings to move them,
   label them, pin them or export them together.
-- **Vocabulary** helps EchoLedger spell names and special words. Add words to a client (**Clients → your client
+- **Vocabulary** helps EchoLedger spell names and special words. Add words to a project (**Projects → your project
   → Keyterms**) or to everyone (**Settings → General → Vocabulary**). If you fix a name in a transcript, EchoLedger offers
   to add it.
 - **Replacements** change one word into another in every new transcript, for example "echo ledger" into
@@ -227,33 +257,37 @@ EchoLedger can tell who a call was with. The recording is then called **Call wit
 - **On Windows**, EchoLedger reads the name in the call window's title, for example "Omar Khan | Microsoft Teams" or
   "Meet - Weekly sync", and calls the recording **Omar Khan** or **Weekly sync**. Titles such as "Zoom Meeting" or a
   Meet code give no name. A meeting name is not added to a client's contacts.
-- **Contacts.** Add the people you talk to under **Clients → your client → Contacts**: a name, a phone number and,
+- **Contacts.** Add the people you talk to under **Projects → your project → Contacts**: a name, a phone number and,
   if you like, their language. A call with a matching name or number is filed under that client. It is transcribed in
   the contact's language unless you chose a language for that recording.
 - When you move a recording with a caller name to a client, EchoLedger adds the caller to that client's contacts. The
   next call with them is filed under the client by itself.
 
-### Client workspaces: brief, call notes, memory and Ask
+### Project pages: brief, call notes, memory and Ask
 
-Open a client (**Clients → the client**) to see four tabs: **Overview**, **Recordings**, **Files** and **Ask**.
+Open a project (**Projects → the project**) to see its tabs: **Notes** (the brief, memory and call notes),
+**Recordings**, **Files**, **Screens** and **Ask**. Breadcrumbs at the top lead back up through its folders, and its
+folders are listed above the tabs.
 
-- **Call notes.** After every call, voice note or import filed under the client, EchoLedger writes short notes: what
+- **Call notes.** After every call, voice note or import filed under the project, EchoLedger writes short notes: what
   was asked for, changes, new things that are not in the brief, decisions, what to confirm with the client, deadlines
   and prices, and your own action items. Only sections with something in them are shown. Tap a line to hear that
   moment. Lines marked **verify** were unclear in the recording: check them before you rely on them. Nothing is added
   that was not said.
 - **Brief.** One page about the project: goal, scope, constraints, deadlines, budget, people and terms. It is made from
-  the client's files or, with none, from the calls so far. **Edit** it as you like; after an edit it is never rewritten
+  the project's files or, with none, from the calls so far. **Edit** it as you like; after an edit it is never rewritten
   by itself (**Make again** rewrites it on purpose).
 - **Memory.** Decisions, open questions and changes from every call, dated, each with the call it came from. Hold a
   line to pin or remove it, or **Add** your own.
 - **Files.** Add PDF, Word, text or Markdown files, or **Paste instructions**. They feed the brief and Ask, and stay
   encrypted on your server.
-- **Ask.** Ask anything about the client ("When did we agree to launch?"). The answer is short and lists its sources:
+- **Ask.** Ask anything about the project ("When did we agree to launch?"). The answer is short and lists its sources:
   a call and the moment, or a file and the page. Answers can be in English or Roman Urdu.
 - **Copy for AI** copies the brief, memory and latest call notes, ready to paste into your own ChatGPT or Claude
   project.
-- **AI notes** can be switched off per client. The console shows what the AI costs each month; the budget is $5
+- **Screens** shows what was on the shared screen in the project's meetings (see Screen moments, once your
+  computer app records them).
+- **AI notes** can be switched off per project. The console shows what the AI costs each month; the budget is $5
   unless you change it. Anthropic does not train its models on what EchoLedger sends.
 
 ## 12. Languages
