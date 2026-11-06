@@ -17,8 +17,8 @@ use App\Services\SettingsRepository;
 use Illuminate\Support\Carbon;
 
 /**
- * The usage page (B20): one month of one workspace, read only from the usage ledger, so every number adds up to the
- * ledger exactly. Minutes are billed minutes (duration × billed channels); cost is the `cost_usd` stored with each row,
+ * The usage page (B20): one month of one workspace (or one person in it), read only from the usage ledger, so every
+ * number adds up to the ledger exactly. Minutes are billed minutes (duration × billed channels); cost is the `cost_usd` stored with each row,
  * priced from the rates in Settings when the row was written. Months are cut in the console's display time zone.
  */
 final class UsageReport
@@ -39,6 +39,8 @@ final class UsageReport
     }
 
     /**
+     * One month of the workspace, or of one person in it (since v1.5 a member sees only their own numbers).
+     *
      * @return array{month: string, label: string,
      *     totals: array{minutes: float, cost_usd: float, streaming_minutes: float, final_minutes: float, free_minutes: float},
      *     providers: list<array{provider: string, label: string, streaming_minutes: float, final_minutes: float, cost_usd: float, recordings: int, per_hour_usd: float|null, check_usd: float}>,
@@ -47,7 +49,7 @@ final class UsageReport
      *     live_translate: list<array{mode: string, minutes: float, cost_usd: float}>,
      *     daily: array{labels: list<string>, minutes: list<float>}}
      */
-    public function forMonth(int $workspaceId, string $month): array
+    public function forMonth(int $workspaceId, string $month, ?int $userId = null): array
     {
         $zone = $this->settings->displayTimezone();
         $start = preg_match('/^\d{4}-\d{2}$/', $month) === 1
@@ -66,6 +68,7 @@ final class UsageReport
         }
 
         $rows = UsageLedgerEntry::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)
+            ->when($userId !== null, fn ($q) => $q->where('user_id', $userId))
             ->where('occurred_at', '>=', $start->copy()->utc())->where('occurred_at', '<', $end->copy()->utc())
             ->toBase()->select(['provider', 'use_case', 'source', 'duration_ms', 'billed_ms', 'cost_usd', 'billable', 'device_id', 'capture_session_id', 'model', 'occurred_at'])
             ->orderBy('occurred_at')->cursor();

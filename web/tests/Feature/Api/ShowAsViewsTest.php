@@ -248,7 +248,9 @@ it('stores both views aligned with the lines, bills the tokens and serves them u
         ->and($state['model'])->toBe('claude-opus-5-5')
         ->and($transcript->fresh()->segments[0]['text'])->toBe('آپ کیسے ہیں');
     $usage = UsageLedgerEntry::query()->where('provider', 'claude')->sole();
-    expect($usage->cost_usd)->toEqualWithDelta((1000 * 4 + 2000 * 20) / 1_000_000, 1e-9)->and($usage->use_case)->toBe('show_as');
+    expect($usage->cost_usd)->toEqualWithDelta((1000 * 4 + 2000 * 20) / 1_000_000, 1e-9)->and($usage->use_case)->toBe('show_as')
+        // Since v1.5 the tokens are kept too: the server's usage page reads them.
+        ->and($usage->input_tokens)->toBe(1000)->and($usage->output_tokens)->toBe(2000);
     $this->postJson("/api/transcripts/{$transcript->id}/views")->assertOk()->assertJsonPath('status', 'ready');
 
     // An edit makes the views stale; Urdu opens in Roman Urdu, so they are made again from the edited lines.

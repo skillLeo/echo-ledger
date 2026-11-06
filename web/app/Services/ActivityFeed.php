@@ -15,25 +15,37 @@ use App\Mail\TranscriptReadyMail;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Recording;
+use App\Models\Screen;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
+use App\Services\ClientAi\ClientWorkspace;
+use App\Services\Usage\UsagePeriod;
 use App\Services\Usage\UsageSummary;
+use App\Services\Workspaces\PlanLimits;
 use Carbon\Carbon;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Number;
 use Throwable;
 
 /**
  * The activity centre (plan B18): "Transcript ready", "Transcription failed", "Upload failed", "Device paired" and
- * "Monthly limit at 80 % / reached". One database notification per event: the console bell shows it, the device apps
- * read it with GET /api/activity and turn it into an OS notification that opens the recording.
+ * "Monthly limit at 80 % / reached", since v1.5 also for the plan's storage and AI credits. One database notification
+ * per event: the console bell shows it, the device apps read it with GET /api/activity and turn it into an OS
+ * notification that opens the recording.
  */
 final class ActivityFeed
 {
+    /** Which of a plan's limits a budget notice is about (none: the minutes, as before v1.5). */
+    public const LIMIT_STORAGE = 'storage';
+
+    public const LIMIT_AI_CREDITS = 'ai_credits';
+
     public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you'];
 
     /** Read notifications are kept this long, unread ones twice as long. */
@@ -49,7 +61,12 @@ final class ActivityFeed
             if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Failed) {
                 $feed()->uploadFailed($r);
             }
+            if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Ready) {
+                $workspace = CaptureSession::acrossPeople()->withTrashed()->whereKey($r->capture_session_id)->value('workspace_id');
+                $workspace === null || $feed()->planLimitChanged((int) $workspace, self::LIMIT_STORAGE);
+            }
         });
+        Screen::created(fn (Screen $s) => $feed()->planLimitChanged($s->workspace_id, self::LIMIT_STORAGE));
         Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->name} paired", 'It can now record, sync and see the library.', null, 'heroicon-o-device-phone-mobile'));
         UsageLedgerEntry::created(fn (UsageLedgerEntry $e) => $feed()->budgetChanged($e));
     }
@@ -110,14 +127,16 @@ final class ActivityFeed
      */
     public function budgetChanged(UsageLedgerEntry $entry): void
     {
+        // Client AI spends the plan's credits; those have their own notice.
+        if ($entry->provider === 'claude' && str_starts_with($entry->use_case, 'client_')) {
+            $this->planLimitChanged($entry->workspace_id, self::LIMIT_AI_CREDITS);
+        }
         $usage = app(UsageSummary::class)->toArray($entry->workspace_id);
         $kind = $usage['limit_reached'] ? 'budget_reached' : ($usage['warn'] ? 'budget_warn' : null);
         if ($kind === null) {
             return;
         }
-        $owners = User::query()->whereIn('id', DB::table('workspace_user')->where('workspace_id', $entry->workspace_id)
-            ->where('role', WorkspaceRole::Owner->value)->select('user_id'))->get();
-        foreach ($owners as $user) {
+        foreach ($this->owners($entry->workspace_id) as $user) {
             if ($this->sentThisMonth($user, $kind, (string) $usage['period_start'])) {
                 continue;
             }
@@ -127,18 +146,62 @@ final class ActivityFeed
         }
     }
 
-    private function sentThisMonth(User $user, string $kind, string $periodStart): bool
+    /**
+     * "Storage at 80 % of the plan" and "reached", the same for AI credits (since v1.5), each once per month, to every
+     * owner of the workspace. Only the plan's own limits: a plan without the limit says nothing.
+     */
+    public function planLimitChanged(int $workspaceId, string $limit): void
+    {
+        try {
+            $limits = app(PlanLimits::class);
+            $plan = $limits->plan($workspaceId);
+            [$used, $max] = $limit === self::LIMIT_STORAGE
+                ? [(float) $limits->storageUsed($workspaceId), $plan->storage_bytes]
+                : [app(ClientWorkspace::class)->budget($workspaceId)['spent_usd'], $plan->aiCredits()];
+            if ($max === null || $max <= 0) {
+                return;
+            }
+            $settings = app(SettingsRepository::class);
+            $warnAt = $settings->warnPercent();
+            $percent = $used / $max * 100;
+            $kind = $percent >= 100 ? 'budget_reached' : ($percent >= $warnAt ? 'budget_warn' : null);
+            if ($kind === null) {
+                return;
+            }
+            $name = $limit === self::LIMIT_STORAGE ? 'Storage' : 'AI credits';
+            [$title, $body] = $kind === 'budget_reached'
+                ? ["{$name} of your plan used up", $limit === self::LIMIT_STORAGE ? 'New recordings stay on the device until there is room or the plan is bigger.' : 'Client notes and Ask wait until next month or a bigger plan.']
+                : ["{$name} at {$warnAt}% of your plan", $limit === self::LIMIT_STORAGE ? Number::fileSize((int) $used, precision: 1).' used.' : '$'.number_format($used, 2).' used this month.'];
+            $start = (string) UsagePeriod::current($settings)['start']->toIso8601String();
+            foreach ($this->owners($workspaceId) as $user) {
+                if (! $this->sentThisMonth($user, $kind, $start, $limit)) {
+                    $this->post($user, $kind, $title, $body, null, $kind === 'budget_reached' ? 'heroicon-o-no-symbol' : 'heroicon-o-chart-bar', $limit);
+                }
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /** @return Collection<int, User> */
+    private function owners(int $workspaceId): Collection
+    {
+        return User::query()->whereIn('id', DB::table('workspace_user')->where('workspace_id', $workspaceId)
+            ->where('role', WorkspaceRole::Owner->value)->select('user_id'))->get();
+    }
+
+    private function sentThisMonth(User $user, string $kind, string $periodStart, ?string $limit = null): bool
     {
         // A date, not the ISO string: compared as text, "2026-11-01 09:00:00" sorts before "2026-11-01T00:00:00+00:00",
         // so on the first day of a month every warning looked unsent and was posted again.
         return $user->notifications()->where('created_at', '>=', Carbon::parse($periodStart))->get()
-            ->contains(fn (DatabaseNotification $n): bool => self::kindOf($n) === $kind);
+            ->contains(fn (DatabaseNotification $n): bool => self::kindOf($n) === $kind && ($n->data['viewData']['limit'] ?? null) === $limit);
     }
 
-    public function post(User $user, string $kind, string $title, string $body, ?CaptureSession $session, string $icon): void
+    public function post(User $user, string $kind, string $title, string $body, ?CaptureSession $session, string $icon, ?string $limit = null): void
     {
         try {
-            $notification = self::make($title, $body, $kind, $session?->id)->icon($icon);
+            $notification = self::make($title, $body, $kind, $session?->id, $limit)->icon($icon);
             if ($session !== null) {
                 $notification->actions([Action::make('open')->label('Open')->url(CaptureSessionResource::getUrl('view', ['record' => $session]), shouldOpenInNewTab: false)->markAsRead()]);
             }
@@ -176,10 +239,10 @@ final class ActivityFeed
      * what people typed (titles, notes, names; since v1.5 from anyone on the server): they are stored escaped, so the
      * bell shows them as text. `escaped` tells payload() to give the apps the words as they were typed.
      */
-    private static function make(string $title, string $body, string $kind, ?string $sessionId): Notification
+    private static function make(string $title, string $body, string $kind, ?string $sessionId, ?string $limit = null): Notification
     {
         return Notification::make()->title(e($title))->body(e($body))
-            ->viewData(['kind' => $kind, 'session_id' => $sessionId, 'escaped' => true]);
+            ->viewData(['kind' => $kind, 'session_id' => $sessionId, 'escaped' => true, ...($limit !== null ? ['limit' => $limit] : [])]);
     }
 
     /** @return array<string, mixed> */

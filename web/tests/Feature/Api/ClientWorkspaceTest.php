@@ -88,7 +88,10 @@ describe('call notes and memory', function () {
         $usage = UsageLedgerEntry::query()->sole();
         expect($usage->use_case)->toBe('client_notes')
             ->and($usage->client_id)->toBe($this->client->id)
-            ->and((float) $usage->cost_usd)->toBe(0.03);
+            ->and((float) $usage->cost_usd)->toBe(0.03)
+            // Since v1.5 the tokens are kept too: the server's usage page reads them.
+            ->and($usage->input_tokens)->toBeGreaterThan(0)
+            ->and($usage->output_tokens)->toBeGreaterThan(0);
         // No files: the brief grows from the calls.
         Queue::assertPushed(RefreshClientBriefJob::class);
 

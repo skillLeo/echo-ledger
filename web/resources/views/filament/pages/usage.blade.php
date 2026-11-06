@@ -16,7 +16,7 @@
 <div style="display:flex;flex-direction:column;gap:1.5rem">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem">
         @foreach ([
-            ['Billable minutes', $min($t['minutes']), 'Streaming '.$min($t['streaming_minutes']).' · final '.$min($t['final_minutes'])],
+            [$ownOnly ? 'Your billable minutes' : 'Billable minutes', $min($t['minutes']), 'Streaming '.$min($t['streaming_minutes']).' · final '.$min($t['final_minutes'])],
             ['Estimated cost', $usd($t['cost_usd']), 'Priced with the rates in Settings'],
             ['Storage used', $bytes($plan['storage']['used']), $plan['storage']['limit'] === null ? 'No limit' : 'of '.$bytes($plan['storage']['limit'])],
             ['Paired devices', (string) $plan['devices']['used'], $plan['devices']['limit'] === null ? 'No limit' : 'of '.$plan['devices']['limit']],
@@ -54,7 +54,7 @@
                 </div>
             @endforeach
             <div style="font-size:.75rem;opacity:.6">
-                You get a notification at {{ $server['warn_at_percent'] ?? 80 }}% and at 100%. At the limit, live captions and new transcripts stop until the limit is raised or the month ends.
+                Owners get a notification at {{ $server['warn_at_percent'] ?? 80 }}% and at 100%. At the limit, live captions and new transcripts stop until the limit is raised or the month ends.
                 @if ($settingsUrl)
                     <a href="{{ $settingsUrl }}" style="text-decoration:underline">Change limits and rates in Settings</a>.
                 @endif
@@ -62,7 +62,13 @@
         </div>
     </x-filament::section>
 
+    @if ($people !== null)
+        @include('filament.pages.usage-people', ['people' => $people])
+    @endif
+
     @livewire(\App\Filament\Widgets\Usage\DailyUsageChart::class, ['month' => $report['month']], key('usage-chart-'.$report['month']))
+
+    @include('filament.pages.usage-trend', ['trend' => $trend])
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));gap:1rem">
         <x-filament::section heading="By provider" description="Billed minutes: audio minutes × billed channels. Per recorded hour: what an hour of recording cost with that engine (final transcripts).">
