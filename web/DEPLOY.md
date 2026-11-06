@@ -128,7 +128,7 @@ People add `https://YOUR_DOMAIN/mcp` in Claude or ChatGPT and read their recordi
   copy: Security shows "App disconnected: used token came back", and the person connects again. A real app that resends
   a refresh token more than 10 seconds later (say, after losing the answer) ends the same way, so if people see this
   often, that app is the first thing to check.
-- **The plan:** the `connector` feature on System → Plans. AI notes (client notes, memory, Ask, the brief's remake) are
+- **The plan:** the `connector` feature on System → Plans. AI notes (project notes, memory, Ask, the brief's remake) are
   a feature of their own, off in a new plan; Roman Urdu and the other views, suggested fixes and screen descriptions
   are never switched off.
 - **Clean-up:** the scheduler removes used and expired tokens (`passport:purge`) and apps that registered over a day

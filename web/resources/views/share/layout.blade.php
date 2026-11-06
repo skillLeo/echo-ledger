@@ -29,7 +29,7 @@
         .at { color: var(--muted); font-variant-numeric: tabular-nums; margin-inline-end: 10px; font-size: 13px; }
         .who { font-weight: 600; margin-inline-end: 6px; }
         .spk-1 { color: var(--me); } .spk-2 { color: var(--client); }
-        audio { width: 100%; margin: 0 0 20px; }
+        audio { width: 100%; margin: 0 0 20px; color-scheme: light dark; }
         form { display: grid; gap: 12px; max-width: 360px; }
         input[type=password] { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
         button { font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 10px; border: 0; background: var(--brand); color: #fff; cursor: pointer; }
