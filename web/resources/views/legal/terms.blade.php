@@ -24,7 +24,7 @@
         <h2>Your recordings</h2>
         <ul>
             <li>What you record and upload stays yours. We use it only to run the service for you: to store it, transcribe it, make the views and notes you ask for, and show it to the people you share it with.</li>
-            <li>Your recordings, transcripts and projects in your personal workspace are private to you until you share them. Those in a team workspace are shared with all its members.</li>
+            <li>Your recordings, transcripts and projects are private to you until you share them, also inside a team workspace: its owners and admins see your minutes and costs, never your content.</li>
             <li>Recordings are deleted after the retention period the server is set to, unless you keep them.</li>
         </ul>
 

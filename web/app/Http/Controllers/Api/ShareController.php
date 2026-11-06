@@ -103,7 +103,7 @@ final class ShareController extends Controller
     }
 
     /**
-     * GET /api/shares (since v1.5): every link of the workspace's recordings and projects, newest first; `session_id`
+     * GET /api/shares (since v1.5): every link of the person's recordings and projects in the workspace, newest first; `session_id`
      * or `client_id` narrows it.
      */
     public function all(Request $request): JsonResponse

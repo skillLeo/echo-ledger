@@ -28,7 +28,7 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
-/** Shares (v1.5): every link to the workspace's recordings and projects, who may open it, its views, and Revoke. */
+/** Shares (v1.5): every link to the person's recordings and projects in the workspace, who may open it, its views, and Revoke. */
 class Shares extends Page implements HasTable
 {
     use FullConsoleOnly;

@@ -59,7 +59,7 @@ final class Invitations
             ]);
             $url = $existing instanceof User ? $this->acceptUrl($invitation, $token) : $this->signUpUrl($token);
             $expires = $invitation->expires_at->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, Y');
-            Mail::to($email)->queue(new InvitationMail($workspace->name, $inviter->name, $url, signUp: ! $existing instanceof User, expires: $expires));
+            Mail::to($email)->queue(new InvitationMail($workspace->name, $inviter->name, $url, signUp: ! $existing instanceof User, expires: $expires, join: $existing instanceof User));
             $this->audit->record('member_invited', $inviter->id, $workspace, "Invited {$email} to {$workspace->name} as ".Str::lower($role->label()));
 
             return $url;

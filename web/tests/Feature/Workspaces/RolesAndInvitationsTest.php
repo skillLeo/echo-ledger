@@ -200,7 +200,9 @@ describe('invitations', function () {
         $ws = Workspace::query()->findOrFail($owner->current_workspace_id);
 
         $url = app(Invitations::class)->invite($ws, $owner, $guest->email, WorkspaceRole::Viewer);
-        Mail::assertQueued(InvitationMail::class, fn (InvitationMail $m): bool => $m->hasTo($guest->email) && ! $m->signUp);
+        Mail::assertQueued(InvitationMail::class, fn (InvitationMail $m): bool => $m->hasTo($guest->email) && ! $m->signUp && $m->join && $m->url === $url);
+        $html = (new InvitationMail($ws->name, $owner->name, $url, signUp: false, expires: 'Nov 13, 2026', join: true))->render();
+        expect($html)->toContain('Join '.e($ws->name))->toContain('stays yours');
         expect($ws->roleOf($guest))->toBeNull();
 
         $this->actingAs($guest, 'web');

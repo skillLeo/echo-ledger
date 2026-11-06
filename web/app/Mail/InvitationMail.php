@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Mail;
 
 /**
- * Someone was added to a workspace, or invited to make an account and join it. A new account's one-time password is
- * never in the email: the person who added them shares it, or the invitation link lets them choose their own.
+ * Someone was added to a workspace, invited to make an account and join it, or (since v1.5) an account invited to join
+ * by a signed link (`join`). A new account's one-time password is never in the email: the person who added them shares
+ * it, or the invitation link lets them choose their own.
  */
 final class InvitationMail extends AccountMail
 {
@@ -16,6 +17,7 @@ final class InvitationMail extends AccountMail
         public readonly string $url,
         public readonly bool $signUp,
         public readonly ?string $expires = null,
+        public readonly bool $join = false,
     ) {}
 
     protected function subjectLine(): string
@@ -30,6 +32,6 @@ final class InvitationMail extends AccountMail
 
     protected function data(): array
     {
-        return ['workspace' => $this->workspace, 'inviter' => $this->inviter, 'url' => $this->url, 'signUp' => $this->signUp, 'expires' => $this->expires];
+        return ['workspace' => $this->workspace, 'inviter' => $this->inviter, 'url' => $this->url, 'signUp' => $this->signUp, 'expires' => $this->expires, 'join' => $this->join];
     }
 }

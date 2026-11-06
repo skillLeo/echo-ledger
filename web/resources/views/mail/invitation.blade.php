@@ -1,9 +1,23 @@
 <x-mail::message>
 # You are invited to {{ $workspace }}
 
+@if ($signUp || $join)
+{{ $inviter }} invited you to the workspace **{{ $workspace }}** on EchoLedger. What you record there stays yours: nobody in it sees it unless you share it.
+@else
 {{ $inviter }} added you to the workspace **{{ $workspace }}** on EchoLedger.
+@endif
 
-@if ($signUp)
+@if ($join)
+Open the link signed in with this email address to join it.
+
+<x-mail::button :url="$url">
+Join {{ $workspace }}
+</x-mail::button>
+
+@if ($expires)
+The invitation works until {{ $expires }}, once.
+@endif
+@elseif ($signUp)
 Make your account with this email address to join it.
 
 <x-mail::button :url="$url">

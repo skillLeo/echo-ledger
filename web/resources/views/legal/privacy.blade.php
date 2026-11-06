@@ -37,7 +37,7 @@
         <p>Other services see less: Google, when you sign in with Google, learns that you signed in; the email provider of this server carries the emails it sends you (confirmations, sign-in alerts, invitations and the like).</p>
 
         <h2>Who sees your recordings</h2>
-        <p>Your personal workspace is yours alone. A team workspace has one library for all its members: each member sees the recordings, transcripts, screens and projects kept in it, and its owners also see its members, minutes and costs. Recordings go to the workspace your phone, computer or console is working in, so keep in your personal workspace what is only for you. Outside a workspace, only the people you share a recording with see it: a share link, or Send to a teammate. The server's operator can reach the stored data only as the hosting of it requires.</p>
+        <p>Your recordings, transcripts, screens and projects are yours alone, in your personal workspace and in a team workspace too: nobody else in the workspace sees them, its owners and admins included, until you share them with a share link or Send to a teammate. A team's owners and admins see who is in it and each person's minutes and costs, never what they recorded. If you leave a team or are removed from it, what you recorded there stays yours and seen by nobody else. The server's operator sees each workspace's members and usage, and can reach the stored data only as the hosting of it requires.</p>
 
         <h2>How long we keep it</h2>
         <ul>
