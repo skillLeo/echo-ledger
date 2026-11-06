@@ -54,6 +54,8 @@ The scheduler (`routes/console.php`) runs:
 - `recordings:retention` hourly (recordings past their retention go to the 48-hour undo bin; the bin erases what has
   waited 48 hours) and `model:prune` daily (webhook events, old tombstones and other expired rows)
 - `sanctum:prune-expired --hours=24` daily
+- `echoledger:erase-accounts` hourly (since v1.5: accounts past their 7-day deletion grace are erased with every file
+  only they own) and `echoledger:prune-exports` hourly ("Export my data" ZIPs go 24 hours after they are made)
 
 Check what the daily clean-up would delete without deleting: `php artisan model:prune --pretend`. Deleted recordings can
 be restored from the console's Recently deleted page for 48 hours.
@@ -66,6 +68,16 @@ be restored from the console's Recently deleted page for 48 hours.
   retries, copy its HMAC secret + webhook ID into API Credentials. Use a service-account key restricted to STT.
 - **Azure:** set region + endpoint in Settings and the resource key in API Credentials.
 - **whisper.cpp:** run `whisper-server` behind an HTTPS reverse proxy that checks `Authorization: Bearer <token>`.
+
+## Email and Google sign-in (since v1.5)
+- **Email:** Settings → Email takes the SMTP server, port, encryption, user, password and From address; Send a test
+  email checks them. Without a server there, the `.env` mailer (`MAIL_MAILER`, `MAIL_HOST`, …) is used. Add the SPF,
+  DKIM and DMARC records of `docs/EMAIL_DNS.md` to the From address's domain, or the emails land in spam.
+- **Google sign-in:** in the Google Cloud console (APIs & Services → Credentials) create an OAuth client ID of type
+  *Web application* with the authorised redirect URI `https://YOUR_DOMAIN/auth/google/callback` (API Credentials →
+  Google sign-in shows the exact one), then paste its client ID and secret there. The consent screen asks only for
+  `openid`, `email` and `profile`.
+- **Sign-up:** Settings → Privacy & security → Who can sign up stays *Nobody* until accounts are opened to the public.
 
 ## Certificate pins for the device apps
 Devices pin the server's public key (SPKI SHA-256), current + backup:
