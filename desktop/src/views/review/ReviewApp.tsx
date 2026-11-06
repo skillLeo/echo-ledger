@@ -55,32 +55,42 @@ export default function ReviewApp() {
   const closeAsk = useCallback((id: string) => setAsk((current) => (current?.id === id ? null : current)), []);
   const dropSaved = useCallback((id: string) => setState((s) => (s.saved?.id === id ? { ...s, saved: null } : s)), []);
   const dropChip = useCallback((id: string) => setState((s) => (s.ask?.id === id ? { ...s, ask: null } : s)), []);
-  // A chip just kept shows its check for a moment, whatever the core sends meanwhile; then it leaves.
-  const [kept, setKept] = useState<PendingItem | null>(null);
-  // The last chip kept, so it still says Kept while it leaves.
-  const lastKept = useRef<string | null>(null);
-  const keep = useCallback((item: PendingItem) => {
-    lastKept.current = item.id;
-    setKept(item);
-    dropChip(item.id);
-  }, [dropChip]);
+  // The chip the person answered (✓, ✕ or its title), from the click on: the core takes that one away because of their
+  // answer. ✓ also holds it on screen, because the core's empty state comes before the command returns.
+  const [answered, setAnswered] = useState<string | null>(null);
+  const [held, setHeld] = useState<PendingItem | null>(null);
+  // The chip kept last: it says Kept, with its check, from then until it has left.
+  const [keptId, setKeptId] = useState<string | null>(null);
+  const onAnswer = useCallback((item: PendingItem, keeping: boolean) => {
+    setAnswered(item.id);
+    if (keeping) setHeld(item);
+  }, []);
+  const onAnswerFailed = useCallback((id: string) => {
+    setAnswered(null);
+    setHeld((current) => (current?.id === id ? null : current));
+  }, []);
+  // A kept chip stays for a moment, whatever the core sends meanwhile; then it leaves.
   useEffect(() => {
-    if (!kept) return;
-    const timer = window.setTimeout(() => setKept(null), KEPT_MS);
+    if (!held || held.id !== keptId) return;
+    const timer = window.setTimeout(() => setHeld(null), KEPT_MS);
     return () => window.clearTimeout(timer);
-  }, [kept]);
-  // A new chip ends the kept one's moment: whatever leaves after it is not the kept one. A chip the core takes away once
-  // its time is up was kept by the core, so it gets the check too.
-  const shownAsk = useRef<PendingItem | null>(null);
-  useEffect(() => {
-    const was = shownAsk.current;
-    shownAsk.current = state.ask;
-    if (state.ask) lastKept.current = null;
-    else if (was && lastKept.current !== was.id && secondsLeft(was.deadlineAt, Date.now()) === 0) keep(was);
-  }, [state.ask, keep]);
+  }, [held, keptId]);
+  // A new chip ends the kept one's moment. A chip nobody answered that the core takes away once its time is up was kept
+  // by the core, so it gets the check too. Worked out while rendering, so such a chip never starts to leave first.
+  const [lastAsk, setLastAsk] = useState<PendingItem | null>(null);
+  if (state.ask !== lastAsk) {
+    setLastAsk(state.ask);
+    if (state.ask) {
+      if (held && held.id !== state.ask.id) setHeld(null);
+      if (keptId && keptId !== state.ask.id) setKeptId(null);
+    } else if (lastAsk && lastAsk.id !== answered && secondsLeft(lastAsk.deadlineAt, Date.now()) === 0) {
+      setHeld(lastAsk);
+      setKeptId(lastAsk.id);
+    }
+  }
   const saved = usePresence(state.saved);
-  const chip = usePresence(state.ask ?? kept);
-  const chipKept = !state.ask && !!kept && chip.item?.id === kept.id;
+  const chip = usePresence(held && (!state.ask || state.ask.id === held.id) ? held : state.ask);
+  const chipKept = !!chip.item && chip.item.id === keptId;
 
   useHitRegions([ask?.id ?? null, state.saved?.id ?? null, state.ask?.id ?? null, chipKept]);
 
@@ -91,7 +101,7 @@ export default function ReviewApp() {
       ) : (
         <div className="after-stack">
           {saved.item && <SavedPill key={saved.item.id} saved={saved.item} leaving={saved.leaving} onGone={dropSaved} />}
-          {chip.item && <KeepChip key={chip.item.id} item={chip.item} kept={chipKept || (chip.leaving && chip.item.id === lastKept.current)} leaving={chip.leaving} onGone={dropChip} onKept={keep} />}
+          {chip.item && <KeepChip key={chip.item.id} item={chip.item} kept={chipKept} leaving={chip.leaving} onGone={dropChip} onAnswer={onAnswer} onAnswerFailed={onAnswerFailed} onKept={setKeptId} />}
         </div>
       )}
     </div>
@@ -158,27 +168,32 @@ function SavedPill({ saved, leaving, onGone }: { saved: SavedToast; leaving: boo
 
 /** "Ask me": the title (opens the recording to rename it or pick a project), ✓ Keep and ✕ Discard; kept by the core at
  * `deadlineAt` when nobody answers. */
-function KeepChip({ item, kept, leaving, onGone, onKept }: {
+function KeepChip({ item, kept, leaving, onGone, onAnswer, onAnswerFailed, onKept }: {
   item: PendingItem;
   /** Kept: the check pops in where the app's icon was and the chip says so, then it leaves. */
   kept: boolean;
   leaving: boolean;
   onGone: (id: string) => void;
-  onKept: (item: PendingItem) => void;
+  onAnswer: (item: PendingItem, keeping: boolean) => void;
+  onAnswerFailed: (id: string) => void;
+  onKept: (id: string) => void;
 }) {
   const [error, setError] = useError();
   const busy = useRef(false);
   // Read once: a window built mid-countdown starts the line where the time is.
   const [left] = useState(() => secondsLeft(item.deadlineAt, Date.now()) ?? CHIP_SECONDS);
 
-  const act = async (command: () => Promise<unknown>, done: () => void = () => onGone(item.id)) => {
+  const act = async (command: () => Promise<unknown>, keeping = false) => {
     if (busy.current) return;
     busy.current = true;
     setError(null);
+    onAnswer(item, keeping);
     try {
       await command();
-      done();
+      if (keeping) onKept(item.id);
+      onGone(item.id);
     } catch (e) {
+      onAnswerFailed(item.id);
       setError(errorMessage(e));
     } finally {
       busy.current = false;
@@ -214,7 +229,7 @@ function KeepChip({ item, kept, leaving, onGone, onKept }: {
         </button>
       )}
       <span className="after-actions">
-        <button type="button" className="rec-btn after-keep" aria-label="Keep" title="Keep" onClick={() => void act(() => api.pendingKeep(item.id), () => onKept(item))}><CheckIcon size={15} /></button>
+        <button type="button" className="rec-btn after-keep" aria-label="Keep" title="Keep" onClick={() => void act(() => api.pendingKeep(item.id), true)}><CheckIcon size={15} /></button>
         <button type="button" className="rec-btn after-discard" aria-label="Discard" title="Discard" onClick={() => void act(() => api.pendingDiscard(item.id))}><CloseIcon size={14} /></button>
       </span>
       <span className="after-progress" aria-hidden="true">

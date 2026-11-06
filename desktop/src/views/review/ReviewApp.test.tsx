@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import ReviewApp from "./ReviewApp";
-import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondAll, setWindowLabel } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondAll, respondWith, setWindowLabel } from "../../test/tauri";
 import { makeAfterCallState, makeAskPayload, makeChipItem, makeSavedToast } from "../../test/fixtures";
 import type { AfterCallState } from "../../lib/ipc";
 
@@ -29,6 +29,25 @@ const chip = () => document.querySelector<HTMLElement>("[data-testid=keep-chip]:
 const keptChip = () => document.querySelector<HTMLElement>("[data-testid=keep-chip].kept");
 const askChip = () => screen.queryByTestId("ask-chip");
 const button = (name: string | RegExp) => screen.getByRole("button", { name });
+
+/** Every class `el` goes through from now on, in order; call the result for the list. The same element all the way. */
+function classesOf(el: Element) {
+  const before: string[] = [];
+  const observer = new MutationObserver((records) => records.forEach((r) => before.push(r.oldValue ?? "")));
+  observer.observe(el, { attributes: true, attributeFilter: ["class"], attributeOldValue: true });
+  return () => {
+    observer.takeRecords().forEach((r) => before.push(r.oldValue ?? ""));
+    observer.disconnect();
+    return [...before, el.className].map((c) => c.replace(/\s+/g, " ").trim());
+  };
+}
+
+/** A command that returns when the test says so: the core's events come before its commands return. */
+function waitingCommand(command: string) {
+  let resolve: () => void = () => undefined;
+  respondWith(command, () => new Promise<void>((r) => { resolve = r; }));
+  return { finish: () => act(async () => resolve()) };
+}
 
 function setup() {
   resetTauriMock();
@@ -106,9 +125,11 @@ describe("Saved toast (Keep automatically)", () => {
 
   it("leaves over 150 ms when it goes: marked leaving, no longer a hit region, then gone (v1.5)", async () => {
     await renderWindow(makeAfterCallState({ saved: makeSavedToast() }));
-    expect(screen.getByTestId("saved-toast")).toHaveAttribute("data-hit");
+    const shown = screen.getByTestId("saved-toast");
+    expect(shown).toHaveAttribute("data-hit");
     await emitEvent("aftercall:state", makeAfterCallState());
     const leaving = screen.getByTestId("saved-toast");
+    expect(leaving).toBe(shown); // the same element: it never blinks out before it leaves
     expect(leaving).toHaveClass("leaving");
     expect(leaving).not.toHaveAttribute("data-hit");
     expect(leaving).toHaveAttribute("aria-hidden", "true");
@@ -179,6 +200,79 @@ describe("Ask-me chip", () => {
     await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2") }));
     await emitEvent("aftercall:state", makeAfterCallState());
     expect(keptChip()).toBeNull();
+  });
+
+  it("goes straight from the chip to Kept when the core's empty state comes before Keep returns, as it does in the core", async () => {
+    const keep = waitingCommand("pending_keep");
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
+    const shown = chip()!;
+    const classes = classesOf(shown);
+    fireEvent.click(button("Keep"));
+    await flushAsync();
+    await emitEvent("aftercall:state", makeAfterCallState());
+    // It says Kept once Keep has worked, not before; until then it stays as it is.
+    expect(chip()).toBe(shown);
+    await keep.finish();
+    expect(keptChip()).toBe(shown);
+    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
+    expect(classes()).toEqual(["after-pill chip", "after-pill chip kept", "after-pill chip kept leaving"]);
+  });
+
+  it("never says Kept when Keep fails, and the chip stays with the reason", async () => {
+    fail("pending_keep", "This recording is no longer waiting.");
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
+    const classes = classesOf(chip()!);
+    fireEvent.click(button("Keep"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("This recording is no longer waiting.");
+    expect(classes().filter((c) => c.includes("kept"))).toEqual([]);
+    expect(chip()).toBeInTheDocument();
+  });
+
+  it("goes straight from the chip to Kept when the core keeps it by itself: it never starts to leave first", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
+    const shown = chip()!;
+    const classes = classesOf(shown);
+    await emitEvent("aftercall:state", makeAfterCallState());
+    expect(keptChip()).toBe(shown);
+    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
+    expect(classes()).toEqual(["after-pill chip", "after-pill chip kept", "after-pill chip kept leaving"]);
+  });
+
+  it.each([
+    ["Discard", "Discard", "pending_discard"],
+    ["its title", /rename or choose a project/, "pending_open"],
+  ] as const)("leaves without saying Kept when the person answered with %s, also when its time ran out meanwhile", async (_how, name, command) => {
+    const answer = waitingCommand(command);
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
+    const classes = classesOf(chip()!);
+    fireEvent.click(button(name));
+    await flushAsync();
+    await emitEvent("aftercall:state", makeAfterCallState());
+    await answer.finish();
+    expect(keptChip()).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument());
+    expect(classes()).toEqual(["after-pill chip", "after-pill chip leaving"]);
+  });
+
+  it("still shows the core's keep after an answer that failed", async () => {
+    fail("pending_discard", "Could not discard.");
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
+    fireEvent.click(button("Discard"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not discard.");
+    await emitEvent("aftercall:state", makeAfterCallState());
+    expect(keptChip()).toHaveTextContent(/^Kept·/);
+  });
+
+  it("a new chip ends the kept one's moment, and only the kept one says Kept", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", { callerName: "Omar" }) }));
+    fireEvent.click(button("Keep"));
+    await waitFor(() => expect(keptChip()).toHaveTextContent("Omar"));
+    await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2", { callerName: "Sara" }) }));
+    expect(keptChip()).toBeNull();
+    expect(chip()).toHaveTextContent("Sara");
+    await emitEvent("aftercall:state", makeAfterCallState());
+    expect(keptChip()).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument());
   });
 
   it("the title opens the recording in the main window with its title field", async () => {

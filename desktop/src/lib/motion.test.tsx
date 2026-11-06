@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook } from "@testing-library/react";
+import { act, render, renderHook, screen } from "@testing-library/react";
 import { fakeAnimations, prefersReducedMotion } from "../test/motion";
 import { aroundOf, EASE, enterView, isConfirmation, MOTION, MotionGroup, openFromRow, reducedMotion, snapshotRow, usePresence, viewDirection } from "./motion";
 
@@ -151,6 +151,22 @@ describe("motion", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("keeps what leaves in the page: the same element goes on, never removed and added back", () => {
+    function Shown({ item }: { item: { id: string } | null }) {
+      const shown = usePresence(item);
+      return shown.item ? <section data-testid="shown" className={shown.leaving ? "leaving" : ""} /> : null;
+    }
+    const { container, rerender } = render(<Shown item={{ id: "a" }} />);
+    const element = screen.getByTestId("shown");
+    const changes = new MutationObserver(() => undefined);
+    changes.observe(container, { childList: true });
+    rerender(<Shown item={null} />);
+    expect(changes.takeRecords()).toEqual([]);
+    changes.disconnect();
+    expect(screen.getByTestId("shown")).toBe(element);
+    expect(element).toHaveClass("leaving");
   });
 
   it("gives the check to messages that confirm something, as the phone does", () => {

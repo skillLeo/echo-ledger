@@ -4,7 +4,7 @@
 // transform and opacity move. With the OS asking for reduced motion nothing moves and states change at once; where
 // the Web Animations API is missing (an old webview, the tests) nothing moves either. An animation never holds an
 // element: it fills nothing, so a cancelled or finished one leaves every element exactly as it is without motion.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /** Durations in ms: press, exit, state change, enter (the phone's Motion.PRESS, FAST, BASE, SLOW). */
 export const MOTION = { press: 120, exit: 150, base: 200, enter: 300 } as const;
@@ -135,28 +135,36 @@ export function openFromRow(group: MotionGroup, page: Element, from: RowSnapshot
 
 /**
  * Keeps what just went away on screen for its exit (150 ms), marked `leaving`, so it can slide out; with reduced
- * motion it goes at once. A new item shows at once and ends the exit of the old one.
+ * motion it goes at once. A new item shows at once and ends the exit of the old one. This is worked out while rendering,
+ * so the element that leaves is the one that was shown: it is never taken out of the page first, not even for a frame.
  */
 export function usePresence<T extends { id: string }>(item: T | null, ms: number = MOTION.exit): { item: T | null; leaving: boolean } {
+  const [last, setLast] = useState<T | null>(item);
   const [gone, setGone] = useState<T | null>(null);
-  const last = useRef<T | null>(item);
+  if (item !== last) {
+    setLast(item);
+    setGone(item || reducedMotion() ? null : last);
+  }
   useEffect(() => {
-    if (item) {
-      last.current = item;
-      setGone(null);
-      return;
-    }
-    const previous = last.current;
-    last.current = null;
-    if (!previous || reducedMotion()) {
-      setGone(null);
-      return;
-    }
-    setGone(previous);
+    if (!gone) return;
     const timer = window.setTimeout(() => setGone(null), ms);
     return () => window.clearTimeout(timer);
-  }, [item, ms]);
+  }, [gone, ms]);
   return item ? { item, leaving: false } : { item: gone, leaving: gone !== null };
+}
+
+function fraction(value: number): number {
+  return Number.isFinite(value) ? Math.round(Math.min(1, Math.max(0, value)) * 1000) / 1000 : 0;
+}
+
+/** A bar's fill at `value` (0 to 1), from its start: it scales, so a level that changes all the time never lays out the page. */
+export function fillWidth(value: number): { transform: string } {
+  return { transform: `scaleX(${fraction(value)})` };
+}
+
+/** The same for a bar that fills upwards. */
+export function fillHeight(value: number): { transform: string } {
+  return { transform: `scaleY(${fraction(value)})` };
 }
 
 /** Messages that confirm something worked get the check that pops in (the phone's `isConfirmation`, and the desktop's own). */
