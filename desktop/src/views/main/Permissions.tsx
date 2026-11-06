@@ -3,7 +3,7 @@
 // holds without it, and the one calm sentence when macOS has forgotten a permission (an unsigned app can lose them at an
 // update).
 import { useCallback, useEffect, useState } from "react";
-import { api, type MissingPermission, type PermissionKind, type PermissionState, type PermissionsStatus } from "../../lib/ipc";
+import { api, listenTo, type MissingPermission, type PermissionKind, type PermissionState, type PermissionsStatus } from "../../lib/ipc";
 import { useWindowShown } from "../../lib/visibility";
 import { AlertIcon, CloseIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
@@ -120,7 +120,15 @@ const SETTINGS_LABEL: Record<PermissionsStatus["platform"], string> = { macos: "
 
 /** Record page: what is missing and what a recording holds without it. */
 export function PermissionBanner({ recordingRef }: { recordingRef: string | null }) {
-  const [permissions] = usePermissions(recordingRef);
+  // A prompt answered after the start, or a switch turned off meanwhile, comes with the recording's state.
+  const [recordingMissing, setRecordingMissing] = useState("");
+  useEffect(() => {
+    const un = listenTo("recording:state", (state) => setRecordingMissing(state.active ? (state.missing ?? []).map((m) => m.kind).join() : ""));
+    return () => {
+      un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
+  const [permissions] = usePermissions(`${recordingRef ?? ""}:${recordingMissing}`);
   const missing: MissingPermission[] = permissions?.missing ?? [];
   if (missing.length === 0 || !permissions) return null;
   return (

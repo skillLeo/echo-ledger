@@ -379,3 +379,14 @@ fn dictation_refused_opens_its_box_to_say_why() {
     assert!(refused.contains("NO_DICTATION"));
     assert!(refused.contains("emit_state(app, false)"), "the box hides by itself after a few seconds");
 }
+
+/// What a recording says it is missing is read during the recording, not only before the prompts that settle it.
+#[test]
+fn a_running_recording_looks_at_its_permissions_again() {
+    let actions = include_str!("../src/actions.rs");
+    let ticker = &actions[actions.find("fn start_ticker").unwrap()..actions.find("/// Seconds between looks").unwrap()];
+    assert!(ticker.contains("read_recording_permissions(&app)"));
+    let reader = &actions[actions.find("fn read_recording_permissions").unwrap()..];
+    assert!(reader.contains("missing_during(info.mode, &state.permissions_now())"));
+    assert!(reader.contains("spawn_blocking"), "the ticker never waits for the system");
+}

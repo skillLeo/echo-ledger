@@ -537,6 +537,32 @@ describe("Screens chip (v1.5)", () => {
       expect(screen.getByTestId("missing-permission")).toBeInTheDocument();
     });
 
+    it("hears a prompt answered after the start, and says more when more goes during the recording", async () => {
+      const noMic = [{ kind: "microphone" as const, sentence: "The microphone is off for EchoLedger: a recording will have the other side of the call, not your voice." }];
+      await renderPill(makeRecordingState({ missing: [] }));
+      await emitEvent("pill:visibility", true);
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+
+      await emitEvent("recording:state", makeRecordingState({ missing: noMic }));
+      expect(screen.getByTestId("missing-permission")).toHaveTextContent("No microphone: recording the other side");
+
+      // Dismissed, then the other side goes too: that is new.
+      fireEvent.click(within(screen.getByTestId("missing-permission")).getByRole("button", { name: "Dismiss warning" }));
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+      await emitEvent("recording:state", makeRecordingState({ missing: [...noMic, { kind: "system_audio", sentence: "Both off." }] }));
+      expect(screen.getByTestId("missing-permission")).toHaveTextContent("Nothing is being recorded: no permission");
+
+      // Allowed after all: the line goes.
+      await emitEvent("recording:state", makeRecordingState({ missing: [] }));
+      expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();
+    });
+
+    it("says a note without its one side records nothing", async () => {
+      await renderPill(makeRecordingState({ mode: "mic_note", missing: [{ kind: "microphone", sentence: "No note." }] }));
+      await emitEvent("pill:visibility", true);
+      expect(screen.getByTestId("missing-permission")).toHaveTextContent("Nothing is being recorded: no permission");
+    });
+
     it("says nothing when the recording has everything", async () => {
       await renderPill(makeRecordingState({ missing: [] }));
       await emitEvent("pill:visibility", true);

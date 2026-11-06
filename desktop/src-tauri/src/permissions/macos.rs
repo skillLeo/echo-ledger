@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 
 use block2::RcBlock;
 use objc2::msg_send;
+use objc2::rc::autoreleasepool;
 use objc2::runtime::{AnyClass, Bool};
 use objc2_core_foundation::CFString;
 use objc2_foundation::NSString;
@@ -92,12 +93,13 @@ pub fn access_of_screen(preflight: bool, tcc: Access) -> Access {
     }
 }
 
+/// Read every few seconds during a recording too, so what the system autoreleases does not build up on a worker thread.
 pub fn read() -> Permissions {
-    Permissions {
+    autoreleasepool(|_| Permissions {
         microphone: microphone(),
         system_audio: tcc("kTCCServiceAudioCapture"),
         screen: access_of_screen(crate::screens::platform::macos::permission(), tcc("kTCCServiceScreenCapture")),
-    }
+    })
 }
 
 /// Shows the system's prompt for a permission it has not asked about yet.

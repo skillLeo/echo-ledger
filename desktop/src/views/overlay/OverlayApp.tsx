@@ -141,7 +141,7 @@ export default function OverlayApp() {
 
   // Captions of one side alone would look like the other side said nothing: the line says why.
   useEffect(() => {
-    const un = listenTo("recording:state", (state) => setMissing(state.active ? missingShort(state.missing) : null));
+    const un = listenTo("recording:state", (state) => setMissing(state.active ? missingShort(state.missing, state.mode) : null));
     return () => {
       un.then((f) => f()).catch(() => undefined);
     };

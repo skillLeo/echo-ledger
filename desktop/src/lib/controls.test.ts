@@ -147,5 +147,8 @@ describe("missingShort", () => {
     expect(missingShort([{ kind: "microphone", sentence: "" }])).toMatch(/recording the other side/);
     expect(missingShort([{ kind: "microphone", sentence: "" }, { kind: "system_audio", sentence: "" }])).toMatch(/Nothing is being recorded/);
     expect(missingShort([{ kind: "screen", sentence: "" }])).toBeNull();
+    expect(missingShort([{ kind: "microphone", sentence: "" }], "call")).toMatch(/recording the other side/);
+    expect(missingShort([{ kind: "microphone", sentence: "" }], "mic_note")).toMatch(/Nothing is being recorded/);
+    expect(missingShort([{ kind: "system_audio", sentence: "" }], "voice_note")).toMatch(/Nothing is being recorded/);
   });
 });

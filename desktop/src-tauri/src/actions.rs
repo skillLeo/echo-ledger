@@ -968,6 +968,7 @@ fn start_ticker(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let mut shown_note = None;
+        let mut ticks = 0_u32;
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
             let state = app.state::<crate::AppState>();
@@ -975,6 +976,10 @@ fn start_ticker(app: &AppHandle) {
                 state.ticker_running.store(false, Ordering::SeqCst);
                 emit_recording_state(&app);
                 break;
+            }
+            ticks = ticks.wrapping_add(1);
+            if ticks.is_multiple_of(READ_PERMISSIONS_EVERY) {
+                read_recording_permissions(&app);
             }
             take_device_notices(&app);
             // The Record page hears of a device note when it comes and when it goes (news lasts a few seconds).
@@ -984,6 +989,30 @@ fn start_ticker(app: &AppHandle) {
                 emit_status(&app);
             }
             emit_recording_state(&app);
+        }
+    });
+}
+
+/// Seconds between looks at what a running recording may use.
+const READ_PERMISSIONS_EVERY: u32 = 3;
+
+/// What the running recording is missing, read again (Phase 1B): the prompt that settles "not asked yet" comes after the
+/// start, and a permission can be turned off during a recording. The pill and the captions hear it with the next
+/// `recording:state`, and the Record page reads the permissions when that changes. Asked beside the ticker, so it never
+/// waits for the system.
+fn read_recording_permissions(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<crate::AppState>();
+        let Some(info) = state.capture.info() else { return };
+        let next = crate::permissions::missing_during(info.mode, &state.permissions_now());
+        // The same recording: a very short one may have ended while the system was asked.
+        if state.capture.info().is_some_and(|i| i.client_ref == info.client_ref) {
+            let mut missing = state.recording_missing.lock().unwrap_or_else(|p| p.into_inner());
+            if *missing != next {
+                eprintln!("[echoledger] capture: what this recording may use changed; {} kind(s) missing now", next.len());
+                *missing = next;
+            }
         }
     });
 }

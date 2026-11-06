@@ -4,7 +4,7 @@ import { PERMISSION_KINDS, PERMISSION_STEP, PermissionBanner, PermissionGuide, P
 import { MAC_STEPS, OnboardingView, STEPS, stepsFor } from "./OnboardingView";
 import { RecordView } from "./RecordView";
 import { MicrophoneCard } from "./CaptureSettings";
-import { callsOf, flushAsync, resetTauriMock, respond, respondAll } from "../../test/tauri";
+import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondAll } from "../../test/tauri";
 import { makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
 import type { PermissionsStatus } from "../../lib/ipc";
 
@@ -168,6 +168,26 @@ describe("the banner on the Record page", () => {
     rerender(<PermissionBanner recordingRef="rec-1" />);
     await flushAsync();
     expect(screen.getByTestId("permission-banner")).toBeInTheDocument();
+  });
+
+  it("looks again when a recording running says what it may use has changed, not on every tick", async () => {
+    respond("permissions_status", mac());
+    render(<PermissionBanner recordingRef="rec-1" />);
+    await flushAsync();
+    const reads = callsOf("permissions_status").length;
+    await emitEvent("recording:state", { active: true, missing: [] });
+    await flushAsync();
+    expect(callsOf("permissions_status")).toHaveLength(reads);
+
+    // Don't Allow was pressed after the start.
+    respond("permissions_status", mac({ systemAudio: "denied", missing: [NO_SYSTEM] }));
+    await emitEvent("recording:state", { active: true, missing: [NO_SYSTEM] });
+    await flushAsync();
+    expect(screen.getByTestId("permission-banner")).toHaveTextContent("your voice, not the other side");
+    expect(callsOf("permissions_status")).toHaveLength(reads + 1);
+    await emitEvent("recording:state", { active: true, missing: [NO_SYSTEM] });
+    await flushAsync();
+    expect(callsOf("permissions_status")).toHaveLength(reads + 1);
   });
 });
 

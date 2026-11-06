@@ -92,7 +92,8 @@ fn missing(kind: Kind, sentence: &str) -> Missing {
 }
 
 /// What the Record page says now: what is off and what a call recording holds without it. Screen Recording counts only
-/// while screen moments are wanted; "not asked yet" is not missing (macOS asks when the recording starts).
+/// while screen moments are wanted; "not asked yet" is not missing (macOS asks when the recording starts, and the running
+/// recording then reads the answer, `missing_during`).
 pub fn missing_now(permissions: &Permissions, screens_wanted: bool) -> Vec<Missing> {
     let mut out = Vec::new();
     match (permissions.microphone == Access::Denied, permissions.system_audio == Access::Denied) {
@@ -120,12 +121,24 @@ pub fn check_start(mode: RecordingMode, permissions: &Permissions) -> StartCheck
     let (mic_off, system_off) = (permissions.microphone == Access::Denied, permissions.system_audio == Access::Denied);
     match mode {
         RecordingMode::Call if mic_off && system_off => StartCheck::Refuse(NOTHING_TO_RECORD.to_string()),
-        RecordingMode::Call if mic_off => StartCheck::Go(vec![missing(Kind::Microphone, NO_MICROPHONE)]),
-        RecordingMode::Call if system_off => StartCheck::Go(vec![missing(Kind::SystemAudio, NO_SYSTEM_AUDIO)]),
-        RecordingMode::Call => StartCheck::Go(Vec::new()),
         RecordingMode::MicNote if mic_off => StartCheck::Refuse(NO_NOTE_MICROPHONE.to_string()),
         RecordingMode::VoiceNote if system_off => StartCheck::Refuse(NO_NOTE_SYSTEM_AUDIO.to_string()),
-        RecordingMode::MicNote | RecordingMode::VoiceNote => StartCheck::Go(Vec::new()),
+        _ => StartCheck::Go(missing_during(mode, permissions)),
+    }
+}
+
+/// What a running recording of `mode` is missing now. There is nothing left to refuse: the prompt that settles "not
+/// asked yet" comes after the start, and a permission can be turned off during a recording, so all of what is off is
+/// listed. Both sides of a call off is both kinds, which is how the pill and the captions know nothing is being recorded.
+pub fn missing_during(mode: RecordingMode, permissions: &Permissions) -> Vec<Missing> {
+    let (mic_off, system_off) = (permissions.microphone == Access::Denied, permissions.system_audio == Access::Denied);
+    match mode {
+        RecordingMode::Call if mic_off && system_off => vec![missing(Kind::Microphone, NOTHING_TO_RECORD), missing(Kind::SystemAudio, NOTHING_TO_RECORD)],
+        RecordingMode::Call if mic_off => vec![missing(Kind::Microphone, NO_MICROPHONE)],
+        RecordingMode::Call if system_off => vec![missing(Kind::SystemAudio, NO_SYSTEM_AUDIO)],
+        RecordingMode::MicNote if mic_off => vec![missing(Kind::Microphone, NO_NOTE_MICROPHONE)],
+        RecordingMode::VoiceNote if system_off => vec![missing(Kind::SystemAudio, NO_NOTE_SYSTEM_AUDIO)],
+        _ => Vec::new(),
     }
 }
 
@@ -242,6 +255,36 @@ mod tests {
         let no_system = Permissions { system_audio: Access::Denied, ..ON };
         assert!(matches!(check_start(RecordingMode::VoiceNote, &no_system), StartCheck::Refuse(_)));
         assert_eq!(check_start(RecordingMode::MicNote, &no_system), StartCheck::Go(Vec::new()));
+    }
+
+    #[test]
+    fn a_prompt_answered_after_the_start_is_heard_during_the_recording() {
+        let not_asked = Permissions { microphone: Access::Unknown, system_audio: Access::Unknown, screen: Access::Unknown };
+        assert_eq!(call(&not_asked), StartCheck::Go(Vec::new()), "the start knows nothing yet");
+        assert_eq!(missing_during(RecordingMode::Call, &not_asked), Vec::new(), "the prompts are still up");
+
+        // Don't Allow for the microphone: the recording goes on with one side, and now it says so.
+        let no_mic = missing_during(RecordingMode::Call, &Permissions { microphone: Access::Denied, ..not_asked });
+        assert_eq!(no_mic.iter().map(|m| m.kind).collect::<Vec<_>>(), [Kind::Microphone]);
+        assert!(no_mic[0].sentence.contains("not your voice"));
+
+        // Don't Allow for both: a start would have refused, a running recording lists both.
+        let both = missing_during(RecordingMode::Call, &Permissions { microphone: Access::Denied, system_audio: Access::Denied, ..not_asked });
+        assert_eq!(both.iter().map(|m| m.kind).collect::<Vec<_>>(), [Kind::Microphone, Kind::SystemAudio]);
+        assert!(both[0].sentence.contains("nothing to record"));
+
+        // Allowed after all: the warning goes.
+        assert_eq!(missing_during(RecordingMode::Call, &ON), Vec::new());
+    }
+
+    #[test]
+    fn a_note_during_its_recording_counts_only_what_it_records() {
+        let no_mic = Permissions { microphone: Access::Denied, ..ON };
+        let no_system = Permissions { system_audio: Access::Denied, ..ON };
+        assert_eq!(missing_during(RecordingMode::MicNote, &no_mic)[0].kind, Kind::Microphone);
+        assert_eq!(missing_during(RecordingMode::VoiceNote, &no_system)[0].kind, Kind::SystemAudio);
+        assert_eq!(missing_during(RecordingMode::MicNote, &no_system), Vec::new());
+        assert_eq!(missing_during(RecordingMode::VoiceNote, &no_mic), Vec::new());
     }
 
     #[test]

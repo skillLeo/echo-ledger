@@ -184,7 +184,10 @@ export default function PillApp() {
     return () => window.clearTimeout(timer);
   }, [screensNotice]);
 
-  const missing = shown && !missingDismissed ? missingShort(live?.missing) : null;
+  // Dismissed is for what was on the line: something new going missing during the recording is said again.
+  const missingKinds = (live?.missing ?? []).map((m) => m.kind).join();
+  useEffect(() => setMissingDismissed(false), [missingKinds]);
+  const missing = shown && !missingDismissed ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
   const tray = mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : screensNotice && shown && live?.screens?.on ? "screens" : null;
   useHitRegions([shown, confirming, tray]);
