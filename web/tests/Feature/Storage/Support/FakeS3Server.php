@@ -42,7 +42,8 @@ final class FakeS3Server
     /** @var list<array{method: string, status: int, match: string}> */
     private array $failures = [];
 
-    private ?int $cutNextDownloadTo = null;
+    /** @var list<int> */
+    private array $cuts = [];
 
     private readonly S3Signer $signer;
 
@@ -80,10 +81,10 @@ final class FakeS3Server
         }
     }
 
-    /** The next object read ends after $bytes while its headers promised all of it, as a dropped connection does. */
-    public function cutNextDownloadTo(int $bytes): void
+    /** The next $times object reads end after $bytes while the file is longer, as a dropped connection does. */
+    public function cutNextDownloads(int $bytes, int $times): void
     {
-        $this->cutNextDownloadTo = $bytes;
+        $this->cuts = array_fill(0, $times, $bytes);
     }
 
     /** Whether any stored object or unfinished part holds these bytes. */
@@ -244,9 +245,8 @@ final class FakeS3Server
             return Http::response(self::error('NoSuchKey'), 404);
         }
         $body = $this->objects[$key]['body'];
-        if ($this->cutNextDownloadTo !== null) {
-            $body = substr($body, 0, $this->cutNextDownloadTo);
-            $this->cutNextDownloadTo = null;
+        if ($this->cuts !== []) {
+            $body = substr($body, 0, (int) array_shift($this->cuts));
         }
 
         return Http::response($body, 200, ['Content-Type' => 'application/octet-stream']);

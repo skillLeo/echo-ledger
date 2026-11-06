@@ -73,7 +73,7 @@ php artisan recordings:check-storage
 ```
 
 - **The bucket stays private.** Files are never served from it: every download goes through the server, which decrypts
-  it. Give the key access to this one bucket only.
+  it. Give the key reading, writing, deleting and listing, on this one bucket only.
 - **What the storage company can see:** encrypted files, their sizes and their dates. Upload parts, which wait
   unencrypted on the server's own disk until the whole file is in, are encrypted one by one on the way to a bucket. The
   keys (`files/2026/11/<id>.elr`, `screens/...`, `client-files/...`, `exports/...`) hold only ids.

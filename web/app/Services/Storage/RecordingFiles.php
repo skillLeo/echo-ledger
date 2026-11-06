@@ -32,6 +32,9 @@ final class RecordingFiles
 
     private const RETRIES_PER_RUN = 200;
 
+    /** A download cut off halfway starts again this many times in all. */
+    private const DOWNLOAD_TRIES = 3;
+
     public function disk(): FilesystemAdapter
     {
         return Storage::disk('recordings');
@@ -388,23 +391,26 @@ final class RecordingFiles
     {
         $disk = $this->disk();
         $size = (int) $disk->size($relative);
-        $in = $disk->readStream($relative);
-        if (! is_resource($in)) {
-            throw new RuntimeException('Cannot read '.$relative.' from the recordings disk.');
-        }
-        $out = fopen($localPath, 'wb');
-        try {
-            $copied = $out === false ? false : stream_copy_to_stream($in, $out);
-        } finally {
-            fclose($in);
-            if (is_resource($out)) {
-                fclose($out);
+        for ($try = 1; $try <= self::DOWNLOAD_TRIES; $try++) {
+            $in = $disk->readStream($relative);
+            if (! is_resource($in)) {
+                throw new RuntimeException('Cannot read '.$relative.' from the recordings disk.');
+            }
+            $out = fopen($localPath, 'wb');
+            try {
+                $copied = $out === false ? false : stream_copy_to_stream($in, $out);
+            } finally {
+                fclose($in);
+                if (is_resource($out)) {
+                    fclose($out);
+                }
+            }
+            if ($copied === $size) {
+                return;
             }
         }
         // A connection that dropped halfway looks like a short file: it must not pass for a damaged recording.
-        if ($copied !== $size) {
-            throw new RuntimeException('The download of '.$relative.' was cut short.');
-        }
+        throw new RuntimeException('The download of '.$relative.' was cut short.');
     }
 
     /** Resolved lazily so that listing and deleting work even before the key is configured. */

@@ -251,11 +251,17 @@ describe('playback', function () {
         expect($this->get($this->url)->status())->toBeGreaterThanOrEqual(500)
             ->and($this->workFiles())->toBe([]);
 
-        $this->bucket->cutNextDownloadTo(1000);
+        $this->bucket->cutNextDownloads(1000, 3);
         expect($this->get($this->url)->status())->toBeGreaterThanOrEqual(500)
             ->and($this->workFiles())->toBe([]);
 
         $this->get($this->url)->assertOk();
+    });
+
+    it('starts a download again when the connection drops once', function () {
+        $this->bucket->cutNextDownloads(1000, 1);
+
+        expect($this->get($this->url)->assertOk()->streamedContent())->toBe($this->audio);
     });
 });
 
@@ -748,7 +754,7 @@ describe('recovering an interrupted assembly', function () {
         expect(fn () => app(ChunkedUploadService::class)->adoptStoredFile($this->recording))->toThrow(UnableToReadFile::class);
         expect($this->bucket->objects)->toHaveKey($this->key);
 
-        $this->bucket->cutNextDownloadTo(100);
+        $this->bucket->cutNextDownloads(100, 3);
         expect(fn () => app(ChunkedUploadService::class)->adoptStoredFile($this->recording))->toThrow(RuntimeException::class, 'cut short');
         expect($this->bucket->objects)->toHaveKey($this->key)
             ->and($this->workFiles())->toBe([]);

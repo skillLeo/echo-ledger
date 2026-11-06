@@ -413,13 +413,22 @@ final class S3Adapter implements FilesystemAdapter
             ->contentType('application/octet-stream')
             ->withOptions(['stream' => $stream, 'expect' => false, 'decode_content' => false, 'allow_redirects' => false])
             ->connectTimeout(self::CONNECT_SECONDS)
-            ->timeout($transfer ? self::TRANSFER_SECONDS : self::REQUEST_SECONDS)
+            ->timeout(self::timeoutFor($transfer, $stream))
             ->retry(self::RETRY_DELAYS_MS, 0, fn (Throwable $e): bool => self::worthRetrying($e), false);
         if ($body !== null) {
             $request = $request->withBody($body, 'application/octet-stream');
         }
 
         return $request->send($method, $this->origin.$target.($queryString !== '' ? '?'.$queryString : ''));
+    }
+
+    /**
+     * A streamed read goes through PHP's HTTP wrapper when it can, where the timeout is per read and a stalled bucket
+     * must end soon; everything else counts the whole transfer.
+     */
+    private static function timeoutFor(bool $transfer, bool $stream): int
+    {
+        return $transfer && ! ($stream && ini_get('allow_url_fopen')) ? self::TRANSFER_SECONDS : self::REQUEST_SECONDS;
     }
 
     /** A network error, the bucket's own trouble or its asking to slow down; a refusal does not change on a retry. */
