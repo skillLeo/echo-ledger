@@ -260,6 +260,22 @@ describe('the signed picture links', function () {
         $this->get($this->screen['image_url'])->assertForbidden();
     });
 
+    it('start no session and set no cookie, as the apps keep none', function () {
+        config(['session.driver' => 'database']);
+        $sessions = DB::table('sessions')->count();
+
+        $answers = [
+            $this->get($this->screen['image_url'])->assertOk(),
+            $this->get($this->screen['thumb_url'])->assertOk(),
+            $this->get(str_replace('signature=', 'signature=0', $this->screen['image_url']))->assertForbidden(),
+        ];
+
+        foreach ($answers as $answer) {
+            expect($answer->headers->getCookies())->toBe([]);
+        }
+        expect(DB::table('sessions')->count())->toBe($sessions);
+    });
+
     it('stop working while the recording is in the undo bin', function () {
         unscoped(fn () => CaptureSession::query()->find($this->session->id)?->delete());
 

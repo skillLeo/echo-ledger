@@ -16,6 +16,8 @@ use App\Models\Transcript;
 use App\Services\ChunkedUploadService;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptExporter;
+use App\Services\Views\TranscriptViews;
+use App\Stt\LanguageChoice;
 use App\Support\UnsureMarkers;
 use Illuminate\Support\Collection;
 use RuntimeException;
@@ -68,12 +70,15 @@ final class MeetingPack
             throw new ApiError(409, 'nothing_to_export', 'This recording has no finished transcript yet.');
         }
         $transcript->setRelation('captureSession', $session);
-        $lines = $this->exporter->lines($transcript, $session, $view === null || $view === 'original' ? null : $view);
+        $view = $view === 'original' ? null : $view;
+        $lines = $this->exporter->lines($transcript, $session, $view);
+        // A view that is not made yet shows the original words.
+        $shown = $view !== null && app(TranscriptViews::class)->textsFor($transcript, $view) !== null ? $view : null;
         $screens = ScreenStore::ordered($session->id)->get()->values();
         $path = $this->uploads->tempPath('meeting-pack');
         try {
             $format === 'html'
-                ? $this->writeHtml($path, $session, $transcript, $lines, $screens, $printBar)
+                ? $this->writeHtml($path, $session, $transcript, $shown, $lines, $screens, $printBar)
                 : $this->writeZip($path, $session, $lines, $screens, $withAudio);
         } catch (Throwable $e) {
             @unlink($path);
@@ -126,10 +131,11 @@ final class MeetingPack
     }
 
     /**
+     * @param  string|null  $view  the Show as view the lines are in, null for the original words
      * @param  list<array{index: int, speaker: string, label: string, channel: int, start_ms: int, end_ms: int, text: string}>  $lines
      * @param  Collection<int, Screen>  $screens
      */
-    private function writeHtml(string $path, CaptureSession $session, Transcript $transcript, array $lines, Collection $screens, bool $printBar): void
+    private function writeHtml(string $path, CaptureSession $session, Transcript $transcript, ?string $view, array $lines, Collection $screens, bool $printBar): void
     {
         $e = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $out = fopen($path, 'wb');
@@ -138,8 +144,9 @@ final class MeetingPack
         }
         try {
             $rtl = array_filter($lines, fn (array $l): bool => TranscriptExporter::isRtl($l['text'])) !== [];
-            // Arabic calls are set in Naskh as on the console; Urdu (and any other Arabic-script line) in Nastaliq.
-            $arabic = $transcript->language === 'ar';
+            // An Arabic call shown as itself is set in Naskh as on the console; Urdu (an Arabic call's Urdu view too, and
+            // any other Arabic-script line) in Nastaliq.
+            $arabic = $view === null && LanguageChoice::normalize($transcript->language) === 'ar';
             $font = $arabic ? 'Noto Naskh Arabic' : 'Noto Nastaliq Urdu';
             $face = '';
             $file = public_path($arabic ? 'fonts/noto-naskh-arabic-arabic.woff2' : 'fonts/noto-nastaliq-urdu-arabic.woff2');

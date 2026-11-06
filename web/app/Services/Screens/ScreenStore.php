@@ -210,7 +210,8 @@ class ScreenStore
 
     /**
      * A copy of the screen for another recording ("Save to my library"): both files decrypted and encrypted again
-     * under the copy's id, with the text and description. Returns the files it wrote.
+     * under the copy's id, with the text and description. Returns the files it wrote; when it fails it erases them
+     * itself. A screen not described yet is described for the copy too, once the save is kept.
      *
      * @return list<string>
      */
@@ -221,35 +222,47 @@ class ScreenStore
         $disk = Storage::disk('recordings');
         $disk->makeDirectory($folder);
         $written = [];
-        foreach ([false, true] as $thumb) {
-            $source = $thumb ? $original->thumb_path : $original->image_path;
-            if ($source === null || ! $disk->exists($source)) {
-                continue;
+        try {
+            foreach ([false, true] as $thumb) {
+                $source = $thumb ? $original->thumb_path : $original->image_path;
+                if ($source === null || ! $disk->exists($source)) {
+                    continue;
+                }
+                $plain = $this->uploads->tempPath('screen-copy');
+                try {
+                    $this->cipher()->decryptToFile($disk->path($source), $plain, $thumb ? self::thumbKey($original->id) : $original->id);
+                    $target = $folder.'/'.$id.($thumb ? '-thumb' : '').'.elr';
+                    // Counted before it is written, so a file a failure leaves half written is erased too.
+                    $written[$thumb ? 'thumb' : 'image'] = $target;
+                    $this->cipher()->encryptFile($plain, $disk->path($target), $thumb ? self::thumbKey($id) : $id);
+                } finally {
+                    @unlink($plain);
+                }
             }
-            $plain = $this->uploads->tempPath('screen-copy');
-            try {
-                $this->cipher()->decryptToFile($disk->path($source), $plain, $thumb ? self::thumbKey($original->id) : $original->id);
-                $target = $folder.'/'.$id.($thumb ? '-thumb' : '').'.elr';
-                $this->cipher()->encryptFile($plain, $disk->path($target), $thumb ? self::thumbKey($id) : $id);
-                $written[$thumb ? 'thumb' : 'image'] = $target;
-            } finally {
-                @unlink($plain);
-            }
-        }
-        if (! isset($written['image'])) {
-            $disk->delete(array_values($written));
+            if (! isset($written['image'])) {
+                $disk->delete(array_values($written));
 
-            return [];
+                return [];
+            }
+            $screen = new Screen([
+                'workspace_id' => $copy->workspace_id,
+                'capture_session_id' => $copy->id,
+                'image_path' => $written['image'],
+                'thumb_path' => $written['thumb'] ?? null,
+                ...$original->only(['at_ms', 'width', 'height', 'trigger', 'sha256', 'mime', 'bytes', 'ocr_text', 'description', 'search_text', 'described_at']),
+            ]);
+            $screen->id = $id;
+            $screen->save();
+        } catch (Throwable $e) {
+            // The caller only learns of the files returned to it: these are erased here.
+            $disk->delete(array_values($written));
+            throw $e;
         }
-        $screen = new Screen([
-            'workspace_id' => $copy->workspace_id,
-            'capture_session_id' => $copy->id,
-            'image_path' => $written['image'],
-            'thumb_path' => $written['thumb'] ?? null,
-            ...$original->only(['at_ms', 'width', 'height', 'trigger', 'sha256', 'mime', 'bytes', 'ocr_text', 'description', 'search_text', 'described_at']),
-        ]);
-        $screen->id = $id;
-        $screen->save();
+        // Its description may still be waiting on the queue: the copy gets its own job, which takes the original's
+        // answer when that has come by then.
+        if ($original->described_at === null && app(ScreenDescriptions::class)->enabled()) {
+            DescribeScreenJob::dispatch($id, $original->id)->afterCommit();
+        }
 
         return array_values($written);
     }

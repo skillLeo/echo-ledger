@@ -139,3 +139,22 @@ it('copies the screens with "Save to my library", encrypted again and independen
         ->and($store->picture($copies[0]))->toBe(screenPicture('png', seed: 5))
         ->and(getimagesizefromstring((string) $store->picture($copies[1], thumb: true))[0])->toBe(480);
 });
+
+it('leaves no file of a screen behind when "Save to my library" fails while copying it', function () {
+    $screen = keepScreen($this->session, screenPicture('png', seed: 7));
+    // The thumbnail no longer opens, so the copy fails after the picture's copy was written.
+    $thumb = Storage::disk('recordings')->path((string) $screen->thumb_path);
+    $raw = (string) file_get_contents($thumb);
+    file_put_contents($thumb, substr($raw, 0, -1).chr(ord($raw[strlen($raw) - 1]) ^ 1));
+    $omar = User::factory()->create(['email' => 'omar@example.com']);
+    [, $omarToken] = $this->enroll($omar);
+    $this->postJson("/api/sessions/{$this->session->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+    $item = $this->asToken($omarToken)->getJson('/api/shared-with-me')->assertOk()->json('data.0.id');
+    $before = Storage::disk('recordings')->allFiles();
+
+    $this->postJson("/api/shared-with-me/{$item}/save")->assertServerError();
+
+    expect(Storage::disk('recordings')->allFiles())->toBe($before)
+        ->and(unscoped(fn () => Screen::query()->count()))->toBe(1)
+        ->and(unscoped(fn () => CaptureSession::query()->where('workspace_id', $omar->fresh()->current_workspace_id)->count()))->toBe(0);
+});

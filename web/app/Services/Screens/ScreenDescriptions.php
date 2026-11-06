@@ -42,12 +42,21 @@ final class ScreenDescriptions
         return (bool) $this->settings->get(self::SETTING, true) && is_string($key) && $key !== '';
     }
 
-    /** Reads the screen and keeps its text and description; false when it was not done (off, gone, or a failure). */
-    public function describe(Screen $screen): bool
+    /**
+     * Reads the screen and keeps its text and description; false when it was not done (off, gone, or a failure). A
+     * copy ("Save to my library", `$copyOf` its original) takes the original's answer when it has one, unbilled.
+     */
+    public function describe(Screen $screen, ?string $copyOf = null): bool
     {
         $session = CaptureSession::query()->withoutGlobalScopes()->find($screen->capture_session_id);
         if (! $this->enabled() || ! $session instanceof CaptureSession || $session->trashed()) {
             return false; // switched off since it was queued, or the recording was deleted
+        }
+        $original = $copyOf !== null ? Screen::query()->withoutGlobalScopes()->find($copyOf) : null;
+        if ($original instanceof Screen && $original->described_at !== null && $original->sha256 === $screen->sha256) {
+            $screen->forceFill($original->only(['ocr_text', 'description', 'search_text', 'described_at']))->save();
+
+            return true;
         }
         try {
             $bytes = $this->store->picture($screen);

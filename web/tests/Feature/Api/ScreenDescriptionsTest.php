@@ -10,6 +10,7 @@ use App\Filament\Pages\Search;
 use App\Jobs\DescribeScreenJob;
 use App\Models\Screen;
 use App\Models\UsageLedgerEntry;
+use App\Models\User;
 use App\Services\CredentialVault;
 use App\Services\Screens\ClaudeScreenDescriber;
 use App\Services\Screens\ScreenDescriber;
@@ -175,6 +176,63 @@ it('treats a refusal or an answer in another shape as a failure that leaves both
     'no description' => [['ocr_text' => 'Hello'], 'end_turn'],
     'cut short' => [['ocr_text' => 'Hel', 'description' => 'x'], 'max_tokens'],
 ]);
+
+describe('a copy saved with "Save to my library" before its screens were described', function () {
+    beforeEach(function () {
+        $this->fake = fakeScreenDescriber();
+        Queue::fake();
+        $this->screen = postScreen($this, $this->session->id, screenPicture('png'));
+        $this->omar = User::factory()->create(['email' => 'omar@example.com']);
+        [, $this->omarToken] = $this->enroll($this->omar);
+        $this->postJson("/api/sessions/{$this->session->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+        $item = $this->asToken($this->omarToken)->getJson('/api/shared-with-me')->assertOk()->json('data.0.id');
+        $copyId = $this->postJson("/api/shared-with-me/{$item}/save")->assertCreated()->json('session_id');
+        $this->copy = unscoped(fn () => Screen::query()->where('capture_session_id', $copyId)->sole());
+    });
+
+    it('takes the original\'s description once it has come, without asking Claude again', function () {
+        Queue::assertPushed(DescribeScreenJob::class, 2);
+        Queue::assertPushed(DescribeScreenJob::class, fn (DescribeScreenJob $job): bool => $job->screenId === $this->copy->id && $job->copyOf === $this->screen['id']);
+
+        (new DescribeScreenJob($this->screen['id']))->handle(app(ScreenDescriptions::class));
+        (new DescribeScreenJob($this->copy->id, $this->screen['id']))->handle(app(ScreenDescriptions::class));
+
+        $copy = unscoped(fn () => Screen::query()->findOrFail($this->copy->id));
+        expect($copy->ocr_text)->toBe("Invoice #2041\nTotal PKR 85,000")
+            ->and($copy->description)->toBe("The client's invoice page with the Pay button")
+            ->and($copy->described_at)->not->toBeNull()
+            ->and($this->fake->calls)->toHaveCount(1)
+            ->and(unscoped(fn () => UsageLedgerEntry::query()->pluck('workspace_id')->all()))->toBe([$this->session->workspace_id]);
+        // The copy's workspace finds it by its screen's text.
+        expect($this->getJson('/api/search?q=invoice')->assertOk()->json('data.0.session.id'))->toBe($this->copy->capture_session_id);
+    });
+
+    it('describes the copy itself, billed to its own workspace, when the original has no description', function () {
+        (new DescribeScreenJob($this->copy->id, $this->screen['id']))->handle(app(ScreenDescriptions::class));
+
+        $copy = unscoped(fn () => Screen::query()->findOrFail($this->copy->id));
+        expect($copy->description)->toBe("The client's invoice page with the Pay button")
+            ->and($this->fake->calls)->toHaveCount(1)
+            ->and(unscoped(fn () => UsageLedgerEntry::query()->sole())->workspace_id)->toBe($this->omar->fresh()->current_workspace_id)
+            ->and(unscoped(fn () => Screen::query()->findOrFail($this->screen['id']))->described_at)->toBeNull();
+    });
+});
+
+it('queues nothing for a copy whose screens are described already', function () {
+    fakeScreenDescriber();
+    $screen = postScreen($this, $this->session->id, screenPicture('png'));
+    expect(unscoped(fn () => Screen::query()->findOrFail($screen['id']))->described_at)->not->toBeNull();
+    Queue::fake();
+    $omar = User::factory()->create(['email' => 'omar@example.com']);
+    [, $omarToken] = $this->enroll($omar);
+    $this->postJson("/api/sessions/{$this->session->id}/send", ['to' => ['omar@example.com']])->assertCreated();
+    $item = $this->asToken($omarToken)->getJson('/api/shared-with-me')->assertOk()->json('data.0.id');
+
+    $copyId = $this->postJson("/api/shared-with-me/{$item}/save")->assertCreated()->json('session_id');
+
+    Queue::assertNotPushed(DescribeScreenJob::class);
+    expect(unscoped(fn () => Screen::query()->where('capture_session_id', $copyId)->sole())->description)->toBe("The client's invoice page with the Pay button");
+});
 
 describe('search', function () {
     beforeEach(function () {

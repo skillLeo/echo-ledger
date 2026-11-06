@@ -116,6 +116,30 @@ describe('html', function () {
             ->and($html)->toContain('یہ انوائس کا صفحہ ہے');
     });
 
+    it('sets an Arabic call in Noto Naskh, and its Urdu view in Noto Nastaliq', function () {
+        $segments = $this->transcript->segments;
+        $segments[1]['text'] = 'هذه صفحة الفاتورة';
+        $this->transcript->update(['language' => 'ar', 'segments' => $segments]);
+        $naskh = '@font-face{font-family:"Noto Naskh Arabic";src:url(data:font/woff2;base64,';
+        $nastaliq = '@font-face{font-family:"Noto Nastaliq Urdu";src:url(data:font/woff2;base64,';
+
+        // The Urdu view is not made yet: the Arabic words are shown, in Naskh.
+        $unmade = packFile(meetingPack($this, 'format=html&view=urdu')->assertOk());
+        expect($unmade)->toContain($naskh)->not->toContain($nastaliq)->toContain('هذه صفحة الفاتورة');
+
+        $meta = ['views' => ['status' => 'ready', 'fingerprint' => TranscriptViews::fingerprint(new Transcript(['segments' => $segments])),
+            'english' => ['Let me share my screen', 'This is the invoice page', 'Click here to pay'],
+            'urdu' => ['میں اپنی اسکرین دکھاتا ہوں', 'یہ انوائس کا صفحہ ہے', 'ادائیگی کے لیے یہاں کلک کریں']]];
+        $this->transcript->update(['meta' => $meta]);
+
+        $urdu = packFile(meetingPack($this, 'format=html&view=urdu')->assertOk());
+        $original = packFile(meetingPack($this, 'format=html&view=original')->assertOk());
+
+        expect($urdu)->toContain($nastaliq)->not->toContain($naskh)->toContain('یہ انوائس کا صفحہ ہے')
+            ->and($urdu)->toContain('p.line[dir=rtl] .text{font-family:"Noto Nastaliq Urdu"')
+            ->and($original)->toContain($naskh)->not->toContain($nastaliq)->toContain('هذه صفحة الفاتورة');
+    });
+
     it('writes the transcript in the chosen Show as view, the original words when it is not made', function () {
         $segments = $this->transcript->segments;
         $meta = ['views' => ['status' => 'ready', 'fingerprint' => TranscriptViews::fingerprint(new Transcript(['segments' => $segments])),

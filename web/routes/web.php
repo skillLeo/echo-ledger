@@ -37,9 +37,11 @@ Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
     ->name('admin.recordings.stream');
 
 // Screen moments (v1.5): a picture or thumbnail from the signed link the API hands out (30 minutes, no token), and on
-// the console for the workspace's own recordings.
+// the console for the workspace's own recordings. The signed link is fetched by apps that keep no cookies, so like the
+// API's signed audio it runs without the web group: no session is started or saved and no cookie is set.
 Route::get('/screen-media/{screen}/{variant}', [ScreenMediaController::class, 'signed'])
     ->whereUlid('screen')->whereIn('variant', ['image', 'thumb'])
+    ->withoutMiddleware('web')
     ->middleware(['signed', 'throttle:uploads'])->name('screens.media');
 Route::get('/admin-media/screens/{screen}/{variant}', [ScreenMediaController::class, 'console'])
     ->whereUlid('screen')->whereIn('variant', ['image', 'thumb'])

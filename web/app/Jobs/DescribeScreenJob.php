@@ -9,7 +9,10 @@ use App\Services\Screens\ScreenDescriptions;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
-/** Reads the text and a one-line description of a screen moment with Claude Haiku (v1.5). Once: a failure leaves both empty. */
+/**
+ * Reads the text and a one-line description of a screen moment with Claude Haiku (v1.5). Once: a failure leaves both
+ * empty. A copy ("Save to my library") names its original, whose answer it takes when there is one.
+ */
 final class DescribeScreenJob implements ShouldQueue
 {
     use Queueable;
@@ -18,13 +21,13 @@ final class DescribeScreenJob implements ShouldQueue
 
     public int $timeout = 300;
 
-    public function __construct(public readonly string $screenId) {}
+    public function __construct(public readonly string $screenId, public readonly ?string $copyOf = null) {}
 
     public function handle(ScreenDescriptions $descriptions): void
     {
         $screen = Screen::query()->withoutGlobalScopes()->find($this->screenId);
         if ($screen instanceof Screen && $screen->described_at === null) {
-            $descriptions->describe($screen);
+            $descriptions->describe($screen, $this->copyOf);
         }
     }
 }
