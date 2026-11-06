@@ -1,15 +1,16 @@
 // A fixture mode for screenshots: the real views in a plain browser, with Tauri's own IPC mock answering every command
-// from sample data (data.ts). `?screen=library|library-empty|library-backup|projects|project|shared|share|move|request-files|record|
-// record-bluetooth|activity|settings|controls|controls-bluetooth&theme=light|dark` (v1.5: "-bluetooth" records from AirPods,
-// "library-backup" opens the backup-engine call; projects, shared, share, move and request-files open on the Projects page
-// or the Library, where scripts/screenshots.mjs clicks its way to the dialog).
+// from sample data (data.ts). `?screen=library|library-empty|library-backup|library-update|projects|project|shared|share|move|
+// request-files|record|record-bluetooth|record-viewer|activity|settings|settings-account|sign-in|controls|controls-bluetooth
+// &theme=light|dark` (v1.5: "-bluetooth" records from AirPods, "library-backup" opens the backup-engine call; projects,
+// shared, share, move and request-files open on the Projects page or the Library, where scripts/screenshots.mjs clicks its
+// way to the dialog; "sign-in" is a computer not signed in, "-viewer" a viewer's, "library-update" an update ready).
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeMicUser, makeRecordingState, makeSavedToast, makeSettings, makeStatus } from "../../src/test/fixtures";
-import { ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
+import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus } from "../../src/test/fixtures";
+import { ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder } from "../../src/lib/ipc";
 
@@ -41,7 +42,12 @@ const bluetooth = screen.endsWith("-bluetooth");
 const LIBRARY_SCREENS = ["shared", "share", "move"];
 const tab = screen.startsWith("library") || LIBRARY_SCREENS.includes(screen) ? "library"
   : screen.startsWith("client") || screen.startsWith("project") || screen === "request-files" ? "projects"
-    : screen.startsWith("record") ? "record" : screen;
+    : screen.startsWith("record") ? "record" : screen.startsWith("settings") ? "settings" : screen;
+// v1.5: the plan with limits next to the usage; a viewer on "-viewer".
+const plan = makePlan({
+  name: "Team", workspace: "Acme team", role: screen.endsWith("-viewer") ? "viewer" : "owner",
+  monthlyMinutes: 3000, usedMinutes: 812.5, storageBytes: 10 * 1024 ** 3, usedStorageBytes: 2.4 * 1024 ** 3, retentionDays: 90, seats: 5,
+});
 const opened = screen === "library-backup" ? "r2" : "r5";
 // Acme Holdings shows its folders in the trees.
 localStorage.setItem("echoledger-projects-open", JSON.stringify(["c-acme"]));
@@ -50,7 +56,12 @@ type Args = Record<string, unknown>;
 let captions: { onmessage: (e: unknown) => void } | null = null;
 
 const commands: Record<string, (args: Args) => unknown> = {
-  app_status: () => makeStatus({ deviceName: "Work laptop", pendingDecisions: empty ? 0 : PENDING.length, captionsLive: controls }),
+  app_status: () => makeStatus({ deviceName: "Work laptop", pendingDecisions: empty ? 0 : PENDING.length, captionsLive: controls, plan, paired: screen !== "sign-in" }),
+  account_get: () => ACCOUNT,
+  update_status: () =>
+    screen === "library-update"
+      ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
+      : { phase: "up_to_date", current: "1.5.0", version: null, notes: null, checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), message: "You have the latest version.", progress: null },
   get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),

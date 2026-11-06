@@ -252,12 +252,15 @@ fn emit(app: &AppHandle, status: &UpdateStatus) {
 /// The updater for `endpoint`, its requests (manifest and package) pinned like every request to the server.
 fn updater(app: &AppHandle, endpoint: reqwest::Url, pins: &[String]) -> Result<tauri_plugin_updater::Updater, (UpdatePhase, String)> {
     let tls = crate::net::pinning::server_tls_config(pins).map_err(|e| (UpdatePhase::Failed, e))?;
+    let exiting = app.clone();
     app.updater_builder()
         .endpoints(vec![endpoint])
         .map_err(|e| describe(&e))?
         // The package is downloaded within this time too.
         .timeout(Duration::from_secs(15 * 60))
         .configure_client(move |b| b.https_only(true).tls_backend_preconfigured(tls.clone()))
+        // Windows ends this process as soon as the installer runs: the tray icon and the windows go first.
+        .on_before_exit(move || exiting.cleanup_before_exit())
         .build()
         .map_err(|e| describe(&e))
 }

@@ -102,7 +102,7 @@ export function SignInView({ onSignedIn, notify, serverUrl }: {
       <form className="card sign-in" style={{ width: 440 }} onSubmit={submit} aria-labelledby="sign-in-title">
         <div className="brand" style={{ padding: "0 0 14px" }}><span className="brand-mark" />EchoLedger</div>
         <h1 id="sign-in-title" className="page-title">Sign in to EchoLedger</h1>
-        <p className="page-sub">Sign in with your EchoLedger account. Your recordings, projects and settings follow you to every computer and phone you sign in on.</p>
+        <p className="page-sub">Sign in with your EchoLedger account. Your recordings and projects are there on every computer and phone you sign in on.</p>
         <label className="field">Server address
           <input className="input" value={server} onChange={(e) => setServer(e.target.value)} placeholder="https://ledger.example.com" required disabled={waiting} />
         </label>

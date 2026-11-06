@@ -111,6 +111,7 @@ export function RecordView({ status, run, onImport }: {
     return (
       <>
         <h1 className="page-title">Record</h1>
+        <p className="page-sub">What is shared with you is in the Library, under Shared with me.</p>
         <div className="card notice-card" data-testid="viewer-notice">
           <div className="row"><MicIcon /><b>Recording is off for viewers</b></div>
           <p className="small">{viewerSentence(status.plan.workspace)}</p>

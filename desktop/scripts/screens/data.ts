@@ -216,3 +216,15 @@ export const REQUESTS: RequestLink[] = [
   { id: "rq1", title: "Send me your voice notes", client_id: null, expires_at: at(-5, 23, 59), max_files: 20, max_mb: 100, received: 4, revoked_at: null, created_at: at(2, 9) },
   { id: "rq2", title: "Contoso documents", client_id: "c-acme", expires_at: at(-12, 23, 59), max_files: 10, max_mb: 50, received: 1, revoked_at: null, created_at: at(4, 9) },
 ];
+
+/** Settings → Account (v1.5). */
+export const ACCOUNT = {
+  name: "Hassam",
+  email: "hassam@example.test",
+  email_verified: true,
+  two_factor: true,
+  google: true,
+  created_at: "2026-11-01T09:00:00+00:00",
+  workspace: { id: 1, name: "Acme team", role: "owner" },
+  deletes_at: null,
+};
