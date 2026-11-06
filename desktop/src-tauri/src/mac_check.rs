@@ -5,11 +5,14 @@
 //! The report holds no names, no paths with a user name and no account (`scrub`). It goes anywhere only when the person
 //! presses Copy report or Send to my admin (`POST /api/devices/report`).
 
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
+use std::time::{Duration, Instant};
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::audio::health::HEARD_LEVEL;
-use crate::audio::types::TARGET_RATE;
+use crate::audio::types::{AudioChunk, Channel, TARGET_RATE};
 use crate::detect::classify::{classify_macos, is_browser_bundle};
 use crate::permissions::{Access, Kind, Permissions};
 
@@ -114,10 +117,11 @@ pub trait MacProbe {
     /// (major, minor, patch).
     fn os_version(&self) -> Option<(u32, u32, u32)>;
     fn permissions(&self) -> Permissions;
-    /// Listens to the microphone and returns the loudest 100 ms (RMS, 0-1).
-    fn listen_to_microphone(&self, seconds: u32) -> Result<f32, String>;
-    /// Runs the system-audio tap while the soft tone plays and returns what the tap captured (16 kHz mono).
-    fn tap_while_tone_plays(&self, seconds: u32) -> Result<Vec<f32>, String>;
+    /// Listens to the microphone and returns the loudest 100 ms (RMS, 0-1). `stop` ends it early (a recording started).
+    fn listen_to_microphone(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<f32, String>;
+    /// Runs the system-audio tap while the soft tone plays and returns what the tap captured (16 kHz mono). `stop` ends it
+    /// and the tone early: a recording that starts now must not get the tone in it.
+    fn tap_while_tone_plays(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<Vec<f32>, String>;
     fn is_installed(&self, bundle_id: &str) -> bool;
     /// Opens the captions and the pill (their content stays hidden) and says how they stand.
     fn overlay_windows(&self) -> Vec<WindowFacts>;
@@ -126,6 +130,7 @@ pub trait MacProbe {
 }
 
 const OPEN_SETTINGS: &str = "Open System Settings";
+const SCREEN_NOT_ASKED: &str = "macOS has not asked yet: turn on screen moments in Settings → Screen moments and press Allow Screen Recording.";
 
 fn fix(settings: &'static str) -> Option<CheckFix> {
     Some(CheckFix { label: OPEN_SETTINGS, settings })
@@ -187,6 +192,8 @@ fn check_permission(kind: Kind, access: Access, version: Option<(u32, u32, u32)>
         }
         Access::Allowed => item(key, title, CheckState::Ok, "Allowed.", None),
         Access::Denied => item(key, title, CheckState::Off, format!("Off. {what_for}"), fix(settings)),
+        // Recording never asks for this one, and System Settings does not list EchoLedger until it has asked.
+        Access::Unknown if kind == Kind::Screen => item(key, title, CheckState::Limited, SCREEN_NOT_ASKED, None),
         Access::Unknown => item(key, title, CheckState::Limited, "macOS has not asked yet. It asks the first time you record.", fix(settings)),
     }
 }
@@ -303,6 +310,7 @@ pub fn check_screen_capture(access: Access, frame: impl FnOnce() -> Result<(), F
     }
     match frame() {
         Ok(()) => item(KEY, TITLE, CheckState::Ok, "One frame captured and thrown away. Nothing was stored.", None),
+        Err(FrameProblem::Permission) if access == Access::Unknown => item(KEY, TITLE, CheckState::Limited, format!("Not tested. {SCREEN_NOT_ASKED}"), None),
         Err(FrameProblem::Permission) => item(KEY, TITLE, CheckState::Off, "Screen Recording is off for EchoLedger. Recordings keep their sound without screen moments.", fix("screen")),
         Err(FrameProblem::Other(e)) => item(KEY, TITLE, CheckState::Failed, format!("No frame came back: {e}"), fix("screen")),
     }
@@ -321,30 +329,61 @@ pub const STEPS: [(&str, &str); 9] = [
     ("screen_capture_test", "Capturing one frame of the screen…"),
 ];
 
-/// Runs every check, one at a time. `on_step` is told before each; `stop_reason` is asked before each too, and a reason
-/// ends the check there (a recording started).
+/// Runs every check, one at a time. `on_step` is told before each; `stop_reason` is asked before each and all through the
+/// two listening tests, and a reason ends the check there (a recording or a dictation started). A test cut short proves
+/// nothing, so it leaves no result.
 pub fn run_all(probe: &dyn MacProbe, mut on_step: impl FnMut(CheckProgress), stop_reason: impl Fn() -> Option<String>) -> (Vec<CheckItem>, Option<String>) {
     let mut items: Vec<CheckItem> = Vec::new();
     let version = probe.os_version();
+    let stop = || stop_reason().is_some();
     for (index, (key, line)) in STEPS.into_iter().enumerate() {
         if let Some(reason) = stop_reason() {
             return (items, Some(reason));
         }
         on_step(CheckProgress { index, total: STEPS.len(), line, done: items.clone() });
         let permissions = probe.permissions();
-        items.push(match key {
+        let result = match key {
             "macos_version" => check_version(version),
             "microphone_permission" => check_permission(Kind::Microphone, permissions.microphone, version),
             "system_audio_permission" => check_permission(Kind::SystemAudio, permissions.system_audio, version),
             "screen_permission" => check_permission(Kind::Screen, permissions.screen, version),
-            "microphone_test" => check_microphone_test(permissions.microphone, || probe.listen_to_microphone(MICROPHONE_TEST_SECONDS)),
-            "system_audio_test" => check_tone_test(version, permissions.system_audio, || probe.tap_while_tone_plays(TONE_TEST_SECONDS)),
+            "microphone_test" => check_microphone_test(permissions.microphone, || probe.listen_to_microphone(MICROPHONE_TEST_SECONDS, &stop)),
+            "system_audio_test" => check_tone_test(version, permissions.system_audio, || probe.tap_while_tone_plays(TONE_TEST_SECONDS, &stop)),
             "meeting_apps" => check_meeting_apps(|bundle| probe.is_installed(bundle)),
             "overlay_windows" => check_overlay_windows(&probe.overlay_windows()),
             _ => check_screen_capture(permissions.screen, || probe.capture_one_frame()),
-        });
+        };
+        if let Some(reason) = stop_reason() {
+            return (items, Some(reason));
+        }
+        items.push(result);
     }
     (items, None)
+}
+
+/// What a capture delivers for `wanted` until the time is up or `stop` says so, which it looks at every 50 ms at most.
+pub fn collect_samples(rx: &Receiver<AudioChunk>, wanted: Channel, time: Duration, stop: &dyn Fn() -> bool) -> Vec<f32> {
+    let until = Instant::now() + time;
+    let mut samples = Vec::new();
+    while Instant::now() < until && !stop() {
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(chunk) if chunk.channel == wanted => samples.extend_from_slice(&chunk.samples),
+            Ok(_) | Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => break,
+        }
+    }
+    samples
+}
+
+/// Why a running check stops; none while nothing else needs the sound.
+pub fn interrupted(recording: bool, dictating: bool) -> Option<&'static str> {
+    if recording {
+        Some("A recording started, so the check stopped.")
+    } else if dictating {
+        Some("Dictation started, so the check stopped.")
+    } else {
+        None
+    }
 }
 
 /// Why the check does not run now; none when it may.
@@ -420,7 +459,7 @@ pub fn tone_wav() -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
 
     const ON: Permissions = Permissions { microphone: Access::Allowed, system_audio: Access::Allowed, screen: Access::Allowed };
 
@@ -441,11 +480,43 @@ mod tests {
         windows: Vec<WindowFacts>,
         frame: Result<(), FrameProblem>,
         ran: RefCell<Vec<&'static str>>,
+        /// A recording starts during this test.
+        recording_starts_in: Option<&'static str>,
+        recording: Cell<bool>,
+        /// What `stop` said once the recording had started.
+        stop_saw_it: Cell<bool>,
+    }
+
+    impl FakeMac {
+        /// Runs the listening test `name`: the recording starts in it if this test is about that.
+        fn listening(&self, name: &'static str, stop: &dyn Fn() -> bool) {
+            self.ran.borrow_mut().push(name);
+            assert!(!stop(), "nothing has started yet");
+            if self.recording_starts_in == Some(name) {
+                self.recording.set(true);
+                self.stop_saw_it.set(stop());
+            }
+        }
+
+        fn stop_reason(&self) -> Option<String> {
+            interrupted(self.recording.get(), false).map(str::to_string)
+        }
     }
 
     impl Default for FakeMac {
         fn default() -> Self {
-            Self { version: Some((15, 1, 0)), permissions: ON, peak: Ok(0.1), tapped: Ok(sine(TONE_HZ, TONE_LEVEL, 3.0)), windows: good_windows(), frame: Ok(()), ran: RefCell::default() }
+            Self {
+                version: Some((15, 1, 0)),
+                permissions: ON,
+                peak: Ok(0.1),
+                tapped: Ok(sine(TONE_HZ, TONE_LEVEL, 3.0)),
+                windows: good_windows(),
+                frame: Ok(()),
+                ran: RefCell::default(),
+                recording_starts_in: None,
+                recording: Cell::new(false),
+                stop_saw_it: Cell::new(false),
+            }
         }
     }
 
@@ -456,14 +527,14 @@ mod tests {
         fn permissions(&self) -> Permissions {
             self.permissions
         }
-        fn listen_to_microphone(&self, seconds: u32) -> Result<f32, String> {
+        fn listen_to_microphone(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<f32, String> {
             assert_eq!(seconds, 5);
-            self.ran.borrow_mut().push("microphone");
+            self.listening("microphone", stop);
             self.peak.clone()
         }
-        fn tap_while_tone_plays(&self, seconds: u32) -> Result<Vec<f32>, String> {
+        fn tap_while_tone_plays(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<Vec<f32>, String> {
             assert_eq!(seconds, 5);
-            self.ran.borrow_mut().push("tap");
+            self.listening("tap", stop);
             self.tapped.clone()
         }
         fn is_installed(&self, bundle_id: &str) -> bool {
@@ -507,15 +578,76 @@ mod tests {
 
     #[test]
     fn it_stops_when_a_recording_starts_and_says_so() {
-        let asked = RefCell::new(0);
         let mac = FakeMac::default();
-        let (items, stopped) = run_all(&mac, |_| {}, || {
-            *asked.borrow_mut() += 1;
-            (*asked.borrow() > 3).then(|| "A recording started.".to_string())
-        });
-        assert_eq!(items.len(), 3, "the checks already done are kept");
-        assert_eq!(stopped.as_deref(), Some("A recording started."));
+        let (items, stopped) = run_all(
+            &mac,
+            |p| {
+                if p.index == 3 {
+                    mac.recording.set(true); // while the fourth reading runs
+                }
+            },
+            || mac.stop_reason(),
+        );
+        assert_eq!(items.len(), 3, "the checks already done are kept, the one it cut short leaves nothing");
+        assert_eq!(stopped.as_deref(), Some("A recording started, so the check stopped."));
         assert!(mac.ran.borrow().is_empty(), "no test ran after it");
+    }
+
+    #[test]
+    fn a_recording_that_starts_during_the_tone_ends_the_test_at_once_and_it_claims_nothing() {
+        let mac = FakeMac { recording_starts_in: Some("tap"), tapped: Ok(Vec::new()), ..FakeMac::default() };
+        let (items, stopped) = run_all(&mac, |_| {}, || mac.stop_reason());
+        assert!(mac.stop_saw_it.get(), "the running test is told, so it ends and kills the tone");
+        assert_eq!(stopped.as_deref(), Some("A recording started, so the check stopped."));
+        assert_eq!(items.len(), 5, "what was finished before it");
+        assert!(items.iter().all(|i| i.key != "system_audio_test"), "no \"did not capture the tone\" from a test cut short");
+        assert_eq!(*mac.ran.borrow(), ["microphone", "tap"], "nothing after it");
+    }
+
+    #[test]
+    fn a_recording_that_starts_during_the_microphone_test_ends_it_too() {
+        let mac = FakeMac { recording_starts_in: Some("microphone"), peak: Ok(0.0), ..FakeMac::default() };
+        let (items, stopped) = run_all(&mac, |_| {}, || mac.stop_reason());
+        assert!(mac.stop_saw_it.get());
+        assert!(stopped.is_some());
+        assert!(items.iter().all(|i| i.key != "microphone_test"), "no \"heard nothing\" from a test cut short");
+        assert_eq!(*mac.ran.borrow(), ["microphone"]);
+    }
+
+    #[test]
+    fn dictation_stops_it_as_a_recording_does() {
+        assert_eq!(interrupted(false, false), None);
+        assert!(interrupted(true, false).unwrap().contains("recording"));
+        assert!(interrupted(false, true).unwrap().contains("Dictation"));
+        assert!(interrupted(true, true).unwrap().contains("recording"));
+    }
+
+    #[test]
+    fn listening_ends_as_soon_as_it_is_told_to() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let chunk = |channel| AudioChunk { channel, samples: vec![0.5; 4], ts_ns: None, discontinuity: false };
+        tx.send(chunk(Channel::System)).unwrap();
+        tx.send(chunk(Channel::Mic)).unwrap();
+        let started = Instant::now();
+        let looks = Cell::new(0);
+        let samples = collect_samples(&rx, Channel::System, Duration::from_secs(5), &|| {
+            looks.set(looks.get() + 1);
+            looks.get() > 3
+        });
+        assert_eq!(samples.len(), 4, "only the side that was asked for");
+        assert!(started.elapsed() < Duration::from_secs(1), "not the 5 seconds it was given: {:?}", started.elapsed());
+    }
+
+    #[test]
+    fn listening_ends_when_the_time_is_up_or_the_capture_has_gone() {
+        let (tx, rx) = std::sync::mpsc::channel::<AudioChunk>();
+        let started = Instant::now();
+        assert!(collect_samples(&rx, Channel::Mic, Duration::from_millis(120), &|| false).is_empty());
+        assert!(started.elapsed() >= Duration::from_millis(120));
+        drop(tx);
+        let started = Instant::now();
+        assert!(collect_samples(&rx, Channel::Mic, Duration::from_secs(5), &|| false).is_empty());
+        assert!(started.elapsed() < Duration::from_secs(1));
     }
 
     #[test]
@@ -566,6 +698,25 @@ mod tests {
         let check = find(&run(&mac), "microphone_permission").clone();
         assert_eq!(check.state, CheckState::Limited);
         assert!(check.detail.contains("first time you record"));
+    }
+
+    #[test]
+    fn screen_recording_not_asked_yet_points_to_where_it_is_asked_and_does_not_say_off() {
+        let not_asked = Permissions { screen: Access::Unknown, ..ON };
+        // What the real capture answers while nothing was asked.
+        let mac = FakeMac { permissions: not_asked, frame: Err(FrameProblem::Permission), ..FakeMac::default() };
+        let items = run(&mac);
+        let permission = find(&items, "screen_permission");
+        assert_eq!(permission.state, CheckState::Limited);
+        assert!(permission.detail.contains("Settings → Screen moments"), "{}", permission.detail);
+        assert!(!permission.detail.contains("first time you record"), "recording never asks for this one");
+        assert_eq!(permission.fix, None, "System Settings does not list EchoLedger until it has asked");
+
+        let test = find(&items, "screen_capture_test");
+        assert_eq!(test.state, CheckState::Limited, "it was never refused");
+        assert!(test.detail.contains("Not tested") && test.detail.contains("Allow Screen Recording"), "{}", test.detail);
+        assert!(!test.detail.contains("is off"), "{}", test.detail);
+        assert_eq!(test.fix, None);
     }
 
     #[test]

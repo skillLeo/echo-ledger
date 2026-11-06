@@ -2106,7 +2106,7 @@ pub fn open_privacy_settings(app: AppHandle, kind: String) -> AppResult<()> {
 }
 
 /// Help & diagnostics → Run Mac check (Phase 1B): every check, one at a time, each step told as `mac_check:progress`.
-/// Never during a recording, and it stops if one starts meanwhile.
+/// Never during a recording or a dictation, and it stops if one starts meanwhile, the running test and its tone at once.
 #[tauri::command]
 pub async fn mac_check_run(app: AppHandle) -> AppResult<crate::mac_check::CheckReport> {
     #[cfg(not(target_os = "macos"))]
@@ -2134,7 +2134,7 @@ pub async fn mac_check_run(app: AppHandle) -> AppResult<crate::mac_check::CheckR
                 |progress| {
                     let _ = emitter.emit("mac_check:progress", progress);
                 },
-                move || watcher.state::<AppState>().capture.is_recording().then(|| "A recording started, so the check stopped.".to_string()),
+                move || crate::mac_check::interrupted(watcher.state::<AppState>().capture.is_recording(), crate::dictation::is_active(&watcher)).map(str::to_string),
             )
         })
         .await;

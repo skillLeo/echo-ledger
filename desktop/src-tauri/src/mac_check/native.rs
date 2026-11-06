@@ -4,14 +4,14 @@
 //! (`mac_check.rs`), so this part is proved by the manual check on a real Mac (docs/MANUAL_QA.md).
 
 use std::ffi::{c_char, c_int, c_void};
-use std::sync::mpsc::{RecvTimeoutError, channel};
+use std::sync::mpsc::channel;
 use std::time::{Duration, Instant};
 
 use objc2_app_kit::NSWorkspace;
 use objc2_foundation::{NSProcessInfo, NSString};
 use tauri::{AppHandle, Manager};
 
-use super::{FrameProblem, MacProbe, WindowFacts, tone_wav};
+use super::{FrameProblem, MacProbe, WindowFacts, collect_samples, tone_wav};
 use crate::audio::health::peak_level;
 use crate::audio::platform::{self, Streams};
 use crate::audio::types::Channel;
@@ -54,20 +54,12 @@ pub fn version_string() -> String {
     if patch == 0 { format!("{major}.{minor}") } else { format!("{major}.{minor}.{patch}") }
 }
 
-/// Runs a capture for `seconds` and returns the samples of `wanted`.
-fn listen(streams: Streams, wanted: Channel, seconds: u32, meanwhile: impl FnOnce()) -> Result<Vec<f32>, String> {
+/// Runs a capture for `seconds`, or until `stop`, and returns the samples of `wanted`.
+fn listen(streams: Streams, wanted: Channel, seconds: u32, stop: &dyn Fn() -> bool, meanwhile: impl FnOnce()) -> Result<Vec<f32>, String> {
     let (tx, rx) = channel();
     let mut backend = platform::start(streams, tx).map_err(|e| e.to_string())?;
     meanwhile();
-    let until = Instant::now() + Duration::from_secs(u64::from(seconds));
-    let mut samples = Vec::new();
-    while Instant::now() < until {
-        match rx.recv_timeout(Duration::from_millis(50)) {
-            Ok(chunk) if chunk.channel == wanted => samples.extend_from_slice(&chunk.samples),
-            Ok(_) | Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
-        }
-    }
+    let samples = collect_samples(&rx, wanted, Duration::from_secs(u64::from(seconds)), stop);
     backend.stop();
     Ok(samples)
 }
@@ -85,18 +77,21 @@ impl MacProbe for NativeProbe {
         crate::permissions::read()
     }
 
-    fn listen_to_microphone(&self, seconds: u32) -> Result<f32, String> {
-        listen(Streams { mic: true, system: false }, Channel::Mic, seconds, || {}).map(|samples| peak_level(&samples))
+    fn listen_to_microphone(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<f32, String> {
+        listen(Streams { mic: true, system: false }, Channel::Mic, seconds, stop, || {}).map(|samples| peak_level(&samples))
     }
 
-    /// The tone is played by the system's own player: the tap leaves EchoLedger out, so the app could not hear itself.
-    fn tap_while_tone_plays(&self, seconds: u32) -> Result<Vec<f32>, String> {
+    /// The tone is played by the system's own player: the tap leaves EchoLedger out, so the app could not hear itself. That
+    /// also means a real recording's tap would hear it, so it ends with the test the moment `stop` says one started.
+    fn tap_while_tone_plays(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<Vec<f32>, String> {
         let path = std::env::temp_dir().join(format!("echoledger-tone-{}.wav", std::process::id()));
         std::fs::write(&path, tone_wav()?).map_err(|e| e.to_string())?;
         let mut player = None;
-        let samples = listen(Streams { mic: false, system: true }, Channel::System, seconds, || {
+        let samples = listen(Streams { mic: false, system: true }, Channel::System, seconds, stop, || {
             std::thread::sleep(Duration::from_millis(300)); // the tap settles first
-            player = std::process::Command::new("/usr/bin/afplay").arg(&path).spawn().ok();
+            if !stop() {
+                player = std::process::Command::new("/usr/bin/afplay").arg(&path).spawn().ok();
+            }
         });
         if let Some(mut player) = player {
             let _ = player.kill();

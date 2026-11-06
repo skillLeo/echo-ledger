@@ -390,3 +390,10 @@ fn a_running_recording_looks_at_its_permissions_again() {
     assert!(reader.contains("missing_during(info.mode, &state.permissions_now())"));
     assert!(reader.contains("spawn_blocking"), "the ticker never waits for the system");
 }
+
+/// The sound tests hold `capture_test`; a real call that starts during one must not lose its screen moments for it.
+#[test]
+fn a_call_that_starts_during_a_sound_test_keeps_its_screen_moments() {
+    let screens = include_str!("../src/screens/mod.rs");
+    assert!(!screens.contains("capture_test"));
+}
