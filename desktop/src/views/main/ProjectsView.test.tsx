@@ -59,21 +59,21 @@ const writeText = vi.fn((_text: string) => Promise.resolve());
 const props = { notify: vi.fn(), onOpenRecording: vi.fn(), onReload: vi.fn(async () => undefined) };
 
 /** The Projects page with the state MainApp keeps for it: the list, the open project and the expanded ones. */
-function Harness({ list, initial }: { list: ClientFolder[] | null; initial: string | null }) {
+function Harness({ list, initial, aiNotesInPlan = true }: { list: ClientFolder[] | null; initial: string | null; aiNotesInPlan?: boolean }) {
   const [projects, setProjects] = useState<ClientFolder[] | null>(list);
   const [projectId, setProjectId] = useState<string | null>(initial);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (id: string) => setExpanded((s) => { const next = new Set(s); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   return (
     <ProjectsView {...props} projects={projects} onChanged={(change) => setProjects((l) => change(l ?? []))} projectId={projectId} onOpenProject={setProjectId}
-      expanded={expanded} onToggle={toggle} />
+      expanded={expanded} onToggle={toggle} aiNotesInPlan={aiNotesInPlan} />
   );
 }
 
-async function renderProjects({ ws = workspace(), list = PROJECTS, open = "c1" as string | null } = {}) {
+async function renderProjects({ ws = workspace(), list = PROJECTS, open = "c1" as string | null, aiNotesInPlan = true } = {}) {
   respond("library_list", RECORDINGS);
   respondWith("client_workspace", ({ id }) => ({ data: id === "c1" ? ws : workspace({ client: { id: String(id), name: list.find((p) => p.id === id)?.name ?? "", ai_notes: true }, brief: null, memory: [], notes: [], files: [] }) }));
-  render(<Harness list={list} initial={open} />);
+  render(<Harness list={list} initial={open} aiNotesInPlan={aiNotesInPlan} />);
   // Microtasks only (no polling helpers), so tests on a fake clock render the same way.
   await flushAsync();
   await flushAsync();
@@ -365,6 +365,22 @@ describe("Notes", () => {
     await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { ai_notes: false } }]));
     await waitFor(() => expect(screen.getByRole("switch", { name: "AI notes" })).toHaveAttribute("aria-checked", "false"));
     expect(screen.queryByRole("tab", { name: "AI notes" })).not.toBeInTheDocument();
+  });
+
+  it("hides the AI notes tab, the switch, Ask and Make again when the plan leaves AI notes out, and keeps the brief and memory", async () => {
+    await renderProjects({ aiNotesInPlan: false });
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings", "Files", "Notes", "Screens"]);
+    tab("Notes");
+    expect(screen.getByTestId("ai-not-in-plan")).toHaveTextContent("Call notes, memory and Ask are not in your workspace's plan. The workspace owner can change the plan in the console.");
+    expect(screen.queryByRole("switch", { name: "AI notes" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("ai-budget")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Question" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Make again" })).not.toBeInTheDocument();
+    // What the person wrote or kept stays theirs to read and edit.
+    expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled();
+    expect(screen.getByText("An online shop")).toBeInTheDocument();
+    expect(screen.getByText("Launch on November 15")).toBeInTheDocument();
+    expect(callsOf("client_brief_refresh")).toEqual([]);
   });
 
   it("edits the brief, one line per item", async () => {

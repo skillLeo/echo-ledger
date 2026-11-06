@@ -36,6 +36,9 @@ export function percentUsed(used: number | null, limit: number | null): number |
   return Math.min(100, Math.max(0, Math.round(((used ?? 0) / limit) * 100)));
 }
 
+/** A project's Notes when the plan leaves out `ai_notes` (the core's sentence for `feature_not_in_plan`). */
+export const NO_AI_NOTES = "Call notes, memory and Ask are not in your workspace's plan. The workspace owner can change the plan in the console.";
+
 /** The plan's features by name, for the account page: what is in the plan and what is not. */
 export function planFeatures(plan: PlanInfo): [string, boolean][] {
   return [

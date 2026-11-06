@@ -1,7 +1,8 @@
 // A project's page (docs/API.md "Client workspaces" since v1.4, "Projects" since v1.5): breadcrumbs, its folders and
 // menu, then Recordings (search, sort, its folders' recordings too), Files, Notes (the AI notes switch and budget, Ask,
 // the brief and the memory), Screens (what the desktop kept of its meetings' screens, since v1.5; hidden on a server
-// without them) and, while AI notes are on, the call notes Claude wrote.
+// without them) and, while AI notes are on, the call notes Claude wrote. A plan without AI notes (since v1.5) hides that
+// tab, the switch, Ask and Make again.
 // Anything the server is still writing or reading is asked for again every few seconds until it is done.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type BriefSections, type ClientAnswer, type ClientFile, type ClientFolder, type ClientWorkspace as Workspace, type LibraryItem, type MemoryKind, type MemoryLine, type ProjectScreensPage, type SearchResult } from "../../lib/ipc";
@@ -14,6 +15,7 @@ import { searchItems, sortItems, type SortKey } from "../../lib/library";
 import { ancestors, nestedCount, projectRecordings, projectTree } from "../../lib/projects";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { snippetParts } from "../../lib/player";
+import { NO_AI_NOTES } from "../../lib/plan";
 import { AlertIcon, AppTileIcon, appKind, ChevronRightIcon, CloseIcon, CopyIcon, FileIcon, FolderIcon, ImportIcon, PinIcon, PlusIcon, SearchIcon, SendIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
 import { PlayIcon } from "../../components/ControlIcons";
 import { NotesSections } from "./CallNotes";
@@ -62,7 +64,7 @@ function fileKind(file: ClientFile): string {
   return ext === "pdf" ? "PDF" : ext === "docx" ? "Word" : ext === "md" ? "Markdown" : ext === "txt" ? "Text" : ext.toUpperCase();
 }
 
-export function ClientWorkspace({ client, projects = [client], items, notify, onOpenRecording, onClientChanged, onOpenProject, menu = [], actions = null, onMoveRecordings, rules = null }: {
+export function ClientWorkspace({ client, projects = [client], items, notify, onOpenRecording, onClientChanged, onOpenProject, menu = [], actions = null, onMoveRecordings, rules = null, aiNotesInPlan = true }: {
   client: ClientFolder;
   /** Every project, for the breadcrumbs, the folders and the folders' recordings. */
   projects?: readonly ClientFolder[];
@@ -81,6 +83,8 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
   onMoveRecordings?: (ids: string[], projectId: string | null) => void;
   /** The filing rules section of the Recordings tab (since v1.5). */
   rules?: ReactNode;
+  /** The plan has call notes, memory and Ask (`ai_notes`, since v1.5): without them the AI parts are hidden. */
+  aiNotesInPlan?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("recordings");
   const [ws, setWs] = useState<Workspace | null>(null);
@@ -89,8 +93,9 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
   const crumbs = useMemo(() => ancestors(projects, client.id), [projects, client.id]);
   const subfolders = useMemo(() => projectTree(projects.filter((p) => p.parent_id === client.id)).map((n) => n.project), [projects, client.id]);
   const own = useMemo(() => projectRecordings(items, projects, client.id, false), [items, projects, client.id]);
-  // AI notes are shown while they are on for the project; before the workspace has loaded, as the list says.
-  const aiNotes = ws ? ws.client.ai_notes : client.ai_notes !== false;
+  // AI notes are shown while they are on for the project; before the workspace has loaded, as the list says. A plan
+  // without them hides them whatever the project's switch says.
+  const aiNotes = aiNotesInPlan && (ws ? ws.client.ai_notes : client.ai_notes !== false);
   // Screen moments (since v1.5): the first page of the project's screens is read with the project; a server without
   // them (or a plan without them) answers none, and the tab goes.
   const [screens, setScreens] = useState<{ id: string; page: ProjectScreensPage | null; error: string | null } | null>(null);
@@ -211,7 +216,7 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
           <Recordings client={client} projects={projects} items={items} hasFolders={subfolders.length > 0} onOpen={(id, ms) => onOpenRecording(id, ms)} onMove={onMoveRecordings} rules={rules} />
         )}
         {tab === "files" && ws && <Files ws={ws} clientId={client.id} notify={notify} onChange={setWs} />}
-        {tab === "notes" && ws && <Notes ws={ws} client={client} notify={notify} onChange={setWs} onReload={load} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} />}
+        {tab === "notes" && ws && <Notes ws={ws} client={client} notify={notify} onChange={setWs} onReload={load} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} inPlan={aiNotesInPlan} />}
         {tab === "screens" && (screensRead?.page ? (
           <ProjectScreens client={client} first={screensRead.page} notify={notify} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} />
         ) : screensRead?.error ? (
@@ -234,8 +239,11 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
 
 // ---- Notes -----------------------------------------------------------------------------------------------------
 
-/** The AI notes switch and the month's AI budget, Ask, the brief and the memory. */
-function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClientChanged }: {
+/**
+ * The AI notes switch and the month's AI budget, Ask, the brief and the memory. A plan without `ai_notes` keeps the
+ * brief (edited by hand) and the memory, as the phone does, and says why the rest is not there.
+ */
+function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClientChanged, inPlan }: {
   ws: Workspace;
   client: ClientFolder;
   notify: Notify;
@@ -243,6 +251,7 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
   onReload: () => Promise<void>;
   onOpenRecording: (id: string, ms?: number) => void;
   onClientChanged: (client: Partial<ClientFolder> & { id: string }) => void;
+  inPlan: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const toggleNotes = async () => {
@@ -258,6 +267,17 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
       setBusy(false);
     }
   };
+  if (!inPlan) {
+    return (
+      <>
+        <section className="ws-section" aria-label="AI">
+          <div className="card small muted" data-testid="ai-not-in-plan">{NO_AI_NOTES}</div>
+        </section>
+        <Brief ws={ws} clientId={client.id} notify={notify} onChange={onChange} onReload={onReload} canMake={false} />
+        <Memory ws={ws} clientId={client.id} notify={notify} onChange={onChange} onOpenRecording={onOpenRecording} />
+      </>
+    );
+  }
   return (
     <>
       <section className="ws-section" aria-label="AI">
@@ -315,7 +335,8 @@ function AiNotes({ ws, clientName, onOpenRecording }: { ws: Workspace; clientNam
   );
 }
 
-function Brief({ ws, clientId, notify, onChange, onReload }: { ws: Workspace; clientId: string; notify: Notify; onChange: (ws: Workspace) => void; onReload: () => Promise<void> }) {
+/** The brief; `canMake` false (a plan without `ai_notes`) leaves out Make again: the brief is then written by hand. */
+function Brief({ ws, clientId, notify, onChange, onReload, canMake = true }: { ws: Workspace; clientId: string; notify: Notify; onChange: (ws: Workspace) => void; onReload: () => Promise<void>; canMake?: boolean }) {
   const brief = ws.brief;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -370,7 +391,7 @@ function Brief({ ws, clientId, notify, onChange, onReload }: { ws: Workspace; cl
         Brief{brief?.edited && <span className="label-chip">Edited by you</span>}
         <span className="spacer" />
         {!editing && <button type="button" className="btn ghost compact" disabled={busy || brief?.status === "working"} onClick={startEdit}>Edit</button>}
-        {!editing && <button type="button" className="btn ghost compact" disabled={busy || brief?.status === "working"} onClick={() => void makeAgain()}><SparkleIcon size={14} />Make again</button>}
+        {!editing && canMake && <button type="button" className="btn ghost compact" disabled={busy || brief?.status === "working"} onClick={() => void makeAgain()}><SparkleIcon size={14} />Make again</button>}
       </h3>
       <div className="card">
         {brief?.status === "working" && <div className="row small muted" role="status"><span className="spinner" aria-hidden="true" />Writing the brief… this takes a minute.</div>}
@@ -391,7 +412,7 @@ function Brief({ ws, clientId, notify, onChange, onReload }: { ws: Workspace; cl
             </div>
           </form>
         ) : filled.length === 0 ? (
-          brief?.status !== "working" && <p className="small muted" style={{ margin: 0 }}>No brief yet. Add files, keep a call, or press Make again.</p>
+          brief?.status !== "working" && <p className="small muted" style={{ margin: 0 }}>{canMake ? "No brief yet. Add files, keep a call, or press Make again." : "No brief yet. Press Edit to write one."}</p>
         ) : (
           <div className="brief-grid">
             {filled.map(([key, label]) => {

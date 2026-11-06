@@ -518,7 +518,7 @@ export default function MainApp() {
         {tab === "projects" && (
           <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
             projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
-            requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} />
+            requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} />
         )}
         {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
         {tab === "activity" && (
