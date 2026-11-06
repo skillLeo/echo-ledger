@@ -89,8 +89,32 @@ Next to the ones in [web/DEPLOY.md](../web/DEPLOY.md):
 
 - `php artisan echoledger:erase-accounts` hourly: erases accounts whose 7 days are over.
 - `php artisan echoledger:prune-exports` hourly: removes export ZIPs after 24 hours.
+- `php artisan recordings:check-storage`, by hand, only when recordings are moved to a bucket
+  ([DEPLOY_VPS.md](DEPLOY_VPS.md)): it tries a write, a read and a delete on the bucket and warns if it keeps old versions.
 
-## 8. Security at a glance
+## 8. Claude and ChatGPT
+
+People can connect Claude or ChatGPT to their own recordings; the steps are in [CONNECTOR.md](CONNECTOR.md). It only
+reads, and sees only what that person can open in the apps.
+
+- **Turn it on or off** per plan: System → Plans → the Connector feature.
+- **Once on the server:** `php artisan passport:keys`, then `chmod 600 storage/oauth-private.key storage/oauth-public.key`,
+  run as the user PHP runs as. Until then `/mcp` and its sign-in page answer with a server error. [DEPLOY.md](../web/DEPLOY.md)
+  has checks you can run with curl.
+- **What a person controls:** Profile → Connected apps lists each app with its last use and Disconnect. **Sign out
+  everywhere** disconnects them too.
+- **What you can see:** every tool call is in **Security** (the tool, the arguments without content, the size of the
+  answer). "App disconnected: used token came back" means a sign-in token was used twice, so the connection was ended; the
+  person connects again. If it keeps happening with one app, check that app first.
+
+## 9. Device reports
+
+**System → Device reports** (super admin) lists what people chose to send from **Send to my admin** on the phone's Device
+check or the Mac's Run Mac check: the maker, model, system version, app version and each check's result. Nothing is sent
+unless the person taps it. Use it to see what works on your team's phones. The list of checks a teammate should run is in
+[MANUAL_QA.md](MANUAL_QA.md), "Teammate phone check".
+
+## 10. Security at a glance
 
 - Sign-in attempts are limited (5 a minute per address, 5 failures per 15 minutes per email); two-step codes and
   recovery codes are under Profile.

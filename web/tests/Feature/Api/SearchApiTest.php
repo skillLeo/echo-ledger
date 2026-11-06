@@ -63,6 +63,20 @@ it('finds the moment in a transcript with a highlighted snippet', function () {
         ->and($response->json('engine'))->toBe('like');
 });
 
+it('reads the labels of all its results at once, not one recording at a time', function () {
+    foreach (range(1, 5) as $i) {
+        searchable($this, "Call {$i}", [['Me', 'A retainer call.']]);
+    }
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    $this->getJson('/api/search?q=retainer')->assertOk()->assertJsonCount(5, 'data');
+
+    $labelReads = array_filter(DB::getQueryLog(), fn (array $q): bool => str_contains($q['query'], '`session_labels`') || str_contains($q['query'], '"session_labels"'));
+    DB::disableQueryLog();
+    expect($labelReads)->toHaveCount(1);
+});
+
 it('needs every word, keeps quoted phrases together and ignores case', function () {
     $both = searchable($this, 'A', [['Client', 'Send the INVOICE before the deadline.']]);
     searchable($this, 'B', [['Client', 'The invoice is late.']]);

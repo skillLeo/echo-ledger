@@ -60,7 +60,7 @@ Android:
 - [ ] B1 Device check (onboarding, Help & diagnostics): voice notes/import, app calls both sides (Android 14+ and the helper, else "your voice only"), SIM calls, captions, Live Translate, with reasons and one-tap fixes; Copy report; opt-in upload (brand, model, Android, results) in the admin panel. *Accept:* tests. **Built** (`DeviceCheckTest`, `DeviceCheckScreenTest`, `DeviceReportTest`); live with the next deploy and phone build.
 - [ ] B2 Honest fallbacks: "This phone can record only your voice in WhatsApp calls" up front; never a silent channel without saying so. *Accept:* tests. **Built**: said on the Record tab, in Setup and onboarding; Android 12 and 13 record your voice through the helper on one channel (emulators pass; Android 10 and 11 record no calls). Not yet run on a real phone there (N19).
 - [ ] B3 Background survival per brand (Xiaomi/HyperOS, Oppo/Realme/OnePlus, Vivo, Huawei/Honor, Pixel, Samsung): exact steps and deep links; the helper re-armed after the OS kills it; vendor audio quirks caught and reported. *Accept:* tests. **Built** (`core/PhoneBrand`); the deep links need real phones to prove (N19).
-- [ ] B4 Helper: Shizuku and the built-in wireless-debugging helper with a setup guide per brand. *Accept:* guide + tests. **Per-brand guide built** in Setup. The built-in helper does not exist yet (Shizuku or a computer's ADB today): needs libadb-android and a phone window.
+- [x] B4 Helper: Shizuku and the built-in wireless-debugging helper with a setup guide per brand. *Accept:* guide + tests. **Simpler version shipped (time box):** the per-brand guide in Setup leads to Shizuku, which starts over Wireless debugging with no computer on every Android this helper can use (12 and newer), so a separate built-in one would do the same job with a pairing and TLS stack of its own to look after. Option B stays a computer's ADB. A built-in helper is backlog if Shizuku ever becomes a barrier.
 - [ ] B5 Firebase Test Lab smoke tests (Xiaomi, Oppo, Vivo, Pixel, Samsung A; Android 10/12/14/15/16): install, onboarding, voice note, library, settings; no crash or ANR; 360 dp and 1.3x fonts; results reported (N18). **Script ready** (`tools/testlab.sh`); needs N18. The free plan allows 5 physical runs a day.
 - [ ] B6 3 GB RAM phones stay smooth. *Accept:* a measured check (Test Lab or a profile). **Partly**: on a 3 GB Android 13 emulator the signed-in screens stay at 171 MB and nothing crashes. Smoothness is not proven: the emulator renders in software, so it needs a real phone (N19) or Test Lab (N18).
 - [ ] B7 Teammate compatibility checklist in MANUAL_QA; device reports visible in the admin panel (N19). **Built** (MANUAL_QA "Teammate phone check", System → Device reports); the phones are N19.
@@ -119,7 +119,7 @@ Everywhere:
 
 ## Phase 8 — Release + verify
 
-- [ ] Full suites green; security review of auth, sharing and MCP (authorisation test for every route); performance check.
+- [ ] Full suites green; security review of auth, sharing and MCP (authorisation test for every route); performance check. **Performance check done** (20,000 recordings on MariaDB, HANDOFF). Security review running.
 - [ ] Web deploy (migrations tested on a production copy first); Windows installer; Mac DMG (CI); APK full (+ Play AAB).
 - [ ] **(phone)** unanswered WhatsApp call skipped; connected call starts at pick-up; after-call chip; Projects auto-filing; teammate share; Google sign-in; test-account deletion.
 - [ ] **(mac)** screen moments in a Meet call with screen share; the meeting pack PDF in Claude.
