@@ -34,9 +34,11 @@ use store::{KeySource, ScreenKey, ScreenStore};
 
 /// One sample a second, never more.
 const SAMPLE_EVERY: Duration = Duration::from_millis(1_000);
-/// The project's switch is read at the start of a recording; a server slower than this lets the capture go on (the
-/// switch is read again before anything is sent).
+/// The project's switch is read at the start of a recording, each try waiting this long for the server. Until it
+/// answered nothing is kept (the switch fails closed), and it is read again before anything is sent.
 const PROJECT_CHECK_FOR: Duration = Duration::from_secs(10);
+/// How long the next try waits after the server could not answer (offline, away or slow).
+const PROJECT_RETRY_EVERY: Duration = Duration::from_secs(30);
 
 /// What the recording pill shows (`RecordingState.screens`); none while screens are off for this recording.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -102,19 +104,17 @@ struct Live {
     user_paused: AtomicBool,
     /// Pointing words were heard since the last sample.
     words: AtomicBool,
-    /// The recording's project: 0 being read, 1 keeps screens, 2 screens off.
-    project: AtomicU8,
     count: AtomicU32,
     pill: Mutex<Option<ScreensPill>>,
 }
 
-impl Live {
-    fn project(&self) -> Option<bool> {
-        match self.project.load(Ordering::SeqCst) {
-            1 => Some(true),
-            2 => Some(false),
-            _ => None,
-        }
+/// The recording's project switch, one per recording (a read still going for the last recording never reaches the
+/// next one): 0 not known yet, 1 keeps screens, 2 screens off.
+fn project_of(cell: &AtomicU8) -> Option<bool> {
+    match cell.load(Ordering::SeqCst) {
+        1 => Some(true),
+        2 => Some(false),
+        _ => None,
     }
 }
 
@@ -262,16 +262,35 @@ impl Screens {
     }
 }
 
-/// The recording `client_ref` keeps screens of its project? Reads `GET /api/clients` (missing flag = on).
-async fn project_keeps_screens(app: &AppHandle, client_id: &str) -> bool {
-    let Ok(api) = app.state::<crate::AppState>().api() else { return true };
-    match tokio::time::timeout(PROJECT_CHECK_FOR, api.clients()).await {
-        Ok(Ok(list)) => list["data"]
-            .as_array()
-            .and_then(|l| l.iter().find(|c| c["id"].as_str() == Some(client_id)))
-            .and_then(|c| c.get("screens").and_then(serde_json::Value::as_bool))
-            .unwrap_or(true),
-        _ => true,
+/// The project's `screens` switch in a `GET /api/clients` answer (pure). A missing switch is on (a server older than
+/// it); a project the list does not have keeps none (deleted, or not this workspace's); `None` when the answer is not
+/// a list.
+fn project_flag(list: &serde_json::Value, client_id: &str) -> Option<bool> {
+    let list = list["data"].as_array()?;
+    Some(list.iter().find(|c| c["id"].as_str() == Some(client_id)).is_some_and(|c| c.get("screens").and_then(serde_json::Value::as_bool).unwrap_or(true)))
+}
+
+/// Does the project `client_id` keep screens? `None` while it cannot be known: not paired, the server away or slower
+/// than [`PROJECT_CHECK_FOR`].
+async fn read_project(app: AppHandle, client_id: String) -> Option<bool> {
+    let api = app.state::<crate::AppState>().api().ok()?;
+    let list = tokio::time::timeout(PROJECT_CHECK_FOR, api.clients()).await.ok()?.ok()?;
+    project_flag(&list, &client_id)
+}
+
+/// Reads the project's switch into `cell` until the server answered, a try every `retry`, while `running` says the
+/// recording goes on. Until then the cell says "not known" and the capture keeps nothing.
+async fn settle_project<F, Fut>(mut read: F, cell: &AtomicU8, running: impl Fn() -> bool, retry: Duration)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Option<bool>>,
+{
+    while running() {
+        if let Some(keeps) = read().await {
+            cell.store(if keeps { 1 } else { 2 }, Ordering::SeqCst);
+            return;
+        }
+        tokio::time::sleep(retry).await;
     }
 }
 
@@ -291,20 +310,20 @@ pub fn on_recording_started(app: &AppHandle, info: &RecordingInfo) {
     live.user_paused.store(false, Ordering::SeqCst);
     live.words.store(false, Ordering::SeqCst);
     live.count.store(0, Ordering::SeqCst);
-    live.project.store(if info.client_id.is_some() { 0 } else { 1 }, Ordering::SeqCst);
     *lock(&live.pill) = None;
+    let wake = Arc::new(Wake::default());
+    // The Inbox keeps screens; a project's switch is read first.
+    let project = Arc::new(AtomicU8::new(if info.client_id.is_some() { 0 } else { 1 }));
     if let Some(client) = info.client_id.clone() {
-        let (app, live) = (app.clone(), live.clone());
+        let (app, project, wake) = (app.clone(), project.clone(), wake.clone());
         tauri::async_runtime::spawn(async move {
-            let keeps = project_keeps_screens(&app, &client).await;
-            live.project.store(if keeps { 1 } else { 2 }, Ordering::SeqCst);
+            settle_project(|| read_project(app.clone(), client.clone()), &project, || !wake.stopped(), PROJECT_RETRY_EVERY).await;
         });
     }
-    let wake = Arc::new(Wake::default());
     let recording = info.client_ref.clone();
     let thread = {
         let (app, recording, wake) = (app.clone(), recording.clone(), wake.clone());
-        std::thread::Builder::new().name("el-screens".into()).spawn(move || capture_loop(&app, &recording, &live, &wake))
+        std::thread::Builder::new().name("el-screens".into()).spawn(move || capture_loop(&app, &recording, &live, &project, &wake))
     };
     match thread {
         Ok(thread) => *running = Some(Running { recording, wake, thread }),
@@ -374,7 +393,7 @@ pub async fn send(app: &AppHandle, api: &ApiClient) -> usize {
 }
 
 /// The capture thread of one recording: once a second the sampler, and a kept frame encoded and sealed on disk.
-fn capture_loop(app: &AppHandle, recording: &str, live: &Live, wake: &Wake) {
+fn capture_loop(app: &AppHandle, recording: &str, live: &Live, project: &AtomicU8, wake: &Wake) {
     let state = app.state::<crate::AppState>();
     let system = state.screens.system();
     system.thread_init();
@@ -390,7 +409,7 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, wake: &Wake) {
             call: true,
             plan: state.screens.in_plan(),
             server: state.screens.on_server(),
-            project: live.project(),
+            project: project_of(project),
             supported: true,
             keychain: key.is_some(),
             permission: true,
@@ -519,6 +538,53 @@ mod tests {
         *lock(&s.live.pill) = Some(ScreensPill { on: false, reason: Some(HoldReason::Minimised), count: 2 });
         s.set_paused(false);
         assert_eq!(lock(&s.live.pill).as_ref().and_then(|p| p.reason), Some(HoldReason::Minimised));
+    }
+
+    #[test]
+    fn the_projects_switch_is_read_from_the_clients_list_and_fails_closed() {
+        let list = json!({"data": [{"id": "p1", "name": "Acme", "screens": false}, {"id": "p2", "name": "Beta", "screens": true}, {"id": "p3", "name": "Old"}]});
+        assert_eq!(project_flag(&list, "p1"), Some(false));
+        assert_eq!(project_flag(&list, "p2"), Some(true));
+        assert_eq!(project_flag(&list, "p3"), Some(true), "no switch (a server older than it): on");
+        assert_eq!(project_flag(&list, "gone"), Some(false), "a project the list does not have keeps nothing");
+        assert_eq!(project_flag(&json!({"message": "x"}), "p1"), None, "not a list: not known");
+        assert_eq!(project_of(&AtomicU8::new(0)), None);
+        assert_eq!(project_of(&AtomicU8::new(2)), Some(false));
+    }
+
+    #[tokio::test]
+    async fn the_projects_switch_is_tried_again_until_the_server_answers() {
+        // Offline twice, then the server says the project keeps no screens.
+        let tries = std::cell::Cell::new(0);
+        let cell = AtomicU8::new(0);
+        let answers = [None, None, Some(false)];
+        settle_project(
+            || {
+                let n = tries.get();
+                tries.set(n + 1);
+                async move { answers[n] }
+            },
+            &cell,
+            || true,
+            Duration::from_millis(1),
+        )
+        .await;
+        assert_eq!((tries.get(), project_of(&cell)), (3, Some(false)));
+
+        // The recording ended while the server was away: the switch stays unknown, so nothing was kept.
+        let tries = std::cell::Cell::new(0);
+        let cell = AtomicU8::new(0);
+        settle_project(
+            || {
+                tries.set(tries.get() + 1);
+                async { None }
+            },
+            &cell,
+            || tries.get() < 4,
+            Duration::from_millis(1),
+        )
+        .await;
+        assert_eq!((tries.get(), project_of(&cell)), (4, None));
     }
 
     #[test]
