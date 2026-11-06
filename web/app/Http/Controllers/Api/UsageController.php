@@ -17,7 +17,8 @@ use Illuminate\Validation\Rule;
 
 /**
  * POST /api/usage — idempotent streaming usage report (docs/API.md). Accepted even while the monthly limit is
- * reached: the spend already happened and the ledger must know about it.
+ * reached: the spend already happened and the ledger must know about it. Since v1.5 a report counts only for streaming
+ * this device was granted, and a viewer's device has none (403 not_allowed).
  */
 final class UsageController extends Controller
 {

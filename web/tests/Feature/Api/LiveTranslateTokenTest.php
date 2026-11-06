@@ -17,6 +17,7 @@ uses(InteractsWithDeviceApi::class);
 
 beforeEach(function () {
     [$this->device, $this->token] = $this->enroll(platform: 'android');
+    grantStreaming($this->device);
     $this->asToken($this->token);
 });
 

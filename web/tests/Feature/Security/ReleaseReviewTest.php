@@ -28,15 +28,18 @@ use App\Models\DeviceSignInCode;
 use App\Models\Plan;
 use App\Models\Screen;
 use App\Models\Setting;
+use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Providers\AppServiceProvider;
 use App\Services\Accounts\Invitations;
 use App\Services\Accounts\SignInGuard;
 use App\Services\Accounts\SignUp;
+use App\Services\CredentialVault;
 use App\Services\PairingService;
 use App\Services\SettingsRepository;
 use App\Services\Sharing\Teammates;
+use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use Filament\Actions\Testing\TestAction;
 use Filament\Auth\Pages\PasswordReset\ResetPassword;
@@ -48,6 +51,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\URL;
@@ -484,4 +488,170 @@ it('H1 keeps every account email encrypted while it waits in the queue', functio
     foreach ([DeletionScheduledMail::class, ExportReadyMail::class, InvitationMail::class, LoginAlertMail::class, ResetPasswordMail::class, ShareReceivedMail::class, TranscriptReadyMail::class, VerifyEmailMail::class] as $mail) {
         expect(is_subclass_of($mail, AccountMail::class))->toBeTrue($mail)->and(is_subclass_of($mail, ShouldBeEncrypted::class))->toBeTrue($mail);
     }
+});
+
+// ---- M2: a usage report counts only for streaming the device was granted --------------------------------------------
+
+function usageBody(int $ms, ?string $id = null, string $useCase = 'dictation', string $provider = 'assemblyai'): array
+{
+    return ['report_id' => $id ?? 'rep-'.bin2hex(random_bytes(6)), 'use_case' => $useCase, 'provider' => $provider, 'streamed_ms' => $ms, 'channels' => 2];
+}
+
+function fakeProviders(): void
+{
+    app(CredentialVault::class)->put('assemblyai', 'api_key', 'x');
+    app(CredentialVault::class)->put('soniox', 'api_key', 'x');
+    Http::fake(fn () => Http::response(['token' => 't', 'api_key' => 'k', 'expires_at' => now()->addMinutes(5)->toIso8601String()], 200));
+}
+
+it('M2 stores a report no grant stands behind with 0 and still answers 201, then 200 for its repeat, so the device stops', function () {
+    $device = Fx::device();
+    $token = Fx::token($device);
+
+    $this->api($token)->postJson('/api/usage', usageBody(86_400_000, 'made-up-1'))->assertCreated()
+        ->assertJsonPath('report.streamed_ms', 0)->assertJsonPath('report.billed_ms', 0)->assertJsonPath('report.cost_usd', 0);
+    $this->api($token)->postJson('/api/usage', usageBody(86_400_000, 'made-up-1'))->assertOk()
+        ->assertJsonPath('report.duplicate', true)->assertJsonPath('report.streamed_ms', 0);
+});
+
+it('M2 stops one tenant from ending transcription for every tenant with made-up reports', function () {
+    app(SettingsRepository::class)->set('budget.monthly_minutes', 5000);
+    fakeProviders();
+    $badToken = Fx::token(Fx::device());
+    $goodToken = Fx::token(Fx::device());
+
+    foreach ([1, 2] as $i) {
+        $this->api($badToken)->postJson('/api/usage', usageBody(86_400_000))->assertCreated();
+    }
+
+    $this->api($goodToken)->postJson('/api/stt/token', ['use_case' => 'dictation'])->assertOk();
+});
+
+it('M2 lets a device report the time since its stt/token, with 5 minutes\' slack, and clamps what goes past it', function () {
+    fakeProviders();
+    $device = Fx::device();
+    $token = Fx::token($device);
+    $this->freezeTime();
+    $this->api($token)->postJson('/api/stt/token', ['use_case' => 'dictation'])->assertOk();
+
+    $this->travel(1)->hours();
+    $this->api($token)->postJson('/api/usage', usageBody(3_000_000))->assertCreated()->assertJsonPath('report.streamed_ms', 3_000_000);
+    // 65 minutes in all, 50 of them taken: 15 left.
+    $this->api($token)->postJson('/api/usage', usageBody(3_000_000))->assertCreated()->assertJsonPath('report.streamed_ms', 900_000)
+        ->assertJsonPath('report.billed_ms', 1_800_000);
+    $this->api($token)->postJson('/api/usage', usageBody(1000))->assertCreated()->assertJsonPath('report.streamed_ms', 0);
+
+    // More time passes, more can be reported.
+    $this->travel(10)->minutes();
+    $this->api($token)->postJson('/api/usage', usageBody(3_000_000))->assertCreated()->assertJsonPath('report.streamed_ms', 600_000);
+});
+
+it('M2 notes live-translate/token as a grant too, and only for the device that got it', function () {
+    fakeProviders();
+    $device = Fx::device();
+    $other = Fx::device($device->user);
+    $this->api(Fx::token($device))->postJson('/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en'])->assertOk();
+
+    $this->api(Fx::token($device))->postJson('/api/usage', usageBody(60_000, null, 'game_translate', 'soniox'))->assertCreated()->assertJsonPath('report.streamed_ms', 60_000);
+    $this->api(Fx::token($other))->postJson('/api/usage', usageBody(60_000, null, 'game_translate', 'soniox'))->assertCreated()->assertJsonPath('report.streamed_ms', 0);
+});
+
+it('M2 takes nothing from what is left for a repeated report', function () {
+    $device = Fx::device();
+    $token = Fx::token($device);
+    grantStreaming($device, 0);
+
+    $report = usageBody(240_000);
+    $this->api($token)->postJson('/api/usage', $report)->assertCreated()->assertJsonPath('report.streamed_ms', 240_000);
+    $this->api($token)->postJson('/api/usage', $report)->assertOk()->assertJsonPath('report.streamed_ms', 240_000);
+
+    $this->api($token)->postJson('/api/usage', usageBody(60_000))->assertCreated()->assertJsonPath('report.streamed_ms', 60_000);
+});
+
+it('M2 counts from the first grant of the last 48 hours, and what was reported since it', function () {
+    $this->freezeTime();
+    $device = Fx::device();
+    $token = Fx::token($device);
+
+    // Long gone: as good as no grant at all.
+    grantStreaming($device, 49);
+    $this->api($token)->postJson('/api/usage', usageBody(60_000))->assertCreated()->assertJsonPath('report.streamed_ms', 0);
+
+    grantStreaming($device, 30);
+    grantStreaming($device, 1);
+    $all = 30 * 3_600_000 + 300_000;
+    $this->api($token)->postJson('/api/usage', usageBody(86_400_000))->assertCreated()->assertJsonPath('report.streamed_ms', 86_400_000);
+    $this->api($token)->postJson('/api/usage', usageBody(86_400_000))->assertCreated()->assertJsonPath('report.streamed_ms', $all - 86_400_000);
+
+    // The first grant has left the 48 hours: the next one counts now, with the reports made since it.
+    $this->travel(19)->hours();
+    $this->api($token)->postJson('/api/usage', usageBody(3_600_000))->assertCreated()->assertJsonPath('report.streamed_ms', 0);
+    $this->travel(30)->hours();
+    $this->api($token)->postJson('/api/usage', usageBody(1000))->assertCreated()->assertJsonPath('report.streamed_ms', 0);
+});
+
+it('M2 answers 403 to a viewer\'s report, so a viewer cannot use up a team\'s minutes', function () {
+    $owner = Fx::user();
+    $plan = Plan::personal();
+    $plan->update(['monthly_minutes' => 100]);
+    $team = app(Workspaces::class)->createFor($owner, 'Team', $plan);
+    $viewer = Fx::user();
+    app(Workspaces::class)->addMember($team, $viewer, WorkspaceRole::Viewer);
+    $device = Device::factory()->create(['user_id' => $viewer->id, 'workspace_id' => $team->id]);
+    grantStreaming($device);
+
+    $this->api(Fx::token($device))->postJson('/api/usage', usageBody(86_400_000))->assertForbidden()->assertJsonPath('code', 'not_allowed');
+
+    expect(app(PlanLimits::class)->minutesReached($team->id))->toBeFalse()
+        ->and(UsageLedgerEntry::query()->withoutGlobalScopes()->where('workspace_id', $team->id)->count())->toBe(0);
+});
+
+// ---- m6: continuing over Live Translate's budget --------------------------------------------------------------------
+
+function liveTranslateSpent(int $workspaceId, User $person, float $usd): void
+{
+    UsageLedgerEntry::query()->withoutGlobalScopes()->create([
+        'workspace_id' => $workspaceId, 'user_id' => $person->id, 'source' => 'device', 'report_id' => 'lt-'.bin2hex(random_bytes(6)), 'use_case' => 'game_translate',
+        'provider' => 'soniox', 'duration_ms' => 1, 'channels' => 1, 'billed_ms' => 1, 'unit_price_usd' => 1, 'cost_usd' => $usd, 'billable' => true, 'occurred_at' => now(),
+    ]);
+}
+
+it('m6 lets an owner, an admin and the super admin continue over budget, and refuses a member whatever the flag says', function (string $who, int $status) {
+    app(SettingsRepository::class)->set('live_translate.monthly_usd', 1);
+    fakeProviders();
+    $owner = Fx::user();
+    $person = $who === 'super admin' ? Fx::superAdmin() : ($who === 'owner' ? $owner : Fx::user());
+    $role = match ($who) {
+        'admin' => WorkspaceRole::Admin,
+        default => WorkspaceRole::Member,
+    };
+    [$team, $device] = reviewTeam($owner, $who === 'owner' ? null : $person, $role);
+    liveTranslateSpent($team->id, $owner, 1.0);
+    $token = Fx::token($device);
+
+    $this->api($token)->postJson('/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en'])->assertForbidden()->assertJsonPath('code', 'budget_exceeded');
+    $flagged = $this->api($token)->postJson('/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en', 'continue_over_budget' => true])->assertStatus($status);
+    if ($status === 403) {
+        $flagged->assertJsonPath('code', 'budget_exceeded');
+        expect($flagged->json('message'))->toContain('Ask an owner');
+    }
+})->with([
+    'owner' => ['owner', 200],
+    'admin' => ['admin', 200],
+    'super admin' => ['super admin', 200],
+    'member' => ['member', 403],
+]);
+
+it('m6 stops everyone at twice the budget, flag or not', function () {
+    app(SettingsRepository::class)->set('live_translate.monthly_usd', 1);
+    fakeProviders();
+    $owner = Fx::user();
+    [$team, $device] = reviewTeam($owner);
+    $token = Fx::token($device);
+    liveTranslateSpent($team->id, $owner, 1.99);
+    $this->api($token)->postJson('/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en', 'continue_over_budget' => true])->assertOk();
+
+    liveTranslateSpent($team->id, $owner, 0.01);
+    $this->api($token)->postJson('/api/live-translate/token', ['mode' => 'game', 'target_language' => 'en', 'continue_over_budget' => true])
+        ->assertForbidden()->assertJsonPath('code', 'budget_exceeded');
 });

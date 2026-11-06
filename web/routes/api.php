@@ -68,7 +68,7 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
 
         Route::post('stt/token', SttTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token', EnsureCanRecord::class])->name('api.stt.token');
         Route::post('live-translate/token', LiveTranslateTokenController::class)->middleware(['abilities:stt:token', 'throttle:stt-token', EnsureCanRecord::class])->name('api.live-translate.token');
-        Route::post('usage', [UsageController::class, 'store'])->middleware('abilities:stt:token')->name('api.usage.store');
+        Route::post('usage', [UsageController::class, 'store'])->middleware(['abilities:stt:token', EnsureCanRecord::class])->name('api.usage.store');
 
         Route::middleware('abilities:sessions:write')->group(function (): void {
             // Since v1.5 a viewer's device records, uploads and changes nothing (403 not_allowed): `record` on recording
