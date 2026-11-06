@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
+use App\Http\Controllers\AdminPackController;
 use App\Http\Controllers\AppLinksController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
@@ -48,6 +49,12 @@ Route::get('/admin-media/screens/{screen}/{variant}', [ScreenMediaController::cl
 Route::get('/admin-export/transcripts/{transcript}/{format}', AdminExportController::class)
     ->middleware(['auth:web', EnsureWorkspaceMember::class])
     ->name('admin.transcripts.export');
+
+// Export → Meeting pack (v1.5): the transcript with its screens; `html` opens with a Print button, `zip` downloads.
+Route::get('/admin-export/sessions/{session}/pack/{format}', AdminPackController::class)
+    ->whereUlid('session')->whereIn('format', ['html', 'zip'])
+    ->middleware(['auth:web', EnsureWorkspaceMember::class])
+    ->name('admin.sessions.pack');
 
 // Library → Upload: the browser's chunked, resumable uploads (the devices' chunk path, behind the console session).
 Route::middleware(['auth:web', EnsureWorkspaceMember::class, 'throttle:uploads'])

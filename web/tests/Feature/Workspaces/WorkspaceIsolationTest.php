@@ -206,6 +206,7 @@ function isoApiCases(array $b): array
         'api.sessions.screens' => ['GET', "/api/sessions/{$s}/screens", [], 404],
         'api.sessions.screens.destroy' => ['DELETE', "/api/sessions/{$s}/screens/{$b['screen']->id}", [], 404],
         'api.clients.screens' => ['GET', "/api/clients/{$b['client']->id}/screens", [], 404],
+        'api.sessions.pack' => ['GET', "/api/sessions/{$s}/pack?format=html", [], 404],
     ];
 }
 
@@ -279,6 +280,7 @@ it('answers 404 to workspace A on every console route outside Filament that take
         'admin.recordings.stream' => ['GET', route('admin.recordings.stream', $b['recording']), [], 404],
         'admin.transcripts.export' => ['GET', route('admin.transcripts.export', [$b['transcript']->id, 'txt']), [], 404],
         'admin.screens.media' => ['GET', route('admin.screens.media', [$b['screen']->id, 'image']), [], 404],
+        'admin.sessions.pack' => ['GET', route('admin.sessions.pack', [$b['session']->id, 'html']), [], 404],
         // Library → Upload: B's audio is not "already in the Library" of A, and B's client cannot be chosen.
         'admin.uploads.store' => ['POST', route('admin.uploads.store'), ['name' => 'x.wav', 'size' => 4096, 'sha256' => $b['recording']->sha256, 'client_id' => $b['client']->id], 422],
         'admin.uploads.show' => ['GET', route('admin.uploads.show', $upload), [], 404],

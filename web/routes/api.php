@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\LibraryController;
 use App\Http\Controllers\Api\LinkController;
 use App\Http\Controllers\Api\LiveTranslateTokenController;
 use App\Http\Controllers\Api\OrganiseController;
+use App\Http\Controllers\Api\PackController;
 use App\Http\Controllers\Api\RecordingController;
 use App\Http\Controllers\Api\RequestLinkController;
 use App\Http\Controllers\Api\ScreenController;
@@ -141,6 +142,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             // Screen moments (v1.5): a recording's screens in time order, and a project's Screens tab.
             Route::get('sessions/{id}/screens', [ScreenController::class, 'index'])->name('api.sessions.screens');
             Route::get('clients/{id}/screens', [ScreenController::class, 'project'])->name('api.clients.screens');
+            // Meeting pack (v1.5): the transcript with its screens, a page to print or a ZIP.
+            Route::get('sessions/{id}/pack', [PackController::class, 'show'])->name('api.sessions.pack');
         });
     });
 
