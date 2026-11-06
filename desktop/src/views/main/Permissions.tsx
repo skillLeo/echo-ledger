@@ -99,7 +99,7 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
       </div>
       <div className="row permission-actions">
         {access === "unknown" && <button type="button" className="btn" disabled={asking} onClick={() => void allow()}>{asking ? "Asking…" : "Allow"}</button>}
-        {access !== "allowed" && <button type="button" className="btn ghost" onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>Open System Settings</button>}
+        {access !== "allowed" && <button type="button" className={`btn ${access === "unknown" ? "ghost" : ""}`} onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>Open System Settings</button>}
       </div>
       {access !== "allowed" && <p className="small muted">{text.where}</p>}
     </div>

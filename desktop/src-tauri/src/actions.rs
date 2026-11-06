@@ -964,6 +964,7 @@ fn start_ticker(app: &AppHandle) {
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        let mut shown_note = None;
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
             let state = app.state::<crate::AppState>();
@@ -973,6 +974,12 @@ fn start_ticker(app: &AppHandle) {
                 break;
             }
             take_device_notices(&app);
+            // The Record page hears of a device note when it comes and when it goes (news lasts a few seconds).
+            let note = state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(Instant::now());
+            if note != shown_note {
+                shown_note = note;
+                emit_status(&app);
+            }
             emit_recording_state(&app);
         }
     });
@@ -998,7 +1005,6 @@ fn take_device_notices(app: &AppHandle) {
     if new_mic && let Some(info) = state.capture.info() {
         check_bluetooth_mic(app, &info);
     }
-    emit_status(app);
 }
 
 /// Appends an item to `uploads.json` and wakes the upload worker. An import of a file that is already queued (same

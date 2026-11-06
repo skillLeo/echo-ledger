@@ -123,6 +123,40 @@ const SCREENS = [
     await page.waitForSelector("[data-testid=bluetooth-notice]");
     await page.waitForSelector(".after-pill.chip");
   }],
+  // Phase 1B: what runs on a Mac and on an old Windows, and what a recording says about what it holds.
+  ["controls-permission", "controls-permission", async (page) => page.waitForSelector("[data-testid=missing-permission]")],
+  ["controls-device", "controls-device", async (page) => page.waitForSelector("[data-testid=device-notice]")],
+  ["record-permission-mac", "record-permission-mac", async (page) => page.waitForSelector("[data-testid=permission-banner]")],
+  ["record-windows10", "record-windows10", async (page) => page.waitForSelector("[data-testid=whole-system-note]")],
+  ["library-lost-mac", "library-lost-mac", async (page) => {
+    await page.waitForSelector("[data-testid=permission-loss]");
+    await page.waitForSelector(".segments .segment");
+  }],
+  ["settings-mac-check", "settings-mac-check", async (page) => {
+    await page.getByRole("textbox", { name: "Search settings" }).fill("mac check");
+    await page.waitForSelector("[data-testid=check-macos_version]");
+  }],
+  ["settings-keys-mac", "settings-keys-mac", async (page) => {
+    await page.getByRole("textbox", { name: "Search settings" }).fill("in the app");
+    await page.waitForSelector("text=⌘W");
+  }],
+  ["settings-windows10", "settings-windows10", async (page) => {
+    await page.getByRole("textbox", { name: "Search settings" }).fill("microphone");
+    await page.waitForSelector("[data-testid=whole-system-note]");
+  }],
+  ["onboarding-mac-microphone", "onboarding-mac", async (page) => {
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForSelector("[data-testid=permission-microphone]");
+  }],
+  ["onboarding-mac-system-audio", "onboarding-mac", async (page) => {
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForSelector("[data-testid=permission-system_audio]");
+  }],
+  ["onboarding-mac-screen", "onboarding-mac", async (page) => {
+    for (let i = 0; i < 3; i += 1) await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForSelector("[data-testid=permission-screen]");
+  }],
 ];
 
 /**

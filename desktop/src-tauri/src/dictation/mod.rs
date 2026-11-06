@@ -44,6 +44,10 @@ pub async fn start(app: &AppHandle) -> AppResult<()> {
     if is_active(app) {
         return Ok(());
     }
+    // Dictating without the microphone would silently type nothing (Phase 1B).
+    if state.permissions_now().microphone == crate::permissions::Access::Denied {
+        return Err(crate::error::AppError::msg(crate::permissions::NO_DICTATION));
+    }
     state.dictation_text.lock().unwrap().clear();
     state.dictation_stop_requested.store(false, Ordering::SeqCst);
     // Before the stream opens, so the box is built while the key is still down (C9: it is built on demand).

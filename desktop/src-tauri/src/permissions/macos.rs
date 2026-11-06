@@ -1,7 +1,8 @@
 //! What macOS allows, read without showing anything. The microphone through AVFoundation; Screen Recording through
 //! CoreGraphics (`screens::platform::macos`). System audio has no public way to ask (`NSAudioCaptureUsageDescription`
-//! only names the prompt), so it reads the same private TCC call Apple's own sample and AudioCap use, looked up at run
-//! time: if it ever goes, the answer is "unknown" and the recording's far-side warning still says when nothing is heard.
+//! only names the prompt), and CoreGraphics cannot tell "not asked yet" from "told no", so both read the private TCC call
+//! that AudioCap uses, looked up at run time: if it ever goes, the answer is "unknown" and the recording's far-side
+//! warning and the screens chip still say when something is missing.
 
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::sync::OnceLock;
@@ -72,19 +73,30 @@ fn preflight() -> Option<Preflight> {
     address.map(|a| unsafe { std::mem::transmute::<usize, Preflight>(a) })
 }
 
-fn system_audio() -> Access {
+fn tcc(service: &str) -> Access {
     let Some(call) = preflight() else { return Access::Unknown };
-    let service = CFString::from_str("kTCCServiceAudioCapture");
+    let service = CFString::from_str(service);
     let service: &CFString = &service;
     // SAFETY: the service name lives for the call; no options; this only reads the answer, it never prompts.
     access_of_tcc_answer(unsafe { call(service, std::ptr::null()) })
 }
 
+/// Screen Recording: CoreGraphics' yes is final; its no is told apart by TCC.
+pub fn access_of_screen(preflight: bool, tcc: Access) -> Access {
+    if preflight {
+        Access::Allowed
+    } else if tcc == Access::Denied {
+        Access::Denied
+    } else {
+        Access::Unknown
+    }
+}
+
 pub fn read() -> Permissions {
     Permissions {
         microphone: microphone(),
-        system_audio: system_audio(),
-        screen: if crate::screens::platform::macos::permission() { Access::Allowed } else { Access::Denied },
+        system_audio: tcc("kTCCServiceAudioCapture"),
+        screen: access_of_screen(crate::screens::platform::macos::permission(), tcc("kTCCServiceScreenCapture")),
     }
 }
 
@@ -125,5 +137,14 @@ mod tests {
         assert_eq!(access_of_tcc_answer(0), Access::Allowed);
         assert_eq!(access_of_tcc_answer(1), Access::Denied);
         assert_eq!(access_of_tcc_answer(2), Access::Unknown);
+    }
+
+    #[test]
+    fn screen_recording_not_asked_yet_is_not_told_no() {
+        assert_eq!(access_of_screen(true, Access::Unknown), Access::Allowed);
+        assert_eq!(access_of_screen(true, Access::Denied), Access::Allowed, "CoreGraphics' yes is what the capture uses");
+        assert_eq!(access_of_screen(false, Access::Denied), Access::Denied);
+        assert_eq!(access_of_screen(false, Access::Unknown), Access::Unknown, "so Allow can put EchoLedger on System Settings' list");
+        assert_eq!(access_of_screen(false, Access::Allowed), Access::Unknown, "TCC says yes, the capture says no: ask again");
     }
 }

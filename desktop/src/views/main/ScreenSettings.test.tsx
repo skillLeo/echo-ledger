@@ -117,7 +117,7 @@ describe("Settings → Screen moments", () => {
     respond("screens_permission", true);
     fireEvent.click(within(card()).getByRole("button", { name: "Allow Screen Recording" }));
     await flushAsync();
-    expect(within(card()).getByTestId("screens-permission-note")).toHaveTextContent("Allowed. macOS 15 and later ask again about once a month");
+    expect(within(card()).getByTestId("screens-permission-note")).toHaveTextContent("From macOS 15, macOS asks again about once a month");
     expect(within(card()).queryByRole("button", { name: "Allow Screen Recording" })).not.toBeInTheDocument();
   });
 

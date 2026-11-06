@@ -102,8 +102,8 @@ export function askSeconds(ask: AskPayload): number {
 /** What the pill and the captions say when the system does not let a recording use something (one short line). */
 export function missingShort(missing: MissingPermission[] | undefined): string | null {
   const kinds = (missing ?? []).map((m) => m.kind);
-  if (kinds.includes("microphone") && kinds.includes("system_audio")) return "Nothing is being recorded: no permission.";
-  if (kinds.includes("microphone")) return "No microphone permission: recording the other side only.";
-  if (kinds.includes("system_audio")) return "No system audio permission: recording your voice only.";
+  if (kinds.includes("microphone") && kinds.includes("system_audio")) return "Nothing is being recorded: no permission";
+  if (kinds.includes("microphone")) return "No microphone: recording the other side";
+  if (kinds.includes("system_audio")) return "No system audio: recording your voice only";
   return null;
 }

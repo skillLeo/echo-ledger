@@ -144,7 +144,7 @@ describe("missingShort", () => {
     expect(missingShort(undefined)).toBeNull();
     expect(missingShort([])).toBeNull();
     expect(missingShort([{ kind: "system_audio", sentence: "" }])).toMatch(/your voice only/);
-    expect(missingShort([{ kind: "microphone", sentence: "" }])).toMatch(/other side only/);
+    expect(missingShort([{ kind: "microphone", sentence: "" }])).toMatch(/recording the other side/);
     expect(missingShort([{ kind: "microphone", sentence: "" }, { kind: "system_audio", sentence: "" }])).toMatch(/Nothing is being recorded/);
     expect(missingShort([{ kind: "screen", sentence: "" }])).toBeNull();
   });

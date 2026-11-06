@@ -90,7 +90,7 @@ export function MacCheckCard({ status }: { status: AppStatus }) {
   if (!running && (status.recording || status.dictationActive)) {
     return (
       <div className="card mac-check" data-testid="mac-check">
-        <b>Mac check</b>
+        <b>Help &amp; diagnostics</b>
         <p className="small" data-testid="mac-check-recording">Finish the current recording to run the Mac check.</p>
       </div>
     );
@@ -100,8 +100,8 @@ export function MacCheckCard({ status }: { status: AppStatus }) {
   const items = report?.items ?? progress?.done ?? [];
   return (
     <div className="card mac-check" data-testid="mac-check">
-      <b>Mac check</b>
-      <p className="small muted">Checks macOS, the permissions, the microphone, the other side of a call, your meeting apps, the captions and screen moments, one at a time. It takes about 15 seconds, says something back, and plays one soft tone.</p>
+      <b>Help &amp; diagnostics</b>
+      <p className="small muted">The Mac check looks at macOS, the permissions, the microphone, the other side of a call, your meeting apps, the captions and screen moments, one at a time. It takes about 15 seconds: say something when it asks, and it plays one soft tone.</p>
       <div className="card-actions"><button type="button" className="btn primary" disabled={running} onClick={() => void run()}>{running ? "Checking…" : report ? "Run Mac check again" : "Run Mac check"}</button></div>
       {running && progress && <p className="small" role="status" data-testid="mac-check-progress">{progress.index + 1} of {progress.total}: {progress.line}</p>}
       {report?.stopped && <p className="small warning-text" role="status">{report.stopped}</p>}

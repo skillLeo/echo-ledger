@@ -588,7 +588,7 @@ describe("caption style (B4)", () => {
     await emitEvent("overlay:visibility", true);
     expect(screen.queryByTestId("caption-missing")).not.toBeInTheDocument();
     await emitEvent("recording:state", { active: true, missing: [{ kind: "microphone", sentence: "x" }] });
-    expect(screen.getByTestId("caption-missing")).toHaveTextContent("No microphone permission: recording the other side only.");
+    expect(screen.getByTestId("caption-missing")).toHaveTextContent("No microphone: recording the other side");
     await emitEvent("recording:state", { active: false, missing: [] });
     expect(screen.queryByTestId("caption-missing")).not.toBeInTheDocument();
   });

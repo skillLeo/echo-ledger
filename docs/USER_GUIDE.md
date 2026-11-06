@@ -23,15 +23,41 @@ All three show the same library.
 
 ## 1b. Install the Mac app
 
-The Mac app is built for Apple Silicon and Intel Macs. Recording the other side of a call needs **macOS 14.2 or
-newer** (Apple menu → **About This Mac** shows your version).
+The Mac app is built for Apple Silicon Macs (M1 and newer) and Intel Macs, and opens on macOS 14.4 or newer. Recording
+the other side of a call needs **macOS 14.2 or newer** (Apple menu → **About This Mac** shows your version).
 
 1. Open the `.dmg` file and drag **EchoLedger** into **Applications**.
-2. The app is not signed by Apple yet, so the first time, **right-click EchoLedger in Applications and choose Open**,
-   then **Open** again. After that it opens normally.
-3. EchoLedger lives in the menu bar (top right). Click its icon to open it.
-4. The first recording asks for the **microphone** and for **system audio recording** (the other side of the call).
-   Allow both. You can change them later in **System Settings → Privacy & Security**.
+2. The app is not signed by Apple yet, so macOS stops it the first time. Open it once and close the message. Then open
+   **System Settings → Privacy & Security**, scroll down to Security and click **Open Anyway** next to EchoLedger, and
+   confirm with your password or Touch ID. After that it opens normally. (On macOS 15 and later, right-click → Open no
+   longer gets past this message.)
+3. EchoLedger lives in the menu bar (top right). Click its icon to open it, or right-click it for the menu. ⌘W closes the
+   window and leaves EchoLedger in the menu bar, ⌘, opens Settings, and ⌘Q quits. The icon follows light and dark menu
+   bars and turns red while recording.
+4. A short setup goes through what macOS must allow, one step each, with a button to the right page of System Settings:
+   - **Microphone:** your side of a call, voice notes and dictation.
+   - **System audio:** the other side of a call (the sound this Mac plays).
+   - **Screen recording:** only for screen moments, what a meeting showed on screen. Recordings work without it. From
+     macOS 15, macOS asks again about once a month whether EchoLedger may still see your screen. That is normal: choose
+     **Allow**. If you miss it, screen moments pause and the recording goes on.
+
+**If a permission is off,** nothing crashes and nothing records silently: the Record page, the recording pill and the
+captions say what is missing and what the recording holds without it (only your voice, or only the other side). A
+recording that would hold nothing does not start and says why.
+
+**Updates and permissions.** Because the app is not signed with an Apple Developer ID yet, macOS may forget its
+permissions after an update. EchoLedger looks at them every time it starts; if one that was allowed has gone, it says so
+once, in one sentence, with the same steps to set it up again.
+
+**Starting at login** is off until you turn it on in **Settings → General**.
+
+**The Mac check.** **Settings → General → Help & diagnostics → Run Mac check** looks at macOS, the permissions, the
+microphone, the other side of a call (with one soft tone), your meeting apps, the captions and pill, and screen moments,
+one at a time, and says how to fix what it finds. It does not run during a recording. **Copy report** gives you plain text
+with no names, and **Send to my admin** sends it to your workspace's admins, only when you press it.
+
+A $99 a year Apple Developer ID fixes both of the above (the Open Anyway step and the forgotten permissions). The
+workflow that signs and notarizes the app already exists and starts working as soon as the certificate is in place.
 
 ## 2. Install the phone app
 
@@ -406,8 +432,9 @@ During a meeting, the computer app keeps what was on the shared screen at each m
 the transcript) know what "this page" or "click here" meant.
 
 - **Turn it on** in the computer app: **Settings → Screen moments**. On a Mac, allow EchoLedger under **System
-  Settings → Privacy & Security → Screen & System Audio Recording**; macOS asks again about once a month. On
-  Windows 10 a thin yellow border shows around what is captured; Windows 11 shows none.
+  Settings → Privacy & Security → Screen & System Audio Recording**. From macOS 15, macOS asks again about once a month
+  whether EchoLedger may still see your screen: choose **Allow**. If you miss it, screen moments pause and the recording
+  goes on. On Windows 10 a thin yellow border shows around what is captured; Windows 11 shows none.
 - **What is kept:** only during a meeting EchoLedger detected, or a recording you started, and by default only the
   meeting's window (Zoom, Teams, Google Meet in a browser, WhatsApp). A screen is kept when the picture changes and
   settles, or at once when someone says "this page", "click here", "yeh dekhein" and the like. At most about 120 an

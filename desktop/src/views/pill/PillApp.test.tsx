@@ -527,7 +527,7 @@ describe("Screens chip (v1.5)", () => {
       await renderPill(makeRecordingState({ missing: noSystem }));
       await emitEvent("pill:visibility", true);
       const warning = screen.getByTestId("missing-permission");
-      expect(warning).toHaveTextContent("No system audio permission: recording your voice only.");
+      expect(warning).toHaveTextContent("No system audio: recording your voice only");
       expect(warning).toHaveAttribute("title", noSystem[0].sentence);
       fireEvent.click(within(warning).getByRole("button", { name: "Dismiss warning" }));
       expect(screen.queryByTestId("missing-permission")).not.toBeInTheDocument();

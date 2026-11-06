@@ -3,7 +3,10 @@
 // request-files|record|record-bluetooth|record-viewer|activity|settings|settings-account|sign-in|controls|controls-bluetooth
 // &theme=light|dark` (v1.5: "-bluetooth" records from AirPods, "library-backup" opens the backup-engine call; projects,
 // shared, share, move and request-files open on the Projects page or the Library, where scripts/screenshots.mjs clicks its
-// way to the dialog; "sign-in" is a computer not signed in, "-viewer" a viewer's, "library-update" an update ready).
+// way to the dialog; "sign-in" is a computer not signed in, "-viewer" a viewer's, "library-update" an update ready. Phase 1B:
+// "-mac" is a Mac, "-windows10" a Windows without per-app capture, "onboarding-mac" the guided permissions,
+// "record-permission-mac" a permission off, "library-lost-mac" a permission macOS forgot, "settings-mac-check" the check's
+// results, "controls-permission" and "controls-device" what the pill says).
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
@@ -38,11 +41,15 @@ const audioUrl = silentWav();
 
 const empty = screen === "library-empty";
 const bluetooth = screen.endsWith("-bluetooth");
+const mac = screen.includes("-mac");
+const windows10 = screen.endsWith("-windows10");
+const onboarding = screen === "onboarding-mac";
+const NO_SYSTEM_AUDIO = { kind: "system_audio", sentence: "System audio is off for EchoLedger: a recording will have your voice, not the other side of the call." };
 // v1.5: projects, the Library's smart folders, sharing and moving open from the Library or the Projects page.
 const LIBRARY_SCREENS = ["shared", "share", "move"];
 const tab = screen.startsWith("library") || LIBRARY_SCREENS.includes(screen) ? "library"
   : screen.startsWith("client") || screen.startsWith("project") || screen === "request-files" ? "projects"
-    : screen.startsWith("record") ? "record" : screen.startsWith("settings") ? "settings" : screen;
+    : screen.startsWith("record") ? "record" : screen.startsWith("settings") ? "settings" : onboarding ? "library" : screen;
 // v1.5: the plan with limits next to the usage; a viewer on "-viewer".
 const plan = makePlan({
   name: "Team", workspace: "Acme team", role: screen.endsWith("-viewer") ? "viewer" : "owner",
@@ -56,13 +63,21 @@ type Args = Record<string, unknown>;
 let captions: { onmessage: (e: unknown) => void } | null = null;
 
 const commands: Record<string, (args: Args) => unknown> = {
-  app_status: () => makeStatus({ deviceName: "Work laptop", pendingDecisions: empty ? 0 : PENDING.length, captionsLive: controls, plan, paired: screen !== "sign-in" }),
+  app_status: () => makeStatus({
+    deviceName: "Work laptop",
+    pendingDecisions: empty ? 0 : PENDING.length,
+    captionsLive: controls,
+    plan,
+    paired: screen !== "sign-in",
+    platform: mac ? "macos" : "windows",
+    systemAudioNote: windows10 ? "This Windows version records all sound playing on this computer, not just the call" : null,
+  }),
   account_get: () => ACCOUNT,
   update_status: () =>
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
       : { phase: "up_to_date", current: "1.5.0", version: null, notes: null, checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), message: "You have the latest version.", progress: null },
-  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true }),
+  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : ITEMS),
@@ -93,12 +108,50 @@ const commands: Record<string, (args: Args) => unknown> = {
     { id: "default", name: "Microphone (Realtek Audio)", isDefault: !bluetooth, bluetooth: false },
     ...(bluetooth ? [{ id: "airpods", name: "AirPods Pro", isDefault: true, bluetooth: true }] : []),
   ],
-  permissions_status: () => ({ microphone: "allowed", browserAutomation: false, platform: "windows" }),
+  permissions_status: () => (mac
+    ? {
+        microphone: onboarding ? "unknown" : "allowed",
+        systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : "allowed",
+        screen: onboarding ? "denied" : "allowed",
+        browserAutomation: false,
+        platform: "macos",
+        missing: screen === "record-permission-mac" ? [NO_SYSTEM_AUDIO] : [],
+        lost: screen === "library-lost-mac" ? "macOS no longer lets EchoLedger use the microphone, which can happen after an update. Setting it up again takes a moment." : null,
+      }
+    : { microphone: "allowed", browserAutomation: false, platform: "windows", missing: [] }),
+  mac_check_last: () => screen === "settings-mac-check"
+    ? {
+        finishedAt: new Date().toISOString(),
+        stopped: null,
+        appVersion: "1.5.0",
+        osVersion: "15.1",
+        model: "Mac14,2",
+        sentAt: new Date(Date.now() - 120_000).toISOString(),
+        items: [
+          { key: "macos_version", title: "macOS version", state: "ok", detail: "macOS 15.1: call audio works on this version.", fix: null },
+          { key: "microphone_permission", title: "Microphone permission", state: "ok", detail: "Allowed.", fix: null },
+          { key: "system_audio_permission", title: "System audio permission", state: "off", detail: "Off. Without it a recording has your voice, not the other side of the call.", fix: { label: "Open System Settings", settings: "system_audio" } },
+          { key: "screen_permission", title: "Screen Recording permission", state: "ok", detail: "Allowed. macOS asks again about once a month: choose Allow to keep screen moments.", fix: null },
+          { key: "microphone_test", title: "Microphone test", state: "ok", detail: "Heard your microphone (loudest about -28 dB).", fix: null },
+          { key: "system_audio_test", title: "System audio test", state: "off", detail: "Not tested: system audio is off for EchoLedger.", fix: { label: "Open System Settings", settings: "system_audio" } },
+          { key: "meeting_apps", title: "Meeting apps", state: "ok", detail: "Installed: Zoom, Chrome, Safari. Not installed: Teams, WhatsApp, Edge, Arc. EchoLedger recognises all of them.", fix: null },
+          { key: "overlay_windows", title: "Captions and pill on screen", state: "ok", detail: "The captions and the pill are on screen, above other windows, in every Space and over full-screen meetings.", fix: null },
+          { key: "screen_capture_test", title: "Screen moment test", state: "ok", detail: "One frame captured and thrown away. Nothing was stored.", fix: null },
+        ],
+      }
+    : null,
   security_overview: () => ({ devices: [{ id: "d1", name: "Work laptop", platform: "windows", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: true }, { id: "d2", name: "Pixel 9", platform: "android", app_version: "1.3.0", last_seen_at: new Date().toISOString(), paired_at: null, current: false }], events: [] }),
   storage_info: () => ({ recordings_bytes: 812_000_000, recordings_count: 42, disk_free_bytes: 80_123_456_789, disk_total_bytes: 107_374_182_400, retention_days: 30 }),
   dictation_history: () => [],
   marker_tags: () => ["Budget", "Decision", "Follow up"],
-  recording_state: () => makeRecordingState({ elapsedMs: 134_000, sourceApp: "whatsapp", language: "ur", bluetoothMic: bluetooth }),
+  recording_state: () => makeRecordingState({
+    elapsedMs: 134_000,
+    sourceApp: "whatsapp",
+    language: "ur",
+    bluetoothMic: bluetooth,
+    missing: screen === "controls-permission" ? [NO_SYSTEM_AUDIO] as never : [],
+    deviceNote: screen === "controls-device" ? { text: "Microphone changed to AirPods Pro. Still recording.", warning: false } : null,
+  }),
   // The after-call window: "Saved · … · Undo" over the Ask-me chip (its line at 6 of 10 s); both stay for the picture.
   after_call_state: () =>
     makeAfterCallState({

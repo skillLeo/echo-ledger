@@ -484,7 +484,7 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 
 | # | Check | Expected |
 |---|---|---|
-| MAC-1 | Open the `.dmg`, drag EchoLedger to Applications, right-click → **Open** → **Open**. | It starts (menu-bar icon, no Dock icon). Later opens need no right-click. |
+| MAC-1 | Open the `.dmg`, drag EchoLedger to Applications, open it once, close the message, then System Settings → Privacy & Security → **Open Anyway** (macOS 15 and later; right-click → Open no longer works there). | It starts (menu-bar icon, no Dock icon). Later opens ask nothing. |
 | MAC-2 | Pair with the console (QR or code). | Paired; the Library loads. |
 | MAC-3 | First recording: allow the microphone and **system audio recording**. | Both prompts show EchoLedger's text; denying one says what to do. |
 | MAC-4 | A Google Meet call in Chrome or Safari, 1 minute, both people talk. | Recorded as Google Meet; the transcript has both sides (You and the other person). |
@@ -494,6 +494,39 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 | MAC-8 | Import a WhatsApp `.opus` and an `.mp3` (Library → Import or drop them on the window). | Two recordings named after the files; importing one again says it is already in your Library. |
 | MAC-9 | Live captions overlay during MAC-4. | Captions show over the call; ⌘ shortcuts from Settings → Shortcuts work. |
 | MAC-10 | Quit from the menu-bar icon during a recording. | It asks first; after quitting, no audio device is left behind (Audio MIDI Setup shows no extra device). |
+
+### Mac app v1.5, what only a real Mac can prove (Phase 1B; CI proves the build, the tests and the smoke test)
+
+| # | Check | Expected |
+|---|---|---|
+| MAC-11 | First start: the setup's Microphone, System audio and Screen recording steps; **Allow**, then **Open System Settings** on each. | Each prompt shows EchoLedger's text; each button opens the right pane (Microphone; Screen & System Audio Recording); coming back shows the new state without a restart. |
+| MAC-12 | Turn off system audio in System Settings, open the Record page, record a call. | The banner says your voice only, the pill and captions say so too, and the recording has your voice. Far-side warning after 30 s. |
+| MAC-13 | Turn off the microphone too, press REC. | It does not start and says why; nothing is saved. Voice note with only the microphone off: refused the same way. |
+| MAC-14 | Install an update (an unsigned build): start the app. | If macOS forgot a permission: one calm sentence with **Set up**; dismissed, it does not come back at the next start; turning the permission off again later says so again. |
+| MAC-15 | **Run Mac check** on a healthy Mac; speak during the microphone test. | One progress line at a time; a soft tone plays; all ✓. Turn off each permission in turn: ✗ with **Open System Settings**, its test not run. During a recording: the sentence and no button. |
+| MAC-16 | **Copy report** and read it; **Send to my admin**, signed in and signed out. | No name, no path with a user name, no account. It appears under the console's System → Device reports with the model (`Mac14,2`) and says when it was sent. Signed out: greyed out with the reason. |
+| MAC-17 | Menu-bar icon on a light and a dark menu bar, Retina and a 1x monitor. | Black or white with the bar, sharp at both; red tile while recording, amber while paused, a small dot while uploading. |
+| MAC-18 | With the window in front: ⌘, ⌘W ⌘Q; ⌘C and ⌘V in a text field. Settings → Shortcuts. | Settings opens; the window closes and EchoLedger stays in the menu bar; it quits, and ⌘Q during a recording saves the recording first; copy and paste work; shortcuts read ⌘ ⌥ ⇧. |
+| MAC-19 | A notched MacBook: start a recording, then System Settings → Control Center → Automatically hide and show the menu bar. | The pill sits below the menu bar and the notch, also with the menu bar hidden; captions and the Saved toast clear the Dock. |
+| MAC-20 | MacBook at 2x with a 1x monitor: drag the pill and captions to the monitor; click their buttons there. Restart the recording. | Clicks land where the buttons are; the pill opens where it was left. |
+| MAC-21 | Unplug that monitor with the pill and captions on it. | Within 5 s both are back on the laptop's screen. |
+| MAC-22 | A full-screen Zoom or Meet window, then swipe between Spaces. | Pill and captions stay over the full-screen meeting and follow every Space; ⌥⌘H from another app leaves them. They never take focus from the meeting. |
+| MAC-23 | Settings → General → Start EchoLedger when I sign in: on, log out and in; then off. | Off by default. On: it starts in the menu bar with no window. Off: `~/Library/LaunchAgents/EchoLedger.plist` is gone. |
+| MAC-24 | A signed update: Settings → About → Check for updates, on Apple Silicon and Intel. | Downloads, says restart, the app comes back on the new version. Recordings and settings stay. |
+| MAC-25 | During a recording: connect AirPods; switch input and output in the menu bar; pull a USB headset; turn the AirPods off. | The pill says what changed and goes on; a device gone says what the recording holds until one returns. In the file nothing is at the wrong speed and the gap is silence, not a cut. |
+| MAC-26 | Press Stop during MAC-25 and on a plain recording. | Stop answers at once (it used to be able to hang); Audio MIDI Setup shows no extra device. |
+| MAC-27 | Terminal, with EchoLedger running and signed in: `/Applications/EchoLedger.app/Contents/MacOS/echoledger-desktop --smoke-test; echo $?` | A second icon for a moment, 0, and the running app, its data and its sign-in untouched. |
+
+### Windows v1.5, what only a real PC can prove (Phase 1B; CI ran the smoke test on Server 2022, Server 2025 and Windows 11 on Arm)
+
+| # | Check | Expected |
+|---|---|---|
+| WIN-1 | Windows 10 below build 20348 (`winver`; 22H2 is 19045): Record page and Settings → Microphone. Record a call with music playing in another app. | Both say "This Windows version records all sound playing on this computer, not just the call"; the music and EchoLedger's own sounds are in the recording, and the recording goes on normally. |
+| WIN-2 | Windows 11: the same, and play a recording inside EchoLedger meanwhile. | No sentence; EchoLedger's own sound is not in the recording (the other apps' still is: the capture leaves out only EchoLedger itself). |
+| WIN-3 | During a recording: plug in a USB headset, switch the default device, connect a Bluetooth headset, pull the USB headset. | The pill says what changed, the recording goes on, the gap is silence. |
+| WIN-4 | Settings → Microphone: choose the USB microphone, pull it during a recording, plug it back. | Moves to the default and says so; moves back when it returns. |
+| WIN-5 | Unplug every microphone during a call. | "No microphone: recording the other side only" until one returns; the file is whole. |
+| WIN-6 | `"%LOCALAPPDATA%\EchoLedger\echoledger-desktop.exe" --smoke-test` from a command prompt, with EchoLedger running, then `echo %ERRORLEVEL%`. | 0; the running app and its sign-in untouched. |
 
 ### Phone v1.5 (phone windows; the S25, installed with `pm install -r`, data kept)
 
