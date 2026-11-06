@@ -181,7 +181,9 @@ account in the console (Profile → Devices → "Sign in a device", the QR of `P
   `POST /api/devices/register` (`device`, `token`, `token_expires_at`, `config`). An account with two-factor sign-in
   needs `otp` (a TOTP code or a recovery code): without it `401 otp_required`, wrong `422 invalid_otp`. Wrong email
   or password `422 invalid_credentials` (the same answer for both); an address not verified yet `403
-  email_not_verified`; after 5 failures `429 too_many_attempts` with `Retry-After`.
+  email_not_verified`; after 5 failures `429 too_many_attempts` with `Retry-After`. An account in its 7-day deletion grace
+  signs in no app (`403 not_allowed`, "Sign in on the console and choose Keep my account"); its pairing codes are
+  `422 validation_failed`.
 - Browser sign-in (Google, passkeys and everything the console's sign-in page offers): the app opens
   `https://<server>/device/sign-in?code_challenge=<BASE64URL(SHA-256(verifier))>&code_challenge_method=S256&state=<random>&redirect_uri=echoledger://signed-in&name=<device name>&platform=android|windows|macos`
   in the browser. The person signs in (and approves "Sign in EchoLedger on <name>?"), and the browser is sent to
@@ -222,7 +224,8 @@ before v1.5 belongs to the person who made it (on a single-person server: its ow
 
 | Per workspace | Owner | Admin | Member | Viewer |
 |---|---|---|---|---|
-| Record, upload, import; pair or sign in devices | yes | yes | yes | no |
+| Record, upload, import | yes | yes | yes | no |
+| Sign in their own phones and computers (a viewer's only open what is shared with them) | yes | yes | yes | yes |
 | Their own recordings and projects: open, edit, organise, share, delete | yes | yes | yes | (has none) |
 | Shared with me: open; Save to my library | yes | yes | yes | open only |
 | Invite and remove people, change roles | yes | members and viewers | no | no |
