@@ -57,14 +57,7 @@ const SIGN_OUT_CONFIRM = "Sign out of this computer? Recordings waiting to uploa
 
 /** "Signed in to ledger.example.com" (the server's host, as on the phone), or "Not signed in". */
 export function signedInLine(serverUrl: string | null | undefined): string {
-  if (!serverUrl) return "Not signed in";
-  let host = serverUrl;
-  try {
-    host = new URL(serverUrl).host || serverUrl;
-  } catch {
-    // Not a URL: shown as stored.
-  }
-  return `Signed in to ${host}`;
+  return serverUrl ? `Signed in to ${hostOf(serverUrl)}` : "Not signed in";
 }
 
 const AFTER_CALL: readonly (readonly [AfterCall, string])[] = [["keep", "Keep automatically"], ["ask", "Ask me"]];
@@ -219,12 +212,12 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
       <div className="card">
         <b>General</b>
         <Toggle label="Start EchoLedger when I sign in" on={settings.autostart} onChange={(v) => patch({ autostart: v })} />
-        <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={220}
+        <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={260}
           onChange={(v) => patch({ transcriptionLanguage: v === "" ? null : v })} />
         <div className="toggle">
           <div><label htmlFor="settings-client">Project keyterms</label><div id="settings-client-hint" className="small muted">Names and jargon of the selected project improve accuracy.</div></div>
           {/* "No project" sends clientId: null (clears it); a missing key would keep the stored client (A6.DU4). */}
-          <select id="settings-client" aria-describedby="settings-client-hint" className="input" style={{ width: 220 }} value={settings.clientId ?? ""} onChange={(e) => patch({ clientId: e.target.value || null })}>
+          <select id="settings-client" aria-describedby="settings-client-hint" className="input" style={{ width: 260 }} value={settings.clientId ?? ""} onChange={(e) => patch({ clientId: e.target.value || null })}>
             <option value="">No project</option>
             {clients.map((cl) => <option key={cl.id} value={cl.id}>{cl.name}</option>)}
           </select>
@@ -335,7 +328,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
   return (
     <>
       <h1 className="page-title">Settings</h1>
-      <p className="page-sub">Connected to {hostOf(status.serverUrl)} {status.pinned ? "· secure connection" : "· connection not verified"}</p>
+      <p className="page-sub">{signedInLine(status.serverUrl)} {status.pinned ? "· secure connection" : "· connection not verified"}</p>
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings groups">
           <label className="searchbox compact"><SearchIcon size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
@@ -401,8 +394,9 @@ function AboutCard({ status, run, onImported }: { status: AppStatus; run: <T>(fn
 function hostOf(url: string | null): string {
   if (!url) return "the server";
   try {
-    return new URL(url).host;
+    return new URL(url).host || url;
   } catch {
+    // Not a URL: shown as stored.
     return url;
   }
 }

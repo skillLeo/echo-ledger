@@ -192,6 +192,7 @@ html[data-platform="macos"] .content { padding-top: 40px; }
 .brand-mark { flex: none; display: block; }
 /* The wordmark on the sign-in, pairing, lock and setup cards: the mark, then the name in Inter 600, tightly tracked. */
 .wordmark { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); font-weight: 600; font-size: var(--text-lg); letter-spacing: -0.3px; color: var(--text); }
+.wordmark .brand-name { flex: none; }
 .brand-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; }
 .sidebar-toggle { flex: none; width: 32px; height: 32px; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); display: grid; place-items: center; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
 .sidebar-toggle:hover { background: var(--surface-3); color: var(--text); }
@@ -726,7 +727,8 @@ audio.player { display: none; }
 .lock-screen { display: grid; place-items: center; min-height: 100vh; padding: var(--space-4); }
 .lock-card { display: grid; gap: var(--space-3); width: min(380px, 100% - 32px); text-align: center; padding: var(--space-6) var(--space-5); border-radius: var(--radius-lg); }
 .lock-card form { justify-content: center; gap: var(--space-2); }
-.lock-card .wordmark { justify-content: center; margin-bottom: 0; }
+/* The lock card's title says the name: the mark alone sits above it, as on the phone's lock. */
+.lock-card .brand-mark { justify-self: center; }
 .activity { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: var(--space-1); }
 
 /* Activity (B18): a page like the phone's, needs action first, then by day. */

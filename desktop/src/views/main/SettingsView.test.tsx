@@ -74,9 +74,9 @@ describe("SettingsView loading", () => {
     expect(screen.getByRole("option", { name: "No project" })).toBeInTheDocument();
   });
 
-  it("shows the paired server and whether the certificate is pinned", async () => {
+  it("shows the server it is signed in to and whether the certificate is pinned", async () => {
     await setup({}, { serverUrl: "https://ledger.example.test", pinned: true });
-    expect(screen.getByText(/Connected to ledger\.example\.test\s+· secure connection/)).toBeInTheDocument();
+    expect(screen.getByText(/^Signed in to ledger\.example\.test\s+· secure connection/)).toBeInTheDocument();
   });
 
   it("says when the certificate is not pinned", async () => {
