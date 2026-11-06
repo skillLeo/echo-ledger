@@ -96,6 +96,23 @@ class SessionScreenTest : ScreenTest() {
     // ---- header and transcript ---------------------------------------------------------------------------------------------
 
     @Test
+    fun `call notes are offered on a project's recording only when the plan has AI notes`() {
+        serve()
+        val notes = "/api/sessions/${ServerFixtures.SESSION_ID}/notes"
+        server.on("GET", notes, FakeServer.json(404, """{"code":"notes_not_found","message":"No notes yet."}"""))
+        showSession()
+        awaitText("Write call notes")
+
+        runBlocking { app.graph.settings.update { it.copy(plan = it.plan.copy(aiNotes = false)) } }
+        pumpUntil("the call notes to go") {
+            compose.waitForIdle()
+            compose.onAllNodesWithText("Write call notes").fetchSemanticsNodes().isEmpty()
+        }
+        compose.onAllNodesWithText("Call notes").assertCountEquals(0)
+        compose.onNodeWithText("Copy text").assertExists()
+    }
+
+    @Test
     fun `the header shows title when who and how long`() {
         serve()
         showSession()

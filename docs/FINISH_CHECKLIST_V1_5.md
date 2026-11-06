@@ -76,7 +76,7 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 ## Phase 6 — Claude / ChatGPT connector (MCP)
 
 - [ ] MCP server (laravel/mcp) with OAuth 2.1 via Passport (PKCE, dynamic client registration, scope `mcp:use`), per-user; read-only tools list_projects, search, get_recording (views + screen moments with signed image links), get_project_brief/notes, list_recent; rate-limited, audited. *Accept:* tool + auth tests; connected from Claude (custom connector) and documented.
-- [ ] In-app AI notes / memory / Ask optional per plan, off by default (Roman Urdu, suggested fixes and screen descriptions stay). *Accept:* tests.
+- [ ] In-app AI notes / memory / Ask optional per plan, off by default (Roman Urdu, suggested fixes and screen descriptions stay). *Accept:* tests. **Phone done** (project tabs and the recording page's call notes follow the plan, `SessionScreenTest`); desktop done with Phase 4; the server's `ai_notes` with web P4b.
 
 ## Phase 7 — Brand, icons, motion, consistency
 

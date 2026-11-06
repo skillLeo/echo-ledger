@@ -850,8 +850,9 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                     }
                 }
             }
-            // Call notes (since 1.4): for a recording filed under a client, written after its transcript.
-            if (item.client != null && t?.status == "completed") {
+            // Call notes (since 1.4): for a recording filed under a project, written after its transcript; only when the
+            // plan has AI notes (since v1.5: off by default, the connector is the main AI path).
+            if (item.client != null && t?.status == "completed" && appSettings.plan.aiNotes) {
                 item(key = "call-notes") {
                     Box(Modifier.padding(horizontal = Space.screen).padding(top = Space.s5)) {
                         CallNotesSection(vm, item.id, onSeek = { pendingSeek = it })
