@@ -29,6 +29,7 @@ use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use UnitEnum;
@@ -40,6 +41,9 @@ use UnitEnum;
 class WorkspaceSettings extends Page implements HasTable
 {
     use InteractsWithTable;
+
+    /** People one account may add or invite in an hour (since v1.5). */
+    public const ADDS_PER_HOUR = 20;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
 
@@ -145,6 +149,16 @@ class WorkspaceSettings extends Page implements HasTable
     /** @param  array{email: string, name?: string|null, role: string}  $data */
     private function addMember(array $data): void
     {
+        // Each one emails the address (an invitation or "you were added"): 20 an hour, so a workspace cannot be used
+        // to send this server's emails to a list of strangers.
+        $key = 'add-member:'.$this->user()->id;
+        if (RateLimiter::tooManyAttempts($key, self::ADDS_PER_HOUR)) {
+            Notification::make()->title('Too many people added for now')
+                ->body('Try again in '.ceil(RateLimiter::availableIn($key) / 60).' minutes.')->danger()->send();
+
+            return;
+        }
+        RateLimiter::hit($key, 3600);
         $email = Str::lower(trim($data['email']));
         $user = User::query()->where('email', $email)->first();
         $role = WorkspaceRole::from($data['role']);

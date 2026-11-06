@@ -233,3 +233,23 @@ it('queues every account email and draws it in the console theme', function (Acc
     'export ready' => [new ExportReadyMail('https://ledger.test/export/1', 'Nov 7, 2026 10:00', '12 MB'), 'https://ledger.test/export/1'],
     'deletion scheduled' => [new DeletionScheduledMail('Nov 13, 2026', 'https://ledger.test/admin'), 'Nov 13, 2026'],
 ]);
+
+it('keeps a link typed into an email\'s text as text, so nobody can put their own link in an email from this server', function (Closure $make) {
+    $evil = '[Your account is locked](https://evil.example/login) <https://evil.example/auto> <a href="https://evil.example/tag">here</a>';
+
+    $mail = $make($evil);
+    $html = $mail->render();
+
+    // The words stay, shown as typed; no link (a Markdown one, an autolink or a tag) goes to their address.
+    expect($html)->not->toMatch('/<a\\s[^>]*href="https:\\/\\/evil\\.example/i')
+        ->toContain('Your account is locked')
+        ->toContain('#3E63DD');
+})->with([
+    'invitation: workspace and inviter' => [fn (string $evil) => new InvitationMail($evil, $evil, 'https://ledger.test/invite/1', true, 'Nov 13, 2026')],
+    'added to a workspace' => [fn (string $evil) => new InvitationMail($evil, $evil, 'https://ledger.test/admin', false)],
+    'login alert: device name and country' => [fn (string $evil) => new LoginAlertMail($evil, 'Nov 6, 2026 10:00', '203.0.113.9', $evil, 'https://ledger.test/admin/profile')],
+    'share received: sender, title and note' => [fn (string $evil) => new ShareReceivedMail($evil, $evil, false, 'https://ledger.test/admin/shared/1', "Hi,\n{$evil}")],
+    'share received: a project' => [fn (string $evil) => new ShareReceivedMail($evil, $evil, true, 'https://ledger.test/admin/shared/1', $evil)],
+    'transcript ready: title' => [fn (string $evil) => new TranscriptReadyMail($evil, 'https://ledger.test/admin/sessions/1')],
+    'test email: SMTP server' => [fn (string $evil) => new TestMail($evil)],
+]);

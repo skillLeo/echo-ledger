@@ -175,6 +175,25 @@ it('invites an address without an account from the Workspace page while sign-up 
     Mail::assertQueued(InvitationMail::class, fn (InvitationMail $mail): bool => $mail->hasTo($existing->email) && ! $mail->signUp);
 });
 
+it('lets one account add or invite 20 people an hour, so a workspace cannot mail a list of strangers', function () {
+    openSignUp();
+    $owner = Fx::user();
+    $this->actingAs($owner, 'web');
+    $page = Livewire::test(WorkspaceSettings::class);
+
+    foreach (range(1, WorkspaceSettings::ADDS_PER_HOUR) as $i) {
+        $page->callAction('addMember', ['email' => "person{$i}@example.test", 'role' => 'member'])->assertNotified("Invitation sent to person{$i}@example.test");
+    }
+    $page->callAction('addMember', ['email' => 'one.more@example.test', 'role' => 'member'])->assertNotified('Too many people added for now');
+
+    expect(WorkspaceInvitation::query()->count())->toBe(WorkspaceSettings::ADDS_PER_HOUR)
+        ->and(WorkspaceInvitation::query()->where('email', 'one.more@example.test')->exists())->toBeFalse();
+    Mail::assertQueuedCount(WorkspaceSettings::ADDS_PER_HOUR);
+
+    $this->travel(61)->minutes();
+    $page->callAction('addMember', ['email' => 'one.more@example.test', 'role' => 'member'])->assertNotified('Invitation sent to one.more@example.test');
+});
+
 it('sends a reset link to an account and says the same for an unknown address', function () {
     $user = User::factory()->create(['email' => 'reset.me@example.test']);
     $this->get('/admin/password-reset/request')->assertOk();

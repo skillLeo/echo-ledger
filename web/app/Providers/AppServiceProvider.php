@@ -42,6 +42,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Mail\MailManager;
+use Illuminate\Mail\Markdown;
 use Illuminate\Mail\SendQueuedMailable;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
@@ -99,6 +100,9 @@ class AppServiceProvider extends ServiceProvider
         });
         // Since v1.5: a console sign-in from a browser the account has not used before emails the account.
         Event::listen(Login::class, [KnownBrowsers::class, 'handle']);
+        // The account emails carry text people typed (a note, a title, a workspace or device name): with secured
+        // encoding a "[link](…)" in it stays text, so nobody can put their own link in an email this server signs.
+        Markdown::withSecuredEncoding();
 
         // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
         FilamentTimezone::set(fn (): string => app(SettingsRepository::class)->displayTimezone());
