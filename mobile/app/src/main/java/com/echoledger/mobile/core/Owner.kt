@@ -40,6 +40,12 @@ data class Owner(val server: String, val email: String? = null) {
             return "$what for ${owner.label()}: sign in as that account to send them. They stay on this phone until then."
         }
 
+        /** The question before discarding recordings that wait for another account. */
+        fun discardTitle(count: Int): String = if (count == 1) "Discard this recording?" else "Discard these $count recordings?"
+
+        fun discardLine(owner: Owner): String =
+            "They were made under ${owner.label()} and were never sent. Discarded, they are deleted from this phone for good."
+
         /** The account a waiting recording waits for, when it is not the one signed in now; null when it may upload. */
         fun heldFor(owner: Owner?, current: Owner?): Owner? = owner?.takeUnless { mayUpload(it, current) }
 

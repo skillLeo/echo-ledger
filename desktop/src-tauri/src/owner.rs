@@ -1,7 +1,7 @@
 //! Whose queued work this is (v1.5, docs/API.md "Workspaces, roles and privacy": a recording belongs to the person who
 //! made it). `account.json` names the account this computer signs in as and is kept after signing out, until the next
-//! sign-in. Everything queued while that account is the one here (recordings waiting for Keep, skipped calls, uploads)
-//! carries no owner of its own; a sign-in as someone else first stamps it with the account it was made under, so it
+//! sign-in. Everything queued while that account is the one here (recordings waiting for Keep, skipped calls, uploads,
+//! screens) carries no owner of its own; a sign-in as someone else first stamps it with the account it was made under, so it
 //! never uploads into another person's library or to another server, and waits for that account instead. The usage
 //! reports and server deletions still to send are set aside for their account the same way (`held.json`) and come
 //! back when it signs in again.
@@ -17,6 +17,7 @@ use crate::net::models::UsageReport;
 use crate::net::sync::paths;
 use crate::net::uploader::{DiscardQueue, UploadQueue, UsageQueue};
 use crate::pending::PendingStore;
+use crate::screens::store::ScreenStore;
 use crate::skipped::SkippedStore;
 
 /// An account on a server. A server without accounts (older than v1.5) has no email: the server is all that is known.
@@ -167,6 +168,9 @@ pub fn hand_over(data_dir: &Path, outgoing: Option<&Owner>, incoming: &Owner) ->
         if stamp(skipped.items.iter_mut().map(|c| &mut c.decision.owner), outgoing) {
             skipped.save(&skipped_path)?;
         }
+        let screens = ScreenStore::in_dir(data_dir);
+        screens.stamp(outgoing)?;
+        screens.welcome_back(incoming, chrono::Utc::now())?;
         if !usage.items.is_empty() || !discards.items.is_empty() {
             let work = held.bucket(outgoing);
             work.usage.append(&mut usage.items);
@@ -291,7 +295,13 @@ mod tests {
         discards.push("01JS".into());
         discards.save(&paths::discards(dir)).unwrap();
 
+        let screens = ScreenStore::in_dir(dir);
+        let key = crate::screens::store::ScreenKey::from_bytes(&[7; 32]);
+        screens.add("r9", &key, b"RIFFa", 1000, 640, 360, "change", chrono::Utc::now()).unwrap();
+        screens.link("r9", "01JSESSION").unwrap();
+
         assert!(hand_over(dir, Some(&a), &b).unwrap(), "another account");
+        assert!(screens.due(chrono::Utc::now(), Some(&b)).is_empty(), "A's screens of a recording already sent wait for A too");
         let queue = UploadQueue::load(&paths::uploads(dir));
         assert_eq!(queue.items[0].owner.as_ref(), Some(&a), "made while A was signed in");
         assert_eq!(queue.items[1].owner.as_ref(), Some(&earlier), "an owner already stamped stays");
@@ -305,6 +315,7 @@ mod tests {
         usage.push(report("u2"));
         usage.save(&paths::usage(dir)).unwrap();
         assert!(hand_over(dir, Some(&b), &a).unwrap());
+        assert_eq!(screens.due(chrono::Utc::now(), Some(&a)).len(), 1);
         let usage: Vec<String> = UsageQueue::load(&paths::usage(dir)).items.into_iter().map(|r| r.report_id).collect();
         assert_eq!(usage, ["u1"]);
         assert_eq!(DiscardQueue::load(&paths::discards(dir)).items, ["01JS"]);

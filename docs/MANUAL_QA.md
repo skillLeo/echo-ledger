@@ -513,6 +513,19 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 | P15-12 | A recording with screen moments (from the desktop). | "Screen 7 · 14:32" rows between the lines; tap opens the screen with Play from here; Export → Meeting pack (PDF) prints with the screens. |
 | P15-13 | With Remove animations on (Accessibility), keep a call. | The chip and its check appear without moving. |
 
+### Accounts on the computer v1.5 (desktop; after the accounts deploy, with two test accounts)
+
+| # | Check | Expected |
+|---|---|---|
+| AC-1 | Sign in as account A with the password. Sign out, sign in with **Sign in with the browser**. | Both reach the Library; the browser shows the console's approval page and returns to the app. |
+| AC-2 | As A, stop the network and make a recording. Sign out, sign in as B, turn the network back on. | The Library says the recording waits for A's email; nothing reaches B's library. Discard stays possible. |
+| AC-3 | With a recording of A's that already reached the server and has screens still waiting: sign in as B, wait for a few uploads, sign back in as A. | The screens wait while B is here and arrive on A's recording afterwards. |
+| AC-4 | Sign in as a Viewer. | The tray and the app offer no recording; the app says what a viewer can do. Signing in itself works. |
+| AC-5 | On a plan with AI notes off, open a recording. | No notes or Ask button; Roman Urdu, suggested fixes and screen descriptions stay. |
+| AC-6 | Enter a wrong password six times. | The app says how long to wait, in plain words; no crash, no lockout of a signed-in device. |
+| AC-7 | Settings → Account → Delete my account… → **Delete on the web page**. | The browser opens the public page of this server. Cancelling in the app leaves everything as it was. |
+| AC-8 | First build from the signing workflow (when a certificate exists). | Windows shows the publisher's name, not "Unknown publisher"; the Mac build opens without a Gatekeeper warning. |
+
 ### Screen moments v1.5 (desktop; the first run of the real capture)
 
 Use the CI build of the branch or the release (Actions → "Desktop (macOS)" or "Desktop (Windows)" → Artifacts), a

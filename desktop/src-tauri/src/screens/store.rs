@@ -14,6 +14,7 @@ use ring::rand::{SecureRandom, SystemRandom};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, AppResult};
+use crate::owner::{Owner, may_upload};
 
 /// First bytes of a sealed screen.
 const MAGIC: &[u8; 4] = b"ELS1";
@@ -158,11 +159,15 @@ pub struct Manifest {
     pub failures: u32,
     #[serde(default)]
     pub next_try_at: Option<DateTime<Utc>>,
+    /// The account these screens were made under, once someone else signed in here (`owner.rs`): they wait for it.
+    /// None: the account signed in now.
+    #[serde(default)]
+    pub owner: Option<Owner>,
 }
 
 impl Manifest {
     fn new(recording: &str, now: DateTime<Utc>) -> Self {
-        Self { recording: recording.to_string(), session_id: None, project_checked: false, created_at: now, updated_at: now, items: Vec::new(), next_number: 1, failures: 0, next_try_at: None }
+        Self { recording: recording.to_string(), session_id: None, project_checked: false, created_at: now, updated_at: now, items: Vec::new(), next_number: 1, failures: 0, next_try_at: None, owner: None }
     }
 
     /// Waiting to be sent now: linked to a session, with screens, and not waiting out a failure.
@@ -309,12 +314,50 @@ impl ScreenStore {
         self.load(recording).map_or(0, |m| m.items.len())
     }
 
-    /// The recordings whose screens are due to be sent now, oldest first.
-    pub fn due(&self, now: DateTime<Utc>) -> Vec<Manifest> {
+    /// The recordings whose screens are due to be sent now while `current` is signed in, oldest first. Another
+    /// account's never are: its session is not this account's to reach, and the server's "not found" would end them.
+    pub fn due(&self, now: DateTime<Utc>, current: Option<&Owner>) -> Vec<Manifest> {
         let _guard = locked();
-        let mut due: Vec<Manifest> = self.recordings().iter().filter_map(|r| self.read_manifest(r)).filter(|m| m.due(now)).collect();
+        let mut due: Vec<Manifest> =
+            self.recordings().iter().filter_map(|r| self.read_manifest(r)).filter(|m| m.due(now) && may_upload(m.owner.as_ref(), current)).collect();
         due.sort_by_key(|m| m.created_at);
         due
+    }
+
+    /// Someone else signed in: the screens here without an owner were made under `owner`, and wait for it.
+    pub fn stamp(&self, owner: &Owner) -> AppResult<()> {
+        for recording in self.recordings() {
+            self.update(&recording, |m| {
+                if m.owner.is_none() {
+                    m.owner = Some(owner.clone());
+                }
+            })?;
+        }
+        Ok(())
+    }
+
+    /// `owner` is back: the days its screens waited do not count against them ([`GIVE_UP_AFTER`]).
+    pub fn welcome_back(&self, owner: &Owner, now: DateTime<Utc>) -> AppResult<()> {
+        for recording in self.recordings() {
+            self.update(&recording, |m| {
+                if m.owner.as_ref().is_some_and(|o| o.may_upload_as(owner)) {
+                    m.created_at = now;
+                    m.failures = 0;
+                    m.next_try_at = None;
+                }
+            })?;
+        }
+        Ok(())
+    }
+
+    /// Deletes the screens that go with the account signed in now (its server or plan takes none); another account's
+    /// keep waiting for it.
+    pub fn forget_for(&self, current: Option<&Owner>) {
+        for recording in self.recordings() {
+            if self.load(&recording).is_none_or(|m| may_upload(m.owner.as_ref(), current)) {
+                self.forget(&recording);
+            }
+        }
     }
 
     /// Whether any screens wait for a server session or for their upload.
@@ -325,8 +368,9 @@ impl ScreenStore {
     /// Deletes what can never be sent: folders of recordings that are not waiting anywhere (`waiting`: the running
     /// recording and the ids of every decision, upload and skipped call) and have no server session, once untouched for
     /// [`ORPHAN_AFTER`]; folders without a readable manifest; and screens the server has not taken for
-    /// [`GIVE_UP_AFTER`]. Returns the recordings swept.
-    pub fn sweep(&self, waiting: &HashSet<String>, now: DateTime<Utc>) -> Vec<String> {
+    /// [`GIVE_UP_AFTER`], which does not run for another account's: they were not offered, and wait for it. Returns the
+    /// recordings swept.
+    pub fn sweep(&self, waiting: &HashSet<String>, current: Option<&Owner>, now: DateTime<Utc>) -> Vec<String> {
         let mut swept = Vec::new();
         for recording in self.recordings() {
             let gone = {
@@ -334,6 +378,7 @@ impl ScreenStore {
                 match self.read_manifest(&recording) {
                     None => !waiting.contains(&recording) && self.untouched_since(&recording, now - ORPHAN_AFTER),
                     Some(m) if m.session_id.is_none() => !waiting.contains(&recording) && m.updated_at <= now - ORPHAN_AFTER,
+                    Some(m) if !may_upload(m.owner.as_ref(), current) => m.items.is_empty(),
                     Some(m) => m.created_at <= now - GIVE_UP_AFTER || m.items.is_empty(),
                 }
             };
@@ -412,10 +457,10 @@ mod tests {
         let key = key();
         store.add("rec-1", &key, WEBP, 1_000, 10, 10, "change", at(0)).unwrap();
         store.add("rec-1", &key, b"second", 2_000, 10, 10, "words", at(1)).unwrap();
-        assert!(store.due(at(2)).is_empty(), "no session yet");
+        assert!(store.due(at(2), None).is_empty(), "no session yet");
         assert!(store.link("rec-1", "01JSESSION").unwrap());
         assert!(!store.link("rec-unknown", "01JX").unwrap());
-        let due = store.due(at(2));
+        let due = store.due(at(2), None);
         assert_eq!(due.len(), 1);
         assert_eq!(due[0].session_id.as_deref(), Some("01JSESSION"));
         store.remove("rec-1", "0001.elsc").unwrap();
@@ -432,8 +477,8 @@ mod tests {
         store.add("rec-1", &key(), WEBP, 1_000, 10, 10, "change", at(0)).unwrap();
         store.link("rec-1", "s1").unwrap();
         store.update("rec-1", |m| m.next_try_at = Some(at(5))).unwrap();
-        assert!(store.due(at(4)).is_empty());
-        assert_eq!(store.due(at(5)).len(), 1);
+        assert!(store.due(at(4), None).is_empty());
+        assert_eq!(store.due(at(5), None).len(), 1);
     }
 
     #[test]
@@ -462,7 +507,7 @@ mod tests {
         store.update("stale-linked", |m| m.created_at = at(-8 * 24 * 60)).unwrap();
         std::fs::create_dir_all(dir.path().join("screens/no-manifest")).unwrap();
         let waiting: HashSet<String> = ["waiting".to_string()].into();
-        let mut swept = store.sweep(&waiting, at(0));
+        let mut swept = store.sweep(&waiting, None, at(0));
         swept.sort();
         // A folder without a manifest was made just now, so it waits out the orphan time like any other.
         assert_eq!(swept, vec!["orphan".to_string(), "stale-linked".to_string()]);
@@ -477,5 +522,42 @@ mod tests {
         assert!(store.add("", &key(), WEBP, 0, 1, 1, "change", at(0)).is_err());
         assert!(safe_file("../../x.elsc").is_err());
         assert!(safe_file("0001.elsc").is_ok());
+    }
+
+    #[test]
+    fn another_accounts_screens_wait_for_it_whatever_this_account_is_told() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = ScreenStore::in_dir(dir.path());
+        let key = key();
+        let ana = Owner::new("https://ledger.example.test", Some("ana@example.test"));
+        let omar = Owner::new("https://ledger.example.test", Some("omar@example.test"));
+        store.add("rec-1", &key, b"RIFFa", 1000, 640, 360, "change", at(0)).unwrap();
+        store.link("rec-1", "01JSESSION").unwrap();
+
+        // Screens from before anyone else signed in go with the account signed in now.
+        assert_eq!(store.due(at(1), Some(&omar)).len(), 1);
+        store.stamp(&ana).unwrap();
+        assert!(store.due(at(1), Some(&omar)).is_empty(), "never sent with another account's token");
+        assert!(store.due(at(1), None).is_empty(), "nor while nobody is known");
+        assert_eq!(store.due(at(1), Some(&ana)).len(), 1);
+
+        // A stamp stays; the other account's plan or server ends only its own screens.
+        store.stamp(&omar).unwrap();
+        assert_eq!(store.load("rec-1").unwrap().owner.as_ref(), Some(&ana));
+        store.forget_for(Some(&omar));
+        assert_eq!(store.count("rec-1"), 1);
+
+        // Long gone: kept for the account, and the wait does not count against them when it returns.
+        let later = at(60 * 24 * 30);
+        assert!(store.sweep(&HashSet::new(), Some(&omar), later).is_empty());
+        assert_eq!(store.sweep(&HashSet::new(), Some(&ana), later), ["rec-1"], "without the welcome the old clock would end them");
+        store.add("rec-2", &key, b"RIFFb", 1000, 640, 360, "change", at(0)).unwrap();
+        store.link("rec-2", "01JOTHER").unwrap();
+        store.stamp(&ana).unwrap();
+        store.welcome_back(&ana, later).unwrap();
+        assert!(store.sweep(&HashSet::new(), Some(&ana), later).is_empty());
+        assert_eq!(store.due(later, Some(&ana)).len(), 1);
+        store.forget_for(Some(&ana));
+        assert_eq!(store.count("rec-2"), 0);
     }
 }

@@ -82,7 +82,7 @@ async fn sent_screens_are_deleted_here_and_the_folder_goes_with_the_last() {
     }));
     let (dir, store) = stored(3);
 
-    let result = drain(&client(&server), &store, &key(), Utc::now()).await;
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!((result.sent, result.dropped, result.stopped), (3, 0, None));
     assert_eq!(server.requests_to("POST", &screens_path()).len(), 3);
@@ -99,7 +99,7 @@ async fn screens_wait_for_their_session() {
     let store = ScreenStore::in_dir(dir.path());
     store.add("deciding", &key(), WEBP, 1_000, 10, 10, "change", Utc::now()).unwrap();
 
-    let result = drain(&client(&server), &store, &key(), Utc::now()).await;
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!((result.sent, result.dropped), (0, 0));
     assert!(server.requests().is_empty(), "nothing is sent before the recording is kept and on the server");
@@ -117,7 +117,7 @@ async fn four_hundred_screens_end_the_recordings_screens() {
     }));
     let (dir, store) = stored(4);
 
-    let result = drain(&client(&server), &store, &key(), Utc::now()).await;
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!((result.sent, result.dropped, result.stopped), (1, 3, None));
     assert_eq!(server.requests_to("POST", &screens_path()).len(), 2, "no screen is sent after 409");
@@ -131,7 +131,7 @@ async fn a_deleted_recording_drops_its_screens() {
     );
     let (dir, store) = stored(2);
 
-    let result = drain(&client(&server), &store, &key(), Utc::now()).await;
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!(result.dropped, 2);
     assert!(server.requests_to("POST", &screens_path()).is_empty());
@@ -144,7 +144,7 @@ async fn an_older_server_stops_everything() {
     let server = MockServer::start(inbox_session());
     let (_dir, store) = stored(2);
 
-    let result = drain(&client(&server), &store, &key(), Utc::now()).await;
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!(result.stopped, Some(Next::ServerMissing));
     assert_eq!(result.sent, 0);
@@ -159,7 +159,7 @@ async fn a_plan_without_screen_moments_stops_everything() {
     ));
     let (_dir, store) = stored(2);
 
-    let result = drain(&client(&server), &store, &key(), Utc::now()).await;
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!(result.stopped, Some(Next::NotInPlan));
     assert_eq!(server.requests_to("POST", &screens_path()).len(), 1);
@@ -171,7 +171,7 @@ async fn a_busy_server_keeps_the_screens_and_waits_longer() {
     let (_dir, store) = stored(2);
     let now = Utc::now();
 
-    let result = drain(&client(&server), &store, &key(), now).await;
+    let result = drain(&client(&server), &store, &key(), None, now).await;
 
     assert_eq!((result.sent, result.dropped, result.stopped), (0, 0, None));
     let manifest = store.load("rec").unwrap();
@@ -179,7 +179,7 @@ async fn a_busy_server_keeps_the_screens_and_waits_longer() {
     assert_eq!(manifest.failures, 1);
     assert!(manifest.next_try_at.unwrap() > now + chrono::Duration::seconds(25));
     // Not due again before its time: the next round sends nothing.
-    drain(&client(&server), &store, &key(), now).await;
+    drain(&client(&server), &store, &key(), None, now).await;
     assert_eq!(server.requests_to("POST", &screens_path()).len(), 1);
 }
 
@@ -189,7 +189,7 @@ async fn rate_limits_wait_at_least_retry_after() {
     let (_dir, store) = stored(1);
     let now = Utc::now();
 
-    drain(&client(&server), &store, &key(), now).await;
+    drain(&client(&server), &store, &key(), None, now).await;
 
     let manifest = store.load("rec").unwrap();
     assert!(manifest.next_try_at.unwrap() >= now + chrono::Duration::seconds(119));
@@ -206,7 +206,7 @@ async fn a_refused_screen_is_dropped_and_the_rest_go() {
     }));
     let (_dir, store) = stored(2);
 
-    let result = drain(&client(&server), &store, &key(), Utc::now()).await;
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!((result.sent, result.dropped), (1, 1));
 }
@@ -220,7 +220,7 @@ async fn a_project_with_screens_off_keeps_none() {
     );
     let (dir, store) = stored(3);
 
-    let result = drain(&client(&server), &store, &key(), Utc::now()).await;
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!(result.dropped, 3);
     assert!(server.requests_to("POST", &screens_path()).is_empty(), "nothing of it reaches the server");
@@ -239,11 +239,11 @@ async fn a_project_that_keeps_screens_is_read_once() {
     );
     let (_dir, store) = stored(2);
 
-    drain(&client(&server), &store, &key(), Utc::now()).await;
+    drain(&client(&server), &store, &key(), None, Utc::now()).await;
     let manifest = store.load("rec").unwrap();
     assert!(manifest.project_checked);
     store.update("rec", |m| m.next_try_at = None).unwrap();
-    drain(&client(&server), &store, &key(), Utc::now()).await;
+    drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!(server.requests_to("GET", "/api/clients").len(), 1, "the project is not read again");
 }

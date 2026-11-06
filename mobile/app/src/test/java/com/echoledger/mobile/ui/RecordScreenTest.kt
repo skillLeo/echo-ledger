@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.RecordingService
@@ -336,6 +338,27 @@ class RecordScreenTest : ScreenTest() {
         compose.onNodeWithText("The artifacts.0.sha256 field format is invalid.").assertIsDisplayed()
         compose.onNodeWithText("Retry").assertIsDisplayed()
         compose.onNodeWithText("Discard").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a recording that waits for another account stays until it is discarded, after asking`() {
+        runBlocking { app.graph.settings.update { it.copy(account = Owner.of(server.baseUrl, "omar@example.com")) } }
+        app.storeRecording(id = "held", state = "queued")
+        app.graph.recordings.update("held") { it.copy(owner = Owner.of(server.baseUrl, "ana@example.com")) }
+        showRecord()
+        awaitText("1 recording waits for ana@example.com")
+
+        compose.onNodeWithText("Discard").click()
+        awaitText("Discard this recording?")
+        compose.onNodeWithText("Keep").click()
+        awaitGone("Discard this recording?")
+        assertNotNull(app.graph.recordings.get("held"))
+
+        compose.onNodeWithText("Discard").click()
+        awaitText("Discard this recording?")
+        compose.onAllNodesWithText("Discard").onLast().performClick()
+        awaitGone("1 recording waits for ana@example.com")
+        assertNull(app.graph.recordings.get("held"))
     }
 
     @Test

@@ -58,5 +58,8 @@ class OwnerTest {
             Owner.waitingLine(2, ana)
         )
         assertTrue(Owner.waitingLine(1, ana).startsWith("1 recording waits"))
+        assertEquals("Discard these 2 recordings?", Owner.discardTitle(2))
+        assertEquals("Discard this recording?", Owner.discardTitle(1))
+        assertTrue(Owner.discardLine(ana).contains("ana@example.com"))
     }
 }

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Tv
 import androidx.compose.material.icons.rounded.Undo
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -223,6 +225,7 @@ fun RecordScreen(
     val waiting = pending.filter { it.state == "pending_decision" }
     // Import (since 1.4): pick one file or many, then one client and language for all of them in the sheet.
     var picked by remember { mutableStateOf<List<com.echoledger.mobile.share.FileImport.Picked>>(emptyList()) }
+    var discardingHeld by remember { mutableStateOf<Pair<Owner, List<String>>?>(null) }
     val scope = rememberCoroutineScope()
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch { picked = vm.describeFiles(uris) }
@@ -311,7 +314,23 @@ fun RecordScreen(
             InlineBanner(
                 Owner.waitingLine(recordings.size, owner),
                 Modifier.padding(horizontal = Space.screen, vertical = Space.s2),
-                kind = BannerKind.Info
+                kind = BannerKind.Info,
+                action = "Discard",
+                onAction = { discardingHeld = owner to recordings.map { it.id } }
+            )
+        }
+        discardingHeld?.let { (owner, ids) ->
+            AlertDialog(
+                onDismissRequest = { discardingHeld = null },
+                title = { Text(Owner.discardTitle(ids.size)) },
+                text = { Text(Owner.discardLine(owner)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        discardingHeld = null
+                        ids.forEach { vm.decide(it, keep = false) }
+                    }) { Text("Discard", color = Brand.Danger) }
+                },
+                dismissButton = { TextButton(onClick = { discardingHeld = null }) { Text("Keep") } }
             )
         }
         val heldIds = held.map { it.first.id }.toSet()

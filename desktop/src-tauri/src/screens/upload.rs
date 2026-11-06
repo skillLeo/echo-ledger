@@ -11,6 +11,7 @@ use super::store::{Manifest, ScreenKey, ScreenStore};
 use crate::error::{AppError, AppResult};
 use crate::net::api::ApiClient;
 use crate::net::models::ScreenUpload;
+use crate::owner::Owner;
 
 /// What follows one answer of the server.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -83,11 +84,11 @@ pub async fn project_keeps_screens(api: &ApiClient, session_id: &str, clients: &
 }
 
 /// Sends every screen that is due, oldest recording first. A failure that is not about one screen ends this round for
-/// its recording (with a growing wait) or, when the server is away, for all of them.
-pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, now: DateTime<Utc>) -> Drain {
+/// its recording (with a growing wait) or, when the server is away, for all of them. Only `current`'s screens go.
+pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, current: Option<&Owner>, now: DateTime<Utc>) -> Drain {
     let mut drain = Drain::default();
     let mut clients: Option<serde_json::Value> = None;
-    for manifest in store.due(now) {
+    for manifest in store.due(now, current) {
         let Some(session) = manifest.session_id.clone() else { continue };
         if !manifest.project_checked {
             match project_keeps_screens(api, &session, &mut clients).await {

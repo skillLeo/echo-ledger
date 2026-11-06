@@ -368,33 +368,35 @@ pub fn sweep(app: &AppHandle, mut waiting: HashSet<String>) {
     if let Some(running) = lock(&state.screens.running).as_ref() {
         waiting.insert(running.recording.clone());
     }
-    ScreenStore::in_dir(&state.data_dir).sweep(&waiting, Utc::now());
+    ScreenStore::in_dir(&state.data_dir).sweep(&waiting, state.owner().as_ref(), Utc::now());
 }
 
 /// Whether screens are due to be sent now.
 pub fn due(app: &AppHandle) -> bool {
-    !ScreenStore::in_dir(&app.state::<crate::AppState>().data_dir).due(Utc::now()).is_empty()
+    let state = app.state::<crate::AppState>();
+    !ScreenStore::in_dir(&state.data_dir).due(Utc::now(), state.owner().as_ref()).is_empty()
 }
 
 /// Sends the screens that are due (the upload worker, after the recordings). A server without screen moments or a
-/// plan without them ends the capture and deletes every stored screen: they could never be sent. Returns how many
-/// were sent.
+/// plan without them ends the capture and deletes the stored screens of the account signed in: they could never be
+/// sent (another account's wait for it). Returns how many were sent.
 pub async fn send(app: &AppHandle, api: &ApiClient) -> usize {
     let state = app.state::<crate::AppState>();
     let store = ScreenStore::in_dir(&state.data_dir);
-    if store.due(Utc::now()).is_empty() {
+    let current = state.owner();
+    if store.due(Utc::now(), current.as_ref()).is_empty() {
         return 0;
     }
     let Some(key) = state.screens.key() else { return 0 };
-    let drain = upload::drain(api, &store, &key, Utc::now()).await;
+    let drain = upload::drain(api, &store, &key, current.as_ref(), Utc::now()).await;
     match drain.stopped {
         Some(upload::Next::ServerMissing) => {
             state.screens.server_missing.store(true, Ordering::SeqCst);
-            store.recordings().iter().for_each(|r| store.forget(r));
+            store.forget_for(current.as_ref());
         }
         Some(upload::Next::NotInPlan) => {
             state.screens.plan_lacks_screens();
-            store.recordings().iter().for_each(|r| store.forget(r));
+            store.forget_for(current.as_ref());
         }
         _ => {}
     }
