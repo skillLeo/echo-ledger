@@ -143,15 +143,21 @@ class SetupScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `before Android 14 call capture is explained as unsupported`() {
+    fun `on Android 10 and 11 call capture is explained as unsupported`() {
+        showSetup(caps(sdk = 29))
+
+        compose.onNodeWithText("2 · Call capture").assertIsDisplayed()
+        compose.onNodeWithText("This phone cannot record WhatsApp calls", substring = true).assertIsDisplayed()
+        compose.onAllNodesWithText("Connect via Shizuku").assertCountEquals(0)
+    }
+
+    @Test
+    fun `on Android 12 and 13 the helper is offered and says it records your voice only`() {
         showSetup(caps(sdk = 33))
 
-        compose.onNodeWithText("2 · Call capture (Android 14+)").assertIsDisplayed()
-        compose.onNodeWithText(
-            "Recording the other side of WhatsApp calls needs Android 14 or later.",
-            substring = true
-        ).assertIsDisplayed()
-        compose.onAllNodesWithText("Connect via Shizuku").assertCountEquals(0)
+        compose.onNodeWithText("only your voice in WhatsApp calls", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Connect via Shizuku").assertExists()
+        compose.onAllNodesWithText("Test the other side").assertCountEquals(0)
     }
 
     @Test
@@ -193,10 +199,10 @@ class SetupScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `Open app settings leads to the battery page for this app`() {
+    fun `Open settings leads to this app's page on a phone whose maker has no screen of its own`() {
         showSetup()
 
-        compose.onNodeWithText("Open app settings").performClick()
+        compose.onNodeWithText("Open settings").performClick()
 
         val opened = shadowOf(app).nextStartedActivity
         assertEquals(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, opened.action)

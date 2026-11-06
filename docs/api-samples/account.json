@@ -1,0 +1,14 @@
+{
+    "name": "Sample Owner",
+    "email": "sample@example.test",
+    "email_verified": true,
+    "two_factor": false,
+    "google": false,
+    "created_at": "2026-11-06T18:28:32+00:00",
+    "workspace": {
+        "id": 1,
+        "name": "Personal",
+        "role": "owner"
+    },
+    "deletes_at": null
+}

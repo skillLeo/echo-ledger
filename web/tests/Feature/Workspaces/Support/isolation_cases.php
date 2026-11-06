@@ -141,6 +141,8 @@ function isoApiCases(array $b): array
 
     return [
         'api.devices.rotate' => ['POST', '/api/devices/rotate-token', [], 'list'],
+        // Writes only about the calling device: no id in the request, the device decides the workspace.
+        'api.devices.report' => ['POST', '/api/devices/report', ['platform' => 'android', 'checks' => [['key' => 'voice_notes', 'state' => 'ok']]], 'list'],
         'api.config' => ['GET', '/api/config', [], 'list'],
         'api.security' => ['GET', '/api/security', [], 'list'],
         'api.clients' => ['GET', '/api/clients', [], 'list'],

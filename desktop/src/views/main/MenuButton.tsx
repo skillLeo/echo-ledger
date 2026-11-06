@@ -1,7 +1,7 @@
 // A ⋯ button with a small menu of actions (a project's menu, since v1.5). It closes on a pick, a click outside or
 // Escape, like the Library row menu.
 import { useEffect, useRef, useState } from "react";
-import { DotsIcon } from "../../components/Icons";
+import { MoreIcon } from "../../components/ControlIcons";
 
 export interface MenuItem {
   label: string;
@@ -31,7 +31,7 @@ export function MenuButton({ label, items, className = "" }: { label: string; it
   return (
     <div className={`menu-button ${className}`.trim()} ref={box}>
       <button type="button" className="btn ghost icon-only" aria-label={label} title={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <DotsIcon size={18} />
+        <MoreIcon size={18} />
       </button>
       {open && (
         <div className="menu-pop card" role="menu" aria-label={label}>

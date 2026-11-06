@@ -6,16 +6,18 @@
 //! reports no hit regions, so the window is fully click-through. docs/research/desktop-tauri.md §2.
 
 pub mod geometry;
+#[cfg(target_os = "macos")]
+pub mod macos;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use tauri::{AppHandle, LogicalSize, Manager, Monitor, PhysicalPosition, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalSize, Manager, Runtime, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
 use crate::lifecycle;
 use crate::settings::{CaptionSize, CaptionStyle, CaptionWidth, Settings};
-use geometry::{Corner, PillPosition, RectPx, WorkArea, caption_overlay_size_for, cursor_in_regions, dock, pill_origin};
+use geometry::{Corner, PillPosition, RectPx, WorkArea, area_for, caption_overlay_size_for, cursor_in_regions_scaled, dock, nearest_corner, pill_origin, rescue};
 
 pub const OVERLAY: &str = "overlay";
 pub const DICTATION: &str = "dictation";
@@ -39,6 +41,9 @@ pub struct HitRegions(pub Mutex<HashMap<String, Vec<RectPx>>>, pub tokio::sync::
 pub const ACTIVE_POLL: Duration = Duration::from_millis(33);
 /// Poll period while every overlay is click-through and empty (C9: idle costs four wake-ups a second).
 pub const IDLE_POLL: Duration = Duration::from_millis(250);
+
+/// How often the built overlays are checked for being off screen (a display unplugged).
+pub const SCREEN_CHECK: Duration = Duration::from_secs(5);
 
 /// How long the click-through loop sleeps: short while a window has hit regions or still accepts clicks.
 pub fn poll_period(has_regions: bool, all_ignoring: bool) -> Duration {
@@ -85,7 +90,7 @@ fn title(label: &str) -> &'static str {
 /// `src/webview/webview_window.rs` (`focusable` 927, `content_protected` 952, `skip_taskbar` 641,
 /// `always_on_top` 615, `accept_first_mouse` 962).
 fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64), protected: bool) -> tauri::Result<WebviewWindow<R>> {
-    WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+    crate::smoke::isolate(WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into())))
         .title(title(label))
         .inner_size(size.0, size.1)
         .transparent(true)
@@ -117,6 +122,8 @@ pub fn create_overlay<R: Runtime>(app: &AppHandle<R>, label: &str, setup: Overla
         _ => REVIEW_SIZE,
     };
     let window = build(app, label, size, setup.content_protected)?;
+    #[cfg(target_os = "macos")]
+    macos::keep_above_everything(&window);
     let _ = window.set_ignore_cursor_events(true);
     match label {
         OVERLAY => redock(&window, setup.corner),
@@ -134,30 +141,105 @@ fn top_center_corner(corner: Corner) -> Corner {
     }
 }
 
-fn work_area(monitor: &Monitor) -> WorkArea {
-    let wa = monitor.work_area();
-    WorkArea { x: wa.position.x, y: wa.position.y, w: wa.size.width, h: wa.size.height }
+/// The displays' usable areas, in the units windows are placed in: physical pixels on Windows, points on a Mac (see
+/// `geometry`). Each with its scale, for the margins.
+struct Desk {
+    areas: Vec<(WorkArea, f64)>,
+    primary: usize,
 }
 
-fn margin_px(monitor: &Monitor, logical: f64) -> i32 {
-    (logical * monitor.scale_factor()).round() as i32
+impl Desk {
+    #[cfg(target_os = "macos")]
+    fn read<R: Runtime>(window: &WebviewWindow<R>) -> Option<Self> {
+        let screens = macos::screens(window.app_handle());
+        let primary_height = screens.first()?.frame.h;
+        Some(Self { areas: screens.iter().map(|s| (geometry::mac_area(s, primary_height), 1.0)).collect(), primary: 0 })
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn read<R: Runtime>(window: &WebviewWindow<R>) -> Option<Self> {
+        let area = |monitor: &tauri::Monitor| {
+            let wa = monitor.work_area();
+            (WorkArea { x: wa.position.x, y: wa.position.y, w: wa.size.width, h: wa.size.height }, monitor.scale_factor())
+        };
+        let primary = window.primary_monitor().ok().flatten();
+        let mut areas: Vec<(WorkArea, f64)> = window.available_monitors().unwrap_or_default().iter().map(area).collect();
+        if areas.is_empty() {
+            areas.push(area(primary.as_ref()?));
+        }
+        let at = primary.as_ref().and_then(|m| {
+            let wanted = area(m).0;
+            areas.iter().position(|(a, _)| *a == wanted)
+        });
+        Some(Self { areas, primary: at.unwrap_or(0) })
+    }
+
+    fn rects(&self) -> Vec<WorkArea> {
+        self.areas.iter().map(|(a, _)| *a).collect()
+    }
+
+    fn primary(&self) -> (WorkArea, f64) {
+        self.areas[self.primary]
+    }
+
+    /// The display a window at this position is on.
+    fn holding(&self, point: (i32, i32)) -> (WorkArea, f64) {
+        area_for(&self.rects(), point).map_or_else(|| self.primary(), |at| self.areas[at])
+    }
 }
 
-/// Docks a window into `corner` of its current monitor's work area (not the full monitor: taskbar-safe).
+fn margin_units(scale: f64, logical: f64) -> i32 {
+    (logical * scale).round() as i32
+}
+
+/// A window's outer position and size in the units of [`Desk`].
+#[cfg(target_os = "macos")]
+fn frame_of<R: Runtime>(window: &WebviewWindow<R>) -> Option<((i32, i32), (u32, u32))> {
+    let scale = window.scale_factor().ok()?;
+    let (position, size) = (window.outer_position().ok()?, window.outer_size().ok()?);
+    let points = |v: f64| (v / scale).round();
+    Some(((points(f64::from(position.x)) as i32, points(f64::from(position.y)) as i32), (points(f64::from(size.width)) as u32, points(f64::from(size.height)) as u32)))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn frame_of<R: Runtime>(window: &WebviewWindow<R>) -> Option<((i32, i32), (u32, u32))> {
+    let (position, size) = (window.outer_position().ok()?, window.outer_size().ok()?);
+    Some(((position.x, position.y), (size.width, size.height)))
+}
+
+fn put<R: Runtime>(window: &WebviewWindow<R>, at: (i32, i32)) {
+    #[cfg(target_os = "macos")]
+    let _ = window.set_position(tauri::LogicalPosition::new(f64::from(at.0), f64::from(at.1)));
+    #[cfg(not(target_os = "macos"))]
+    let _ = window.set_position(tauri::PhysicalPosition::new(at.0, at.1));
+}
+
+fn centre(position: (i32, i32), size: (u32, u32)) -> (i32, i32) {
+    (position.0 + size.0 as i32 / 2, position.1 + size.1 as i32 / 2)
+}
+
+/// Docks a window into `corner` of its current monitor's work area (not the full monitor: taskbar-safe; on a Mac clear of
+/// the menu bar, the notch and the Dock).
 pub fn redock<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
-    let monitor = window.current_monitor().ok().flatten().or_else(|| window.primary_monitor().ok().flatten());
-    let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else { return };
-    let (x, y) = dock(work_area(&monitor), (size.width, size.height), corner, margin_px(&monitor, MARGIN_LOGICAL));
-    let _ = window.set_position(PhysicalPosition::new(x, y));
+    let (Some(desk), Some((position, size))) = (Desk::read(window), frame_of(window)) else { return };
+    let (area, scale) = desk.holding(centre(position, size));
+    put(window, dock(area, size, corner, margin_units(scale, MARGIN_LOGICAL)));
+}
+
+/// The corner nearest to where the person dragged a window.
+pub fn nearest_corner_of<R: Runtime>(window: &WebviewWindow<R>) -> Option<Corner> {
+    let desk = Desk::read(window)?;
+    let (position, size) = frame_of(window)?;
+    let (area, _) = desk.holding(centre(position, size));
+    Some(nearest_corner(area, position, size))
 }
 
 /// Docks a window into `corner` of the primary monitor's work area (the after-call window: bottom-right, near the
 /// tray, 18 px).
 fn dock_on_primary<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
-    let monitor = window.primary_monitor().ok().flatten().or_else(|| window.current_monitor().ok().flatten());
-    let (Some(monitor), Ok(size)) = (monitor, window.outer_size()) else { return };
-    let (x, y) = dock(work_area(&monitor), (size.width, size.height), corner, margin_px(&monitor, MARGIN_LOGICAL));
-    let _ = window.set_position(PhysicalPosition::new(x, y));
+    let (Some(desk), Some((_, size))) = (Desk::read(window), frame_of(window)) else { return };
+    let (area, scale) = desk.primary();
+    put(window, dock(area, size, corner, margin_units(scale, MARGIN_LOGICAL)));
 }
 
 /// The Live Translate window (v1.3): top-centre for a game's voice chat, bottom-centre for a video's subtitles, on
@@ -168,14 +250,15 @@ pub fn create_translate_window<R: Runtime>(app: &AppHandle<R>, subtitles: bool) 
     }
     let size = if subtitles { (900.0, 140.0) } else { (560.0, 132.0) };
     let window = build(app, crate::translate::WINDOW, size, false)?;
+    #[cfg(target_os = "macos")]
+    macos::keep_above_everything(&window);
     let _ = window.set_ignore_cursor_events(true);
-    let monitor = window.primary_monitor().ok().flatten().or_else(|| window.current_monitor().ok().flatten());
-    if let (Some(monitor), Ok(outer)) = (monitor, window.outer_size()) {
-        let area = work_area(&monitor);
-        let margin = margin_px(&monitor, if subtitles { 96.0 } else { 16.0 });
-        let x = area.x + (area.w as i32 - outer.width as i32) / 2;
-        let y = if subtitles { area.y + area.h as i32 - outer.height as i32 - margin } else { area.y + margin };
-        let _ = window.set_position(PhysicalPosition::new(x, y));
+    if let (Some(desk), Some((_, outer))) = (Desk::read(&window), frame_of(&window)) {
+        let (area, scale) = desk.primary();
+        let margin = margin_units(scale, if subtitles { 96.0 } else { 16.0 });
+        let x = area.x + (area.w as i32 - outer.0 as i32) / 2;
+        let y = if subtitles { area.y + area.h as i32 - outer.1 as i32 - margin } else { area.y + margin };
+        put(&window, (x, y));
     }
     Ok(())
 }
@@ -183,18 +266,30 @@ pub fn create_translate_window<R: Runtime>(app: &AppHandle<R>, subtitles: bool) 
 /// Puts the pill at its saved position when that is on a connected monitor, else top-centre of the primary work
 /// area with a 12 px margin.
 pub fn place_pill<R: Runtime>(window: &WebviewWindow<R>, saved: Option<PillPosition>) {
-    let monitors = window.available_monitors().unwrap_or_default();
-    let primary = window.primary_monitor().ok().flatten().or_else(|| monitors.first().cloned());
-    let (Some(primary), Ok(size)) = (primary, window.outer_size()) else { return };
-    let areas: Vec<WorkArea> = monitors.iter().map(work_area).collect();
-    let margin = margin_px(&primary, PILL_MARGIN_LOGICAL);
-    let (x, y) = pill_origin(saved, &areas, work_area(&primary), (size.width, size.height), margin);
-    let _ = window.set_position(PhysicalPosition::new(x, y));
+    let (Some(desk), Some((_, size))) = (Desk::read(window), frame_of(window)) else { return };
+    let (primary, scale) = desk.primary();
+    put(window, pill_origin(saved, &desk.rects(), primary, size, margin_units(scale, PILL_MARGIN_LOGICAL)));
 }
 
 /// The pill's current top-left corner, for saving after the user dragged it.
 pub fn pill_position<R: Runtime>(window: &WebviewWindow<R>) -> Option<PillPosition> {
-    window.outer_position().ok().map(|p| PillPosition { x: p.x, y: p.y })
+    frame_of(window).map(|((x, y), _)| PillPosition { x, y })
+}
+
+/// Moves overlays back on screen after a display went away or moved. Asked about every few seconds while one is built.
+fn keep_on_screen<R: Runtime>(app: &AppHandle<R>) {
+    let Some(first) = WINDOWS.iter().find_map(|label| app.get_webview_window(label)) else { return };
+    let Some(desk) = Desk::read(&first) else { return };
+    let rects = desk.rects();
+    for label in WINDOWS {
+        let Some(window) = app.get_webview_window(label) else { continue };
+        if let Some((position, size)) = frame_of(&window)
+            && let Some(at) = rescue(&rects, position, size)
+        {
+            eprintln!("[echoledger] the {label} window was off screen: moved back");
+            put(&window, at);
+        }
+    }
 }
 
 /// Resizes the caption overlay for the line count, text size and width settings and re-docks it (never `show()`).
@@ -222,6 +317,9 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
         let mut ignoring: HashMap<&'static str, bool> = HashMap::new();
         let mut period = ACTIVE_POLL;
         let mut last_resync = std::time::Instant::now();
+        let mut last_screen_check = std::time::Instant::now();
+        // On a Mac the cursor comes scaled by the primary display, a window by its own (`cursor_in_regions_scaled`).
+        let mut cursor_scale = 1.0;
         loop {
             let regions_changed = app.state::<HitRegions>();
             tokio::select! {
@@ -245,6 +343,13 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
             if (!resync && regions.is_empty() && all_ignoring) || WINDOWS.iter().all(|l| app.get_webview_window(l).is_none()) {
                 continue;
             }
+            if resync && cfg!(target_os = "macos") {
+                cursor_scale = app.primary_monitor().ok().flatten().map_or(cursor_scale, |m| m.scale_factor());
+            }
+            if last_screen_check.elapsed() >= SCREEN_CHECK {
+                last_screen_check = std::time::Instant::now();
+                keep_on_screen(&app);
+            }
             let Ok(cursor) = app.cursor_position() else { continue };
             for label in WINDOWS {
                 let Some(window) = app.get_webview_window(label) else {
@@ -254,7 +359,10 @@ pub fn spawn_clickthrough_poll<R: Runtime>(app: AppHandle<R>) {
                 let want_ignore = match regions.get(label) {
                     None => true,
                     Some(rects) => match window.inner_position() {
-                        Ok(origin) => !cursor_in_regions((cursor.x, cursor.y), (origin.x, origin.y), rects),
+                        Ok(origin) => {
+                            let window_scale = if cfg!(target_os = "macos") { window.scale_factor().unwrap_or(1.0) } else { 1.0 };
+                            !cursor_in_regions_scaled((cursor.x, cursor.y), cursor_scale, (origin.x, origin.y), window_scale, rects)
+                        }
                         Err(_) => true,
                     },
                 };
@@ -299,11 +407,30 @@ pub fn set_pill_visible(app: &AppHandle, visible: bool) {
     }
 }
 
-/// The after-call toast and chip (v1.5): the window shows `state`; with nothing in it the window may go.
+/// How long the after-call window stays once it has nothing left to show (v1.5): long enough for the toast or chip
+/// to leave (150 ms) and for a kept chip's check (0.9 s) before the window goes.
+const AFTER_CALL_GRACE: Duration = Duration::from_millis(1200);
+/// Counts what the after-call window was asked to show, so only the last empty state hides it.
+static AFTER_CALL_SHOWN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Whether the empty state numbered `asked` is still the last one shown when its grace is over.
+fn still_empty(asked: u64) -> bool {
+    AFTER_CALL_SHOWN.load(std::sync::atomic::Ordering::SeqCst) == asked
+}
+
+/// The after-call toast and chip (v1.5): the window shows `state`; with nothing in it the window goes after
+/// [AFTER_CALL_GRACE], unless something new is shown first.
 pub fn show_after_call(app: &AppHandle, state: &crate::after_call::AfterCallState) {
+    let asked = AFTER_CALL_SHOWN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
     if state.is_empty() {
         lifecycle::emit(app, REVIEW, "aftercall:state", state);
-        lifecycle::hide(app, REVIEW, "after_call");
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(AFTER_CALL_GRACE).await;
+            if still_empty(asked) {
+                lifecycle::hide(&app, REVIEW, "after_call");
+            }
+        });
     } else {
         lifecycle::show(app, REVIEW, "after_call");
         lifecycle::emit(app, REVIEW, "aftercall:state", state);
@@ -324,6 +451,17 @@ pub fn hide_ask(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_last_empty_after_call_state_hides_the_window() {
+        let first = AFTER_CALL_SHOWN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        assert!(still_empty(first));
+        // Something new was shown during the grace: the old empty state no longer hides the window.
+        let second = AFTER_CALL_SHOWN.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
+        assert!(!still_empty(first));
+        assert!(still_empty(second));
+        assert!(AFTER_CALL_GRACE >= Duration::from_millis(900 + 150), "room for the kept check and the exit");
+    }
 
     #[test]
     fn the_click_through_poll_slows_down_when_every_overlay_is_idle() {

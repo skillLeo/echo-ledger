@@ -152,6 +152,7 @@ describe('a viewer\'s device', function () {
             ['POST', '/api/sessions', Fx::sessionPayload()],
             ['POST', "/api/sessions/{$session->id}/recordings", Fx::artifact(['role' => 'channel_1'])],
             ['POST', '/api/stt/token', ['use_case' => 'dictation']],
+            ['POST', '/api/live-translate/token', []],
             ['POST', "/api/recordings/{$upload->id}/chunks", []],
             ['POST', "/api/recordings/{$upload->id}/complete", []],
             ['POST', "/api/sessions/{$session->id}/screens", ['at_ms' => 0]],

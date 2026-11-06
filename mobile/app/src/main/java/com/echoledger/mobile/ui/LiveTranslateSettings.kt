@@ -547,5 +547,6 @@ internal fun HelpSection(vm: MainViewModel, settings: AppSettings, onSetup: () -
             color = LocalEchoColors.current.textMuted
         )
     }
+    DeviceCheckSection(vm, settings, onSetup)
     if (probing) AudioProbeSheet(vm, helperReady = helper.connected, onDismiss = { probing = false })
 }

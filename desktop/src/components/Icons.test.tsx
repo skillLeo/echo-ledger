@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render } from "@testing-library/react";
-import { SourceAppIcon, SourceDeviceIcon } from "./Icons";
+import { CallIcon, SourceAppIcon, SourceDeviceIcon } from "./Icons";
 
 const markup = (element: React.ReactElement) => render(element).container.innerHTML;
 
@@ -40,8 +40,9 @@ describe("icons", () => {
     expect(markup(<SourceAppIcon app="whatsapp_web" />)).not.toBe(other);
   });
 
-  it("gives a SIM phone call the phone glyph", () => {
-    expect(markup(<SourceAppIcon app="phone_call" />)).toBe(markup(<SourceDeviceIcon source="phone" />));
+  it("gives a SIM phone call the handset (Calls), not the phone the recording came from", () => {
+    expect(markup(<SourceAppIcon app="phone_call" />)).toBe(markup(<CallIcon />));
+    expect(markup(<SourceAppIcon app="phone_call" />)).not.toBe(markup(<SourceDeviceIcon source="phone" />));
   });
 
   it("falls back to the generic glyph for an unknown or missing app", () => {

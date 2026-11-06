@@ -759,7 +759,7 @@ internal fun ShareSheet(vm: MainViewModel, sessionId: String?, clientId: String?
 internal object ShareText {
     fun audience(link: ShareLinkDto): String = when (link.audience) {
         "password" -> "Password"
-        "people" -> "Only " + link.people.joinToString(", ").ifEmpty { "chosen people" }
+        "people" -> "Only " + link.people.orEmpty().joinToString(", ").ifEmpty { "chosen people" }
         else -> if (link.hasPassword) "Password" else "Anyone with the link"
     }
 

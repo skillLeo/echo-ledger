@@ -1,14 +1,26 @@
 // First-run wizard (plan B19): permissions → sign in (or pairing, v1.5) → a 10-second test recording → done, with the
-// recording-consent notice. Can be skipped; the same controls stay in Settings.
+// recording-consent notice. On a Mac (since v1.5) each permission gets a guided step of its own after the welcome. Can be
+// skipped; the same controls stay in Settings.
 import { useEffect, useState, type ReactNode } from "react";
-import { api, errorMessage, type AppStatus, type PermissionsStatus, type TestResult } from "../../lib/ipc";
+import { api, errorMessage, type AppStatus, type PermissionKind, type PermissionsStatus, type TestResult } from "../../lib/ipc";
 import { SignInView } from "./SignInView";
 import { testVerdict } from "./CaptureSettings";
 import { ConsentNotice } from "./ConsentNotice";
+import { Wordmark } from "../../components/BrandMark";
+import { CheckIcon } from "../../components/ControlIcons";
 import { CONSENT_TICK } from "../../lib/consent";
+import { PERMISSION_STEP, PermissionStep } from "./Permissions";
 
 export const STEPS = ["Permissions", "Sign in", "Test", "Done"] as const;
-export type Step = (typeof STEPS)[number];
+/** On a Mac the welcome comes first and each permission is a step of its own. */
+export const MAC_STEPS = ["Welcome", "Microphone", "System audio", "Screen recording", "Sign in", "Test", "Done"] as const;
+export type Step = (typeof STEPS)[number] | (typeof MAC_STEPS)[number];
+
+const MAC_PERMISSION_STEP: Partial<Record<Step, PermissionKind>> = { Microphone: "microphone", "System audio": "system_audio", "Screen recording": "screen" };
+
+export function stepsFor(platform: AppStatus["platform"]): readonly Step[] {
+  return platform === "macos" ? MAC_STEPS : STEPS;
+}
 
 export function OnboardingView({ status, onStatus, onFinished, notify }: {
   status: AppStatus;
@@ -16,14 +28,19 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
   onFinished: () => void;
   notify: (text: string, error?: boolean) => void;
 }) {
-  const [step, setStep] = useState<Step>("Permissions");
+  const steps = stepsFor(status.platform);
+  const [step, setStep] = useState<Step>(steps[0]);
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const [consent, setConsent] = useState(false);
 
+  // Read again whenever the window comes back, which is what returning from System Settings looks like.
   useEffect(() => {
-    api.permissionsStatus().then(setPermissions).catch(() => undefined);
+    const read = () => api.permissionsStatus().then(setPermissions).catch(() => undefined);
+    read();
+    window.addEventListener("focus", read);
+    return () => window.removeEventListener("focus", read);
   }, []);
 
   const finish = async () => {
@@ -44,8 +61,9 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
       setTesting(false);
     }
   };
-  const index = STEPS.indexOf(step);
-  const next = () => setStep(STEPS[Math.min(index + 1, STEPS.length - 1)]);
+  const index = steps.indexOf(step);
+  const next = () => setStep(steps[Math.min(index + 1, steps.length - 1)]);
+  const permissionKind = MAC_PERMISSION_STEP[step];
   // Skip setup sits on the same row as the step's main action (left), so the two read as one choice.
   const actions = (primary: ReactNode) => (
     <div className="row onboarding-actions">
@@ -58,9 +76,32 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
   return (
     <main className="gate onboarding">
       <div className="card onboarding-card">
+        <Wordmark />
         <ol className="steps" aria-label="Setup steps">
-          {STEPS.map((s, i) => <li key={s} className={i === index ? "current" : i < index ? "done" : ""} aria-current={i === index ? "step" : undefined}>{s}</li>)}
+          {steps.map((s, i) => (
+            <li key={s} className={i === index ? "current" : i < index ? "done" : ""} aria-current={i === index ? "step" : undefined}>
+              {i < index && <span className="step-check" aria-hidden="true"><CheckIcon size={13} /></span>}{s}
+            </li>
+          ))}
         </ol>
+
+        {step === "Welcome" && (
+          <section aria-labelledby="ob-welcome">
+            <h1 id="ob-welcome" className="page-title">Welcome to EchoLedger</h1>
+            <p className="small muted">EchoLedger records your calls, voice notes and dictation on this computer and keeps them in your own library. Next, macOS needs to allow three things.</p>
+            {/* The consent notice is on the first page too, so skipping the setup does not skip it (v1.5). */}
+            <div className="notice small"><ConsentNotice legal={false} /></div>
+            {actions(<button type="button" className="btn primary" onClick={next}>Continue</button>)}
+          </section>
+        )}
+
+        {permissionKind && (
+          <section aria-labelledby="ob-permission">
+            <h1 id="ob-permission" className="page-title">{PERMISSION_STEP[permissionKind].title}</h1>
+            <PermissionStep kind={permissionKind} permissions={permissions} onChange={setPermissions} />
+            {actions(<button type="button" className="btn primary" onClick={next}>Continue</button>)}
+          </section>
+        )}
 
         {step === "Permissions" && (
           <section aria-labelledby="ob-perm">
@@ -75,12 +116,6 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
                 {permissions?.microphone === "denied" && <button type="button" className="btn ghost small" onClick={() => void api.openPrivacySettings("microphone")}>Open settings</button>}
               </div>
             </div>
-            {permissions?.platform === "macos" && (
-              <div className="toggle">
-                <div>Sound from other apps</div>
-                <button type="button" className="btn ghost small" onClick={() => void api.openPrivacySettings("system_audio")}>Open settings</button>
-              </div>
-            )}
             {actions(<button type="button" className="btn primary" onClick={next}>Continue</button>)}
           </section>
         )}

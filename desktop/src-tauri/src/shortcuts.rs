@@ -53,6 +53,25 @@ pub fn parse(accelerator: &str) -> Result<Shortcut, String> {
     accelerator.parse::<Shortcut>().map_err(|e| format!("Invalid shortcut \"{accelerator}\": {e:?}"))
 }
 
+/// An accelerator as a person reads it (pure): "⌘⌥⇧R" on a Mac, "Ctrl + Alt + Shift + R" elsewhere.
+pub fn label(accelerator: &str, macos: bool) -> String {
+    let keys: Vec<String> = accelerator
+        .split('+')
+        .map(str::trim)
+        .filter(|key| !key.is_empty())
+        .map(|key| match key.to_ascii_lowercase().as_str() {
+            "commandorcontrol" | "cmdorctrl" => if macos { "⌘" } else { "Ctrl" }.to_string(),
+            "command" | "cmd" | "super" | "meta" => if macos { "⌘" } else { "Win" }.to_string(),
+            "control" | "ctrl" => if macos { "⌃" } else { "Ctrl" }.to_string(),
+            "alt" | "option" => if macos { "⌥" } else { "Alt" }.to_string(),
+            "shift" => if macos { "⇧" } else { "Shift" }.to_string(),
+            "comma" => ",".to_string(),
+            _ => key.strip_prefix("Key").filter(|k| !k.is_empty()).unwrap_or(key).to_string(),
+        })
+        .collect();
+    keys.join(if macos { "" } else { " + " })
+}
+
 /// Actions whose accelerators collide with another action (pure).
 pub fn duplicates(map: &HashMap<Action, String>) -> Vec<Action> {
     let mut seen: HashMap<Shortcut, Action> = HashMap::new();
@@ -95,7 +114,7 @@ pub fn register_all(app: &AppHandle, map: &HashMap<Action, String>) -> Vec<(Acti
         if accelerator.trim().is_empty() {
             continue;
         }
-        match parse(accelerator).and_then(|s| gs.register(s).map(|_| s).map_err(|e| e.to_string())) {
+        match parse(accelerator).and_then(|s| gs.register(s).map(|_| s).map_err(|e| format!("{}: {e}", label(accelerator, cfg!(target_os = "macos"))))) {
             Ok(shortcut) => {
                 bound.insert(action, shortcut);
             }
@@ -129,7 +148,7 @@ pub fn rebind(app: &AppHandle, action: Action, accelerator: &str) -> Result<(), 
     if app.state::<Bindings>().0.lock().unwrap().iter().any(|(a, s)| *a != action && *s == new) {
         return Err("That shortcut is already used by another EchoLedger action.".into());
     }
-    gs.register(new).map_err(|e| format!("Could not register (maybe used by another app): {e}"))?;
+    gs.register(new).map_err(|e| format!("Could not register {} (maybe used by another app): {e}", label(accelerator, cfg!(target_os = "macos"))))?;
     if let Some(o) = old {
         let _ = gs.unregister(o);
     }

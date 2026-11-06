@@ -92,4 +92,28 @@ class CaptureTestClassifyTest {
         assertTrue(r.stages.all { it.ok == true })
         assertEquals("WhatsApp Business found.", stage(r, Check.APP).detail)
     }
+
+    @Test
+    fun `below Android 14 a silent other side is not a fault, and the result says your voice only`() {
+        val result = CaptureTest.classify(
+            CaptureTest.Measured(
+                helperConnected = true,
+                whatsapp = true,
+                started = true,
+                meBytes = 1000,
+                clientBytes = 1000,
+                mePeak = 0.2f,
+                clientPeak = 0f,
+                inCall = true,
+                fileBytes = 2048,
+                voiceOnly = true
+            )
+        )
+
+        org.junit.Assert.assertEquals(CaptureTest.Verdict.READY, result.verdict)
+        org.junit.Assert.assertTrue(result.headline.startsWith("Call capture works for your voice."))
+        val other = result.stages.single { it.check == CaptureTest.Check.OTHER_SIDE }
+        org.junit.Assert.assertNull(other.ok)
+        org.junit.Assert.assertTrue(other.detail.startsWith("Needs Android 14"))
+    }
 }

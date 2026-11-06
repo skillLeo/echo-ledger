@@ -12,7 +12,7 @@ use crate::net::api::ApiClient;
 use crate::net::sync::{LibraryCache, paths};
 pub use crate::net::models::BudgetState;
 use crate::net::uploader::{UploadItem, UploadQueue};
-use crate::overlay::geometry::{RectPx, WorkArea, nearest_corner};
+use crate::overlay::geometry::RectPx;
 use crate::overlay::{HitRegions, redock};
 use crate::pending::{DecisionFiles, PendingItem};
 use crate::tray::TrayState;
@@ -45,6 +45,10 @@ pub struct AppStatus {
     pub tray_state: TrayState,
     /// What the workspace's plan and the person's role allow (v1.5).
     pub plan: crate::plan::PlanInfo,
+    /// This Windows version has no per-app capture: the sentence the Record page and Settings show (Phase 1B).
+    pub system_audio_note: Option<&'static str>,
+    /// The running recording's devices: one that is gone, or news of a change (Phase 1B).
+    pub device_note: Option<crate::audio::devices::DeviceNote>,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
@@ -88,6 +92,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
         pending_decisions,
         tray_state,
         plan: state.plan_info(),
+        system_audio_note: crate::audio::platform::system_audio_note(),
+        device_note: state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()),
     }
 }
 
@@ -562,7 +568,7 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
         let _ = if enable { manager.enable() } else { manager.disable() };
     }
     if patch.input_device.is_some() {
-        // Used from the next recording or resume on; a recording in progress keeps its device.
+        // A recording in progress moves to it within a second or so (`audio::devices`).
         crate::audio::platform::set_preferred_mic(updated.input_device.clone());
     }
     if patch.caption_lines.is_some() || patch.caption_style.is_some() {
@@ -629,11 +635,7 @@ pub fn overlay_set_hit_regions(window: WebviewWindow, regions: Vec<RectPx>, stat
 /// After the user drags the overlay: snap to the nearest corner of its monitor's work area and remember it.
 #[tauri::command]
 pub fn overlay_snap(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
-    let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) else { return Ok(()) };
-    let Some(monitor) = window.current_monitor()? else { return Ok(()) };
-    let wa = monitor.work_area();
-    let area = WorkArea { x: wa.position.x, y: wa.position.y, w: wa.size.width, h: wa.size.height };
-    let corner = nearest_corner(area, (pos.x, pos.y), (size.width, size.height));
+    let Some(corner) = crate::overlay::nearest_corner_of(&window) else { return Ok(()) };
     redock(&window, corner);
     if window.label() == crate::overlay::OVERLAY {
         let settings = app.state::<AppState>().update_settings(|s| s.overlay_corner = corner)?;
@@ -827,7 +829,11 @@ fn os_version() -> String {
     {
         crate::audio::platform::windows::os_build().map(|b| format!("build {b}")).unwrap_or_default()
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        crate::mac_check::native::version_string()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         String::new()
     }
@@ -855,6 +861,10 @@ pub struct RecordingState {
     pub bluetooth_mic: bool,
     /// Screen moments of the recording (v1.5): on, or paused and why, and how many were kept; none while off.
     pub screens: Option<crate::screens::ScreensPill>,
+    /// What the system does not let this recording use, and what it holds without it (Phase 1B).
+    pub missing: Vec<crate::permissions::Missing>,
+    /// One of its devices is gone, or changed a moment ago (Phase 1B).
+    pub device_note: Option<crate::audio::devices::DeviceNote>,
 }
 
 /// `main:navigate`: which view the main window opens on.
@@ -887,6 +897,8 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
         language: info.as_ref().and_then(|i| state.recording_language(&i.client_ref)),
         bluetooth_mic: info.is_some() && state.bluetooth_mic.load(std::sync::atomic::Ordering::SeqCst),
         screens: info.as_ref().and_then(|_| state.screens.pill()),
+        missing: if info.is_some() { state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()).clone() } else { Vec::new() },
+        device_note: if info.is_some() { state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()) } else { None },
     }
 }
 
@@ -2013,24 +2025,66 @@ pub async fn test_capture(app: AppHandle, seconds: Option<u32>) -> AppResult<cra
 pub struct PermissionsStatus {
     /// `allowed` | `denied` | `unknown`.
     pub microphone: &'static str,
+    /// The same for this Mac's sound (Phase 1B); always `allowed` on Windows.
+    pub system_audio: &'static str,
+    /// The same for Screen Recording (Phase 1B); always `allowed` on Windows.
+    pub screen: &'static str,
     /// macOS: reading browser tabs through Automation is switched on in EchoLedger.
     pub browser_automation: bool,
     pub platform: &'static str,
+    /// What is off now and what a recording holds without it (Phase 1B).
+    pub missing: Vec<crate::permissions::Missing>,
+    /// A permission that was granted and has gone: the one calm sentence, until the person dismisses it or it returns.
+    pub lost: Option<String>,
+}
+
+fn access_word(access: crate::permissions::Access) -> &'static str {
+    match access {
+        crate::permissions::Access::Allowed => "allowed",
+        crate::permissions::Access::Denied => "denied",
+        crate::permissions::Access::Unknown => "unknown",
+    }
 }
 
 #[tauri::command]
-pub async fn permissions_status(state: State<'_, AppState>) -> AppResult<PermissionsStatus> {
-    let microphone = tauri::async_runtime::spawn_blocking(crate::audio::health::microphone_permission).await.unwrap_or("unknown");
+pub async fn permissions_status(app: AppHandle) -> AppResult<PermissionsStatus> {
+    let reader = app.clone();
+    let now = tauri::async_runtime::spawn_blocking(move || reader.state::<AppState>().permissions_now()).await.map_err(|e| AppError::msg(e.to_string()))?;
+    let state = app.state::<AppState>();
+    let settings = state.settings();
     Ok(PermissionsStatus {
-        microphone,
-        browser_automation: state.settings().browser_automation,
+        microphone: access_word(now.microphone),
+        system_audio: access_word(now.system_audio),
+        screen: access_word(now.screen),
+        browser_automation: settings.browser_automation,
         platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" },
+        missing: crate::permissions::missing_now(&now, settings.screen_moments),
+        lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(),
     })
+}
+
+/// The person pressed Allow: macOS shows its prompt the first time (later only System Settings can change it).
+#[tauri::command]
+pub async fn permission_request(app: AppHandle, kind: crate::permissions::Kind) -> AppResult<PermissionsStatus> {
+    let refused = crate::mac_check::refusal(app.state::<AppState>().capture.is_recording(), crate::dictation::is_active(&app), false);
+    if refused.is_none() {
+        tauri::async_runtime::spawn_blocking(move || crate::permissions::request(kind)).await.map_err(|e| AppError::msg(e.to_string()))?;
+    }
+    permissions_status(app).await
+}
+
+/// "Once per loss": the person has read the sentence.
+#[tauri::command]
+pub fn permission_notice_dismiss(app: AppHandle) {
+    let state = app.state::<AppState>();
+    let mut memory = state.permission_memory.lock().unwrap_or_else(|p| p.into_inner());
+    memory.notice.clear();
+    memory.save(&crate::permissions::Memory::path(&state.data_dir));
 }
 
 /// The system settings page for a permission: `microphone`, `system_audio` (macOS screen and system audio
 /// recording), `screen` (screen moments: macOS Screen Recording, Windows 11 borderless capture) or `automation`
-/// (macOS).
+/// (macOS); the Mac check's `sound` and `software_update`.
 pub fn privacy_settings_url(kind: &str, macos: bool) -> Option<&'static str> {
     match (kind, macos) {
         ("microphone", false) => Some("ms-settings:privacy-microphone"),
@@ -2038,6 +2092,8 @@ pub fn privacy_settings_url(kind: &str, macos: bool) -> Option<&'static str> {
         ("system_audio", true) | ("screen", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"),
         ("screen", false) => Some("ms-settings:privacy-graphicscapturewithoutborder"),
         ("automation", true) => Some("x-apple.systempreferences:com.apple.preference.security?Privacy_Automation"),
+        ("sound", true) => Some("x-apple.systempreferences:com.apple.Sound-Settings.extension"),
+        ("software_update", true) => Some("x-apple.systempreferences:com.apple.Software-Update-Settings.extension"),
         _ => None,
     }
 }
@@ -2047,6 +2103,84 @@ pub fn open_privacy_settings(app: AppHandle, kind: String) -> AppResult<()> {
     use tauri_plugin_opener::OpenerExt;
     let url = privacy_settings_url(&kind, cfg!(target_os = "macos")).ok_or_else(|| AppError::msg("There is no setting for that here."))?;
     app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))
+}
+
+/// Help & diagnostics → Run Mac check (Phase 1B): every check, one at a time, each step told as `mac_check:progress`.
+/// Never during a recording or a dictation, and it stops if one starts meanwhile, the running test and its tone at once.
+#[tauri::command]
+pub async fn mac_check_run(app: AppHandle) -> AppResult<crate::mac_check::CheckReport> {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err(AppError::msg("The Mac check runs on a Mac."))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let state = app.state::<AppState>();
+        let busy = state.capture_test.load(std::sync::atomic::Ordering::SeqCst);
+        if let Some(refusal) = crate::mac_check::refusal(state.capture.is_recording(), crate::dictation::is_active(&app), busy) {
+            return Err(AppError::msg(refusal));
+        }
+        if state.capture_test.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return Err(AppError::msg("A test is already running."));
+        }
+        let runner = app.clone();
+        let result = tauri::async_runtime::spawn_blocking(move || {
+            let probe = crate::mac_check::native::NativeProbe { app: runner.clone() };
+            let emitter = runner.clone();
+            let watcher = runner.clone();
+            crate::mac_check::run_all(
+                &probe,
+                |progress| {
+                    let _ = emitter.emit("mac_check:progress", progress);
+                },
+                move || crate::mac_check::interrupted(watcher.state::<AppState>().capture.is_recording(), crate::dictation::is_active(&watcher)).map(str::to_string),
+            )
+        })
+        .await;
+        state.capture_test.store(false, std::sync::atomic::Ordering::SeqCst);
+        let (items, stopped) = result.map_err(|e| AppError::msg(e.to_string()))?;
+        let report = crate::mac_check::CheckReport {
+            items,
+            stopped,
+            finished_at: chrono::Utc::now(),
+            app_version: app.package_info().version.to_string(),
+            os_version: os_version(),
+            model: crate::mac_check::native::model(),
+            sent_at: None,
+        };
+        *state.mac_check.lock().unwrap_or_else(|p| p.into_inner()) = Some(report.clone());
+        Ok(report)
+    }
+}
+
+/// The last Mac check of this run, to show it again when the page opens.
+#[tauri::command]
+pub fn mac_check_last(state: State<'_, AppState>) -> Option<crate::mac_check::CheckReport> {
+    state.mac_check.lock().unwrap_or_else(|p| p.into_inner()).clone()
+}
+
+/// Copy report: plain text with no names, no paths and no account.
+#[tauri::command]
+pub fn mac_check_copy(app: AppHandle) -> AppResult<()> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    let report = app.state::<AppState>().mac_check.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let report = report.ok_or_else(|| AppError::msg("Run the check first."))?;
+    app.clipboard().write_text(crate::mac_check::report_text(&report)).map_err(|e| AppError::msg(e.to_string()))
+}
+
+/// Send to my admin: `POST /api/devices/report`, only on this tap. Returns when it was sent.
+#[tauri::command]
+pub async fn mac_check_send(app: AppHandle) -> AppResult<String> {
+    let state = app.state::<AppState>();
+    let report = state.mac_check.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let report = report.ok_or_else(|| AppError::msg("Run the check first."))?;
+    let api = state.api()?;
+    let reported_at = api.device_report(&crate::net::models::DeviceReport::of_mac_check(&report)).await?;
+    if let Some(last) = state.mac_check.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
+        last.sent_at = Some(reported_at.clone());
+    }
+    Ok(reported_at)
 }
 
 /// Bookmarks the current recording now (B3); `tag` is one of the presets or none.

@@ -15,6 +15,7 @@ import {
   type TestResult,
 } from "../../lib/ipc";
 import { meterLevel } from "../../lib/controls";
+import { fillWidth } from "../../lib/motion";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { sourceAppLabel } from "../../lib/format";
 import { SourceAppIcon } from "../../components/Icons";
@@ -117,7 +118,7 @@ const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
 };
 
 /** Settings → Microphone and capture health (B5). */
-export function MicrophoneCard({ settings, patch, disabled }: { settings: Settings; patch: Patch; disabled: boolean }) {
+export function MicrophoneCard({ settings, patch, disabled, systemAudioNote }: { settings: Settings; patch: Patch; disabled: boolean; systemAudioNote?: string | null }) {
   const [devices, setDevices] = useState<InputDevice[]>([]);
   const [permissions, setPermissions] = useState<PermissionsStatus | null>(null);
   const [testing, setTesting] = useState(false);
@@ -176,8 +177,8 @@ export function MicrophoneCard({ settings, patch, disabled }: { settings: Settin
       </div>
       {(testing || result) && (
         <div aria-live="polite">
-          <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(testing ? levels[0] : result?.micPeak ?? 0) * 100)}><div style={{ width: `${meterLevel(testing ? levels[0] : result?.micPeak ?? 0) * 100}%` }} /></div></div>
-          <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter" role="meter" aria-label="Computer sound level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(testing ? levels[1] : result?.systemPeak ?? 0) * 100)}><div style={{ width: `${meterLevel(testing ? levels[1] : result?.systemPeak ?? 0) * 100}%` }} /></div></div>
+          <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(testing ? levels[0] : result?.micPeak ?? 0) * 100)}><div style={fillWidth(meterLevel(testing ? levels[0] : result?.micPeak ?? 0))} /></div></div>
+          <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter" role="meter" aria-label="Computer sound level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(testing ? levels[1] : result?.systemPeak ?? 0) * 100)}><div style={fillWidth(meterLevel(testing ? levels[1] : result?.systemPeak ?? 0))} /></div></div>
           {result && (
             <>
               {testVerdict(result).map((line) => <p className="small" key={line}>{line}</p>)}
@@ -194,10 +195,14 @@ export function MicrophoneCard({ settings, patch, disabled }: { settings: Settin
       </div>
       {permissions?.platform === "macos" && (
         <div className="toggle">
-          <div><div>Screen and system audio recording</div><div className="small muted">Needed to hear the other side of calls.</div></div>
+          <div>
+            <div>Screen and system audio recording</div>
+            <div className="small muted" data-testid="system-audio-permission">{permissions.systemAudio === "denied" ? "Off: recordings have your voice, not the other side of the call" : permissions.systemAudio === "allowed" ? "Allowed: needed to hear the other side of calls" : "Needed to hear the other side of calls. macOS asks the first time you record."}</div>
+          </div>
           <button type="button" className="btn ghost" onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Open settings</button>
         </div>
       )}
+      {systemAudioNote && <p className="small warning-text" data-testid="whole-system-note">{systemAudioNote}.</p>}
       <Toggle label="Warn me when the other side is silent" hint="Shows a warning on the recording pill if a call has not heard the other side for 30 seconds." on={settings.farSideWarning} onChange={(farSideWarning) => void patch({ farSideWarning })} />
     </div>
   );

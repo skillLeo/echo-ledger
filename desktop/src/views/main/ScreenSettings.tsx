@@ -11,6 +11,8 @@ const TARGET_HINT: Record<ScreenTarget, string> = {
   meeting_window: "Only the meeting app's window: nothing else on your screen is kept.",
   whole_screen: "The screen the meeting is on, without EchoLedger's own windows. Screens pause while an excluded app shows on it.",
 };
+/** macOS 15's monthly question, in plain words. */
+export const MONTHLY_NOTE = "From macOS 15, macOS asks again about once a month whether EchoLedger may still see your screen. That is normal: choose Allow. If you miss it, screen moments pause and the recording goes on.";
 /** Windows leaves EchoLedger out of a whole screen's picture only by hiding it from every screen capture meanwhile. */
 const WINDOWS_WHOLE_SCREEN = " Meanwhile Windows hides EchoLedger's window from screen sharing too.";
 
@@ -87,13 +89,14 @@ export function ScreenMomentsCard({ settings, patch }: { settings: Settings; pat
                     <div>Screen Recording</div>
                     <div className="small muted" data-testid="screens-permission-note">
                       {status.permission
-                        ? "Allowed. macOS 15 and later ask again about once a month: choose Allow to keep screen moments."
+                        ? MONTHLY_NOTE
                         : asked
                           ? "Turn on EchoLedger in System Settings → Privacy & Security → Screen & System Audio Recording, then open EchoLedger again."
-                          : "macOS asks once for the Screen Recording permission, and from macOS 15 again about once a month."}
+                          : `macOS asks once for the Screen Recording permission. ${MONTHLY_NOTE}`}
                     </div>
                   </div>
                   {!status.permission && <button type="button" className="btn compact" onClick={() => void allow()}>Allow Screen Recording</button>}
+                  {!status.permission && asked && <button type="button" className="btn ghost compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>Open System Settings</button>}
                 </div>
               )}
               <div className="excluded-apps">

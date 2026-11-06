@@ -1,0 +1,289 @@
+{
+    "id": "01m6s1x743024zzgyrceszd9zs",
+    "session_id": "01m6s1x6v38xtqnqa6exvtgtmn",
+    "kind": "final",
+    "provider": "assemblyai",
+    "status": "completed",
+    "language": "en",
+    "model": null,
+    "language_label": "English",
+    "provider_label": "AssemblyAI",
+    "script_warning": null,
+    "fallback": false,
+    "backup_engine": false,
+    "backup_reason": null,
+    "retry_at": null,
+    "retry_reason": null,
+    "text": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in phase one.\nClient: Perfect, Acme Holdings will sign off by Friday.",
+    "segments": [
+        {
+            "channel": 1,
+            "speaker": "Me",
+            "start_ms": 400,
+            "end_ms": 3565,
+            "text": "Hi Farah, thanks for making time today.",
+            "words": [
+                {
+                    "text": "Hi",
+                    "start_ms": 400,
+                    "end_ms": 670,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "Farah,",
+                    "start_ms": 740,
+                    "end_ms": 1190,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "thanks",
+                    "start_ms": 1260,
+                    "end_ms": 1710,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "for",
+                    "start_ms": 1780,
+                    "end_ms": 2095,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "making",
+                    "start_ms": 2165,
+                    "end_ms": 2615,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "time",
+                    "start_ms": 2685,
+                    "end_ms": 3045,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "today.",
+                    "start_ms": 3115,
+                    "end_ms": 3565,
+                    "confidence": 0.97
+                }
+            ]
+        },
+        {
+            "channel": 2,
+            "speaker": "Client",
+            "start_ms": 4235,
+            "end_ms": 8645,
+            "text": "Of course. I wanted to confirm the Q3 retainer scope.",
+            "words": [
+                {
+                    "text": "Of",
+                    "start_ms": 4235,
+                    "end_ms": 4505,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "course.",
+                    "start_ms": 4575,
+                    "end_ms": 5070,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "I",
+                    "start_ms": 5140,
+                    "end_ms": 5365,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "wanted",
+                    "start_ms": 5435,
+                    "end_ms": 5885,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "to",
+                    "start_ms": 5955,
+                    "end_ms": 6225,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "confirm",
+                    "start_ms": 6295,
+                    "end_ms": 6790,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "the",
+                    "start_ms": 6860,
+                    "end_ms": 7175,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "Q3",
+                    "start_ms": 7245,
+                    "end_ms": 7515,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "retainer",
+                    "start_ms": 7585,
+                    "end_ms": 8125,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "scope.",
+                    "start_ms": 8195,
+                    "end_ms": 8645,
+                    "confidence": 0.97
+                }
+            ]
+        },
+        {
+            "channel": 1,
+            "speaker": "Me",
+            "start_ms": 9315,
+            "end_ms": 13905,
+            "text": "Sure. We kept the Karachi office onboarding in phase one.",
+            "words": [
+                {
+                    "text": "Sure.",
+                    "start_ms": 9315,
+                    "end_ms": 9720,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "We",
+                    "start_ms": 9790,
+                    "end_ms": 10060,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "kept",
+                    "start_ms": 10130,
+                    "end_ms": 10490,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "the",
+                    "start_ms": 10560,
+                    "end_ms": 10875,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "Karachi",
+                    "start_ms": 10945,
+                    "end_ms": 11440,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "office",
+                    "start_ms": 11510,
+                    "end_ms": 11960,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "onboarding",
+                    "start_ms": 12030,
+                    "end_ms": 12660,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "in",
+                    "start_ms": 12730,
+                    "end_ms": 13000,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "phase",
+                    "start_ms": 13070,
+                    "end_ms": 13475,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "one.",
+                    "start_ms": 13545,
+                    "end_ms": 13905,
+                    "confidence": 0.97
+                }
+            ]
+        },
+        {
+            "channel": 2,
+            "speaker": "Client",
+            "start_ms": 14575,
+            "end_ms": 18305,
+            "text": "Perfect, Acme Holdings will sign off by Friday.",
+            "words": [
+                {
+                    "text": "Perfect,",
+                    "start_ms": 14575,
+                    "end_ms": 15115,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "Acme",
+                    "start_ms": 15185,
+                    "end_ms": 15545,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "Holdings",
+                    "start_ms": 15615,
+                    "end_ms": 16155,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "will",
+                    "start_ms": 16225,
+                    "end_ms": 16585,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "sign",
+                    "start_ms": 16655,
+                    "end_ms": 17015,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "off",
+                    "start_ms": 17085,
+                    "end_ms": 17400,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "by",
+                    "start_ms": 17470,
+                    "end_ms": 17740,
+                    "confidence": 0.97
+                },
+                {
+                    "text": "Friday.",
+                    "start_ms": 17810,
+                    "end_ms": 18305,
+                    "confidence": 0.97
+                }
+            ]
+        }
+    ],
+    "error": null,
+    "error_code": null,
+    "created_at": "2026-11-06T18:28:33+00:00",
+    "completed_at": "2026-11-05T10:17:00+00:00",
+    "edited_at": null,
+    "progress": null,
+    "views": {
+        "available": [
+            "urdu"
+        ],
+        "status": "none",
+        "default": "original"
+    },
+    "suggestions": [
+        {
+            "id": 0,
+            "index": 0,
+            "from": "Omer",
+            "to": "Omar",
+            "reason": "name",
+            "status": "open"
+        }
+    ]
+}

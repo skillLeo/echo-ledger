@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, errorMessage, listenTo, type ClientFolder, type LibraryItem } from "../../lib/ipc";
 import { canAddSubfolder, hasSubfolders, projectLabel } from "../../lib/projects";
-import { FolderIcon, LinkIcon, PlusIcon, ShareIcon } from "../../components/Icons";
+import { FolderIcon, LinkIcon, PlusIcon, RequestFilesIcon } from "../../components/Icons";
 import { ClientWorkspace } from "./ClientWorkspace";
 import { ProjectTree } from "./ProjectTree";
 import { DeleteProjectDialog, MoveProjectDialog, moveRecordings, movedText, NameDialog } from "./ProjectDialogs";
@@ -185,7 +185,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
     ];
     const share = nested && (
       <button type="button" className="btn" onClick={() => setDialog({ kind: "share", project, start: "link" })} title="A link to the project's recordings, or send it to a teammate">
-        <ShareIcon size={16} />Share
+        <LinkIcon size={16} />Share
       </button>
     );
     return (
@@ -209,7 +209,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
         <span className="spacer" />
         {requests && (
           <button type="button" className="btn" onClick={() => setDialog({ kind: "requests", projectId: null, focusId: null })} title="A link anyone can use to send you voice notes and files">
-            <LinkIcon size={16} />Request files
+            <RequestFilesIcon size={16} />Request files
           </button>
         )}
         <button type="button" className="btn primary" onClick={() => setDialog({ kind: "new", parentId: null })}><PlusIcon size={16} />New project</button>

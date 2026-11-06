@@ -1,5 +1,7 @@
 // Screenshots of every desktop screen, light and dark, at 1280 x 800, into docs/design/screens/desktop/. The views run in
-// the Vite dev server's fixture mode (scripts/screens/), answered by Tauri's IPC mock with sample data.
+// the Vite dev server's fixture mode (scripts/screens/) or the older harness (screenshots/harness.ts, screen moments and
+// held recordings), answered by Tauri's IPC mock with sample data. Motion is off (reduced motion), so nothing is caught
+// mid-transition.
 //   node scripts/screenshots.mjs              every screen
 //   node scripts/screenshots.mjs library      only the screens whose name starts with "library"
 import { createServer } from "vite";
@@ -40,14 +42,14 @@ const SCREENS = [
   }],
   ["project-notes", "project", async (page) => {
     await openAcme(page);
-    await page.getByRole("tab", { name: "Notes" }).click();
-    await page.getByLabel("Question").fill("When do we launch?");
+    await page.getByRole("tab", { name: "Notes", exact: true }).click();
+    await page.getByRole("textbox", { name: "Question" }).fill("When do we launch?");
     await page.getByRole("button", { name: "Ask", exact: true }).click();
     await page.waitForSelector(".ask-answer");
   }],
   ["project-files", "project", async (page) => {
     await openAcme(page);
-    await page.getByRole("tab", { name: "Files" }).click();
+    await page.getByRole("tab", { name: "Files", exact: true }).click();
     await page.waitForSelector(".file-row");
   }],
   ["project-delete", "project", async (page) => {
@@ -121,21 +123,118 @@ const SCREENS = [
     await page.waitForSelector("[data-testid=bluetooth-notice]");
     await page.waitForSelector(".after-pill.chip");
   }],
+  // Phase 1B: what runs on a Mac and on an old Windows, and what a recording says about what it holds.
+  ["controls-permission", "controls-permission", async (page) => page.waitForSelector("[data-testid=missing-permission]")],
+  ["controls-nothing", "controls-nothing", async (page) => page.waitForSelector("[data-testid=missing-permission]")],
+  ["controls-device", "controls-device", async (page) => page.waitForSelector("[data-testid=device-notice]")],
+  ["controls-dictation-refused", "controls-dictation-refused", async (page) => page.getByText("Dictation did not start").waitFor()],
+  ["record-permission-mac", "record-permission-mac", async (page) => page.waitForSelector("[data-testid=permission-banner]")],
+  ["record-windows10", "record-windows10", async (page) => page.waitForSelector("[data-testid=whole-system-note]")],
+  ["library-lost-mac", "library-lost-mac", async (page) => {
+    await page.waitForSelector("[data-testid=permission-loss]");
+    await page.waitForSelector(".segments .segment");
+  }],
+  ["settings-mac-check", "settings-mac-check", async (page) => {
+    await page.getByRole("textbox", { name: "Search settings" }).fill("mac check");
+    await page.waitForSelector("[data-testid=check-macos_version]");
+  }],
+  ["settings-keys-mac", "settings-keys-mac", async (page) => {
+    await page.getByRole("textbox", { name: "Search settings" }).fill("in the app");
+    await page.waitForSelector("text=⌘W");
+  }],
+  ["settings-windows10", "settings-windows10", async (page) => {
+    await page.getByRole("textbox", { name: "Search settings" }).fill("microphone");
+    await page.waitForSelector("[data-testid=whole-system-note]");
+  }],
+  ["onboarding-mac-microphone", "onboarding-mac", async (page) => {
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForSelector("[data-testid=permission-microphone]");
+  }],
+  ["onboarding-mac-system-audio", "onboarding-mac", async (page) => {
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForSelector("[data-testid=permission-system_audio]");
+  }],
+  ["onboarding-mac-screen", "onboarding-mac", async (page) => {
+    for (let i = 0; i < 3; i += 1) await page.getByRole("button", { name: "Continue" }).click();
+    await page.waitForSelector("[data-testid=permission-screen]");
+  }],
 ];
+
+/**
+ * Screens of the older harness (screenshots/harness.ts, v1.5 screen moments and held recordings): name, its query, what
+ * to do before the picture, and the viewport when it is not the main window's.
+ */
+const HARNESS = [
+  ["library-screens", "w=main&screens=1", async (page) => {
+    await openWeeklySync(page);
+    await page.waitForSelector(".screen-thumb");
+    await page.evaluate(() => document.querySelector(".screen-thumb")?.scrollIntoView({ block: "center" }));
+  }],
+  ["library-gallery", "w=main&screens=1", async (page) => {
+    await openWeeklySync(page);
+    await page.getByRole("button", { name: /^3 screens/ }).click();
+    await page.waitForSelector(".screen-gallery .screen-thumb img");
+    await page.evaluate(() => document.querySelector(".screen-gallery")?.scrollIntoView({ block: "end" }));
+  }],
+  ["screen-viewer", "w=main&screens=1", async (page) => {
+    await openWeeklySync(page);
+    await page.waitForSelector(".screen-thumb img");
+    await page.locator(".screen-thumb").nth(1).click();
+    await page.waitForSelector(".screen-viewer img");
+  }],
+  ["project-screens", "w=main&screens=1", async (page) => {
+    await page.getByRole("list", { name: "Projects in the sidebar" }).getByRole("button", { name: "Northwind", exact: true }).click();
+    await page.getByRole("tab", { name: "Screens", exact: true }).click();
+    await page.waitForSelector(".screen-thumb img");
+  }],
+  ["settings-screens-windows", "w=main&view=settings&screens=1&borderless=0", async (page) => {
+    await page.getByRole("textbox", { name: "Search settings" }).fill("screen moments");
+    await page.waitForSelector("text=Keep screen moments");
+  }],
+  ["settings-screens-macos", "w=main&view=settings&screens=1&platform=macos&permission=0", async (page) => {
+    await page.getByRole("textbox", { name: "Search settings" }).fill("screen moments");
+    await page.waitForSelector("text=Allow Screen Recording");
+  }],
+  ["library-held", "w=main&held=1", async (page) => page.waitForSelector("text=Waiting for another account")],
+  ["controls-screens", "w=pill&screens=1", async (page) => page.waitForSelector(".rec-screens"), { width: 360, height: 92 }],
+  // v1.5: the brand's wordmark on the lock and first-run cards.
+  ["lock", "w=main&view=lock", async (page) => page.waitForSelector("text=EchoLedger is locked")],
+  ["onboarding", "w=main&view=onboarding", async (page) => page.waitForSelector("text=Welcome to EchoLedger")],
+];
+
+/** Opens the harness's first recording, the one with screens. */
+async function openWeeklySync(page) {
+  await page.getByTestId("library-list").getByText("Weekly sync with Northwind").click();
+  await page.waitForSelector(".detail-title");
+}
 
 /** Opens Acme Holdings from the sidebar's project tree. */
 async function openAcme(page) {
-  await page.getByRole("list", { name: "Projects in the sidebar" }).getByRole("button", { name: "Acme Holdings" }).click();
+  await page.getByRole("list", { name: "Projects in the sidebar" }).getByRole("button", { name: "Acme Holdings", exact: true }).click();
   await page.waitForSelector(".crumbs");
 }
 
 async function launch() {
-  try {
-    return await chromium.launch();
-  } catch {
-    // No Playwright browser downloaded: Microsoft Edge is on every Windows 11 machine.
-    return chromium.launch({ channel: "msedge" });
+  // Playwright's own Chromium, else the installed Google Chrome (the Mac), else Microsoft Edge (every Windows 11).
+  for (const options of [{}, { channel: "chrome" }, { channel: "msedge" }]) {
+    try {
+      return await chromium.launch(options);
+    } catch {
+      // Try the next browser.
+    }
   }
+  throw new Error("No Chromium browser to take the screenshots with");
+}
+
+/** Waits for the page's fonts and lets it settle, then takes the picture. */
+async function shoot(page, file) {
+  // No hover state left from the last click (a row's menu button, a tooltip).
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: file });
+  console.log(file);
 }
 
 const only = process.argv[2];
@@ -152,11 +251,19 @@ try {
       page.on("pageerror", (e) => console.error(`${name}-${theme}: ${e.message}`));
       await page.goto(`${base}scripts/screens/index.html?screen=${screen}&theme=${theme}`);
       await prepare(page);
-      await page.evaluate(() => document.fonts.ready);
-      await page.waitForTimeout(400);
-      const file = join(out, `desktop-${name}-${theme}.png`);
-      await page.screenshot({ path: file });
-      console.log(file);
+      await shoot(page, join(out, `desktop-${name}-${theme}.png`));
+      await page.close();
+    }
+  }
+  for (const [name, query, prepare, viewport] of HARNESS) {
+    if (only && !name.startsWith(only)) continue;
+    for (const theme of ["light", "dark"]) {
+      const page = await browser.newPage({ viewport: viewport ?? { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
+      page.on("pageerror", (e) => console.error(`${name}-${theme}: ${e.message}`));
+      await page.goto(`${base}screenshots/harness.html?${query}&theme=${theme}`);
+      await page.waitForSelector("html[data-shot-ready]");
+      await prepare(page);
+      await shoot(page, join(out, `desktop-${name}-${theme}.png`));
       await page.close();
     }
   }

@@ -329,7 +329,7 @@ fn a_pin_set_that_cannot_be_used_refuses_to_build_a_client() {
     .expect("no client without usable pins");
     assert_eq!(
         error.to_string(),
-        "The certificate pins from the server are invalid. Pair this computer again."
+        "The certificate pins from the server are invalid. Sign in on this computer again."
     );
 }
 

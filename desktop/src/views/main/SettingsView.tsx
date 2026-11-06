@@ -12,6 +12,7 @@ import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./Securit
 import { AccountCard, PlanCard, YourDataCard, useAccount } from "./AccountSettings";
 import { ConsentNotice } from "./ConsentNotice";
 import { UpdatesPanel } from "./UpdateSettings";
+import { MacCheckCard } from "./MacCheck";
 import { CONSENT_SWITCH } from "../../lib/consent";
 import { conflictFor } from "../../lib/shortcutConflicts";
 import { getVersion } from "@tauri-apps/api/app";
@@ -51,15 +52,36 @@ const APP_KEYS: readonly [string, string][] = [
   ["J / L", "Back or forward 10 seconds"],
   ["Ctrl+F", "Find in the open transcript"],
 ];
+/** A Mac's own keys (since v1.5): the app menu answers them, and they read as a Mac person expects. */
+const MAC_KEYS: readonly [string, string][] = [
+  ["⌘,", "Open Settings"],
+  ["⌘W", "Close the window; EchoLedger stays in the menu bar"],
+  ["⌘Q", "Quit EchoLedger; a running recording is saved first"],
+];
+
+/** The keys Settings lists on this platform, with their names as this platform writes them. */
+export function appKeys(platform: string): readonly [string, string][] {
+  if (platform !== "macos") return APP_KEYS;
+  return [...APP_KEYS.map(([keys, what]) => [keys.replace("Ctrl+", "⌘"), what] as [string, string]), ...MAC_KEYS];
+}
 interface SettingsSection { id: string; group: Group; title: string; keywords: string; node: ReactNode }
 /** Signing this computer out (v1.5; "Unpair" before accounts): the token goes, the recordings waiting here stay. */
 const SIGN_OUT_CONFIRM = "Sign out of this computer? Recordings waiting to upload stay here and upload when you sign in again with this account, never into another one.";
+
+/** "Signed in to ledger.example.com" (the server's host, as on the phone), or "Not signed in". */
+export function signedInLine(serverUrl: string | null | undefined): string {
+  return serverUrl ? `Signed in to ${hostOf(serverUrl)}` : "Not signed in";
+}
 
 const AFTER_CALL: readonly (readonly [AfterCall, string])[] = [["keep", "Keep automatically"], ["ask", "Ask me"]];
 const AFTER_CALL_HINT: Record<AfterCall, string> = {
   keep: "Each call is saved at once. A small “Saved · Undo” shows near the tray for a few seconds.",
   ask: "A small prompt near the tray asks Keep or Discard, and keeps the call by itself after 10 seconds.",
 };
+/** A Mac has no tray: the window is in the corner of the screen. */
+function afterCallHint(choice: AfterCall, platform: string): string {
+  return platform === "macos" ? AFTER_CALL_HINT[choice].replace("near the tray", "in the corner of the screen") : AFTER_CALL_HINT[choice];
+}
 const CAPTION_LINES = [["2", "2"], ["3", "3"], ["5", "5"]] as const;
 const SKIP_OPTIONS = SKIP_SHORTER_THAN.map(([seconds, label]) => [String(seconds), label] as const);
 /** Automatic uses the client's language or the console default, else detects it. */
@@ -203,17 +225,17 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
       { id: "your-data", group: "account", title: "Your data", keywords: "export my data download zip delete my account",
         node: <YourDataCard account={account} onAccount={setAccount} /> },
     ] satisfies SettingsSection[] : []),
-    { id: "general", group: "general", title: "General", keywords: "start sign in login autostart language transcription client keyterms", node: (
+    { id: "general", group: "general", title: "General", keywords: "start sign in login autostart language transcription project client keyterms", node: (
       <div className="card">
         <b>General</b>
         <Toggle label="Start EchoLedger when I sign in" on={settings.autostart} onChange={(v) => patch({ autostart: v })} />
-        <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={220}
+        <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={260}
           onChange={(v) => patch({ transcriptionLanguage: v === "" ? null : v })} />
         <div className="toggle">
-          <div><label htmlFor="settings-client">Client keyterms</label><div id="settings-client-hint" className="small muted">Names and jargon from this client boost accuracy.</div></div>
-          {/* "No client" sends clientId: null (clears it); a missing key would keep the stored client (A6.DU4). */}
-          <select id="settings-client" aria-describedby="settings-client-hint" className="input" style={{ width: 220 }} value={settings.clientId ?? ""} onChange={(e) => patch({ clientId: e.target.value || null })}>
-            <option value="">No client</option>
+          <div><label htmlFor="settings-client">Project keyterms</label><div id="settings-client-hint" className="small muted">Names and jargon of the selected project improve accuracy.</div></div>
+          {/* "No project" sends clientId: null (clears it); a missing key would keep the stored client (A6.DU4). */}
+          <select id="settings-client" aria-describedby="settings-client-hint" className="input" style={{ width: 260 }} value={settings.clientId ?? ""} onChange={(e) => patch({ clientId: e.target.value || null })}>
+            <option value="">No project</option>
             {clients.map((cl) => <option key={cl.id} value={cl.id}>{cl.name}</option>)}
           </select>
         </div>
@@ -246,7 +268,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
         {status.platform === "macos" && (
           <Toggle label="Read browser tab addresses" hint="Lets EchoLedger tell a Google Meet call from dictation. macOS asks for permission once." on={settings.browserAutomation} onChange={(v) => patch({ browserAutomation: v })} />
         )}
-        <SelectRow label="After a call" value={settings.afterCall} options={AFTER_CALL} hint={AFTER_CALL_HINT[settings.afterCall]} onChange={(v) => patch({ afterCall: v })} />
+        <SelectRow label="After a call" value={settings.afterCall} options={AFTER_CALL} hint={afterCallHint(settings.afterCall, status.platform)} onChange={(v) => patch({ afterCall: v })} />
         <SelectRow label="Skip calls shorter than" value={String(settings.skipCallsShorterThanS)} options={SKIP_OPTIONS} width={180}
           hint="Automatic calls that are this short, or where nobody spoke, are skipped quietly. Activity can restore them for 24 hours."
           onChange={(v) => patch({ skipCallsShorterThanS: Number(v) })} />
@@ -254,7 +276,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
     ) },
     { id: "auto-apps", group: "calls", title: "Auto-record apps", keywords: "whatsapp zoom teams meet apps", node: <AutoRecordApps settings={settings} patch={patch} /> },
     { id: "call-sites", group: "calls", title: "Call sites", keywords: "sites browser never record rules", node: <CallSites rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules: siteRules })} /> },
-    { id: "microphone", group: "calls", title: "Microphone", keywords: "microphone device test permission silence far side", node: <MicrophoneCard settings={settings} patch={patch} disabled={!!status.recording || status.dictationActive} /> },
+    { id: "microphone", group: "calls", title: "Microphone", keywords: "microphone device test permission silence far side", node: <MicrophoneCard settings={settings} patch={patch} disabled={!!status.recording || status.dictationActive} systemAudioNote={status.systemAudioNote} /> },
     { id: "screen-moments", group: "calls", title: "Screen moments", keywords: "screen moments screenshots shared screen capture meeting window whole screen excluded apps password managers border screen recording permission",
       node: <ScreenMomentsCard settings={settings} patch={patch} /> },
     { id: "captions", group: "calls", title: "Captions", keywords: "captions lines overlay screen sharing position corner", node: (
@@ -297,8 +319,8 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
     { id: "app-keys", group: "shortcuts", title: "In the app", keywords: "keys search voice note play pause find", node: (
       <div className="card">
         <b>In the app</b>
-        {APP_KEYS.map(([keys, what]) => (
-          <div className="toggle" key={keys}><span>{what}</span><span className="kbd">{status.platform === "macos" ? keys.replace("Ctrl+", "⌘") : keys}</span></div>
+        {appKeys(status.platform).map(([keys, what]) => (
+          <div className="toggle" key={keys}><span>{what}</span><span className="kbd">{keys}</span></div>
         ))}
       </div>
     ) },
@@ -306,12 +328,17 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
     { id: "devices", group: "general", title: "Devices", keywords: "devices revoke paired activity audit", node: <DevicesCard run={run} /> },
     { id: "this-device", group: "general", title: "This computer", keywords: "sign out unpair device name", node: (
       <div className="card">
-        <div className="row"><div><b>Device</b><div className="small muted">{status.deviceName}</div></div><span className="spacer" />
-          <button className="btn danger" onClick={async () => { if (window.confirm(SIGN_OUT_CONFIRM)) { const s = await run(api.unpair); if (s) onUnpaired(s); } }}>Sign out</button>
+        <div className="row"><div><b>{status.deviceName}</b><div className="small muted" data-testid="signed-in-to">{signedInLine(status.serverUrl)}</div></div><span className="spacer" />
+          <button className="btn danger" onClick={async () => { if (window.confirm(SIGN_OUT_CONFIRM)) { const s = await run(api.unpair); if (s) onUnpaired(s); } }}>Sign out of this computer…</button>
         </div>
       </div>
     ) },
     { id: "storage", group: "general", title: "Storage and retention", keywords: "storage disk retention deleted bin", node: <StorageCard limitBytes={status.plan.storageBytes} /> },
+    // The Mac's own check (since v1.5): on any other computer this section does not exist.
+    ...(status.platform === "macos" ? [
+      { id: "help", group: "general", title: "Help & diagnostics", keywords: "help diagnostics run mac check permissions microphone system audio screen recording report admin",
+        node: <MacCheckCard status={status} /> },
+    ] satisfies SettingsSection[] : []),
     { id: "about", group: "general", title: "About", keywords: "version server updates check for updates restart export import backup settings file", node: <AboutCard status={status} run={run} onImported={setSettings} /> },
   ];
   const q = query.trim().toLowerCase();
@@ -323,7 +350,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
   return (
     <>
       <h1 className="page-title">Settings</h1>
-      <p className="page-sub">Connected to {hostOf(status.serverUrl)} {status.pinned ? "· secure connection" : "· connection not verified"}</p>
+      <p className="page-sub">{signedInLine(status.serverUrl)} {status.pinned ? "· secure connection" : "· connection not verified"}</p>
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings groups">
           <label className="searchbox compact"><SearchIcon size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
@@ -373,14 +400,14 @@ function AboutCard({ status, run, onImported }: { status: AppStatus; run: <T>(fn
   return (
     <div className="card about-settings">
       <b>EchoLedger{version ? ` ${version}` : ""}</b>
-      <p className="small muted">Server: {status.serverUrl ?? "not paired"}{status.pinned ? " (secure connection)" : " (connection not verified)"}</p>
+      <p className="small muted">{signedInLine(status.serverUrl)}{status.serverUrl ? (status.pinned ? " (secure connection)" : " (connection not verified)") : ""}</p>
       <UpdatesPanel appStatus={status} />
       <div className="row organise-field">
         <button type="button" className="btn ghost" onClick={() => void run(api.exportSettings, "Settings saved in Downloads")}>Export settings</button>
         <label htmlFor={fileId} className="btn ghost">Import settings</label>
         <input id={fileId} type="file" accept="application/json,.json" className="sr-only" aria-label="Import settings" onChange={(e) => void importFile(e.target.files?.[0])} />
       </div>
-      <p className="small muted">The file has your preferences only, never the pairing, keys or PIN.</p>
+      <p className="small muted">The file has your preferences only, never the sign-in, keys or PIN.</p>
     </div>
   );
 }
@@ -389,8 +416,9 @@ function AboutCard({ status, run, onImported }: { status: AppStatus; run: <T>(fn
 function hostOf(url: string | null): string {
   if (!url) return "the server";
   try {
-    return new URL(url).host;
+    return new URL(url).host || url;
   } catch {
+    // Not a URL: shown as stored.
     return url;
   }
 }

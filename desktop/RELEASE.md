@@ -8,6 +8,13 @@ npm run tauri build            # Windows: NSIS installer (tauri.windows.conf.jso
 Prerequisites: Rust stable (MSVC on Windows) + Visual Studio Build Tools "Desktop development with C++";
 WebView2 (preinstalled on Windows 10 1803+). macOS: Xcode Command Line Tools; build on macOS 14.4+ hardware.
 
+## Smoke test
+`<the app> --smoke-test` (or `ECHOLEDGER_SMOKE_TEST=1`) starts the built app against a temporary folder with no account,
+opens its windows, waits until they are ready, quits and exits 0 (`src-tauri/src/smoke.rs`; no network, capture, keychain
+or permission prompt, and a running EchoLedger is left alone). Both workflows run it on the built app with
+`scripts/smoke-mac.sh` and `scripts/smoke-windows.ps1`, on every runner GitHub offers: a crash, a hang or a new crash report
+fails the job. On a `v*` tag "Desktop (macOS)" attaches both DMGs to the tag's GitHub Release.
+
 ## Code signing and notarization
 See `docs/SIGNING.md`: the certificate options and costs, the GitHub secrets the "Desktop (Windows)" and
 "Desktop (macOS)" workflows sign and notarize with when they exist (unsigned builds otherwise), and the checks.

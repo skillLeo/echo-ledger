@@ -222,6 +222,7 @@ describe("Settings → Account → Plan", () => {
     expect(within(card).getByText("Team")).toBeInTheDocument();
     expect(within(card).getByText("540 of 600 minutes this month")).toBeInTheDocument();
     expect(within(card).getByRole("meter", { name: "Transcription used" })).toHaveAttribute("aria-valuenow", "90");
+    expect((within(card).getByRole("meter", { name: "Transcription used" }).firstElementChild as HTMLElement).style.transform).toBe("scaleX(0.9)");
     expect(within(card).getByText("2.5 GB of 10.0 GB stored")).toBeInTheDocument();
     expect(within(card).getByRole("meter", { name: "Storage used" })).toHaveAttribute("aria-valuenow", "25");
     expect(within(card).getByText("90 days")).toBeInTheDocument();

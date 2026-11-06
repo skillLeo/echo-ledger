@@ -29,12 +29,12 @@ class PlanStateTest {
             """{"key":"free","name":"Free","features":{"live_translate":false,"screen_moments":true,"ai_notes":false,"connector":true},
                "limits":{"monthly_minutes":300,"storage_bytes":5368709120,"retention_days":30,"seats":1},"used":{"minutes":120,"storage_bytes":4}}"""
         )
-        val workspace = ApiJson.decodeFromString(ConfigWorkspaceDto.serializer(), """{"id":"01J","name":"Acme team","role":"viewer"}""")
+        val workspace = ApiJson.decodeFromString(ConfigWorkspaceDto.serializer(), """{"id":1,"name":"Acme team","role":"viewer"}""")
         val state = PlanState.from(plan, workspace)
         assertFalse(state.liveTranslate)
         assertFalse(state.aiNotes)
         assertTrue(state.viewer)
-        assertEquals("Free · 120 of 300 min this month", state.summary())
+        assertEquals("Free plan · 120 of 300 min this month", state.summary())
         assertEquals("Acme team · Viewer", state.membership())
         assertEquals(
             "You are a viewer in Acme team: you can open what is shared with you, not record.",
@@ -47,7 +47,7 @@ class PlanStateTest {
         val plan = ApiJson.decodeFromString(PlanDto.serializer(), """{"name":"Personal","features":{"live_translate":true}}""")
         val state = PlanState.from(plan, ConfigWorkspaceDto(name = "Personal", role = "owner"))
         assertTrue(state.aiNotes)
-        assertEquals("Personal", state.summary())
+        assertEquals("Personal plan", state.summary())
         assertEquals("Personal · Owner", state.membership())
         assertEquals("You are a viewer in this workspace: you can open what is shared with you, not record.", PlanState.viewerText(null))
     }

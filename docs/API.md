@@ -45,7 +45,7 @@ Every addition below is marked **(since v1.1)**.
 
 | HTTP | `code` | Meaning | What the client does |
 |---|---|---|---|
-| 401 | `unauthenticated` | Token missing, expired or revoked | Stop syncing and uploading, keep local recordings, show the unpaired state |
+| 401 | `unauthenticated` | Token missing, expired or revoked | Stop syncing and uploading, keep local recordings, show the signed-out state |
 | 403 | `missing_ability` | Token lacks the route's ability | Permanent: do not retry |
 | 403 | `budget_exceeded` | Monthly limit reached: the server cap (message `Monthly transcription limit reached`) or, since B20, the workspace plan's minutes (message `Monthly limit reached — raise it in Settings`) | Keep recording without captions; show the message; do not retry until `usage.limit_reached` is false |
 | 403 | `storage_limit_reached` | Since B20: a new recording would pass the workspace plan's storage (message `Storage limit reached — raise it in Settings`) | Permanent for this upload: keep the recording on the device, show the message |
@@ -82,13 +82,13 @@ Every addition below is marked **(since v1.1)**.
 | 409 | `session_not_recording` | `stt/token`: the session is not in status `recording`, or is 4 hours old or older | Captions are unavailable for this recording; keep recording |
 | 409 | `too_many_open_uploads` | 50 or more unfinished recordings exist for this device | Finish pending uploads, then retry |
 | 409 | `too_many_open_sessions` | 10 or more sessions of this device are still `recording` | Finish or discard them, then retry |
-| 409 | `current_device` | `DELETE devices/{id}` for the device making the request | Unpair from the device's own settings |
+| 409 | `current_device` | `DELETE devices/{id}` for the device making the request | Sign out in the device's own settings |
 | 409 | `nothing_to_export` | `sessions/export`: none of the chosen recordings has a finished transcript | Permanent for those recordings |
 | 409 | `duplicate_recording` | `POST /api/sessions` with `skip_duplicate`: the same file (by SHA-256) is already a live recording of this workspace; `session_id` names it (since v1.4) | Mark the import as skipped (already in the Library); do not retry |
 | 409 | `views_unavailable` | `transcripts/{id}/views`: the transcript is not finished, or no Anthropic key is set (since v1.2) | Add the key, or wait for the transcript |
 | 409 | `cannot_retranscribe` | `sessions/{id}/retranscribe`: the recording's audio is not on the server (not uploaded yet, or erased; since v1.2) | Retry once the upload has finished |
 | 409 | `ai_unavailable` | Since v1.4: client notes, brief or Ask without an Anthropic key in API Credentials | Show the message; retry after the key is added |
-| 409 | `no_client` | Since v1.4: `POST sessions/{id}/notes` for a recording not filed under a client | File it under a client first |
+| 409 | `no_client` | Since v1.4: `POST sessions/{id}/notes` for a recording not filed under a project | File it under a project first |
 | 410 | `restore_expired` | `sessions/{id}/restore` after the 48-hour undo bin ended | Permanent: the recording is gone |
 | 413 | `too_large` | Body or declared size above the limit | Permanent |
 | 422 | `validation_failed` | Field errors in `errors` | Permanent for that request |
@@ -152,7 +152,7 @@ share them (see "Workspaces, roles and privacy"). Plan limits (minutes per month
 ## Pairing & configuration
 
 ### `POST /api/devices/register` — public, throttled (5/min/IP)
-The admin creates a one-time pairing code in Filament (Devices → "Pair a device"; valid 10 min, single use).
+The admin creates a one-time pairing code in Filament (Profile → Devices → "Sign in a device"; valid 10 min, single use).
 The QR shows JSON `{"v":1,"url":"https://ledger.example.com","code":"7KQ2M9XD","pins":["sha256/…=","sha256/…="]}`.
 Codes are 8 Crockford-base32 chars, displayed `7KQ2-M9XD`; the server ignores hyphens/case.
 ```json
@@ -168,6 +168,20 @@ Codes are 8 Crockford-base32 chars, displayed `7KQ2-M9XD`; the server ignores hy
 ### `POST /api/devices/rotate-token` — auth
 `200 {"token": "…", "token_expires_at": "…"}`; the old token is revoked immediately. The new token carries exactly the
 abilities of the token that asked for it, never more **(since v1.1)**.
+
+### `POST /api/devices/report` — `config:read`, throttled (10/hour/device) (since v1.5)
+The result of an app's device check (phone: Device check; Mac: Run Mac check), sent only when the person taps the
+button that sends it. Nothing is sent by itself. It holds no recordings, names or phone numbers. One report per device:
+a new one replaces the last. Any role may send one, a viewer too.
+```json
+{"platform": "android", "app_version": "1.5.0", "brand": "Xiaomi", "model": "23078PND5G", "os_version": "14",
+ "checks": [{"key": "app_calls", "state": "limited", "detail": "Your voice only: the other side needs Android 14."}]}
+```
+`platform` is an enumerated device platform; `brand`, `model`, `os_version` at most 64 characters, `app_version` 32;
+`checks`: 1 to 40, `key` lower-case letters, digits and `_` (at most 40), `state` is `ok`, `limited`, `off` or
+`failed`, `detail` at most 300 characters or null. `201 {"data": {"reported_at": "…"}}`; `422 validation_failed`;
+`429 rate_limited`. The console shows them under System → Device reports: the super admin every device's, owners and
+admins those of their workspace.
 
 ### Signing in with an account (since v1.5)
 People have their own accounts (email and password, or Google), and a phone or computer signs in to its owner's
@@ -237,7 +251,7 @@ The super admin (the server's operator) manages plans, sees every workspace's me
 and the server settings and API credentials. A workspace always keeps one owner; leaving it needs a transfer first.
 
 - `GET /api/account` gives the role (`workspace.role`). A viewer's device gets `403 not_allowed` from recording and
-  upload routes (`POST /api/sessions`, uploads, `stt/token`, request uploads into their name); the apps show "You are
+  upload routes (`POST /api/sessions`, uploads, `stt/token`, `live-translate/token`, request uploads into their name); the apps show "You are
   a viewer in <workspace>: you can open what is shared with you, not record."
 
 ### Plans and features (since v1.5)
@@ -1256,9 +1270,14 @@ the way the person can in the apps. It only reads: it never records, edits, shar
   `/.well-known/oauth-authorization-server`, dynamic client registration, the authorization-code flow with PKCE
   (S256 only), scope `mcp:use`. The person signs in on the console (with two-factor sign-in when it is on) and
   approves "Allow Claude to read your EchoLedger recordings?". Access tokens last 1 hour, refresh tokens 30 days.
-  Profile → Connected apps lists each connection with its last use and Disconnect.
+  The page asks every time, and `prompt=none` answers `consent_required`. Registration takes only the apps' own return
+  addresses, compared whole (`MCP_REDIRECT_DOMAINS` replaces the list), at 10 a minute, 30 an hour and 100 a day per
+  address; an app that never connects is removed after a day. A used refresh token or code that comes back ends that
+  connection and writes `connector_token_reused` to the audit log, except a refresh token back within 10 seconds of its
+  swap, which is only refused. Profile → Connected apps lists each connection with its last use and Disconnect; Sign out
+  everywhere disconnects them too.
 - **What it sees:** exactly what the person can open in the apps: their own recordings and projects and what was
-  shared with them, in their current workspace. The plan's `connector` feature must be on; otherwise every tool
+  shared with them: their own in their current workspace, and what a teammate sent them from any workspace, as in the apps. The plan's `connector` feature must be on; otherwise every tool
   answers "The connector is not in your plan."
 - **Limits and records:** 60 tool calls a minute per person; every call goes into the audit log (tool, arguments
   without content, result size).

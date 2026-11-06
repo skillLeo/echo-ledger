@@ -80,7 +80,7 @@ describe('call notes', function () {
         Queue::fake();
         app(CredentialVault::class)->forget('anthropic', 'api_key');
 
-        recordingPage($this, recordingCall($this, $this->client))->call('writeNotes', 'en')->assertNotified('Add your Anthropic key in API Credentials to use project notes and Ask.');
+        recordingPage($this, recordingCall($this, $this->client))->call('writeNotes', 'en')->assertNotified('AI is not set up on this server yet. Whoever runs it adds the Anthropic key under API Credentials.');
         Queue::assertNothingPushed();
     });
 });

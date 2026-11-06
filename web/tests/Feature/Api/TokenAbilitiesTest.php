@@ -23,6 +23,7 @@ function abilityRoutes(): array
 
     return [
         'config' => ['GET', '/api/config', 'config:read'],
+        'device report' => ['POST', '/api/devices/report', 'config:read'],
         'clients' => ['GET', '/api/clients', 'library:read'],
         'stt token' => ['POST', '/api/stt/token', 'stt:token'],
         'live translate token' => ['POST', '/api/live-translate/token', 'stt:token'],

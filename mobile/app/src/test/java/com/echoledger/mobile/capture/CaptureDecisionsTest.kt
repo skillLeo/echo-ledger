@@ -18,12 +18,13 @@ class CaptureDecisionsTest {
         Capabilities(sdk, helper, mic, notif, overlay)
 
     @Test
-    fun `call capture eligibility changes exactly at Android 14`() {
+    fun `call capture starts at Android 12 with the helper, and both sides at Android 14`() {
         (29..37).forEach { sdk ->
-            assertEquals("sdk $sdk", sdk >= 34, caps(sdk).callCaptureSupportedByOs)
-            assertEquals("sdk $sdk with helper", sdk >= 34, caps(sdk, helper = true).canCaptureCalls)
+            assertEquals("sdk $sdk", sdk >= 31, caps(sdk).callCaptureSupportedByOs)
+            assertEquals("sdk $sdk with helper", sdk >= 31, caps(sdk, helper = true).canCaptureCalls)
             assertFalse("sdk $sdk without helper", caps(sdk, helper = false).canCaptureCalls)
         }
+        assertEquals(31, Capabilities.MIN_VOICE_ONLY_SDK)
         assertEquals(34, Capabilities.MIN_CALL_CAPTURE_SDK)
     }
 
@@ -50,7 +51,8 @@ class CaptureDecisionsTest {
                 if (!overlay) add(SetupStep.OVERLAY)
             }
             assertEquals("mask $mask on Android 14", expected, modern)
-            assertFalse("mask $mask on Android 13", SetupStep.HELPER in caps(33, helper, mic, notif, overlay).missingSteps())
+            assertEquals("mask $mask on Android 13", !helper, SetupStep.HELPER in caps(33, helper, mic, notif, overlay).missingSteps())
+            assertFalse("mask $mask on Android 10", SetupStep.HELPER in caps(29, helper, mic, notif, overlay).missingSteps())
         }
     }
 

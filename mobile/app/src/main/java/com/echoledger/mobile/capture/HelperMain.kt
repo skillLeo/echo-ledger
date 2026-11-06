@@ -83,7 +83,8 @@ object HelperMain {
                 context.contentResolver.call(uri, BinderHandoffProvider.METHOD_ATTACH, null, extras)
             }
         }
-        handOff()
+        // A refused hand-off is said and tried again below, never a crash that takes the helper with it (since v1.5).
+        runCatching { handOff() }.onFailure { println("hand-off refused: ${it.message}") }
         // Android may stop the app at any time; a restarted app has no binder until it is handed over again.
         thread(name = "el-helper-handoff", isDaemon = true) {
             while (true) {

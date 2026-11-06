@@ -117,7 +117,7 @@ describe('overview', function () {
         Queue::fake();
         app(CredentialVault::class)->forget('anthropic', 'api_key');
 
-        workspacePage($this)->call('remakeBrief')->assertNotified('Add your Anthropic key in API Credentials to use project notes and Ask.');
+        workspacePage($this)->call('remakeBrief')->assertNotified('AI is not set up on this server yet. Whoever runs it adds the Anthropic key under API Credentials.');
         Queue::assertNothingPushed();
     });
 

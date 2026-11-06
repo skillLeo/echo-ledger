@@ -1338,3 +1338,46 @@ async fn a_server_that_never_answers_times_out_after_two_minutes() {
         "timed out after {elapsed:?}"
     );
 }
+
+// ---- POST /api/devices/report (v1.5) -----------------------------------------------------------------------------
+
+fn device_report() -> desktop_lib::net::models::DeviceReport {
+    use desktop_lib::mac_check::{CheckItem, CheckReport, CheckState};
+    desktop_lib::net::models::DeviceReport::of_mac_check(&CheckReport {
+        items: vec![CheckItem { key: "macos_version", title: "macOS version", state: CheckState::Ok, detail: "macOS 15.1.".into(), fix: None }],
+        stopped: None,
+        finished_at: chrono::Utc::now(),
+        app_version: "1.5.0".into(),
+        os_version: "15.1".into(),
+        model: "Mac14,2".into(),
+        sent_at: None,
+    })
+}
+
+#[tokio::test]
+async fn a_device_report_is_a_bearer_json_post_and_answers_when_it_was_taken() {
+    let server = MockServer::start(Router::new().fixed("POST", "/api/devices/report", Reply::json(201, serde_json::json!({"data": {"reported_at": "2026-11-06T12:00:00Z"}}))));
+    let sent = client(&server).device_report(&device_report()).await.unwrap();
+    assert_eq!(sent, "2026-11-06T12:00:00Z");
+    let requests = server.requests_to("POST", "/api/devices/report");
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].header("authorization"), Some(format!("Bearer {TOKEN}").as_str()));
+    let body = requests[0].json();
+    assert_eq!(body["platform"], "macos");
+    assert_eq!(body["brand"], "Apple");
+    assert_eq!(body["checks"][0]["key"], "macos_version");
+}
+
+#[tokio::test]
+async fn an_older_server_says_it_takes_no_reports() {
+    let server = MockServer::start(Router::new());
+    let error = client(&server).device_report(&device_report()).await.unwrap_err();
+    assert!(error.to_string().contains("does not take device reports"), "{error}");
+}
+
+#[tokio::test]
+async fn too_many_reports_surface_the_server_s_answer() {
+    let server = MockServer::start(Router::new().fixed("POST", "/api/devices/report", Reply::json(429, serde_json::json!({"error": {"code": "rate_limited", "message": "Too many reports."}}))));
+    let (status, _) = server_error(client(&server).device_report(&device_report()).await);
+    assert_eq!(status, 429);
+}

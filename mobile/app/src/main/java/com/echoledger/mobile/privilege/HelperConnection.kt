@@ -50,7 +50,12 @@ class HelperConnection(private val context: Context) {
         helper = null
         _armState.value = null
         _state.value = State(error = "Capture helper stopped (reboot or Wireless debugging off). Re-enable it from Setup.")
+        // Since v1.5: the phone maker's system stopped it while Shizuku stays up: it comes back by itself.
+        reconnect()
     }
+
+    /** Starts the helper again when it is gone and Shizuku is up and allowed (after a kill, and on the 15-minute check). */
+    fun reconnect(): Boolean = helper == null && bindShizuku()
 
     fun attach(binder: ICaptureHelper, source: String) {
         if (helper?.asBinder() === binder.asBinder() && _state.value.connected) return // the ADB helper repeats its hand-off

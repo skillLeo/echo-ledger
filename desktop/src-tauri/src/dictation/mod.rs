@@ -44,6 +44,16 @@ pub async fn start(app: &AppHandle) -> AppResult<()> {
     if is_active(app) {
         return Ok(());
     }
+    // Dictating without the microphone would silently type nothing (Phase 1B). The box says so where the person is
+    // typing: it stays long enough to read why, then hides (DictationApp).
+    if state.permissions_now().microphone == crate::permissions::Access::Denied {
+        set_overlay_visible(app, DICTATION, true);
+        let hub = app.state::<CaptionHub>();
+        hub.send(TARGETS, CaptionEvent::Clear);
+        hub.send(TARGETS, CaptionEvent::Status { live: false, recording: false, provider: None, message: Some(crate::permissions::NO_DICTATION.to_string()) });
+        emit_state(app, false);
+        return Ok(());
+    }
     state.dictation_text.lock().unwrap().clear();
     state.dictation_stop_requested.store(false, Ordering::SeqCst);
     // Before the stream opens, so the box is built while the key is still down (C9: it is built on demand).
@@ -66,6 +76,7 @@ pub async fn start(app: &AppHandle) -> AppResult<()> {
             Ok(mic) => *state.dictation.lock().unwrap() = Some(mic),
             Err(e) => {
                 state.dictation_live.stop(); // the socket must not stay open without audio
+                app.state::<CaptionHub>().send(TARGETS, CaptionEvent::Status { live: false, recording: false, provider: None, message: Some(e.to_string()) });
                 emit_state(app, false);
                 return Err(e);
             }

@@ -1,6 +1,7 @@
 package com.echoledger.mobile.ui
 
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -137,11 +138,27 @@ class RecordScreenTest : ScreenTest() {
     // ---- auto-record ------------------------------------------------------------------------------------------------------
 
     @Test
-    fun `auto record is unavailable before Android 14`() {
-        showRecord(caps(sdk = 33, helper = false), RecordMode.CALLS)
+    fun `auto record is unavailable on Android 10 and 11, and it says why`() {
+        showRecord(caps(sdk = 29, helper = true), RecordMode.CALLS)
 
-        compose.onNodeWithText("Requires Android 14 or later").assertIsDisplayed()
+        compose.onNodeWithText("Needs Android 12 or newer").assertIsDisplayed()
+        compose.onNodeWithText("This phone cannot record WhatsApp calls", substring = true).assertExists()
         autoSwitch().assertIsNotEnabled()
+    }
+
+    @Test
+    fun `on Android 12 and 13 the Record tab says up front that a call records your voice only`() {
+        showRecord(caps(sdk = 33, helper = true), RecordMode.CALLS)
+
+        compose.onNodeWithText("This phone can record only your voice in WhatsApp calls", substring = true).assertExists()
+        autoSwitch().assertIsEnabled()
+    }
+
+    @Test
+    fun `a call that records both sides needs no such line`() {
+        showRecord(caps(sdk = 34, helper = true), RecordMode.CALLS)
+
+        compose.onAllNodesWithText("only your voice", substring = true).assertCountEquals(0)
     }
 
     @Test

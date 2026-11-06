@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { announceReady, listenTo, subscribeCaptions } from "../../lib/ipc";
 import { meterLevel } from "../../lib/controls";
+import { fillWidth } from "../../lib/motion";
 import { playTone } from "../../lib/sounds";
 
 /**
@@ -75,12 +76,14 @@ export default function DictationApp() {
     <div className={`overlay-root ${visible ? "" : "overlay-hidden"}`} style={{ alignItems: "flex-start" }}>
       <div className="overlay-card dictation-card">
         <div className="overlay-head">
-          <span className="listening"><span /><span /><span /></span>
-          <span>{holding ? "Dictating — let go of the shortcut to insert" : "Dictating — press the shortcut again to insert"}</span>
+          {!ended && <span className="listening"><span /><span /><span /></span>}
+          <span>{ended ? "Dictation did not start" : holding ? "Dictating — let go of the shortcut to insert" : "Dictating — press the shortcut again to insert"}</span>
         </div>
-        <div className="flow-bar" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(level) * 100)}>
-          <span style={{ width: `${Math.round(meterLevel(level) * 100)}%` }} />
-        </div>
+        {!ended && (
+          <div className="flow-bar" role="meter" aria-label="Microphone level" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(meterLevel(level) * 100)}>
+            <span style={fillWidth(meterLevel(level))} />
+          </div>
+        )}
         {message && <div className="caption-line small caption-message">{message}</div>}
         <div ref={textRef} className="caption-line dictation-text">{finals.join(" ")} <span className="partial" style={{ opacity: 0.7 }}>{partial}</span></div>
       </div>

@@ -8,6 +8,8 @@ import OverlayApp from "./views/overlay/OverlayApp";
 import PillApp from "./views/pill/PillApp";
 import ReviewApp from "./views/review/ReviewApp";
 import DictationApp from "./views/dictation/DictationApp";
+import { MacCheckCard } from "./views/main/MacCheck";
+import { PermissionStep } from "./views/main/Permissions";
 import { emitEvent, flushAsync, pushChannelMessage, resetTauriMock, respondAll, setWindowLabel } from "./test/tauri";
 import { makeAfterCallState, makeChipItem, makeItem, makePendingItem, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeTranscript, makeUploadItem } from "./test/fixtures";
 
@@ -90,6 +92,35 @@ describe("screen-reader names (C7)", () => {
       expect(unnamed(), label).toEqual([]);
       cleanup();
     }
+  });
+});
+
+describe("screen-reader names of the Mac's own pages (since v1.5)", () => {
+  it("names every control of the Mac check and of the guided permissions, and every result's mark", async () => {
+    respondAll({
+      mac_check_last: {
+        items: [
+          { key: "microphone_permission", title: "Microphone permission", state: "ok", detail: "Allowed.", fix: null },
+          { key: "system_audio_permission", title: "System audio permission", state: "off", detail: "Off.", fix: { label: "Open System Settings", settings: "system_audio" } },
+        ],
+        stopped: null,
+        finishedAt: "2026-11-06T12:00:00Z",
+        appVersion: "1.5.0",
+        osVersion: "15.1",
+        model: "Mac14,2",
+        sentAt: null,
+      },
+      permissions_status: { microphone: "unknown", systemAudio: "denied", screen: "denied", browserAutomation: false, platform: "macos" },
+    });
+    render(
+      <>
+        <MacCheckCard status={makeStatus({ platform: "macos" })} />
+        <PermissionStep kind="microphone" permissions={{ microphone: "unknown", browserAutomation: false, platform: "macos" }} onChange={() => undefined} />
+      </>,
+    );
+    await flushAsync();
+    expect(screen.getAllByRole("img").map((mark) => mark.getAttribute("aria-label"))).toEqual(["OK", "Off"]);
+    expect(unnamed()).toEqual([]);
   });
 });
 

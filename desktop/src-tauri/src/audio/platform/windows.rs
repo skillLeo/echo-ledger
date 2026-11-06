@@ -9,11 +9,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use wasapi::{AudioClient, DeviceEnumerator, Direction, Role, SampleType, StreamMode, WaveFormat, initialize_mta};
 
 use super::{CaptureBackend, Streams, supports_process_loopback};
+use crate::audio::devices::{DeviceLog, DeviceNotice, Reopener, fall_back_to_endpoint, packet_limit};
 use crate::audio::types::{AudioChunk, BackendKind, CaptureError, Channel, TARGET_RATE};
 
 /// Windows build number via RtlGetVersion (GetVersionEx lies to unmanifested apps).
@@ -24,10 +25,18 @@ pub fn os_build() -> Option<u32> {
     if unsafe { RtlGetVersion(&mut info) }.is_ok() { Some(info.dwBuildNumber) } else { None }
 }
 
+/// The running recording's process loopback failed and it records through endpoint loopback (all system sound) now.
+static FELL_BACK: AtomicBool = AtomicBool::new(false);
+
+pub fn fell_back() -> bool {
+    FELL_BACK.load(Ordering::SeqCst)
+}
+
 pub struct WindowsBackend {
     kind: BackendKind,
     stop: Arc<AtomicBool>,
     threads: Vec<JoinHandle<()>>,
+    log: DeviceLog,
 }
 
 impl WindowsBackend {
@@ -36,16 +45,18 @@ impl WindowsBackend {
         let process_loopback = os_build().is_some_and(supports_process_loopback);
         let kind = if process_loopback { BackendKind::ProcessLoopback } else { BackendKind::EndpointLoopback };
         let mut threads = Vec::new();
+        let log = DeviceLog::default();
 
         if streams.system {
-            let (stop, tx) = (stop.clone(), tx.clone());
-            threads.push(spawn_named("el-audio-system", move || capture_loop(Channel::System, process_loopback, &stop, &tx)));
+            FELL_BACK.store(false, Ordering::SeqCst); // this recording tries process loopback afresh
+            let (stop, tx, log) = (stop.clone(), tx.clone(), log.clone());
+            threads.push(spawn_named("el-audio-system", move || capture_loop(Channel::System, process_loopback, &stop, &tx, &log)));
         }
         if streams.mic {
-            let (stop, tx) = (stop.clone(), tx.clone());
-            threads.push(spawn_named("el-audio-mic", move || capture_loop(Channel::Mic, false, &stop, &tx)));
+            let (stop, tx, log) = (stop.clone(), tx.clone(), log.clone());
+            threads.push(spawn_named("el-audio-mic", move || capture_loop(Channel::Mic, false, &stop, &tx, &log)));
         }
-        Ok(Self { kind, stop, threads })
+        Ok(Self { kind, stop, threads, log })
     }
 }
 
@@ -60,6 +71,10 @@ impl CaptureBackend for WindowsBackend {
             let _ = handle.join();
         }
     }
+
+    fn take_notices(&mut self) -> Vec<DeviceNotice> {
+        self.log.take()
+    }
 }
 
 impl Drop for WindowsBackend {
@@ -73,56 +88,90 @@ fn spawn_named(name: &str, f: impl FnOnce() + Send + 'static) -> JoinHandle<()> 
 }
 
 /// Opens the stream, captures until `stop`, and transparently reopens after device loss or default-device change
-/// (each reopen leaves a gap the timeline fills with silence).
-fn capture_loop(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &Sender<AudioChunk>) {
+/// (each reopen leaves a gap the timeline fills with silence; `devices.rs` decides the waits and what is said).
+fn capture_loop(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &Sender<AudioChunk>, log: &DeviceLog) {
     if initialize_mta().is_err() {
         // Already initialized on this thread is fine; anything else surfaces on the first call below.
     }
     let mut use_process_loopback = process_loopback;
-    let mut backoff = Duration::from_millis(250);
+    let mut reopener = Reopener::new(channel);
     while !stop.load(Ordering::SeqCst) {
-        match run_stream(channel, use_process_loopback, stop, tx) {
+        let result = run_stream(channel, use_process_loopback, stop, tx, &mut |news: StreamNews| {
+            let notice = match news {
+                StreamNews::Opened { id, name } => reopener.opened_on(Instant::now(), id, name),
+                StreamNews::Delivering => reopener.delivering(),
+            };
+            if let Some(notice) = notice {
+                log.push(notice);
+            }
+        });
+        match result {
             Ok(()) => break, // stopped normally
             Err(err) => {
                 eprintln!("[echoledger] {channel:?} capture error: {err}; reopening");
-                if channel == Channel::System && use_process_loopback {
-                    use_process_loopback = false; // feature-test fallback to endpoint loopback
+                if err == NO_AUDIO
+                    && let Some(notice) = reopener.stalled(Instant::now())
+                {
+                    log.push(notice);
                 }
-                std::thread::sleep(backoff);
-                backoff = (backoff * 2).min(Duration::from_secs(3));
+                let (wait, notice) = reopener.failed(Instant::now());
+                if let Some(notice) = notice {
+                    log.push(notice);
+                }
+                if channel == Channel::System && use_process_loopback && fall_back_to_endpoint(reopener.ever_opened(), reopener.failures()) {
+                    use_process_loopback = false; // feature-test fallback to endpoint loopback
+                    FELL_BACK.store(true, Ordering::SeqCst);
+                    eprintln!("[echoledger] process loopback failed: this recording now has all sound playing on this computer");
+                }
+                std::thread::sleep(wait);
             }
         }
     }
 }
 
-fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &Sender<AudioChunk>) -> Result<(), String> {
+/// What a stream tells `capture_loop` while it runs.
+enum StreamNews {
+    /// It runs, on this device when it has one of its own.
+    Opened { id: Option<String>, name: Option<String> },
+    /// Its first packet arrived.
+    Delivering,
+}
+
+/// The error of a microphone stream that stayed open and delivered nothing.
+const NO_AUDIO: &str = "no audio from the microphone";
+
+/// One stream until `stop` (`Ok`) or until its device goes or should change (`Err`). `news` is told once it runs and when
+/// its first packet arrives.
+fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &Sender<AudioChunk>, news: &mut dyn FnMut(StreamNews)) -> Result<(), String> {
     let format = WaveFormat::new(32, 32, &SampleType::Float, TARGET_RATE as usize, 1, None);
     let mode = StreamMode::EventsShared { autoconvert: true, buffer_duration_hns: 0 };
     let enumerator = DeviceEnumerator::new().map_err(|e| e.to_string())?;
     let mut follow_default = true;
 
-    let (mut client, device_id): (AudioClient, Option<String>) = match channel {
+    let (mut client, device_id, device_name): (AudioClient, Option<String>, Option<String>) = match channel {
         Channel::System if process_loopback => {
             // `false` = PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE: everything except EchoLedger itself.
-            (AudioClient::new_application_loopback_client(std::process::id(), false).map_err(|e| e.to_string())?, None)
+            (AudioClient::new_application_loopback_client(std::process::id(), false).map_err(|e| e.to_string())?, None, None)
         }
         Channel::System => {
             let device = enumerator.get_default_device(&Direction::Render).map_err(|e| e.to_string())?;
             let id = device.get_id().ok();
-            (device.get_iaudioclient().map_err(|e| e.to_string())?, id)
+            let name = device.get_friendlyname().ok();
+            (device.get_iaudioclient().map_err(|e| e.to_string())?, id, name)
         }
         Channel::Mic => {
-            // The chosen microphone while it is connected (then device changes are not followed), else the
-            // default communications device.
+            // The chosen microphone while it is connected, else the default communications device.
             let chosen = super::choose_mic(&input_devices_with(&enumerator), super::preferred_mic().as_deref());
             if let Some(device) = chosen.and_then(|id| enumerator.get_device(&id).ok()) {
                 follow_default = false;
                 let id = device.get_id().ok();
-                (device.get_iaudioclient().map_err(|e| e.to_string())?, id)
+                let name = device.get_friendlyname().ok();
+                (device.get_iaudioclient().map_err(|e| e.to_string())?, id, name)
             } else {
                 let device = enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications).map_err(|e| e.to_string())?;
                 let id = device.get_id().ok();
-                (device.get_iaudioclient().map_err(|e| e.to_string())?, id)
+                let name = device.get_friendlyname().ok();
+                (device.get_iaudioclient().map_err(|e| e.to_string())?, id, name)
             }
         }
     };
@@ -131,30 +180,57 @@ fn run_stream(channel: Channel, process_loopback: bool, stop: &AtomicBool, tx: &
     let event = client.set_get_eventhandle().map_err(|e| e.to_string())?;
     let capture = client.get_audiocaptureclient().map_err(|e| e.to_string())?;
     client.start_stream().map_err(|e| e.to_string())?;
+    news(StreamNews::Opened { id: device_id.clone(), name: device_name });
 
     let mut queue: VecDeque<u8> = VecDeque::new();
-    let mut last_default_check = std::time::Instant::now();
+    let mut last_device_check = Instant::now();
+    let mut last_packet = Instant::now();
+    let mut delivered = false;
     let result = (|| -> Result<(), String> {
         while !stop.load(Ordering::SeqCst) {
-            // Follow default-device changes (headset unplug / Bluetooth switch) for endpoint streams.
-            if let Some(id) = device_id.as_ref().filter(|_| follow_default)
-                && last_default_check.elapsed() > Duration::from_secs(1)
+            // Follow device changes (headset unplug / Bluetooth switch, a chosen microphone going or coming back) for
+            // endpoint streams.
+            if let Some(id) = device_id.as_ref()
+                && last_device_check.elapsed() > Duration::from_secs(1)
             {
-                last_default_check = std::time::Instant::now();
-                let current = match channel {
-                    Channel::Mic => enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications),
-                    Channel::System => enumerator.get_default_device(&Direction::Render),
-                };
-                if let Ok(device) = current
-                    && device.get_id().ok().as_ref() != Some(id)
-                {
-                    return Err("default device changed".into());
+                last_device_check = Instant::now();
+                if channel == Channel::Mic {
+                    let chosen = super::preferred_mic().and_then(|preferred| super::choose_mic(&input_devices_with(&enumerator), Some(&preferred)));
+                    match chosen {
+                        Some(chosen) if chosen != *id => return Err("the chosen microphone changed".into()),
+                        None if !follow_default => return Err("the chosen microphone is gone".into()),
+                        _ => {}
+                    }
+                }
+                if follow_default {
+                    let current = match channel {
+                        Channel::Mic => enumerator.get_default_device_for_role(&Direction::Capture, &Role::Communications),
+                        Channel::System => enumerator.get_default_device(&Direction::Render),
+                    };
+                    if let Ok(device) = current
+                        && device.get_id().ok().as_ref() != Some(id)
+                    {
+                        return Err("default device changed".into());
+                    }
                 }
             }
             if event.wait_for_event(200).is_err() {
-                continue; // timeout: no packets (silence on endpoint loopback); the timeline fills the gap
+                // Timeout: no packets (silence on endpoint loopback); the timeline fills the gap. A device that was
+                // removed sends no more events either: asking for the next packet is what reports it.
+                capture.get_next_packet_size().map_err(|e| e.to_string())?;
+                // A microphone delivers packets even in silence, so none for a while means it died quietly. A new stream
+                // has longer for its first one, so a device that is slow to wake is not torn down.
+                if channel == Channel::Mic && last_packet.elapsed() >= packet_limit(delivered) {
+                    return Err(NO_AUDIO.into());
+                }
+                continue;
             }
             while capture.get_next_packet_size().map_err(|e| e.to_string())?.unwrap_or(0) > 0 {
+                last_packet = Instant::now();
+                if !delivered {
+                    delivered = true;
+                    news(StreamNews::Delivering);
+                }
                 let start = queue.len();
                 let info = capture.read_from_device_to_deque(&mut queue).map_err(|e| e.to_string())?;
                 if info.flags.silent {

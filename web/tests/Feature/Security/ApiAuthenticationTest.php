@@ -21,6 +21,7 @@ function secDeviceGuardedRoutes(): array
 {
     return [
         'POST devices/rotate-token' => ['POST', '/api/devices/rotate-token', null],
+        'POST devices/report' => ['POST', '/api/devices/report', null],
         'GET config' => ['GET', '/api/config', 'config:read'],
         'GET clients' => ['GET', '/api/clients', 'library:read'],
         'DELETE clients/{id}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID, 'sessions:write'],
@@ -148,7 +149,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(88);
+    expect($guarded)->toBe(89);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

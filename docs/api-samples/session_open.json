@@ -1,0 +1,55 @@
+{
+    "session": {
+        "id": "01m6s1x82k13zgm68wdphz79fs",
+        "client_ref": "47dfcc11-1bd0-495e-a7a5-09c2ecace132",
+        "deleted": false,
+        "source_device": "phone",
+        "source_device_label": "Phone",
+        "source_device_icon": "device-phone-mobile",
+        "source_app": "whatsapp",
+        "source_app_label": "WhatsApp",
+        "device": {
+            "id": "01m6s1x7sg4bzyqqf2rg5a2cyf",
+            "name": "Sample phone"
+        },
+        "client": null,
+        "filed_by": null,
+        "title": "WhatsApp call",
+        "caller": null,
+        "started_at": "2026-10-24T09:00:00+00:00",
+        "ended_at": null,
+        "duration_ms": null,
+        "status": "recording",
+        "language": null,
+        "language_chip": "Auto",
+        "transcript": {
+            "final_status": null,
+            "final_transcript_id": null,
+            "live_available": false,
+            "live_transcript_id": null,
+            "preview": null,
+            "final_language": null,
+            "final_provider": null,
+            "final_provider_label": null,
+            "final_model": null,
+            "live_language": null,
+            "script_warning": null,
+            "final_error_code": null,
+            "alternate_transcript_id": null,
+            "alternate_status": null,
+            "alternate_language": null,
+            "final_progress": null
+        },
+        "marker_count": 0,
+        "screen_count": 0,
+        "tags": [],
+        "pinned": false,
+        "keep": false,
+        "labels": [],
+        "updated_at": "2026-11-06T18:28:34+00:00"
+    },
+    "recordings": [],
+    "required_artifacts": [
+        "primary"
+    ]
+}

@@ -56,7 +56,11 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         /** Since Android 16/17 the permission that lets a recorder keep the microphone beside another app's call. */
         private const val BYPASS_CONCURRENT = "android.permission.BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION"
 
+        /** The shell user holds CAPTURE_VOICE_COMMUNICATION_OUTPUT from here on: the other side of an app call. */
+        private const val FAR_PARTY_SDK = 34
+
         /** Sources Android never mutes and that cannot mute anyone (they do not compete for the microphone). */
+
         private val LINE_SOURCES = setOf(
             MediaRecorder.AudioSource.VOICE_UPLINK,
             MediaRecorder.AudioSource.VOICE_DOWNLINK,
@@ -118,7 +122,7 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
     override fun capabilities(): String = buildString {
         append("sdk=").append(Build.VERSION.SDK_INT)
         append(";uid=").append(Process.myUid())
-        append(";far_party=").append(Build.VERSION.SDK_INT >= 34)
+        append(";far_party=").append(Build.VERSION.SDK_INT >= FAR_PARTY_SDK)
         // Which package the recorders are opened as (must be com.android.shell for UID 2000).
         append(";as=").append(runCatching { context.opPackageName }.getOrNull())
         append(";mic_beside_calls=").append(runCatching { bypassesConcurrentCapture() }.getOrNull())
@@ -133,7 +137,8 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
 
     override fun arm(on: Boolean): String = asHelper {
         if (on) {
-            farMix.arm()?.let { "error: $it" } ?: "armed"
+            // Below Android 14 there is no mix to arm: only the microphone is recorded beside a call.
+            if (Build.VERSION.SDK_INT < FAR_PARTY_SDK) "armed" else farMix.arm()?.let { "error: $it" } ?: "armed"
         } else {
             if (!capturing) farMix.disarm()
             "disarmed"
@@ -144,7 +149,13 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
         callApps = packages?.mapNotNull(CallTargets::clean)?.toSet()?.takeIf { it.isNotEmpty() } ?: CallTargets.DEFAULT_PACKAGES
     }
 
-    override fun selfTest(): String = asHelper { if (capturing) "busy: a call is being recorded" else farMix.selfTest(context) }
+    override fun selfTest(): String = asHelper {
+        when {
+            capturing -> "busy: a call is being recorded"
+            Build.VERSION.SDK_INT < FAR_PARTY_SDK -> "fail: hearing the other side needs Android 14 or newer"
+            else -> farMix.selfTest(context)
+        }
+    }
 
     override fun captureChannels(): Int = channels
 
@@ -225,12 +236,17 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             // keeps the call app's recorder and never mutes it for ours. VOICE_COMMUNICATION is fed zeros on One UI.
             val source = if (inCallNow() || micSource <= 0) MediaRecorder.AudioSource.MIC else micSource
             near = openMic(rate, source, problems)?.let { Side(it, rate, lane = 0, mic = true) }
-            far = runCatching { farMix.openSink(context) }
-                .onFailure { problems += "other side: ${FarPartyCapture.reason(it)}" }
-                .getOrNull()
-                ?.let { Side(it, farMix.sampleRate, lane = 1, mic = false) }
-            if (far != null) lateArmReason()?.let { problems += it }
-            channels = 2
+            // Below Android 14 only your voice is recorded, on one channel: never a silent second one.
+            if (Build.VERSION.SDK_INT >= FAR_PARTY_SDK) {
+                far = runCatching { farMix.openSink(context) }
+                    .onFailure { problems += "other side: ${FarPartyCapture.reason(it)}" }
+                    .getOrNull()
+                    ?.let { Side(it, farMix.sampleRate, lane = 1, mic = false) }
+                if (far != null) lateArmReason()?.let { problems += it }
+                channels = 2
+            } else {
+                channels = 1
+            }
         }
 
         // Nothing to record: say why (the app shows it) instead of a recording that stays silent.

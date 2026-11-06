@@ -3,9 +3,11 @@ package com.echoledger.mobile.recording
 import android.content.Context
 import android.media.AudioManager
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import com.echoledger.mobile.capture.ICaptureHelper
 import com.echoledger.mobile.core.CallTargets
+import com.echoledger.mobile.privilege.Capabilities
 import java.io.File
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +44,9 @@ object CaptureTest {
         val inCall: Boolean = false,
         val fileBytes: Long = 0,
         val helperProblem: String? = null,
-        val otherAppsRecording: Int = 0
+        val otherAppsRecording: Int = 0,
+        /** Since v1.5: below Android 14 a call records your voice only, so a silent other side is not a fault. */
+        val voiceOnly: Boolean = false
     )
 
     /** A level at or above this is sound, not the silence of a muted or blocked recorder. */
@@ -86,9 +90,10 @@ object CaptureTest {
         val clientHeard = m.clientBytes > 0 && m.clientPeak >= HEARD
         stages += Stage(
             Check.OTHER_SIDE,
-            if (m.inCall) clientHeard else null,
+            if (m.inCall && !m.voiceOnly) clientHeard else null,
             "The other side",
             when {
+                m.voiceOnly -> "Needs Android 14 or newer: this phone records only your voice."
                 !m.inCall -> "Checked only during a call."
                 clientHeard -> "Heard."
                 else -> "Silent during the call."
@@ -131,7 +136,7 @@ object CaptureTest {
                 stages
             )
 
-            m.inCall && !clientHeard -> Result(
+            m.inCall && !clientHeard && !m.voiceOnly -> Result(
                 Verdict.PARTLY,
                 "Your voice is recorded, but the other side of the call is silent.",
                 "This phone may keep call audio away from other apps. Recordings will contain your side only.$reason",
@@ -154,7 +159,9 @@ object CaptureTest {
 
             else -> Result(
                 Verdict.READY,
-                if (m.inCall) {
+                if (m.voiceOnly) {
+                    "Call capture works for your voice. Hearing the other side needs Android 14 or newer."
+                } else if (m.inCall) {
                     "Call capture works: both sides were heard."
                 } else {
                     "Call capture works. To check the other side too, run the test during a WhatsApp call."
@@ -175,7 +182,8 @@ object CaptureTest {
             whatsapp = installed(CallTargets.WHATSAPP),
             whatsappBusiness = installed(CallTargets.WHATSAPP_BUSINESS),
             inCall = audio?.mode == AudioManager.MODE_IN_COMMUNICATION,
-            otherAppsRecording = runCatching { audio?.activeRecordingConfigurations?.size ?: 0 }.getOrDefault(0)
+            otherAppsRecording = runCatching { audio?.activeRecordingConfigurations?.size ?: 0 }.getOrDefault(0),
+            voiceOnly = Build.VERSION.SDK_INT < Capabilities.MIN_CALL_CAPTURE_SDK
         )
         if (!base.helperConnected || helper == null) return@withContext classify(base).also { log(context, it) }
 

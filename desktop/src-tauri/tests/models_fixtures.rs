@@ -599,7 +599,7 @@ fn errors_serialise_to_plain_messages() {
     let cases: [(AppError, &str); 5] = [
         (
             AppError::NotPaired,
-            "This computer is not paired with an EchoLedger server yet.",
+            "This computer is not signed in to an EchoLedger server yet.",
         ),
         (
             AppError::Server {

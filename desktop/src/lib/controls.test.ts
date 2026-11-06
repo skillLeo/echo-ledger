@@ -8,6 +8,7 @@ import {
   formatTimer,
   isTwoChannel,
   meterLevel,
+  missingShort,
   nextAnchor,
   reviewDuration,
   secondsLeft,
@@ -135,5 +136,19 @@ describe("ask chip copy", () => {
     expect(askSeconds(makeAskPayload({ seconds: 5 }))).toBe(5);
     expect(askSeconds(makeAskPayload({ seconds: 0 }))).toBe(8);
     expect(askSeconds(makeAskPayload({ seconds: Number.NaN }))).toBe(8);
+  });
+});
+
+describe("missingShort", () => {
+  it("says in one short line what the recording holds", () => {
+    expect(missingShort(undefined)).toBeNull();
+    expect(missingShort([])).toBeNull();
+    expect(missingShort([{ kind: "system_audio", sentence: "" }])).toMatch(/your voice only/);
+    expect(missingShort([{ kind: "microphone", sentence: "" }])).toMatch(/recording the other side/);
+    expect(missingShort([{ kind: "microphone", sentence: "" }, { kind: "system_audio", sentence: "" }])).toMatch(/Nothing is being recorded/);
+    expect(missingShort([{ kind: "screen", sentence: "" }])).toBeNull();
+    expect(missingShort([{ kind: "microphone", sentence: "" }], "call")).toMatch(/recording the other side/);
+    expect(missingShort([{ kind: "microphone", sentence: "" }], "mic_note")).toMatch(/Nothing is being recorded/);
+    expect(missingShort([{ kind: "system_audio", sentence: "" }], "voice_note")).toMatch(/Nothing is being recorded/);
   });
 });

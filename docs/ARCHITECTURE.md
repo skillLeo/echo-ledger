@@ -111,7 +111,7 @@ microphone.
 
 ## Pairing and authentication
 
-1. The admin clicks **Devices → Pair a device**. The server creates a random code and stores only its hash. The
+1. The admin clicks **Profile → Devices → Sign in a device**. The server creates a random code and stores only its hash. The
    code is shown as text and as a QR payload: `{"v":1,"url":…,"code":…,"pins":[…]}`.
 2. The device calls `POST /api/devices/register` with the code. The server creates the `Device` and issues a
    Sanctum token:

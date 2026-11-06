@@ -1,0 +1,75 @@
+{
+    "data": {
+        "id": "01m6s1x81c95ew4gqyrmzeej5v",
+        "session_id": "01m6s1x6v38xtqnqa6exvtgtmn",
+        "status": "ready",
+        "error": null,
+        "language": "en",
+        "sections": [
+            {
+                "key": "asked_for",
+                "heading": "Asked for",
+                "items": [
+                    {
+                        "text": "A login page",
+                        "verify": false,
+                        "lines": [
+                            1
+                        ],
+                        "at_ms": 4235
+                    }
+                ]
+            },
+            {
+                "key": "changes",
+                "heading": "Changes",
+                "items": [
+                    {
+                        "text": "Dark mode",
+                        "verify": false,
+                        "lines": [
+                            2
+                        ],
+                        "at_ms": 9315,
+                        "kind": "add"
+                    }
+                ]
+            },
+            {
+                "key": "decisions",
+                "heading": "Decisions",
+                "items": [
+                    {
+                        "text": "Launch on November 15",
+                        "verify": false,
+                        "lines": [
+                            3
+                        ],
+                        "at_ms": 14575
+                    }
+                ]
+            },
+            {
+                "key": "to_confirm",
+                "heading": "To confirm with the client",
+                "items": [
+                    {
+                        "text": "Hosting plan",
+                        "verify": true,
+                        "lines": [
+                            2
+                        ],
+                        "at_ms": 9315
+                    }
+                ]
+            }
+        ],
+        "created_at": "2026-11-06T18:28:33Z",
+        "session": {
+            "id": "01m6s1x6v38xtqnqa6exvtgtmn",
+            "title": "Retainer check-in, renamed",
+            "started_at": "2026-11-05T10:15:00Z",
+            "duration_ms": 19375
+        }
+    }
+}

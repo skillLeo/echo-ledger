@@ -44,7 +44,7 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 | ☐ | 13 | As the member, try to delete one of the owner's recordings. | The console offers no delete for it. | W-6 |
 | ☐ | 14 | As the owner, remove the member. | The member is gone and their devices are unpaired. | W-7 |
 | ☐ | 15 | Open **Usage**. | The current month shows with minutes, cost, storage and devices. Nothing is broken. | W-8 |
-| ☐ | 16 | Open **Devices** and click **Pair a device**. | A code and a QR code appear. Keep this page open for Parts 2 and 3. | — |
+| ☐ | 16 | Open **Profile → Devices** and click **Sign in a device**. | A code and a QR code appear. Keep this page open for Parts 2 and 3. | — |
 
 ---
 
@@ -144,7 +144,7 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 | ☐ | 68 | Install the APK. | The install finishes and the app opens to the setup guide. | A-01 |
 | ☐ | 69 | In the guide, allow the microphone, notifications, display over other apps and battery. | Each row says "Allowed" when you return. | O-4 |
 | ☐ | 70 | Tap **Scan QR code** and scan any other QR code first. | "That isn't an EchoLedger pairing code" and nothing is paired. | A-02 |
-| ☐ | 71 | Scan the QR code on **Devices → Pair a device** (new code if needed). | The phone pairs and the guide moves on by itself. | O-5 |
+| ☐ | 71 | Scan the QR code on **Profile → Devices → Sign in a device** (new code if needed). | The phone pairs and the guide moves on by itself. | O-5 |
 | ☐ | 72 | Run the 10-second test while you speak. | The meter moves and the result says the microphone works. | O-5 |
 | ☐ | 73 | Finish the guide. | The Library shows the recordings from Windows with Phone, Desktop and Web labels. | A-02 |
 | ☐ | 74 | Open **Settings → Devices → This phone → Setup guide** and connect through Shizuku (or paste the ADB command on a computer). | The helper status turns green. | A-10, A-11 |
@@ -419,7 +419,7 @@ Run these when the change touches the area, or before a release.
 | O-W4 | Give a client an avatar and pin it. | The folder shows the avatar and comes first everywhere. |
 | R-4 | Leave a deleted recording for 48 hours. | It leaves Recently deleted and cannot be restored. |
 | N-1 | Upload a recording. | The bell shows "Transcript ready". |
-| N-6 | Pair a device and go past 80 % of a small monthly limit. | "Device paired" and the limit notices appear once each. |
+| N-6 | Sign in a device and go past 80 % of a small monthly limit. | "<device> signed in" and the limit notices appear once each. |
 | W-11 | Set the device limit to the number paired, then pair one more. | "Device limit reached — raise it in Settings". |
 | W-10 | Set the storage limit below what is used and upload. | "Storage limit reached — raise it in Settings". The recording stays on the device. |
 | W-12 | Pass 80 % and 100 % of the monthly limit. | The bell shows each notice once per owner. |
@@ -478,13 +478,13 @@ Run these when the change touches the area, or before a release.
 
 ### Mac app v1.4 (about 30 minutes; paste the results back)
 
-First check the macOS version: Apple menu → **About This Mac**. Calls need 14.2 or newer (the process tap; 14.4+ is
-what the capture code was written against). Get the `.dmg` from the latest **Desktop (macOS)** run on GitHub
+First check the macOS version: Apple menu → **About This Mac**. The app needs 14.4 or newer and does not open on older
+versions. Get the `.dmg` from the latest **Desktop (macOS)** run on GitHub
 (Actions → the run → Artifacts: `EchoLedger-mac-apple-silicon` for M1–M4, `EchoLedger-mac-intel` for Intel).
 
 | # | Check | Expected |
 |---|---|---|
-| MAC-1 | Open the `.dmg`, drag EchoLedger to Applications, right-click → **Open** → **Open**. | It starts (menu-bar icon, no Dock icon). Later opens need no right-click. |
+| MAC-1 | Open the `.dmg`, drag EchoLedger to Applications, open it once, close the message, then System Settings → Privacy & Security → **Open Anyway** (macOS 15 and later; right-click → Open no longer works there). | It starts (menu-bar icon, no Dock icon). Later opens ask nothing. |
 | MAC-2 | Pair with the console (QR or code). | Paired; the Library loads. |
 | MAC-3 | First recording: allow the microphone and **system audio recording**. | Both prompts show EchoLedger's text; denying one says what to do. |
 | MAC-4 | A Google Meet call in Chrome or Safari, 1 minute, both people talk. | Recorded as Google Meet; the transcript has both sides (You and the other person). |
@@ -494,6 +494,43 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 | MAC-8 | Import a WhatsApp `.opus` and an `.mp3` (Library → Import or drop them on the window). | Two recordings named after the files; importing one again says it is already in your Library. |
 | MAC-9 | Live captions overlay during MAC-4. | Captions show over the call; ⌘ shortcuts from Settings → Shortcuts work. |
 | MAC-10 | Quit from the menu-bar icon during a recording. | It asks first; after quitting, no audio device is left behind (Audio MIDI Setup shows no extra device). |
+
+### Mac app v1.5, what only a real Mac can prove (Phase 1B; CI proves the build, the tests and the smoke test)
+
+| # | Check | Expected |
+|---|---|---|
+| MAC-11 | First start: the setup's Microphone, System audio and Screen recording steps; **Allow**, then **Open System Settings** on each. | Each prompt shows EchoLedger's text; each button opens the right pane (Microphone; Screen & System Audio Recording); coming back shows the new state without a restart. |
+| MAC-12 | Turn off system audio in System Settings, open the Record page, record a call. | The banner says your voice only, the pill and captions say so too, and the recording has your voice. Far-side warning after 30 s. |
+| MAC-13 | Turn off the microphone too, press REC. | It does not start and says why; nothing is saved. Voice note with only the microphone off: refused the same way. |
+| MAC-14 | Install an update (an unsigned build): start the app. | If macOS forgot a permission: one calm sentence with **Set up**; dismissed, it does not come back at the next start; turning the permission off again later says so again. |
+| MAC-15 | **Run Mac check** on a healthy Mac; speak during the microphone test. | One progress line at a time; a soft tone plays; all ✓. Turn off each permission in turn: ✗ with **Open System Settings**, its test not run. During a recording: the sentence and no button. |
+| MAC-16 | **Copy report** and read it; **Send to my admin**, signed in and signed out. | No name, no path with a user name, no account. It appears under the console's System → Device reports with the model (`Mac14,2`) and says when it was sent. Signed out: greyed out with the reason. |
+| MAC-17 | Menu-bar icon on a light and a dark menu bar, Retina and a 1x monitor. | Black or white with the bar, sharp at both; red tile while recording, amber while paused, a small dot while uploading. |
+| MAC-18 | With the window in front: ⌘, ⌘W ⌘Q; ⌘C and ⌘V in a text field. Settings → Shortcuts. | Settings opens; the window closes and EchoLedger stays in the menu bar; it quits, and ⌘Q during a recording saves the recording first; copy and paste work; shortcuts read ⌘ ⌥ ⇧. |
+| MAC-19 | A notched MacBook: start a recording, then System Settings → Control Center → Automatically hide and show the menu bar. | The pill sits below the menu bar and the notch, also with the menu bar hidden; captions and the Saved toast clear the Dock. |
+| MAC-20 | MacBook at 2x with a 1x monitor: drag the pill and captions to the monitor; click their buttons there. Restart the recording. | Clicks land where the buttons are; the pill opens where it was left. |
+| MAC-21 | Unplug that monitor with the pill and captions on it. | Within 5 s both are back on the laptop's screen. |
+| MAC-22 | A full-screen Zoom or Meet window, then swipe between Spaces. | Pill and captions stay over the full-screen meeting and follow every Space; ⌥⌘H from another app leaves them. They never take focus from the meeting. |
+| MAC-23 | Settings → General → Start EchoLedger when I sign in: on, log out and in; then off. | Off by default. On: it starts in the menu bar with no window. Off: `~/Library/LaunchAgents/EchoLedger.plist` is gone. |
+| MAC-24 | A signed update: Settings → About → Check for updates, on Apple Silicon and Intel. | Downloads, says restart, the app comes back on the new version. Recordings and settings stay. |
+| MAC-25 | During a recording: connect AirPods; switch input and output in the menu bar; pull a USB headset; turn the AirPods off. | The pill says what changed and goes on; a device gone says what the recording holds until one returns. In the file nothing is at the wrong speed and the gap is silence, not a cut. |
+| MAC-26 | Press Stop during MAC-25 and on a plain recording. | Stop answers at once (it used to be able to hang); Audio MIDI Setup shows no extra device. |
+| MAC-27 | Terminal, with EchoLedger running and signed in: `/Applications/EchoLedger.app/Contents/MacOS/echoledger-desktop --smoke-test; echo $?` | A second icon for a moment, 0, and the running app, its data and its sign-in untouched. |
+| MAC-28 | Close the main window and turn off the microphone and system audio. Press the record shortcut; click **Record** in the menu-bar icon; close the window again and join a meeting with auto-record on; press the dictation shortcut in a text field. | The shortcut and the menu open the window with the reason in it and the banner. The meeting gets a system notification saying why, and no window jumps in front of it (this is also the first proof that an unsigned build's notifications arrive). Dictation's box says the microphone is off and that dictation did not start, then hides. |
+| MAC-29 | First recording after setup was skipped (or after an update made macOS forget): press **Don't Allow** at the microphone prompt, then at system audio. Then, during a recording, turn the microphone off and on again in System Settings. | Within a few seconds of each answer the pill, the captions and the Record page say what the recording holds; both refused: "Nothing is being recorded". Turned back on: the line goes; check the microphone is really back in the file. |
+| MAC-30 | **Run Mac check**; during its tone test press the record shortcut. Run it again and press the dictation shortcut during the microphone test. On a Mac that never asked for Screen Recording, run it once more. | The tone stops at once and the check says a recording (or dictation) started, with no failed result for the test it cut short; the recording has no tone in it, and a meeting recorded this way still gets screen moments. Never asked: both Screen Recording rows say **Limited** and point to Settings → Screen moments, not "off". |
+
+### Windows v1.5, what only a real PC can prove (Phase 1B; CI ran the smoke test on Server 2022, Server 2025 and Windows 11 on Arm)
+
+| # | Check | Expected |
+|---|---|---|
+| WIN-1 | Windows 10 below build 20348 (`winver`; 22H2 is 19045): Record page and Settings → Microphone. Record a call with music playing in another app. | Both say "This Windows version records all sound playing on this computer, not just the call"; the music and EchoLedger's own sounds are in the recording, and the recording goes on normally. |
+| WIN-2 | Windows 11: the same, and play a recording inside EchoLedger meanwhile. | No sentence; EchoLedger's own sound is not in the recording (the other apps' still is: the capture leaves out only EchoLedger itself). |
+| WIN-3 | During a recording: plug in a USB headset, switch the default device, connect a Bluetooth headset, pull the USB headset. | The pill says what changed (on Windows 11 a change of speakers alone needs no move, because per-app capture does not depend on the device, so it may say nothing about that), the recording goes on, the gap is silence. A microphone that opens again on the same device says nothing; one that stays silent for good says "No microphone" after about 15 s. |
+| WIN-4 | Settings → Microphone: choose the USB microphone, pull it during a recording, plug it back. | Moves to the default and says so; moves back when it returns. |
+| WIN-5 | Unplug every microphone during a call. | "No microphone: recording the other side only" until one returns; the file is whole. |
+| WIN-6 | From a command prompt, with EchoLedger running: `start /wait "" "%LOCALAPPDATA%\EchoLedger\echoledger-desktop.exe" --smoke-test`, then `echo %ERRORLEVEL%`. (Without `start /wait` the prompt does not wait for a windowed app and always shows 0.) Or with PowerShell 7: `pwsh -File desktop\scripts\smoke-windows.ps1 "$env:LOCALAPPDATA\EchoLedger\echoledger-desktop.exe"`. | 0, after a few seconds; the running app and its sign-in untouched. |
+| WIN-7 | Close the main window and turn off the microphone in Windows Settings → Privacy → Microphone. Click **Record a voice note** in the tray; press the dictation shortcut in a text field. | The tray click opens the window with the reason in it. Dictation's box says the microphone is off and that dictation did not start, then hides. |
 
 ### Phone v1.5 (phone windows; the S25, installed with `pm install -r`, data kept)
 
@@ -525,6 +562,25 @@ what the capture code was written against). Get the `.dmg` from the latest **Des
 | AC-6 | Enter a wrong password six times. | The app says how long to wait, in plain words; no crash, no lockout of a signed-in device. |
 | AC-7 | Settings → Account → Delete my account… → **Delete on the web page**. | The browser opens the public page of this server. Cancelling in the app leaves everything as it was. |
 | AC-8 | First build from the signing workflow (when a certificate exists). | Windows shows the publisher's name, not "Unknown publisher"; the Mac build opens without a Gatekeeper warning. |
+
+### Teammate phone check (any Android 10+ phone; about 15 minutes)
+
+Send this to a teammate with a phone that is not a Samsung. It needs an account on the server, the website APK and one
+short test call. Nothing here changes what is already on the phone, other than installing EchoLedger.
+
+| # | Check | Expected |
+|---|---|---|
+| TP-1 | Install the APK and open it. | No crash. The second setup step lists "What works on this phone" with a reason for each line. |
+| TP-2 | Sign in, then You → General → Help & diagnostics → Device check → **Send to my admin**. | "Sent to your admin". The report shows in the console under System → Device reports. |
+| TP-3 | Follow "Keep EchoLedger running on …": tap **Open settings**. | The phone maker's own screen opens, or this app's page; the steps match what the phone shows. Note any that differ. |
+| TP-4 | Record a 20-second voice note and open it in the Library. | It plays and gets a transcript. |
+| TP-5 | Android 12 or newer: set up the helper with Setup's steps for this brand. | The Developer options path matches this phone, and the helper says it is running. |
+| TP-6 | With the helper, a WhatsApp call to a friend; talk for 20 seconds. | Android 14+: both voices. Android 12 and 13: **your voice only**, labelled so, with no silent track. |
+| TP-7 | Without the helper, a WhatsApp call. | Nothing recorded, and the Record tab said so before the call. |
+| TP-8 | Leave the phone alone for an hour with auto-record on, then repeat TP-6. | The call still records, without opening the app first. |
+| TP-9 | Settings → Display: largest text. Open the Library, Record and Device check. | Nothing is cut off or overlaps. |
+
+Send back the brand, model, Android version and the rows that differ.
 
 ### Screen moments v1.5 (desktop; the first run of the real capture)
 

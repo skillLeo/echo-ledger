@@ -32,8 +32,9 @@ class CapabilitiesTest {
     )
 
     @Test
-    fun `call capture needs Android 14 and a connected helper`() {
-        assertFalse(caps(33, helper = true).canCaptureCalls)
+    fun `call capture needs Android 12 and a connected helper`() {
+        assertFalse(caps(30, helper = true).canCaptureCalls)
+        assertTrue(caps(33, helper = true).canCaptureCalls)
         assertFalse(caps(34, helper = false).canCaptureCalls)
         assertTrue(caps(34, helper = true).canCaptureCalls)
     }
@@ -41,13 +42,16 @@ class CapabilitiesTest {
     @Test
     fun `the OS support flag ignores the helper`() {
         assertTrue(caps(34, helper = false).callCaptureSupportedByOs)
-        assertFalse(caps(33, helper = false).callCaptureSupportedByOs)
+        assertTrue(caps(33, helper = false).callCaptureSupportedByOs)
+        assertFalse(caps(29, helper = false).callCaptureSupportedByOs)
     }
 
     @Test
     fun `missing steps lists the helper only when the OS supports it`() {
+        val a10 = Capabilities(29, helperConnected = false, micPermission = true, notificationPermission = true, overlayPermission = false)
+        assertFalse(a10.missingSteps().contains(SetupStep.HELPER))
         val a13 = Capabilities(33, helperConnected = false, micPermission = true, notificationPermission = true, overlayPermission = false)
-        assertFalse(a13.missingSteps().contains(SetupStep.HELPER))
+        assertTrue(a13.missingSteps().contains(SetupStep.HELPER))
 
         val a14 =
             Capabilities(34, helperConnected = false, micPermission = false, notificationPermission = false, overlayPermission = false)

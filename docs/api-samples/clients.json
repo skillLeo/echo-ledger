@@ -1,0 +1,40 @@
+{
+    "data": [
+        {
+            "id": "01m6s1x6s9z9c2d3dzby62m437",
+            "name": "Acme Holdings",
+            "color": "#8B5CF6",
+            "avatar": null,
+            "pinned": false,
+            "retention_days": null,
+            "language": null,
+            "ai_notes": true,
+            "screens": true,
+            "keyterm_count": 5,
+            "session_count": 2,
+            "updated_at": "2026-11-06T18:28:32+00:00",
+            "parent_id": null,
+            "path": [],
+            "children_count": 0,
+            "nested_session_count": 2
+        },
+        {
+            "id": "01m6s1x6sfrm8djmwrfthjckyk",
+            "name": "Nova Clinics",
+            "color": "#22D3EE",
+            "avatar": null,
+            "pinned": false,
+            "retention_days": null,
+            "language": null,
+            "ai_notes": true,
+            "screens": true,
+            "keyterm_count": 3,
+            "session_count": 1,
+            "updated_at": "2026-11-06T18:28:32+00:00",
+            "parent_id": null,
+            "path": [],
+            "children_count": 0,
+            "nested_session_count": 1
+        }
+    ]
+}

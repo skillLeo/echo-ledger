@@ -5,8 +5,11 @@ import { explainMicUser, micTone } from "../../lib/explainer";
 import { DISCARD_CONFIRM } from "../../lib/pending";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { useWindowShown } from "../../lib/visibility";
-import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
+import { fillWidth } from "../../lib/motion";
+import { AlertIcon, CaptionsIcon, CopyIcon, MicIcon, RecordIcon } from "../../components/Icons";
+import { RecordDotIcon, StopIcon } from "../../components/ControlIcons";
 import { LiveTranslateCard } from "./LiveTranslateCard";
+import { PermissionBanner } from "./Permissions";
 import { isViewer, viewerSentence } from "../../lib/plan";
 
 /**
@@ -113,7 +116,7 @@ export function RecordView({ status, run, onImport }: {
         <h1 className="page-title">Record</h1>
         <p className="page-sub">What is shared with you is in the Library, under Shared with me.</p>
         <div className="card notice-card" data-testid="viewer-notice">
-          <div className="row"><MicIcon /><b>Recording is off for viewers</b></div>
+          <div className="row"><RecordIcon /><b>Recording is off for viewers</b></div>
           <p className="small">{viewerSentence(status.plan.workspace)}</p>
           <p className="small muted">An owner or admin of the workspace can change your role in the console.</p>
         </div>
@@ -125,12 +128,19 @@ export function RecordView({ status, run, onImport }: {
     <>
       <h1 className="page-title">Record</h1>
       <p className="page-sub">Two channels: your microphone is "Me", the other side of the call is "Client".</p>
+      <PermissionBanner recordingRef={recording?.clientRef ?? null} />
+      {status.systemAudioNote && <div className="banner warn" role="status" data-testid="whole-system-note"><AlertIcon size={16} /><span>{status.systemAudioNote}.</span></div>}
       <div className="card">
         <div className="record-hero">
-          <button className={`record-btn ${recording ? "" : "idle"}`} onClick={() => run(recording ? api.stopRecording : () => api.startRecording())}
-            aria-label={recording ? "Stop recording" : "Start recording"}>
-            {recording ? "STOP" : "REC"}
-          </button>
+          {/* The record control (since v1.5, as on the phone): its colour changes over 200 ms, it gives a little under a
+              press, and a calm ring breathes around it while it records; Record is a filled dot, a recording shows stop. */}
+          <span className={`record-wrap ${recording && !paused ? "live" : ""}`} data-testid="record-wrap">
+            <button className={`record-btn ${recording ? "" : "idle"}`} onClick={() => run(recording ? api.stopRecording : () => api.startRecording())}
+              aria-label={recording ? "Stop recording" : "Start recording"}>
+              <span key={recording ? "stop" : "rec"} className="record-glyph" aria-hidden="true">{recording ? <StopIcon size={18} /> : <RecordDotIcon size={18} />}</span>
+              <span className="record-word">{recording ? "STOP" : "REC"}</span>
+            </button>
+          </span>
           <div style={{ display: "grid", gap: 8 }}>
             <div className="row">
               <span className={`status-dot ${paused ? "paused" : recording ? "live" : ""}`} />
@@ -147,8 +157,11 @@ export function RecordView({ status, run, onImport }: {
                 <button type="button" className="btn ghost compact danger" aria-label="Cancel recording" onClick={cancel}>Cancel</button>
               </div>
             )}
-            <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter"><div style={{ width: `${Math.min(100, mic * 400)}%` }} /></div></div>
-            <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter"><div style={{ width: `${Math.min(100, sys * 400)}%` }} /></div></div>
+            <div className="row small"><span style={{ width: 52 }}>Me</span><div className="meter"><div style={fillWidth(mic * 4)} /></div></div>
+            <div className="row small"><span style={{ width: 52 }}>Client</span><div className="meter"><div style={fillWidth(sys * 4)} /></div></div>
+            {recording && status.deviceNote && (
+              <p className={`small ${status.deviceNote.warning ? "warning-text" : "muted"}`} role="status" data-testid="device-note">{status.deviceNote.text}</p>
+            )}
             {bluetooth && recording?.mode !== "voice_note" && (
               <p className="small muted bluetooth-note" data-testid="bluetooth-note" title={bluetooth.name}>{BLUETOOTH_NOTE} · {bluetooth.name}</p>
             )}

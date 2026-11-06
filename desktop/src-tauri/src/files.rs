@@ -188,7 +188,7 @@ pub async fn pick_import_files(app: &AppHandle) -> Vec<PathBuf> {
 /// cancelled.
 #[cfg(any(windows, target_os = "macos"))]
 pub async fn pick_client_files(app: &AppHandle) -> Vec<PathBuf> {
-    let chosen = file_dialog(app, |dialog| dialog.set_title("Add files for this client").add_filter("PDF, Word, text and Markdown", &CLIENT_FILE_EXTENSIONS).pick_files()).await;
+    let chosen = file_dialog(app, |dialog| dialog.set_title("Add files for this project").add_filter("PDF, Word, text and Markdown", &CLIENT_FILE_EXTENSIONS).pick_files()).await;
     chosen.flatten().unwrap_or_default().iter().map(|f| f.path().to_path_buf()).collect()
 }
 

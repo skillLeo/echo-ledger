@@ -65,7 +65,7 @@ fn roots() -> Arc<RootCertStore> {
 }
 
 /// Shown when a pin set is configured but none of its entries is a usable SHA-256 digest.
-pub const INVALID_PINS: &str = "The certificate pins from the server are invalid. Pair this computer again.";
+pub const INVALID_PINS: &str = "The certificate pins from the server are invalid. Sign in on this computer again.";
 
 /// rustls config for the EchoLedger server. With no pins configured it falls back to WebPKI only; a configured
 /// pin set that yields no usable pin is refused (fail closed, A6.DR3) instead of silently turning pinning off.

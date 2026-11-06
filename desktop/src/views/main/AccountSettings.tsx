@@ -3,6 +3,7 @@
 // Delete my account. A server without accounts answers none and the group is not shown.
 import { useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage, type Account, type AccountExport, type AppStatus, type WorkspaceRole } from "../../lib/ipc";
+import { fillWidth } from "../../lib/motion";
 import { minutesLine, percentUsed, planFeatures, ROLE_LABEL, storageLine, viewerSentence } from "../../lib/plan";
 
 /** How often a data export that is being made is asked about. */
@@ -79,7 +80,7 @@ function LimitRow({ label, text, percent }: { label: string; text: string; perce
       <div className="row"><span>{label}</span><span className="spacer" /><span className="small muted">{text}</span></div>
       {percent !== null && (
         <div className={`flow-bar ${percent >= 100 ? "full" : percent >= 80 ? "warn" : ""}`} role="meter" aria-label={`${label} used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-          <span style={{ width: `${percent}%` }} />
+          <span style={fillWidth(percent / 100)} />
         </div>
       )}
     </div>

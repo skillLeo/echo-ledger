@@ -137,6 +137,15 @@ it('serves a build as a resumable attachment, and nothing else', function () {
     $this->get('/downloads/files/.env')->assertNotFound();
 });
 
+it('says what works where, also before any build is published', function () {
+    $this->get('/downloads')->assertOk()
+        ->assertSee('What works where')
+        ->assertSee('macOS 14.4')
+        ->assertSee('only your voice in app calls')
+        ->assertSee('Windows 10:')
+        ->assertSee('Samsung Galaxy S25 Ultra');
+});
+
 it('shows the newest build of each app with its SHA-256, and the older ones folded away', function () {
     $this->get('/downloads')->assertOk()->assertSee('No builds are published yet.');
 

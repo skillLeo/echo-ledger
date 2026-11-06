@@ -1,0 +1,16 @@
+{
+    "data": [
+        {
+            "id": "01m6s1x6v38xtqnqa6exvtgtmn",
+            "title": "Retainer check-in, renamed",
+            "client": {
+                "id": "01m6s1x86j0z17y6qtyyr062mp",
+                "name": "Sample project, renamed"
+            },
+            "started_at": "2026-11-05T10:15:00+00:00",
+            "duration_ms": 19375,
+            "deleted_at": "2026-11-06T18:28:34+00:00",
+            "erase_at": "2026-11-08T18:28:34+00:00"
+        }
+    ]
+}

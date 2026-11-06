@@ -138,12 +138,13 @@ describe('secrets and local files', () => {
   test('tracked text files contain no private key blocks, device tokens or provider key values', () => {
     // A token or key value that is an obvious placeholder is not a secret, so tests may use one: a single repeated
     // character, or at most three straight runs such as 0123456789abcdefABCDEF. Random values break into many runs.
+    // AWS's documentation signs its published examples with a key ending in EXAMPLE, and the S3 signer is tested on them.
     const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
     const runs = (value) =>
       [...value.toLowerCase()].filter(
         (c, i, all) => i === 0 || alphabet.indexOf(c) !== (alphabet.indexOf(all[i - 1]) + 1) % alphabet.length,
       ).length;
-    const placeholder = ([, value]) => value !== undefined && (new Set(value).size === 1 || runs(value) <= 3);
+    const placeholder = ([, value]) => value !== undefined && (new Set(value).size === 1 || runs(value) <= 3 || value.endsWith('EXAMPLE'));
     const patterns = [
       PRIVATE_KEY_BLOCK,
       /\beld_([A-Za-z0-9]{20,})/,

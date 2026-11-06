@@ -5,7 +5,7 @@ Three different signatures matter for EchoLedger on Windows and the Mac:
 | Signature | Who checks it | Without it |
 |---|---|---|
 | Windows code signing (Authenticode) | Windows, SmartScreen | "Windows protected your PC" and "Unknown publisher" on the installer |
-| Apple Developer ID + notarization | macOS Gatekeeper | "EchoLedger cannot be opened" the first time; right-click → Open, or on macOS 15 and later System Settings → Privacy & Security → Open Anyway |
+| Apple Developer ID + notarization | macOS Gatekeeper | "EchoLedger cannot be opened" the first time, and on macOS 15 and later right-click → Open no longer gets past it: System Settings → Privacy & Security → Open Anyway. macOS may also forget the app's permissions after each update |
 | The updater key (minisign) | EchoLedger's own updater | Nothing is installed: the app only installs packages signed with this key |
 
 The first two are bought; the updater key is ours (made 2026-11-04, see `desktop/RELEASE.md`). The GitHub Actions
@@ -18,7 +18,7 @@ certificate is bought.
 |---|---|---|
 | Desktop (Windows) | none | Unsigned NSIS installer (the run's summary says so) |
 | Desktop (Windows) | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | The certificate is imported into the runner's user store for the build; the Tauri bundler signs the app, the installer and the uninstaller with signtool by its thumbprint (SHA-256, timestamped); the step after the build fails unless Windows reports the installer as validly signed |
-| Desktop (macOS) | none | Unsigned `.dmg` for Apple Silicon and Intel |
+| Desktop (macOS) | none | Unsigned `.dmg` for Apple Silicon and Intel, each built, tested and smoke-tested on a real runner of its chip; on a v* tag both are attached to the tag's GitHub Release |
 | Desktop (macOS) | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` (all five) | Signed with the Developer ID certificate and the hardened runtime, notarized by Apple and stapled; `codesign`, `spctl` and `stapler` check it after the build |
 | Both | `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, empty for our key) | Also the updater package and its `.sig` (Windows: the installer; Mac: `EchoLedger.app.tar.gz`), uploaded with the run's artifacts |
 
@@ -92,8 +92,17 @@ publisher name in `tauri.conf.json` (`bundle.publisher`, now "SkillLeo") should 
 | Developer ID Application certificate | included | Made by the Account Holder in Xcode → Settings → Accounts, or on developer.apple.com → Certificates; up to five per team |
 | Notarization | included | Apple's notary service scans the app (usually a few minutes) and the ticket is stapled to it |
 
-Without it the app works, but every person has to allow it once by hand, and macOS 15 and later hide the old
-right-click → Open shortcut behind System Settings → Privacy & Security → Open Anyway (docs/USER_GUIDE.md).
+Without it the app works, with two costs, and the $99 a year fixes both:
+
+1. **First launch.** Every person has to allow it once by hand: on macOS 15 and later right-click → Open no longer works,
+   so it is System Settings → Privacy & Security → Open Anyway (docs/USER_GUIDE.md).
+2. **Permissions after an update.** macOS ties a permission to the app's signature, and an unsigned app's changes with
+   every build, so it may forget the microphone, system audio and Screen Recording after each update. The app re-checks
+   them at every start and, when one that was granted is gone, says so once with the guided steps; a person still has to
+   allow them again.
+
+The signing and notarization workflow already exists (`.github/workflows/desktop-mac.yml`, "What the workflows do"
+above): put the five `APPLE_*` secrets in place and the next build is signed and notarized, with nothing else to change.
 
 ## Checks after a signed build
 - Windows: `Get-AuthenticodeSignature .\EchoLedger_*_x64-setup.exe` (Status `Valid`) or `signtool verify /pa /v

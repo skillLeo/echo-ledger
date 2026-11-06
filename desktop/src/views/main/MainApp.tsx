@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type ClientFolder, type LibraryItem, type LibraryViews, type LockStatus, type SmartFolder } from "../../lib/ipc";
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityUnread } from "./ActivityCentre";
 import { OnboardingView } from "./OnboardingView";
-import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
+import { PermissionLossNotice } from "./Permissions";
+import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MonitorIcon, MoonIcon, RecordIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
+import { BrandMark } from "../../components/BrandMark";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
 import { UpdateBanner } from "./UpdateSettings";
@@ -22,13 +24,16 @@ import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
 import { fileDropClaim } from "../../lib/dropTarget";
 import { isViewer, viewerSentence } from "../../lib/plan";
+import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib/motion";
+import { SuccessCheck } from "../../components/SuccessCheck";
 
 type Tab = MainTab;
 const TABS: readonly Tab[] = ["library", "projects", "record", "activity", "settings"];
+/** The pages, with the phone's metaphors: outlined at rest, filled on the active page (DESIGN_SYSTEM.md "Icons"). */
 const NAV: readonly [Tab, string, typeof LibraryIcon][] = [
   ["library", "Library", LibraryIcon],
   ["projects", "Projects", FolderIcon],
-  ["record", "Record", MicIcon],
+  ["record", "Record", RecordIcon],
   ["activity", "Activity", BellIcon],
   ["settings", "Settings", SettingsIcon],
 ];
@@ -255,6 +260,20 @@ export default function MainApp() {
   }, []);
 
   useEffect(() => trackScroll(), []);
+  // A page switch (since v1.5, the phone's tab rule): the new page fades in from the side its page sits on in the
+  // sidebar. The whole page moves (its parts appear as their data comes); a click during the switch ends the last one
+  // at once, so a page is never left half-faded.
+  const contentRef = useRef<HTMLElement>(null);
+  const shownTab = useRef(tab);
+  const viewMotion = useMemo(() => new MotionGroup(), []);
+  useLayoutEffect(() => {
+    const from = shownTab.current;
+    shownTab.current = tab;
+    const content = contentRef.current;
+    if (from === tab || !content) return;
+    enterView(viewMotion, [content], viewDirection(TABS, from, tab));
+  }, [tab, viewMotion]);
+  useEffect(() => () => viewMotion.stop(), [viewMotion]);
   useEffect(() => {
     if (restored) rememberMainView({ tab });
   }, [restored, tab]);
@@ -398,7 +417,12 @@ export default function MainApp() {
 
   // Rendered in every branch: a pairing error, or "signed out on the server" arriving with the status that sends the
   // window back to the sign-in form, must stay visible (A6.DU1).
-  const toastView = toast && <div className={`toast ${toast.error ? "error" : ""}`} role="status">{toast.text}</div>;
+  // A message that confirms something carries the check that pops in (as on the phone).
+  const toastView = toast && (
+    <div className={`toast ${toast.error ? "error" : ""}`} role="status">
+      {!toast.error && isConfirmation(toast.text) && <SuccessCheck size={16} />}{toast.text}
+    </div>
+  );
 
   if (lock?.locked) {
     return (
@@ -451,7 +475,7 @@ export default function MainApp() {
       <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true"><MicIcon size={14} /></span>
+          <BrandMark size={24} />
           <span className="brand-name">EchoLedger</span>
           <button type="button" className="sidebar-toggle" aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"} aria-expanded={!collapsed}
             title={collapsed ? "Expand" : "Collapse"} onClick={toggleSidebar}><SidebarIcon size={18} /></button>
@@ -461,7 +485,7 @@ export default function MainApp() {
             <div key={id} className="nav-group">
               <button type="button" className={`nav-btn ${tab === id ? "active" : ""}`} aria-current={tab === id ? "page" : undefined}
                 title={collapsed ? label : undefined} onClick={() => goTo(id)}>
-                <Icon size={20} /><span className="nav-label">{label}</span>
+                <Icon size={20} filled={tab === id} /><span className="nav-label">{label}</span>
                 {id === "record" && status.recording && <span className="status-dot live" aria-hidden="true" />}
                 {id === "activity" && unread > 0 && <><span className="nav-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</span><span className="sr-only">, {unread} unread</span></>}
               </button>
@@ -499,8 +523,9 @@ export default function MainApp() {
           <div className="small">{status.pendingUploads > 0 ? "Uploading…" : "All uploads done"}</div>
         </div>
       </aside>
-      <main className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
+      <main ref={contentRef} className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
         <UpdateBanner appStatus={status} notify={notify} />
+        {status.platform === "macos" && <PermissionLossNotice />}
         {status.budget === "reached" && (
           <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
         )}

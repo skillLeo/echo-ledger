@@ -4,6 +4,7 @@ import { LibraryView } from "./LibraryView";
 import type { LibraryItem, Segment, TranscriptDetail } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeTranscript } from "../../test/fixtures";
+import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -1351,5 +1352,54 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     await flushAsync();
     await waitFor(() => expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w").length).toBeGreaterThan(0));
     expect(within(detail()).queryByTestId("retry-line")).not.toBeInTheDocument();
+  });
+});
+
+describe("LibraryView: a row opens its recording with motion (v1.5)", () => {
+  let anim: ReturnType<typeof fakeAnimations>;
+  beforeEach(() => {
+    anim = fakeAnimations();
+    prefersReducedMotion(false);
+  });
+  afterEach(() => {
+    anim.restore();
+    vi.unstubAllGlobals();
+  });
+
+  it("moves the row's title and app tile into place and fades the rest, 300 ms, transform and opacity only", async () => {
+    // jsdom lays nothing out: give every element a box so there is somewhere to move from.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue({ left: 10, top: 20, width: 100, height: 20, right: 110, bottom: 40, x: 10, y: 20, toJSON() {} } as DOMRect);
+    await renderLibrary();
+    await selectItem("Zoom with Acme");
+    const moved = anim.calls.filter((c) => typeof c.keyframes[0].transform === "string" && c.keyframes[0].transform.startsWith("translate("));
+    expect(moved.map((c) => c.el.getAttribute("data-motion")).sort()).toEqual(["tile", "title"]);
+    expect(moved.every((c) => detail().contains(c.el))).toBe(true);
+    const faded = anim.calls.filter((c) => c.keyframes[0].opacity === 0);
+    expect(faded.length).toBeGreaterThan(0);
+    expect(faded.some((c) => c.el.contains(detail().querySelector("[data-motion=title]")))).toBe(false);
+    for (const call of anim.calls) {
+      expect(Object.keys(call.keyframes[0]).every((k) => ["transform", "opacity", "transformOrigin"].includes(k))).toBe(true);
+      expect(call.options).toMatchObject({ duration: 300, fill: "none" });
+    }
+  });
+
+  it("ends the last opening at once when another row is clicked during it", async () => {
+    await renderLibrary();
+    await selectItem("Zoom with Acme");
+    const first = [...anim.calls];
+    await selectItem("Voice note from Sam");
+    expect(first.every((c) => c.cancel.mock.calls.length === 1)).toBe(true);
+    expect(anim.calls.length).toBeGreaterThan(first.length);
+  });
+
+  it("opens the recording at once with reduced motion, and does not move a recording already open", async () => {
+    prefersReducedMotion(true);
+    await renderLibrary();
+    await selectItem("Zoom with Acme");
+    expect(anim.animate).not.toHaveBeenCalled();
+    prefersReducedMotion(false);
+    await selectItem("Zoom with Acme");
+    expect(anim.animate).not.toHaveBeenCalled();
+    expect(within(detail()).getByRole("heading", { name: "Zoom with Acme" })).toBeInTheDocument();
   });
 });

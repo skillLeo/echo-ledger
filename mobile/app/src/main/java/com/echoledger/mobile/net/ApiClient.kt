@@ -166,6 +166,32 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun account(): com.echoledger.mobile.data.AccountDto =
         call(request("account").get().build(), com.echoledger.mobile.data.AccountDto.serializer())!!
 
+    /** `POST /api/devices/report` (since v1.5): the device check, only when the person taps Send to my admin. */
+    suspend fun reportDevice(facts: com.echoledger.mobile.core.PhoneFacts, rows: List<com.echoledger.mobile.core.CheckRow>) {
+        val body = buildJsonObject {
+            put("platform", "android")
+            put("app_version", facts.appVersion.take(32))
+            put("brand", facts.brand.take(64))
+            put("model", facts.model.take(64))
+            put("os_version", facts.release.take(64))
+            put(
+                "checks",
+                buildJsonArray {
+                    rows.forEach { row ->
+                        add(
+                            buildJsonObject {
+                                put("key", row.key)
+                                put("state", row.state.wire)
+                                put("detail", row.detail.take(300))
+                            }
+                        )
+                    }
+                }
+            )
+        }.toString().toRequestBody(jsonType)
+        call(request("devices/report").post(body).build(), null as KSerializer<Unit>?, allowEmpty = true)
+    }
+
     suspend fun signOutEverywhere() {
         call(request("account/sign-out-everywhere").post("{}".toRequestBody(jsonType)).build(), null as KSerializer<Unit>?)
     }

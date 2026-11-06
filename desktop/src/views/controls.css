@@ -69,8 +69,17 @@
 
 .rec-status { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .rec-dot {
+  position: relative;
   width: 8px;
   height: 8px;
+  border-radius: 50%;
+  background: var(--ctl-rec);
+}
+/* The ring that spreads from the dot: a shape that scales and fades, so nothing is repainted while it records. */
+.rec-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
   background: var(--ctl-rec);
   animation-name: rec-pulse;
@@ -81,12 +90,13 @@
 .rec-state { font-size: 11px; font-weight: 600; color: var(--ctl-muted); }
 .rec-pill:not(.paused) .rec-state,
 .rec-source:not(.rec-error) .rec-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
-.rec-pill.paused .rec-dot { background: var(--ctl-paused); animation: none; }
+.rec-pill.paused .rec-dot { background: var(--ctl-paused); }
+.rec-pill.paused .rec-dot::after { animation: none; opacity: 0; }
 .rec-pill.paused .rec-state { color: var(--ctl-paused); }
 @keyframes rec-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.55); }
-  70% { box-shadow: 0 0 0 6px rgba(229, 72, 77, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(229, 72, 77, 0); }
+  0% { transform: scale(1); opacity: 0.55; }
+  70% { transform: scale(2.5); opacity: 0; }
+  100% { transform: scale(2.5); opacity: 0; }
 }
 
 .rec-timer { flex: none; min-width: 40px; font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
@@ -116,7 +126,7 @@
 /* Two 3 px level bars: Me and Client, the speaker colours of the captions. */
 .rec-meters { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; flex: none; }
 .rec-meter { position: relative; width: 3px; height: 14px; border-radius: 2px; background: var(--ctl-hover); overflow: hidden; }
-.rec-meter > span { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 2px; transition: height 120ms linear; }
+.rec-meter > span { position: absolute; inset: 0; border-radius: 2px; transform-origin: 50% 100%; transition: transform 120ms linear; }
 .rec-meter.me > span { background: var(--me); }
 .rec-meter.client > span { background: var(--client); }
 
@@ -221,8 +231,8 @@
   overflow: hidden;
   /* A2.2: slides in over 180 ms; none with reduced motion (below). */
   animation-name: ctl-slide-in;
-  animation-duration: 180ms;
-  animation-timing-function: ease-out;
+  animation-duration: var(--motion-slow);
+  animation-timing-function: var(--ease-out);
   animation-fill-mode: both;
 }
 @keyframes ctl-slide-in {
@@ -262,11 +272,25 @@
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   overflow: hidden;
   font-size: var(--text-xs);
+  /* Rises in over 300 ms, decelerating; leaves over 150 ms, accelerating (.leaving, since v1.5). */
   animation-name: ctl-slide-in;
-  animation-duration: 180ms;
-  animation-timing-function: ease-out;
+  animation-duration: var(--motion-slow);
+  animation-timing-function: var(--ease-out);
   animation-fill-mode: both;
 }
+.after-pill.leaving {
+  animation-name: ctl-slide-out;
+  animation-duration: var(--motion-fast);
+  animation-timing-function: var(--ease-in);
+  animation-fill-mode: forwards;
+  pointer-events: none;
+}
+@keyframes ctl-slide-out {
+  from { transform: none; opacity: 1; }
+  to { transform: translateY(8px); opacity: 0; }
+}
+/* A kept chip: the check and "Kept · title", no buttons. */
+.after-pill.kept { padding-right: var(--space-3); }
 .after-icon { flex: none; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; }
 .after-icon.ok { background: rgba(61, 214, 140, 0.16); color: var(--after-ok); }
 /* Not ".app": that is the main window's shell grid (styles.css), which pushed the icon over the title. */
@@ -353,8 +377,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rec-dot { animation: none; box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.25); }
-  .rec-pill.paused .rec-dot { box-shadow: none; }
+  .rec-dot::after { animation: none; transform: scale(1.75); opacity: 0.25; }
   .rec-meter > span { transition: none; }
   .mark-tray { animation: none; }
   .after-pill,

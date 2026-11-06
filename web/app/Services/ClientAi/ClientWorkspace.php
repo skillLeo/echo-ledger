@@ -112,7 +112,7 @@ final class ClientWorkspace
     public function assertCanSpend(int $workspaceId): void
     {
         if (! $this->configured()) {
-            throw new ApiError(409, 'ai_unavailable', 'Add your Anthropic key in API Credentials to use project notes and Ask.');
+            throw new ApiError(409, 'ai_unavailable', 'AI is not set up on this server yet. Whoever runs it adds the Anthropic key under API Credentials.');
         }
         $budget = $this->budget($workspaceId);
         if ($budget['spent_usd'] >= $budget['budget_usd']) {

@@ -1,14 +1,18 @@
 //! macOS 14.4+ capture: a Core Audio process tap (all processes except EchoLedger) combined with the chosen
 //! microphone (`inputDevice`, else the default input device) in one private aggregate device, read by a single IOProc so mic and system audio share one
-//! clock (docs/research/desktop-audio-native.md §3).
+//! clock (docs/research/desktop-audio-native.md §3). A device that changes or goes during a recording closes the stream
+//! and opens another on the new devices (`audio::devices`).
 //!
-//! NOT VERIFIED ON HARDWARE (this repo is built on Windows): the input-buffer → channel mapping below assumes the
-//! sub-device (mic) streams precede the tap stream. docs/MANUAL_QA.md lists the check.
+//! NOT VERIFIED ON HARDWARE (the tests never open a real tap): the input-buffer → channel mapping below assumes the
+//! sub-device streams come in list order and precede the tap's (`mic_buffer`). docs/MANUAL_QA.md lists the check.
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
-use std::sync::mpsc::{Sender, channel};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::{RecvTimeoutError, Sender, channel};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use block2::RcBlock;
 use dispatch2::DispatchQueue;
@@ -19,8 +23,12 @@ use objc2_core_foundation::{CFArray, CFBoolean, CFDictionary, CFRetained, CFStri
 use objc2_foundation::{NSArray, NSNumber};
 
 use super::{CaptureBackend, Streams};
+use crate::audio::devices::{CaptureHost, DeviceLog, DeviceNotice, Route, Supervisor};
 use crate::audio::dsp::{Resampler, downmix_to_mono};
 use crate::audio::types::{AudioChunk, BackendKind, CaptureError, Channel, TARGET_RATE};
+
+/// The name of our aggregate device: the prefix and the process id.
+const AGGREGATE_PREFIX: &str = "EchoLedger-";
 
 struct RawPacket {
     mic: Vec<f32>,
@@ -32,17 +40,32 @@ struct RawPacket {
 /// data, output time.
 type IoBlock = dyn Fn(NonNull<AudioTimeStamp>, NonNull<AudioBufferList>, NonNull<AudioTimeStamp>, NonNull<AudioBufferList>, NonNull<AudioTimeStamp>);
 
-pub struct MacBackend {
+/// One open capture: the tap and the aggregate device built on one set of devices. A device change closes it and opens
+/// another (`MacHost`); the recorder's timeline fills the gap from the host clock, which they all share.
+pub struct Stream {
     aggregate: AudioObjectID,
     tap: AudioObjectID,
     proc_id: AudioDeviceIOProcID,
-    _block: RcBlock<IoBlock>,
+    block: Option<RcBlock<IoBlock>>,
     _queue: dispatch2::DispatchRetained<DispatchQueue>,
     worker: Option<JoinHandle<()>>,
-    stopped: bool,
+    /// Tells the worker to end once what is queued is written.
+    finish: Arc<AtomicBool>,
+    /// IOProc calls so far: a device that dies without telling anyone stops counting.
+    packets: Arc<AtomicU64>,
+    /// The rate the worker's resamplers were made for.
+    device_rate: u32,
 }
 
-unsafe impl Send for MacBackend {}
+// SAFETY: the Core Audio objects are plain ids, usable from any thread; the block and queue are only kept alive here.
+unsafe impl Send for Stream {}
+
+/// The capture of one recording: keeps a [`Stream`] open on the right devices until it is stopped (`devices.rs`).
+pub struct MacBackend {
+    stop: Arc<AtomicBool>,
+    log: DeviceLog,
+    watcher: Option<JoinHandle<()>>,
+}
 
 fn address(selector: AudioObjectPropertySelector, scope: AudioObjectPropertyScope) -> AudioObjectPropertyAddress {
     AudioObjectPropertyAddress { mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain }
@@ -89,23 +112,16 @@ pub fn input_devices() -> Vec<super::InputDevice> {
 unsafe fn input_devices_inner() -> Vec<super::InputDevice> {
     let system_object = kAudioObjectSystemObject as AudioObjectID;
     let default = unsafe { get_u32(system_object, kAudioHardwarePropertyDefaultInputDevice, kAudioObjectPropertyScopeGlobal, None) };
-    let addr = address(kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal);
-    let mut size: u32 = 0;
-    if unsafe { AudioObjectGetPropertyDataSize(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size)) } != 0 || size == 0 {
-        return Vec::new();
-    }
-    let mut ids: Vec<AudioObjectID> = vec![0; size as usize / std::mem::size_of::<AudioObjectID>()];
-    let status = unsafe {
-        AudioObjectGetPropertyData(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size), NonNull::new_unchecked(ids.as_mut_ptr().cast()))
-    };
-    if status != 0 {
-        return Vec::new();
-    }
+    let ids = unsafe { all_devices() };
     ids.into_iter()
         .filter(|&device| unsafe { input_stream_channels(device) }.iter().sum::<u32>() > 0)
         .filter_map(|device| {
             let id = unsafe { device_uid(device) }?;
             let name = unsafe { device_name(device) }.unwrap_or_else(|| "Microphone".into());
+            // Our own private aggregate device is listed to us while a recording runs.
+            if name.starts_with(AGGREGATE_PREFIX) {
+                return None;
+            }
             let bus = match unsafe { get_u32(device, kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal, None) } {
                 Some(kind) if kind == kAudioDeviceTransportTypeBluetooth || kind == kAudioDeviceTransportTypeBluetoothLE => super::MicBus::Bluetooth,
                 Some(_) => super::MicBus::Other,
@@ -156,152 +172,273 @@ fn cfstr(key: &std::ffi::CStr) -> CFRetained<CFString> {
     CFString::from_str(key.to_str().unwrap_or_default())
 }
 
-impl MacBackend {
-    pub fn start(streams: Streams, tx: Sender<AudioChunk>) -> Result<Self, CaptureError> {
-        unsafe { Self::start_inner(streams, tx) }
+/// Every audio device the system knows.
+unsafe fn all_devices() -> Vec<AudioObjectID> {
+    let system_object = kAudioObjectSystemObject as AudioObjectID;
+    let addr = address(kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal);
+    let mut size: u32 = 0;
+    if unsafe { AudioObjectGetPropertyDataSize(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size)) } != 0 || size == 0 {
+        return Vec::new();
+    }
+    let mut ids: Vec<AudioObjectID> = vec![0; size as usize / std::mem::size_of::<AudioObjectID>()];
+    let status = unsafe {
+        AudioObjectGetPropertyData(system_object, NonNull::from(&addr), 0, std::ptr::null(), NonNull::from(&mut size), NonNull::new_unchecked(ids.as_mut_ptr().cast()))
+    };
+    if status != 0 { Vec::new() } else { ids }
+}
+
+unsafe fn device_with_uid(uid: &str) -> Option<AudioObjectID> {
+    unsafe { all_devices() }.into_iter().find(|&device| unsafe { device_uid(device) }.as_deref() == Some(uid))
+}
+
+/// Which input buffer of the aggregate is the microphone (pure). The sub-devices' streams come in list order and the
+/// tap's last, and the output device is listed first, so a USB headset used as output puts its own microphone's streams
+/// ahead of another chosen microphone. The same device for both is listed once.
+pub fn mic_buffer(buffers: usize, output_input_streams: usize, same_device: bool) -> Option<usize> {
+    let at = if same_device { 0 } else { output_input_streams };
+    // The last buffer is the tap's.
+    (at + 1 < buffers).then_some(at)
+}
+
+/// The sub-devices of the aggregate (pure): the output first, the microphone after it when it is another device.
+pub fn subdevice_uids<'a>(output: &'a str, mic: Option<&'a str>) -> Vec<&'a str> {
+    let mut uids = vec![output];
+    if let Some(mic) = mic.filter(|m| *m != output) {
+        uids.push(mic);
+    }
+    uids
+}
+
+/// The Mac side of [`Supervisor`]: reads the default devices and opens streams.
+struct MacHost {
+    streams: Streams,
+    tx: Sender<AudioChunk>,
+}
+
+impl CaptureHost for MacHost {
+    type Stream = Stream;
+
+    fn want(&self) -> Route {
+        let system_object = kAudioObjectSystemObject as AudioObjectID;
+        let default = |selector| unsafe { get_u32(system_object, selector, kAudioObjectPropertyScopeGlobal, None) }.filter(|&d| d != 0).and_then(|d| unsafe { device_uid(d) });
+        // The chosen microphone while it is connected, else the default input device.
+        let mic = self.streams.mic.then(|| super::preferred_mic().filter(|chosen| input_devices().iter().any(|d| d.id == *chosen)).or_else(|| default(kAudioHardwarePropertyDefaultInputDevice))).flatten();
+        Route { mic, output: default(kAudioHardwarePropertyDefaultOutputDevice) }
     }
 
-    unsafe fn start_inner(streams: Streams, tx: Sender<AudioChunk>) -> Result<Self, CaptureError> {
-        let system_object = kAudioObjectSystemObject as AudioObjectID;
-        let output = unsafe { get_u32(system_object, kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, None) }
-            .ok_or_else(|| CaptureError::Device("no default output device".into()))?;
-        let input = unsafe { get_u32(system_object, kAudioHardwarePropertyDefaultInputDevice, kAudioObjectPropertyScopeGlobal, None) };
-        let output_uid = unsafe { device_uid(output) }.ok_or_else(|| CaptureError::Device("output device has no UID".into()))?;
-        // The chosen microphone while it is connected, else the default input device.
-        let chosen = if streams.mic { super::choose_mic(&input_devices(), super::preferred_mic().as_deref()) } else { None };
-        let input_uid = if streams.mic { chosen.or_else(|| input.and_then(|d| unsafe { device_uid(d) })) } else { None };
+    fn open(&mut self, route: &Route) -> Result<Stream, String> {
+        unsafe { open_stream(route, self.streams, self.tx.clone()) }.map_err(|e| e.to_string())
+    }
 
-        // Exclude our own process object (0 if we have not done audio I/O yet — then nothing is excluded).
-        let pid = std::process::id() as i32;
-        let own = unsafe { get_u32(system_object, kAudioHardwarePropertyTranslatePIDToProcessObject, kAudioObjectPropertyScopeGlobal, Some(&pid)) }
-            .filter(|&id| id != 0);
-        let numbers: Vec<_> = own.into_iter().map(NSNumber::new_u32).collect();
-        let excluded = NSArray::from_retained_slice(&numbers);
-        let description = unsafe { CATapDescription::initStereoGlobalTapButExcludeProcesses(CATapDescription::alloc(), &excluded) };
-        unsafe { description.setPrivate(true) };
-        let tap_uid = unsafe { description.UUID() }.UUIDString().to_string();
-        let mut tap: AudioObjectID = 0;
-        let status = unsafe { AudioHardwareCreateProcessTap(Some(&description), &mut tap) };
-        if status != 0 {
-            return Err(CaptureError::Permission(format!("system audio tap (OSStatus {status}); allow System Audio Recording")));
-        }
+    fn close(&mut self, stream: Stream) {
+        close_stream(stream);
+    }
 
-        // Aggregate: output as main sub-device, optional mic sub-device (drift-compensated), tap (drift-compensated).
-        let yes: &CFType = CFBoolean::new(true);
-        let no: &CFType = CFBoolean::new(false);
-        let sub_output = CFDictionary::<CFString, CFType>::from_slices(&[&*cfstr(kAudioSubDeviceUIDKey)], &[&*CFString::from_str(&output_uid)]);
-        let mut subdevices: Vec<CFRetained<CFDictionary<CFString, CFType>>> = vec![sub_output];
-        if let Some(uid) = &input_uid {
-            subdevices.push(CFDictionary::<CFString, CFType>::from_slices(
-                &[&*cfstr(kAudioSubDeviceUIDKey), &*cfstr(kAudioSubDeviceDriftCompensationKey)],
-                &[&*CFString::from_str(uid), yes],
-            ));
-        }
-        let tap_entry = CFDictionary::<CFString, CFType>::from_slices(
-            &[&*cfstr(kAudioSubTapUIDKey), &*cfstr(kAudioSubTapDriftCompensationKey)],
-            &[&*CFString::from_str(&tap_uid), yes],
-        );
-        let sub_refs: Vec<&CFDictionary<CFString, CFType>> = subdevices.iter().map(|d| &**d).collect();
-        let sub_array = CFArray::from_objects(&sub_refs);
-        let tap_array = CFArray::from_objects(&[&*tap_entry]);
-        let aggregate_uid = uuid::Uuid::new_v4().to_string();
-        let keys = [
-            &*cfstr(kAudioAggregateDeviceUIDKey),
-            &*cfstr(kAudioAggregateDeviceNameKey),
-            &*cfstr(kAudioAggregateDeviceMainSubDeviceKey),
-            &*cfstr(kAudioAggregateDeviceIsPrivateKey),
-            &*cfstr(kAudioAggregateDeviceIsStackedKey),
-            &*cfstr(kAudioAggregateDeviceTapAutoStartKey),
-            &*cfstr(kAudioAggregateDeviceSubDeviceListKey),
-            &*cfstr(kAudioAggregateDeviceTapListKey),
-        ];
-        let name = CFString::from_str(&format!("EchoLedger-{pid}"));
-        let uid_value = CFString::from_str(&aggregate_uid);
-        let main_value = CFString::from_str(&output_uid);
-        let values: [&CFType; 8] = [&uid_value, &name, &main_value, yes, no, yes, sub_array.as_ref(), tap_array.as_ref()];
-        let dictionary = CFDictionary::<CFString, CFType>::from_slices(&keys, &values);
-        let mut aggregate: AudioObjectID = 0;
-        let status = unsafe { AudioHardwareCreateAggregateDevice(dictionary.as_opaque(), NonNull::from(&mut aggregate)) };
-        if status != 0 {
-            unsafe { AudioHardwareDestroyProcessTap(tap) };
-            return Err(CaptureError::Device(format!("aggregate device (OSStatus {status})")));
-        }
+    fn packets(&self, stream: &Stream) -> u64 {
+        stream.packets.load(Ordering::Relaxed)
+    }
 
-        let device_rate = unsafe { get_f64(aggregate, kAudioDevicePropertyNominalSampleRate) }.unwrap_or(48_000.0) as u32;
-        let stream_channels = unsafe { input_stream_channels(aggregate) };
-        eprintln!("[echoledger] macOS aggregate input streams (channels): {stream_channels:?}");
-        let has_mic = input_uid.is_some();
+    fn rate_moved(&self, stream: &Stream) -> bool {
+        unsafe { get_f64(stream.aggregate, kAudioDevicePropertyNominalSampleRate) }.is_some_and(|rate| rate as u32 != stream.device_rate)
+    }
 
-        // IOProc copies into a channel; a worker thread downmixes + resamples to 16 kHz (no heavy work on the HAL thread).
-        let (raw_tx, raw_rx) = channel::<RawPacket>();
-        let block = RcBlock::new(
-            move |_now: NonNull<AudioTimeStamp>, input: NonNull<AudioBufferList>, in_time: NonNull<AudioTimeStamp>, _out: NonNull<AudioBufferList>, _out_time: NonNull<AudioTimeStamp>| {
-                let list = unsafe { input.as_ref() };
-                let buffers = unsafe { std::slice::from_raw_parts(list.mBuffers.as_ptr(), list.mNumberBuffers as usize) };
-                let read = |i: usize| -> Vec<f32> {
-                    let b = &buffers[i];
-                    if b.mData.is_null() || b.mNumberChannels == 0 {
-                        return Vec::new();
-                    }
-                    let samples = unsafe { std::slice::from_raw_parts(b.mData as *const f32, b.mDataByteSize as usize / 4) };
-                    downmix_to_mono(samples, b.mNumberChannels as usize)
-                };
-                let (mic, system) = match buffers.len() {
-                    0 => (Vec::new(), Vec::new()),
-                    1 => (Vec::new(), read(0)),
-                    n => (if has_mic { read(0) } else { Vec::new() }, read(n - 1)),
-                };
-                let ts_ns = unsafe { AudioConvertHostTimeToNanos(in_time.as_ref().mHostTime) };
-                let _ = raw_tx.send(RawPacket { mic, system, ts_ns });
-            },
-        );
-        let queue = DispatchQueue::new("com.echoledger.audio.io", None);
-        let mut proc_id: AudioDeviceIOProcID = None;
-        let status = unsafe { AudioDeviceCreateIOProcIDWithBlock(NonNull::from(&mut proc_id), aggregate, Some(&queue), RcBlock::as_ptr(&block)) };
-        if status != 0 {
-            unsafe {
-                AudioHardwareDestroyAggregateDevice(aggregate);
-                AudioHardwareDestroyProcessTap(tap);
-            }
-            return Err(CaptureError::Device(format!("IOProc (OSStatus {status})")));
-        }
+    fn device_name(&self, id: &str) -> Option<String> {
+        unsafe { device_with_uid(id).and_then(|device| device_name(device)) }
+    }
+}
 
-        let want_mic = streams.mic && has_mic;
-        let want_system = streams.system;
-        let worker = std::thread::Builder::new()
-            .name("el-audio-mac".into())
+impl MacBackend {
+    /// Opens the first stream (its error is the recording's) and watches the devices from then on.
+    pub fn start(streams: Streams, tx: Sender<AudioChunk>) -> Result<Self, CaptureError> {
+        let mut host = MacHost { streams, tx };
+        let route = host.want();
+        let first = unsafe { open_stream(&route, streams, host.tx.clone()) }?;
+        let mut supervisor = Supervisor::new(first, route, streams.mic, streams.system, Instant::now());
+        let stop = Arc::new(AtomicBool::new(false));
+        let log = DeviceLog::default();
+        let (watching, notices) = (stop.clone(), log.clone());
+        let watcher = std::thread::Builder::new()
+            .name("el-audio-devices".into())
             .spawn(move || {
-                let mut mic_rs = Resampler::new(device_rate, TARGET_RATE);
-                let mut sys_rs = Resampler::new(device_rate, TARGET_RATE);
-                while let Ok(packet) = raw_rx.recv() {
-                    if want_mic && !packet.mic.is_empty() {
-                        let samples = mic_rs.process(&packet.mic);
-                        if tx.send(AudioChunk { channel: Channel::Mic, samples, ts_ns: Some(packet.ts_ns), discontinuity: false }).is_err() {
-                            break;
+                'watch: loop {
+                    for _ in 0..10 {
+                        if watching.load(Ordering::SeqCst) {
+                            break 'watch;
                         }
+                        std::thread::sleep(Duration::from_millis(100));
                     }
-                    if want_system && !packet.system.is_empty() {
-                        let samples = sys_rs.process(&packet.system);
-                        if tx.send(AudioChunk { channel: Channel::System, samples, ts_ns: Some(packet.ts_ns), discontinuity: false }).is_err() {
-                            break;
-                        }
+                    for notice in supervisor.tick(&mut host, Instant::now()) {
+                        notices.push(notice);
                     }
+                }
+                if let Some(stream) = supervisor.take_stream() {
+                    close_stream(stream);
                 }
             })
             .map_err(|e| CaptureError::Device(e.to_string()))?;
+        Ok(Self { stop, log, watcher: Some(watcher) })
+    }
+}
 
-        // The first start triggers the one-time "System Audio Recording" prompt (tie to a user action).
-        let status = unsafe { AudioDeviceStart(aggregate, proc_id) };
-        if status != 0 {
-            unsafe {
-                AudioDeviceDestroyIOProcID(aggregate, proc_id);
-                AudioHardwareDestroyAggregateDevice(aggregate);
-                AudioHardwareDestroyProcessTap(tap);
-            }
-            return Err(CaptureError::Permission(format!("start capture (OSStatus {status})")));
+/// Builds the tap and the aggregate device on `route` and starts them.
+unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>) -> Result<Stream, CaptureError> {
+    let system_object = kAudioObjectSystemObject as AudioObjectID;
+    let output_uid = route.output.clone().ok_or_else(|| CaptureError::Device("no default output device".into()))?;
+    let input_uid = route.mic.clone().filter(|_| streams.mic);
+    let same_device = input_uid.as_deref() == Some(output_uid.as_str());
+    let output_inputs = unsafe { device_with_uid(&output_uid).map(|device| input_stream_channels(device).len()) }.unwrap_or(0);
+
+    // Exclude our own process object (0 if we have not done audio I/O yet — then nothing is excluded).
+    let pid = std::process::id() as i32;
+    let own = unsafe { get_u32(system_object, kAudioHardwarePropertyTranslatePIDToProcessObject, kAudioObjectPropertyScopeGlobal, Some(&pid)) }
+        .filter(|&id| id != 0);
+    let numbers: Vec<_> = own.into_iter().map(NSNumber::new_u32).collect();
+    let excluded = NSArray::from_retained_slice(&numbers);
+    let description = unsafe { CATapDescription::initStereoGlobalTapButExcludeProcesses(CATapDescription::alloc(), &excluded) };
+    unsafe { description.setPrivate(true) };
+    let tap_uid = unsafe { description.UUID() }.UUIDString().to_string();
+    let mut tap: AudioObjectID = 0;
+    let status = unsafe { AudioHardwareCreateProcessTap(Some(&description), &mut tap) };
+    if status != 0 {
+        return Err(CaptureError::Permission(format!("system audio tap (OSStatus {status}); allow System Audio Recording")));
+    }
+
+    // Aggregate: output as main sub-device, optional mic sub-device (drift-compensated), tap (drift-compensated).
+    let yes: &CFType = CFBoolean::new(true);
+    let no: &CFType = CFBoolean::new(false);
+    let mut subdevices: Vec<CFRetained<CFDictionary<CFString, CFType>>> = Vec::new();
+    for (i, uid) in subdevice_uids(&output_uid, input_uid.as_deref()).into_iter().enumerate() {
+        subdevices.push(if i == 0 {
+            CFDictionary::<CFString, CFType>::from_slices(&[&*cfstr(kAudioSubDeviceUIDKey)], &[&*CFString::from_str(uid)])
+        } else {
+            CFDictionary::<CFString, CFType>::from_slices(&[&*cfstr(kAudioSubDeviceUIDKey), &*cfstr(kAudioSubDeviceDriftCompensationKey)], &[&*CFString::from_str(uid), yes])
+        });
+    }
+    let tap_entry = CFDictionary::<CFString, CFType>::from_slices(
+        &[&*cfstr(kAudioSubTapUIDKey), &*cfstr(kAudioSubTapDriftCompensationKey)],
+        &[&*CFString::from_str(&tap_uid), yes],
+    );
+    let sub_refs: Vec<&CFDictionary<CFString, CFType>> = subdevices.iter().map(|d| &**d).collect();
+    let sub_array = CFArray::from_objects(&sub_refs);
+    let tap_array = CFArray::from_objects(&[&*tap_entry]);
+    let aggregate_uid = uuid::Uuid::new_v4().to_string();
+    let keys = [
+        &*cfstr(kAudioAggregateDeviceUIDKey),
+        &*cfstr(kAudioAggregateDeviceNameKey),
+        &*cfstr(kAudioAggregateDeviceMainSubDeviceKey),
+        &*cfstr(kAudioAggregateDeviceIsPrivateKey),
+        &*cfstr(kAudioAggregateDeviceIsStackedKey),
+        &*cfstr(kAudioAggregateDeviceTapAutoStartKey),
+        &*cfstr(kAudioAggregateDeviceSubDeviceListKey),
+        &*cfstr(kAudioAggregateDeviceTapListKey),
+    ];
+    let name = CFString::from_str(&format!("{AGGREGATE_PREFIX}{pid}"));
+    let uid_value = CFString::from_str(&aggregate_uid);
+    let main_value = CFString::from_str(&output_uid);
+    let values: [&CFType; 8] = [&uid_value, &name, &main_value, yes, no, yes, sub_array.as_ref(), tap_array.as_ref()];
+    let dictionary = CFDictionary::<CFString, CFType>::from_slices(&keys, &values);
+    let mut aggregate: AudioObjectID = 0;
+    let status = unsafe { AudioHardwareCreateAggregateDevice(dictionary.as_opaque(), NonNull::from(&mut aggregate)) };
+    if status != 0 {
+        unsafe { AudioHardwareDestroyProcessTap(tap) };
+        return Err(CaptureError::Device(format!("aggregate device (OSStatus {status})")));
+    }
+
+    let device_rate = unsafe { get_f64(aggregate, kAudioDevicePropertyNominalSampleRate) }.unwrap_or(48_000.0) as u32;
+    let stream_channels = unsafe { input_stream_channels(aggregate) };
+    eprintln!("[echoledger] macOS aggregate input streams (channels): {stream_channels:?}");
+    let has_mic = input_uid.is_some();
+
+    // IOProc copies into a channel; a worker thread downmixes + resamples to 16 kHz (no heavy work on the HAL thread).
+    let (raw_tx, raw_rx) = channel::<RawPacket>();
+    let packets = Arc::new(AtomicU64::new(0));
+    let counted = packets.clone();
+    let block = RcBlock::new(
+        move |_now: NonNull<AudioTimeStamp>, input: NonNull<AudioBufferList>, in_time: NonNull<AudioTimeStamp>, _out: NonNull<AudioBufferList>, _out_time: NonNull<AudioTimeStamp>| {
+            counted.fetch_add(1, Ordering::Relaxed);
+            let list = unsafe { input.as_ref() };
+            let buffers = unsafe { std::slice::from_raw_parts(list.mBuffers.as_ptr(), list.mNumberBuffers as usize) };
+            let read = |i: usize| -> Vec<f32> {
+                let b = &buffers[i];
+                if b.mData.is_null() || b.mNumberChannels == 0 {
+                    return Vec::new();
+                }
+                let samples = unsafe { std::slice::from_raw_parts(b.mData as *const f32, b.mDataByteSize as usize / 4) };
+                downmix_to_mono(samples, b.mNumberChannels as usize)
+            };
+            let mic = mic_buffer(buffers.len(), output_inputs, same_device).filter(|_| has_mic).map(read).unwrap_or_default();
+            let system = buffers.len().checked_sub(1).map(read).unwrap_or_default();
+            let ts_ns = unsafe { AudioConvertHostTimeToNanos(in_time.as_ref().mHostTime) };
+            let _ = raw_tx.send(RawPacket { mic, system, ts_ns });
+        },
+    );
+    let queue = DispatchQueue::new("com.echoledger.audio.io", None);
+    let mut proc_id: AudioDeviceIOProcID = None;
+    let status = unsafe { AudioDeviceCreateIOProcIDWithBlock(NonNull::from(&mut proc_id), aggregate, Some(&queue), RcBlock::as_ptr(&block)) };
+    if status != 0 {
+        unsafe {
+            AudioHardwareDestroyAggregateDevice(aggregate);
+            AudioHardwareDestroyProcessTap(tap);
         }
+        return Err(CaptureError::Device(format!("IOProc (OSStatus {status})")));
+    }
 
-        Ok(Self { aggregate, tap, proc_id, _block: block, _queue: queue, worker: Some(worker), stopped: false })
+    let want_mic = streams.mic && has_mic;
+    let want_system = streams.system;
+    let finish = Arc::new(AtomicBool::new(false));
+    let finishing = finish.clone();
+    let worker = std::thread::Builder::new()
+        .name("el-audio-mac".into())
+        .spawn(move || {
+            let mut mic_rs = Resampler::new(device_rate, TARGET_RATE);
+            let mut sys_rs = Resampler::new(device_rate, TARGET_RATE);
+            loop {
+                // The sender lives in the IOProc's block, which Core Audio may hold on to: the flag ends this.
+                let packet = match raw_rx.recv_timeout(Duration::from_millis(100)) {
+                    Ok(packet) => packet,
+                    Err(RecvTimeoutError::Timeout) if finishing.load(Ordering::SeqCst) => break,
+                    Err(RecvTimeoutError::Timeout) => continue,
+                    Err(RecvTimeoutError::Disconnected) => break,
+                };
+                if want_mic && !packet.mic.is_empty() {
+                    let samples = mic_rs.process(&packet.mic);
+                    if tx.send(AudioChunk { channel: Channel::Mic, samples, ts_ns: Some(packet.ts_ns), discontinuity: false }).is_err() {
+                        break;
+                    }
+                }
+                if want_system && !packet.system.is_empty() {
+                    let samples = sys_rs.process(&packet.system);
+                    if tx.send(AudioChunk { channel: Channel::System, samples, ts_ns: Some(packet.ts_ns), discontinuity: false }).is_err() {
+                        break;
+                    }
+                }
+            }
+        })
+        .map_err(|e| CaptureError::Device(e.to_string()))?;
+
+    // The first start triggers the one-time "System Audio Recording" prompt (tie to a user action).
+    let status = unsafe { AudioDeviceStart(aggregate, proc_id) };
+    let stream = Stream { aggregate, tap, proc_id, block: Some(block), _queue: queue, worker: Some(worker), finish, packets, device_rate };
+    if status != 0 {
+        close_stream(stream);
+        return Err(CaptureError::Permission(format!("start capture (OSStatus {status})")));
+    }
+    Ok(stream)
+}
+
+/// Teardown order from Apple's sample / AudioCap: stop → destroy IOProc → destroy aggregate → destroy tap. Then the
+/// worker writes what is queued and ends (every captured packet is in the recorder's channel when this returns).
+fn close_stream(mut stream: Stream) {
+    unsafe {
+        AudioDeviceStop(stream.aggregate, stream.proc_id);
+        AudioDeviceDestroyIOProcID(stream.aggregate, stream.proc_id);
+        AudioHardwareDestroyAggregateDevice(stream.aggregate);
+        AudioHardwareDestroyProcessTap(stream.tap);
+    }
+    drop(stream.block.take());
+    stream.finish.store(true, Ordering::SeqCst);
+    if let Some(worker) = stream.worker.take() {
+        let _ = worker.join();
     }
 }
 
@@ -311,20 +448,14 @@ impl CaptureBackend for MacBackend {
     }
 
     fn stop(&mut self) {
-        if self.stopped {
-            return;
+        self.stop.store(true, Ordering::SeqCst);
+        if let Some(watcher) = self.watcher.take() {
+            let _ = watcher.join();
         }
-        self.stopped = true;
-        // Teardown order from Apple's sample / AudioCap: stop → destroy IOProc → destroy aggregate → destroy tap.
-        unsafe {
-            AudioDeviceStop(self.aggregate, self.proc_id);
-            AudioDeviceDestroyIOProcID(self.aggregate, self.proc_id);
-            AudioHardwareDestroyAggregateDevice(self.aggregate);
-            AudioHardwareDestroyProcessTap(self.tap);
-        }
-        if let Some(worker) = self.worker.take() {
-            let _ = worker.join();
-        }
+    }
+
+    fn take_notices(&mut self) -> Vec<DeviceNotice> {
+        self.log.take()
     }
 }
 
@@ -456,4 +587,31 @@ pub fn observe_trees(read_urls: bool) -> Vec<crate::detect::decide::TreeAudio> {
     }
     out.sort_by_key(|t| t.root_pid);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_microphone_is_found_among_the_aggregate_s_buffers() {
+        // Speakers (no input streams) + built-in microphone + tap.
+        assert_eq!(mic_buffer(2, 0, false), Some(0));
+        // A USB headset as output, with its own microphone stream, and another microphone chosen: the headset's comes first.
+        assert_eq!(mic_buffer(3, 1, false), Some(1));
+        // The headset's microphone itself (the same device, listed once) + tap.
+        assert_eq!(mic_buffer(2, 1, true), Some(0));
+        // Only the tap: no microphone to read.
+        assert_eq!(mic_buffer(1, 0, false), None);
+        assert_eq!(mic_buffer(0, 0, false), None);
+        // A microphone that did not make it into the aggregate is never read from the tap's buffer.
+        assert_eq!(mic_buffer(1, 1, false), None);
+    }
+
+    #[test]
+    fn a_headset_used_for_both_is_one_sub_device() {
+        assert_eq!(subdevice_uids("airpods", Some("airpods")), ["airpods"]);
+        assert_eq!(subdevice_uids("speakers", Some("usb-mic")), ["speakers", "usb-mic"]);
+        assert_eq!(subdevice_uids("speakers", None), ["speakers"]);
+    }
 }

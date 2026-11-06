@@ -986,6 +986,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun adbCommand(): String = graph.helper.adbCommand()
 
+    /** Send to my admin on the device check (since v1.5): the only thing that uploads it. */
+    suspend fun sendDeviceReport(facts: com.echoledger.mobile.core.PhoneFacts, rows: List<com.echoledger.mobile.core.CheckRow>) {
+        workspaceCall("The report could not be sent.") { it.reportDevice(facts, rows) } ?: return
+        _message.value = "Sent to your admin"
+    }
+
     // ---- Test translate (since v1.3, plan B3) ---------------------------------------------------------------------
 
     private val _testFeed = MutableStateFlow<com.echoledger.mobile.translate.TranslateFeed?>(null)

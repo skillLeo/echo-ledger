@@ -402,7 +402,8 @@ data class ShareLinkDto(
     @SerialName("session_id") val sessionId: String? = null,
     @SerialName("client_id") val clientId: String? = null,
     val audience: String = "public",
-    val people: List<String> = emptyList(),
+    /** Null unless the link is for chosen people. */
+    val people: List<String>? = null,
     @SerialName("allow_download") val allowDownload: Boolean? = null,
     @SerialName("last_viewed_at") val lastViewedAt: String? = null
 )
@@ -780,7 +781,7 @@ data class PlanUsedDto(val minutes: Long? = null, @SerialName("storage_bytes") v
 
 /** The device's workspace and its person's role there, in `GET /api/config` (since v1.5). */
 @Serializable
-data class ConfigWorkspaceDto(val id: String? = null, val name: String? = null, val role: String? = null)
+data class ConfigWorkspaceDto(val id: Long? = null, val name: String? = null, val role: String? = null)
 
 /** `GET /api/library/views` (since v1.5 its `folders`): how many recordings each smart folder lists on the server. */
 @Serializable
