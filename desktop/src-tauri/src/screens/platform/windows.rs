@@ -26,7 +26,10 @@ use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR, MONITOR_
 use windows::Win32::System::WinRT::Direct3D11::{CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess};
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
 use windows::Win32::System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize};
-use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GWL_EXSTYLE, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic, IsWindowVisible, WS_EX_TOOLWINDOW};
+use windows::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, GWL_EXSTYLE, GetWindowDisplayAffinity, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic, IsWindowVisible, WDA_EXCLUDEFROMCAPTURE,
+    WS_EX_TOOLWINDOW,
+};
 use windows::core::{BOOL, Interface, Ref};
 
 use super::{Bounds, Frame, Grab, Snapshot, SysWindow, Target, Wanted, choose, displays_of};
@@ -140,6 +143,14 @@ fn windows_now() -> Vec<Win> {
     let mut ctx = Collect { own: std::process::id(), buf: vec![0u16; 512], out: Vec::new() };
     let _ = unsafe { EnumWindows(Some(each), LPARAM(&mut ctx as *mut Collect as isize)) };
     ctx.out
+}
+
+/// One of EchoLedger's windows is hidden from screen captures now (`WDA_EXCLUDEFROMCAPTURE`, Windows 10 2004 and
+/// later; older systems refuse it). `None` when Windows did not say.
+pub fn hidden_from_capture(hwnd: isize) -> Option<bool> {
+    let mut affinity = 0u32;
+    unsafe { GetWindowDisplayAffinity(HWND(hwnd as *mut _), &mut affinity) }.ok()?;
+    Some(affinity == WDA_EXCLUDEFROMCAPTURE.0)
 }
 
 fn primary_monitor() -> isize {

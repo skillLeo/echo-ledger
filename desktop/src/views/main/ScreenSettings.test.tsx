@@ -58,7 +58,7 @@ describe("Settings → Screen moments", () => {
     expect(within(card()).getByText("Only the meeting app's window: nothing else on your screen is kept.")).toBeInTheDocument();
     fireEvent.change(capture, { target: { value: "whole_screen" } });
     await flushAsync();
-    expect(within(card()).getByText(/The screen the meeting is on\. Screens pause while an excluded app shows on it\./)).toBeInTheDocument();
+    expect(within(card()).getByText("The screen the meeting is on, without EchoLedger's own windows. Screens pause while an excluded app shows on it. Meanwhile Windows hides EchoLedger's window from screen sharing too.")).toBeInTheDocument();
     fireEvent.click(keep);
     await flushAsync();
     expect(callsOf("update_settings")).toEqual([{ patch: { screenTarget: "whole_screen" } }, { patch: { screenMoments: false } }]);
@@ -97,6 +97,11 @@ describe("Settings → Screen moments", () => {
     fireEvent.click(within(card()).getByRole("button", { name: "Windows Settings" }));
     await flushAsync();
     expect(callsOf("open_privacy_settings")).toEqual([{ kind: "screen" }]);
+  });
+
+  it("says only on Windows that EchoLedger is hidden from screen sharing while the whole screen is kept", async () => {
+    const { card } = await setup({ screenTarget: "whole_screen" }, status({ platform: "macos" }));
+    expect(within(card()).getByText("The screen the meeting is on, without EchoLedger's own windows. Screens pause while an excluded app shows on it.")).toBeInTheDocument();
   });
 
   it("asks macOS for Screen Recording and says it asks again about once a month", async () => {

@@ -9,8 +9,10 @@ import { SelectRow, Toggle } from "./SettingsControls";
 const TARGETS: readonly (readonly [ScreenTarget, string])[] = [["meeting_window", "The meeting window"], ["whole_screen", "The whole screen"]];
 const TARGET_HINT: Record<ScreenTarget, string> = {
   meeting_window: "Only the meeting app's window: nothing else on your screen is kept.",
-  whole_screen: "The screen the meeting is on. Screens pause while an excluded app shows on it.",
+  whole_screen: "The screen the meeting is on, without EchoLedger's own windows. Screens pause while an excluded app shows on it.",
 };
+/** Windows leaves EchoLedger out of a whole screen's picture only by hiding it from every screen capture meanwhile. */
+const WINDOWS_WHOLE_SCREEN = " Meanwhile Windows hides EchoLedger's window from screen sharing too.";
 
 /** A name as the excluded list compares it (the core cleans the list the same way): no capitals, spaces or `.exe`. */
 export function comparableApp(name: string): string {
@@ -61,7 +63,8 @@ export function ScreenMomentsCard({ settings, patch }: { settings: Settings; pat
       <Toggle label="Keep screen moments" hint="The recording pill shows when screens are on; one click there pauses them." on={settings.screenMoments} onChange={(v) => void patch({ screenMoments: v })} />
       {settings.screenMoments && (
         <>
-          <SelectRow label="Capture" value={settings.screenTarget} options={TARGETS} hint={TARGET_HINT[settings.screenTarget]} width={200} onChange={(v) => void patch({ screenTarget: v })} />
+          <SelectRow label="Capture" value={settings.screenTarget} options={TARGETS} width={200} onChange={(v) => void patch({ screenTarget: v })}
+            hint={TARGET_HINT[settings.screenTarget] + (settings.screenTarget === "whole_screen" && status?.platform === "windows" ? WINDOWS_WHOLE_SCREEN : "")} />
           {status?.platform === "windows" && (
             <div className="toggle">
               <div>

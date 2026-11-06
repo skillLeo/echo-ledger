@@ -137,6 +137,9 @@ pub struct Screens {
     /// has. Read from each fresh config (at start and before each upload round), never from cached library items,
     /// which keep the shape they had before the server was updated.
     server_old: AtomicBool,
+    /// Windows: EchoLedger's main window is hidden from screen captures while a whole screen is captured, so a main
+    /// window built meanwhile starts hidden too.
+    own_hidden: AtomicBool,
     running: Mutex<Option<Running>>,
     live: Arc<Live>,
 }
@@ -154,6 +157,7 @@ impl Screens {
             plan_off: AtomicBool::new(false),
             server_missing: AtomicBool::new(false),
             server_old: AtomicBool::new(false),
+            own_hidden: AtomicBool::new(false),
             running: Mutex::new(None),
             live: Arc::default(),
         }
@@ -211,6 +215,11 @@ impl Screens {
     /// Before the first config (offline at start) it counts as yes; a 404 from the first upload then ends it.
     pub fn on_server(&self) -> bool {
         !self.server_missing.load(Ordering::SeqCst) && !self.server_old.load(Ordering::SeqCst)
+    }
+
+    /// EchoLedger's main window is to be hidden from screen captures now (Windows, while a whole screen is captured).
+    pub fn own_hidden(&self) -> bool {
+        self.own_hidden.load(Ordering::SeqCst)
     }
 
     /// The pill's chip while a recording captures screens (or could, once a pause ends).
@@ -392,6 +401,30 @@ pub async fn send(app: &AppHandle, api: &ApiClient) -> usize {
     drain.sent
 }
 
+/// How long the capture thread waits for the main thread to hide EchoLedger's main window (Windows).
+#[cfg(windows)]
+const SHIELD_WAIT: Duration = Duration::from_secs(2);
+
+/// Windows: a monitor's capture cannot leave EchoLedger's own windows out of its picture as macOS does, so while a
+/// whole screen is captured the main window, which can show other recordings, is hidden from screen captures (as
+/// Settings' "hide from screen sharing" hides the overlays, which keep that switch), and given back once the capture
+/// closed. Waits until Windows applied it; true when the main window is as asked (or there is none).
+#[cfg(windows)]
+fn hide_own_windows(app: &AppHandle, hidden: bool) -> bool {
+    app.state::<crate::AppState>().screens.own_hidden.store(hidden, Ordering::SeqCst);
+    let main = app.get_webview_window(crate::lifecycle::MAIN);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let posted = app.run_on_main_thread(move || {
+        // On the main thread the change takes effect before the call returns.
+        let done = main.is_none_or(|w| {
+            let _ = w.set_content_protected(hidden);
+            w.hwnd().ok().and_then(|h| platform::windows::hidden_from_capture(h.0 as isize)) == Some(hidden)
+        });
+        let _ = tx.send(done);
+    });
+    posted.is_ok() && rx.recv_timeout(SHIELD_WAIT).unwrap_or(false)
+}
+
 /// The capture thread of one recording: once a second the sampler, and a kept frame encoded and sealed on disk.
 fn capture_loop(app: &AppHandle, recording: &str, live: &Live, project: &AtomicU8, wake: &Wake) {
     let state = app.state::<crate::AppState>();
@@ -400,7 +433,10 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, project: &AtomicU
     let store = ScreenStore::in_dir(&state.data_dir);
     let key = state.screens.key();
     let clock = Instant::now();
+    #[cfg(not(windows))]
     let mut sampler = Sampler::new(system);
+    #[cfg(windows)]
+    let mut sampler = Sampler::new(system).with_shield(Box::new(|hidden| hide_own_windows(app, hidden)));
     let show = |pill: Option<ScreensPill>| *lock(&live.pill) = pill;
     while !wake.wait(SAMPLE_EVERY) {
         let settings = state.settings();

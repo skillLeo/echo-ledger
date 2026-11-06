@@ -4,8 +4,13 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::detect::{Detector, Luma, Trigger};
-use super::platform::{Frame, Grab, ScreenSystem, Wanted};
+use super::platform::{Frame, Grab, ScreenSystem, Target, Wanted};
 use super::privacy::{Facts, Gate, HoldReason, OffReason, gate};
+
+/// Hides EchoLedger's own windows from what is captured where the system cannot leave them out of a screen's picture
+/// (Windows): called with true before a whole screen's capture opens and with false once it closed. True when the
+/// windows are as asked; a screen's capture opens only once they are hidden.
+pub type Shield<'a> = Box<dyn FnMut(bool) -> bool + 'a>;
 
 /// What one second came to.
 pub enum Sample {
@@ -24,16 +29,48 @@ pub struct Sampler<'a> {
     system: &'a dyn ScreenSystem,
     detector: Detector,
     capture: Option<Box<dyn Grab>>,
+    shield: Option<Shield<'a>>,
+    /// The shield was asked to hide the windows (and not yet to show them again), and whether it said it did.
+    shield_asked: bool,
+    shielded: bool,
 }
 
 impl<'a> Sampler<'a> {
     pub fn new(system: &'a dyn ScreenSystem) -> Self {
-        Self { system, detector: Detector::new(), capture: None }
+        Self { system, detector: Detector::new(), capture: None, shield: None, shield_asked: false, shielded: false }
+    }
+
+    /// Hides EchoLedger's own windows while a whole screen is captured (Windows).
+    #[cfg(any(windows, test))]
+    pub fn with_shield(mut self, shield: Shield<'a>) -> Self {
+        self.shield = Some(shield);
+        self
     }
 
     /// The capture is open now.
     pub fn open(&self) -> bool {
         self.capture.is_some()
+    }
+
+    /// Hides EchoLedger's own windows (`hide`) or gives them back; true when they are as asked (always without a
+    /// shield). Hiding is asked again until it took effect; giving back follows any hiding asked for, even one that
+    /// was not confirmed in time.
+    fn shield(&mut self, hide: bool) -> bool {
+        let Some(shield) = self.shield.as_mut() else { return true };
+        if hide && !self.shielded {
+            self.shield_asked = true;
+            self.shielded = shield(true);
+        } else if !hide && self.shield_asked {
+            shield(false);
+            (self.shield_asked, self.shielded) = (false, false);
+        }
+        self.shielded == hide
+    }
+
+    /// Closes the capture, then gives EchoLedger's windows back to other captures.
+    fn close(&mut self) {
+        self.capture = None;
+        self.shield(false);
     }
 
     /// One sample at `now_ms` (any monotonic clock). `facts` comes from the app; the system's support and permission
@@ -43,7 +80,7 @@ impl<'a> Sampler<'a> {
         let facts = Facts { supported: self.system.supported(), permission: self.system.permission(), capped: self.detector.capped(now_ms), ..facts };
         let target = match gate(&facts) {
             Gate::Off(reason) => {
-                self.capture = None;
+                self.close();
                 return Sample::Off(reason);
             }
             Gate::Hold(reason) => Err(reason),
@@ -52,7 +89,7 @@ impl<'a> Sampler<'a> {
         let target = match target {
             Ok(target) => target,
             Err(reason) => {
-                self.capture = None;
+                self.close();
                 words.store(false, Ordering::SeqCst);
                 return Sample::Held(reason);
             }
@@ -61,10 +98,15 @@ impl<'a> Sampler<'a> {
         if self.capture.as_ref().is_none_or(|c| c.target() != target) {
             self.capture = None;
             self.detector.restart();
+            // A whole screen is captured only once EchoLedger's own windows are hidden from it.
+            if !self.shield(matches!(target, Target::Display(_))) {
+                return Sample::Held(HoldReason::Starting);
+            }
             match self.system.open(target) {
                 Ok(open) => self.capture = Some(open),
                 Err(e) => {
                     eprintln!("[echoledger] {e}");
+                    self.close();
                     return Sample::Held(HoldReason::NoWindow);
                 }
             }
@@ -75,7 +117,7 @@ impl<'a> Sampler<'a> {
             Ok(None) => return Sample::Watching,
             Err(e) => {
                 eprintln!("[echoledger] screen capture: {e}");
-                self.capture = None;
+                self.close();
                 return Sample::Watching;
             }
         };
@@ -85,6 +127,13 @@ impl<'a> Sampler<'a> {
             Some(trigger) => Sample::Keep { frame, trigger },
             None => Sample::Watching,
         }
+    }
+}
+
+impl Drop for Sampler<'_> {
+    /// The recording ended: the capture closes and EchoLedger's windows are given back to other captures.
+    fn drop(&mut self) {
+        self.close();
     }
 }
 
@@ -254,6 +303,47 @@ mod tests {
         let listed = Wanted { mode: MEETING_WINDOW, meeting: Some(&meeting), excluded: &zoom_excluded, site_rules: &[] };
         assert!(matches!(sampler.tick(facts(), &listed, 2_000, &words), Sample::Held(HoldReason::ExcludedApp)));
         assert!(!sampler.open());
+    }
+
+    #[test]
+    fn a_whole_screen_opens_only_once_our_windows_are_hidden_and_gives_them_back_after() {
+        use std::cell::{Cell, RefCell};
+        let system = system();
+        // Each call: hide or give back, and how many captures had opened by then.
+        let calls: RefCell<Vec<(bool, usize)>> = RefCell::new(Vec::new());
+        let confirms = Cell::new(false);
+        let meeting = zoom();
+        let words = AtomicBool::new(false);
+        {
+            let mut sampler = Sampler::new(&system).with_shield(Box::new(|hide| {
+                calls.borrow_mut().push((hide, system.opened.lock().unwrap().len()));
+                confirms.get() || !hide
+            }));
+            let whole = Wanted { mode: WHOLE_SCREEN, meeting: Some(&meeting), excluded: &[], site_rules: &[] };
+            // Windows did not confirm in time: nothing opens, and hiding is asked again the next second.
+            assert!(matches!(sampler.tick(facts(), &whole, 0, &words), Sample::Held(HoldReason::Starting)));
+            assert!(system.opened.lock().unwrap().is_empty());
+            confirms.set(true);
+            assert!(matches!(sampler.tick(facts(), &whole, 1_000, &words), Sample::Watching));
+            assert_eq!(*system.opened.lock().unwrap(), vec![Target::Display(1)]);
+            assert_eq!(*calls.borrow(), vec![(true, 0), (true, 0)], "hidden before the screen's capture opened");
+            sampler.tick(facts(), &whole, 2_000, &words);
+            assert_eq!(calls.borrow().len(), 2, "not asked again while the capture stays open");
+            // A pause closes the capture and gives the windows back.
+            assert!(matches!(sampler.tick(Facts { user_paused: true, ..facts() }, &whole, 3_000, &words), Sample::Held(HoldReason::You)));
+            assert_eq!(calls.borrow().last(), Some(&(false, 1)));
+            // The meeting window alone never shows our windows: nothing to hide.
+            let window = Wanted { mode: MEETING_WINDOW, ..whole };
+            sampler.tick(facts(), &window, 4_000, &words);
+            assert_eq!((calls.borrow().len(), system.opened.lock().unwrap().last().copied()), (3, Some(Target::Window(7))));
+            sampler.tick(facts(), &whole, 5_000, &words);
+            assert_eq!(calls.borrow().last(), Some(&(true, 2)));
+        }
+        assert_eq!(calls.borrow().last().map(|c| c.0), Some(false), "given back when the recording ended");
+        // Without a shield (macOS leaves our windows out of the picture itself) a whole screen opens at once.
+        let mut plain = Sampler::new(&system);
+        let whole = Wanted { mode: WHOLE_SCREEN, meeting: Some(&meeting), excluded: &[], site_rules: &[] };
+        assert!(matches!(plain.tick(facts(), &whole, 0, &words), Sample::Watching));
     }
 
     #[test]
