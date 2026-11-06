@@ -230,6 +230,11 @@ describe("wire types", () => {
     expect(sorted(tsInterfaceKeys("SettingsPatch"))).toEqual(sorted(settingsPatchKeys));
   });
 
+  it("the server pages the window opens are the ones the Rust command lets through", () => {
+    const rust = /SERVER_PAGES: \[&str; \d+\] = \[([^\]]+)\]/.exec(commandsRs)?.[1] ?? "";
+    expect(sorted(tsUnionValues("ServerPage"))).toEqual(sorted([...rust.matchAll(/"([\w/]+)"/g)].map((m) => m[1])));
+  });
+
   it("the meeting pack formats are the ones the Rust command takes", () => {
     const body = commandsRs.slice(commandsRs.indexOf("pub async fn meeting_pack"));
     const rust = [...body.slice(0, body.indexOf("_ => return Err")).matchAll(/"(\w+)" => "\w+"/g)].map((m) => m[1]);

@@ -10,6 +10,8 @@ import { DictationCard } from "./DictationSettings";
 import { ScreenMomentsCard } from "./ScreenSettings";
 import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./SecuritySettings";
 import { AccountCard, PlanCard, YourDataCard, useAccount } from "./AccountSettings";
+import { ConsentNotice } from "./ConsentNotice";
+import { CONSENT_SWITCH } from "../../lib/consent";
 import { conflictFor } from "../../lib/shortcutConflicts";
 import { getVersion } from "@tauri-apps/api/app";
 import { LANGUAGE_OPTIONS, menuLabel } from "../../lib/languages";
@@ -228,11 +230,11 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
       </div>
     ) },
     { id: "notifications", group: "general", title: "Notifications", keywords: "notifications quiet hours bell activity", node: <NotificationsCard settings={settings} patch={patch} /> },
-    { id: "consent", group: "general", title: "Privacy & consent", keywords: "consent law participants", node: (
+    { id: "consent", group: "general", title: "Privacy & consent", keywords: "consent law participants terms privacy policy", node: (
       <div className="card">
         <b>Privacy &amp; consent</b>
-        <p className="small muted">Call-recording laws differ by country. Tell participants you are recording where required. EchoLedger shows a red indicator whenever it records.</p>
-        <Toggle label="I understand and will obtain consent where required" on={settings.consentAcknowledged} onChange={(v) => patch({ consentAcknowledged: v })} />
+        <ConsentNotice legal={status.plan.known && status.paired} />
+        <Toggle label={CONSENT_SWITCH} on={settings.consentAcknowledged} onChange={(v) => patch({ consentAcknowledged: v })} />
       </div>
     ) },
     { id: "recording", group: "calls", title: "Recording", keywords: "auto record calls unknown apps after a call keep ask undo saved skip short silent calls browser tab", node: (

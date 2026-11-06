@@ -99,7 +99,7 @@ describe("SettingsView switches", () => {
     ["Show live captions while recording", "captionsOnRecord", true],
     ["Hide overlays from screen sharing", "contentProtection", true],
     ["Start EchoLedger when I sign in", "autostart", false],
-    ["I understand and will obtain consent where required", "consentAcknowledged", false],
+    ["I understand", "consentAcknowledged", false],
     ["Ask me when an unrecognised app uses the microphone", "askUnknownApps", false],
   ];
 

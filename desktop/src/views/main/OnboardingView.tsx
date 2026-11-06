@@ -4,6 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { api, errorMessage, type AppStatus, type PermissionsStatus, type TestResult } from "../../lib/ipc";
 import { SignInView } from "./SignInView";
 import { testVerdict } from "./CaptureSettings";
+import { ConsentNotice } from "./ConsentNotice";
+import { CONSENT_TICK } from "../../lib/consent";
 
 export const STEPS = ["Permissions", "Sign in", "Test", "Done"] as const;
 export type Step = (typeof STEPS)[number];
@@ -111,8 +113,9 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
         {step === "Done" && (
           <section aria-labelledby="ob-done">
             <h1 id="ob-done" className="page-title">You are set</h1>
-            <p className="small muted">Call-recording laws differ by country. Tell participants you are recording where required. A red indicator shows whenever EchoLedger records.</p>
-            <label className="row small"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> I understand and will obtain consent where required</label>
+            <h2 className="settings-group-title">Recording and consent</h2>
+            <ConsentNotice legal={status.plan.known && status.paired} />
+            <label className="row small"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> {CONSENT_TICK}</label>
             <div className="row onboarding-actions"><span className="spacer" /><button type="button" className="btn primary" onClick={() => void finish()}>Start using EchoLedger</button></div>
           </section>
         )}
