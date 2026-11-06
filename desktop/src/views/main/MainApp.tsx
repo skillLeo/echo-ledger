@@ -7,7 +7,7 @@ import { ActivityView, useActivityUnread } from "./ActivityCentre";
 import { OnboardingView } from "./OnboardingView";
 import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
-import { PairingView } from "./PairingView";
+import { SignInView } from "./SignInView";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
 import { RecordView } from "./RecordView";
@@ -107,7 +107,7 @@ export default function MainApp() {
   // Import: the files of the open import sheet, and whether files are being dragged over the window.
   const [importPaths, setImportPaths] = useState<string[] | null>(null);
   const [dragging, setDragging] = useState(false);
-  // Drops count only on the app itself, never on the lock screen, the pairing form or the first-run wizard.
+  // Drops count only on the app itself, never on the lock screen, the sign-in form or the first-run wizard.
   const acceptDrops = useRef(false);
   acceptDrops.current = !!status?.paired && restored && !lock?.locked && setupDone !== false;
 
@@ -411,7 +411,7 @@ export default function MainApp() {
   if (!status || !status.paired || !restored) {
     return (
       <main className="gate">
-        {status && !status.paired ? <PairingView onPaired={setStatus} notify={notify} /> : <div className="empty">Starting EchoLedger…</div>}
+        {status && !status.paired ? <SignInView onSignedIn={setStatus} notify={notify} serverUrl={status.serverUrl} /> : <div className="empty">Starting EchoLedger…</div>}
         {toastView}
       </main>
     );

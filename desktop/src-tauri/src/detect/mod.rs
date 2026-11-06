@@ -198,9 +198,13 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
     let detect = &state.detect;
     let recording = state.capture.is_recording();
     let rules = &settings.site_rules;
+    // A viewer records nothing (v1.5): no automatic start and no "Record?" chip, as if auto-record were off.
+    let can_record = state.viewer_refusal().is_none();
+    let auto_mode = settings.auto_mode && can_record;
+    let ask_unknown = settings.ask_unknown_apps && can_record;
     let mut verdicts: Vec<Verdict> = trees
         .iter()
-        .map(|t| apply_app_switches(decide(t, rules, settings.ask_unknown_apps, settings.auto_mode), &settings.auto_record_apps))
+        .map(|t| apply_app_switches(decide(t, rules, ask_unknown, auto_mode), &settings.auto_record_apps))
         .collect();
 
     let (event, recorded, chip) = {
@@ -212,7 +216,7 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
                 *v = Verdict::Ignore(if is_browser_tree(t) { IgnoreReason::UnknownSite } else { IgnoreReason::UnknownApp });
             }
         }
-        let event = if settings.auto_mode {
+        let event = if auto_mode {
             call.tick(now_ms, trees, &verdicts)
         } else {
             call.reset();

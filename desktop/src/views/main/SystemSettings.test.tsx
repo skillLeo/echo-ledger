@@ -120,7 +120,7 @@ describe("first-run wizard (B19)", () => {
     respond("update_settings", makeSettings());
   });
 
-  it("walks through permissions, pairing, a test and consent", async () => {
+  it("walks through permissions, signing in, a test and consent", async () => {
     respond("test_capture", { seconds: 10, micPeak: 0.4, systemPeak: 0, micHeard: true, systemHeard: false, wavBase64: "" });
     respond("open_privacy_settings", undefined);
     const onFinished = vi.fn();
@@ -130,7 +130,7 @@ describe("first-run wizard (B19)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Open settings" }));
     expect(callsOf("open_privacy_settings")).toEqual([{ kind: "microphone" }]);
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByText(/Paired with/)).toBeInTheDocument();
+    expect(screen.getByText(/Signed in to/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("button", { name: "Start the test" }));
     expect(await screen.findByText("Your microphone is working.")).toBeInTheDocument();

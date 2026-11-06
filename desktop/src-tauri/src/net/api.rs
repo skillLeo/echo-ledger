@@ -58,18 +58,29 @@ impl ApiClient {
     /// Maps a non-2xx answer: `401` → `NotPaired`; otherwise the body's `message` and `code` plus the
     /// `Retry-After` header (integer seconds; an HTTP-date is ignored).
     async fn error(resp: reqwest::Response) -> AppError {
-        let status = resp.status().as_u16();
-        if status == 401 {
+        if resp.status().as_u16() == 401 {
             return AppError::NotPaired;
         }
+        Self::answer_error(resp).await
+    }
+
+    /// The error of an answer as the server sent it, a `401` included (the sign-in routes answer `401 otp_required`,
+    /// which says nothing about this computer's token). `403 feature_not_in_plan` gets the app's sentence for its
+    /// `feature`.
+    async fn answer_error(resp: reqwest::Response) -> AppError {
+        let status = resp.status().as_u16();
         let retry_after_secs = resp
             .headers()
             .get(reqwest::header::RETRY_AFTER)
             .and_then(|v| v.to_str().ok())
             .and_then(|v| v.trim().parse::<u64>().ok());
         let body: serde_json::Value = resp.json().await.unwrap_or_default();
-        let message = body.get("message").and_then(|m| m.as_str()).unwrap_or("request failed").to_string();
         let code = body.get("code").and_then(|c| c.as_str()).map(str::to_string);
+        let message = if code.as_deref() == Some("feature_not_in_plan") {
+            crate::plan::feature_text(body.get("feature").and_then(|f| f.as_str()))
+        } else {
+            body.get("message").and_then(|m| m.as_str()).unwrap_or("request failed").to_string()
+        };
         AppError::Server { status, message, code, retry_after_secs }
     }
 
@@ -81,6 +92,94 @@ impl ApiClient {
             .json(&json!({ "pairing_code": code, "name": name, "platform": platform, "app_version": env!("CARGO_PKG_VERSION"), "os_version": os_version }))
             .send()
             .await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/auth/password` (since v1.5): signs this computer in to the person's account, like pairing. An account
+    /// with two-factor sign-in answers `401 otp_required` until `otp` (a TOTP or recovery code) is sent.
+    pub async fn sign_in_password(&self, sign_in: &PasswordSignIn<'_>, platform: &str, os_version: &str) -> AppResult<PasswordAnswer> {
+        let resp = self
+            .http
+            .post(self.url("auth/password"))
+            .header("Accept", "application/json")
+            .json(&json!({
+                "email": sign_in.email, "password": sign_in.password, "otp": sign_in.otp, "name": sign_in.name,
+                "platform": platform, "app_version": env!("CARGO_PKG_VERSION"), "os_version": os_version,
+            }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let e = Self::answer_error(resp).await;
+            return if e.code() == Some("otp_required") { Ok(PasswordAnswer::OtpRequired) } else { Err(e) };
+        }
+        Ok(PasswordAnswer::SignedIn(Box::new(resp.json::<RegisterResponse>().await?)))
+    }
+
+    /// `POST /api/auth/device/token` (since v1.5): the browser sign-in's one-time code and its PKCE verifier for this
+    /// computer's token. A wrong, used or expired code, or another verifier, is `422 invalid_code`.
+    pub async fn device_token(&self, code: &str, verifier: &str, name: &str, platform: &str, os_version: &str) -> AppResult<RegisterResponse> {
+        let resp = self
+            .http
+            .post(self.url("auth/device/token"))
+            .header("Accept", "application/json")
+            .json(&json!({ "code": code, "code_verifier": verifier, "name": name, "platform": platform, "app_version": env!("CARGO_PKG_VERSION"), "os_version": os_version }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(Self::answer_error(resp).await);
+        }
+        Ok(resp.json::<RegisterResponse>().await?)
+    }
+
+    /// Whether the server signs devices in with accounts (since v1.5): an empty `POST /api/auth/device/token` is refused
+    /// for its missing fields by a server that has the route, and answers `404 not_found` on an older one.
+    pub async fn offers_account_sign_in(&self) -> AppResult<bool> {
+        let resp = self.http.post(self.url("auth/device/token")).header("Accept", "application/json").json(&json!({})).send().await?;
+        if resp.status().is_success() {
+            return Ok(true);
+        }
+        Ok(!Self::answer_error(resp).await.is_missing_route())
+    }
+
+    /// `GET /api/account` (since v1.5); none from a server without accounts.
+    pub async fn account(&self) -> AppResult<Option<AccountDto>> {
+        let resp = self.authed(self.http.get(self.url("account")))?.send().await?;
+        match Self::parse(resp).await {
+            Ok(account) => Ok(Some(account)),
+            Err(e) if e.is_missing_route() => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// `POST /api/account/sign-out-everywhere` (since v1.5): every device and console session of the account, this
+    /// computer's token included.
+    pub async fn sign_out_everywhere(&self) -> AppResult<()> {
+        let resp = self.authed(self.http.post(self.url("account/sign-out-everywhere")))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `DELETE /api/account` (since v1.5) with the password or a two-factor code: the account goes after 7 days. Returns
+    /// when (`deletes_at`).
+    pub async fn delete_account(&self, password: Option<&str>, otp: Option<&str>) -> AppResult<Option<String>> {
+        let body = match (password, otp) {
+            (Some(password), _) => json!({ "password": password }),
+            (None, Some(otp)) => json!({ "otp": otp }),
+            (None, None) => return Err(AppError::msg("Type your password or a two-factor code to confirm it is you.")),
+        };
+        let resp = self.authed(self.http.delete(self.url("account")))?.json(&body).send().await?;
+        let answer: serde_json::Value = Self::parse(resp).await?;
+        Ok(answer.get("deletes_at").and_then(|d| d.as_str()).map(str::to_string))
+    }
+
+    /// `POST /api/account/export` (since v1.5): starts the ZIP of everything the account owns.
+    pub async fn start_export(&self) -> AppResult<AccountExport> {
+        let resp = self.authed(self.http.post(self.url("account/export")))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/account/export/{id}` (since v1.5): `making`, `ready` (with its link) or `failed`.
+    pub async fn export_status(&self, id: &str) -> AppResult<AccountExport> {
+        let resp = self.authed(self.http.get(self.url(&format!("account/export/{id}"))))?.send().await?;
         Self::parse(resp).await
     }
 

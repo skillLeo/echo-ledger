@@ -227,6 +227,9 @@ pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: 
     if !state.is_paired() {
         return Err(AppError::NotPaired);
     }
+    if let Some(refusal) = state.viewer_refusal() {
+        return Err(AppError::Message(refusal));
+    }
     let client_id = state.settings().client_id.clone();
     clear_captions(app); // a new recording never inherits the previous one's lines
     let info = state.capture.start(&paths::recordings(&state.data_dir), RecordingMode::Call, source_app, client_id)?;
@@ -256,6 +259,9 @@ async fn toggle_note(app: &AppHandle, mode: RecordingMode) -> AppResult<()> {
     }
     if !state.is_paired() {
         return Err(AppError::NotPaired);
+    }
+    if let Some(refusal) = state.viewer_refusal() {
+        return Err(AppError::Message(refusal));
     }
     clear_captions(app);
     let info = state.capture.start(&paths::recordings(&state.data_dir), mode, "voice_note", state.settings().client_id.clone())?;
@@ -1380,8 +1386,7 @@ const NOTIFIED_WINDOW: Duration = Duration::from_secs(600);
 /// show the window and open the link it was started with or, when a notification about a recording went out in the
 /// last ten minutes, that recording.
 pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {
-    if let Some(link) = crate::deep_link::find_open_link(args) {
-        open_app_link(app, link);
+    if handle_links(app, args) {
         return;
     }
     crate::tray::show_main(app);
@@ -1392,6 +1397,22 @@ pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {
         let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: Some(id), link: None };
         crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
     }
+}
+
+/// An `echoledger://signed-in` link (the browser sign-in coming back) or an `echoledger://open` link among `args`
+/// (v1.5); false when there is neither.
+pub fn handle_links(app: &AppHandle, args: &[String]) -> bool {
+    if let Some(link) = crate::account::find_signed_in_link(args) {
+        crate::tray::show_main(app);
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { crate::commands::finish_browser_sign_in(&app, link).await });
+        return true;
+    }
+    if let Some(link) = crate::deep_link::find_open_link(args) {
+        open_app_link(app, link);
+        return true;
+    }
+    false
 }
 
 /// Shows the main window with a share, project or request link to open in place (v1.5). The page resolves it once it

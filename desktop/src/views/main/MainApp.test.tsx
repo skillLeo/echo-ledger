@@ -60,7 +60,7 @@ describe("MainApp start-up and pairing gate", () => {
   it("shows the pairing form instead of the app when this computer is not paired", async () => {
     mockBackend({ paired: false, serverUrl: null, deviceName: null });
     render(<MainApp />);
-    expect(await screen.findByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Library/ })).not.toBeInTheDocument();
     expect(callsOf("library_list")).toHaveLength(0);
   });
@@ -69,6 +69,7 @@ describe("MainApp start-up and pairing gate", () => {
     mockBackend({ paired: false, serverUrl: null, deviceName: null });
     respond("pair_device", makeStatus({ deviceName: "Studio PC" }));
     render(<MainApp />);
+    fireEvent.click(await screen.findByRole("button", { name: "Use a pairing code or QR instead" }));
     await screen.findByRole("heading", { name: "Pair this computer" });
     fireEvent.change(screen.getByLabelText(/Server address/), { target: { value: "https://ledger.example.test" } });
     fireEvent.change(screen.getByLabelText(/Pairing code/), { target: { value: "ABCD-1234" } });
@@ -84,6 +85,7 @@ describe("MainApp start-up and pairing gate", () => {
     mockBackend({ paired: false });
     respondWith("pair_device", () => Promise.reject("Server returned 422: The pairing code is invalid or has expired."));
     render(<MainApp />);
+    fireEvent.click(await screen.findByRole("button", { name: "Use a pairing code or QR instead" }));
     await screen.findByRole("heading", { name: "Pair this computer" });
     fireEvent.change(screen.getByLabelText(/Pairing code/), { target: { value: "NOPE" } });
     fireEvent.click(screen.getByRole("button", { name: "Pair" }));
@@ -96,7 +98,7 @@ describe("MainApp start-up and pairing gate", () => {
   it("goes back to the pairing form when the backend reports the device was unpaired", async () => {
     await renderPaired();
     await emitEvent("app:status", makeStatus({ paired: false }));
-    expect(await screen.findByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
   });
 
   // A6.DU1: the 401 "unpaired on the server" error arrives together with the status that shows the pairing form.
@@ -104,17 +106,17 @@ describe("MainApp start-up and pairing gate", () => {
     await renderPaired();
     await emitEvent("app:error", "This computer was unpaired on the server. Pair it again to upload.");
     await emitEvent("app:status", makeStatus({ paired: false }));
-    expect(await screen.findByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
     const toast = screen.getByRole("status");
     expect(toast).toHaveTextContent("This computer was unpaired on the server. Pair it again to upload.");
     expect(toast).toHaveClass("toast", "error");
   });
 
   // A6.DU1: errors that reach an unpaired window (network, certificate pin) are shown too.
-  it("shows an app:error toast while the pairing form is open", async () => {
+  it("shows an app:error toast while the sign-in form is open", async () => {
     mockBackend({ paired: false, serverUrl: null, deviceName: null });
     render(<MainApp />);
-    await screen.findByRole("heading", { name: "Pair this computer" });
+    await screen.findByRole("heading", { name: "Sign in to EchoLedger" });
     await emitEvent("app:error", "Network error: the server's TLS certificate was not accepted (pin mismatch)");
     expect(screen.getByRole("status")).toHaveTextContent("Network error: the server's TLS certificate was not accepted (pin mismatch)");
     expect(screen.getByRole("status")).toHaveClass("error");
@@ -128,7 +130,7 @@ describe("MainApp start-up and pairing gate", () => {
     render(<MainApp />);
     expect(screen.getByRole("main")).toHaveTextContent("Starting EchoLedger…");
     await act(async () => release(makeStatus({ paired: false, serverUrl: null, deviceName: null })));
-    expect(within(await screen.findByRole("main")).getByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    expect(within(await screen.findByRole("main")).getByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
     await emitEvent("app:status", makeStatus());
     expect(within(screen.getByRole("main")).getByRole("heading", { name: "Library" })).toBeInTheDocument();
     expect(screen.getAllByRole("main")).toHaveLength(1);
@@ -429,7 +431,7 @@ describe("MainApp action runner", () => {
     respond("unpair", makeStatus({ paired: false, serverUrl: null, deviceName: null }));
     fireEvent.click(nav("Settings"));
     fireEvent.click(await screen.findByRole("button", { name: "Unpair" }));
-    expect(await screen.findByRole("heading", { name: "Pair this computer" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
   });
 });
 

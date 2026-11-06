@@ -1,5 +1,6 @@
 //! EchoLedger desktop. Tray app: dual-channel capture, live captions overlay, dictation, auto mode, uploads.
 
+pub mod account;
 mod actions;
 pub mod activity;
 pub mod after_call;
@@ -16,6 +17,7 @@ pub mod material;
 pub mod net;
 pub mod overlay;
 pub mod pending;
+pub mod plan;
 pub mod projects;
 pub mod recovery;
 pub mod screens;
@@ -94,6 +96,8 @@ pub struct AppState {
     /// Screen moments (v1.5): the capture beside a call recording, the key that seals stored screens, what the plan
     /// and the server said.
     pub screens: screens::Screens,
+    /// A browser sign-in waiting for its `echoledger://signed-in` link (v1.5), in memory only.
+    pub browser_sign_in: Mutex<Option<account::BrowserSignIn>>,
 }
 
 impl AppState {
@@ -141,6 +145,7 @@ impl AppState {
             recording_language_marks: Mutex::new(None),
             recording_caller: Mutex::new(None),
             screens: screens::Screens::new(Box::new(screens::platform::Native), Box::new(screens::store::KeychainKeys)),
+            browser_sign_in: Mutex::new(None),
         }
     }
 
@@ -189,6 +194,18 @@ impl AppState {
         self.budget_blocked.store(false, std::sync::atomic::Ordering::SeqCst);
         self.screens.note_config(&config);
         *self.server_config.lock().unwrap_or_else(|p| p.into_inner()) = Some(config);
+    }
+
+    /// What the workspace's plan and the person's role allow, from the last server config (v1.5).
+    pub fn plan_info(&self) -> plan::PlanInfo {
+        let config = self.server_config.lock().unwrap_or_else(|p| p.into_inner());
+        plan::PlanInfo::from_config(config.as_ref(), self.screens.in_plan())
+    }
+
+    /// A viewer's computer records nothing (v1.5): the sentence the app shows instead, or none when it may record.
+    pub fn viewer_refusal(&self) -> Option<String> {
+        let info = self.plan_info();
+        (!info.can_record()).then(|| account::viewer_sentence(info.workspace.as_deref()))
     }
 
     /// True when the last server config says the server speaks the v1.1 contract.
@@ -268,9 +285,12 @@ pub fn run() {
             if !std::env::args().any(|a| a == "--autostart") {
                 tray::show_main(&handle);
             }
-            // Started by an echoledger://open link (Windows passes it on the command line, since v1.5).
+            // Started by an echoledger://open link (Windows passes it on the command line, since v1.5). A sign-in link
+            // never starts the app usefully: its verifier was in the memory of the run that opened the browser.
             if let Some(link) = deep_link::find_open_link(&std::env::args().collect::<Vec<_>>()) {
                 actions::open_app_link(&handle, link);
+            } else if account::find_signed_in_link(&std::env::args().collect::<Vec<_>>()).is_some() {
+                actions::handle_links(&handle, &std::env::args().collect::<Vec<_>>());
             }
             Ok(())
         })
@@ -293,7 +313,17 @@ pub fn run() {
             commands::window_appearance,
             commands::set_window_theme,
             commands::pair_device,
+            commands::sign_in_password,
+            commands::sign_in_browser,
+            commands::sign_in_browser_cancel,
             commands::unpair,
+            commands::account_get,
+            commands::account_sign_out_everywhere,
+            commands::account_delete,
+            commands::account_export_start,
+            commands::account_export_status,
+            commands::account_export_open,
+            commands::server_page_open,
             commands::get_settings,
             commands::update_settings,
             commands::set_shortcut,
@@ -436,13 +466,12 @@ pub fn run() {
         .expect("error while building EchoLedger");
 
     app.run(|handle, event| {
-        // macOS hands an echoledger://open link to the running app as an opened URL (Info.plist registers the scheme).
+        // macOS hands an echoledger://open or echoledger://signed-in link to the running app as an opened URL (Info.plist
+        // registers the scheme).
         #[cfg(target_os = "macos")]
         if let RunEvent::Opened { urls, .. } = &event {
             let urls: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
-            if let Some(link) = deep_link::find_open_link(&urls) {
-                actions::open_app_link(handle, link);
-            }
+            actions::handle_links(handle, &urls);
         }
         if let RunEvent::ExitRequested { code, api, .. } = &event {
             // User-initiated exit (last window closed): stay in the tray. Programmatic exit (Quit) proceeds.

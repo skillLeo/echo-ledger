@@ -1041,3 +1041,8 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .chip.excluded-app { cursor: default; gap: 2px; padding-right: 2px; }
 .chip-remove { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); cursor: pointer; }
 .chip-remove:hover { background: var(--surface-3); color: var(--text); }
+/* Sign in to EchoLedger (since v1.5): "or" between the password and the browser, the pairing link, the browser wait. */
+.sign-in-or { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-3) 0; color: var(--text-muted); font-size: var(--text-xs); }
+.sign-in-or::before, .sign-in-or::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+.sign-in-pair { display: flex; margin: var(--space-2) auto 0; }
+.sign-in-wait { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }

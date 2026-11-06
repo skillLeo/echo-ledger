@@ -43,6 +43,8 @@ pub struct AppStatus {
     pub pill_hidden: bool,
     pub pending_decisions: usize,
     pub tray_state: TrayState,
+    /// What the workspace's plan and the person's role allow (v1.5).
+    pub plan: crate::plan::PlanInfo,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
@@ -83,6 +85,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
         pill_hidden,
         pending_decisions,
         tray_state,
+        plan: state.plan_info(),
     }
 }
 
@@ -115,11 +118,21 @@ pub async fn pair_device(app: AppHandle, server_url: String, code: String, devic
         (server_url, code, Vec::<String>::new())
     };
     let name = if device_name.trim().is_empty() { default_device_name() } else { device_name.trim().to_string() };
-    let platform = if cfg!(target_os = "macos") { "macos" } else if cfg!(windows) { "windows" } else { "linux" };
 
     // Pairing uses the pins from the QR (when scanned); typed codes rely on WebPKI until the server sends pins.
     let api = ApiClient::new(&server_url, &pins, None)?;
-    let registered = api.register(code.trim(), &name, platform, &os_version()).await?;
+    let registered = api.register(code.trim(), &name, this_platform(), &os_version()).await?;
+    adopt_registration(&app, &api, registered, pins).await
+}
+
+/// `platform` as the server knows this computer.
+fn this_platform() -> &'static str {
+    if cfg!(target_os = "macos") { "macos" } else if cfg!(windows) { "windows" } else { "linux" }
+}
+
+/// This computer's token from pairing or a sign-in (both answer like `POST /api/devices/register`): kept in the
+/// keychain, the server, pins and device remembered, the config applied, the queue and the library started.
+async fn adopt_registration(app: &AppHandle, api: &ApiClient, registered: crate::net::models::RegisterResponse, pins: Vec<String>) -> AppResult<AppStatus> {
     let state = app.state::<AppState>();
     state.token_store.save(&registered.token).map_err(AppError::Keychain)?;
     *state.token.lock().unwrap() = Some(registered.token);
@@ -130,10 +143,121 @@ pub async fn pair_device(app: AppHandle, server_url: String, code: String, devic
         s.device_id = Some(registered.device.id.clone());
         s.device_name = Some(registered.device.name.clone());
     })?;
-    *state.server_config.lock().unwrap() = Some(registered.config);
+    state.apply_config(registered.config);
     state.upload_notify.notify_one();
-    let _ = refresh_library_inner(&app).await;
-    Ok(status(&app))
+    let _ = refresh_library_inner(app).await;
+    Ok(status(app))
+}
+
+/// What a sign-in came to (v1.5): signed in, the account wants its two-factor code, or the server only pairs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignInResult {
+    SignedIn,
+    OtpRequired,
+    PairingOnly,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignInOutcome {
+    pub result: SignInResult,
+    pub status: Option<AppStatus>,
+}
+
+/// The pins remembered for `server_url` (signed out of the same server before), else none: WebPKI until the server
+/// sends its pins with the token.
+fn known_pins(state: &AppState, server_url: &str) -> Vec<String> {
+    let settings = state.settings();
+    let same = settings.server_url.as_deref().is_some_and(|s| s.trim().trim_end_matches('/') == server_url.trim().trim_end_matches('/'));
+    if same { settings.pins } else { Vec::new() }
+}
+
+/// Signs this computer in with the account's email and password (docs/API.md "Signing in with an account"); `otp` is
+/// the two-factor code once the server asked for it.
+#[tauri::command]
+pub async fn sign_in_password(app: AppHandle, server_url: String, email: String, password: String, otp: Option<String>, device_name: String) -> AppResult<SignInOutcome> {
+    let state = app.state::<AppState>();
+    let name = if device_name.trim().is_empty() { default_device_name() } else { device_name.trim().to_string() };
+    let pins = known_pins(&state, &server_url);
+    let api = ApiClient::new(&server_url, &pins, None)?;
+    let otp = otp.map(|o| o.trim().replace(' ', "")).filter(|o| !o.is_empty());
+    let sign_in = crate::net::models::PasswordSignIn { email: email.trim(), password: &password, otp: otp.as_deref(), name: &name };
+    match api.sign_in_password(&sign_in, this_platform(), &os_version()).await {
+        Ok(crate::net::models::PasswordAnswer::OtpRequired) => Ok(SignInOutcome { result: SignInResult::OtpRequired, status: None }),
+        Ok(crate::net::models::PasswordAnswer::SignedIn(registered)) => {
+            let status = adopt_registration(&app, &api, *registered, pins).await?;
+            Ok(SignInOutcome { result: SignInResult::SignedIn, status: Some(status) })
+        }
+        Err(e) if e.is_missing_route() => Ok(SignInOutcome { result: SignInResult::PairingOnly, status: None }),
+        Err(e) => Err(e),
+    }
+}
+
+/// "Sign in in the browser (Google, passkeys)": opens the server's sign-in page with a PKCE challenge; the page sends
+/// the browser back to `echoledger://signed-in`, which `finish_browser_sign_in` takes. False (and no browser) when the
+/// server has no account sign-in yet.
+#[tauri::command]
+pub async fn sign_in_browser(app: AppHandle, server_url: String, device_name: String) -> AppResult<bool> {
+    use tauri_plugin_opener::OpenerExt;
+    let state = app.state::<AppState>();
+    let name = if device_name.trim().is_empty() { default_device_name() } else { device_name.trim().to_string() };
+    let pins = known_pins(&state, &server_url);
+    let api = ApiClient::new(&server_url, &pins, None)?;
+    if !api.offers_account_sign_in().await? {
+        return Ok(false);
+    }
+    let sign_in = crate::account::BrowserSignIn::start(api.base_url(), pins, &name, std::time::Instant::now()).map_err(AppError::Message)?;
+    let url = sign_in.url(this_platform()).map_err(AppError::Message)?;
+    *state.browser_sign_in.lock().unwrap_or_else(|p| p.into_inner()) = Some(sign_in);
+    if let Err(e) = app.opener().open_url(url, None::<&str>) {
+        *state.browser_sign_in.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        return Err(AppError::msg(format!("The browser could not be opened: {e}")));
+    }
+    Ok(true)
+}
+
+/// Stops waiting for the browser: a link that comes back afterwards is not used.
+#[tauri::command]
+pub fn sign_in_browser_cancel(state: State<'_, AppState>) {
+    *state.browser_sign_in.lock().unwrap_or_else(|p| p.into_inner()) = None;
+}
+
+/// The browser sign-in's `echoledger://signed-in` link: checked against the waiting sign-in, then its code and the
+/// verifier exchanged for this computer's token. The sign-in screen hears `signin:done` (the status) or
+/// `signin:failed` (what to say).
+pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callback) {
+    let state = app.state::<AppState>();
+    let checked = {
+        let mut pending = state.browser_sign_in.lock().unwrap_or_else(|p| p.into_inner());
+        match crate::account::check(pending.as_ref(), &link, std::time::Instant::now()) {
+            Ok(code) => pending.take().map(|sign_in| (sign_in, code)).ok_or(crate::account::Refused::NotStarted),
+            Err(refused) => {
+                if refused.ends_wait() {
+                    *pending = None;
+                }
+                Err(refused)
+            }
+        }
+    };
+    let result = match checked {
+        Err(refused) if state.is_paired() && refused == crate::account::Refused::NotStarted => return, // an old link, nothing waits for it
+        Err(refused) => Err(AppError::msg(refused.text())),
+        Ok((sign_in, code)) => match ApiClient::new(&sign_in.server, &sign_in.pins, None) {
+            Ok(api) => match api.device_token(&code, &sign_in.verifier, &sign_in.name, this_platform(), &os_version()).await {
+                Ok(registered) => adopt_registration(app, &api, registered, sign_in.pins.clone()).await,
+                Err(e) => Err(e),
+            },
+            Err(e) => Err(e),
+        },
+    };
+    match result {
+        Ok(status) => {
+            crate::lifecycle::emit(app, crate::lifecycle::MAIN, "signin:done", &status);
+            crate::actions::emit_status(app);
+        }
+        Err(e) => crate::lifecycle::emit(app, crate::lifecycle::MAIN, "signin:failed", e.to_string()),
+    }
 }
 
 #[tauri::command]
@@ -149,6 +273,81 @@ pub async fn unpair(app: AppHandle) -> AppResult<AppStatus> {
     let _ = std::fs::remove_file(paths::library(&state.data_dir));
     *state.library.lock().await = LibraryCache::default();
     Ok(status(&app))
+}
+
+// ---- Your account (v1.5) ------------------------------------------------------------------------------------------
+
+/// The account page: the person, the workspace and role, two-factor and Google; none from a server without accounts.
+/// The config is read again first, so the plan and the role the page shows are current.
+#[tauri::command]
+pub async fn account_get(app: AppHandle) -> AppResult<Option<crate::net::models::AccountDto>> {
+    let state = app.state::<AppState>();
+    let api = state.api()?;
+    if let Ok(config) = api.config().await {
+        state.apply_config(config);
+        crate::actions::emit_status(&app);
+    }
+    api.account().await
+}
+
+/// Sign out everywhere: every device and console session of the account, this computer's token included, so this
+/// computer is signed out too (its recordings stay queued until it signs in again).
+#[tauri::command]
+pub async fn account_sign_out_everywhere(app: AppHandle) -> AppResult<AppStatus> {
+    let api = app.state::<AppState>().api()?;
+    match api.sign_out_everywhere().await {
+        // A token the server no longer knows is signed out already.
+        Ok(()) | Err(AppError::NotPaired) => {}
+        Err(e) => return Err(e),
+    }
+    unpair(app).await
+}
+
+/// Deletes the account after 7 days, confirmed with the password or a two-factor code; returns when (`deletes_at`).
+#[tauri::command]
+pub async fn account_delete(app: AppHandle, password: Option<String>, otp: Option<String>) -> AppResult<Option<String>> {
+    let password = password.filter(|p| !p.is_empty());
+    let otp = otp.map(|o| o.trim().replace(' ', "")).filter(|o| !o.is_empty());
+    app.state::<AppState>().api()?.delete_account(password.as_deref(), otp.as_deref()).await
+}
+
+/// Export my data: starts the ZIP; the page asks for its state every 5 seconds.
+#[tauri::command]
+pub async fn account_export_start(app: AppHandle) -> AppResult<crate::net::models::AccountExport> {
+    app.state::<AppState>().api()?.start_export().await
+}
+
+#[tauri::command]
+pub async fn account_export_status(app: AppHandle, id: String) -> AppResult<crate::net::models::AccountExport> {
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(AppError::msg("That export is not one of the server's."));
+    }
+    app.state::<AppState>().api()?.export_status(&id).await
+}
+
+/// Opens a ready export's link in the browser, only when it is a page of the signed-in server.
+#[tauri::command]
+pub fn account_export_open(app: AppHandle, url: String) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let server = app.state::<AppState>().settings().server_url.ok_or(AppError::NotPaired)?;
+    if !crate::account::export_link_ok(&server, &url) {
+        return Err(AppError::msg("The server sent an export link of another site, so it was not opened."));
+    }
+    app.opener().open_url(url.trim(), None::<&str>).map_err(|e| AppError::msg(e.to_string()))
+}
+
+/// The server's public pages the app links to (docs/API.md "Public pages and app downloads"), opened in the browser.
+const SERVER_PAGES: [&str; 4] = ["terms", "privacy", "account/delete", "downloads"];
+
+#[tauri::command]
+pub fn server_page_open(app: AppHandle, page: String) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    if !SERVER_PAGES.contains(&page.as_str()) {
+        return Err(AppError::msg("That is not one of the server's pages."));
+    }
+    let server = app.state::<AppState>().settings().server_url.ok_or(AppError::NotPaired)?;
+    let url = format!("{}/{page}", server.trim().trim_end_matches('/'));
+    app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))
 }
 
 #[tauri::command]
@@ -1962,6 +2161,9 @@ pub fn translate_status() -> Option<crate::translate::Feed> {
 #[tauri::command]
 pub async fn translate_start(app: AppHandle, state: State<'_, AppState>, request: crate::translate::StartRequest) -> AppResult<Vec<String>> {
     let crate::translate::StartRequest { pid, name, mode, target, hints, speed } = request;
+    if !state.plan_info().live_translate {
+        return Err(AppError::Message(crate::plan::feature_text(Some("live_translate"))));
+    }
     let api = state.api()?;
     let fetch = move || {
         let (api, target, hints) = (api.clone(), target.clone(), hints.clone());
