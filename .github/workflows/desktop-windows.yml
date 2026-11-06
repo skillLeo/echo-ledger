@@ -157,3 +157,10 @@ jobs:
       - name: Run the smoke test
         shell: pwsh
         run: ./desktop/scripts/smoke-windows.ps1 -Exe (Resolve-Path app/echoledger-desktop.exe).Path
+
+      - name: Run it again as a person would on their own PC, without the runner's folder
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path app/echoledger-desktop.exe).Path
+          Remove-Item Env:RUNNER_TEMP
+          ./desktop/scripts/smoke-windows.ps1 -Exe $exe

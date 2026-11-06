@@ -13,8 +13,10 @@ $caption = (Get-CimInstance Win32_OperatingSystem).Caption
 $webview = Get-ItemProperty -ErrorAction SilentlyContinue 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
 "WebView2 runtime: $($webview.pv)"
 
-$out = Join-Path $env:RUNNER_TEMP 'smoke-out.txt'
-$err = Join-Path $env:RUNNER_TEMP 'smoke-err.txt'
+# On a person's PC there is no runner's folder.
+$temp = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+$out = Join-Path $temp 'smoke-out.txt'
+$err = Join-Path $temp 'smoke-err.txt'
 $started = Get-Date
 $process = Start-Process -FilePath $Exe -ArgumentList '--smoke-test' -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
 $null = $process.Handle # keeps the exit code readable after it ended

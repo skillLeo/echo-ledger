@@ -142,6 +142,20 @@ describe("the workflows run the smoke test", () => {
     expect(windows).toContain("smoke-windows.ps1");
   });
 
+  it("the Windows script also works outside a runner, and the workflow proves it", () => {
+    const script = readFileSync(resolve(__dirname, "../scripts/smoke-windows.ps1"), "utf8");
+    expect(script).toContain("[System.IO.Path]::GetTempPath()");
+    expect(script).not.toMatch(/Join-Path \$env:RUNNER_TEMP/);
+    expect(workflow("desktop-windows.yml")).toContain("Remove-Item Env:RUNNER_TEMP");
+  });
+
+  it("the manual Windows check waits for the windowed app before it reads the exit code", () => {
+    const qa = readFileSync(resolve(__dirname, "../../docs/MANUAL_QA.md"), "utf8");
+    const row = qa.split("\n").find((line) => line.startsWith("| WIN-6 |")) ?? "";
+    expect(row).toContain("start /wait");
+    expect(row).toContain("%ERRORLEVEL%");
+  });
+
   it("the first-launch text no longer says right-click", () => {
     expect(workflow("desktop-mac.yml")).not.toMatch(/right-click/i);
     expect(workflow("desktop-mac.yml")).toContain("Open Anyway");
