@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
 use App\Services\Accounts\SignUp;
+use App\Services\AuditLog;
 use App\Services\EngineWait;
 use App\Services\RetentionPolicy;
 use App\Services\SessionMarkers;
@@ -48,6 +49,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
@@ -631,6 +633,7 @@ class Settings extends Page
     private function persist(SettingsRepository $settings): void
     {
         $state = $this->form->getState();
+        $before = $settings->all();
         $settings->setMany([
             'retention_days' => (int) $state['retention_days'],
             'provider.live_captions' => $state['provider_live_captions'],
@@ -692,6 +695,20 @@ class Settings extends Page
             'storage_bytes' => $gb === null ? null : $gb * 1024 ** 3,
             'max_devices' => $limit('plan_max_devices'),
         ]);
+        // Since v1.5 the audit log names what changed (the keys only: values stay in the settings).
+        $after = $settings->all();
+        // A list saved in another order (ticked languages) is the same setting.
+        $same = function (mixed $value): string {
+            if (is_array($value) && array_is_list($value) && array_filter($value, 'is_array') === []) {
+                sort($value);
+            }
+
+            return (string) json_encode($value);
+        };
+        $changed = array_values(array_filter(array_keys($after), fn (string $key): bool => $same($before[$key] ?? null) !== $same($after[$key])));
+        if ($changed !== []) {
+            app(AuditLog::class)->record('settings_changed', (int) auth()->id(), null, Str::limit('Settings changed: '.implode(', ', $changed), 250, '…'), ['keys' => $changed]);
+        }
     }
 
     /** @return array{plan_monthly_minutes: int|null, plan_storage_gb: int|null, plan_max_devices: int|null} */

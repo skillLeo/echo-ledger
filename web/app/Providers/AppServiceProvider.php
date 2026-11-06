@@ -18,6 +18,7 @@ use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Services\Accounts\KnownBrowsers;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
 use App\Services\ClientAi\ClaudeClientAi;
@@ -33,11 +34,13 @@ use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
 use Filament\Support\Facades\FilamentTimezone;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -77,6 +80,8 @@ class AppServiceProvider extends ServiceProvider
         AuditLog::listen();
         // The activity centre (B18).
         ActivityFeed::listen();
+        // Since v1.5: a console sign-in from a browser the account has not used before emails the account.
+        Event::listen(Login::class, [KnownBrowsers::class, 'handle']);
 
         // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
         FilamentTimezone::set(fn (): string => app(SettingsRepository::class)->displayTimezone());

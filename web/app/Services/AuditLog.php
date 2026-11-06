@@ -10,6 +10,7 @@ use App\Models\Credential;
 use App\Models\Device;
 use App\Models\ShareLink;
 use App\Models\User;
+use App\Services\Accounts\SignInGuard;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
@@ -130,7 +131,12 @@ final class AuditLog
         Event::listen(Failed::class, function (Failed $e) use ($log): void {
             if ($e->guard === 'web') {
                 $email = Str::limit((string) ($e->credentials['email'] ?? ''), 120, '');
-                $log()->record('login_failed', $e->user instanceof User ? (int) $e->user->getAuthIdentifier() : null, null, "Sign-in failed for {$email}");
+                $userId = $e->user instanceof User ? (int) $e->user->getAuthIdentifier() : null;
+                $log()->record('login_failed', $userId, null, "Sign-in failed for {$email}");
+                // Since v1.5 the console's failures count with the apps' sign-ins: a burst locks the email for a while.
+                if ($email !== '') {
+                    app(SignInGuard::class)->fail($email, $userId);
+                }
             }
         });
         Event::listen(Logout::class, function (Logout $e) use ($log): void {

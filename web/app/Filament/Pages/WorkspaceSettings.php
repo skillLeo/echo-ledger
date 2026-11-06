@@ -87,12 +87,18 @@ class WorkspaceSettings extends Page implements HasTable
                     ->authorize(fn (): bool => $this->isOwner())
                     ->action(function (User $record): void {
                         $to = $this->roleOf($record) === WorkspaceRole::Owner ? WorkspaceRole::Member : WorkspaceRole::Owner;
-                        $this->attempt(fn () => app(Workspaces::class)->setRole($this->workspaceOrFail(), $record, $to), "{$record->name} is now ".Str::lower($to->label()));
+                        if ($this->attempt(fn () => app(Workspaces::class)->setRole($this->workspaceOrFail(), $record, $to), "{$record->name} is now ".Str::lower($to->label()))) {
+                            app(AuditLog::class)->record('role_changed', $this->user()->id, $this->workspaceOrFail(), "{$record->email} is now ".Str::lower($to->label()).' of '.$this->workspaceOrFail()->name);
+                        }
                     }),
                 Action::make('remove')->label('Remove')->icon(Heroicon::OutlinedUserMinus)->color('danger')
                     ->authorize(fn (): bool => $this->isOwner())
                     ->requiresConfirmation()->modalDescription('They lose access to this workspace at once and their devices here are unpaired. Their recordings stay.')
-                    ->action(fn (User $record) => $this->attempt(fn () => app(Workspaces::class)->removeMember($this->workspaceOrFail(), $record), "{$record->name} removed")),
+                    ->action(function (User $record): void {
+                        if ($this->attempt(fn () => app(Workspaces::class)->removeMember($this->workspaceOrFail(), $record), "{$record->name} removed")) {
+                            app(AuditLog::class)->record('member_removed', $this->user()->id, $this->workspaceOrFail(), "Removed {$record->email} from ".$this->workspaceOrFail()->name);
+                        }
+                    }),
             ])
             ->paginated([25, 50, 100]);
     }
@@ -118,6 +124,7 @@ class WorkspaceSettings extends Page implements HasTable
                 ->schema([TextInput::make('name')->required()->maxLength(120)])
                 ->action(function (array $data): void {
                     $this->workspaceOrFail()->update(['name' => trim((string) $data['name'])]);
+                    app(AuditLog::class)->record('workspace_renamed', $this->user()->id, $this->workspaceOrFail(), 'Workspace renamed to '.$this->workspaceOrFail()->name);
                     Notification::make()->title('Workspace renamed')->success()->send();
                 }),
             Action::make('addMember')->label('Add member')->icon(Heroicon::OutlinedUserPlus)

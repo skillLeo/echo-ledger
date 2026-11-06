@@ -9,6 +9,7 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Http\Controllers\Api\ConfigController;
+use App\Mail\ShareReceivedMail;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Recording;
@@ -18,6 +19,7 @@ use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Models\User;
 use App\Services\ActivityFeed;
+use App\Services\AuditLog;
 use App\Services\ChunkedUploadService;
 use App\Services\Projects\ProjectTree;
 use App\Services\Screens\ScreenStore;
@@ -26,6 +28,7 @@ use App\Support\UrduText;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
@@ -75,6 +78,11 @@ final class Teammates
                 app(ActivityFeed::class)->sharedWithYou($person, "{$sender->name} sent you {$title}", $note ?? 'Open it in Shared with me.', $target instanceof CaptureSession ? $target->id : null);
             }
         });
+        // Since v1.5 each person also gets an email, and the sending is in the sender's audit log.
+        foreach ($people as $person) {
+            Mail::to($person->email)->queue(new ShareReceivedMail($sender->name, $title, $kind === 'project', url('/admin/shared-with-me'), $note));
+        }
+        app(AuditLog::class)->record('sent_to_teammate', $sender->id, $target, 'Sent '.($kind === 'project' ? 'project ' : '').$title.' to '.Str::limit($people->pluck('email')->implode(', '), 160, '…'));
 
         return $people->count();
     }

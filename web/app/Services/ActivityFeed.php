@@ -11,6 +11,7 @@ use App\Enums\UploadStatus;
 use App\Enums\WorkspaceRole;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Mail\TranscriptReadyMail;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Recording;
@@ -23,6 +24,7 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
@@ -63,12 +65,21 @@ final class ActivityFeed
             return;
         }
         match ($transcript->status) {
-            TranscriptStatus::Completed => $this->post($session->user, 'transcript_ready', 'Transcript ready', $session->displayTitle(), $session, 'heroicon-o-document-text'),
+            TranscriptStatus::Completed => $this->transcriptReady($session),
             // A provider failure goes to the next engine first (TranscriptStore::fail queues EngineFallbackJob), so
             // "failed" waits until no engine is left: EngineFallbackJob posts it then.
             TranscriptStatus::Failed => self::fallsBack($transcript) ? null : $this->transcriptFailed($transcript, $session),
             default => null,
         };
+    }
+
+    /** The bell, and since v1.5 an email for people who turned "Email me when a transcript is ready" on. */
+    private function transcriptReady(CaptureSession $session): void
+    {
+        $this->post($session->user, 'transcript_ready', 'Transcript ready', $session->displayTitle(), $session, 'heroicon-o-document-text');
+        if ($session->user->notify_transcript_ready) {
+            Mail::to($session->user->email)->queue(new TranscriptReadyMail($session->displayTitle(), url('/admin/sessions/'.$session->id)));
+        }
     }
 
     /** True when a failure of this final transcript is handed to another engine before anyone is told. */

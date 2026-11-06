@@ -50,7 +50,28 @@ class EditProfile extends BaseEditProfile
             ...Arr::wrap($this->getMultiFactorAuthenticationContentComponent()),
             $this->googleSection(),
             $this->devicesSection(),
+            $this->emailsSection(),
         ]);
+    }
+
+    /** Emails that are a choice (sign-in alerts, invitations and the like always come). */
+    private function emailsSection(): Section
+    {
+        return Section::make('Emails')
+            ->schema([
+                Text::make(fn (): string => $this->account()->notify_transcript_ready
+                    ? 'You get an email when a transcript of yours is ready.'
+                    : 'No email when a transcript is ready: the bell in the console and the apps tell you.'),
+                Actions::make([
+                    Action::make('toggleTranscriptEmails')->color('gray')->icon(Heroicon::OutlinedEnvelope)
+                        ->label(fn (): string => $this->account()->notify_transcript_ready ? 'Stop the transcript emails' : 'Email me when a transcript is ready')
+                        ->action(function (): void {
+                            $on = ! $this->account()->notify_transcript_ready;
+                            $this->account()->forceFill(['notify_transcript_ready' => $on])->save();
+                            Notification::make()->title($on ? 'Transcript emails on' : 'Transcript emails off')->success()->send();
+                        }),
+                ])->key('email-actions'),
+            ]);
     }
 
     /** Profile → Devices: every phone, computer and browser signed in to this account, with Revoke. */
