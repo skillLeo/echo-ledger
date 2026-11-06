@@ -15,6 +15,7 @@ export function sendBlocked(status: Pick<AppStatus, "paired">): string | null {
 }
 
 function CheckRow({ item }: { item: CheckItem }) {
+  const { fix } = item;
   return (
     <li className={`check-row ${item.state}`} data-testid={`check-${item.key}`}>
       <span className="check-mark" role="img" aria-label={STATE_WORD[item.state]}>{item.state === "ok" ? <CheckIcon size={15} /> : <CloseIcon size={15} />}</span>
@@ -22,7 +23,7 @@ function CheckRow({ item }: { item: CheckItem }) {
         <div className="check-title">{item.title}{item.state !== "ok" && <span className="small muted"> · {STATE_WORD[item.state]}</span>}</div>
         <div className="small muted">{item.detail}</div>
       </div>
-      {item.fix && <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings(item.fix?.settings as never).catch(() => undefined)}>{item.fix.label}</button>}
+      {fix && <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings(fix.settings).catch(() => undefined)}>{fix.label}</button>}
     </li>
   );
 }

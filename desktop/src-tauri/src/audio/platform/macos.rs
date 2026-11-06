@@ -1,9 +1,10 @@
 //! macOS 14.4+ capture: a Core Audio process tap (all processes except EchoLedger) combined with the chosen
 //! microphone (`inputDevice`, else the default input device) in one private aggregate device, read by a single IOProc so mic and system audio share one
-//! clock (docs/research/desktop-audio-native.md §3).
+//! clock (docs/research/desktop-audio-native.md §3). A device that changes or goes during a recording closes the stream
+//! and opens another on the new devices (`audio::devices`).
 //!
-//! NOT VERIFIED ON HARDWARE (this repo is built on Windows): the input-buffer → channel mapping below assumes the
-//! sub-device (mic) streams precede the tap stream. docs/MANUAL_QA.md lists the check.
+//! NOT VERIFIED ON HARDWARE (the tests never open a real tap): the input-buffer → channel mapping below assumes the
+//! sub-device streams come in list order and precede the tap's (`mic_buffer`). docs/MANUAL_QA.md lists the check.
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
@@ -25,6 +26,9 @@ use super::{CaptureBackend, Streams};
 use crate::audio::devices::{CaptureHost, DeviceLog, DeviceNotice, Route, Supervisor};
 use crate::audio::dsp::{Resampler, downmix_to_mono};
 use crate::audio::types::{AudioChunk, BackendKind, CaptureError, Channel, TARGET_RATE};
+
+/// The name of our aggregate device: the prefix and the process id.
+const AGGREGATE_PREFIX: &str = "EchoLedger-";
 
 struct RawPacket {
     mic: Vec<f32>,
@@ -114,6 +118,10 @@ unsafe fn input_devices_inner() -> Vec<super::InputDevice> {
         .filter_map(|device| {
             let id = unsafe { device_uid(device) }?;
             let name = unsafe { device_name(device) }.unwrap_or_else(|| "Microphone".into());
+            // Our own private aggregate device is listed to us while a recording runs.
+            if name.starts_with(AGGREGATE_PREFIX) {
+                return None;
+            }
             let bus = match unsafe { get_u32(device, kAudioDevicePropertyTransportType, kAudioObjectPropertyScopeGlobal, None) } {
                 Some(kind) if kind == kAudioDeviceTransportTypeBluetooth || kind == kAudioDeviceTransportTypeBluetoothLE => super::MicBus::Bluetooth,
                 Some(_) => super::MicBus::Other,
@@ -324,7 +332,7 @@ unsafe fn open_stream(route: &Route, streams: Streams, tx: Sender<AudioChunk>) -
         &*cfstr(kAudioAggregateDeviceSubDeviceListKey),
         &*cfstr(kAudioAggregateDeviceTapListKey),
     ];
-    let name = CFString::from_str(&format!("EchoLedger-{pid}"));
+    let name = CFString::from_str(&format!("{AGGREGATE_PREFIX}{pid}"));
     let uid_value = CFString::from_str(&aggregate_uid);
     let main_value = CFString::from_str(&output_uid);
     let values: [&CFType; 8] = [&uid_value, &name, &main_value, yes, no, yes, sub_array.as_ref(), tap_array.as_ref()];

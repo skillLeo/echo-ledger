@@ -207,9 +207,11 @@ describe("a permission macOS forgot", () => {
     expect(callsOf("permission_notice_dismiss")).toHaveLength(0);
   });
 
-  it("closes the guide with Escape", async () => {
-    render(<PermissionGuide permissions={mac()} onChange={vi.fn()} onClose={vi.fn()} />);
-    expect(screen.getByRole("dialog", { name: "Set up permissions" })).toBeInTheDocument();
+  it("closes the guide with Escape", () => {
+    const onClose = vi.fn();
+    render(<PermissionGuide permissions={mac()} onChange={vi.fn()} onClose={onClose} />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalled();
   });
 });
 

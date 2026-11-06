@@ -24,6 +24,8 @@ pub const LOST_AFTER: Duration = Duration::from_secs(3);
 pub const HEALTHY_AFTER: Duration = Duration::from_secs(10);
 /// A running stream that delivers nothing for this long has stalled (a device died without telling anyone).
 pub const STALL_AFTER: Duration = Duration::from_secs(4);
+/// A new stream's first packet may take longer: macOS's own permission prompt can hold it back.
+pub const FIRST_PACKET_WITHIN: Duration = Duration::from_secs(10);
 /// How long "Microphone changed to …" stays.
 pub const MOVED_NOTE_FOR: Duration = Duration::from_secs(8);
 
@@ -234,7 +236,8 @@ impl<S> Supervisor<S> {
         if host.rate_moved(stream) {
             return Some(Change::Rate);
         }
-        (now.saturating_duration_since(self.last_packet_at) >= STALL_AFTER).then_some(Change::Stalled)
+        let limit = if self.last_packets == 0 { FIRST_PACKET_WITHIN } else { STALL_AFTER };
+        (now.saturating_duration_since(self.last_packet_at) >= limit).then_some(Change::Stalled)
     }
 
     /// The channels this recording records.
@@ -579,13 +582,18 @@ mod tests {
         let t0 = Instant::now();
         let mut host = FakeHost::new(Some("mic"), Some("speakers"));
         let mut s = start(&host, t0);
+        for second in 1..10 {
+            assert!(s.tick(&mut host, at(t0, second)).is_empty());
+            assert_eq!(host.closed, 0, "a first packet gets time: macOS may be asking for permission");
+        }
         let mut said = Vec::new();
-        for second in 1..=12 {
+        for second in 10..=25 {
             said.extend(s.tick(&mut host, at(t0, second)));
         }
+        assert!(host.closed >= 2, "it keeps trying");
         assert_eq!(said, vec![DeviceNotice::Lost { channel: Channel::Mic }, DeviceNotice::Lost { channel: Channel::System }]);
         host.packets = 7;
-        let back = s.tick(&mut host, at(t0, 13));
+        let back = s.tick(&mut host, at(t0, 26));
         assert_eq!(back, vec![DeviceNotice::Back { channel: Channel::Mic, name: None }, DeviceNotice::Back { channel: Channel::System, name: None }]);
     }
 

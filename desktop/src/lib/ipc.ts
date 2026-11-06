@@ -318,6 +318,8 @@ export interface TestResult {
 
 /** A permission the guided steps and the Mac check name (since v1.5). */
 export type PermissionKind = "microphone" | "system_audio" | "screen";
+/** A pane of the system's settings the app can open. */
+export type SettingsPane = PermissionKind | "automation" | "sound" | "software_update";
 
 /** Something the system does not let EchoLedger use, and what a recording holds without it. */
 export interface MissingPermission {
@@ -352,7 +354,7 @@ export interface CheckItem {
   state: CheckState;
   detail: string;
   /** A button to the System Settings pane that fixes it. */
-  fix: { label: string; settings: string } | null;
+  fix: { label: string; settings: SettingsPane } | null;
 }
 export interface CheckProgress {
   index: number;
@@ -1234,7 +1236,7 @@ export const api = {
   inputDevices: () => invoke<InputDevice[]>("input_devices"),
   testCapture: (seconds?: number) => invoke<TestResult>("test_capture", { seconds: seconds ?? null }),
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
-  openPrivacySettings: (kind: "microphone" | "system_audio" | "automation" | "screen" | "sound" | "software_update") => invoke<void>("open_privacy_settings", { kind }),
+  openPrivacySettings: (kind: SettingsPane) => invoke<void>("open_privacy_settings", { kind }),
   permissionRequest: (kind: PermissionKind) => invoke<PermissionsStatus>("permission_request", { kind }),
   permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
   macCheckRun: () => invoke<CheckReport>("mac_check_run"),

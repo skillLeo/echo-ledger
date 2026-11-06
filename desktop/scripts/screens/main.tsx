@@ -44,7 +44,7 @@ const bluetooth = screen.endsWith("-bluetooth");
 const mac = screen.includes("-mac");
 const windows10 = screen.endsWith("-windows10");
 const onboarding = screen === "onboarding-mac";
-const NO_SYSTEM_AUDIO = { kind: "system_audio", sentence: "System audio is off for EchoLedger: a recording will have your voice, not the other side of the call." };
+const NO_SYSTEM_AUDIO = { kind: "system_audio" as const, sentence: "System audio is off for EchoLedger: a recording will have your voice, not the other side of the call." };
 // v1.5: projects, the Library's smart folders, sharing and moving open from the Library or the Projects page.
 const LIBRARY_SCREENS = ["shared", "share", "move"];
 const tab = screen.startsWith("library") || LIBRARY_SCREENS.includes(screen) ? "library"
@@ -149,7 +149,7 @@ const commands: Record<string, (args: Args) => unknown> = {
     sourceApp: "whatsapp",
     language: "ur",
     bluetoothMic: bluetooth,
-    missing: screen === "controls-permission" ? [NO_SYSTEM_AUDIO] as never : [],
+    missing: screen === "controls-permission" ? [NO_SYSTEM_AUDIO] : [],
     deviceNote: screen === "controls-device" ? { text: "Microphone changed to AirPods Pro. Still recording.", warning: false } : null,
   }),
   // The after-call window: "Saved · … · Undo" over the Ask-me chip (its line at 6 of 10 s); both stay for the picture.

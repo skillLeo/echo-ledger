@@ -73,6 +73,52 @@ describe.runIf(process.platform === "darwin")("smoke-mac.sh", () => {
   }, 60_000);
 });
 
+/** The release job's script, run with a stand-in for `gh` that logs its arguments. */
+function runReleaseStep(tag: string, releaseExists: boolean): string[] {
+  const workflow = readFileSync(resolve(__dirname, "../../.github/workflows/desktop-mac.yml"), "utf8");
+  const step = workflow.slice(workflow.indexOf("- name: Attach to the release of this tag"));
+  const body = step.slice(step.indexOf("run: |") + "run: |".length).split("\n").map((line) => line.replace(/^ {10}/, "")).join("\n");
+  const root = mkdtempSync(join(tmpdir(), "release-step-"));
+  dirs.push(root);
+  for (const [folder, dmg] of [["EchoLedger-mac-apple-silicon", "EchoLedger_1.5.0_aarch64.dmg"], ["EchoLedger-mac-intel", "EchoLedger_1.5.0_x64.dmg"]]) {
+    mkdirSync(join(root, "downloaded", folder), { recursive: true });
+    writeFileSync(join(root, "downloaded", folder, dmg), "dmg");
+  }
+  mkdirSync(join(root, "bin"));
+  const log = join(root, "gh.log");
+  const gh = join(root, "bin", "gh");
+  writeFileSync(gh, `#!/bin/sh\necho "$*" >> "${log}"\n[ "$1 $2" = "release view" ] && exit ${releaseExists ? 0 : 1}\nexit 0\n`);
+  chmodSync(gh, 0o755);
+  const result = spawnSync("sh", ["-e", "-c", body], {
+    cwd: root,
+    encoding: "utf8",
+    env: { ...process.env, PATH: `${join(root, "bin")}:${process.env.PATH}`, TAG: tag, GITHUB_STEP_SUMMARY: join(root, "summary") },
+  });
+  expect(result.status, result.stderr).toBe(0);
+  return readFileSync(log, "utf8").trim().split("\n");
+}
+
+describe.runIf(process.platform !== "win32")("the release job", () => {
+  it("makes the release when the tag has none and attaches both DMGs, a beta as a pre-release", () => {
+    const calls = runReleaseStep("v1.5.0-beta.1", false);
+    expect(calls[0]).toBe("release view v1.5.0-beta.1");
+    expect(calls[1]).toMatch(/^release create v1\.5\.0-beta\.1 --verify-tag .*--prerelease$/);
+    expect(calls[2]).toMatch(/^release upload v1\.5\.0-beta\.1 --clobber /);
+    expect(calls[2]).toContain("EchoLedger_1.5.0_aarch64.dmg");
+    expect(calls[2]).toContain("EchoLedger_1.5.0_x64.dmg");
+  });
+
+  it("a final version is not a pre-release", () => {
+    expect(runReleaseStep("v1.5.0", false)[1]).not.toContain("--prerelease");
+  });
+
+  it("adds to a release the tag already has", () => {
+    const calls = runReleaseStep("v1.5.0", true);
+    expect(calls.some((call) => call.startsWith("release create"))).toBe(false);
+    expect(calls.some((call) => call.startsWith("release upload v1.5.0 --clobber"))).toBe(true);
+  });
+});
+
 describe("the workflows run the smoke test", () => {
   const workflow = (name: string) => readFileSync(resolve(__dirname, `../../.github/workflows/${name}`), "utf8");
 
