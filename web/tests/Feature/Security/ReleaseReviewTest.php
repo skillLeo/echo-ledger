@@ -83,8 +83,8 @@ beforeEach(function () {
 });
 
 /*
-| The findings of the v1.5 release's security review, each with what guards it (C1, M1 … m7, H1). Every test here failed
-| before its fix.
+| The findings of the v1.5 release's security review, each with what guards it (C1, M1 … m7, H1). These failed before
+| their fixes, apart from the few that say what must keep working (the super admin, a confirmed account, a profile change).
 */
 
 afterEach(function () {
