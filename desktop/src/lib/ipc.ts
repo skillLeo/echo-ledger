@@ -1007,6 +1007,8 @@ export interface EventPayloads {
   "activity:updated": number;
   "signin:done": AppStatus;
   "signin:failed": string;
+  /** A link of another browser sign-in (an earlier tab): what to say while this one keeps waiting. */
+  "signin:other": string;
   "update:status": UpdateStatus;
 }
 
@@ -1025,7 +1027,7 @@ export const api = {
   signInPassword: (serverUrl: string, email: string, password: string, otp: string | null, deviceName: string) =>
     invoke<SignInOutcome>("sign_in_password", { serverUrl, email, password, otp, deviceName }),
   /** Opens the server's sign-in page in the browser; false (and no browser) when the server only pairs. The answer
-   * comes back as `signin:done` or `signin:failed`. */
+   * comes back as `signin:done` or `signin:failed` (`signin:other` for an earlier sign-in's link). */
   signInBrowser: (serverUrl: string, deviceName: string) => invoke<boolean>("sign_in_browser", { serverUrl, deviceName }),
   signInBrowserCancel: () => invoke<void>("sign_in_browser_cancel"),
   /** null on a server without accounts. */

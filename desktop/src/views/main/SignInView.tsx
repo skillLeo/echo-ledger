@@ -46,6 +46,8 @@ export function SignInView({ onSignedIn, notify, serverUrl }: {
         setWaiting(false);
         setProblem(text);
       }),
+      // A link of an earlier browser sign-in: said, while this one keeps waiting.
+      listenTo("signin:other", (text) => setProblem(text)),
     ];
     return () => subs.forEach((p) => p.then((f) => f()).catch(() => undefined));
   }, []);
@@ -87,6 +89,7 @@ export function SignInView({ onSignedIn, notify, serverUrl }: {
 
   const cancel = () => {
     setWaiting(false);
+    setProblem(null);
     void api.signInBrowserCancel().catch(() => undefined);
   };
 
@@ -109,6 +112,7 @@ export function SignInView({ onSignedIn, notify, serverUrl }: {
         {waiting ? (
           <div className="sign-in-wait" role="status">
             <p className="small">{BROWSER_WAIT}</p>
+            {problem && <div className="notice error small" role="alert">{problem}</div>}
             <div className="row"><span className="spacer" /><button type="button" className="btn ghost" onClick={cancel}>Cancel</button></div>
           </div>
         ) : (

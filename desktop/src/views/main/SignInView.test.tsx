@@ -189,6 +189,23 @@ describe("SignInView: in the browser (Google, passkeys)", () => {
     expect(screen.queryByText(/Finish signing in in your browser/)).not.toBeInTheDocument();
   });
 
+  it("keeps waiting when an earlier sign-in's link comes back, and still enters the app with this one", async () => {
+    const { onSignedIn } = setup();
+    fireEvent.change(server(), { target: { value: "https://ledger.example.test" } });
+    fireEvent.click(browserButton());
+    await screen.findByText(/Finish signing in in your browser/);
+
+    const text = "This sign-in link belongs to another sign-in, so it was not used. Finish the sign-in in the browser window EchoLedger opened.";
+    await emitEvent("signin:other", text);
+    expect(screen.getByRole("alert")).toHaveTextContent(text);
+    expect(screen.getByText(/Finish signing in in your browser/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Password/)).not.toBeInTheDocument();
+
+    const status = makeStatus({ deviceName: "Studio Mac" });
+    await emitEvent("signin:done", status);
+    expect(onSignedIn).toHaveBeenCalledWith(status);
+  });
+
   it("stops waiting on Cancel", async () => {
     setup();
     fireEvent.change(server(), { target: { value: "https://ledger.example.test" } });

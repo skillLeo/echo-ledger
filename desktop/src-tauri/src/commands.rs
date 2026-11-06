@@ -225,7 +225,8 @@ pub fn sign_in_browser_cancel(state: State<'_, AppState>) {
 
 /// The browser sign-in's `echoledger://signed-in` link: checked against the waiting sign-in, then its code and the
 /// verifier exchanged for this computer's token. The sign-in screen hears `signin:done` (the status) or
-/// `signin:failed` (what to say).
+/// `signin:failed` (what to say), and `signin:other` for a link of another sign-in (an earlier, cancelled tab, say):
+/// the waiting one goes on.
 pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callback) {
     let state = app.state::<AppState>();
     let checked = {
@@ -242,6 +243,10 @@ pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callb
     };
     let result = match checked {
         Err(refused) if state.is_paired() && refused == crate::account::Refused::NotStarted => return, // an old link, nothing waits for it
+        Err(refused) if refused == crate::account::Refused::OtherState => {
+            crate::lifecycle::emit(app, crate::lifecycle::MAIN, "signin:other", refused.text());
+            return;
+        }
         Err(refused) => Err(AppError::msg(refused.text())),
         Ok((sign_in, code)) => match ApiClient::new(&sign_in.server, &sign_in.pins, None) {
             Ok(api) => match api.device_token(&code, &sign_in.verifier, &sign_in.name, this_platform(), &os_version()).await {
