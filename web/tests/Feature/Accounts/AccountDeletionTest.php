@@ -201,14 +201,27 @@ describe('echoledger:erase-accounts', function () {
         app(Workspaces::class)->addMember($team, $user);
         $teamProject = unscoped(fn () => Client::factory()->create(['user_id' => $user->id, 'workspace_id' => $team->id, 'name' => 'Team project']));
         $theirs = unscoped(fn () => CaptureSession::factory()->create(['user_id' => $teamOwner->id, 'workspace_id' => $team->id, 'client_id' => $teamProject->id]));
+        // A file they added to the team owner's project goes; the owner's own file there stays.
+        $ownersProject = unscoped(fn () => Client::factory()->create(['user_id' => $teamOwner->id, 'workspace_id' => $team->id, 'name' => 'Owner project']));
+        $storeIn = function (Client $in, string $text, int $by): ClientFile {
+            $tmp = tempnam(sys_get_temp_dir(), 'doc');
+            file_put_contents($tmp, $text);
+            $stored = unscoped(fn () => app(ClientWorkspace::class)->storeFile($in, $tmp, 'notes.txt', 'text/plain', strlen($text), $by));
+            @unlink($tmp);
+
+            return $stored;
+        };
+        $addedToTeam = $storeIn($ownersProject, 'MEMBER-ADDED-SECRET', $user->id);
+        $ownersFile = $storeIn($ownersProject, 'OWNER-FILE', $teamOwner->id);
         app(RequestLinks::class)->create($personal->id, $user->id, null, 'Send me files', null, 5, 50);
         $disk->put('exports/old.zip.elr', 'x');
         AccountExport::query()->create(['user_id' => $user->id, 'status' => 'ready', 'path' => 'exports/old.zip.elr', 'expires_at' => now()->addHour()]);
 
         $paths = unscoped(fn () => [
             ...Recording::query()->whereIn('capture_session_id', [$session->id, $binned->id])->pluck('stored_path')->all(),
-            $screen->image_path, $screen->thumb_path, $file->path, 'exports/old.zip.elr',
+            $screen->image_path, $screen->thumb_path, $file->path, $addedToTeam->path, 'exports/old.zip.elr',
         ]);
+        expect($disk->exists((string) $ownersFile->path))->toBeTrue();
         foreach ($paths as $path) {
             expect($disk->exists((string) $path))->toBeTrue();
         }
@@ -225,7 +238,8 @@ describe('echoledger:erase-accounts', function () {
         foreach ($paths as $path) {
             expect($disk->exists((string) $path))->toBeFalse("{$path} is still on the disk");
         }
-        unscoped(function () use ($user, $personal, $team, $theirs, $session, $binned, $file): void {
+        expect($disk->exists((string) $ownersFile->path))->toBeTrue();
+        unscoped(function () use ($user, $personal, $team, $theirs, $session, $binned, $file, $addedToTeam, $ownersFile, $ownersProject): void {
             expect(User::query()->find($user->id))->toBeNull()
                 ->and(Workspace::query()->find($personal->id))->toBeNull()
                 ->and(Workspace::query()->find($team->id))->not->toBeNull()
@@ -234,6 +248,9 @@ describe('echoledger:erase-accounts', function () {
                 ->and(Screen::query()->where('capture_session_id', $session->id)->count())->toBe(0)
                 ->and(Client::query()->where('user_id', $user->id)->count())->toBe(0)
                 ->and(ClientFile::query()->find($file->id))->toBeNull()
+                ->and(ClientFile::query()->find($addedToTeam->id))->toBeNull()
+                ->and(ClientFile::query()->find($ownersFile->id))->not->toBeNull()
+                ->and(Client::query()->find($ownersProject->id))->not->toBeNull()
                 ->and(Device::query()->where('user_id', $user->id)->count())->toBe(0)
                 ->and(RequestLink::query()->where('user_id', $user->id)->count())->toBe(0)
                 ->and(AccountExport::query()->count())->toBe(0)

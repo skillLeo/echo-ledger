@@ -8,6 +8,7 @@ use App\Enums\WorkspaceRole;
 use App\Models\AccountExport;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\ClientFile;
 use App\Models\Device;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
@@ -27,8 +28,8 @@ use Throwable;
  * Erases an account at the end of its 7-day grace (since v1.5, `echoledger:erase-accounts`): its recordings in every
  * workspace with their audio, transcripts and screens (CaptureSession::purgeMedia(), so the encrypted files go too),
  * its projects with their files (ProjectTree::delete(), which moves anyone else's recordings in them to the Inbox),
- * its request links, exports, devices and tokens, its console sessions; every workspace only it belongs to with
- * everything still in it; then the account. Workspace rows are deleted only once they are empty, never to let foreign
+ * the files it added to teammates' projects, its request links, exports, devices and tokens, its console sessions;
+ * every workspace only it belongs to with everything still in it; then the account. Workspace rows are deleted only once they are empty, never to let foreign
  * keys cascade over encrypted files. Provider copies were erased when the recordings were transcribed or deleted; a
  * live recording is deleted first so ProviderCopyEraser runs for it too. Safe to run again after a failure.
  */
@@ -71,6 +72,14 @@ final class AccountEraser
                 $projects++;
             }
         }
+
+        // Files they added to a teammate's project. Their rows would go with the account by its foreign key and leave
+        // the encrypted originals on the disk, so each goes here, file first.
+        ClientFile::query()->withoutGlobalScopes()->where('user_id', $user->id)->lazyById(100)
+            ->each(function (ClientFile $file): void {
+                self::deleteFile($file->path);
+                $file->delete();
+            });
 
         RequestLink::query()->withoutGlobalScopes()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->get()
             ->each(function (RequestLink $link): void {
