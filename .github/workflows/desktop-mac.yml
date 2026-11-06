@@ -60,7 +60,8 @@ jobs:
 
       - run: npm ci
 
-      # The macOS-only code (Core Audio tap, Touch ID, bundle-id detection) is compiled and checked only here.
+      # The macOS-only code (Core Audio tap, Touch ID, bundle-id detection, the ScreenCaptureKit screen moments) is
+      # compiled and checked only here.
       - name: Rust tests and clippy (macOS code)
         if: matrix.checks
         working-directory: desktop/src-tauri

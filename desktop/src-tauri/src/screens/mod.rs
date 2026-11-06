@@ -1,7 +1,7 @@
 //! Screen moments (docs/API.md "Screen moments", since v1.5): during a meeting the desktop keeps what was on the
 //! shared screen at each moment, on the recording's clock, so the transcript and an AI reading it know what "this
-//! page" meant. A capture thread runs beside every call recording: once a second it checks the privacy rules
-//! (`privacy`), finds the meeting window or the screen (`platform`), samples one frame and lets the detector
+//! page" meant. A capture thread runs beside every call recording: once a second (`sampler`) it checks the privacy
+//! rules (`privacy`), finds the meeting window or the screen (`platform`), samples one frame and lets the detector
 //! (`detect`) decide; a kept frame is encoded (`encode`) and sealed on disk (`store`) until the recording reached the
 //! server, then sent and deleted (`upload`).
 
@@ -9,6 +9,7 @@ pub mod detect;
 pub mod encode;
 pub mod platform;
 pub mod privacy;
+pub mod sampler;
 pub mod store;
 pub mod upload;
 pub mod words;
@@ -26,7 +27,9 @@ use tauri::{AppHandle, Manager};
 use crate::audio::{RecordingInfo, RecordingMode};
 use crate::net::api::ApiClient;
 use crate::net::models::ServerConfig;
-use privacy::{Facts, Gate, HoldReason};
+use platform::ScreenSystem;
+use privacy::{Facts, HoldReason};
+use sampler::{Sample, Sampler};
 use store::{KeySource, ScreenKey, ScreenStore};
 
 /// One sample a second, never more.
@@ -122,6 +125,7 @@ struct Running {
 
 /// Screen moments of the app: the key, what the server and the plan said, and the capture of the running recording.
 pub struct Screens {
+    system: Box<dyn ScreenSystem>,
     keys: Box<dyn KeySource>,
     key: Mutex<Option<Arc<ScreenKey>>>,
     /// The plan leaves screen moments out (`403 feature_not_in_plan`, or the config's plan) until a config says otherwise.
@@ -137,8 +141,13 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Screens {
-    pub fn new(keys: Box<dyn KeySource>) -> Self {
-        Self { keys, key: Mutex::new(None), plan_off: AtomicBool::new(false), server_missing: AtomicBool::new(false), running: Mutex::new(None), live: Arc::default() }
+    pub fn new(system: Box<dyn ScreenSystem>, keys: Box<dyn KeySource>) -> Self {
+        Self { system, keys, key: Mutex::new(None), plan_off: AtomicBool::new(false), server_missing: AtomicBool::new(false), running: Mutex::new(None), live: Arc::default() }
+    }
+
+    /// The system's capture (Windows.Graphics.Capture, ScreenCaptureKit), or a stand-in in tests.
+    pub fn system(&self) -> &dyn ScreenSystem {
+        self.system.as_ref()
     }
 
     /// The key screens are sealed with, read from the keychain (or made) on first use.
@@ -205,10 +214,10 @@ impl Screens {
             "other"
         };
         ScreensStatus {
-            supported: platform::supported(),
+            supported: self.system.supported(),
             platform: platform.into(),
-            borderless: platform::borderless(),
-            permission: platform::permission(),
+            borderless: self.system.borderless(),
+            permission: self.system.permission(),
             in_plan: self.in_plan(),
             on_server: self.on_server(),
         }
@@ -337,88 +346,54 @@ pub async fn send(app: &AppHandle, api: &ApiClient) -> usize {
     drain.sent
 }
 
-/// The capture thread of one recording: once a second the rules, the target, one frame and the detector.
+/// The capture thread of one recording: once a second the sampler, and a kept frame encoded and sealed on disk.
 fn capture_loop(app: &AppHandle, recording: &str, live: &Live, wake: &Wake) {
-    platform::thread_init();
     let state = app.state::<crate::AppState>();
+    let system = state.screens.system();
+    system.thread_init();
     let store = ScreenStore::in_dir(&state.data_dir);
     let key = state.screens.key();
     let server = server_has_screens(app);
-    let supported = platform::supported();
     let clock = Instant::now();
-    let mut detector = detect::Detector::new();
-    let mut capture: Option<Box<dyn platform::Grab>> = None;
+    let mut sampler = Sampler::new(system);
     let show = |pill: Option<ScreensPill>| *lock(&live.pill) = pill;
     while !wake.wait(SAMPLE_EVERY) {
         let settings = state.settings();
-        let now_ms = clock.elapsed().as_millis() as u64;
         let facts = Facts {
             enabled: settings.screen_moments,
             call: true,
             plan: state.screens.in_plan(),
             server: server && state.screens.on_server(),
             project: live.project(),
-            supported,
+            supported: true,
             keychain: key.is_some(),
-            permission: platform::permission(),
+            permission: true,
             user_paused: live.user_paused.load(Ordering::SeqCst),
             recording_paused: state.capture.is_paused(),
-            capped: detector.capped(now_ms),
+            capped: false,
         };
+        let meeting = state.detect.meeting();
+        let wanted = platform::Wanted { mode: &settings.screen_target, meeting: meeting.as_ref(), excluded: &settings.screen_excluded_apps, site_rules: &settings.site_rules };
+        let sample = sampler.tick(facts, &wanted, clock.elapsed().as_millis() as u64, &live.words);
         let count = live.count.load(Ordering::SeqCst);
-        let hold = |reason: HoldReason| Some(ScreensPill { on: false, reason: Some(reason), count });
-        let target = match privacy::gate(&facts) {
-            Gate::Off(_) => {
-                capture = None;
+        let (frame, trigger) = match sample {
+            Sample::Off(_) => {
                 show(None);
                 continue;
             }
-            Gate::Hold(reason) => Err(reason),
-            Gate::Look => {
-                let meeting = state.detect.meeting();
-                platform::find_target(&platform::Wanted { mode: &settings.screen_target, meeting: meeting.as_ref(), excluded: &settings.screen_excluded_apps, site_rules: &settings.site_rules })
-            }
-        };
-        let target = match target {
-            Ok(target) => target,
-            Err(reason) => {
-                // Nothing is captured while held: the capture closes, so Windows 10 drops its border too.
-                capture = None;
-                live.words.store(false, Ordering::SeqCst);
-                show(hold(reason));
+            Sample::Held(reason) => {
+                show(Some(ScreensPill { on: false, reason: Some(reason), count }));
                 continue;
             }
-        };
-        // A new target, or back after a hold: the picture may have jumped, so settling starts again.
-        if capture.as_ref().is_none_or(|c| c.target() != target) {
-            capture = None;
-            detector.restart();
-            match platform::open(target) {
-                Ok(open) => capture = Some(open),
-                Err(e) => {
-                    eprintln!("[echoledger] {e}");
-                    show(hold(HoldReason::NoWindow));
-                    continue;
-                }
-            }
-        }
-        let Some(open) = capture.as_mut() else { continue };
-        let frame = match open.grab() {
-            Ok(Some(frame)) => frame,
-            Ok(None) => {
+            Sample::Watching => {
                 show(Some(ScreensPill { on: true, reason: None, count }));
                 continue;
             }
-            Err(e) => {
-                eprintln!("[echoledger] screen capture: {e}");
-                capture = None;
-                continue;
-            }
+            Sample::Keep { frame, trigger } => (frame, trigger),
         };
+        // The moment on the recording's clock, read before encoding takes its time.
         let at_ms = state.capture.elapsed_ms();
-        let words = live.words.swap(false, Ordering::SeqCst);
-        let kept = detect::Luma::from_bgra(&frame.bgra, frame.width as usize, frame.height as usize, frame.stride).and_then(|luma| detector.observe(now_ms, &luma, words));
-        if let (Some(trigger), Some(key)) = (kept, key.as_ref())
+        if let Some(key) = key.as_ref()
             && !wake.stopped()
         {
             match encode::encode(&frame.bgra, frame.width, frame.height, frame.stride) {
@@ -436,6 +411,6 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, wake: &Wake) {
         }
         show(Some(ScreensPill { on: true, reason: None, count: live.count.load(Ordering::SeqCst) }));
     }
-    drop(capture);
+    drop(sampler);
     show(None);
 }

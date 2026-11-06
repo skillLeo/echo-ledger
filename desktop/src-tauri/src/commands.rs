@@ -1416,7 +1416,9 @@ pub fn screens_pause(app: AppHandle, paused: bool) -> RecordingState {
 #[tauri::command]
 pub fn screens_permission(app: AppHandle) -> bool {
     use tauri_plugin_opener::OpenerExt;
-    let granted = crate::screens::platform::permission() || crate::screens::platform::request_permission();
+    let state = app.state::<AppState>();
+    let system = state.screens.system();
+    let granted = system.permission() || system.request_permission();
     if !granted && let Some(url) = privacy_settings_url("screen", cfg!(target_os = "macos")) {
         let _ = app.opener().open_url(url, None::<&str>);
     }

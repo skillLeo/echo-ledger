@@ -140,7 +140,7 @@ impl AppState {
             recording_language: Mutex::new(None),
             recording_language_marks: Mutex::new(None),
             recording_caller: Mutex::new(None),
-            screens: screens::Screens::new(Box::new(screens::store::KeychainKeys)),
+            screens: screens::Screens::new(Box::new(screens::platform::Native), Box::new(screens::store::KeychainKeys)),
         }
     }
 

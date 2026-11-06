@@ -236,11 +236,6 @@ pub fn pick_meeting_window(app: SourceApp, browser: bool, windows: &[WindowFacts
     Pick::Window(*from.iter().max_by_key(|&&i| windows[i].area).expect("not empty"))
 }
 
-/// Whole screen: an excluded app showing anywhere on the captured screen holds the capture.
-pub fn screen_shows_excluded(on_screen: &[WindowFacts], excluded: &[String]) -> bool {
-    on_screen.iter().any(|w| w.showing() && is_excluded(&w.process, excluded))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,15 +342,5 @@ mod tests {
         // The Meet tab is not the open tab of any window: hidden, nothing is captured.
         let elsewhere = [window("Inbox (3) - Gmail - Google Chrome", 3_000_000), window("Meeting notes - Google Docs - Google Chrome", 2_000_000)];
         assert_eq!(pick_meeting_window(SourceApp::GoogleMeet, true, &elsewhere, &[]), Pick::Hold(HoldReason::NoWindow));
-    }
-
-    #[test]
-    fn whole_screen_holds_while_an_excluded_app_shows() {
-        let mut vault = window("Bitwarden", 600_000);
-        vault.process = "Bitwarden.exe".into();
-        let meeting = window("Zoom Meeting", 2_000_000);
-        assert!(screen_shows_excluded(&[meeting.clone(), vault.clone()], &excluded()));
-        vault.minimised = true;
-        assert!(!screen_shows_excluded(&[meeting, vault], &excluded()));
     }
 }

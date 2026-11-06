@@ -29,9 +29,9 @@ use windows::Win32::System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize};
 use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GWL_EXSTYLE, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsIconic, IsWindowVisible, WS_EX_TOOLWINDOW};
 use windows::core::{BOOL, Interface, Ref};
 
-use super::{Frame, Grab, Target, Wanted};
+use super::{Frame, Grab, Snapshot, SysWindow, Target, Wanted, choose};
 use crate::audio::platform::windows::{descends_from, os_build, parent_map, process_identity, resolve_root_with};
-use crate::screens::privacy::{HoldReason, Pick, WindowFacts, is_excluded, pick_meeting_window, screen_shows_excluded};
+use crate::screens::privacy::{HoldReason, WindowFacts, is_excluded};
 
 /// The first build with `GraphicsCaptureAccess` and `IsBorderRequired` (Windows Server 2022 / Windows 11).
 const BORDERLESS_BUILD: u32 = 20_348;
@@ -133,32 +133,13 @@ pub fn find_target(wanted: &Wanted<'_>) -> Result<Target, HoldReason> {
         w.facts.process = identity(w.pid).0;
     }
     // The meeting app's windows: the processes of its tree (a Zoom window opened by Chrome is Zoom's own tree).
-    let meeting_window = wanted.meeting.map(|m| {
-        let parents = parent_map();
-        let tree: Vec<&Win> = wins.iter().filter(|w| descends_from(w.pid, m.root_pid, &parents) && resolve_root_with(w.pid, &parents, identity) == m.root_pid).collect();
-        let facts: Vec<WindowFacts> = tree.iter().map(|w| w.facts.clone()).collect();
-        match pick_meeting_window(m.app, m.browser, &facts, wanted.site_rules) {
-            Pick::Window(i) => Ok((tree[i].hwnd, tree[i].monitor)),
-            Pick::Hold(reason) => Err(reason),
-        }
-    });
-    if wanted.mode != crate::screens::privacy::WHOLE_SCREEN {
-        return match meeting_window {
-            Some(Ok((hwnd, _))) => Ok(Target::Window(hwnd)),
-            Some(Err(reason)) => Err(reason),
-            None => Err(HoldReason::NoWindow),
-        };
-    }
-    // The whole screen the meeting is on (the main screen when its window is not showing).
-    let monitor = match meeting_window {
-        Some(Ok((_, monitor))) => monitor,
-        _ => primary_monitor(),
+    let parents = wanted.meeting.map(|_| parent_map());
+    let in_tree = |pid: u32| match (wanted.meeting, &parents) {
+        (Some(m), Some(parents)) => descends_from(pid, m.root_pid, parents) && resolve_root_with(pid, parents, identity) == m.root_pid,
+        _ => false,
     };
-    let on_screen: Vec<WindowFacts> = wins.into_iter().filter(|w| w.monitor == monitor).map(|w| w.facts).collect();
-    if screen_shows_excluded(&on_screen, wanted.excluded) {
-        return Err(HoldReason::ExcludedApp);
-    }
-    Ok(Target::Display(monitor))
+    let windows = wins.into_iter().map(|w| SysWindow { id: w.hwnd, meeting: in_tree(w.pid), displays: vec![w.monitor], bundle: None, facts: w.facts }).collect();
+    choose(wanted, &Snapshot { windows, main: Some(primary_monitor()) })
 }
 
 pub fn open(target: Target) -> Result<Box<dyn Grab>, String> {
