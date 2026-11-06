@@ -23,6 +23,7 @@ use App\Services\ClientAi\ClientWorkspace;
 use App\Services\ConsoleUploads;
 use App\Services\Data\CompleteOutcome;
 use App\Services\SettingsRepository;
+use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
@@ -296,7 +297,7 @@ final class RequestLinks
         if (strlen($bytes) !== $expected || ! hash_equals(strtolower($sha256), hash('sha256', $bytes))) {
             throw new ApiError(422, 'validation_failed', 'The chunk does not match its size or checksum. Send it again.');
         }
-        Storage::disk('recordings')->put($upload->partsDirectory().'/'.$index.'.part', $bytes);
+        app(RecordingFiles::class)->putPart($upload->partsDirectory().'/'.$index.'.part', $bytes);
         if ($index === 0 && self::sniffDocument(substr($bytes, 0, self::SNIFF_BYTES), $upload->name) === null) {
             $this->refuse($upload, self::REFUSED);
         }
@@ -469,10 +470,14 @@ final class RequestLinks
         $size = 0;
         try {
             for ($i = 0; $i < $upload->total_chunks; $i++) {
-                $part = (string) $disk->get($upload->partsDirectory().'/'.$i.'.part');
-                $size += strlen($part);
-                hash_update($hash, $part);
-                fwrite($out, $part);
+                app(RecordingFiles::class)->readPart($upload->partsDirectory().'/'.$i.'.part', static function ($part) use ($out, $hash, &$size): void {
+                    while (! feof($part)) {
+                        $buffer = (string) fread($part, 1024 * 1024);
+                        $size += strlen($buffer);
+                        hash_update($hash, $buffer);
+                        fwrite($out, $buffer);
+                    }
+                });
             }
         } finally {
             fclose($out);

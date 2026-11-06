@@ -7,6 +7,7 @@ namespace App\Models;
 use App\Enums\RecordingRole;
 use App\Enums\UploadStatus;
 use App\Services\SettingsRepository;
+use App\Services\Storage\RecordingFiles;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
@@ -79,10 +80,8 @@ class Recording extends Model
     public function deleteFiles(): void
     {
         $disk = Storage::disk('recordings');
+        app(RecordingFiles::class)->erase($this->stored_path);
         try {
-            if ($this->stored_path !== null && $disk->exists($this->stored_path)) {
-                $disk->delete($this->stored_path);
-            }
             if ($disk->directoryExists($this->partsDirectory())) {
                 $disk->deleteDirectory($this->partsDirectory());
             }

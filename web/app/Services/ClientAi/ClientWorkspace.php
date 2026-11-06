@@ -20,8 +20,8 @@ use App\Models\ClientMemoryItem;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
-use App\Services\RecordingCipher;
 use App\Services\SettingsRepository;
+use App\Services\Storage\RecordingFiles;
 use App\Services\TranscriptEditor;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\SttManager;
@@ -484,9 +484,7 @@ final class ClientWorkspace
             'status' => $image ? 'ready' : 'extracting',
         ]);
         $relative = 'client-files/'.$client->id.'/'.$file->id.'.elr';
-        $disk = Storage::disk('recordings');
-        $disk->makeDirectory(dirname($relative));
-        app(RecordingCipher::class)->encryptFile($plainPath, $disk->path($relative), $file->id);
+        app(RecordingFiles::class)->encryptInto($plainPath, $relative, $file->id);
         $file->forceFill(['path' => $relative])->save();
         if (! $image) {
             ExtractClientFileJob::dispatch($file->id);
@@ -566,7 +564,7 @@ final class ClientWorkspace
         if ($file->path === null || ! Storage::disk('recordings')->exists($file->path)) {
             return null;
         }
-        $plain = app(RecordingCipher::class)->decryptToMemory(Storage::disk('recordings')->path($file->path), $file->id);
+        $plain = app(RecordingFiles::class)->decryptToMemory($file->path, $file->id);
         $plain->rewind();
         $bytes = '';
         while (! $plain->eof()) {

@@ -7,8 +7,7 @@ namespace App\Services\Accounts;
 use App\Jobs\MakeAccountExportJob;
 use App\Models\AccountExport;
 use App\Models\User;
-use Illuminate\Support\Facades\Storage;
-use Throwable;
+use App\Services\Storage\RecordingFiles;
 
 /**
  * One export at a time per account (since v1.5): asking again while one is being made answers that one; a new export
@@ -54,11 +53,7 @@ final class AccountExports
     private function remove(AccountExport $export): void
     {
         if ($export->path !== null) {
-            try {
-                Storage::disk('recordings')->delete($export->path);
-            } catch (Throwable $e) {
-                report($e);
-            }
+            app(RecordingFiles::class)->erase($export->path);
         }
         $export->delete();
     }

@@ -38,8 +38,19 @@ return [
             'report' => false,
         ],
 
-        // Encrypted recordings + upload parts. Never served directly.
-        'recordings' => [
+        // Encrypted recordings + upload parts. Never served directly. RECORDINGS_DRIVER=s3 keeps them in a bucket of any
+        // S3-compatible storage instead (docs/DEPLOY_VPS.md); code reaches them through App\Services\Storage\RecordingFiles.
+        'recordings' => strtolower(trim((string) env('RECORDINGS_DRIVER', 'local'))) === 's3' ? [
+            'driver' => 's3-compatible',
+            'key' => env('RECORDINGS_S3_KEY'),
+            'secret' => env('RECORDINGS_S3_SECRET'),
+            'region' => env('RECORDINGS_S3_REGION'),
+            'bucket' => env('RECORDINGS_S3_BUCKET'),
+            'endpoint' => env('RECORDINGS_S3_ENDPOINT'),
+            'path_style' => (bool) env('RECORDINGS_S3_PATH_STYLE', false),
+            'throw' => true,
+            'report' => false,
+        ] : [
             'driver' => 'local',
             'root' => storage_path('app/private/recordings'),
             'throw' => true,

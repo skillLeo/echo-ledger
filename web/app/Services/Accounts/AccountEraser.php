@@ -18,12 +18,11 @@ use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
 use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\RequestLinks;
+use App\Services\Storage\RecordingFiles;
 use App\Services\WebSessions;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Throwable;
 
 /**
  * Erases an account at the end of its 7-day grace (since v1.5, `echoledger:erase-accounts`): its recordings in every
@@ -145,13 +144,6 @@ final class AccountEraser
 
     private static function deleteFile(?string $path): void
     {
-        if ($path === null) {
-            return;
-        }
-        try {
-            Storage::disk('recordings')->delete($path);
-        } catch (Throwable $e) {
-            report($e);
-        }
+        app(RecordingFiles::class)->erase($path);
     }
 }

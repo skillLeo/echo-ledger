@@ -12,12 +12,11 @@ use App\Models\ClientFile;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\Workspaces;
 use Closure;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
-use Throwable;
 
 /**
  * Projects with subfolders (docs/API.md "Projects", since v1.5). A project (a `clients` row) sits at the top of its
@@ -331,13 +330,7 @@ final class ProjectTree
         });
 
         // The rows are gone; the encrypted originals of the project's files go after the commit.
-        foreach ($paths as $path) {
-            try {
-                Storage::disk('recordings')->delete($path);
-            } catch (Throwable $e) {
-                report($e);
-            }
-        }
+        app(RecordingFiles::class)->erase($paths);
 
         return $result;
     }

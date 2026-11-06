@@ -12,11 +12,10 @@ use App\Models\Device;
 use App\Models\Recording;
 use App\Services\ChunkedUploadService;
 use App\Services\Data\CompleteOutcome;
-use App\Services\RecordingCipher;
+use App\Services\Storage\RecordingFiles;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -86,11 +85,7 @@ final class RecordingController extends Controller
     public static function streamDecrypted(Recording $recording): BinaryFileResponse
     {
         $plain = app(ChunkedUploadService::class)->tempPath('play');
-        RecordingCipher::fromConfig()->decryptToFile(
-            Storage::disk('recordings')->path((string) $recording->stored_path),
-            $plain,
-            $recording->id,
-        );
+        app(RecordingFiles::class)->decryptToFile((string) $recording->stored_path, $plain, $recording->id);
         $headers = ['X-Content-Type-Options' => 'nosniff', 'Cache-Control' => 'private, no-store'];
 
         $size = (int) filesize($plain);

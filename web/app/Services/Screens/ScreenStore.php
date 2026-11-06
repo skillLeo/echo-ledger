@@ -10,7 +10,7 @@ use App\Models\CaptureSession;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\Screen;
 use App\Services\ChunkedUploadService;
-use App\Services\RecordingCipher;
+use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\PlanLimits;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -93,17 +93,16 @@ class ScreenStore
         $folder = 'screens/'.now()->format('Y/m');
         $imagePath = $folder.'/'.$id.'.elr';
         $thumbPath = $folder.'/'.$id.'-thumb.elr';
-        $disk = Storage::disk('recordings');
-        $disk->makeDirectory($folder);
+        $files = $this->files();
         $thumbPlain = $this->uploads->tempPath('screen-thumb');
         $written = [];
         try {
             self::writeThumbnail($plainPath, $thumbPlain);
-            $this->cipher()->encryptFile($plainPath, $disk->path($imagePath), $id);
+            $storedBytes = $files->encryptInto($plainPath, $imagePath, $id);
             $written[] = $imagePath;
-            $this->cipher()->encryptFile($thumbPlain, $disk->path($thumbPath), self::thumbKey($id));
+            $storedBytes += $files->encryptInto($thumbPlain, $thumbPath, self::thumbKey($id));
             $written[] = $thumbPath;
-            $result = DB::transaction(function () use ($session, $sha, $id, $picture, $meta, $imagePath, $thumbPath, $plainPath): array {
+            $result = DB::transaction(function () use ($session, $sha, $id, $picture, $meta, $imagePath, $thumbPath, $plainPath, $storedBytes): array {
                 // One picture of a recording at a time: two sent together can neither pass the cap nor both be kept.
                 CaptureSession::query()->withoutGlobalScopes()->whereKey($session->id)->lockForUpdate()->value('id');
                 $twin = $this->twin($session, $sha);
@@ -124,7 +123,7 @@ class ScreenStore
                     'thumb_path' => $thumbPath,
                     'bytes' => (int) filesize($plainPath),
                     // Since v1.5 the plan's storage counts what the two encrypted files take.
-                    'stored_bytes' => self::sizeOf($imagePath) + self::sizeOf($thumbPath),
+                    'stored_bytes' => $storedBytes,
                 ]);
                 $screen->id = $id;
                 $screen->save();
@@ -133,19 +132,19 @@ class ScreenStore
             });
         } catch (UniqueConstraintViolationException $e) {
             // The same picture arrived twice at the same moment: the other request kept it.
-            $disk->delete($written);
+            $files->erase($written);
             $twin = $this->twin($session, $sha);
 
             return $twin instanceof Screen ? [$twin, false] : throw $e;
         } catch (Throwable $e) {
-            $disk->delete($written);
+            $files->erase($written);
             throw $e;
         } finally {
             @unlink($thumbPlain);
         }
 
         if (! $result[1]) {
-            $disk->delete($written);
+            $files->erase($written);
 
             return $result;
         }
@@ -182,11 +181,11 @@ class ScreenStore
     public function picture(Screen $screen, bool $thumb = false): ?string
     {
         $path = $thumb ? $screen->thumb_path : $screen->image_path;
-        $disk = Storage::disk('recordings');
-        if ($path === null || ! $disk->exists($path)) {
+        $files = $this->files();
+        if ($path === null || ! $files->disk()->exists($path)) {
             return null;
         }
-        $plain = $this->cipher()->decryptToMemory($disk->path($path), $thumb ? self::thumbKey($screen->id) : $screen->id);
+        $plain = $files->decryptToMemory($path, $thumb ? self::thumbKey($screen->id) : $screen->id);
         $bytes = '';
         while (! $plain->eof()) {
             $bytes .= $plain->fread(1 << 20);
@@ -198,12 +197,12 @@ class ScreenStore
     /** Decrypts the picture into [$dstPath] without holding it in memory (the account export); its size, or null when it is gone. */
     public function pictureToFile(Screen $screen, string $dstPath): ?int
     {
-        $disk = Storage::disk('recordings');
-        if ($screen->image_path === null || ! $disk->exists($screen->image_path)) {
+        $files = $this->files();
+        if ($screen->image_path === null || ! $files->disk()->exists($screen->image_path)) {
             return null;
         }
 
-        return $this->cipher()->decryptToFile($disk->path($screen->image_path), $dstPath, $screen->id);
+        return $files->decryptToFile($screen->image_path, $dstPath, $screen->id);
     }
 
     /** Deletes one screen and its two files. */
@@ -235,28 +234,28 @@ class ScreenStore
     {
         $id = (string) Str::ulid();
         $folder = 'screens/'.now()->format('Y/m');
-        $disk = Storage::disk('recordings');
-        $disk->makeDirectory($folder);
+        $files = $this->files();
         $written = [];
+        $storedBytes = 0;
         try {
             foreach ([false, true] as $thumb) {
                 $source = $thumb ? $original->thumb_path : $original->image_path;
-                if ($source === null || ! $disk->exists($source)) {
+                if ($source === null || ! $files->disk()->exists($source)) {
                     continue;
                 }
                 $plain = $this->uploads->tempPath('screen-copy');
                 try {
-                    $this->cipher()->decryptToFile($disk->path($source), $plain, $thumb ? self::thumbKey($original->id) : $original->id);
+                    $files->decryptToFile($source, $plain, $thumb ? self::thumbKey($original->id) : $original->id);
                     $target = $folder.'/'.$id.($thumb ? '-thumb' : '').'.elr';
                     // Counted before it is written, so a file a failure leaves half written is erased too.
                     $written[$thumb ? 'thumb' : 'image'] = $target;
-                    $this->cipher()->encryptFile($plain, $disk->path($target), $thumb ? self::thumbKey($id) : $id);
+                    $storedBytes += $files->encryptInto($plain, $target, $thumb ? self::thumbKey($id) : $id);
                 } finally {
                     @unlink($plain);
                 }
             }
             if (! isset($written['image'])) {
-                $disk->delete(array_values($written));
+                $files->erase(array_values($written));
 
                 return [];
             }
@@ -265,14 +264,14 @@ class ScreenStore
                 'capture_session_id' => $copy->id,
                 'image_path' => $written['image'],
                 'thumb_path' => $written['thumb'] ?? null,
-                'stored_bytes' => self::sizeOf($written['image']) + self::sizeOf($written['thumb'] ?? null),
+                'stored_bytes' => $storedBytes,
                 ...$original->only(['at_ms', 'width', 'height', 'trigger', 'sha256', 'mime', 'bytes', 'ocr_text', 'description', 'search_text', 'described_at']),
             ]);
             $screen->id = $id;
             $screen->save();
         } catch (Throwable $e) {
             // The caller only learns of the files returned to it: these are erased here.
-            $disk->delete(array_values($written));
+            $files->erase(array_values($written));
             throw $e;
         }
         // Its description may still be waiting on the queue: the copy gets its own job, which takes the original's
@@ -327,26 +326,11 @@ class ScreenStore
     /** @param  list<string|null>  $paths */
     private function deleteFiles(array $paths): void
     {
-        try {
-            Storage::disk('recordings')->delete(array_values(array_filter($paths)));
-        } catch (Throwable $e) {
-            report($e); // a missing file must never block an erase
-        }
+        $this->files()->erase(array_values(array_filter($paths))); // a missing file must never block an erase
     }
 
-    private function cipher(): RecordingCipher
+    private function files(): RecordingFiles
     {
-        return app(RecordingCipher::class);
-    }
-
-    /** Bytes a file takes on the recordings disk, 0 when it is not there. */
-    private static function sizeOf(?string $path): int
-    {
-        if ($path === null) {
-            return 0;
-        }
-        $full = Storage::disk('recordings')->path($path);
-
-        return is_file($full) ? (int) filesize($full) : 0;
+        return app(RecordingFiles::class);
     }
 }

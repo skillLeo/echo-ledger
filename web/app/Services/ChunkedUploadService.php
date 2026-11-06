@@ -13,6 +13,7 @@ use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Recording;
 use App\Services\Data\CompleteOutcome;
+use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\PlanLimits;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,11 @@ final class ChunkedUploadService
     private function cipher(): RecordingCipher
     {
         return app(RecordingCipher::class);
+    }
+
+    private function files(): RecordingFiles
+    {
+        return app(RecordingFiles::class);
     }
 
     /**
@@ -120,10 +126,9 @@ final class ChunkedUploadService
             throw ValidationException::withMessages(['sha256' => 'Upload-Chunk-Sha256 must be a hex SHA-256.']);
         }
 
-        $disk = Storage::disk('recordings');
-        $disk->makeDirectory($recording->partsDirectory());
-        $final = $disk->path($recording->partsDirectory().'/'.$index.'.part');
-        $tmp = $final.'.'.bin2hex(random_bytes(6)).'.tmp';
+        $files = $this->files();
+        $relative = $recording->partsDirectory().'/'.$index.'.part';
+        $tmp = $files->partWorkPath($relative);
 
         $limit = $this->expectedChunkLength($recording, $index);
         $out = fopen($tmp, 'wb');
@@ -160,10 +165,7 @@ final class ChunkedUploadService
             @unlink($tmp);
             throw ValidationException::withMessages(['sha256' => 'Chunk checksum mismatch.']);
         }
-        if (! rename($tmp, $final)) {
-            @unlink($tmp);
-            throw new RuntimeException('Cannot finalize upload chunk.');
-        }
+        $files->finishPart($tmp, $relative);
 
         return DB::transaction(function () use ($recording, $index): Recording {
             /** @var Recording $locked */
@@ -182,10 +184,10 @@ final class ChunkedUploadService
     /** @return list<int> */
     public function missingChunks(Recording $recording): array
     {
-        $disk = Storage::disk('recordings');
+        $stored = array_flip($this->files()->namesIn($recording->partsDirectory()));
         $missing = [];
         for ($i = 0; $i < $recording->total_chunks; $i++) {
-            if (! in_array($i, $recording->received_chunks, true) || ! $disk->exists($recording->partsDirectory().'/'.$i.'.part')) {
+            if (! in_array($i, $recording->received_chunks, true) || ! isset($stored[$i.'.part'])) {
                 $missing[] = $i;
             }
         }
@@ -274,17 +276,14 @@ final class ChunkedUploadService
         $size = 0;
         try {
             for ($i = 0; $i < $recording->total_chunks; $i++) {
-                $part = fopen($disk->path($recording->partsDirectory().'/'.$i.'.part'), 'rb');
-                if ($part === false) {
-                    throw new RuntimeException("Missing chunk {$i}.");
-                }
-                while (! feof($part)) {
-                    $buffer = (string) fread($part, 1024 * 1024);
-                    $size += strlen($buffer);
-                    hash_update($hash, $buffer);
-                    fwrite($out, $buffer);
-                }
-                fclose($part);
+                $this->files()->readPart($recording->partsDirectory().'/'.$i.'.part', static function ($part) use ($out, $hash, &$size): void {
+                    while (! feof($part)) {
+                        $buffer = (string) fread($part, 1024 * 1024);
+                        $size += strlen($buffer);
+                        hash_update($hash, $buffer);
+                        fwrite($out, $buffer);
+                    }
+                });
             }
             fclose($out);
 
@@ -307,14 +306,12 @@ final class ChunkedUploadService
     /** Encrypts a verified plaintext file into the recordings disk and marks the recording ready. */
     public function storeEncrypted(Recording $recording, string $plainPath): void
     {
-        $disk = Storage::disk('recordings');
         $relative = self::storedPathFor($recording);
-        $disk->makeDirectory(dirname($relative));
-        $this->cipher()->encryptFile($plainPath, $disk->path($relative), $recording->id);
+        $bytes = $this->files()->encryptInto($plainPath, $relative, $recording->id);
 
         $recording->update([
             'stored_path' => $relative,
-            'stored_size_bytes' => filesize($disk->path($relative)) ?: null,
+            'stored_size_bytes' => $bytes ?: null,
             'upload_status' => UploadStatus::Ready,
             'assembled_at' => now(),
             'error' => null,
@@ -337,12 +334,16 @@ final class ChunkedUploadService
         }
         $cipher = $this->cipher(); // a missing key must stop here, not count as a bad file
 
-        try {
-            $digest = $cipher->digest($disk->path($relative), $recording->id);
-            $valid = $digest['size'] === $recording->declared_size_bytes && hash_equals($recording->sha256, $digest['sha256']);
-        } catch (RuntimeException) {
-            $valid = false; // cut short or damaged while it was being written
-        }
+        // A download that fails throws out of here: only a file that was read and does not decrypt counts as bad.
+        $valid = $this->files()->withLocalCopy($relative, function (string $path) use ($cipher, $recording): bool {
+            try {
+                $digest = $cipher->digest($path, $recording->id);
+
+                return $digest['size'] === $recording->declared_size_bytes && hash_equals($recording->sha256, $digest['sha256']);
+            } catch (RuntimeException) {
+                return false; // cut short or damaged while it was being written
+            }
+        });
         if (! $valid) {
             $disk->delete($relative);
 
@@ -351,7 +352,7 @@ final class ChunkedUploadService
 
         $recording->update([
             'stored_path' => $relative,
-            'stored_size_bytes' => filesize($disk->path($relative)) ?: null,
+            'stored_size_bytes' => ((int) $disk->size($relative)) ?: null,
             'upload_status' => UploadStatus::Ready,
             'assembled_at' => now(),
             'error' => null,
@@ -376,18 +377,13 @@ final class ChunkedUploadService
             throw new RuntimeException("Recording {$recording->id} is not ready.");
         }
         $path = $this->tempPath($recording->role === RecordingRole::Primary ? 'primary' : $recording->role->value);
-        $this->cipher()->decryptToFile(Storage::disk('recordings')->path((string) $recording->stored_path), $path, $recording->id);
+        $this->files()->decryptToFile((string) $recording->stored_path, $path, $recording->id);
 
         return $path;
     }
 
     public function tempPath(string $label): string
     {
-        $dir = (string) config('echoledger.tmp_dir');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0700, true);
-        }
-
-        return $dir.DIRECTORY_SEPARATOR.$label.'-'.bin2hex(random_bytes(8)).'.bin';
+        return RecordingFiles::tempPath($label);
     }
 }

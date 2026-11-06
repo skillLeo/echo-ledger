@@ -9,8 +9,8 @@ use App\Models\Recording;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
 use App\Services\Sharing\RequestLinks;
+use App\Services\Storage\RecordingFiles;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 /**
@@ -34,7 +34,7 @@ final class TempFileSweeper
         $cutoff = $cutoffAt->getTimestamp();
 
         return $this->sweepTempDirectory($cutoff) + $this->sweepParts($cutoff, now()->subHours(self::ORPHANED_PARTS_HOURS)->getTimestamp())
-            + $this->sweepRequestUploads($cutoffAt);
+            + $this->sweepRequestUploads($cutoffAt) + app(RecordingFiles::class)->retryErasures();
     }
 
     /**
@@ -61,13 +61,14 @@ final class TempFileSweeper
             }
         }
 
-        $disk = Storage::disk('recordings');
+        $files = app(RecordingFiles::class);
+        $disk = $files->disk();
         if (! $disk->directoryExists('request-parts')) {
             return $removed;
         }
         foreach ($disk->directories('request-parts') as $relative) {
             $upload = RequestUpload::query()->find(basename($relative), ['id', 'status']);
-            if (($upload === null || $upload->status !== 'uploading') && $this->newestChange($disk->path($relative)) < $cutoff->getTimestamp()) {
+            if (($upload === null || $upload->status !== 'uploading') && $files->newestChange($relative) < $cutoff->getTimestamp()) {
                 $disk->deleteDirectory($relative);
                 $removed++;
             }
@@ -98,7 +99,8 @@ final class TempFileSweeper
 
     private function sweepParts(int $tmpCutoff, int $partsCutoff): int
     {
-        $disk = Storage::disk('recordings');
+        $files = app(RecordingFiles::class);
+        $disk = $files->disk();
         if (! $disk->directoryExists('parts')) {
             return 0;
         }
@@ -106,34 +108,25 @@ final class TempFileSweeper
         $removed = 0;
         foreach ($disk->directories('parts') as $relative) {
             $id = basename($relative);
-            $root = $disk->path($relative);
             $recording = Recording::query()->find($id, ['id', 'upload_status']);
             $orphaned = $recording === null || $recording->upload_status === UploadStatus::Failed;
 
-            if ($orphaned && $this->newestChange($root) < $partsCutoff) {
+            if ($orphaned && $files->newestChange($relative) < $partsCutoff) {
                 $disk->deleteDirectory($relative);
                 $removed++;
 
                 continue;
             }
-            // A chunk upload that died before its rename leaves "<index>.part.<random>.tmp" behind.
-            foreach (glob($root.DIRECTORY_SEPARATOR.'*.tmp') ?: [] as $tmp) {
-                $removed += $this->removeIfOlder($tmp, $tmpCutoff);
+            // A chunk upload that died before its rename leaves "<index>.part.<random>.tmp" behind (a bucket gets only
+            // finished chunks: its work files are in the temp directory).
+            if ($files->isLocal()) {
+                foreach (glob($disk->path($relative).DIRECTORY_SEPARATOR.'*.tmp') ?: [] as $tmp) {
+                    $removed += $this->removeIfOlder($tmp, $tmpCutoff);
+                }
             }
         }
 
         return $removed;
-    }
-
-    /** Last time anything in the directory changed (the directory itself or any file in it). */
-    private function newestChange(string $dir): int
-    {
-        $newest = (int) @filemtime($dir);
-        foreach (glob($dir.DIRECTORY_SEPARATOR.'*') ?: [] as $file) {
-            $newest = max($newest, (int) @filemtime($file));
-        }
-
-        return $newest;
     }
 
     private function removeIfOlder(string $path, int $cutoff): int

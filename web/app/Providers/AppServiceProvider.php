@@ -30,6 +30,8 @@ use App\Services\RecordingCipher;
 use App\Services\Screens\ClaudeScreenDescriber;
 use App\Services\Screens\ScreenDescriber;
 use App\Services\SettingsRepository;
+use App\Services\Storage\ObjectStorageDisk;
+use App\Services\Storage\S3Adapter;
 use App\Services\Views\ClaudeTranscriptConverter;
 use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
@@ -47,8 +49,11 @@ use Illuminate\Mail\SendQueuedMailable;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use League\Flysystem\Filesystem;
+use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -79,6 +84,18 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // RECORDINGS_DRIVER=s3 (config/filesystems.php). Laravel's own s3 driver needs the AWS SDK, which is not installed.
+        Storage::extend('s3-compatible', function ($app, array $config): ObjectStorageDisk {
+            foreach (['key', 'secret', 'region', 'bucket'] as $name) {
+                if (trim((string) ($config[$name] ?? '')) === '') {
+                    throw new RuntimeException('RECORDINGS_S3_'.strtoupper($name).' is not set.');
+                }
+            }
+            $adapter = new S3Adapter($config['bucket'], $config['region'], $config['key'], $config['secret'], $config['endpoint'] ?? null, (bool) ($config['path_style'] ?? false));
+
+            return new ObjectStorageDisk(new Filesystem($adapter), $adapter, $config);
+        });
+
         // C9: outside production a relation loaded lazily on a model from a list of several (an N+1 query) throws,
         // so every test that renders a list catches a missing eager load. Production only loads lazily.
         Model::preventLazyLoading(! $this->app->isProduction());
