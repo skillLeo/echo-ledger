@@ -10,7 +10,7 @@
         x-data="{
             d: @js($data), active: -1, word: -1, raf: null, playing: false, now: 0, rate: 1, skipSilence: false, follow: true,
             editing: false, saving: null, error: null, copied: null, view: 'original', find: '', hitAt: 0, peaks: null,
-            learn: [], deciding: null,
+            learn: [], deciding: null, panel: 'transcript', shot: null,
             init() {
                 // Show as: open in the default view (Settings) when it is made for this recording.
                 if (this.d.views && this.d.views.status === 'ready' && this.d.views.default && this.d.views[this.d.views.default]) this.view = this.d.views.default;
@@ -104,6 +104,13 @@
                 this.seekTo(Math.max(0, (e.clientX - box.left) / box.width) * this.d.duration_ms);
             },
             onKey(e) {
+                // A screen opened large: the arrows move between screens, Escape closes it.
+                if (this.shot !== null) {
+                    if (e.key === 'Escape') { e.preventDefault(); this.shot = null; }
+                    else if (e.key === 'ArrowLeft') { e.preventDefault(); this.moveShot(-1); }
+                    else if (e.key === 'ArrowRight') { e.preventDefault(); this.moveShot(1); }
+                    return;
+                }
                 const tag = (e.target && e.target.tagName) || '';
                 if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag) || (e.target && e.target.isContentEditable)) return;
                 const onControl = ['BUTTON', 'AUDIO', 'A'].includes(tag);
@@ -172,7 +179,15 @@
                 const u = this.d.unsure || { style: 'brackets', note: true, note_text: '' };
                 const style = forAi && u.style === 'off' ? 'brackets' : u.style;
                 const single = new Set(this.d.segments.map(s => s.speaker)).size <= 1;
-                const body = this.d.segments.map((s, i) => (withTimes ? '[' + this.clock(s.start_ms) + '] ' : '') + (single ? '' : this.name(s) + ': ') + this.markedLine(i, style)).join('\n');
+                // Copy for AI (v1.5): '[Screen 7 at 14:32: description]' before the first line that starts after it.
+                const shots = forAi ? (this.d.screens || []) : [], lines = [];
+                let k = 0;
+                this.d.segments.forEach((s, i) => {
+                    while (k < shots.length && shots[k].at_ms < s.start_ms) { lines.push(this.shotLine(shots[k++])); }
+                    lines.push((withTimes ? '[' + this.clock(s.start_ms) + '] ' : '') + (single ? '' : this.name(s) + ': ') + this.markedLine(i, style));
+                });
+                while (k < shots.length) { lines.push(this.shotLine(shots[k++])); }
+                const body = lines.join('\n');
                 const note = (u.note_text || 'Note: [?word] = the transcription is unsure about this word; [unclear] = inaudible audio.').replace('[?word]', style === 'suffix' ? 'word(?)' : '[?word]');
                 const marked = /\[\?[^\]]+\]|\[unclear|\(\?\)/.test(body);
                 return forAi || (u.note && style !== 'off' && marked) ? note + '\n\n' + body : body;
@@ -222,6 +237,17 @@
             // A line whose view failed the checks twice shows the original words, with a note (plan A3).
             keptLine(i) { return this.view !== 'original' && this.viewReady(this.view) && ((this.d.views.kept || {})[this.view] || []).includes(i); },
             useWords(i) { return this.d.segments[i].words.length && this.view === 'original' && !this.suggFor(i).length && !this.find.trim(); },
+            // Screen moments (v1.5): each shows under the line it falls in (from that line's start to the next one's).
+            screensAt(i) {
+                const from = i < 0 ? -Infinity : this.d.segments[i].start_ms;
+                const to = i + 1 < this.d.segments.length ? this.d.segments[i + 1].start_ms : Infinity;
+                return (this.d.screens || []).filter(s => s.at_ms >= from && s.at_ms < to);
+            },
+            screenLabel(s) { return 'Screen ' + s.index + ' · ' + this.clock(s.at_ms); },
+            shotLine(s) { return '[Screen ' + s.index + ' at ' + this.clock(s.at_ms) + (s.description ? ': ' + s.description : '') + ']'; },
+            openShot(k) { this.shot = k; this.$nextTick(() => this.$refs.shotClose && this.$refs.shotClose.focus()); },
+            moveShot(step) { const n = (this.d.screens || []).length; if (this.shot !== null) this.shot = Math.min(n - 1, Math.max(0, this.shot + step)); },
+            playShot() { const s = this.d.screens[this.shot]; this.shot = null; this.panel = 'transcript'; this.seekTo(s.at_ms); },
             async copy(withTimes, forAi = false) {
                 try { await navigator.clipboard.writeText(this.transcriptText(withTimes, forAi)); this.copied = forAi ? 'ai' : (withTimes ? 'times' : 'text'); }
                 catch (e) { this.copied = 'failed'; }
@@ -348,6 +374,27 @@
                 .el-player .el-tools .el-btn { padding: 0 12px; font-size: 13px; }
             }
             @media (min-width: 641px) and (max-width: 1023.98px) { .el-player .el-dock { bottom: calc(76px + env(safe-area-inset-bottom)); } }
+            /* Screen moments (v1.5): a thumbnail under its line, the Screens tab's gallery, and a screen opened large. */
+            .el-player .el-panels { display: inline-flex; align-self: flex-start; gap: 2px; padding: 3px; border-radius: 999px; background: var(--el-btn-bg); }
+            .el-player .el-panels button { min-height: 30px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--el-muted); }
+            .el-player .el-panels button[aria-selected=true] { background: var(--el-bg); color: var(--el-text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+            .el-player .el-screen { display: flex; gap: 12px; align-items: center; width: 100%; max-width: 520px; margin: 6px 0 10px; padding: 6px;
+                border: 1px solid var(--el-border); border-radius: 12px; background: var(--el-bg); color: inherit; text-align: start; cursor: zoom-in; }
+            .el-player .el-screen:hover { background: var(--el-hover); }
+            .el-player .el-screen img { flex: none; width: 160px; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; background: var(--el-hover); }
+            .el-player .el-screen-cap { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px; line-height: 18px; color: var(--el-muted); unicode-bidi: plaintext; }
+            .el-player .el-screen-cap strong { color: var(--el-text); font-weight: 600; font-variant-numeric: tabular-nums; }
+            .el-player .el-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+            .el-player .el-gallery .el-screen { flex-direction: column; align-items: stretch; max-width: none; margin: 0; }
+            .el-player .el-gallery .el-screen img { width: 100%; }
+            .el-player .el-shot { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,.72); }
+            .el-player .el-shot-box { display: flex; flex-direction: column; gap: 12px; max-width: min(1200px, 100%); max-height: 100%; margin: 0; padding: 16px;
+                border-radius: 16px; background: var(--el-bg); overflow: auto; }
+            .el-player .el-shot-box img { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 8px; }
+            .el-player .el-shot-box figcaption { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--el-muted); unicode-bidi: plaintext; }
+            .el-player .el-shot-box figcaption strong { color: var(--el-text); }
+            .el-player .el-shot-tools { display: flex; flex-wrap: wrap; gap: 8px; }
+            @media (max-width: 640px) { .el-player .el-screen img { width: 112px; } .el-player .el-shot { padding: 12px; } }
             @media (prefers-reduced-motion: reduce) { .el-player .el-btn { transition: none; } }
         </style>
 
@@ -409,8 +456,27 @@
             </template>
         </div>
 
-        <div class="el-empty" x-show="!d.segments.length">No transcript yet.</div>
-        <div class="el-list" x-ref="list" x-show="d.segments.length" :lang="view === 'original' ? d.language_code : (view === 'urdu' ? 'ur' : null)" aria-label="Transcript. Choose a line to play from there.">
+        {{-- Screen moments (v1.5): the transcript with the screens between its lines, or all of them as a gallery. --}}
+        <div class="el-panels" role="tablist" aria-label="Transcript and screens" x-show="(d.screens || []).length" x-cloak>
+            <button type="button" role="tab" :aria-selected="panel === 'transcript'" x-on:click="panel = 'transcript'">Transcript</button>
+            <button type="button" role="tab" :aria-selected="panel === 'screens'" x-on:click="panel = 'screens'" x-text="'Screens ' + (d.screens || []).length">Screens</button>
+        </div>
+        <div class="el-gallery" x-show="panel === 'screens'" x-cloak aria-label="Screens of this recording">
+            <template x-for="(s, k) in (d.screens || [])" :key="'g' + s.id">
+                <button type="button" class="el-screen" x-on:click="openShot(k)" :aria-label="'Open ' + screenLabel(s)">
+                    <img :src="s.thumb" alt="" loading="lazy">
+                    <span class="el-screen-cap"><strong x-text="screenLabel(s)"></strong><span x-show="s.description" x-text="s.description"></span></span>
+                </button>
+            </template>
+        </div>
+        <div class="el-empty" x-show="panel === 'transcript' && !d.segments.length">No transcript yet.</div>
+        <div class="el-list" x-ref="list" x-show="panel === 'transcript' && d.segments.length" :lang="view === 'original' ? d.language_code : (view === 'urdu' ? 'ur' : null)" aria-label="Transcript. Choose a line to play from there.">
+            <template x-for="s in screensAt(-1)" :key="'sb' + s.id">
+                <button type="button" class="el-screen" x-on:click="openShot(s.index - 1)" :aria-label="'Open ' + screenLabel(s)">
+                    <img :src="s.thumb" alt="" loading="lazy">
+                    <span class="el-screen-cap"><strong x-text="screenLabel(s)"></strong><span x-show="s.description" x-text="s.description"></span></span>
+                </button>
+            </template>
             <template x-for="(b, bi) in blocks()" :key="'b' + bi + '-' + b.start">
                 <div class="el-block" :class="'el-block-' + b.channel">
                     <span class="el-avatar" aria-hidden="true" x-text="initial(d.segments[b.items[0]])"></span>
@@ -446,10 +512,33 @@
                                         x-init="$el.value = d.segments[i].text" x-on:blur="save(i, $el.value)"
                                         x-on:keydown.ctrl.enter.prevent="$el.blur()" x-on:keydown.meta.enter.prevent="$el.blur()"></textarea>
                                 </template>
+                                <template x-for="s in screensAt(i)" :key="'sc' + s.id">
+                                    <button type="button" class="el-screen" x-on:click="openShot(s.index - 1)" :aria-label="'Open ' + screenLabel(s)">
+                                        <img :src="s.thumb" alt="" loading="lazy">
+                                        <span class="el-screen-cap"><strong x-text="screenLabel(s)"></strong><span x-show="s.description" x-text="s.description"></span></span>
+                                    </button>
+                                </template>
                             </div>
                         </template>
                     </div>
                 </div>
+            </template>
+        </div>
+
+        {{-- A screen opened large, with the screens before and after it. --}}
+        <div class="el-shot" x-show="shot !== null" x-cloak role="dialog" aria-modal="true" aria-label="Screen" x-on:click.self="shot = null">
+            <template x-if="shot !== null && d.screens[shot]">
+                <figure class="el-shot-box">
+                    <img :src="d.screens[shot].image" :alt="screenLabel(d.screens[shot]) + (d.screens[shot].description ? ': ' + d.screens[shot].description : '')">
+                    <figcaption><strong x-text="screenLabel(d.screens[shot])"></strong><span x-show="d.screens[shot].description" x-text="d.screens[shot].description"></span></figcaption>
+                    <div class="el-shot-tools">
+                        <button type="button" class="el-btn" :disabled="shot === 0" x-on:click="moveShot(-1)">Previous</button>
+                        <button type="button" class="el-btn" :disabled="shot === d.screens.length - 1" x-on:click="moveShot(1)">Next</button>
+                        <button type="button" class="el-btn" x-show="$refs.audio" x-on:click="playShot()" x-text="'Play from ' + clock(d.screens[shot].at_ms)"></button>
+                        <span class="el-spacer"></span>
+                        <button type="button" class="el-btn el-btn-text" x-ref="shotClose" x-on:click="shot = null">Close</button>
+                    </div>
+                </figure>
             </template>
         </div>
 

@@ -8,8 +8,10 @@ use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Http\Resources\TranscriptResource;
 use App\Models\CaptureSession;
+use App\Models\Screen;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
+use App\Services\Screens\ScreenStore;
 use App\Services\TranscriptEditor;
 use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
@@ -40,14 +42,15 @@ class TranscriptPlayerEntry extends Entry
      * @return array{audio_url: string|null, segments: list<array<string, mixed>>, speaker_names: array<string, string>, kind: string|null,
      *     status: string|null, editable: bool, edited: bool, model: string|null, language: string, language_code: string|null, markers: list<array{at_ms: int, tag: string|null, note: string|null}>,
      *     pauses: list<array{at_ms: int, paused_ms: int}>, views: array<string, mixed>|null, duration_ms: int, audio_bytes: int|null,
-     *     suggestions: list<array{id: int, line: int, from: string, to: string, reason: string}>, client: string|null}
+     *     suggestions: list<array{id: int, line: int, from: string, to: string, reason: string}>, client: string|null,
+     *     screens: list<array{id: string, index: int, at_ms: int, thumb: string, image: string, description: string|null}>}
      */
     public static function payload(?CaptureSession $record): array
     {
         if ($record === null) {
             return ['audio_url' => null, 'segments' => [], 'speaker_names' => [], 'kind' => null, 'status' => null, 'editable' => false,
                 'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'language_code' => null, 'markers' => [], 'pauses' => [], 'views' => null, 'duration_ms' => 1,
-                'audio_bytes' => null, 'suggestions' => [], 'client' => null];
+                'audio_bytes' => null, 'suggestions' => [], 'client' => null, 'screens' => []];
         }
         $record->loadMissing(['primaryRecording', 'client']);
         $primary = $record->primaryRecording;
@@ -105,7 +108,27 @@ class TranscriptPlayerEntry extends Entry
             // Suggested fixes (P5) still open on the shown final transcript: marked on their words, never applied alone.
             'suggestions' => $shown !== null && $shown === $final ? self::openSuggestions($final) : [],
             'client' => $record->client?->name,
+            // Screen moments (v1.5): shown between the lines at their moments and in the Screens tab.
+            'screens' => self::screens($record),
         ];
+    }
+
+    /**
+     * The recording's screens in time order, with the console's links to their thumbnail and picture.
+     *
+     * @return list<array{id: string, index: int, at_ms: int, thumb: string, image: string, description: string|null}>
+     */
+    public static function screens(CaptureSession $record): array
+    {
+        return array_values(ScreenStore::ordered($record->id)->get(['id', 'capture_session_id', 'at_ms', 'description'])->values()
+            ->map(fn (Screen $s, int $i): array => [
+                'id' => $s->id,
+                'index' => $i + 1,
+                'at_ms' => $s->at_ms,
+                'thumb' => route('admin.screens.media', [$s->id, 'thumb']),
+                'image' => route('admin.screens.media', [$s->id, 'image']),
+                'description' => $s->description,
+            ])->all());
     }
 
     /**

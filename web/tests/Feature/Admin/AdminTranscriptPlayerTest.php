@@ -405,8 +405,12 @@ it('keeps hostile text inside the data, never in the markup', function () {
     $html = adminPlayerPage($this, $session);
     $player = adminPlayerNode($html);
 
-    foreach (['script', 'img', 'svg', 'iframe', 'object', 'embed', 'b', 'i'] as $tag) {
+    foreach (['script', 'svg', 'iframe', 'object', 'embed', 'b', 'i'] as $tag) {
         expect($player->getElementsByTagName($tag)->length)->toBe(0, "unexpected <{$tag}> inside the player");
+    }
+    // Screen moments (v1.5) are the only pictures: Alpine templates whose source is bound from the data, none in the markup.
+    foreach ($player->getElementsByTagName('img') as $img) {
+        expect($img->hasAttribute(':src') && ! $img->hasAttribute('src'))->toBeTrue('unexpected <img> inside the player');
     }
     foreach ((new DOMXPath($player->ownerDocument))->query('.//*[@*[starts-with(name(), "on")]]', $player) as $element) {
         $this->fail('Inline event handler found on <'.$element->nodeName.'>');

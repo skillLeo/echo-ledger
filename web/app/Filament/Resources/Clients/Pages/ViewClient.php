@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\Clients\Pages;
 
+use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Exceptions\ApiError;
 use App\Filament\Pages\ApiCredentials;
@@ -20,10 +21,13 @@ use App\Models\ClientBrief;
 use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
 use App\Models\FilingRule;
+use App\Models\Scopes\WorkspaceScope;
+use App\Models\Screen;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Projects\FilingRules;
 use App\Services\Projects\ProjectTree;
 use App\Services\SettingsRepository;
+use App\Services\TranscriptExporter;
 use App\Support\UrduText;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -53,7 +57,10 @@ class ViewClient extends ViewRecord
 
     protected static string $resource = ClientResource::class;
 
-    public const TABS = ['overview' => 'Overview', 'recordings' => 'Recordings', 'files' => 'Files', 'ask' => 'Ask', 'rules' => 'Rules'];
+    public const TABS = ['overview' => 'Overview', 'recordings' => 'Recordings', 'screens' => 'Screens', 'files' => 'Files', 'ask' => 'Ask', 'rules' => 'Rules'];
+
+    /** The Screens tab (v1.5) shows the screens of this many recordings, newest first. */
+    public const SCREEN_RECORDINGS = 30;
 
     /** How the Recordings tab sorts (v1.5). */
     public const SORTS = ['newest' => 'Newest first', 'oldest' => 'Oldest first', 'title' => 'By title', 'longest' => 'Longest first'];
@@ -388,6 +395,7 @@ class ViewClient extends ViewRecord
             'rules' => ['rules' => FilingRule::query()->where('client_id', $client->id)->orderBy('id')->get(), 'kinds' => self::RULE_KINDS,
                 'apps' => collect(SourceApp::cases())->mapWithKeys(fn (SourceApp $a): array => [$a->value => $a->getLabel()])->all()],
             'files' => ['files' => ClientFile::query()->where('client_id', $client->id)->latest()->get()],
+            'screens' => ['groups' => $this->screenGroups($client, $zone), 'limit' => self::SCREEN_RECORDINGS],
             'ask' => ['configured' => $service->configured(), 'credentialsUrl' => ApiCredentials::getUrl()],
             default => [
                 'configured' => $service->configured(),
@@ -446,6 +454,42 @@ class ViewClient extends ViewRecord
             'longest' => $query->orderByDesc('duration_ms'),
             default => $query->latest('started_at'),
         };
+    }
+
+    /**
+     * The Screens tab (v1.5): the recordings of the project and its subfolders that kept screens, newest first, each
+     * with its screens in time order (numbered as the API numbers them).
+     *
+     * @return list<array{title: string, when: string, url: string, screens: list<array{id: string, index: int, at_ms: int, clock: string, thumb: string, image: string, description: string|null, url: string}>}>
+     */
+    private function screenGroups(Client $client, string $zone): array
+    {
+        $sessions = CaptureSession::query()->where('workspace_id', $client->workspace_id)
+            ->whereIn('client_id', app(ProjectTree::class)->withDescendants($client))
+            ->where('status', '!=', SessionStatus::Recording->value)->whereHas('screens')
+            ->latest('started_at')->limit(self::SCREEN_RECORDINGS)->get();
+        $screens = Screen::query()->withoutGlobalScope(WorkspaceScope::class)->whereIn('capture_session_id', $sessions->modelKeys())
+            ->orderBy('at_ms')->orderBy('id')->get(['id', 'capture_session_id', 'at_ms', 'description'])->groupBy('capture_session_id');
+
+        return array_values($sessions->map(function (CaptureSession $session) use ($screens, $zone): array {
+            $url = CaptureSessionResource::getUrl('view', ['record' => $session]);
+
+            return [
+                'title' => $session->displayTitle(),
+                'when' => $session->started_at->copy()->setTimezone($zone)->format('M j, Y · g:i A'),
+                'url' => $url,
+                'screens' => array_values(($screens[$session->id] ?? collect())->values()->map(fn (Screen $s, int $i): array => [
+                    'id' => $s->id,
+                    'index' => $i + 1,
+                    'at_ms' => $s->at_ms,
+                    'clock' => TranscriptExporter::clock($s->at_ms),
+                    'thumb' => route('admin.screens.media', [$s->id, 'thumb']),
+                    'image' => route('admin.screens.media', [$s->id, 'image']),
+                    'description' => $s->description,
+                    'url' => $url.'?t='.$s->at_ms,
+                ])->all()),
+            ];
+        })->all());
     }
 
     /** Levels from the top down to this project: 1 at the top. */

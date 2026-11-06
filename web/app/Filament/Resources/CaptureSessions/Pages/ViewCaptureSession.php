@@ -419,18 +419,28 @@ class ViewCaptureSession extends ViewRecord
             ->modalCancelActionLabel('Close');
     }
 
-    /** @return array{audio: array{url: string, label: string}|null, links: array<string, list<array{label: string, url: string, print: bool}>>, views: array<string, string>, default: string, unsure: bool} */
+    /** @return array{audio: array{url: string, label: string}|null, links: array<string, list<array{label: string, url: string, print: bool}>>, pack: array<string, list<array{label: string, url: string, print: bool}>>, screens: int, views: array<string, string>, default: string, unsure: bool} */
     private function downloadOptions(): array
     {
         $recording = $this->session()->primaryRecording;
         $transcript = $this->editableTranscript();
         $views = ['original' => 'Original'] + array_intersect_key(TranscriptViews::VIEWS, array_flip($this->readyViews()));
         $links = [];
+        $pack = [];
         foreach ($transcript !== null ? array_keys($views) : [] as $view) {
             foreach (self::DOWNLOAD_FORMATS as $format => $label) {
                 $query = array_filter(['view' => $view === 'original' ? null : $view, 'print' => $format === 'html' ? 1 : null]);
                 $links[$view][] = ['label' => $label, 'print' => $format === 'html',
                     'url' => route('admin.transcripts.export', ['transcript' => $transcript->id, 'format' => $format, ...$query])];
+            }
+            // Meeting pack (v1.5): the transcript with its screens, a page to print or a ZIP (with the audio or without).
+            $at = ['session' => $this->session()->id, 'view' => $view === 'original' ? null : $view];
+            $pack[$view] = [
+                ['label' => 'Meeting pack (print)', 'print' => true, 'url' => route('admin.sessions.pack', [...$at, 'format' => 'html'])],
+                ['label' => 'Meeting pack (.zip)', 'print' => false, 'url' => route('admin.sessions.pack', [...$at, 'format' => 'zip'])],
+            ];
+            if ($recording?->isReady() === true) {
+                $pack[$view][] = ['label' => 'Meeting pack with audio (.zip)', 'print' => false, 'url' => route('admin.sessions.pack', [...$at, 'format' => 'zip', 'include_audio' => 1])];
             }
         }
         // Opens in the view the player opens in (Settings → Transcription), when it is made.
@@ -442,6 +452,8 @@ class ViewCaptureSession extends ViewRecord
                 'label' => 'Audio (.'.AdminMediaController::extensionFor($recording->mime).')',
             ] : null,
             'links' => $links,
+            'pack' => $pack,
+            'screens' => $this->session()->screens()->count(),
             'views' => $views,
             'default' => array_key_exists($default, $views) ? $default : 'original',
             'unsure' => UnsureMarkers::settings()['style'] !== 'off',
