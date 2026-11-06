@@ -10,7 +10,6 @@ use App\Models\Device;
 use App\Models\DevicePairingCode;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
-use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AuditLog;
@@ -72,7 +71,8 @@ final class WorkspaceEraser
         });
         Device::query()->withoutGlobalScopes()->where('workspace_id', $id)->get()->each(fn (Device $device) => $device->delete());
         DevicePairingCode::query()->withoutGlobalScopes()->where('workspace_id', $id)->delete();
-        UsageLedgerEntry::query()->withoutGlobalScopes()->where('workspace_id', $id)->delete();
+        // Its usage rows stay, without the workspace (the foreign key sets it to null): costs already paid stay on
+        // Server usage.
 
         $name = $workspace->name;
         $workspace->members()->detach();

@@ -237,7 +237,7 @@ The super admin (the server's operator) manages plans, sees every workspace's me
 and the server settings and API credentials. A workspace always keeps one owner; leaving it needs a transfer first.
 
 - `GET /api/account` gives the role (`workspace.role`). A viewer's device gets `403 not_allowed` from recording and
-  upload routes (`POST /api/sessions`, uploads, `stt/token`, request uploads into their name); the apps show "You are
+  upload routes (`POST /api/sessions`, uploads, `stt/token`, `live-translate/token`, request uploads into their name); the apps show "You are
   a viewer in <workspace>: you can open what is shared with you, not record."
 
 ### Plans and features (since v1.5)

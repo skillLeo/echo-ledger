@@ -23,6 +23,9 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 | N14 | Back up the desktop updater key | Installed desktop apps only take updates signed with it; losing it means reinstalling by hand | Copy C:echoledger-keysdesktop-updater.key (made 2026-11-04, no password yet) to your password manager or an offline drive. Say if you want a password on it before the public release. |
 | N15 | Production SSH from the Mac | Deploys (backup, bundle, migrations) run over SSH; the Mac has the keys but no host entry, and trying keys against the server is not something I do on my own | Add the console server to `~/.ssh/config` as `Host skillleo-host` (HostName, Port, User and IdentityFile as on the Windows laptop), or tell me which key and I will add the entry; then say "ssh ready". |
 | N16 | Three files from the Windows laptop | (1) The phone takes updates only when they are signed like its installed app, which the laptop built: without the laptop's debug key every build from this Mac needs an uninstall (your recordings and settings on the phone would go). (2) The desktop updater's private key (N14) lives only there. | Copy to this Mac: `%USERPROFILE%\.android\debug.keystore` → `~/echoledger-keys/laptop-debug.keystore`; `C:\echoledger-keys\desktop-updater.key` and `.pub` → `~/echoledger-keys/`; optional, `C:\echoledger-releases\v1.5.0-beta.2\` → `~/echoledger-releases/`. Use a USB drive or AirDrop, not chat or e-mail. Then say "keys copied". |
+| N17 | A real Mac test (Phase 1B A6) | The Mac check on a Mac with a simulated Meet call and screen share; permission dialogs need a person | Read docs/MAC_TEST_CLOUD.md (coming), rent the Mac, then say "Mac rented". You said you don't own a Mac, but this session runs on a Mac with macOS 27.3: if it stays available, tell me and the test can run here with no rental. |
+| N18 | Firebase project for Test Lab (Phase 1B B5) | Smoke tests on physical Xiaomi, Oppo, Vivo, Pixel and Samsung A-series phones | console.firebase.google.com → Add project (the free plan is enough) → then on this Mac `gcloud auth login` and tell me the project id. No key goes in chat. |
+| N19 | Three non-Samsung phones (Phase 1B acceptance) | Device reports from real phones | Ask teammates to install the APK, run Help & diagnostics → Device check and allow the upload (checklist in MANUAL_QA, coming); Test Lab results also count. |
 
 ## Step 0
 
@@ -42,6 +45,34 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 - [x] 1.4f Roman Urdu word-count/alignment check on 20 recordings, reported. *Accept:* the command's report in HANDOFF. **Done** 2026-11-04 on production: 20 recordings, 12 OK, 6 to check, 2 with a problem (long lines lost up to 10 % of their words). Fix: stricter check (fewer words only 5 %, min 2) + word-by-word retry.
 - [ ] Phase 1 suites: phone, desktop, web green; lints clean.
 
+## Phase 1B — Runs everywhere
+
+Mac:
+- [ ] A1 CI: Rust + frontend tests on Apple Silicon and Intel; the built .app is launched, opens its windows and quits cleanly (a crash fails the run); DMGs attached to each tag. *Accept:* both chips green.
+- [ ] A2 Help & diagnostics → Run Mac check: macOS version (14.2+), mic, system-audio and screen-recording permissions, 5 s mic test, 5 s system-audio tap test with a tone, meeting-app detection (Zoom, Teams, WhatsApp, Chrome, Safari, Edge, Arc), overlay + pill visible, a screen-moment capture; ✓/✗ with a fix each, Copy report, opt-in upload shown per device in the admin panel. *Accept:* tests with mocks; **(mac)** passes on a real Mac.
+- [ ] A3 Permissions: one guided onboarding step each with Open System Settings; macOS 15's monthly re-approval explained; a missing permission never crashes or silently records nothing (clear banner). *Accept:* tests.
+- [ ] A4 Unsigned builds: USER_GUIDE first launch on macOS 15+ (System Settings → Privacy & Security → Open Anyway); permissions re-checked at start after updates; the $99/yr Developer ID documented. *Accept:* docs + test.
+- [ ] A5 Parity: menu-bar icon, ⌘ shortcuts; pill, overlay and toast respect the notch and menu bar; dark/light, Retina, several displays; overlays over fullscreen windows and Spaces; start at login; updater. *Accept:* tests; **(mac)**.
+- [ ] A6 docs/MAC_TEST_CLOUD.md: renting a cloud Mac for a day, SSH + VNC, BlackHole for a simulated Meet call, the Mac check + Mac rows of MANUAL_QA; then fix what is found (N17).
+
+Android:
+- [ ] B1 Device check (onboarding, Help & diagnostics): voice notes/import, app calls both sides (Android 14+ and the helper, else "your voice only"), SIM calls, captions, Live Translate, with reasons and one-tap fixes; Copy report; opt-in upload (brand, model, Android, results) in the admin panel. *Accept:* tests.
+- [ ] B2 Honest fallbacks: "This phone can record only your voice in WhatsApp calls" up front; never a silent channel without saying so. *Accept:* tests.
+- [ ] B3 Background survival per brand (Xiaomi/HyperOS, Oppo/Realme/OnePlus, Vivo, Huawei/Honor, Pixel, Samsung): exact steps and deep links; the helper re-armed after the OS kills it; vendor audio quirks caught and reported. *Accept:* tests.
+- [ ] B4 Helper: Shizuku and the built-in wireless-debugging helper with a setup guide per brand. *Accept:* guide + tests.
+- [ ] B5 Firebase Test Lab smoke tests (Xiaomi, Oppo, Vivo, Pixel, Samsung A; Android 10/12/14/15/16): install, onboarding, voice note, library, settings; no crash or ANR; 360 dp and 1.3x fonts; results reported (N18).
+- [ ] B6 3 GB RAM phones stay smooth. *Accept:* a measured check (Test Lab or a profile).
+- [ ] B7 Teammate compatibility checklist in MANUAL_QA; device reports visible in the admin panel (N19).
+
+Windows:
+- [ ] C1 Windows 10 below build 20348: the whole-system-audio fallback works and the UI says so. *Accept:* tests.
+- [ ] C2 CI smoke tests on Windows 10 and 11 runners. *Accept:* green, or the nearest runner GitHub still offers, noted.
+- [ ] C3 Bluetooth/USB headsets and switching audio devices mid-call keep the recording going. *Accept:* tests.
+
+Everywhere:
+- [ ] D Supported devices on the download page and in USER_GUIDE, saying what works where. *Accept:* page test.
+- [ ] Acceptance: CI green on macOS (both chips) and Windows; the Mac check on a real Mac with a simulated Meet call and screen share; reports from 3 non-Samsung phones; docs updated.
+
 ## Phase 2 — Projects, smart folders, sharing
 
 - [x] 2.1 Library unchanged (everything, newest first, filters). **Live** 2026-11-04 (beta.2).
@@ -57,14 +88,14 @@ on the S25 in a phone window; **(mac)** = checked by Hassam on the MacBook from 
 
 ## Phase 4 — SaaS foundation
 
-- [ ] 4.1 Accounts: email + password (verified, reset), Google sign-in, 2FA (TOTP + recovery codes); phone/desktop sign in with the account (browser OAuth with PKCE) + biometric unlock; "Sign in with QR" instead of pairing codes; sessions & devices with revoke, sign out everywhere, login alerts; rate limits, lockout, CSRF, audit log. *Accept:* auth tests per route.
-- [ ] 4.2 Workspaces and roles (Super admin, Owner, Admin, Member, Viewer) with a tested permission matrix; private by default; email invitations; join/leave; transfer ownership; existing data migrated into Hassam's workspace. *Accept:* policy matrix tests; migration on a production copy.
-- [ ] 4.3 Plans: price (0), minutes, storage, retention, seats, AI credits, feature flags; limits enforced with friendly messages. *Accept:* tests. Phone done (`PlanStateTest`, plan/viewer screen tests); server and desktop with the Phase 4 helpers.
-- [ ] 4.4 Usage and costs per user, workspace and provider ($ from an editable price table, % of plan, trends, date filters, CSV, 80 %/100 % alerts). *Accept:* tests.
-- [ ] 4.5 Console for super admin and workspace admins; members read-only (toggle). *Accept:* tests.
-- [ ] 4.6 Account deletion in the apps and on a public web page; data export ZIP. *Accept:* tests; **(phone)** deletion of a test account.
-- [ ] 4.7 Legal drafts: Terms, Privacy (processors listed), recording-consent notice in setup and settings. *Accept:* pages render; N10. Phone: the consent notice is in onboarding and Settings → Privacy & consent already.
-- [ ] 4.8 Email: SMTP settings, templates (invite, verify, reset, login alert, share received, transcript ready), SPF/DKIM/DMARC checklist. *Accept:* mail tests.
+- [x] 4.1 Accounts: email + password (verified, reset), Google sign-in, 2FA (TOTP + recovery codes); phone/desktop sign in with the account (browser OAuth with PKCE) + biometric unlock; "Sign in with QR" instead of pairing codes; sessions & devices with revoke, sign out everywhere, login alerts; rate limits, lockout, CSRF, audit log. *Accept:* auth tests per route. **Merged** 2026-11-06 (`a263343`, 4,446 tests on SQLite and MariaDB); live with the next deploy.
+- [ ] 4.2 Workspaces and roles (Super admin, Owner, Admin, Member, Viewer) with a tested permission matrix; private by default; email invitations; join/leave; transfer ownership; existing data migrated into Hassam's workspace. *Accept:* policy matrix tests; migration on a production copy. **Merged** (policy matrix green); the migration on a production copy is left, at the deploy.
+- [x] 4.3 Plans: price (0), minutes, storage, retention, seats, AI credits, feature flags; limits enforced with friendly messages. *Accept:* tests. Phone done (`PlanStateTest`, plan/viewer screen tests); server and desktop with the Phase 4 helpers. **Merged**; Free plan numbers are placeholders for Hassam.
+- [x] 4.4 Usage and costs per user, workspace and provider ($ from an editable price table, % of plan, trends, date filters, CSV, 80 %/100 % alerts). *Accept:* tests. **Merged**; costs stay after an account or workspace is erased.
+- [x] 4.5 Console for super admin and workspace admins; members read-only (toggle). *Accept:* tests. **Merged**.
+- [ ] 4.6 Account deletion in the apps and on a public web page; data export ZIP. *Accept:* tests; **(phone)** deletion of a test account. **Merged**; the phone test is left.
+- [ ] 4.7 Legal drafts: Terms, Privacy (processors listed), recording-consent notice in setup and settings. *Accept:* pages render; N10. Phone: the consent notice is in onboarding and Settings → Privacy & consent already. **Merged**; N10 is left.
+- [x] 4.8 Email: SMTP settings, templates (invite, verify, reset, login alert, share received, transcript ready), SPF/DKIM/DMARC checklist. *Accept:* mail tests. **Merged** (docs/EMAIL_DNS.md).
 
 ## Phase 5 — Distribution ready
 
