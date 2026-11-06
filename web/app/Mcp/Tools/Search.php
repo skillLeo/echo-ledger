@@ -21,7 +21,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('search')]
 #[Title('Search recordings')]
-#[Description('Finds words in titles, transcript text and screen text. Each match gives the recording id, title, date, project, the matching line and its time. Every word must be there; put a phrase in double quotes. Newest recordings first.')]
+#[Description('Finds words in titles, transcript text and screen text. Each match gives the recording id, title, date, project, the matching line and its time. Every word must be there; put a phrase in double quotes. The person\'s own recordings come first, newest first, then what was shared with them.')]
 #[IsReadOnly]
 #[IsIdempotent]
 #[IsOpenWorld(false)]

@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Models\AuditEvent;
 use App\Filament\Auth\Login;
+use App\Models\AuditEvent;
 use App\Models\ConnectedApp;
 use Carbon\CarbonInterval;
 use Filament\Auth\MultiFactor\App\AppAuthentication;

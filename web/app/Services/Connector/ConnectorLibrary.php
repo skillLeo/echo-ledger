@@ -109,12 +109,14 @@ final class ConnectorLibrary
             $blocks[] = $this->hitBlock($session, $own['hits'][$session->id]['hits'], $this->projectLabel($session, $paths));
         }
         $more = $own['more'];
-        if ($projectId === null && count($blocks) < $limit) {
-            $shared = $this->search->searchIn($this->teammates->sharedSessions($person)->with('transcripts'), $query, $limit - count($blocks));
-            foreach ($shared['items'] as $session) {
+        if ($projectId === null) {
+            // With the limit reached, one more is asked for only to say that more match.
+            $room = $limit - count($blocks);
+            $shared = $this->search->searchIn($this->teammates->sharedSessions($person)->with('transcripts'), $query, max(1, $room));
+            foreach ($shared['items']->take($room) as $session) {
                 $blocks[] = $this->hitBlock(Teammates::readOnly($session), $shared['hits'][$session->id]['hits'], 'shared with you');
             }
-            $more = $more || $shared['more'];
+            $more = $more || $shared['more'] || $shared['items']->count() > $room;
         }
         if ($blocks === []) {
             return 'No recording matches that.';
@@ -143,7 +145,7 @@ final class ConnectorLibrary
             'Date' => $this->date($session->started_at),
             'Length' => $session->duration_ms ? TranscriptExporter::clock($session->duration_ms) : null,
             'People' => null,
-            'Project' => $shared ? 'Shared with you (read-only)' : ($this->paths($person, $workspaceId)[$session->client_id] ?? 'In no project'),
+            'Project' => $shared ? 'Shared with you (read-only)' : ($this->paths($person, $workspaceId)[(string) $session->client_id] ?? 'In no project'),
             'App' => $session->source_app->getLabel(),
         ];
         if (! $transcript instanceof Transcript) {
@@ -253,7 +255,7 @@ final class ConnectorLibrary
 
             return '- '.$session->displayTitle()." (id {$session->id}): ".$this->date($session->started_at)
                 .($session->duration_ms ? ', '.TranscriptExporter::clock($session->duration_ms) : '')
-                .', '.($shared ? 'shared with you' : ($paths[$session->client_id] ?? 'in no project'))
+                .', '.($shared ? 'shared with you' : $this->projectLabel($session, $paths))
                 .', '.$session->source_app->getLabel();
         })->implode("\n");
     }
@@ -287,7 +289,7 @@ final class ConnectorLibrary
     /** @param array<string, string> $paths */
     private function projectLabel(CaptureSession $session, array $paths): string
     {
-        return $session->client_id !== null ? ($paths[$session->client_id] ?? 'in no project') : 'in no project';
+        return $paths[(string) $session->client_id] ?? 'in no project';
     }
 
     /**

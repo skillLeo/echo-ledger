@@ -479,6 +479,24 @@ describe('what it may see', function () {
         expect(connectorTool($this, $token, 'search', ['query' => 'Kept'])['text'])->toBe('No recording matches that.');
     });
 
+    it('fills a search with what was sent up to the limit, and says when that leaves some out', function () {
+        $sender = Fx::user();
+        $sent = Fx::session($sender, Fx::device($sender), ['title' => 'Sent call']);
+        Fx::transcript($sent, 'the capybara from Ana');
+        $person = Fx::user();
+        $own = Fx::session($person, Fx::device($person), ['title' => 'My call']);
+        Fx::transcript($own, 'the capybara of mine');
+        app(Teammates::class)->send($sender, $sent, [$person->email], null);
+        $token = connectorConnect($this, $person)['access'];
+
+        $both = connectorTool($this, $token, 'search', ['query' => 'capybara', 'limit' => 2])['text'];
+        expect($both)->toContain($own->id)->toContain($sent->id)->not->toContain('More recordings match')
+            ->and(strpos($both, $own->id))->toBeLessThan(strpos($both, $sent->id));
+
+        $one = connectorTool($this, $token, 'search', ['query' => 'capybara', 'limit' => 1])['text'];
+        expect($one)->toContain($own->id)->not->toContain($sent->id)->toContain('More recordings match');
+    });
+
     it('lets a viewer read what was sent to them', function () {
         $owner = Fx::user();
         $team = Workspace::query()->findOrFail($owner->current_workspace_id);
