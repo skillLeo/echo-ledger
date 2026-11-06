@@ -96,10 +96,9 @@ final class RecordingRow
     public static function appIcon(SourceApp $app): string
     {
         return match ($app) {
-            SourceApp::WhatsApp, SourceApp::WhatsAppWeb, SourceApp::Telegram, SourceApp::Signal, SourceApp::Messenger, SourceApp::Instagram => 'heroicon-s-chat-bubble-left-right',
+            SourceApp::WhatsApp, SourceApp::WhatsAppWeb, SourceApp::Telegram, SourceApp::Signal, SourceApp::Messenger, SourceApp::Instagram, SourceApp::Slack, SourceApp::Discord => 'heroicon-s-chat-bubble-left-right',
             SourceApp::WhatsAppBusiness => 'heroicon-s-building-storefront',
-            SourceApp::GoogleMeet, SourceApp::Zoom, SourceApp::Skype => 'heroicon-s-video-camera',
-            SourceApp::MicrosoftTeams, SourceApp::Slack, SourceApp::Discord => 'heroicon-s-user-group',
+            SourceApp::GoogleMeet, SourceApp::Zoom, SourceApp::Skype, SourceApp::MicrosoftTeams => 'heroicon-s-video-camera',
             SourceApp::PhoneCall => 'heroicon-s-phone',
             SourceApp::VoiceNote => 'heroicon-s-microphone',
             SourceApp::Other => 'heroicon-s-musical-note',

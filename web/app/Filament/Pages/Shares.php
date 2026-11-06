@@ -36,6 +36,8 @@ class Shares extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedLink;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::Link;
+
     protected static string|UnitEnum|null $navigationGroup = 'More';
 
     protected static ?int $navigationSort = 3;
@@ -70,11 +72,14 @@ class Shares extends Page implements HasTable
                     ->state(fn (ShareLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isActive() ? 'Active' : 'Expired'))
                     ->color(fn (string $state): string => $state === 'Active' ? 'success' : 'gray'),
                 TextColumn::make('allow_download')->label('Downloads')->state(fn (ShareLink $link): string => $link->allow_download ? 'Allowed' : 'Read and listen'),
-                TextColumn::make('expires_at')->label('Expires')->dateTime('M j, Y · g:i A', $tz)->placeholder('Never'),
+                TextColumn::make('expires_at')->label('Expires')->date('M j, Y', $tz)->placeholder('Never'),
                 TextColumn::make('view_count')->label('Views')->numeric()->sortable(),
                 TextColumn::make('last_viewed_at')->label('Last opened')->since()->placeholder('Never'),
                 TextColumn::make('created_at')->label('Made')->since()->sortable(),
             ])
+            // The filter button's badge shows once a filter is on, not as a 0 (see the theme).
+            ->filtersTriggerAction(fn (Action $action, Table $table): Action => $action
+                ->extraAttributes(fn (): array => ['data-active-filters' => (string) $table->getActiveFiltersCount()]))
             ->filters([
                 SelectFilter::make('state')->label('Status')->options(['active' => 'Active', 'ended' => 'Revoked or expired'])
                     ->query(fn (Builder $query, array $data): Builder => match ($data['value'] ?? null) {

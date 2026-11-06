@@ -38,7 +38,9 @@ class RequestLinksPage extends Page implements HasTable
     use FullConsoleOnly;
     use InteractsWithTable;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowDownOnSquareStack;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedInboxArrowDown;
+
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::InboxArrowDown;
 
     protected static string|UnitEnum|null $navigationGroup = 'More';
 
@@ -108,7 +110,7 @@ class RequestLinksPage extends Page implements HasTable
                     ->requiresConfirmation()->modalDescription('The page stops taking files at once. What was sent stays in the library.')
                     ->action(fn (RequestLink $link) => app(RequestLinks::class)->revoke($link)),
             ])
-            ->emptyStateIcon(Heroicon::OutlinedArrowDownOnSquareStack)
+            ->emptyStateIcon(Heroicon::OutlinedInboxArrowDown)
             ->emptyStateHeading('No request links yet')
             ->emptyStateDescription('Make one to collect voice notes, recordings or documents from anyone, without an account.');
     }

@@ -39,7 +39,7 @@
 
     @if ($groups === [])
         <div class="el-empty">
-            <span class="el-empty-icon">@svg('heroicon-o-photo', ['aria-hidden' => 'true'])</span>
+            <span class="el-empty-icon">@svg('heroicon-o-computer-desktop', ['aria-hidden' => 'true'])</span>
             <p class="el-empty-title">No screens yet</p>
             <p class="el-empty-text">When a meeting filed under {{ $client->name }} shares a screen, the desktop app keeps what was shown at each moment, and it shows here.</p>
         </div>

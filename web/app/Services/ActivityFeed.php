@@ -218,7 +218,7 @@ final class ActivityFeed
     public function sharedWithYou(User $recipient, string $title, string $body, ?string $sessionId): void
     {
         try {
-            $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-inbox-arrow-down')
+            $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-users')
                 ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'admin'), shouldOpenInNewTab: false)->markAsRead()]);
             $recipient->notifyNow($notification->toDatabase());
         } catch (Throwable $e) {

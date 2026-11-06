@@ -73,6 +73,8 @@ class Settings extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::Cog6Tooth;
+
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 3;

@@ -31,6 +31,8 @@ class DeviceResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDevicePhoneMobile;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::DevicePhoneMobile;
+
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 1;
@@ -60,7 +62,7 @@ class DeviceResource extends Resource
                     ->state(fn (Device $record) => $record->sourceDevice()),
                 TextColumn::make('platform'),
                 TextColumn::make('app_version')->label('App')->placeholder('—'),
-                TextColumn::make('capture_sessions_count')->label('Sessions')->badge()->color('gray'),
+                TextColumn::make('capture_sessions_count')->label('Recordings')->badge()->color('gray'),
                 TextColumn::make('last_seen_at')->label('Last seen')->since()->placeholder('never'),
                 TextColumn::make('created_at')->label('Signed in')->date(),
             ])
@@ -76,6 +78,7 @@ class DeviceResource extends Resource
                     ->modalHeading('Revoke device')
                     ->modalDescription('The device loses access immediately. Its past recordings stay in the library.'),
             ])
+            ->emptyStateIcon(Heroicon::OutlinedDevicePhoneMobile)
             ->emptyStateHeading('No devices signed in')
             ->emptyStateDescription('Use "Sign in a device" to connect the EchoLedger phone or desktop app.');
     }

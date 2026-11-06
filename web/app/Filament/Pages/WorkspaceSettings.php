@@ -22,7 +22,6 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
-use Filament\Pages\Dashboard;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\View;
@@ -52,6 +51,8 @@ class WorkspaceSettings extends Page implements HasTable
     public const ADDS_PER_HOUR = 20;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
+
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::UserGroup;
 
     protected static string|UnitEnum|null $navigationGroup = 'System';
 

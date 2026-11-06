@@ -18,17 +18,17 @@
 <div class="el-recording-chips" style="display: flex; flex-direction: column; gap: var(--space-3)">
     @if ($readOnly)
         <div class="el-chips" role="group" aria-label="Organise">
-            <span class="el-chip el-chip-static">@svg('heroicon-o-user', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No project' }}</span></span>
+            <span class="el-chip el-chip-static">@svg('heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No project' }}</span></span>
             <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ $language }}</span></span>
             @foreach ($labels as $label)
-                <span class="el-chip el-chip-static el-on">@svg('heroicon-o-tag', ['aria-hidden' => 'true'])<span>{{ $label }}</span></span>
+                <span class="el-chip el-chip-static el-on">@svg('heroicon-s-tag', ['aria-hidden' => 'true'])<span>{{ $label }}</span></span>
             @endforeach
         </div>
     @else
         <div class="el-chips" role="group" aria-label="Organise">
             <button type="button" @class(['el-chip', 'el-on' => $session->client !== null]) wire:click="mountAction('fileUnder')"
                 aria-label="Project: {{ $session->client?->name ?? 'none' }}. Change">
-                @svg('heroicon-o-user', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No project' }}</span>@svg('heroicon-m-chevron-down', ['aria-hidden' => 'true', 'style' => 'width: 14px; height: 14px'])
+                @svg($session->client !== null ? 'heroicon-s-folder' : 'heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No project' }}</span>@svg('heroicon-m-chevron-down', ['aria-hidden' => 'true', 'style' => 'width: 14px; height: 14px'])
             </button>
             @if ($canRetranscribe)
                 <button type="button" class="el-chip" wire:click="mountAction('retranscribe_as')" aria-label="Language: {{ $language }}. Transcribe again in another language">
@@ -39,7 +39,7 @@
             @endif
             @foreach ($labels as $label)
                 <button type="button" class="el-chip el-on" wire:click="mountAction('labels')" aria-label="Label {{ $label }}. Edit labels">
-                    @svg('heroicon-o-tag', ['aria-hidden' => 'true'])<span>{{ $label }}</span>
+                    @svg('heroicon-s-tag', ['aria-hidden' => 'true'])<span>{{ $label }}</span>
                 </button>
             @endforeach
             <button type="button" class="el-chip" wire:click="mountAction('labels')">

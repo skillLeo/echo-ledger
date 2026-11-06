@@ -6,15 +6,17 @@
     <meta name="robots" content="noindex, nofollow">
     <meta name="referrer" content="no-referrer">
     <title>@yield('title', 'Shared transcript') · EchoLedger</title>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    <link rel="alternate icon" href="{{ asset('favicon.ico') }}">
     <style>
         /* Urdu in Nastaliq, Arabic in Naskh (Noto, OFL: public/fonts); only Arabic-script letters use them. */
         @font-face { font-family: "Noto Nastaliq Urdu"; src: url("{{ asset('fonts/noto-nastaliq-urdu-arabic.woff2') }}") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
         @font-face { font-family: "Noto Naskh Arabic"; src: url("{{ asset('fonts/noto-naskh-arabic-arabic.woff2') }}") format("woff2"); font-weight: 400 700; font-display: swap; unicode-range: U+0600-06FF, U+0750-077F, U+0870-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC; }
         [lang="ur"] .line { font-family: "Noto Nastaliq Urdu", inherit; line-height: 2.1; }
         [lang="ar"] .line { font-family: "Noto Naskh Arabic", inherit; line-height: 1.8; }
-        :root { --text: #111827; --muted: #6b7280; --line: #e5e7eb; --bg: #f8fafc; --card: #ffffff; --me: #6d28d9; --client: #0e7490; --accent: #6366f1; }
+        :root { --text: #1C2024; --muted: #60646C; --line: #D9D9E0; --bg: #F9F9FB; --card: #FFFFFF; --me: #3A5BC7; --client: #00715D; --brand: #3E63DD; --accent: #3A5BC7; --danger: #CE2C31; }
         @media (prefers-color-scheme: dark) {
-            :root { --text: #f1f3f8; --muted: #9ba3b4; --line: #23283a; --bg: #0a0b10; --card: #13151f; --me: #a78bfa; --client: #22d3ee; --accent: #818cf8; }
+            :root { --text: #EDEEF0; --muted: #B0B4BA; --line: #363A3F; --bg: #111113; --card: #18191B; --me: #9EB1FF; --client: #0BD8B6; --brand: #3E63DD; --accent: #9EB1FF; --danger: #FF9592; }
         }
         * { box-sizing: border-box; }
         body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Nastaliq Urdu", "Noto Sans Devanagari", sans-serif; }
@@ -30,11 +32,11 @@
         audio { width: 100%; margin: 0 0 20px; }
         form { display: grid; gap: 12px; max-width: 360px; }
         input[type=password] { font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); }
-        button { font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; cursor: pointer; }
-        .error { color: #e11d48; margin: 0; }
+        button { font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 10px; border: 0; background: var(--brand); color: #fff; cursor: pointer; }
+        .error { color: var(--danger); margin: 0; }
         footer { margin-top: 18px; font-size: 13px; color: var(--muted); text-align: center; }
         a { color: var(--accent); }
-        .button { display: inline-block; font-weight: 600; padding: 10px 14px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; }
+        .button { display: inline-block; font-weight: 600; padding: 10px 14px; border-radius: 10px; background: var(--brand); color: #fff; text-decoration: none; }
         .actions { margin: 0 0 18px; }
         .crumbs { margin: 0 0 12px; font-size: 14px; }
         .list { list-style: none; margin: 0; padding: 0; }
@@ -42,10 +44,12 @@
         .list li:first-child { border-top: 0; }
         .list .muted { font-size: 13px; }
         .open-app { margin: 14px 0 0; text-align: center; font-size: 14px; }
+        .brand { display: flex; align-items: center; gap: 7px; margin: 0 0 16px; font-weight: 600; font-size: 18px; letter-spacing: -0.4px; }
     </style>
 </head>
 <body>
 <main>
+    <p class="brand"><img src="{{ asset('mark.svg') }}" width="24" height="24" alt="">EchoLedger</p>
     @yield('content')
     @isset($pageUrl)
         {{-- Opens the page in the desktop app when it is installed (the phone opens these links itself). --}}

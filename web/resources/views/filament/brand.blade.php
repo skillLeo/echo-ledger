@@ -1,5 +1,5 @@
-{{-- The console's brand (since v1.5, docs/design/brand): the mark and the name. --}}
-<span style="display: inline-flex; align-items: center; gap: 0.5rem; height: 1.75rem;">
-    <img src="{{ asset('favicon.svg') }}" alt="" style="height: 1.75rem; width: 1.75rem;">
-    <span style="font-weight: 600; font-size: 1.125rem; letter-spacing: -0.02em;">EchoLedger</span>
+{{-- The console's brand (since v1.5, docs/design/brand): the mark at 24 px, the name at 0.75 of it, the gap at 0.3. --}}
+<span style="display: inline-flex; align-items: center; gap: 7px; height: 24px; color: var(--text);">
+    <img src="{{ asset('mark.svg') }}" alt="" width="24" height="24" style="height: 24px; width: 24px;">
+    <span style="font-weight: 600; font-size: 18px; line-height: 24px; letter-spacing: -0.4px;">EchoLedger</span>
 </span>

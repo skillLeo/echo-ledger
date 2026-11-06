@@ -15,16 +15,19 @@ use App\Models\Client;
 use App\Models\ClientBrief;
 use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
+use App\Models\SentItem;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Services\ShareLinks;
+use App\Services\Sharing\RequestLinks;
 use App\Services\Views\TranscriptViews;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
 
 /**
  * Fills the demo library (DemoSeeder) with what the console's pages show when they are in use: a client workspace
- * (brief, memory, call notes, files), a suggested fix, a call waiting for Keep or Discard, a failed transcription and
- * an Urdu call with its Show as views. For local screenshots and walk-throughs only:
+ * (brief, memory, call notes, files), a suggested fix, a call waiting for Keep or Discard, a failed transcription,
+ * an Urdu call with its Show as views, a share link, a request link and a recording a teammate sent. For local screenshots and walk-throughs only:
  * `php artisan db:seed --class=ConsoleTourSeeder` after `php artisan db:seed`.
  */
 class ConsoleTourSeeder extends Seeder
@@ -32,6 +35,8 @@ class ConsoleTourSeeder extends Seeder
     public function run(): void
     {
         $user = User::query()->where('is_super_admin', true)->firstOrFail();
+        // The notice shows once before anything else; the tour starts past it.
+        $user->forceFill(['consent_seen_at' => $user->consent_seen_at ?? now()])->save();
         $acme = Client::query()->where('user_id', $user->id)->where('name', 'Acme Holdings')->first();
         $checkIn = CaptureSession::query()->where('user_id', $user->id)->where('title', 'Retainer check-in')->first();
         if ($acme === null || $checkIn === null || ClientBrief::query()->where('client_id', $acme->id)->exists()) {
@@ -115,5 +120,13 @@ class ConsoleTourSeeder extends Seeder
             'status' => 'ready', 'fingerprint' => TranscriptViews::fingerprint($transcript), 'model' => 'claude-haiku-5-5', 'made_at' => now()->toAtomString(), 'kept' => [],
             'roman' => array_column($lines, 4), 'urdu' => array_column($lines, 3), 'english' => array_column($lines, 5),
         ]]])->save();
+
+        // What the sharing pages list: a link, a request for files and a recording from a teammate.
+        app(ShareLinks::class)->make($checkIn, ['audience' => 'public', 'include_audio' => true, 'allow_download' => false, 'expires_at' => now()->addWeek()], $user->name);
+        app(RequestLinks::class)->create($workspace, $user->id, $acme, 'Documents for the Q3 retainer', now()->addWeek(), 10, 200);
+        $omar = User::query()->firstOrCreate(['email' => 'omar@echoledger.local'], ['name' => 'Omar Malik', 'password' => Str::password(24)]);
+        $omar->forceFill(['email_verified_at' => now(), 'consent_seen_at' => now()])->save();
+        SentItem::query()->create(['workspace_id' => $workspace, 'from_user_id' => $omar->id, 'to_user_id' => $user->id, 'kind' => 'session',
+            'capture_session_id' => $urdu->id, 'title' => 'Invoice questions', 'note' => 'The part about Friday', 'sent_at' => now()->subDay()]);
     }
 }

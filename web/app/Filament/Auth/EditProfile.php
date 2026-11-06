@@ -80,7 +80,7 @@ class EditProfile extends BaseEditProfile
                             app(AccountExports::class)->start($this->account());
                             Notification::make()->title('Your export is being made')->body('The link comes by email.')->success()->send();
                         }),
-                    Action::make('downloadExport')->label('Download my export')->icon(Heroicon::OutlinedDocumentArrowDown)->color('gray')
+                    Action::make('downloadExport')->label('Download my export')->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
                         ->visible(fn (): bool => app(AccountExports::class)->latest($this->account())?->downloadable() === true)
                         ->url(fn (): ?string => app(AccountExports::class)->latest($this->account())?->downloadUrl()),
                     Action::make('deleteAccount')->label('Delete my account')->icon(Heroicon::OutlinedTrash)->color('danger')->link()

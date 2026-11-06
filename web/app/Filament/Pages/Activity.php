@@ -135,7 +135,7 @@ class Activity extends Page
             'upload_failed' => 'heroicon-o-arrow-up-tray',
             'device_paired' => 'heroicon-o-device-phone-mobile',
             'budget_warn', 'budget_reached' => 'heroicon-o-chart-bar',
-            'shared_with_you' => 'heroicon-o-inbox-arrow-down',
+            'shared_with_you' => 'heroicon-o-users',
             default => 'heroicon-o-bell',
         };
     }

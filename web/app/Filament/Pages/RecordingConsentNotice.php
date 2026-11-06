@@ -7,7 +7,6 @@ namespace App\Filament\Pages;
 use App\Models\User;
 use App\Support\RecordingConsent;
 use Filament\Actions\Action;
-use Filament\Pages\Dashboard;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Section;

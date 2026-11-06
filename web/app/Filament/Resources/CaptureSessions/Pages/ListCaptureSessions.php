@@ -67,6 +67,20 @@ class ListCaptureSessions extends ListRecords
         'shared' => 'Shared with me',
     ];
 
+    /** The Heroicon of each smart folder: the same pictures as the apps' source icons. */
+    public const FOLDER_ICONS = [
+        'inbox' => 'inbox',
+        'whatsapp' => 'chat-bubble-left-right',
+        'whatsapp_business' => 'building-storefront',
+        'google_meet' => 'video-camera',
+        'zoom' => 'video-camera',
+        'teams' => 'video-camera',
+        'phone' => 'phone',
+        'voice_notes' => 'microphone',
+        'imported' => 'arrow-up-tray',
+        'shared' => 'users',
+    ];
+
     /** The smart folder the list is narrowed to (v1.5), kept in the address. */
     #[Url]
     public ?string $folder = null;
@@ -101,7 +115,7 @@ class ListCaptureSessions extends ListRecords
         $counts['shared'] = $user instanceof User ? app(Teammates::class)->sharedCount($user) : 0;
         $folders = [];
         foreach (self::FOLDER_LABELS as $key => $label) {
-            $folders[$key] = ['label' => $label, 'count' => $counts[$key] ?? 0, 'url' => $key === 'shared' ? SharedWithMe::getUrl() : null];
+            $folders[$key] = ['label' => $label, 'icon' => self::FOLDER_ICONS[$key], 'count' => $counts[$key] ?? 0, 'url' => $key === 'shared' ? SharedWithMe::getUrl() : null];
         }
 
         return $folders;

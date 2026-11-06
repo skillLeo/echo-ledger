@@ -119,7 +119,7 @@ final class CaptureSessionsTable
                 ])->label('More')->tooltip('More')->color('gray'),
             ])
             ->toolbarActions(ConsoleAccess::readOnly() ? [] : [BulkActionGroup::make([...self::bulkActions(), DeleteBulkAction::make()->authorizeIndividualRecords('delete')])])
-            ->emptyStateIcon(Heroicon::OutlinedPlayCircle)
+            ->emptyStateIcon(Heroicon::OutlinedFilm)
             ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => match (true) {
                 $livewire->hasTableSearch() => 'No recordings match your search',
                 $table->isFiltered() => 'No recordings match these filters',
@@ -137,7 +137,7 @@ final class CaptureSessionsTable
                         $livewire->resetTableSearch();
                         $livewire->removeTableFilters();
                     }),
-                Action::make('pairDevice')->label('Sign in a device')->icon(Heroicon::OutlinedDevicePhoneMobile)
+                Action::make('pairDevice')->label('Sign in a device')->icon(Heroicon::OutlinedQrCode)
                     ->visible(fn (HasTable $livewire, Table $table): bool => ! $livewire->hasTableSearch() && ! $table->isFiltered())
                     ->url(fn (): string => DeviceResource::getUrl('index')),
             ]);

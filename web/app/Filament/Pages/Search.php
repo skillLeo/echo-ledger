@@ -39,6 +39,8 @@ class Search extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedMagnifyingGlass;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::MagnifyingGlass;
+
     protected static string|UnitEnum|null $navigationGroup = 'More';
 
     protected static ?int $navigationSort = 0;

@@ -32,6 +32,8 @@ class RecentlyDeleted extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTrash;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::Trash;
+
     protected static string|UnitEnum|null $navigationGroup = 'More';
 
     protected static ?int $navigationSort = 5;
@@ -77,6 +79,7 @@ class RecentlyDeleted extends Page implements HasTable
                         Notification::make()->title('Recording erased')->success()->send();
                     }),
             ])
+            ->emptyStateIcon(Heroicon::OutlinedTrash)
             ->emptyStateHeading('Nothing deleted in the last 48 hours');
     }
 }

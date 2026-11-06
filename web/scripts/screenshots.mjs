@@ -53,11 +53,15 @@ const pages = {
     'client-files': { path: async (page) => `/admin/clients/${await firstClient(page)}?tab=files` },
     'client-ask': { path: async (page) => `/admin/clients/${await firstClient(page)}?tab=ask` },
     'client-recordings': { path: async (page) => `/admin/clients/${await firstClient(page)}?tab=recordings` },
+    'client-screens': { path: async (page) => `/admin/clients/${await firstClient(page)}?tab=screens` },
+    'shared-with-me': { path: '/admin/shared-with-me' },
+    shares: { path: '/admin/shares' },
+    'request-links': { path: '/admin/request-links' },
     search: { path: '/admin/search' },
     devices: { path: '/admin/devices' },
     'api-credentials': { path: '/admin/api-credentials' },
     settings: { path: '/admin/settings' },
-    // The Recording tab holds "Always double-check recordings filed under a client" and the client AI budget.
+    // The Recording tab holds "Always double-check recordings filed under a project" and the AI budget for projects.
     'settings-recording': { path: '/admin/settings', click: '.fi-tabs-item:has-text("Recording")' },
     usage: { path: '/admin/usage' },
     security: { path: '/admin/security' },
@@ -116,6 +120,11 @@ for (const theme of themes) {
                     await page.click(spec.click);
                     await page.waitForLoadState('networkidle');
                 }
+                // Widgets below the fold load when they are scrolled to.
+                await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+                await page.waitForTimeout(1500);
+                await page.waitForLoadState('networkidle');
+                await page.evaluate(() => window.scrollTo(0, 0));
                 // Alpine fades the sidebar labels in; give it time so every picture shows the settled page.
                 await page.waitForTimeout(900);
                 await page.screenshot({ path: file, fullPage: spec.full !== false, animations: 'disabled' });

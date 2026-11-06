@@ -39,6 +39,8 @@ class Plans extends Page implements HasTable
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::RectangleStack;
+
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 6;

@@ -23,6 +23,8 @@ class AccuracyLab extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBeaker;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::Beaker;
+
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 5;

@@ -41,6 +41,7 @@ class ShareLinksRelationManager extends RelationManager
         return $table
             ->recordTitle(fn (ShareLink $link): string => 'share link '.$link->created_at->copy()->setTimezone($tz)->format('M j, g:i A'))
             ->defaultSort('created_at', 'desc')
+            ->emptyStateIcon(Heroicon::OutlinedLink)
             ->emptyStateHeading('No share links')
             ->emptyStateDescription('Use “Share” at the top of the page to make a view-only link.')
             ->columns([

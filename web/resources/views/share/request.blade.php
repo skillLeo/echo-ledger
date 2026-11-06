@@ -31,9 +31,10 @@
         .uploads .name { overflow-wrap: anywhere; }
         .uploads .state { font-size: 13px; color: var(--muted); text-align: end; }
         .uploads .state.ok { color: #15803d; }
-        .uploads .state.bad { color: #e11d48; }
+        .uploads .state.bad { color: var(--danger); }
         .bar { grid-column: 1 / -1; height: 4px; border-radius: 4px; background: var(--line); overflow: hidden; }
-        .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+        .bar > span { display: block; height: 100%; width: 0; background: var(--accent); }
+        @media (prefers-reduced-motion: no-preference) { .bar > span { transition: width .2s; } }
     </style>
     @include('partials.sha256')
     <script>

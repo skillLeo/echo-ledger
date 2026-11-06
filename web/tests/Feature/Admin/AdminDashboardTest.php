@@ -96,7 +96,7 @@ it('counts sessions per source device with an icon and a text label', function (
     expect($stats['Phone']->getValue())->toBe(3)
         ->and($stats['Desktop']->getValue())->toBe(2)
         ->and($stats['Web']->getValue())->toBe(1)
-        ->and($stats['Phone']->getDescription())->toBe('sessions')
+        ->and($stats['Phone']->getDescription())->toBe('recordings')
         ->and($stats['Phone']->getIcon())->toBe(SourceDevice::Phone->getIcon())
         ->and($stats['Desktop']->getIcon())->toBe(SourceDevice::Desktop->getIcon())
         ->and($stats['Web']->getIcon())->toBe(SourceDevice::Web->getIcon());
@@ -193,7 +193,7 @@ it('renders a bar chart canvas on the dashboard', function () {
     $this->signInAsAdmin();
 
     $this->panelComponent(SessionsChart::class)
-        ->assertSee('Sessions · last 14 days')
+        ->assertSee('Recordings · last 14 days')
         ->assertSeeHtml('<canvas');
     expect(adminWidgetData(new SessionsChart, 'getType'))->toBe('bar');
 });

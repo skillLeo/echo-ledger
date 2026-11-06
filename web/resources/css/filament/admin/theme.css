@@ -292,8 +292,24 @@ time,
 }
 
 .fi-link {
-    color: var(--accent-text);
     font-weight: 600;
+}
+
+/* A link keeps its colour: indigo by default, red when it destroys, quiet when it is gray. */
+.fi-link.fi-color-primary {
+    color: var(--accent-text);
+}
+
+.fi-link.fi-color-danger {
+    color: var(--danger);
+}
+
+.fi-link:not(.fi-color) {
+    color: var(--text);
+}
+
+.fi-link:not(.fi-color) > .fi-icon {
+    color: var(--text-muted);
 }
 
 /* Inputs and row tiles: 12 px, a 1 px border (Filament's ring is a shadow; the phone draws a border). */
@@ -482,11 +498,20 @@ time,
 }
 
 /* ---------- tables: flat, quiet header ---------- */
-.fi-ta-header-cell {
+.fi-ta-header-cell,
+.fi-ta-empty-header-cell,
+thead .fi-ta-selection-cell {
     font-size: 12px;
     font-weight: 600;
     color: var(--text-muted);
     background-color: var(--surface);
+}
+
+/* The plain tables on the Usage, Workspace and Accuracy Lab pages have the same header. */
+.fi-section-content table th {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
 }
 
 .fi-ta-row {
@@ -534,10 +559,21 @@ time,
 
 .fi-ta-empty-state-icon-bg,
 .fi-empty-state-icon-bg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     width: 72px;
     height: 72px;
+    padding: 0;
     border-radius: var(--radius-full);
     background-color: var(--surface-2);
+}
+
+/* The same size as the empty states the console draws itself (.el-empty-icon). */
+.fi-ta-empty-state-icon-bg svg,
+.fi-empty-state-icon-bg svg {
+    width: 32px;
+    height: 32px;
 }
 
 .fi-ta-empty-state-heading,
@@ -620,7 +656,7 @@ time,
     color: var(--text-muted);
 }
 
-.el-list .fi-ta-filters-dropdown [data-active-filters='0'] .fi-icon-btn-badge-ctn {
+[data-active-filters='0'] .fi-icon-btn-badge-ctn {
     display: none;
 }
 
@@ -1408,6 +1444,19 @@ time,
     color: var(--text-faint);
 }
 
+select.el-field-input {
+    appearance: none;
+    padding-inline-end: var(--space-6);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2360646c'%3E%3Cpath fill-rule='evenodd' d='M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z' clip-rule='evenodd'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right var(--space-2) center;
+    background-size: 20px;
+}
+
+.dark select.el-field-input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23b0b4ba'%3E%3Cpath fill-rule='evenodd' d='M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z' clip-rule='evenodd'/%3E%3C/svg%3E");
+}
+
 textarea.el-field-input {
     resize: vertical;
 }
@@ -1995,6 +2044,14 @@ textarea.el-field-input {
 }
 
 /* The recording's Details card: small labels over values, two to a row, like a settings summary. */
+/* The same side padding as the Call notes card above it. */
+@media (min-width: 640px) {
+    .el-details-card .fi-section-header,
+    .el-details-card .fi-section-content {
+        padding-inline: var(--space-5);
+    }
+}
+
 .el-details-card .fi-sc-has-gap {
     gap: var(--space-3) var(--space-4);
 }
@@ -2349,11 +2406,6 @@ textarea.el-field-input {
     height: 32px;
 }
 
-.el-memory-tools .el-icon-btn svg {
-    width: 18px;
-    height: 18px;
-}
-
 .el-switch {
     position: relative;
     display: inline-flex;
@@ -2493,8 +2545,8 @@ textarea.el-field-input {
 }
 
 .el-bottom-nav svg {
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
 }
 
 .el-bottom-nav [aria-current='page'] {
@@ -2548,6 +2600,31 @@ textarea.el-field-input {
 
 :focus-visible {
     outline-color: var(--accent);
+}
+
+/* A success message's check pops in once the card has slid in, like the phone's SuccessCheck. Filament's own
+   transitions stay as they are. */
+@media (prefers-reduced-motion: no-preference) {
+    .fi-no-notification.fi-status-success .fi-no-notification-icon {
+        animation: el-check-pop var(--motion-slow) var(--ease-out) 120ms both;
+    }
+}
+
+@keyframes el-check-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.4);
+    }
+
+    70% {
+        opacity: 1;
+        transform: scale(1.12);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {

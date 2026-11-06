@@ -22,18 +22,14 @@
             @php($active = $this->folder === $key)
             @if ($folder['url'] !== null)
                 <a href="{{ $folder['url'] }}" class="el-chip" wire:navigate wire:key="folder-chip-{{ $key }}">
-                    @svg('heroicon-o-inbox-arrow-down', ['aria-hidden' => 'true'])
+                    @svg('heroicon-o-'.$folder['icon'], ['aria-hidden' => 'true'])
                     <span>{{ $folder['label'] }}</span>
                     <span class="el-chip-count">{{ $folder['count'] }}</span>
                 </a>
             @else
                 <button type="button" @class(['el-chip', 'el-on' => $active]) aria-pressed="{{ $active ? 'true' : 'false' }}"
                     wire:click="setFolder(@js($key))" wire:key="folder-chip-{{ $key }}">
-                    @if ($key === 'inbox')
-                        @svg('heroicon-o-inbox', ['aria-hidden' => 'true'])
-                    @else
-                        @svg('heroicon-o-folder', ['aria-hidden' => 'true'])
-                    @endif
+                    @svg(($active ? 'heroicon-s-' : 'heroicon-o-').$folder['icon'], ['aria-hidden' => 'true'])
                     <span>{{ $folder['label'] }}</span>
                     <span class="el-chip-count">{{ $folder['count'] }}</span>
                 </button>

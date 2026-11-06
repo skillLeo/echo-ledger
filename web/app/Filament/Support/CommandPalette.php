@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Filament\Pages\ApiCredentials;
+use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\Search;
 use App\Filament\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
@@ -18,7 +19,6 @@ use App\Services\Workspaces\CurrentWorkspace;
 use Filament\GlobalSearch\GlobalSearchResult;
 use Filament\GlobalSearch\GlobalSearchResults;
 use Filament\GlobalSearch\Providers\Contracts\GlobalSearchProvider;
-use Filament\Pages\Dashboard;
 use Throwable;
 
 /**

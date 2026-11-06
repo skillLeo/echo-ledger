@@ -33,6 +33,8 @@ class ApiCredentials extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedKey;
 
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::Key;
+
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
     protected static ?int $navigationSort = 2;
