@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type LibraryItem, type SearchResult, type SharedItem, type SmartFolder, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
+import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type MeetingPackFormat, type ScreenMoment, type LibraryItem, type SearchResult, type SharedItem, type SmartFolder, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
 import { folderLabel, inFolderHere } from "../../lib/folders";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { SharedWithMe, sentLine } from "./SharedWithMe";
@@ -11,7 +11,7 @@ import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { AlertIcon, AppTileIcon, appKind, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, PinIcon, RefreshIcon, SearchIcon, ShareIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
+import { AlertIcon, AppTileIcon, appKind, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, ShareIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
@@ -21,6 +21,8 @@ import { useWindowShown } from "../../lib/visibility";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
 import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcribingText, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
+import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
+import { screenMarker, screensByLine } from "../../lib/screens";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -283,6 +285,14 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     : filtered.find((i) => i.id === selected) ?? (hitSelected !== null && hitSelected === selected ? items.find((i) => i.id === selected && !i.deleted) : undefined) ?? null;
   // A recording a teammate sent can be played and read, not changed.
   const readOnly = !!current && current === sharedSession;
+  // Screen moments (since v1.5): read when the recording has any; each sits after the line of its moment.
+  const { screens, reload: reloadScreens } = useSessionScreens(current && !readOnly ? current.id : null, current?.screen_count);
+  const [screenOpen, setScreenOpen] = useState<number | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  useEffect(() => {
+    setScreenOpen(null);
+    setGalleryOpen(false);
+  }, [current?.id]);
   // Transcript matches of a smart folder's own recordings only.
   const shownHits = useMemo(() => (smartFolder ? found.filter((r) => folderBase.some((i) => i.id === r.session.id)) : found), [smartFolder, found, folderBase]);
   // The full client list (folders without recordings too) is fetched once, when a recording is opened or selecting starts.
@@ -513,12 +523,27 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
   };
   const viewText = (i: number): string | null => (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] ?? null : null);
-  // Unsure words go into the copy as "[?word]" (or the console's style); Copy for AI starts with the note line.
+  const screensAfter = useMemo(() => screensByLine(transcript?.segments ?? [], screens ?? []), [transcript, screens]);
+  const openScreen = (screen: ScreenMoment) => setScreenOpen(Math.max(0, (screens ?? []).findIndex((s) => s.id === screen.id)));
+  const deleteScreen = async (screen: ScreenMoment) => {
+    if (!current || !window.confirm(`Delete screen ${screen.index}? The recording and its transcript stay.`)) return;
+    try {
+      await api.deleteScreen(current.id, screen.id);
+      setScreenOpen(null);
+      reloadScreens();
+      notify(`Deleted screen ${screen.index}`);
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+  // Unsure words go into the copy as "[?word]" (or the console's style); Copy for AI starts with the note line and puts
+  // each screen ("[Screen 7 at 14:32: …]") after the line of its moment.
   const copy = async (withTimestamps: boolean, forAi = false) => {
     if (!transcript) return;
     try {
       const segments = transcript.segments.map((s) => ({ ...s, speaker: speakerName(speakerNames, s.speaker) }));
-      await navigator.clipboard.writeText(copiedTranscript(segments, viewText, withTimestamps, unsure, forAi));
+      const after = (i: number) => (screensAfter.get(i) ?? []).map(screenMarker);
+      await navigator.clipboard.writeText(copiedTranscript(segments, viewText, withTimestamps, unsure, forAi, after));
       notify(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied");
     } catch {
       notify("Could not access the clipboard", true);
@@ -717,6 +742,17 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       const path = await api.exportTranscript(transcript.id, format, true, true, exportView);
       // null: the save dialog was cancelled, nothing to say.
       if (format === "html") notify("Opened the print page in your browser: choose Save as PDF there");
+      else if (path) notify(`Saved to ${path}`);
+    } catch (e) {
+      notify(errorMessage(e), true);
+    }
+  };
+  // Export → Meeting pack (since v1.5): the transcript with its screens at their moments, in the view on screen.
+  const packAs = async (format: MeetingPackFormat, withAudio: boolean) => {
+    if (!current) return;
+    try {
+      const path = await api.meetingPack(current.id, format, exportView, withAudio);
+      if (format === "pdf") notify("Opened the meeting pack in your browser: choose Save as PDF there");
       else if (path) notify(`Saved to ${path}`);
     } catch (e) {
       notify(errorMessage(e), true);
@@ -1153,8 +1189,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         <button className="btn compact" onClick={() => copy(false)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy text</button>
                         <button className="btn compact" onClick={() => copy(true)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy with timestamps</button>
                         <button className="btn text compact" onClick={() => copy(false, true)} disabled={transcript.segments.length === 0}
-                          title="Copies the text with unsure words marked [?word] and a first line that tells an AI what the marks mean"><SparkleIcon size={14} />Copy for AI</button>
+                          title={screens?.length ? "Copies the text with unsure words marked [?word], a first line that tells an AI what the marks mean, and each screen at its moment"
+                            : "Copies the text with unsure words marked [?word] and a first line that tells an AI what the marks mean"}><SparkleIcon size={14} />Copy for AI</button>
+                        {!!screens?.length && (
+                          <button type="button" className="btn ghost compact" aria-pressed={galleryOpen} onClick={() => setGalleryOpen(!galleryOpen)}>
+                            <MonitorIcon size={14} />{screens.length === 1 ? "1 screen" : `${screens.length} screens`}
+                          </button>
+                        )}
                       </div>
+                      {galleryOpen && !!screens?.length && <ScreenGallery screens={screens} onOpen={openScreen} onClose={() => setGalleryOpen(false)} />}
                       {showAs !== "original" && (
                         <div className="small muted" role="status" data-testid="view-status" style={{ marginTop: 6 }}>
                           {views?.status === "ready"
@@ -1170,7 +1213,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                           <button className="btn ghost" aria-pressed={panel === "replace"} onClick={() => setPanel(panel === "replace" ? null : "replace")}>Find and replace</button>
                           <button className="btn ghost" aria-pressed={panel === "speakers"} onClick={() => setPanel(panel === "speakers" ? null : "speakers")}>Speakers</button>
                           <button className="btn ghost" aria-pressed={panel === "history"} onClick={() => setPanel(panel === "history" ? null : "history")}>History</button>
-                          <ExportMenu onExport={(format) => void exportAs(format)} viewLabel={exportView ? VIEW_LABELS[exportView] : null} />
+                          <ExportMenu onExport={(format) => void exportAs(format)} viewLabel={exportView ? VIEW_LABELS[exportView] : null}
+                            onPack={current.screen_count !== undefined ? (format, withAudio) => void packAs(format, withAudio) : undefined} />
                         </div>
                       )}
                       {panel === "replace" && <ReplaceBar onReplace={replaceAll} onClose={() => setPanel(null)} />}
@@ -1227,7 +1271,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                           ) : (
                             <div key={i} className={className} data-seg={i}>{cells}</div>
                           );
-                          return fix ? [line, fix] : line;
+                          const shots = screensAfter.get(i);
+                          const below = shots ? <LineScreens key={`screens-${i}`} screens={shots} onOpen={openScreen} /> : null;
+                          return fix || below ? [line, fix, below] : line;
                         })}
                       </div>
                     </>
@@ -1256,6 +1302,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
           )}
         </div>
       </div>
+      {screenOpen !== null && screens?.[screenOpen] && (
+        <ScreenViewer screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)}
+          onPlay={playbackUrl ? (s) => { setScreenOpen(null); seek(s.at_ms); } : undefined}
+          onDelete={(s) => void deleteScreen(s)} />
+      )}
       {moveFor && (
         <MoveRecordingsDialog ids={moveFor.ids} title={moveFor.title} current={moveFor.current} projects={folders} notify={notify}
           onClose={() => setMoveFor(null)} onProjectCreated={addClient} />

@@ -63,10 +63,13 @@ export function timestamp(ms: number): string {
  * `[m:ss] ` prefix when timestamps are requested, `Speaker: ` prefix unless there is only one speaker.
  */
 export function transcriptText(segments: { speaker: string; start_ms: number; text: string }[], withTimestamps: boolean): string {
+  return transcriptLines(segments, withTimestamps).join("\n");
+}
+
+/** The lines of [transcriptText], one per segment. */
+export function transcriptLines(segments: { speaker: string; start_ms: number; text: string }[], withTimestamps: boolean): string[] {
   const single = new Set(segments.map((s) => s.speaker)).size <= 1;
-  return segments
-    .map((s) => `${withTimestamps ? `[${timestamp(s.start_ms)}] ` : ""}${single ? "" : `${s.speaker}: `}${s.text}`)
-    .join("\n");
+  return segments.map((s) => `${withTimestamps ? `[${timestamp(s.start_ms)}] ` : ""}${single ? "" : `${s.speaker}: `}${s.text}`);
 }
 
 /** How unsure words appear in copied text (the server's `config.unsure`, plan A4). */
@@ -126,7 +129,8 @@ export function hasUnsureMarks(text: string): boolean {
 
 /**
  * The text Copy puts on the clipboard: the note line first for "Copy for AI" (always, with "[?word]" marks even when
- * the console turned marks off), or when the console has the note on and the text has marks.
+ * the console turned marks off), or when the console has the note on and the text has marks. Copy for AI puts the
+ * lines `after(i)` gives after line `i` (since v1.5 the screens of that moment, "[Screen 7 at 14:32: …]").
  */
 export function copiedTranscript(
   segments: { speaker: string; start_ms: number; text: string; words?: { text: string; confidence?: number | null }[] }[],
@@ -134,9 +138,11 @@ export function copiedTranscript(
   withTimestamps: boolean,
   markers: UnsureMarkers,
   forAi = false,
+  after?: (i: number) => string[],
 ): string {
   const style = forAi && markers.style === "off" ? "brackets" : markers.style;
-  const body = transcriptText(segments.map((s, i) => ({ ...s, text: markedLine(s, inView(i), markers, style) })), withTimestamps);
+  const lines = transcriptLines(segments.map((s, i) => ({ ...s, text: markedLine(s, inView(i), markers, style) })), withTimestamps);
+  const body = lines.flatMap((line, i) => [line, ...(forAi && after ? after(i) : [])]).join("\n");
   const note = style === "suffix" ? markers.note_text.replace("[?word]", "word(?)") : markers.note_text;
   return forAi || (markers.note && style !== "off" && hasUnsureMarks(body)) ? `${note}\n\n${body}` : body;
 }

@@ -6,9 +6,10 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { useState } from "react";
 import { deletedText, ProjectsView } from "./ProjectsView";
 import { budgetLine, citationLabel, workspaceBusy } from "./ClientWorkspace";
-import type { ClientFolder, ClientWorkspace, LibraryItem } from "../../lib/ipc";
+import type { ClientFolder, ClientWorkspace, LibraryItem, ProjectScreen, ProjectScreensPage } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem } from "../../test/fixtures";
+import { makeItem, makeScreen } from "../../test/fixtures";
+import { forgetPictures } from "../../lib/screens";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -165,10 +166,12 @@ describe("a project's page", () => {
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings", "Files", "Notes", "Screens"]);
   });
 
-  it("says screen moments come in a later update", async () => {
+  it("says there are no screen moments yet when the project has none", async () => {
+    respond("client_screens", { data: [], next_cursor: null });
     await renderProjects();
     tab("Screens");
-    expect(screen.getByTestId("screens-empty")).toHaveTextContent("Screen moments arrive in a later update");
+    expect(screen.getByTestId("screens-empty")).toHaveTextContent("No screen moments yet");
+    expect(callsOf("client_screens")).toEqual([{ id: "c1", includeSubfolders: true, cursor: null }]);
   });
 
   it("shows where the project is and opens a level from its breadcrumbs", async () => {
@@ -590,5 +593,108 @@ describe("workspace helpers", () => {
     expect(workspaceBusy(workspace())).toBe(false);
     expect(workspaceBusy(workspace({ brief: { ...workspace().brief!, status: "working" } }))).toBe(true);
     expect(workspaceBusy(workspace({ notes: [{ ...workspace().notes[0], status: "pending" }] }))).toBe(true);
+  });
+});
+
+describe("a project's Screens tab (since v1.5)", () => {
+  const shot = (index: number, session: string, title: string | null, at_ms: number, extra: Partial<ProjectScreen> = {}): ProjectScreen => ({
+    ...makeScreen(index, at_ms), id: `${session}-${index}`, session_id: session, session_title: title, session_started_at: "2026-11-04T10:00:00Z", ...extra,
+  });
+  const FIRST: ProjectScreensPage = {
+    data: [shot(1, "s1", "Kick-off", 60_000, { description: "The checkout page" }), shot(2, "s1", "Kick-off", 872_000), shot(1, "s3", "March invoice", 5_000)],
+    next_cursor: "c-2",
+  };
+  const SECOND: ProjectScreensPage = { data: [shot(1, "s2", "Budget review", 30_000)], next_cursor: null };
+
+  beforeEach(() => {
+    forgetPictures();
+    respondWith("screen_image", ({ url }) => `data:image/webp;base64,${btoa(String(url))}`);
+    respondWith("client_screens", ({ cursor }) => (cursor === "c-2" ? SECOND : FIRST));
+  });
+
+  it("shows each recording's screens in a grid, newest recording first, and Show more reads the next page", async () => {
+    await renderProjects();
+    tab("Screens");
+    await flushAsync();
+    const grid = screen.getByTestId("project-screens");
+    expect(within(grid).getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([expect.stringContaining("Kick-off"), expect.stringContaining("March invoice")]);
+    expect(within(grid).getByRole("button", { name: "Screen 1 · 1:00: The checkout page" })).toBeInTheDocument();
+    expect(within(grid).getByText("Screen 2 · 14:32")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+    await flushAsync();
+    expect(callsOf("client_screens").at(-1)).toEqual({ id: "c1", includeSubfolders: true, cursor: "c-2" });
+    expect(within(grid).getByRole("region", { name: "Budget review" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show more" })).not.toBeInTheDocument();
+  });
+
+  it("opens a screen large with previous and next, and Play from here opens its recording at that moment", async () => {
+    await renderProjects();
+    tab("Screens");
+    await flushAsync();
+    fireEvent.click(screen.getByText("Screen 2 · 14:32").closest("button")!);
+    await flushAsync();
+    const viewer = screen.getByRole("dialog", { name: "Screen 2 · 14:32" });
+    expect(within(viewer).getByText(/^Kick-off · /)).toBeInTheDocument();
+    expect(within(viewer).getByText("2 of 3")).toBeInTheDocument();
+    expect(within(viewer).getByRole("img")).toHaveAttribute("src", expect.stringMatching(/^data:image\/webp;base64,/));
+    expect(callsOf("screen_image").map((c) => c.url)).toContain(FIRST.data[1].image_url);
+    fireEvent.click(within(viewer).getByRole("button", { name: "Next screen" }));
+    expect(screen.getByRole("dialog", { name: "Screen 1 · 0:05" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next screen" })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowLeft" });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowLeft" });
+    expect(screen.getByRole("dialog", { name: "Screen 1 · 1:00" })).toHaveTextContent("The checkout page");
+    expect(screen.getByRole("button", { name: "Previous screen" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Play from here" }));
+    expect(props.onOpenRecording).toHaveBeenCalledWith("s1", 60_000);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("closes the viewer with Escape", async () => {
+    await renderProjects();
+    tab("Screens");
+    await flushAsync();
+    fireEvent.click(screen.getByText("Screen 2 · 14:32").closest("button")!);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("switches screen moments off for the project's meetings", async () => {
+    const list = PROJECTS.map((p) => (p.id === "c1" ? { ...p, screens: true } : p));
+    respondWith("client_update", ({ id, patch }) => ({ data: { ...list[0], id, ...(patch as object) } }));
+    await renderProjects({ list });
+    tab("Screens");
+    await flushAsync();
+    const keep = screen.getByRole("switch", { name: "Keep screen moments" });
+    expect(keep).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(keep);
+    await flushAsync();
+    expect(callsOf("client_update")).toEqual([{ id: "c1", patch: { screens: false } }]);
+    expect(screen.getByRole("switch", { name: "Keep screen moments" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText(/Nothing on screen is kept for meetings filed under Acme Holdings/)).toBeInTheDocument();
+  });
+
+  it("has no switch on a server whose projects do not carry it", async () => {
+    await renderProjects();
+    tab("Screens");
+    await flushAsync();
+    expect(screen.queryByRole("switch", { name: "Keep screen moments" })).not.toBeInTheDocument();
+  });
+
+  it("is hidden on a server without screen moments", async () => {
+    respond("client_screens", null);
+    await renderProjects();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings", "Files", "Notes", "AI notes"]);
+  });
+
+  it("says when the screens could not be read and tries again", async () => {
+    fail("client_screens", "The server is busy.");
+    await renderProjects();
+    tab("Screens");
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't load Acme Holdings's screens. The server is busy.");
+    respondWith("client_screens", () => FIRST);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await flushAsync();
+    expect(screen.getByTestId("project-screens")).toBeInTheDocument();
   });
 });

@@ -985,7 +985,7 @@ export const api = {
   createClient: (name: string, color: string | null = null, avatar: string | null = null, parentId: string | null = null) =>
     invoke<{ data: ClientFolder }>("client_create", { name, color, avatar, parentId }),
   /** `parent_id` moves a project into another one, null to the top level (since v1.5). */
-  updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned" | "language" | "ai_notes" | "parent_id">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
+  updateClient: (id: string, patch: Partial<Pick<ClientFolder, "name" | "color" | "avatar" | "pinned" | "language" | "ai_notes" | "parent_id" | "screens">>) => invoke<{ data: ClientFolder }>("client_update", { id, patch }),
   // Projects, smart folders, filing rules, sharing and links (since v1.5).
   /** Its recordings go to the Inbox and its subfolders up a level. */
   deleteClient: (id: string) => invoke<{ moved_sessions?: number; moved_projects?: number }>("client_delete", { id }),

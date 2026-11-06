@@ -1,7 +1,7 @@
 // Tools around a recording's transcript in the library (plan B6, B7, B10, B11): player controls, the activity
 // timeline, find and replace, speaker names, history, export, share links and "Add to vocabulary".
 import { useEffect, useId, useMemo, useState } from "react";
-import { api, errorMessage, type ExportFormat, type LearnOffer, type Segment, type ShareLink, type TranscriptRevision, type TranscriptSuggestion } from "../../lib/ipc";
+import { api, errorMessage, type ExportFormat, type LearnOffer, type MeetingPackFormat, type Segment, type ShareLink, type TranscriptRevision, type TranscriptSuggestion } from "../../lib/ipc";
 import { formatWhen, timestamp } from "../../lib/format";
 import { SPEEDS, timelinePercent, waveformBars } from "../../lib/player";
 import type { Bookmark } from "../../lib/library";
@@ -269,18 +269,40 @@ export const EXPORTS: [ExportFormat, string][] = [
 /** What "PDF (print)" does: the desktop has no PDF writer of its own, the browser's print page makes the file. */
 export const PDF_HINT = "PDF (print) opens a print page in your browser: choose Save as PDF there.";
 
+/** Export → Meeting pack (since v1.5): the transcript with each screen at its moment, as a print page or a ZIP. */
+export const PACKS: [string, MeetingPackFormat, boolean, string][] = [
+  ["pack-pdf", "pdf", false, "Meeting pack (PDF)"],
+  ["pack-zip", "zip", false, "Meeting pack (.zip)"],
+  ["pack-zip-audio", "zip", true, "Meeting pack with audio (.zip)"],
+];
+
 /**
  * Export menu: the transcript in the view on screen (`viewLabel`, e.g. "Roman Urdu"; none = the original words). Each
- * file is saved where the person chooses; PDF opens the print page in the browser to save as PDF.
+ * file is saved where the person chooses; PDF opens the print page in the browser to save as PDF. With `onPack` (a
+ * server with meeting packs) it also offers the meeting pack.
  */
-export function ExportMenu({ onExport, viewLabel = null }: { onExport: (format: ExportFormat) => void; viewLabel?: string | null }) {
+export function ExportMenu({ onExport, viewLabel = null, onPack }: {
+  onExport: (format: ExportFormat) => void;
+  viewLabel?: string | null;
+  onPack?: (format: MeetingPackFormat, withAudio: boolean) => void;
+}) {
   const id = useId();
+  const choose = (value: string) => {
+    const pack = PACKS.find(([v]) => v === value);
+    if (pack) onPack?.(pack[1], pack[2]);
+    else if (value) onExport(value as ExportFormat);
+  };
   return (
     <>
       <label htmlFor={id} className="sr-only">Export</label>
-      <select id={id} className="select compact" value="" title={PDF_HINT} onChange={(e) => { if (e.target.value) onExport(e.target.value as ExportFormat); e.target.value = ""; }}>
+      <select id={id} className="select compact" value="" title={PDF_HINT} onChange={(e) => { choose(e.target.value); e.target.value = ""; }}>
         <option value="">{viewLabel ? `Export as ${viewLabel}…` : "Export…"}</option>
         {EXPORTS.map(([format, label]) => <option key={format} value={format}>{label}</option>)}
+        {onPack && (
+          <optgroup label="With the screens">
+            {PACKS.map(([value, , , label]) => <option key={value} value={value}>{label}</option>)}
+          </optgroup>
+        )}
       </select>
     </>
   );

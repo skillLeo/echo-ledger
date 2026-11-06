@@ -1,9 +1,10 @@
 // A project's page (docs/API.md "Client workspaces" since v1.4, "Projects" since v1.5): breadcrumbs, its folders and
 // menu, then Recordings (search, sort, its folders' recordings too), Files, Notes (the AI notes switch and budget, Ask,
-// the brief and the memory), Screens (a later update) and, while AI notes are on, the call notes Claude wrote.
+// the brief and the memory), Screens (what the desktop kept of its meetings' screens, since v1.5; hidden on a server
+// without them) and, while AI notes are on, the call notes Claude wrote.
 // Anything the server is still writing or reading is asked for again every few seconds until it is done.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type BriefSections, type ClientAnswer, type ClientFile, type ClientFolder, type ClientWorkspace as Workspace, type LibraryItem, type MemoryKind, type MemoryLine, type SearchResult } from "../../lib/ipc";
+import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type BriefSections, type ClientAnswer, type ClientFile, type ClientFolder, type ClientWorkspace as Workspace, type LibraryItem, type MemoryKind, type MemoryLine, type ProjectScreensPage, type SearchResult } from "../../lib/ipc";
 import { formatDuration, formatWhen, timestamp } from "../../lib/format";
 import { usePoll } from "../../lib/usePoll";
 import { notifyWhenAway } from "../../lib/notify";
@@ -13,11 +14,12 @@ import { searchItems, sortItems, type SortKey } from "../../lib/library";
 import { ancestors, nestedCount, projectRecordings, projectTree } from "../../lib/projects";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { snippetParts } from "../../lib/player";
-import { AlertIcon, AppTileIcon, appKind, ChevronRightIcon, CloseIcon, CopyIcon, FileIcon, FolderIcon, ImportIcon, MonitorIcon, PinIcon, PlusIcon, SearchIcon, SendIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
+import { AlertIcon, AppTileIcon, appKind, ChevronRightIcon, CloseIcon, CopyIcon, FileIcon, FolderIcon, ImportIcon, PinIcon, PlusIcon, SearchIcon, SendIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
 import { PlayIcon } from "../../components/ControlIcons";
 import { NotesSections } from "./CallNotes";
 import { ClientAvatar, clientSummary } from "./ClientAvatar";
 import { MenuButton, type MenuItem } from "./MenuButton";
+import { ProjectScreens } from "./ScreenMoments";
 
 type Notify = (text: string, error?: boolean) => void;
 type Tab = "recordings" | "files" | "notes" | "screens" | "ai_notes";
@@ -89,10 +91,24 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
   const own = useMemo(() => projectRecordings(items, projects, client.id, false), [items, projects, client.id]);
   // AI notes are shown while they are on for the project; before the workspace has loaded, as the list says.
   const aiNotes = ws ? ws.client.ai_notes : client.ai_notes !== false;
-  const tabs = TABS.filter(([id]) => id !== "ai_notes" || aiNotes);
+  // Screen moments (since v1.5): the first page of the project's screens is read with the project; a server without
+  // them (or a plan without them) answers none, and the tab goes.
+  const [screens, setScreens] = useState<{ id: string; page: ProjectScreensPage | null; error: string | null } | null>(null);
+  const [screensAttempt, setScreensAttempt] = useState(0);
+  useEffect(() => {
+    let live = true;
+    api.clientScreens(client.id, true, null)
+      .then((page) => { if (live) setScreens({ id: client.id, page, error: null }); })
+      .catch((e) => { if (live) setScreens({ id: client.id, page: null, error: errorMessage(e) }); });
+    return () => { live = false; };
+  }, [client.id, screensAttempt]);
+  const screensRead = screens?.id === client.id ? screens : null;
+  const screensMissing = !!screensRead && !screensRead.page && !screensRead.error;
+  const tabs = TABS.filter(([id]) => (id !== "ai_notes" || aiNotes) && (id !== "screens" || !screensMissing));
   useEffect(() => {
     if (tab === "ai_notes" && !aiNotes) setTab("notes");
-  }, [tab, aiNotes]);
+    if (tab === "screens" && screensMissing) setTab("recordings");
+  }, [tab, aiNotes, screensMissing]);
 
   const load = async () => {
     try {
@@ -196,13 +212,20 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
         )}
         {tab === "files" && ws && <Files ws={ws} clientId={client.id} notify={notify} onChange={setWs} />}
         {tab === "notes" && ws && <Notes ws={ws} client={client} notify={notify} onChange={setWs} onReload={load} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} />}
-        {tab === "screens" && (
-          <div className="empty-state" data-testid="screens-empty">
-            <span className="empty-icon"><MonitorIcon size={26} /></span>
-            <span className="empty-title">Screen moments arrive in a later update</span>
-            <p>What was on a shared screen during a meeting will show here, next to the moment in the transcript.</p>
+        {tab === "screens" && (screensRead?.page ? (
+          <ProjectScreens client={client} first={screensRead.page} notify={notify} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} />
+        ) : screensRead?.error ? (
+          <div className="notice error sync-error" role="alert">
+            <span>Couldn't load {client.name}'s screens. {screensRead.error}</span>
+            <button type="button" className="btn compact" onClick={() => setScreensAttempt((n) => n + 1)}>Retry</button>
           </div>
-        )}
+        ) : (
+          <div aria-busy="true">
+            <span className="sr-only">Loading the screens…</span>
+            <span className="skeleton" style={{ width: "40%", height: 14, marginBottom: 10 }} />
+            <span className="skeleton" style={{ width: "70%", height: 90 }} />
+          </div>
+        ))}
         {tab === "ai_notes" && ws && <AiNotes ws={ws} clientName={client.name} onOpenRecording={onOpenRecording} />}
       </div>
     </>
