@@ -494,9 +494,9 @@ nothing is recorded or kept unless you switch saving on.
   made and kept.
 - When the limit is raised, open the recording in the console and choose **Transcribe again**.
 
-**"This device was unpaired on the server"**
-- The device was revoked in the console. Pair it again (section 3). Recordings waiting to upload stay on the
-  device.
+**"This computer was signed out on the server"** (or "This phone was unpaired on the server")
+- The device was signed out: revoked in the console or under **Profile → Devices**, or by **Sign out everywhere**.
+  Sign in again (section 3). Recordings waiting to upload stay on the device.
 
 **I forgot my app lock PIN**
 - On Windows, use **Windows Hello** if it is set up. Otherwise close EchoLedger, delete the file `app_lock.json` in
