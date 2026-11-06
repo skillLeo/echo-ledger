@@ -637,3 +637,20 @@ second person or device to share a screen, and a slide deck with a few slides.
 | R-03 | Install the new APK over the previous one. | The update works. Pairing and waiting recordings survive. |
 | R-04 | Optional auto-update with a signed manifest. | It installs only when not recording. A tampered signature is rejected. |
 | Privacy | Watch a proxy for 10 minutes of use; run `tools/scan-secrets.ps1` on the installer folder and the APK. | Only the server and the chosen speech provider appear. No provider key is found. |
+
+### After the deploy: security checks v1.5 (about 15 minutes)
+
+Replace `<server>` with the console's address.
+
+| # | Check | Expected |
+|---|---|---|
+| SEC-1 | `curl -s -o /dev/null -w '%{http_code}' -H 'Host: example.com' https://<server>/up` | `400`, or the host's own error page. The same without the `-H` part answers `200`. |
+| SEC-2 | Console → Forgot password for your own account. Open the email. | The link starts with `https://<server>/`. |
+| SEC-3 | Play a recording in the console and on a phone. | It plays: signed links use the server's own address. |
+| SEC-4 | Profile: change your email to a second address you own. Before opening the link in that mailbox, sign out and sign in with the old address. | The old address still works; the new one takes over only after the link is opened. |
+| SEC-5 | Send a project to a teammate, then file a new recording in it. | They see what was there when you sent it, not the new one. Send it again: now they see it. |
+| SEC-6 | **Share** on a recording or project you sent, on the phone, the desktop and the console. Press **Stop sharing**. | The person is listed with the date; after pressing, they can no longer open it. A copy they saved stays theirs. |
+| SEC-7 | Remove a teammate from the workspace. | What was sent to them from it leaves their Shared with me, and links they made there stop working. |
+| SEC-8 | As a member, not an owner or admin, with Live Translate's budget used up: press **Continue this month**. | Refused, with a message to ask an owner. An owner can continue, up to twice the budget. |
+| SEC-9 | Fail the console sign-in six times for one email, then enter the right password. | Refused for about 15 minutes, in plain words. |
+| SEC-10 | **Sign out everywhere** with the console open in a second browser. | The second browser goes to the sign-in page on its next click. |
