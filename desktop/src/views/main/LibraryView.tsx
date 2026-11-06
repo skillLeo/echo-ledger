@@ -920,7 +920,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       <div className="chips library-chips">
         <LibraryFilters state={filters} onChange={setFilters} counts={viewCounts} tags={tags} showBookmarks={anyBookmarks || filters.tags.size > 0} />
         {(folders.length > 0 || folder !== null) && (
-          <select className={`chip ${folder !== null ? "active" : ""}`} value={folder ?? "*"} onChange={(e) => setFolder(e.target.value === "*" ? null : e.target.value)} aria-label="Project">
+          <select className={`chip ${folder !== null ? "active" : ""}`} value={folder ?? "*"} onChange={(e) => setFolder(e.target.value === "*" ? null : e.target.value)} aria-label="Filter by project">
             <option value="*">All projects</option>
             <option value="">No project</option>
             {folders.map((cl) => <option key={cl.id} value={cl.id}>{`${folderBadge(cl)} · ${cl.name}`}</option>)}

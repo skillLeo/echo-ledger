@@ -69,15 +69,23 @@ describe("library organisation (B15)", () => {
     expect(within(card).getByText("Invoice")).toBeInTheDocument();
   });
 
-  it("filters by client folder and by label", async () => {
+  it("filters by project and by label", async () => {
     await renderLibrary();
-    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "c1" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by project" }), { target: { value: "c1" } });
     expect(titles()).toEqual(["Kickoff"]);
-    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by project" }), { target: { value: "" } });
     expect(titles()).toEqual(["Briefing", "Old call"]);
-    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "*" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by project" }), { target: { value: "*" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Label" }), { target: { value: "Invoice" } });
     expect(titles()).toEqual(["Kickoff"]);
+  });
+
+  it("names the project filter apart from the open recording's Project field, for a screen reader or voice control", async () => {
+    await renderLibrary();
+    fireEvent.click(within(list()).getByText("Kickoff"));
+    expect(await screen.findByRole("combobox", { name: "Project" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Filter by project" })).toBeInTheDocument();
+    expect(screen.getAllByRole("combobox", { name: "Project" })).toHaveLength(1);
   });
 
   it("selects several recordings and runs a bulk action on them", async () => {
