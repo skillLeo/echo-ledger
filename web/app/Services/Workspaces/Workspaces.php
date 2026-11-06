@@ -8,7 +8,11 @@ use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Device;
+use App\Models\DevicePairingCode;
 use App\Models\Plan;
+use App\Models\RequestLink;
+use App\Models\SentItem;
+use App\Models\ShareLink;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Support\Facades\DB;
@@ -17,9 +21,10 @@ use InvalidArgumentException;
 
 /**
  * Workspaces and memberships (B20; admin and viewer, transfer and leave since v1.5). Every change that removes someone
- * from a workspace also moves their current workspace and revokes their devices there, so nothing keeps acting for a
- * workspace it no longer belongs to. What a removed person made stays in the workspace, theirs and seen by nobody
- * else (it is theirs again if they come back, and goes with their account).
+ * from a workspace also moves their current workspace and revokes their devices, codes and links there and ends what
+ * was sent to them from it, so nothing keeps acting for a workspace it no longer belongs to. What a removed person made
+ * stays in the workspace, theirs and seen by nobody else (it is theirs again if they come back, and goes with their
+ * account); copies they saved stay theirs.
  */
 final class Workspaces
 {
@@ -187,11 +192,27 @@ final class Workspaces
                     $device->tokens()->delete();
                     $device->delete();
                 });
+            // A pairing code made a minute ago would otherwise still bring a device in afterwards. (A browser sign-in's code
+            // is refused when it is exchanged: `403 not_allowed`, docs/API.md.)
+            DevicePairingCode::query()->withoutGlobalScopes()->where('workspace_id', $workspace->id)->where('user_id', $user->getKey())->delete();
+            // What was sent to them from here, and what they shared by link here.
+            SentItem::query()->where('workspace_id', $workspace->id)->where('to_user_id', $user->getKey())->delete();
+            $this->revokeLinks($workspace, $user);
             if ((int) $user->current_workspace_id === $workspace->id) {
                 $user->forceFill(['current_workspace_id' => null])->save();
                 $this->current($user);
             }
         });
+    }
+
+    /** A link is made by whoever made its recording or project: recordings and projects are private to their maker. */
+    private function revokeLinks(Workspace $workspace, User $user): void
+    {
+        $own = fn (string $table) => DB::table($table)->where('workspace_id', $workspace->id)->where('user_id', $user->getKey())->select('id');
+        ShareLink::query()->whereNull('revoked_at')
+            ->where(fn ($q) => $q->whereIn('capture_session_id', $own('capture_sessions'))->orWhereIn('client_id', $own('clients')))
+            ->update(['revoked_at' => now()]);
+        RequestLink::acrossPeople()->where('workspace_id', $workspace->id)->where('user_id', $user->getKey())->whereNull('revoked_at')->update(['revoked_at' => now()]);
     }
 
     /**

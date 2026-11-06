@@ -14,6 +14,7 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SharingActions;
+use App\Filament\Support\StopsSharing;
 use App\Http\Controllers\AdminMediaController;
 use App\Jobs\MakeCallNotesJob;
 use App\Models\CallNote;
@@ -66,6 +67,8 @@ use RuntimeException;
 
 class ViewCaptureSession extends ViewRecord
 {
+    use StopsSharing;
+
     protected static string $resource = CaptureSessionResource::class;
 
     /** Transcript files offered under Download, in this order; PDF is the print page the browser saves as PDF. */
@@ -421,6 +424,7 @@ class ViewCaptureSession extends ViewRecord
             ActionGroup::make([
                 CaptureSessionsTable::renameAction(),
                 SharingActions::send(fn (): CaptureSession => $this->session()),
+                SharingActions::sentTo(fn (): CaptureSession => $this->session()),
                 $this->retryAction(),
                 $this->retranscribeAsAction(),
                 $this->secondEngineAction(),
@@ -790,12 +794,13 @@ class ViewCaptureSession extends ViewRecord
             ->modalHeading('Engine results')
             ->modalSubmitAction(false)
             ->modalCancelActionLabel('Close')
-            ->modalContent(fn (CaptureSession $record): View => view('filament.pages.engine-results', ['runs' => app(EngineComparison::class)->results($record)]));
+            ->modalContent(fn (CaptureSession $record): View => view('filament.pages.engine-results', ['runs' => app(EngineComparison::class)->results($record), 'canSetDefault' => self::isOwner()]));
     }
 
-    /** "Make default for <language>" on a run in Engine results. */
+    /** "Make default for <language>" on a run in Engine results: the whole server's routing, so the operator's alone. */
     public function pickEngine(string $runId): void
     {
+        abort_unless(self::isOwner(), 403);
         $this->assertCanChange();
         $run = $this->session()->trials()->find($runId);
         if (! $run instanceof Transcript) {

@@ -1,0 +1,16 @@
+{
+    "data": [
+        {
+            "id": "01m6s92pgw63ebenv83j4ssvbm",
+            "kind": "session",
+            "to": {
+                "name": "Avis Hammes",
+                "email": "teammate@example.test"
+            },
+            "title": "Retainer check-in, renamed",
+            "note": "Please look.",
+            "sent_at": "2026-11-06T20:33:52+00:00",
+            "saved_at": null
+        }
+    ]
+}

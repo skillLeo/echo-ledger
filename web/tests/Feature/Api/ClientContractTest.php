@@ -368,6 +368,7 @@ describe('sessions and uploads', function () {
 
 describe('usage reports', function () {
     it('answers a streaming usage report in the documented shape', function () {
+        grantStreaming($this->device);
         $body = ['report_id' => '6c0d0b2e-2a4e-4c8e-9a9f-0c3f1f5b7d11', 'use_case' => 'live_captions', 'provider' => 'assemblyai',
             'session_id' => $this->openSession(), 'streamed_ms' => 61000, 'channels' => 2, 'ended_at' => '2026-10-24T09:43:00Z'];
 

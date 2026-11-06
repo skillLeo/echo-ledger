@@ -23,6 +23,7 @@ use Illuminate\Support\Carbon;
  * @property string $kind session | project
  * @property string|null $capture_session_id
  * @property string|null $client_id
+ * @property list<string>|null $session_ids the recordings a project held when it was sent (null for a recording)
  * @property string $title
  * @property string|null $note
  * @property Carbon $sent_at
@@ -36,7 +37,7 @@ class SentItem extends Model
 {
     use HasUlids;
 
-    protected $fillable = ['workspace_id', 'from_user_id', 'to_user_id', 'kind', 'capture_session_id', 'client_id', 'title', 'note', 'sent_at', 'saved_at', 'saved_id'];
+    protected $fillable = ['workspace_id', 'from_user_id', 'to_user_id', 'kind', 'capture_session_id', 'client_id', 'session_ids', 'title', 'note', 'sent_at', 'saved_at', 'saved_id'];
 
     /** @return BelongsTo<User, $this> */
     public function sender(): BelongsTo
@@ -65,6 +66,6 @@ class SentItem extends Model
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['sent_at' => 'datetime', 'saved_at' => 'datetime'];
+        return ['session_ids' => 'array', 'sent_at' => 'datetime', 'saved_at' => 'datetime'];
     }
 }

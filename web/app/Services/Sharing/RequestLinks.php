@@ -17,6 +17,7 @@ use App\Models\Client;
 use App\Models\Recording;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Services\ChunkedUploadService;
 use App\Services\ClientAi\ClientWorkspace;
@@ -116,7 +117,8 @@ final class RequestLinks
 
     /**
      * A link that can take files now, found by its token whoever is signed in; null for anything else. Since v1.5
-     * also null once its person no longer records in its workspace (a viewer now, or no longer in it).
+     * also null once its person no longer records in its workspace (a viewer now, or no longer in it), and while their
+     * account is in its 7-day deletion grace (it takes files again if they keep the account).
      */
     public function usable(string $token): ?RequestLink
     {
@@ -125,6 +127,9 @@ final class RequestLinks
         }
         $link = RequestLink::acrossPeople()->where('token_hash', hash('sha256', $token))->first();
         if (! $link instanceof RequestLink || ! $link->isActive()) {
+            return null;
+        }
+        if (User::query()->whereKey($link->user_id)->whereNotNull('deletes_at')->exists()) {
             return null;
         }
         $role = DB::table('workspace_user')->where('workspace_id', $link->workspace_id)->where('user_id', $link->user_id)->value('role');

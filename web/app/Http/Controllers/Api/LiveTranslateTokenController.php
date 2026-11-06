@@ -10,7 +10,9 @@ use App\Models\Device;
 use App\Services\CredentialVault;
 use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\SettingsRepository;
+use App\Services\Usage\StreamingGrants;
 use App\Services\Workspaces\PlanLimits;
+use App\Services\Workspaces\Workspaces;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
@@ -25,17 +27,21 @@ use Illuminate\Validation\Rule;
  * expires.
  *
  * Live Translate has its own monthly budget (LiveTranslateBudget, apart from the transcription limit): at 100 % no key
- * is given unless the person chose "Continue this month anyway" on the phone (`continue_over_budget`).
+ * is given, unless an owner or admin of the workspace chose "Continue this month anyway" on the phone
+ * (`continue_over_budget`), and past twice the budget to nobody.
  */
 final class LiveTranslateTokenController extends Controller
 {
     public const EXPIRES_IN_SECONDS = 600;
 
+    /** "Continue this month anyway" goes up to this many times the budget. */
+    public const OVER_BUDGET_CAP = 2;
+
     public const WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 
     private const TEMPORARY_KEY_URL = 'https://api.soniox.com/v1/auth/temporary-api-key';
 
-    public function __invoke(Request $request, CredentialVault $vault, SettingsRepository $settings, LiveTranslateBudget $budget): JsonResponse
+    public function __invoke(Request $request, CredentialVault $vault, SettingsRepository $settings, LiveTranslateBudget $budget, StreamingGrants $grants): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
@@ -48,11 +54,8 @@ final class LiveTranslateTokenController extends Controller
         ]);
         app(PlanLimits::class)->assertFeature($device->workspace_id, 'live_translate');
         $spending = $budget->state($device->workspace_id);
-        if ($spending['reached'] && ! $request->boolean('continue_over_budget')) {
-            throw new ApiError(403, 'budget_exceeded', sprintf(
-                "Live Translate's budget of $%.2f for this month is used up. Raise it in Settings → Game translate, or continue this month anyway.",
-                (float) $spending['limit_usd'],
-            ));
+        if ($spending['reached']) {
+            $this->assertMayContinue($device, (float) $spending['used_usd'], (float) $spending['limit_usd'], $request->boolean('continue_over_budget'));
         }
         $key = $vault->get('soniox', 'api_key');
         if ($key === null || $key === '') {
@@ -77,6 +80,9 @@ final class LiveTranslateTokenController extends Controller
             throw new ApiError(502, 'provider_error', 'Soniox answered without a key. Try again in a minute.');
         }
 
+        // What this device reports with POST /api/usage counts from here on.
+        $grants->note($device);
+
         return response()->json([
             'provider' => 'soniox',
             'api_key' => $temporary,
@@ -87,5 +93,21 @@ final class LiveTranslateTokenController extends Controller
             'language_hints' => array_values(array_unique($data['language_hints'] ?? [])),
             'budget' => $spending,
         ])->header('Cache-Control', 'no-store');
+    }
+
+    /** The budget is used up: `403 budget_exceeded`, unless someone who may spend more asked to, and it is not spent twice over. */
+    private function assertMayContinue(Device $device, float $used, float $limit, bool $asked): void
+    {
+        $person = $device->user;
+        $mayDecide = $person->is_super_admin || app(Workspaces::class)->roleOf($person, $device->workspace_id)?->manages() === true;
+        $capped = $used >= $limit * self::OVER_BUDGET_CAP;
+        if ($asked && $mayDecide && ! $capped) {
+            return;
+        }
+        throw new ApiError(403, 'budget_exceeded', match (true) {
+            ! $mayDecide => sprintf("Live Translate's budget of $%.2f for this month is used up. Ask an owner of this workspace.", $limit),
+            $capped => sprintf('Live Translate has used twice its budget of $%.2f this month. Raise it in Settings → Game translate.', $limit),
+            default => sprintf("Live Translate's budget of $%.2f for this month is used up. Raise it in Settings → Game translate, or continue this month anyway.", $limit),
+        });
     }
 }

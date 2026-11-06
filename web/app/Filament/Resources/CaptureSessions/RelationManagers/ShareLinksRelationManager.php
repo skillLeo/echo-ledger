@@ -47,7 +47,7 @@ class ShareLinksRelationManager extends RelationManager
             ->columns([
                 TextColumn::make('created_at')->label('Made')->dateTime('M j, Y · g:i A', $tz),
                 TextColumn::make('state')->label('Status')->badge()
-                    ->state(fn (ShareLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isActive() ? 'Active' : 'Expired'))
+                    ->state(fn (ShareLink $link): string => $link->revoked_at !== null ? 'Revoked' : ($link->isOpen() ? 'Active' : 'Expired'))
                     ->color(fn (string $state): string => $state === 'Active' ? 'success' : 'gray'),
                 TextColumn::make('expires_at')->label('Expires')->dateTime('M j, Y · g:i A', $tz)->placeholder('Never'),
                 // Since v1.5: who may open it (anyone, a password, named people) and whether files can be downloaded.
@@ -64,7 +64,7 @@ class ShareLinksRelationManager extends RelationManager
                         'views' => $link->views()->latest('viewed_at')->limit(200)->get(), 'tz' => $tz,
                     ])),
                 Action::make('revoke')->label('Revoke')->icon(Heroicon::OutlinedNoSymbol)->color('danger')
-                    ->visible(fn (ShareLink $link): bool => $link->isActive())
+                    ->visible(fn (ShareLink $link): bool => $link->isOpen())
                     ->requiresConfirmation()->modalDescription('The link stops working at once.')
                     ->action(fn (ShareLink $link) => app(ShareLinks::class)->revoke($link)),
             ]);

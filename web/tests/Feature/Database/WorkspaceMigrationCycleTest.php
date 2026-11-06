@@ -127,7 +127,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 28;
+const LATER_MIGRATIONS = 29;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
@@ -203,7 +203,7 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
 const PHASE2_STEPS = 5;
 
 /** Migrations that came after them (rolled back first); add yours here as for LATER_MIGRATIONS. */
-const AFTER_PHASE2 = 13;
+const AFTER_PHASE2 = 14;
 
 /** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
 function seedPhase2Library(Connection $db): array
@@ -301,7 +301,7 @@ it('refuses to roll projects back while one person has two projects of the same 
 /** The v1.5 Phase 3 migration (screen moments), and how many came after it (rolled back first). */
 const PHASE3_STEPS = 1;
 
-const AFTER_PHASE3 = 11;
+const AFTER_PHASE3 = 12;
 
 it('runs the v1.5 Phase 3 migration down and up again on a library with screen moments', function () {
     $db = cycleConnection();
@@ -348,7 +348,7 @@ it('runs the v1.5 Phase 3 migration down and up again on a library with screen m
 /** The v1.5 account migrations (accounts, data exports), and how many came after them (rolled back first). */
 const ACCOUNT_STEPS = 2;
 
-const AFTER_ACCOUNTS = 9;
+const AFTER_ACCOUNTS = 10;
 
 it('runs the v1.5 account migrations down and up again without touching the library', function () {
     $db = cycleConnection();
@@ -404,12 +404,12 @@ it('runs the v1.5 account migrations down and up again without touching the libr
 });
 
 /** The v1.5 plans, roles and privacy migration; add later ones to the count as for LATER_MIGRATIONS. */
-const AFTER_PLANS = 8;
+const AFTER_PLANS = 9;
 
 /** Passport's four tables and Connected apps (v1.5, the Claude and ChatGPT connector); add later ones as for LATER_MIGRATIONS. */
 const CONNECTOR_STEPS = 5;
 
-const AFTER_CONNECTOR = 1;
+const AFTER_CONNECTOR = 2;
 
 const CONNECTOR_TABLES = ['oauth_auth_codes', 'oauth_access_tokens', 'oauth_refresh_tokens', 'oauth_clients', 'connected_apps'];
 
@@ -599,4 +599,66 @@ it('gives each person a project of their own for what they filed or nested in so
         DB::disconnect('cycle');
         @unlink((string) config('database.connections.cycle.database'));
     }
+});
+
+it('fills what a project sent before this release holds, keeps every row and can go back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumn('sent_items', 'session_ids'))->toBeFalse();
+
+    $now = now();
+    $plan = $db->table('plans')->value('id');
+    $workspace = $db->table('workspaces')->insertGetId(['name' => 'Team', 'plan_id' => $plan, 'created_at' => $now, 'updated_at' => $now]);
+    $person = fn (string $email): int => $db->table('users')->insertGetId(['name' => $email, 'email' => $email, 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    [$maker, $other, $recipient] = [$person('maker@example.test'), $person('other@example.test'), $person('to@example.test')];
+    $project = function (int $owner, ?string $parent = null) use ($db, $workspace, $now): string {
+        $id = (string) Str::ulid();
+        $db->table('clients')->insert(['id' => $id, 'workspace_id' => $workspace, 'user_id' => $owner, 'parent_id' => $parent, 'name' => $id, 'created_at' => $now, 'updated_at' => $now]);
+
+        return $id;
+    };
+    $call = function (int $owner, ?string $client, string $status = 'completed', mixed $deleted = null) use ($db, $workspace, $now): string {
+        $id = (string) Str::ulid();
+        $db->table('capture_sessions')->insert(['id' => $id, 'workspace_id' => $workspace, 'user_id' => $owner, 'client_id' => $client, 'client_ref' => (string) Str::uuid(),
+            'source_device' => 'phone', 'source_app' => 'whatsapp', 'started_at' => $now, 'status' => $status, 'created_at' => $now, 'updated_at' => $now, 'deleted_at' => $deleted]);
+
+        return $id;
+    };
+    $sent = function (string $kind, ?string $session, ?string $client) use ($db, $workspace, $maker, $recipient, $now): string {
+        $id = (string) Str::ulid();
+        $db->table('sent_items')->insert(['id' => $id, 'workspace_id' => $workspace, 'from_user_id' => $maker, 'to_user_id' => $recipient, 'kind' => $kind,
+            'capture_session_id' => $session, 'client_id' => $client, 'title' => 'T', 'sent_at' => $now, 'created_at' => $now, 'updated_at' => $now]);
+
+        return $id;
+    };
+
+    $top = $project($maker);
+    $sub = $project($maker, $top);
+    $below = $project($maker, $sub);
+    $inTop = $call($maker, $top);
+    $inSub = $call($maker, $sub);
+    $inBelow = $call($maker, $below);
+    $call($maker, $top, 'recording');
+    $call($maker, $top, 'completed', $now);
+    $call($maker, $project($maker));
+    $call($other, $top);
+    $single = $call($maker, null);
+    $projectItem = $sent('project', null, $top);
+    $empty = $sent('project', null, $project($maker));
+    $sessionItem = $sent('session', $single, null);
+
+    cycleArtisan('migrate', ['--step' => 1]);
+
+    $held = fn (string $item): ?array => json_decode((string) $db->table('sent_items')->where('id', $item)->value('session_ids'), true);
+    expect(collect($held($projectItem))->sort()->values()->all())->toBe(collect([$inTop, $inSub, $inBelow])->sort()->values()->all())
+        ->and($held($empty))->toBe([])
+        ->and($db->table('sent_items')->where('id', $sessionItem)->value('session_ids'))->toBeNull()
+        ->and($db->table('sent_items')->count())->toBe(3);
+
+    cycleArtisan('migrate:rollback', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumn('sent_items', 'session_ids'))->toBeFalse()
+        ->and($db->table('sent_items')->count())->toBe(3);
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect(collect($held($projectItem))->sort()->values()->all())->toBe(collect([$inTop, $inSub, $inBelow])->sort()->values()->all());
 });

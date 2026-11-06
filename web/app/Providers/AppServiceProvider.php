@@ -18,6 +18,7 @@ use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\WebhookEvent;
+use App\Services\Accounts\AccountSessions;
 use App\Services\Accounts\KnownBrowsers;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
@@ -38,7 +39,9 @@ use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
@@ -46,10 +49,12 @@ use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Mail\MailManager;
 use Illuminate\Mail\Markdown;
 use Illuminate\Mail\SendQueuedMailable;
+use Illuminate\Notifications\SendQueuedNotifications;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use League\Flysystem\Filesystem;
@@ -82,8 +87,23 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(RecordingCipher::class, fn (): RecordingCipher => RecordingCipher::fromConfig());
     }
 
+    /**
+     * Every link this server makes starts with APP_URL, whatever Host a request names (reset, invitation and sign-in
+     * links go out by email). Local and tests keep the request's address: a phone on the desk reaches a laptop by its IP.
+     */
+    public static function useAppUrl(Application $app): void
+    {
+        if (! $app->environment('local') && ! $app->runningUnitTests()) {
+            $root = rtrim((string) config('app.url'), '/');
+            URL::forceRootUrl($root);
+            URL::forceScheme(parse_url($root, PHP_URL_SCHEME) ?: null);
+        }
+    }
+
     public function boot(): void
     {
+        self::useAppUrl($this->app);
+
         // RECORDINGS_DRIVER=s3 (config/filesystems.php). Laravel's own s3 driver needs the AWS SDK, which is not installed.
         Storage::extend('s3-compatible', function ($app, array $config): ObjectStorageDisk {
             foreach (['key', 'secret', 'region', 'bucket'] as $name) {
@@ -111,12 +131,20 @@ class AppServiceProvider extends ServiceProvider
         // The activity centre (B18).
         ActivityFeed::listen();
         Event::listen(JobProcessing::class, function (JobProcessing $event): void {
-            if (($event->job->payload()['data']['commandName'] ?? null) === SendQueuedMailable::class) {
+            // Filament's mails for changing an email are queued notifications.
+            if (in_array($event->job->payload()['data']['commandName'] ?? null, [SendQueuedMailable::class, SendQueuedNotifications::class], true)) {
                 app(MailSettings::class)->apply();
             }
         });
         // Since v1.5: a console sign-in from a browser the account has not used before emails the account.
         Event::listen(Login::class, [KnownBrowsers::class, 'handle']);
+        // "Forgot password?" is how someone takes an account back (Filament's reset page fires this): whoever else was in
+        // it is out, on browsers, devices and connected apps. Changing the password on the profile keeps the rest.
+        Event::listen(PasswordReset::class, function (PasswordReset $event): void {
+            if ($event->user instanceof User) {
+                app(AccountSessions::class)->signOutEverywhere($event->user);
+            }
+        });
         // The account emails carry text people typed (a note, a title, a workspace or device name): with secured
         // encoding a "[link](…)" in it stays text, so nobody can put their own link in an email this server signs.
         Markdown::withSecuredEncoding();
@@ -155,6 +183,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('search', fn (Request $request) => Limit::perMinute(60)->by('search:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Ask costs money on every question: at most 20 a minute for a device.
         RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Send to a teammate: 30 sends an hour per person, whichever of their devices sends (an email goes to each address).
+        RateLimiter::for('send', function (Request $request) {
+            $device = $request->user();
+
+            return Limit::perHour(30)->by('send:'.($device instanceof Device ? $device->user_id : $request->ip()));
+        });
         RateLimiter::for('share', fn (Request $request) => Limit::perMinute(120)->by('share:'.$request->ip()));
         RateLimiter::for('share-password', fn (Request $request) => Limit::perMinute(10)->by('share-pw:'.$request->ip().'|'.(string) $request->route('token')));
         // Request links (v1.5): no account, so every upload call is counted per address (chunks of a few MB each).

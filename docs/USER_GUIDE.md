@@ -120,6 +120,10 @@ need the web console.
 
 To remove a device, open **Profile → Devices** in the console and revoke it. It is signed out at once.
 
+**Changing your email:** on your profile, type the new address. It takes effect when you open the link sent to it, signed
+in; the old address is told, and your devices stay signed in. **Forgot password?** on the sign-in page signs your account
+out everywhere when you set the new password: every browser, device and connected app. Sign your devices in again.
+
 ## 4. Record automatically
 
 EchoLedger can start recording when a call starts.
@@ -257,8 +261,15 @@ any time and it stops working at once. **Shares** (in the console) and the share
 with its views and when it was last opened.
 
 **Send to a teammate** puts a recording or a project in the **Shared with me** folder of someone with an account on
-your server. Type their email and, if you like, a note. They can play and read it but not change it, and **Save to
-my library** gives them their own copy, which stays even if you delete yours.
+your server. Type their email and, if you like, a note. People without an account here will not receive it, and nothing
+tells you so: check with them if it matters. They can play and read it but not change it, and **Save to my library**
+gives them their own copy, which stays even if you delete yours.
+
+A sent project holds the recordings that were in it when you sent it, while they stay there. A recording you file in it
+later is not sent until you send the project again; its brief, notes and files stay current.
+
+**Sent to** (in the same menu) lists whom you sent a recording or project to. **Stop sharing** takes it off their list
+and they can no longer open it. A copy they already saved stays theirs.
 
 **Request files** makes a link anyone can use to send you voice notes, recordings or documents, without an account.
 Choose a project (or the Inbox), when the link stops working, and how many files and megabytes it takes. Audio and
@@ -504,7 +515,8 @@ nothing is recorded or kept unless you switch saving on.
 - **Cost and privacy:** about $0.18 an hour, only while someone speaks (the connection closes when it is quiet). The
   sound goes from your phone or computer straight to Soniox, which does not store it or train on it. Live Translate
   has its own monthly budget (default $10, Game translate → Privacy and budget): a warning at 80%, a pause at 100%,
-  and **Continue this month anyway** if you want more. It never stops your call transcripts.
+  and for a workspace's owners and admins **Continue this month anyway**, up to twice the budget (a member asks an
+  owner). It never stops your call transcripts.
 - **Saving:** off by default. **Save session text** (Game) and **Save subtitles (.srt)** (Watch) write the translated
   text to Downloads/EchoLedger on the phone.
 - It needs the capture helper (Shizuku) to hear game voice chat. Without it the phone asks to share the sound each

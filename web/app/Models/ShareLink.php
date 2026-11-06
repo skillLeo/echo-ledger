@@ -85,8 +85,22 @@ class ShareLink extends Model
         return $this->client_id !== null ? $this->client?->workspace_id : $this->captureSession?->workspace_id;
     }
 
-    /** Usable now: not revoked, not expired, and the recording (or project) still exists. */
+    /**
+     * Opens now: {@see isOpen()}, and its maker's account is not in its 7-day deletion grace (it opens again if they keep
+     * the account). The public pages ask this; the lists of a person's own links ask isOpen(), which needs no query.
+     */
     public function isActive(): bool
+    {
+        if (! $this->isOpen()) {
+            return false;
+        }
+        $maker = $this->client_id !== null ? $this->client?->user_id : $this->captureSession?->user_id;
+
+        return ! User::query()->whereKey($maker)->whereNotNull('deletes_at')->exists();
+    }
+
+    /** Not revoked, not expired, and the recording (or project) still exists. */
+    public function isOpen(): bool
     {
         if ($this->revoked_at !== null || ($this->expires_at !== null && ! $this->expires_at->isFuture())) {
             return false;
@@ -120,7 +134,7 @@ class ShareLink extends Model
             'view' => $this->view,
             'expires_at' => $this->expires_at?->toAtomString(),
             'revoked_at' => $this->revoked_at?->toAtomString(),
-            'active' => $this->isActive(),
+            'active' => $this->isOpen(),
             'view_count' => $this->view_count,
             'last_viewed_at' => $this->last_viewed_at?->toAtomString(),
             'created_by' => $this->created_by,

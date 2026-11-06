@@ -76,16 +76,22 @@ describe('resolve', function () {
 
         $me = User::query()->findOrFail($this->device->user_id);
         $sentRecording = SentItem::query()->create(['workspace_id' => $this->otherSession->workspace_id, 'from_user_id' => $this->other->id, 'to_user_id' => $me->id, 'kind' => 'session', 'capture_session_id' => $this->otherSession->id, 'title' => 'Call']);
-        $item = SentItem::query()->create(['workspace_id' => $this->otherProject->workspace_id, 'from_user_id' => $this->other->id, 'to_user_id' => $me->id, 'kind' => 'project', 'client_id' => $this->otherProject->id, 'title' => 'Project']);
+        // A sent project holds what was in it when it was sent.
+        $inProject = CaptureSession::factory()->create(['user_id' => $this->other->id, 'workspace_id' => $this->otherProject->workspace_id,
+            'client_id' => $this->otherProject->id, 'status' => SessionStatus::Completed]);
+        $item = SentItem::query()->create(['workspace_id' => $this->otherProject->workspace_id, 'from_user_id' => $this->other->id, 'to_user_id' => $me->id, 'kind' => 'project', 'client_id' => $this->otherProject->id, 'session_ids' => [$inProject->id], 'title' => 'Project']);
 
         // Not in the caller's library, so never `session`: the app opens it from Shared with me (docs/API.md).
         resolveLink($this, $recording)->assertOk()->assertExactJson(['kind' => 'shared', 'shared_id' => $sentRecording->id]);
         resolveLink($this, $project)->assertOk()->assertExactJson(['kind' => 'shared', 'shared_id' => $item->id]);
 
         // A recording of the sent project, from the project page (/p/{token}/{recording}): the project's item.
-        $inProject = CaptureSession::factory()->create(['user_id' => $this->other->id, 'workspace_id' => $this->otherProject->workspace_id,
-            'client_id' => $this->otherProject->id, 'status' => SessionStatus::Completed]);
         resolveLink($this, $project.'/'.$inProject->id)->assertOk()->assertExactJson(['kind' => 'shared', 'shared_id' => $item->id]);
+
+        // One filed since is not part of what was sent.
+        $filedLater = CaptureSession::factory()->create(['user_id' => $this->other->id, 'workspace_id' => $this->otherProject->workspace_id,
+            'client_id' => $this->otherProject->id, 'status' => SessionStatus::Completed]);
+        resolveLink($this, $project.'/'.$filedLater->id)->assertNotFound();
     });
 
     it('answers not_found for another workspace, a revoked, expired or deleted target, and anything that is not a link here', function () {

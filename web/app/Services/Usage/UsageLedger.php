@@ -30,7 +30,7 @@ final class UsageLedger
 
     private const MS_PER_HOUR = 3_600_000;
 
-    public function __construct(private readonly SettingsRepository $settings) {}
+    public function __construct(private readonly SettingsRepository $settings, private readonly StreamingGrants $grants) {}
 
     /** Self-hosted and on-device engines cost nothing per minute, so they never count against the monthly limit. */
     public static function isBillable(SttProviderKey $provider): bool
@@ -39,7 +39,8 @@ final class UsageLedger
     }
 
     /**
-     * Stores one streaming report, idempotent on (owner, report_id): a repeat returns the stored row unchanged.
+     * Stores one streaming report, idempotent on (owner, report_id): a repeat returns the stored row unchanged. Since v1.5
+     * it counts only for streaming the device was granted (StreamingGrants): past that, with what was left, down to 0.
      *
      * @param  array{report_id: string, use_case: string, provider: string, session_id?: string|null, streamed_ms: int|string, channels: int|string, ended_at?: string|null}  $data  validated body
      * @return array{entry: UsageLedgerEntry, duplicate: bool}
@@ -55,12 +56,13 @@ final class UsageLedger
 
         $entry = UsageLedgerEntry::query()->firstOrCreate(
             ['user_id' => $device->user_id, 'report_id' => $data['report_id']],
-            [
+            // A function: a repeat of a report is stored already and takes nothing from what the device has left.
+            fn (): array => [
                 'workspace_id' => $device->workspace_id,
                 'device_id' => $device->id,
                 'capture_session_id' => $sessionId,
                 'source' => UsageLedgerEntry::SOURCE_DEVICE,
-                ...$this->pricing($provider, $useCase, $streamed, $channels),
+                ...$this->pricing($provider, $useCase, $this->grants->take($device, $streamed), $channels),
                 'model' => $this->streamingModel($provider),
                 'occurred_at' => $this->clampedEnd($data['ended_at'] ?? null),
             ],

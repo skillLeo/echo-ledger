@@ -148,8 +148,33 @@ it('throttles the signed audio route by address', function () {
     expect($statuses)->each->toBe(403);
 });
 
-it('registers the five documented named rate limiters', function () {
-    foreach (['pairing', 'device', 'uploads', 'stt-token', 'webhooks'] as $name) {
+it('limits sending to a teammate to 30 an hour per person, on both routes and across their devices', function () {
+    $person = Fx::user();
+    $phone = Fx::device($person);
+    $laptop = Fx::device($person);
+    $session = Fx::session($person, $phone);
+    $project = Fx::client($person);
+    $phoneToken = Fx::token($phone);
+    $laptopToken = Fx::token($laptop);
+
+    $statuses = secBurst(fn (int $i) => $this->api($i % 2 === 0 ? $phoneToken : $laptopToken)
+        ->postJson($i % 2 === 0 ? "/api/sessions/{$session->id}/send" : "/api/clients/{$project->id}/send", ['to' => ['nobody@example.test']]), 31);
+
+    expect(array_slice($statuses, 0, 30))->each->toBe(201)->and($statuses[30])->toBe(429);
+    $blocked = $this->api($phoneToken)->postJson("/api/sessions/{$session->id}/send", ['to' => ['nobody@example.test']]);
+    expect($blocked->headers->get('X-RateLimit-Limit'))->toBe('30')
+        ->and((int) $blocked->headers->get('Retry-After'))->toBeGreaterThan(60)->toBeLessThanOrEqual(3600);
+
+    // Someone else sends as before, and the person again an hour later.
+    $other = Fx::user();
+    $theirs = Fx::device($other);
+    $this->api(Fx::token($theirs))->postJson('/api/sessions/'.Fx::session($other, $theirs)->id.'/send', ['to' => ['nobody@example.test']])->assertCreated();
+    $this->travel(61)->minutes();
+    $this->api($phoneToken)->postJson("/api/sessions/{$session->id}/send", ['to' => ['nobody@example.test']])->assertCreated();
+});
+
+it('registers the documented named rate limiters', function () {
+    foreach (['pairing', 'device', 'uploads', 'stt-token', 'webhooks', 'send'] as $name) {
         expect(RateLimiter::limiter($name))->not->toBeNull($name);
     }
 });

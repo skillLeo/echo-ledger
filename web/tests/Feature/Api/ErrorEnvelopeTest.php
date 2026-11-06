@@ -180,8 +180,6 @@ function produceError(object $test, string $code): TestResponse
             $test->postJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/rules', ['kind' => 'app', 'value' => 'zoom'])->assertCreated();
 
             return $test->postJson('/api/clients/'.Client::factory()->create(['user_id' => $test->device->user_id])->id.'/rules', ['kind' => 'app', 'value' => 'zoom']);
-        case 'recipient_not_found':
-            return $test->postJson('/api/sessions/'.$test->makeReadySession($test->device, $test->bytes)->id.'/send', ['to' => ['nobody@example.com']]);
         case 'invalid_parent':
             $project = Client::factory()->create(['user_id' => $test->device->user_id]);
 
@@ -307,15 +305,14 @@ it('produces each documented code with its status, a message and nothing interna
 
     $response->assertStatus($status)->assertJsonPath('code', $code);
     expect($response->json('message'))->toBeString()->not->toBe('');
-    // Since v1.5 rule_exists names the project that has the rule, recipient_not_found the emails with no account and
-    // feature_not_in_plan the feature.
-    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id', 'client_id', 'client_name', 'emails', 'feature']))->toBe([]);
+    // Since v1.5 rule_exists names the project that has the rule and feature_not_in_plan the feature.
+    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id', 'client_id', 'client_name', 'feature']))->toBe([]);
     expectNoInternals($response);
 })->with(array_diff_key(documentedErrorCodes(), array_flip(ENVELOPE_PENDING_CODES)));
 
 it('reads every row of the documented table', function () {
     expect(array_keys(documentedErrorCodes()))->toContain('unauthenticated', 'rate_limited', 'session_required', ...ENVELOPE_PENDING_CODES)
-        ->and(count(documentedErrorCodes()))->toBe(55);
+        ->and(count(documentedErrorCodes()))->toBe(54);
 });
 
 it('answers 403 budget_exceeded when the monthly limit is reached', function () {

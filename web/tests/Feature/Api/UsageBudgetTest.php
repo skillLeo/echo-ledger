@@ -19,6 +19,7 @@ uses(InteractsWithDeviceApi::class);
 
 beforeEach(function () {
     [$this->device, $this->token] = $this->enroll(platform: 'windows');
+    grantStreaming($this->device);
     $this->asToken($this->token);
     $this->configureAssemblyAi();
     Http::fake(['streaming.assemblyai.com/v3/token*' => Http::response(['token' => 'tmp_stream_token'], 200)]);

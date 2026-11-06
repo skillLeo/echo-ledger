@@ -13,6 +13,7 @@ use App\Models\Client;
 use App\Models\Device;
 use App\Services\SettingsRepository;
 use App\Services\Usage\BudgetGuard;
+use App\Services\Usage\StreamingGrants;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\Data\StreamingRequest;
 use App\Stt\Exceptions\ProviderNotConfigured;
@@ -34,7 +35,7 @@ final class SttTokenController extends Controller
     /** Live captions are refused for a session this old or older (docs/API.md `session_not_recording`). */
     public const MAX_SESSION_HOURS = 4;
 
-    public function __invoke(Request $request, SttManager $stt, SettingsRepository $settings, BudgetGuard $budget, PlanLimits $limits, LanguageRouter $router): JsonResponse
+    public function __invoke(Request $request, SttManager $stt, SettingsRepository $settings, BudgetGuard $budget, PlanLimits $limits, LanguageRouter $router, StreamingGrants $grants): JsonResponse
     {
         /** @var Device $device */
         $device = $request->user();
@@ -101,6 +102,9 @@ final class SttTokenController extends Controller
 
             throw new ApiError(502, 'provider_error', 'The speech provider could not be reached.');
         }
+
+        // What this device reports with POST /api/usage counts from here on.
+        $grants->note($device);
 
         return response()->json($grant->toArray())->header('Cache-Control', 'no-store');
     }

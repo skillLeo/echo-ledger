@@ -16,7 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 
-/** docs/API.md "Sending to a teammate" (since v1.5): send, list what was sent to you, save a copy, remove it. */
+/** docs/API.md "Sending to a teammate" (since v1.5): send, stop sharing, list what was sent to you, save a copy, remove it. */
 final class TeammateController extends Controller
 {
     public function __construct(private readonly Teammates $teammates) {}
@@ -30,7 +30,7 @@ final class TeammateController extends Controller
             throw new ApiError(404, 'session_not_found', 'Session not found.');
         }
 
-        return $this->sent($request, $session);
+        return $this->send($request, $session);
     }
 
     /** POST /api/clients/{id}/send */
@@ -42,10 +42,10 @@ final class TeammateController extends Controller
             throw new ApiError(404, 'client_not_found', 'Project not found.');
         }
 
-        return $this->sent($request, $project);
+        return $this->send($request, $project);
     }
 
-    private function sent(Request $request, CaptureSession|Client $target): JsonResponse
+    private function send(Request $request, CaptureSession|Client $target): JsonResponse
     {
         $data = $request->validate([
             'to' => ['required', 'array', 'min:1', 'max:'.Teammates::MAX_RECIPIENTS],
@@ -55,6 +55,32 @@ final class TeammateController extends Controller
         $sent = $this->teammates->send($this->device($request)->user, $target, array_values($data['to']), $data['note'] ?? null);
 
         return response()->json(['sent' => $sent], 201);
+    }
+
+    /** GET /api/sent: what this person sent of one recording or project. */
+    public function sent(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'session_id' => ['required_without:client_id', 'nullable', 'string', 'max:26'],
+            'client_id' => ['required_without:session_id', 'nullable', 'string', 'max:26'],
+        ]);
+        $device = $this->device($request);
+        $items = $this->teammates->sentOf($device->user, $device->workspace_id, $data['session_id'] ?? null, $data['client_id'] ?? null);
+
+        return response()->json(['data' => array_values($items->map(fn (SentItem $item): array => Teammates::sentPayload($item))->all())]);
+    }
+
+    /** DELETE /api/sent/{id}: stop sharing it. */
+    public function stopSharing(Request $request, string $id): Response
+    {
+        $device = $this->device($request);
+        $item = $this->teammates->sentItem($device->user, $device->workspace_id, $id);
+        if (! $item instanceof SentItem) {
+            throw new ApiError(404, 'not_found', 'You did not send this.');
+        }
+        $this->teammates->stopSharing($item);
+
+        return response()->noContent();
     }
 
     /** GET /api/shared-with-me */

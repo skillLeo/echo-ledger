@@ -43,7 +43,9 @@
                     @if ($run['status'] === 'completed')
                         <div class="el-text" dir="auto">{{ $run['text'] }}</div>
                         <div class="el-actions">
-                            <button type="button" wire:click="pickEngine('{{ $run['id'] }}')">Make default for {{ $run['language'] }}</button>
+                            @if ($canSetDefault)
+                                <button type="button" wire:click="pickEngine('{{ $run['id'] }}')">Make default for {{ $run['language'] }}</button>
+                            @endif
                             <button type="button" wire:click="useEngineRun('{{ $run['id'] }}')">Use this version</button>
                         </div>
                     @endif

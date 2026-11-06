@@ -7,6 +7,7 @@ namespace App\Filament\Support;
 use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\SentItem;
 use App\Models\ShareLink;
 use App\Models\User;
 use App\Services\Projects\ProjectTree;
@@ -26,6 +27,8 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 
 /**
@@ -115,7 +118,7 @@ final class SharingActions
         return Action::make('send')
             ->label('Send to a teammate')
             ->icon(Heroicon::OutlinedPaperAirplane)
-            ->modalDescription('They find it in Shared with me, can read and play it, and can save their own copy. Only accounts on this server can receive it.')
+            ->modalDescription('They find it in Shared with me, can read and play it, and can save their own copy. People without an account here will not receive it.')
             ->schema([
                 TagsInput::make('to')->label('Their emails')->placeholder('name@example.com')->required()
                     ->nestedRecursiveRules(['email', 'max:190'])->rules(['array', 'max:'.Teammates::MAX_RECIPIENTS]),
@@ -134,8 +137,34 @@ final class SharingActions
 
                     return;
                 }
-                Notification::make()->title($sent === 1 ? 'Sent to 1 person' : "Sent to {$sent} people")->success()->send();
+                Notification::make()->title($sent === 1 ? 'Sent to 1 address' : "Sent to {$sent} addresses")->body('People without an account here will not receive it.')->success()->send();
             });
+    }
+
+    /**
+     * "Sent to": whom this recording or project was sent to, with Stop sharing on each (the page's StopsSharing).
+     *
+     * @param  Closure(): (CaptureSession|Client)  $target
+     */
+    public static function sentTo(Closure $target): Action
+    {
+        return Action::make('sentTo')
+            ->label('Sent to')
+            ->icon(Heroicon::OutlinedUsers)
+            ->color('gray')
+            ->modalWidth('lg')
+            ->modalSubmitAction(false)->modalCancelActionLabel('Close')
+            ->modalContent(fn (): View => view('filament.pages.sent-to', ['items' => self::sentOf($target())]));
+    }
+
+    /** @return Collection<int, SentItem> */
+    private static function sentOf(CaptureSession|Client $target): Collection
+    {
+        $user = auth()->user();
+
+        return $user instanceof User
+            ? app(Teammates::class)->sentOf($user, $target->workspace_id, $target instanceof CaptureSession ? $target->id : null, $target instanceof Client ? $target->id : null)
+            : new Collection;
     }
 
     /** Rename a project; names are unique within a folder. */

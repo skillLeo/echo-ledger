@@ -129,7 +129,7 @@ class WorkspaceSettings extends Page implements HasTable
                     }),
                 Action::make('remove')->label('Remove')->icon(Heroicon::OutlinedUserMinus)->color('danger')
                     ->authorize(fn (User $record): bool => $this->can('manageMember', $record))
-                    ->requiresConfirmation()->modalDescription('They lose access to this workspace at once and their devices here are signed out. What they recorded stays theirs: nobody here sees it, and it is theirs again if they come back.')
+                    ->requiresConfirmation()->modalDescription('They lose access to this workspace at once and their devices here are signed out. Their links stop working, and what was sent to them from here ends (copies they saved stay theirs). What they recorded stays theirs: nobody here sees it, and it is theirs again if they come back.')
                     ->action(function (User $record): void {
                         if ($this->attempt(fn () => app(Workspaces::class)->removeMember($this->workspaceOrFail(), $record), "{$record->name} removed")) {
                             app(AuditLog::class)->record('member_removed', $this->user()->id, $this->workspaceOrFail(), "Removed {$record->email} from ".$this->workspaceOrFail()->name);
@@ -190,7 +190,7 @@ class WorkspaceSettings extends Page implements HasTable
                 }),
             Action::make('leave')->label('Leave')->icon(Heroicon::OutlinedArrowRightStartOnRectangle)->color('danger')
                 ->authorize(fn (): bool => $this->can('leave'))
-                ->requiresConfirmation()->modalDescription('You lose access to this workspace and your devices here are signed out. What you recorded here stays yours, seen by nobody else.')
+                ->requiresConfirmation()->modalDescription('You lose access to this workspace and your devices here are signed out. Your links here stop working, and what was sent to you from here ends (copies you saved stay yours). What you recorded here stays yours, seen by nobody else.')
                 ->action(function (): void {
                     $workspace = $this->workspaceOrFail();
                     if ($this->attempt(fn () => app(Workspaces::class)->leave($workspace, $this->user()), "You left {$workspace->name}")) {
@@ -273,7 +273,7 @@ class WorkspaceSettings extends Page implements HasTable
         }
         app(Invitations::class)->tellAdded($workspace, $this->user(), $user);
         app(AuditLog::class)->record('member_added', $this->user()->id, $workspace, "Added {$email} to {$workspace->name}");
-        Notification::make()->title('One-time password for '.$email)
+        Notification::make()->title('One-time password for '.e($email))
             ->body("{$password}\nShare it privately; they can change it on their profile after signing in.")
             ->persistent()->warning()->send();
     }
@@ -287,7 +287,8 @@ class WorkspaceSettings extends Page implements HasTable
 
             return false;
         }
-        Notification::make()->title($done)->success()->send();
+        // Toasts render their title as HTML: a person's or a workspace's name is text.
+        Notification::make()->title(e($done))->success()->send();
 
         return true;
     }

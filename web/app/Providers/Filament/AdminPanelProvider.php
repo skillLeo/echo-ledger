@@ -84,6 +84,8 @@ class AdminPanelProvider extends PanelProvider
             // Confirming one's email: required since v1.5 Phase 4 (an unconfirmed account sees only "Confirm your
             // email", and the apps' sign-in answers 403 email_not_verified); people-only share links need it too.
             ->emailVerification(EmailVerificationPrompt::class, isRequired: true)
+            // A new address takes effect once the link sent to it is opened: nobody takes an address they do not read.
+            ->emailChangeVerification()
             // Optional TOTP 2FA with one-time recovery codes: offered in the profile, not forced at login.
             ->multiFactorAuthentication([
                 AppAuthentication::make()->recoverable()->brandName('EchoLedger'),

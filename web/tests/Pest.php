@@ -3,10 +3,13 @@
 declare(strict_types=1);
 
 use App\Models\CaptureSession;
+use App\Models\Device;
 use App\Models\User;
 use App\Services\RetentionPolicy;
+use App\Services\Usage\StreamingGrants;
 use App\Services\Workspaces\CurrentWorkspace;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 // Feature tests boot the Laravel app and get a fresh in-memory schema per test.
@@ -45,4 +48,16 @@ function withoutWorkspace(User $user): User
     $user->forceFill(['current_workspace_id' => null])->save();
 
     return $user;
+}
+
+/**
+ * Gives the device a token [$hoursAgo] hours ago, as `stt/token` and `live-translate/token` do: its usage reports count
+ * only for streaming it was granted, up to the time since then (docs/API.md `POST /api/usage`).
+ */
+function grantStreaming(Device $device, int $hoursAgo = 47): void
+{
+    $now = Carbon::getTestNow();
+    Carbon::setTestNow(now()->subHours($hoursAgo));
+    app(StreamingGrants::class)->note($device);
+    Carbon::setTestNow($now);
 }
