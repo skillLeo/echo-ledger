@@ -4,11 +4,11 @@
 import type { LibraryViews, SmartFolder } from "../../lib/ipc";
 import { folderApp, shownFolders } from "../../lib/folders";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
-import { ImportIcon, InboxIcon, SourceAppIcon, UsersIcon } from "../../components/Icons";
+import { DownloadIcon, InboxIcon, SourceAppIcon, UsersIcon } from "../../components/Icons";
 
 function FolderGlyph({ folder }: { folder: SmartFolder }) {
   if (folder === "inbox") return <InboxIcon size={16} />;
-  if (folder === "imported") return <ImportIcon size={16} />;
+  if (folder === "imported") return <DownloadIcon size={16} />;
   if (folder === "shared") return <UsersIcon size={16} />;
   return <SourceAppIcon app={folderApp(folder) ?? "other"} size={16} />;
 }

@@ -570,7 +570,7 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
         <label className="searchbox">
           <SearchIcon size={18} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${client.name}`} aria-label="Search in this project" />
-          {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search">×</button>}
+          {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><CloseIcon size={16} /></button>}
         </label>
         <select className="chip" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort recordings">
           {PROJECT_SORTS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}

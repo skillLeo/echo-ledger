@@ -1,19 +1,17 @@
-// Glyphs for the recording pill and the after-call toast and chip, in the same 24 px outline style as Icons.tsx. Media controls
-// (pause, play, stop) are filled so they stay legible at 14 px on the translucent surfaces.
-import type { ReactNode, SVGProps } from "react";
-import { ICON_STROKE } from "./Icons";
-
-type IconProps = SVGProps<SVGSVGElement> & { size?: number };
+// Glyphs for the recording pill, the player and the after-call toast and chip, on the same base as Icons.tsx (one
+// stroke, round ends). Media controls (record, pause, play, stop) and the "more" dots are filled shapes so they stay
+// legible at 14 px on the translucent surfaces.
+import type { ReactNode } from "react";
+import { IconSvg, type IconProps } from "./Icons";
 
 function Svg({ size = 16, children, ...rest }: IconProps & { children: ReactNode }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={ICON_STROKE}
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...rest}>
-      {children}
-    </svg>
-  );
+  return <IconSvg size={size} {...rest}>{children}</IconSvg>;
 }
 
+/** The record control's dot (Record = a filled dot, as on the phone's and the console's record controls). */
+export const RecordDotIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none" /></Svg>
+);
 export const PauseIcon = (p: IconProps) => (
   <Svg {...p}><rect x="6.5" y="5" width="3.8" height="14" rx="1.2" fill="currentColor" stroke="none" /><rect x="13.7" y="5" width="3.8" height="14" rx="1.2" fill="currentColor" stroke="none" /></Svg>
 );
@@ -26,6 +24,7 @@ export const StopIcon = (p: IconProps) => (
 export const MinimizeIcon = (p: IconProps) => (
   <Svg {...p}><path d="M6 12h12" /></Svg>
 );
+/** More actions (a row's or a project's menu): three dots, as the phone's. */
 export const MoreIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="6" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" /><circle cx="18" cy="12" r="1.6" fill="currentColor" stroke="none" /></Svg>
 );
@@ -34,9 +33,6 @@ export const ChevronDownIcon = (p: IconProps) => (
 );
 export const ChevronLeftIcon = (p: IconProps) => (
   <Svg {...p}><path d="m14.5 6-6 6 6 6" /></Svg>
-);
-export const UserIcon = (p: IconProps) => (
-  <Svg {...p}><circle cx="12" cy="8.5" r="3.6" /><path d="M5 20a7 7 0 0 1 14 0" /></Svg>
 );
 export const CheckIcon = (p: IconProps) => (
   <Svg {...p}><path d="m5 12.5 4.5 4.5L19 7.5" /></Svg>
@@ -50,6 +46,7 @@ export const OpenIcon = (p: IconProps) => (
 export const BookmarkIcon = (p: IconProps) => (
   <Svg {...p}><path d="M7 4.5h10a1 1 0 0 1 1 1V20l-6-4-6 4V5.5a1 1 0 0 1 1-1z" /></Svg>
 );
-export const AlertIcon = (p: IconProps) => (
+/** A warning (a Bluetooth microphone, a screen paused): the triangle; an error is Icons.tsx's AlertIcon. */
+export const WarningIcon = (p: IconProps) => (
   <Svg {...p}><path d="M12 4 3 19.5h18L12 4zM12 10v4.5M12 17.2v.3" /></Svg>
 );

@@ -6,7 +6,7 @@ import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
 import { elapsedAt, formatTimer, isTwoChannel, meterLevel, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
 import { BLUETOOTH_NOTE } from "../../lib/microphone";
 import { CaptionsIcon, MicIcon, MonitorIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
-import { AlertIcon, BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon } from "../../components/ControlIcons";
+import { BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon, WarningIcon } from "../../components/ControlIcons";
 import "../controls.css";
 
 /** How long a failed action's message replaces the source label. */
@@ -362,7 +362,7 @@ export default function PillApp() {
       )}
       {tray === "warn" && farSide && (
         <div className="mark-tray warn" data-hit data-testid="far-side-warning" role="alert">
-          <AlertIcon size={14} />
+          <WarningIcon size={14} />
           <span className="mark-text">Not hearing the other side for {farSide.seconds} s. Check the call's speaker or device.</span>
           <button type="button" className="rec-btn" aria-label="Dismiss warning" title="Dismiss" onClick={() => setFarSide(null)}><MinimizeIcon size={14} /></button>
         </div>

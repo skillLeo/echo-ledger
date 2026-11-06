@@ -5,7 +5,8 @@ import { explainMicUser, micTone } from "../../lib/explainer";
 import { DISCARD_CONFIRM } from "../../lib/pending";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { useWindowShown } from "../../lib/visibility";
-import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
+import { CaptionsIcon, CopyIcon, MicIcon, RecordIcon } from "../../components/Icons";
+import { RecordDotIcon, StopIcon } from "../../components/ControlIcons";
 import { LiveTranslateCard } from "./LiveTranslateCard";
 import { isViewer, viewerSentence } from "../../lib/plan";
 
@@ -113,7 +114,7 @@ export function RecordView({ status, run, onImport }: {
         <h1 className="page-title">Record</h1>
         <p className="page-sub">What is shared with you is in the Library, under Shared with me.</p>
         <div className="card notice-card" data-testid="viewer-notice">
-          <div className="row"><MicIcon /><b>Recording is off for viewers</b></div>
+          <div className="row"><RecordIcon /><b>Recording is off for viewers</b></div>
           <p className="small">{viewerSentence(status.plan.workspace)}</p>
           <p className="small muted">An owner or admin of the workspace can change your role in the console.</p>
         </div>
@@ -129,7 +130,9 @@ export function RecordView({ status, run, onImport }: {
         <div className="record-hero">
           <button className={`record-btn ${recording ? "" : "idle"}`} onClick={() => run(recording ? api.stopRecording : () => api.startRecording())}
             aria-label={recording ? "Stop recording" : "Start recording"}>
-            {recording ? "STOP" : "REC"}
+            {/* Record is a filled dot (the phone's and the console's record control); a recording shows stop. */}
+            <span className="record-glyph" aria-hidden="true">{recording ? <StopIcon size={18} /> : <RecordDotIcon size={18} />}</span>
+            <span className="record-word">{recording ? "STOP" : "REC"}</span>
           </button>
           <div style={{ display: "grid", gap: 8 }}>
             <div className="row">

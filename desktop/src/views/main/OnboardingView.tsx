@@ -6,6 +6,7 @@ import { SignInView } from "./SignInView";
 import { testVerdict } from "./CaptureSettings";
 import { ConsentNotice } from "./ConsentNotice";
 import { Wordmark } from "../../components/BrandMark";
+import { CheckIcon } from "../../components/ControlIcons";
 import { CONSENT_TICK } from "../../lib/consent";
 
 export const STEPS = ["Permissions", "Sign in", "Test", "Done"] as const;
@@ -61,7 +62,11 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
       <div className="card onboarding-card">
         <Wordmark />
         <ol className="steps" aria-label="Setup steps">
-          {STEPS.map((s, i) => <li key={s} className={i === index ? "current" : i < index ? "done" : ""} aria-current={i === index ? "step" : undefined}>{s}</li>)}
+          {STEPS.map((s, i) => (
+            <li key={s} className={i === index ? "current" : i < index ? "done" : ""} aria-current={i === index ? "step" : undefined}>
+              {i < index && <span className="step-check" aria-hidden="true"><CheckIcon size={13} /></span>}{s}
+            </li>
+          ))}
         </ol>
 
         {step === "Permissions" && (

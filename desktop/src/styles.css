@@ -271,7 +271,7 @@ label.field { display: grid; gap: 6px; margin-bottom: var(--space-3); color: var
 .searchbox { flex: 1; display: flex; align-items: center; gap: var(--space-3); min-width: 220px; height: 44px; background: var(--surface-2); border: 1px solid transparent; border-radius: var(--radius-full); padding: 0 var(--space-2) 0 var(--space-4); color: var(--text-muted); transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out); }
 .searchbox:focus-within { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
 .searchbox input { flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; outline: 0; color: var(--text); font: inherit; font-size: 15px; padding: 0; }
-.searchbox .clear { width: 28px; height: 28px; background: none; border: 0; color: var(--text-muted); font-size: 18px; line-height: 1; cursor: pointer; border-radius: var(--radius-full); }
+.searchbox .clear { width: 28px; height: 28px; display: grid; place-items: center; flex: none; background: none; border: 0; color: var(--text-muted); cursor: pointer; border-radius: var(--radius-full); }
 .searchbox .clear:hover { background: var(--surface-3); color: var(--text); }
 .searchbox .kbd { flex: none; }
 .searchbox.compact { height: 36px; padding-left: var(--space-3); }
@@ -350,8 +350,9 @@ select.chip option { color: var(--text); background: var(--surface); }
 .spk-1 { color: var(--me); } .spk-2 { color: var(--client); }
 
 .record-hero { display: flex; align-items: center; gap: var(--space-5); }
-.record-btn { width: 72px; height: 72px; border-radius: 50%; border: 0; cursor: pointer; background: var(--danger-strong); box-shadow: 0 0 0 6px var(--danger-soft); color: var(--on-accent); font-weight: 700; font-size: var(--text-sm); letter-spacing: 0.04em; display: grid; place-items: center; transition: transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
+.record-btn { width: 72px; height: 72px; border-radius: 50%; border: 0; cursor: pointer; background: var(--danger-strong); box-shadow: 0 0 0 6px var(--danger-soft); color: var(--on-accent); font-weight: 700; font-size: var(--text-sm); letter-spacing: 0.04em; display: grid; place-items: center; align-content: center; gap: 2px; transition: transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .record-btn.idle { background: var(--accent-strong); box-shadow: 0 0 0 6px var(--accent-soft); }
+.record-glyph { display: grid; place-items: center; }
 .record-btn:hover { transform: scale(1.03); }
 .record-btn:active { transform: scale(0.96); }
 .meter { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; width: 160px; }
@@ -692,7 +693,7 @@ audio.player { display: none; }
 .label-chip { display: inline-flex; align-items: center; gap: var(--space-1); height: 24px; border: 0; border-radius: var(--radius-tag); padding: 0 var(--space-2); font-size: var(--text-xs); font-weight: 500; color: var(--text-muted); background: var(--surface-2); }
 .label-chip.small { font-size: 11px; height: 20px; padding: 0 6px; }
 .chip.label-chip { height: 24px; cursor: default; }
-.chip-remove { border: 0; background: transparent; color: var(--text-faint); cursor: pointer; padding: 0 2px; font-size: 14px; line-height: 1; }
+.chip-remove { border: 0; background: transparent; color: var(--text-faint); cursor: pointer; padding: 0 2px; display: inline-grid; place-items: center; }
 .chip-remove:hover { color: var(--text); }
 .label-add .input { width: 110px; min-height: 26px; height: 26px; padding: 0 var(--space-2); border-radius: var(--radius-tag); font-size: var(--text-xs); }
 .item-labels { display: flex; flex-wrap: wrap; gap: var(--space-1); padding-left: 60px; }
@@ -706,7 +707,7 @@ audio.player { display: none; }
 .bulk-menu { position: relative; }
 .bulk-menu > summary { list-style: none; cursor: pointer; }
 .bulk-menu > summary::-webkit-details-marker { display: none; }
-.bulk-menu > summary::after { content: "▾"; margin-left: 6px; font-size: 10px; opacity: .7; }
+.bulk-menu > summary svg { margin-left: -2px; opacity: .7; }
 .bulk-pop { position: absolute; top: 40px; left: 0; z-index: 5; min-width: 240px; display: grid; gap: var(--space-1); padding: var(--space-2); box-shadow: var(--shadow-3); }
 
 /* App lock and security (B16). */
@@ -777,7 +778,9 @@ audio.player { display: none; }
 .steps li.current { color: var(--text); font-weight: 600; }
 .steps li.current::before { background: var(--accent-strong); border-color: transparent; color: var(--on-accent); }
 .steps li.done { color: var(--success); }
-.steps li.done::before { content: "✓"; border-color: transparent; background: color-mix(in srgb, var(--success) 15%, transparent); }
+/* A finished step shows the check icon in place of its number. */
+.steps li.done::before { display: none; }
+.step-check { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; flex: none; background: color-mix(in srgb, var(--success) 15%, transparent); }
 .onboarding-actions { margin-top: var(--space-4); }
 
 /* Loading placeholders (C6): a quiet shimmer while a list loads (the phone's SkeletonRow). */

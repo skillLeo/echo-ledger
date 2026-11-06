@@ -5,7 +5,7 @@ import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTa
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityUnread } from "./ActivityCentre";
 import { OnboardingView } from "./OnboardingView";
-import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MicIcon, MonitorIcon, MoonIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
+import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MonitorIcon, MoonIcon, RecordIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
 import { BrandMark } from "../../components/BrandMark";
 import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
@@ -26,10 +26,11 @@ import { isViewer, viewerSentence } from "../../lib/plan";
 
 type Tab = MainTab;
 const TABS: readonly Tab[] = ["library", "projects", "record", "activity", "settings"];
+/** The pages, with the phone's metaphors: outlined at rest, filled on the active page (DESIGN_SYSTEM.md "Icons"). */
 const NAV: readonly [Tab, string, typeof LibraryIcon][] = [
   ["library", "Library", LibraryIcon],
   ["projects", "Projects", FolderIcon],
-  ["record", "Record", MicIcon],
+  ["record", "Record", RecordIcon],
   ["activity", "Activity", BellIcon],
   ["settings", "Settings", SettingsIcon],
 ];
@@ -462,7 +463,7 @@ export default function MainApp() {
             <div key={id} className="nav-group">
               <button type="button" className={`nav-btn ${tab === id ? "active" : ""}`} aria-current={tab === id ? "page" : undefined}
                 title={collapsed ? label : undefined} onClick={() => goTo(id)}>
-                <Icon size={20} /><span className="nav-label">{label}</span>
+                <Icon size={20} filled={tab === id} /><span className="nav-label">{label}</span>
                 {id === "record" && status.recording && <span className="status-dot live" aria-hidden="true" />}
                 {id === "activity" && unread > 0 && <><span className="nav-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</span><span className="sr-only">, {unread} unread</span></>}
               </button>

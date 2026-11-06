@@ -11,7 +11,7 @@ import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, groupItems, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { AlertIcon, AppTileIcon, appKind, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, ShareIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
+import { AlertIcon, AppTileIcon, appKind, CloseIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
@@ -902,7 +902,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         <label className="searchbox">
           <SearchIcon size={18} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search recordings and transcripts" aria-label="Search recordings" />
-          {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search">×</button>}
+          {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><CloseIcon size={16} /></button>}
         </label>
       </div>
       <div className="chips library-chips">
@@ -1088,7 +1088,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <button type="button" className="btn ghost icon-only" aria-label="Find in this transcript" aria-pressed={findOpen} title="Find in this transcript (Ctrl+F)" onClick={() => setFindOpen(!findOpen)}><SearchIcon size={18} /></button>
                     )}
                     {playbackUrl && !readOnly && <button type="button" className="btn ghost icon-only" aria-label="Save audio" onClick={() => void saveAudio()} title="Save the recording's audio file on this computer"><DownloadIcon size={18} /></button>}
-                    {!readOnly && <button className="btn ghost icon-only" aria-label="Share" title="Share a view-only link" aria-pressed={panel === "share"} onClick={() => setPanel(panel === "share" ? null : "share")}><ShareIcon size={18} /></button>}
+                    {!readOnly && <button className="btn ghost icon-only" aria-label="Share" title="Share a view-only link" aria-pressed={panel === "share"} onClick={() => setPanel(panel === "share" ? null : "share")}><LinkIcon size={18} /></button>}
                     {!readOnly && <button className="btn danger ghost icon-only" aria-label="Delete" title="Delete this recording" onClick={() => remove(current.id)}><TrashIcon size={18} /></button>}
                   </div>
                   {readOnly ? (
