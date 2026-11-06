@@ -112,7 +112,9 @@ final class ClientWorkspace
         }
         $budget = $this->budget($workspaceId);
         if ($budget['spent_usd'] >= $budget['budget_usd']) {
-            throw new ApiError(403, 'ai_budget_reached', sprintf("This month's AI budget (\$%.2f) is used up. Raise it in Settings → AI.", $budget['budget_usd']));
+            throw new ApiError(403, 'ai_budget_reached', app(PlanLimits::class)->aiCredits($workspaceId) !== null
+                ? sprintf("This month's AI credits (\$%.2f) are used up. They come back next month, or with a bigger plan.", $budget['budget_usd'])
+                : sprintf("This month's AI budget (\$%.2f) is used up. Raise it in Settings → AI.", $budget['budget_usd']));
         }
     }
 

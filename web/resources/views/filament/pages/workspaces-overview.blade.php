@@ -1,5 +1,5 @@
 @php $cell = 'padding:.5rem .75rem;border-top:1px solid var(--gray-200);'; @endphp
-<x-filament::section heading="All workspaces" description="Server admin view: names and totals this month only, never recordings. Plan limits are changed in Settings while working in a workspace.">
+<x-filament::section heading="All workspaces" description="Server admin view: names and totals this month only, never recordings. Plans are made and assigned on the Plans page.">
     <div style="overflow-x:auto">
         <table style="width:100%;font-size:.85rem;border-collapse:collapse">
             <thead>

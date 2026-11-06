@@ -11,6 +11,7 @@ use App\Models\Scopes\WorkspaceScope;
 use App\Models\Screen;
 use App\Services\ChunkedUploadService;
 use App\Services\RecordingCipher;
+use App\Services\Workspaces\PlanLimits;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
@@ -71,7 +72,8 @@ class ScreenStore
 
     /**
      * Keeps a picture of the recording: the same picture (by SHA-256) twice is the screen already kept, not a copy.
-     * `409 too_many_screens` at the cap. The text and description are made afterwards on the queue.
+     * `409 too_many_screens` at the cap, and since v1.5 `403 storage_limit_reached` at the plan's storage. The text and
+     * description are made afterwards on the queue.
      *
      * @param  array{mime: string, width: int, height: int}  $picture  what sniff() found
      * @param  array{at_ms: int, width: int, height: int, trigger: string, sha256: string}  $meta
@@ -85,6 +87,7 @@ class ScreenStore
             return [$existing, false];
         }
         $this->assertRoom($session);
+        app(PlanLimits::class)->assertStorage($session->workspace_id, (int) filesize($plainPath));
 
         $id = (string) Str::ulid();
         $folder = 'screens/'.now()->format('Y/m');
