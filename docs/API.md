@@ -738,14 +738,14 @@ Share links can now be for a project too, and say who may open them.
 ### Sending to a teammate (since v1.5)
 - `POST /api/sessions/{id}/send` and `POST /api/clients/{id}/send` — `sessions:write`: `{"to": ["ana@example.com"],
   "note": "for tomorrow"}` (up to 20 emails; `note` ≤ 500; throttled to 30 sends an hour per person) →
-  `201 {"sent": 2}`, the number of addresses asked. So that this route cannot be used to learn who has an account, an
+  `201 {"sent": 2}`, the number of different addresses asked. So that this route cannot be used to learn who has an account, an
   address with no confirmed account on this server answers the same and simply receives nothing; apps say so ("People
   without an account here will not receive it"). `recipient_not_found` is no longer answered.
 - **What a sent project holds:** the recordings in it (and in its subfolders) when it was sent, while they stay there.
   A recording filed in it later is not sent until the project is sent again; its brief, notes and files stay current.
   Saving a copy keeps it whatever happens next.
-- `GET /api/sent?session_id=…` or `?client_id=…` — `library:read`: what you sent of that recording or project, newest
-  first: `{"data": [{"id": "01JD…", "kind": "session" | "project", "to": {"name": "Ana", "email": "…"}, "title": "Call
+- `GET /api/sent?session_id=…` or `?client_id=…` — `library:read` (one of the two is required, else `422`): what you
+  sent of that recording or project, newest first: `{"data": [{"id": "01JD…", "kind": "session" | "project", "to": {"name": "Ana", "email": "…"}, "title": "Call
   with Omar", "note": "…", "sent_at": "…", "saved_at": null}]}`.
 - `DELETE /api/sent/{id}` — `sessions:write`: **stop sharing** what you sent → `204`; it leaves the person's list and
   they can no longer open it. A copy they already saved stays theirs. Someone else's id is `404`.

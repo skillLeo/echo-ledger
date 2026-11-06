@@ -49,6 +49,7 @@ class ApiSamplesTest {
         "search" to SearchResponse.serializer(),
         "security" to SecurityResponse.serializer(),
         "send" to SentAnswer.serializer(),
+        "sent" to SentListResponse.serializer(),
         "session" to SessionDetailDto.serializer(),
         "session_create" to CreateSessionResponse.serializer(),
         "session_finish" to CreateSessionResponse.serializer(),

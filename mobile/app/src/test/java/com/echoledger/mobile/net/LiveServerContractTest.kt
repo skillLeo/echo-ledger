@@ -232,6 +232,9 @@ class LiveServerContractTest {
                 step("file a recording") { api.updateSession(id, clientId = p) }
                 step("bulk move") { api.bulk(listOf(id), "move", clientId = p) }
                 step("send recording") { api.sendToTeammates(id, null, listOf("teammate@example.test"), null) }
+                val sent = step("sent list") { api.sentOf(id, null) }
+                sent?.firstOrNull()?.let { step("stop sharing") { api.stopSharing(it.id) } }
+                step("sent list of a project") { api.sentOf(null, p) }
                 step("unfile") { api.updateSession(id, clearClient = true) }
             }
         }

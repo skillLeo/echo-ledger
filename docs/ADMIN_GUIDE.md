@@ -76,6 +76,11 @@ can **Sign out everywhere**. A new device or a console sign-in from a new browse
 - **Usage** (owners and admins): their workspace per person. A member sees only their own.
 - Activity shows "at 80 %" and "reached" once a month for minutes, storage and AI credits.
 
+**Limits on a server with customers.** Use each plan's minutes, not only the server-wide monthly budget in Settings. The
+server-wide budget stops transcription for everyone once it is reached, and streaming minutes are reported by the devices.
+A report can no longer claim more than the time since the server granted that device a stream, but a device with a real
+grant can still report up to that time on two channels, so one account can use up a small server-wide budget.
+
 ## 6. Deleting an account, exporting data
 
 - A person deletes their account in the app, in the console or on the public page `/account/delete`. They have

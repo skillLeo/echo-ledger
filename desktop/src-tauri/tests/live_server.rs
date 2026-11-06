@@ -188,6 +188,11 @@ async fn every_call_the_desktop_makes_passes_the_server_and_reads_back() {
         }
         log.note("shares filter", api.shares(Some(id), None).await);
         log.note("send", api.send_to("sessions", id, &json!({"to": ["teammate@example.test"], "note": "Please look."})).await);
+        if let Some(sent) = log.note("sent list", api.sent(Some(id), None).await)
+            && let Some(first) = sent.get("data").and_then(Value::as_array).and_then(|d| d.first()).and_then(id_of)
+        {
+            log.note("stop sharing", api.stop_sharing(&first).await);
+        }
         log.note("export sessions", api.export_sessions(std::slice::from_ref(id), "txt").await.map(|_| ()));
         log.note("bulk label", api.bulk_sessions(std::slice::from_ref(id), "label", None, Some("Bulk")).await);
         log.note("retranscribe", api.retranscribe(id, Some("ur")).await);
