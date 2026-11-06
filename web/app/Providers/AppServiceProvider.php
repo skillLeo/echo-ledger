@@ -81,9 +81,10 @@ class AppServiceProvider extends ServiceProvider
         // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
         FilamentTimezone::set(fn (): string => app(SettingsRepository::class)->displayTimezone());
 
-        // Console passwords follow the same 12-character minimum as `echoledger:make-admin` (Filament's profile
-        // page validates new passwords with Password::default()).
-        Password::defaults(static fn (): Password => Password::min(12));
+        // Console passwords: 12 characters with letters and numbers (sign-up, profile and reset all validate with
+        // Password::default(); `echoledger:make-admin` keeps its 12-character minimum). No "uncompromised" check:
+        // it would send part of each password's hash to a third party.
+        Password::defaults(static fn (): Password => Password::min(12)->letters()->numbers());
 
         // Short, stable morph names: tokens and Livewire payloads never carry PHP class names.
         Relation::enforceMorphMap([

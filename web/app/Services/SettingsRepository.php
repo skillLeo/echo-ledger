@@ -77,6 +77,16 @@ final class SettingsRepository
         'whisper.vad' => true,
         'app.pins' => [],                            // SPKI pins ("sha256/<base64>") handed to devices
         'display.timezone' => 'UTC',                 // IANA zone the admin console shows times in
+        // Since v1.5: who may make an account on the console's sign-up page (App\Services\Accounts\SignUp).
+        'signup.mode' => 'nobody',                   // nobody | anyone | invited
+        // Since v1.5: the SMTP server emails go through (the password is in the credential vault, as `mail.password`).
+        // No host = the mailer of the server's .env file.
+        'mail.host' => null,
+        'mail.port' => 587,
+        'mail.encryption' => 'tls',                  // tls (STARTTLS) | ssl | none
+        'mail.username' => null,
+        'mail.from_address' => null,
+        'mail.from_name' => 'EchoLedger',
         // Monthly transcription limit (whole server). Minutes = billable provider minutes (audio minutes × channels).
         'budget.monthly_minutes' => null,            // int >= 1, or null = no minutes limit
         'budget.monthly_usd' => null,                // decimal >= 0.01, or null = no US$ limit

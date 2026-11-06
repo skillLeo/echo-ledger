@@ -45,6 +45,25 @@ final class AuditLog
         'passkey_added' => 'Passkey added',
         'passkey_removed' => 'Passkey removed',
         'credentials_changed' => 'Provider credentials changed',
+        // Since v1.5: accounts, sign-in from the apps, teams and the settings.
+        'account_created' => 'Account made',
+        'google_login' => 'Signed in with Google',
+        'google_linked' => 'Google account linked',
+        'google_unlinked' => 'Google account unlinked',
+        'device_signed_in' => 'Device signed in',
+        'sign_in_locked' => 'Sign-in locked after failures',
+        'signed_out_everywhere' => 'Signed out everywhere',
+        'account_deletion_requested' => 'Account deletion asked for',
+        'account_deletion_cancelled' => 'Account kept',
+        'account_erased' => 'Account erased',
+        'account_exported' => 'Data exported',
+        'sent_to_teammate' => 'Sent to a teammate',
+        'member_invited' => 'Invitation sent',
+        'member_added' => 'Member added',
+        'member_removed' => 'Member removed',
+        'role_changed' => 'Role changed',
+        'workspace_renamed' => 'Workspace renamed',
+        'settings_changed' => 'Settings changed',
     ];
 
     /**

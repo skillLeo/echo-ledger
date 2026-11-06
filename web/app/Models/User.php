@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Mail\ResetPasswordMail;
+use App\Mail\VerifyEmailMail;
 use Database\Factories\UserFactory;
 use Filament\Auth\MultiFactor\App\Concerns\InteractsWithAppAuthentication;
 use Filament\Auth\MultiFactor\App\Concerns\InteractsWithAppAuthenticationRecovery;
 use Filament\Auth\MultiFactor\App\Contracts\HasAppAuthentication;
 use Filament\Auth\MultiFactor\App\Contracts\HasAppAuthenticationRecovery;
+use Filament\Facades\Filament;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
@@ -21,6 +24,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Mail;
 
 /**
  * A console account. Its email is confirmed (`email_verified_at`) once its owner opened the link the console sent to
@@ -32,6 +36,12 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $email_verified_at
  * @property bool $is_super_admin
  * @property int|null $current_workspace_id
+ * @property string|null $google_id the linked Google account (its stable `sub`), since v1.5
+ * @property Carbon|null $deletion_requested_at
+ * @property Carbon|null $deletes_at when the account is erased (7 days after it asked); null = not being deleted
+ * @property Carbon|null $consent_seen_at when the recording-consent notice was shown after sign-up
+ * @property bool $notify_transcript_ready an email when a transcript of theirs is ready (off by default)
+ * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
  */
 #[Fillable(['name', 'email', 'password'])]
@@ -56,6 +66,29 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         // Super admins (the server operator) and members of a workspace reach /admin; `is_super_admin` and
         // `current_workspace_id` are never mass-assignable. Content is always that of the current workspace.
         return $panel->getId() === 'admin' && ($this->is_super_admin || $this->workspaces()->exists());
+    }
+
+    /** In the 7-day deletion grace (v1.5): signing in only offers "Keep my account". */
+    public function isBeingDeleted(): bool
+    {
+        return $this->deletes_at !== null;
+    }
+
+    public function hasTwoFactor(): bool
+    {
+        return filled($this->app_authentication_secret);
+    }
+
+    /** The console's confirmation link, as a queued email of our own (Mail::fake() sees it in tests). */
+    public function sendEmailVerificationNotification(): void
+    {
+        Mail::to($this->email)->queue(new VerifyEmailMail(Filament::getPanel('admin')->getVerifyEmailUrl($this)));
+    }
+
+    /** @param  string  $token */
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        Mail::to($this->email)->queue(new ResetPasswordMail(Filament::getPanel('admin')->getResetPasswordUrl($token, $this)));
     }
 
     /** @return BelongsToMany<Workspace, $this> */
@@ -96,6 +129,10 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'password' => 'hashed',
             'is_super_admin' => 'boolean',
             'current_workspace_id' => 'integer',
+            'deletion_requested_at' => 'datetime',
+            'deletes_at' => 'datetime',
+            'consent_seen_at' => 'datetime',
+            'notify_transcript_ready' => 'boolean',
         ];
     }
 }

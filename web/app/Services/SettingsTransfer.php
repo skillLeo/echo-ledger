@@ -44,6 +44,7 @@ final class SettingsTransfer
         'unsure.threshold',
         'unsure.note',
         'display.timezone',
+        'signup.mode',
         'vocabulary.keyterms',
         'vocabulary.replacements',
         'markers.tags',

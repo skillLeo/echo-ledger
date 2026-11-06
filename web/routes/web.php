@@ -16,6 +16,9 @@ use App\Http\Controllers\SiteController;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
 
+// Console routes outside Filament's pages need a confirmed email too (since v1.5), like the panel's own pages.
+$consoleVerified = 'verified:filament.admin.auth.email-verification.prompt';
+
 // The public site (since v1.5): the landing page, the downloads page and the apps' update manifests (docs/API.md
 // "Public pages and app downloads"). Nothing here shows anyone's data; throttled per IP.
 Route::middleware('throttle:site')->group(function (): void {
@@ -33,7 +36,7 @@ Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app
 
 // Decrypted playback for the admin transcript player (HTTP Range supported).
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
-    ->middleware(['auth:web', EnsureWorkspaceMember::class])
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class])
     ->name('admin.recordings.stream');
 
 // Screen moments (v1.5): a picture or thumbnail from the signed link the API hands out (30 minutes, no token), and on
@@ -45,21 +48,21 @@ Route::get('/screen-media/{screen}/{variant}', [ScreenMediaController::class, 's
     ->middleware(['signed', 'throttle:uploads'])->name('screens.media');
 Route::get('/admin-media/screens/{screen}/{variant}', [ScreenMediaController::class, 'console'])
     ->whereUlid('screen')->whereIn('variant', ['image', 'thumb'])
-    ->middleware(['auth:web', EnsureWorkspaceMember::class])->name('admin.screens.media');
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class])->name('admin.screens.media');
 
 // Console exports of a transcript (download; `html` opens for printing to PDF).
 Route::get('/admin-export/transcripts/{transcript}/{format}', AdminExportController::class)
-    ->middleware(['auth:web', EnsureWorkspaceMember::class])
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class])
     ->name('admin.transcripts.export');
 
 // Export → Meeting pack (v1.5): the transcript with its screens; `html` opens with a Print button, `zip` downloads.
 Route::get('/admin-export/sessions/{session}/pack/{format}', AdminPackController::class)
     ->whereUlid('session')->whereIn('format', ['html', 'zip'])
-    ->middleware(['auth:web', EnsureWorkspaceMember::class])
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class])
     ->name('admin.sessions.pack');
 
 // Library → Upload: the browser's chunked, resumable uploads (the devices' chunk path, behind the console session).
-Route::middleware(['auth:web', EnsureWorkspaceMember::class, 'throttle:uploads'])
+Route::middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, 'throttle:uploads'])
     ->prefix('/admin-upload/recordings')->name('admin.uploads.')->group(function (): void {
         Route::post('/', [ConsoleUploadController::class, 'store'])->name('store');
         Route::get('/{recording}', [ConsoleUploadController::class, 'show'])->name('show');

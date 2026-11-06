@@ -7,6 +7,9 @@ namespace App\Filament\Pages;
 use App\Enums\WorkspaceRole;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Accounts\Invitations;
+use App\Services\Accounts\SignUp;
+use App\Services\AuditLog;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
@@ -119,7 +122,9 @@ class WorkspaceSettings extends Page implements HasTable
                 }),
             Action::make('addMember')->label('Add member')->icon(Heroicon::OutlinedUserPlus)
                 ->authorize(fn (): bool => $this->isOwner())
-                ->modalDescription('Someone without an account gets one with a one-time password, shown to you once.')
+                ->modalDescription(fn (): string => app(SignUp::class)->open()
+                    ? 'Someone without an account gets an email with a link to make one and join.'
+                    : 'Someone without an account gets one with a one-time password, shown to you once.')
                 ->schema([
                     TextInput::make('email')->email()->required()->maxLength(255),
                     TextInput::make('name')->maxLength(255)->helperText('For a new account.'),
@@ -135,12 +140,24 @@ class WorkspaceSettings extends Page implements HasTable
     {
         $email = Str::lower(trim($data['email']));
         $user = User::query()->where('email', $email)->first();
+        $role = WorkspaceRole::from($data['role']);
+        // Since v1.5: while people may sign up, an address without an account gets an invitation link instead of a
+        // one-time password, and chooses its own password.
+        if (! $user instanceof User && app(SignUp::class)->open()) {
+            $this->attempt(fn () => app(Invitations::class)->invite($this->workspaceOrFail(), $this->user(), $email, $role), "Invitation sent to {$email}");
+
+            return;
+        }
         $password = null;
         if (! $user instanceof User) {
             $password = Str::password(20, symbols: false);
             $user = User::query()->create(['name' => trim((string) ($data['name'] ?? '')) ?: Str::before($email, '@'), 'email' => $email, 'password' => $password]);
         }
-        $added = $this->attempt(fn () => app(Workspaces::class)->addMember($this->workspaceOrFail(), $user, WorkspaceRole::from($data['role'])), "{$user->name} added");
+        $added = $this->attempt(fn () => app(Workspaces::class)->addMember($this->workspaceOrFail(), $user, $role), "{$user->name} added");
+        if ($added) {
+            app(Invitations::class)->tellAdded($this->workspaceOrFail(), $this->user(), $user);
+            app(AuditLog::class)->record('member_added', $this->user()->id, $this->workspaceOrFail(), "Added {$email} to ".$this->workspaceOrFail()->name);
+        }
         if ($added && $password !== null) {
             Notification::make()->title('One-time password for '.$email)
                 ->body("{$password}\nShare it privately; they can change it on their profile after signing in.")

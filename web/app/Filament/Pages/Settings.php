@@ -10,6 +10,7 @@ use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\User;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
+use App\Services\Accounts\SignUp;
 use App\Services\EngineWait;
 use App\Services\RetentionPolicy;
 use App\Services\SessionMarkers;
@@ -144,6 +145,7 @@ class Settings extends Page
             'vocabulary_keyterms' => KeytermPolicy::sanitize((array) ($all['vocabulary.keyterms'] ?? [])),
             'vocabulary_replacements' => TextReplacements::rules($all['vocabulary.replacements'] ?? []),
             'display_timezone' => is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC',
+            'signup_mode' => isset(SignUp::MODES[$all['signup.mode'] ?? '']) ? $all['signup.mode'] : SignUp::NOBODY,
             'marker_tags' => SessionMarkers::presets($all['markers.tags'] ?? SessionMarkers::DEFAULT_TAGS),
             'assemblyai_region' => $all['assemblyai.region'],
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
@@ -393,6 +395,10 @@ class Settings extends Page
                 'privacy' => $this->tab('privacy', [
                     $this->section('access')->description('Two-factor sign-in, passkeys, signed-in browsers and the audit log.')->schema([
                         Actions::make([Action::make('openSecurity')->label('Open Security')->color('gray')->url(fn (): string => Security::getUrl())]),
+                    ]),
+                    $this->section('signup')->description('New accounts get their own personal workspace and must confirm their email before they can sign in. People you add on the Workspace page always can.')->schema([
+                        Select::make('signup_mode')->label('Who can sign up')->options(SignUp::MODES)->selectablePlaceholder(false)->required()
+                            ->helperText('"Only people with an invitation": the Workspace page\'s Add member emails a sign-up link to an address without an account.'),
                     ]),
                     $this->section('pins')->schema([
                         TagsInput::make('app_pins')->label('Server certificate pins (SPKI SHA-256)')
@@ -649,6 +655,7 @@ class Settings extends Page
             'vocabulary.keyterms' => KeytermPolicy::sanitize((array) ($state['vocabulary_keyterms'] ?? [])),
             'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',
+            'signup.mode' => isset(SignUp::MODES[$state['signup_mode'] ?? '']) ? $state['signup_mode'] : SignUp::NOBODY,
             'assemblyai.region' => $state['assemblyai_region'],
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],

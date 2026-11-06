@@ -115,4 +115,12 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    // Since v1.5 the emails use the console's colours (resources/views/vendor/mail/html/themes/echoledger.css).
+    'markdown' => [
+        'theme' => env('MAIL_MARKDOWN_THEME', 'echoledger'),
+        'paths' => [
+            resource_path('views/vendor/mail'),
+        ],
+    ],
+
 ];

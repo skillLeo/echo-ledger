@@ -84,16 +84,17 @@ it('has the command palette as global search on Ctrl or Cmd + K and a collapsibl
         ->and($this->panel->isSidebarCollapsibleOnDesktop())->toBeTrue();
 });
 
-it('has sign-in, profile and revealable passwords, an email confirmation it never forces, but no sign-up or reset', function () {
+it('has sign-in, profile, revealable passwords, sign-up (switched in Settings), a password reset and a required email confirmation', function () {
     expect($this->panel->hasLogin())->toBeTrue()
         ->and($this->panel->hasProfile())->toBeTrue()
         ->and($this->panel->isProfilePageSimple())->toBeFalse()
         ->and($this->panel->arePasswordsRevealable())->toBeTrue()
-        ->and($this->panel->hasRegistration())->toBeFalse()
-        ->and($this->panel->hasPasswordReset())->toBeFalse()
-        // Since v1.5 people-only share links need a confirmed email; nobody is kept out of the console without one.
+        // Since v1.5 Phase 4: the sign-up page answers 404 until Settings → "Who can sign up" opens it (SignUpTest).
+        ->and($this->panel->hasRegistration())->toBeTrue()
+        ->and($this->panel->hasPasswordReset())->toBeTrue()
+        // An unconfirmed account is kept out of the console and the apps' sign-in.
         ->and($this->panel->hasEmailVerification())->toBeTrue()
-        ->and($this->panel->isEmailVerificationRequired())->toBeFalse();
+        ->and($this->panel->isEmailVerificationRequired())->toBeTrue();
 });
 
 it('titles console pages "Page - EchoLedger" and declares the language', function () {
