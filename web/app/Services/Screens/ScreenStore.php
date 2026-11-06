@@ -190,6 +190,17 @@ class ScreenStore
         return $bytes;
     }
 
+    /** Decrypts the picture into [$dstPath] without holding it in memory (the account export); its size, or null when it is gone. */
+    public function pictureToFile(Screen $screen, string $dstPath): ?int
+    {
+        $disk = Storage::disk('recordings');
+        if ($screen->image_path === null || ! $disk->exists($screen->image_path)) {
+            return null;
+        }
+
+        return $this->cipher()->decryptToFile($disk->path($screen->image_path), $dstPath, $screen->id);
+    }
+
     /** Deletes one screen and its two files. */
     public function delete(Screen $screen): void
     {

@@ -8,7 +8,9 @@ use App\Models\AccountExport;
 use App\Models\CallNote;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\Screen;
 use App\Models\Transcript;
+use App\Services\Accounts\AccountExporter;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\RecordingCipher;
 use App\Services\Screens\ScreenStore;
@@ -16,6 +18,7 @@ use App\Services\Views\TranscriptViews;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -187,4 +190,39 @@ it('includes a recording\'s other engines and live captions, never trial runs', 
         $all .= (string) $zip->getFromName($name);
     }
     expect($all)->toContain('LIVE-TEXT')->not->toContain('TRIAL-TEXT');
+});
+
+it('puts a recording full of screens in the ZIP from files, without holding the pictures in memory', function () {
+    $user = Fx::user();
+    [$device] = $this->enroll($user);
+    $session = $this->makeReadySession($device, Fixtures::audio(2000), ['title' => 'Many screens']);
+    $disk = Storage::disk('recordings');
+    $disk->makeDirectory('screens/export-test');
+    $plain = (string) tempnam(sys_get_temp_dir(), 'scr');
+    $last = '';
+    // 48 MB of pictures that do not compress, as a long screen-sharing call keeps them.
+    for ($i = 1; $i <= 24; $i++) {
+        $last = "\x89PNG\r\n\x1a\n".random_bytes(2 * 1024 * 1024);
+        file_put_contents($plain, $last);
+        $screen = unscoped(fn () => Screen::query()->create([
+            'workspace_id' => $session->workspace_id, 'capture_session_id' => $session->id, 'at_ms' => $i * 1000, 'width' => 1920, 'height' => 1080,
+            'trigger' => 'change', 'sha256' => hash('sha256', $last), 'mime' => 'image/png', 'image_path' => "screens/export-test/{$i}.elr", 'bytes' => strlen($last),
+        ]));
+        app(RecordingCipher::class)->encryptFile($plain, $disk->path("screens/export-test/{$i}.elr"), $screen->id);
+    }
+    @unlink($plain);
+    $export = AccountExport::query()->create(['user_id' => $user->id, 'status' => 'making']);
+
+    gc_collect_cycles();
+    memory_reset_peak_usage();
+    $before = memory_get_usage();
+    app(AccountExporter::class)->build($export);
+    $used = memory_get_peak_usage() - $before;
+
+    expect($used)->toBeLessThan(16 * 1024 * 1024);
+    $zip = openExport($this, (string) $export->fresh()->downloadUrl());
+    $folder = 'recordings/'.$session->started_at->format('Y-m-d').' Many screens';
+    expect($zip->getFromName("{$folder}/screens/024-0-24.png"))->toBe($last)
+        ->and(json_decode((string) $zip->getFromName("{$folder}/screens.json"), true))->toHaveCount(24)
+        ->and(File::isDirectory(AccountExporter::workDirectory($export->id)))->toBeFalse();
 });

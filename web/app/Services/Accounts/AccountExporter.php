@@ -42,7 +42,11 @@ use ZipArchive;
  */
 final class AccountExporter
 {
-    /** The working folder is written out into the ZIP whenever this much audio waits in it (the disk holds it twice). */
+    /**
+     * The working folder is written out into the ZIP whenever this much waits in it (the disk holds it twice). Every
+     * part goes in as a file of the working folder, never as a string: ZipArchive keeps an added string in memory
+     * until the ZIP is written, and a library of screens and transcripts would not fit.
+     */
     private const FLUSH_BYTES = 512 * 1024 * 1024;
 
     /** File extensions of the stored audio types. */
@@ -57,6 +61,11 @@ final class AccountExporter
     private ZipArchive $zip;
 
     private string $zipPath = '';
+
+    private string $work = '';
+
+    /** Numbers the working folder's files of text and pictures. */
+    private int $parts = 0;
 
     /** @var list<string> decrypted files waiting for the next write of the ZIP */
     private array $pending = [];
@@ -85,9 +94,11 @@ final class AccountExporter
         $user = User::query()->findOrFail($export->user_id);
         $work = self::workDirectory($export->id);
         File::ensureDirectoryExists($work, 0700);
+        $this->work = $work;
         $this->zipPath = $work.'/export.zip';
         $this->pending = [];
         $this->pendingBytes = 0;
+        $this->parts = 0;
         $this->usedNames = [];
         try {
             $this->open(ZipArchive::CREATE | ZipArchive::OVERWRITE);
@@ -99,7 +110,7 @@ final class AccountExporter
                 'recordings' => $this->recordings($user, $work),
                 'projects' => $this->projects($user, $work),
             ];
-            $this->zip->addFromString('manifest.json', (string) json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            $this->addText('manifest.json', (string) json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             $this->close();
 
             $relative = 'exports/'.$export->id.'.zip.elr';
@@ -144,11 +155,9 @@ final class AccountExporter
             }
             $name = "{$folder}/audio-{$recording->role->value}.".(self::AUDIO[strtolower($recording->mime)] ?? 'audio');
             $plain = $work.'/'.$recording->id.'.audio';
-            $this->pendingBytes += $this->cipher->decryptToFile(Storage::disk('recordings')->path($recording->stored_path), $plain, $recording->id);
-            $this->zip->addFile($plain, $name);
+            $bytes = $this->cipher->decryptToFile(Storage::disk('recordings')->path($recording->stored_path), $plain, $recording->id);
             // Audio is compressed already: stored as it is.
-            $this->zip->setCompressionName($name, ZipArchive::CM_STORE);
-            $this->pending[] = $plain;
+            $this->addPlain($plain, $name, $bytes, store: true);
             $files[] = $name;
         }
 
@@ -172,7 +181,7 @@ final class AccountExporter
             foreach ($views as $view) {
                 foreach (['txt', 'json'] as $format) {
                     $name = "{$folder}/{$base}".($view === null ? '' : "-{$view}").".{$format}";
-                    $this->zip->addFromString($name, $this->exporter->export($transcript, $format, ['view' => $view])['body']);
+                    $this->addText($name, $this->exporter->export($transcript, $format, ['view' => $view])['body']);
                     $files[] = $name;
                 }
             }
@@ -181,28 +190,25 @@ final class AccountExporter
         $shots = [];
         foreach (ScreenStore::ordered($session->id)->get() as $index => $screen) {
             /** @var Screen $screen */
-            $bytes = $this->screens->picture($screen);
+            $plain = $this->part();
+            $bytes = $this->screens->pictureToFile($screen, $plain);
             if ($bytes === null) {
                 continue;
             }
             $name = sprintf('%s/screens/%03d-%s.%s', $folder, $index + 1, str_replace(':', '-', TranscriptExporter::clock($screen->at_ms)), self::PICTURES[$screen->mime] ?? 'img');
-            $this->zip->addFromString($name, $bytes);
-            $this->zip->setCompressionName($name, ZipArchive::CM_STORE);
+            $this->addPlain($plain, $name, $bytes, store: true);
             $shots[] = ['file' => $name, 'at_ms' => $screen->at_ms, 'trigger' => $screen->trigger, 'text' => $screen->ocr_text, 'description' => $screen->description];
             $files[] = $name;
         }
         if ($shots !== []) {
-            $this->zip->addFromString("{$folder}/screens.json", (string) json_encode($shots, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            $this->addText("{$folder}/screens.json", (string) json_encode($shots, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             $files[] = "{$folder}/screens.json";
         }
 
         $notes = CallNote::query()->withoutGlobalScopes()->where('capture_session_id', $session->id)->where('status', 'ready')->first();
         if ($notes instanceof CallNote) {
-            $this->zip->addFromString("{$folder}/notes.json", (string) json_encode($notes->sections, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+            $this->addText("{$folder}/notes.json", (string) json_encode($notes->sections, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
             $files[] = "{$folder}/notes.json";
-        }
-        if ($this->pendingBytes >= self::FLUSH_BYTES) {
-            $this->flush();
         }
 
         return [
@@ -227,31 +233,29 @@ final class AccountExporter
             $folder = $this->uniqueName('projects/'.self::safe($project->name, 60));
             $files = [];
             if (filled($project->notes)) {
-                $this->zip->addFromString("{$folder}/notes.txt", (string) $project->notes);
+                $this->addText("{$folder}/notes.txt", (string) $project->notes);
                 $files[] = "{$folder}/notes.txt";
             }
             $brief = ClientBrief::query()->withoutGlobalScopes()->where('client_id', $project->id)->first();
             if ($brief instanceof ClientBrief) {
-                $this->zip->addFromString("{$folder}/brief.json", (string) json_encode($brief->sections, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+                $this->addText("{$folder}/brief.json", (string) json_encode($brief->sections, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
                 $files[] = "{$folder}/brief.json";
             }
             $memory = ClientMemoryItem::query()->withoutGlobalScopes()->where('client_id', $project->id)->orderBy('created_at')->get()
                 ->map(fn (ClientMemoryItem $m): array => ['kind' => $m->kind, 'text' => $m->text, 'happened_on' => $m->happened_on?->toDateString(), 'pinned' => $m->pinned])->all();
             if ($memory !== []) {
-                $this->zip->addFromString("{$folder}/memory.json", (string) json_encode($memory, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+                $this->addText("{$folder}/memory.json", (string) json_encode($memory, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
                 $files[] = "{$folder}/memory.json";
             }
             foreach (ClientFile::query()->withoutGlobalScopes()->where('client_id', $project->id)->orderBy('created_at')->get() as $file) {
                 /** @var ClientFile $file */
                 if ($file->path === null) {
                     $name = $this->uniqueName("{$folder}/files/".self::safe($file->name, 80).'.txt', file: true);
-                    $this->zip->addFromString($name, (string) $file->text);
+                    $this->addText($name, (string) $file->text);
                 } elseif (Storage::disk('recordings')->exists($file->path)) {
                     $name = $this->uniqueName("{$folder}/files/".self::safe($file->name, 80), file: true);
                     $plain = $work.'/'.$file->id.'.file';
-                    $this->pendingBytes += $this->cipher->decryptToFile(Storage::disk('recordings')->path($file->path), $plain, $file->id);
-                    $this->zip->addFile($plain, $name);
-                    $this->pending[] = $plain;
+                    $this->addPlain($plain, $name, $this->cipher->decryptToFile(Storage::disk('recordings')->path($file->path), $plain, $file->id));
                 } else {
                     continue;
                 }
@@ -261,6 +265,37 @@ final class AccountExporter
         }
 
         return $entries;
+    }
+
+    /** Adds text to the ZIP through a file of the working folder. */
+    private function addText(string $name, string $text): void
+    {
+        $plain = $this->part();
+        if (file_put_contents($plain, $text) === false) {
+            throw new RuntimeException('Could not write the export file.');
+        }
+        $this->addPlain($plain, $name, strlen($text));
+    }
+
+    /** Adds a file of the working folder (decrypted or written there); it is removed once the ZIP is written. */
+    private function addPlain(string $plain, string $name, int $bytes, bool $store = false): void
+    {
+        $this->pending[] = $plain;
+        if (! $this->zip->addFile($plain, $name)) {
+            throw new RuntimeException('Could not add to the export file.');
+        }
+        if ($store) {
+            $this->zip->setCompressionName($name, ZipArchive::CM_STORE);
+        }
+        $this->pendingBytes += $bytes;
+        if ($this->pendingBytes >= self::FLUSH_BYTES) {
+            $this->flush();
+        }
+    }
+
+    private function part(): string
+    {
+        return $this->work.'/'.(++$this->parts).'.part';
     }
 
     /** Writes what waits into the ZIP and removes the decrypted copies, then opens the ZIP again to go on. */
