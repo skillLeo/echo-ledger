@@ -246,8 +246,10 @@ suggested fixes and screen descriptions are never switched off by a plan.
 - `GET /api/config` gains `"plan": {"key": "personal", "name": "Personal", "features": {"live_translate": true,
   "screen_moments": true, "ai_notes": false, "connector": true}, "limits": {"monthly_minutes": null,
   "storage_bytes": null, "retention_days": null, "seats": null}, "used": {"minutes": 123, "storage_bytes": 456}}`
-  (`null` = no limit), and `"workspace": {"id": "01J…", "name": "Acme team", "role": "owner" | "admin" | "member" |
-  "viewer"}` (the device's workspace and its person's role there). Missing (an older server): every feature on, no
+  (`null` = no limit), and `"workspace": {"id": 1, "name": "Acme team", "role": "owner" | "admin" | "member" |
+  "viewer"}` (the device's workspace and its person's role there). Every v1.5 server sends both, so a config without
+  `plan` comes from an older server (the desktop then leaves screen moments off). Until the Phase 4 plans, every
+  feature is `true`, `retention_days` and `seats` are `null`, and the limits are the workspace's minutes and storage. Missing (an older server): every feature on, no
   limits, role unknown (act as a member). The apps hide what the plan leaves out, show the limits next to the usage,
   and a viewer's app offers no recording.
 - New errors: `403 feature_not_in_plan` with `"feature": "screen_moments"` ("Screen moments are not in your plan"),

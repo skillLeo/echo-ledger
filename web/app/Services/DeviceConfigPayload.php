@@ -6,8 +6,11 @@ namespace App\Services;
 
 use App\Enums\SttUseCase;
 use App\Models\Device;
+use App\Models\Workspace;
 use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\Usage\UsageSummary;
+use App\Services\Workspaces\PlanLimits;
+use App\Services\Workspaces\Workspaces;
 use App\Stt\LanguageChoice;
 use App\Stt\SttManager;
 use App\Support\UnsureMarkers;
@@ -83,6 +86,50 @@ final class DeviceConfigPayload
             'usage' => app(UsageSummary::class)->toArray($device->workspace_id),
             // Since v1.3 (Phase B): the console's Live Translate defaults and this month's Live Translate spending.
             'live_translate' => app(LiveTranslateBudget::class)->defaults() + ['budget' => app(LiveTranslateBudget::class)->state($device->workspace_id)],
+            // Since v1.5 (docs/API.md "Plans and features"): every v1.5 server sends both, and the desktop takes a config
+            // without a plan for a server older than screen moments.
+            'plan' => $this->plan($device),
+            'workspace' => $this->workspace($device),
+        ];
+    }
+
+    /**
+     * The workspace's plan. B20 plans have no feature switches yet, so every feature is on (as the contract reads a
+     * missing one); their limits are the minutes, storage and devices of B20. Retention and seats come with Phase 4.
+     *
+     * @return array<string, mixed>
+     */
+    private function plan(Device $device): array
+    {
+        $limits = app(PlanLimits::class);
+        $plan = $limits->plan($device->workspace_id);
+
+        return [
+            'key' => $plan->key,
+            'name' => $plan->name,
+            'features' => ['live_translate' => true, 'screen_moments' => true, 'ai_notes' => true, 'connector' => true],
+            'limits' => [
+                'monthly_minutes' => $plan->monthly_minutes,
+                'storage_bytes' => $plan->storage_bytes,
+                'retention_days' => null,
+                'seats' => null,
+            ],
+            'used' => [
+                'minutes' => (int) round($limits->minutesUsed($device->workspace_id)),
+                'storage_bytes' => $limits->storageUsed($device->workspace_id),
+            ],
+        ];
+    }
+
+    /** @return array{id: int, name: string|null, role: string|null} the device's workspace and its person's role there */
+    private function workspace(Device $device): array
+    {
+        $role = app(Workspaces::class)->roleOf($device->user, $device->workspace_id);
+
+        return [
+            'id' => $device->workspace_id,
+            'name' => Workspace::query()->whereKey($device->workspace_id)->value('name'),
+            'role' => $role?->value,
         ];
     }
 }
