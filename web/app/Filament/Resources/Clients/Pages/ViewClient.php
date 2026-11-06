@@ -370,7 +370,7 @@ class ViewClient extends ViewRecord
 
         return $this->brief()->status === 'working'
             || ClientFile::query()->where('client_id', $client->id)->where('status', 'extracting')->exists()
-            || CallNote::query()->where('client_id', $client->id)->where('status', 'pending')->exists();
+            || CallNote::query()->ofProjectMaker($client)->where('status', 'pending')->exists();
     }
 
     /** The poll: a re-render shows what is done. */
@@ -409,9 +409,9 @@ class ViewClient extends ViewRecord
                 'budget' => $service->budget($client->workspace_id),
                 'clientSpend' => $service->clientSpend($client),
                 'brief' => $this->brief(),
-                'memory' => ClientMemoryItem::query()->where('client_id', $client->id)->orderByDesc('pinned')->orderByDesc('happened_on')->orderByDesc('created_at')
+                'memory' => ClientMemoryItem::query()->ofProjectMaker($client)->orderByDesc('pinned')->orderByDesc('happened_on')->orderByDesc('created_at')
                     ->limit(300)->get()->groupBy('kind'),
-                'notes' => CallNote::query()->where('client_id', $client->id)->with('captureSession')->latest()->limit(5)->get(),
+                'notes' => CallNote::query()->ofProjectMaker($client)->with('captureSession')->latest()->limit(5)->get(),
             ],
         };
     }
@@ -425,7 +425,7 @@ class ViewClient extends ViewRecord
 
     private function memoryItem(string $id): ?ClientMemoryItem
     {
-        $item = ClientMemoryItem::query()->where('client_id', $this->client()->id)->find($id);
+        $item = ClientMemoryItem::query()->ofProjectMaker($this->client())->find($id);
 
         return $item instanceof ClientMemoryItem ? $item : null;
     }

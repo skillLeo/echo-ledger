@@ -164,7 +164,7 @@ final class ClientWorkspace
                 return;
             }
             $session = CaptureSession::query()->withoutGlobalScopes()->find($transcript->capture_session_id);
-            $client = $session?->client_id !== null ? Client::query()->withoutGlobalScopes()->find($session->client_id) : null;
+            $client = $session !== null ? $this->projectOf($session) : null;
             if ($session === null || $client === null || ! $client->ai_notes || ! app(PlanLimits::class)->allows($session->workspace_id, 'ai_notes')) {
                 return;
             }
@@ -178,10 +178,20 @@ final class ClientWorkspace
         }
     }
 
+    /**
+     * The project a recording is filed under, when it is its maker's own: since v1.5 nobody's notes or memory lines go
+     * into another person's project (null for the Inbox too).
+     */
+    public function projectOf(CaptureSession $session): ?Client
+    {
+        return $session->client_id === null ? null
+            : Client::query()->withoutGlobalScopes()->where('user_id', $session->user_id)->find($session->client_id);
+    }
+
     /** Writes (or rewrites) the notes of one recording, then updates the client's memory and, without files, its brief. */
     public function makeNotes(CaptureSession $session, ?string $language = null): CallNote
     {
-        $client = Client::query()->withoutGlobalScopes()->findOrFail($session->client_id);
+        $client = Client::query()->withoutGlobalScopes()->where('user_id', $session->user_id)->findOrFail($session->client_id);
         $note = CallNote::query()->withoutGlobalScopes()->firstOrNew(['capture_session_id' => $session->id]);
         $note->fill(['workspace_id' => $session->workspace_id, 'client_id' => $client->id, 'language' => $language ?? $note->language ?? 'en']);
         $transcript = $session->finalTranscript()->first();
@@ -414,7 +424,7 @@ final class ClientWorkspace
     /** @return list<string> the latest ready notes of a client as plain text, oldest first */
     private function recentNotesText(Client $client, int $count): array
     {
-        $notes = CallNote::query()->withoutGlobalScopes()->where('client_id', $client->id)->where('status', 'ready')
+        $notes = CallNote::query()->withoutGlobalScopes()->ofProjectMaker($client)->where('status', 'ready')
             ->with('captureSession')->latest()->limit($count)->get()->reverse();
 
         return array_values($notes->map(fn (CallNote $note): string => $this->noteText($note))->all());
@@ -623,7 +633,7 @@ final class ClientWorkspace
         $this->assertCanWriteNotes($client->workspace_id);
         $passages = (new PassageSearch($this->settings))->top($client, $question, self::PASSAGES);
         $brief = ClientBrief::query()->withoutGlobalScopes()->where('client_id', $client->id)->first();
-        $memory = ClientMemoryItem::query()->withoutGlobalScopes()->where('client_id', $client->id)->orderByDesc('pinned')->orderBy('happened_on')
+        $memory = ClientMemoryItem::query()->withoutGlobalScopes()->ofProjectMaker($client)->orderByDesc('pinned')->orderBy('happened_on')
             ->limit(200)->get()->map(fn (ClientMemoryItem $m): string => '- '.ucfirst($m->kind).($m->happened_on ? ' ('.$m->happened_on->toDateString().')' : '').': '.$m->text)->all();
         try {
             $result = $this->ai->ask(
@@ -668,7 +678,7 @@ final class ClientWorkspace
                 }
             }
         }
-        $memory = ClientMemoryItem::query()->withoutGlobalScopes()->where('client_id', $client->id)->orderBy('kind')->orderBy('happened_on')->get();
+        $memory = ClientMemoryItem::query()->withoutGlobalScopes()->ofProjectMaker($client)->orderBy('kind')->orderBy('happened_on')->get();
         if ($memory->isNotEmpty()) {
             $out[] = '';
             $out[] = '## Memory';

@@ -464,3 +464,89 @@ it('runs the v1.5 plans and roles migration down and up again without touching t
         @unlink((string) config('database.connections.cycle.database'));
     }
 });
+
+it('gives each person a project of their own for what they filed or nested in someone else\'s before v1.5', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    $seeded = seedPhase2Library($db);
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_PLANS]);
+    $now = now();
+    $owner = $seeded['user'];
+    $friend = (int) $db->table('users')->where('email', 'friend@example.test')->value('id');
+    $workspace = (int) $db->table('workspaces')->value('id');
+    $db->table('workspace_user')->insert(['workspace_id' => $workspace, 'user_id' => $friend, 'role' => 'member', 'created_at' => $now, 'updated_at' => $now]);
+    $project = fn (int $user, string $name, ?string $parent = null): string => tap((string) Str::ulid(), fn (string $id) => $db->table('clients')->insert(
+        ['id' => $id, 'workspace_id' => $workspace, 'user_id' => $user, 'parent_id' => $parent, 'name' => $name, 'color' => '#123456', 'ai_notes' => true, 'created_at' => $now, 'updated_at' => $now]));
+    $call = fn (int $user, ?string $client): string => tap((string) Str::ulid(), fn (string $id) => $db->table('capture_sessions')->insert(['id' => $id, 'workspace_id' => $workspace,
+        'user_id' => $user, 'client_id' => $client, 'filed_by' => $client === null ? null : 'user', 'client_ref' => (string) Str::uuid(), 'source_device' => 'phone',
+        'source_app' => 'whatsapp', 'started_at' => $now, 'status' => 'completed', 'created_at' => $now, 'updated_at' => $now]));
+    $note = fn (string $client, string $session): string => tap((string) Str::ulid(), fn (string $id) => $db->table('call_notes')->insert(['id' => $id, 'workspace_id' => $workspace,
+        'client_id' => $client, 'capture_session_id' => $session, 'status' => 'ready', 'sections' => '{}', 'created_at' => $now, 'updated_at' => $now]));
+    $line = fn (string $client, string $type, ?string $source, bool $pinned = false): string => tap((string) Str::ulid(), fn (string $id) => $db->table('client_memory_items')->insert(['id' => $id,
+        'workspace_id' => $workspace, 'client_id' => $client, 'kind' => 'decision', 'text' => 'A decision', 'pinned' => $pinned, 'source_type' => $type, 'source_id' => $source,
+        'created_at' => $now, 'updated_at' => $now]));
+
+    // The friend's folder inside the owner's Acme, and an owner's folder inside that one.
+    $friendFolder = $project($friend, 'Friend calls', $seeded['acme']);
+    $ownerFolder = $project($owner, 'Owner inside', $friendFolder);
+    // The friend's own top-level Website, so their copy of the owner's Website is "Website (2)".
+    $friendWebsite = $project($friend, 'Website');
+    // A friend's call filed under Acme with its notes and memory lines; another one moved to the Inbox since.
+    $filed = $call($friend, $seeded['acme']);
+    $filedNote = $note($seeded['acme'], $filed);
+    $filedLine = $line($seeded['acme'], 'call', $filed, true);
+    $moved = $call($friend, null);
+    $movedNote = $note($seeded['acme'], $moved);
+    // The owner's own notes and lines stay where they are.
+    $ownNote = $note($seeded['site'], $seeded['session']);
+    $ownLine = $line($seeded['site'], 'call', $seeded['session']);
+    $handLine = $line($seeded['acme'], 'user', null);
+    $link = (string) Str::ulid();
+    $db->table('request_links')->insert(['id' => $link, 'workspace_id' => $workspace, 'user_id' => $friend, 'client_id' => $seeded['site'], 'token_hash' => hash('sha256', 'friend'),
+        'title' => 'Files', 'created_at' => $now, 'updated_at' => $now]);
+    $before = ['clients' => $db->table('clients')->count(), 'capture_sessions' => $db->table('capture_sessions')->count(), 'call_notes' => $db->table('call_notes')->count(), 'client_memory_items' => $db->table('client_memory_items')->count()];
+
+    cycleArtisan('migrate');
+    $copy = fn (int $user, string $name): ?object => $db->table('clients')->where('user_id', $user)->whereNull('parent_id')->where('name', $name)->first();
+    $friendAcme = $copy($friend, 'Acme');
+    $ownerFriendCalls = $copy($owner, 'Friend calls');
+    $friendSite = $copy($friend, 'Website (2)');
+    expect($friendAcme)->not->toBeNull()->and($ownerFriendCalls)->not->toBeNull()->and($friendSite)->not->toBeNull()
+        ->and($ownerFriendCalls->color)->toBe('#123456')->and((int) $friendAcme->workspace_id)->toBe($workspace)
+        // Folders sit in a project of their own maker.
+        ->and($db->table('clients')->where('id', $friendFolder)->value('parent_id'))->toBe($friendAcme->id)
+        ->and($db->table('clients')->where('id', $ownerFolder)->value('parent_id'))->toBe($ownerFriendCalls->id)
+        ->and($db->table('clients')->where('id', $friendWebsite)->value('parent_id'))->toBeNull()
+        // The friend's call, its notes and its (still pinned) line moved together; the moved one's notes followed it.
+        ->and($db->table('capture_sessions')->where('id', $filed)->value('client_id'))->toBe($friendAcme->id)
+        ->and($db->table('call_notes')->where('id', $filedNote)->value('client_id'))->toBe($friendAcme->id)
+        ->and($db->table('client_memory_items')->where('id', $filedLine)->value('client_id'))->toBe($friendAcme->id)
+        ->and((bool) $db->table('client_memory_items')->where('id', $filedLine)->value('pinned'))->toBeTrue()
+        ->and($db->table('capture_sessions')->where('id', $moved)->value('client_id'))->toBeNull()
+        ->and($db->table('call_notes')->where('id', $movedNote)->value('client_id'))->toBe($friendAcme->id)
+        ->and($db->table('request_links')->where('id', $link)->value('client_id'))->toBe($friendSite->id)
+        // The owner's own things stay.
+        ->and($db->table('capture_sessions')->where('id', $seeded['session'])->value('client_id'))->toBe($seeded['site'])
+        ->and($db->table('call_notes')->where('id', $ownNote)->value('client_id'))->toBe($seeded['site'])
+        ->and($db->table('client_memory_items')->where('id', $ownLine)->value('client_id'))->toBe($seeded['site'])
+        ->and($db->table('client_memory_items')->where('id', $handLine)->value('client_id'))->toBe($seeded['acme'])
+        // Nothing is lost, and nothing is left across people.
+        ->and($db->table('clients')->count())->toBe($before['clients'] + 3)
+        ->and($db->table('capture_sessions')->count())->toBe($before['capture_sessions'])
+        ->and($db->table('call_notes')->count())->toBe($before['call_notes'])
+        ->and($db->table('client_memory_items')->count())->toBe($before['client_memory_items'])
+        ->and($db->table('clients as c')->join('clients as p', 'p.id', '=', 'c.parent_id')->whereColumn('c.user_id', '!=', 'p.user_id')->count())->toBe(0)
+        ->and($db->table('capture_sessions as s')->join('clients as c', 'c.id', '=', 's.client_id')->whereColumn('s.user_id', '!=', 'c.user_id')->count())->toBe(0);
+
+    // The rollback keeps the copies and what is in them.
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_PLANS]);
+    expect($db->table('clients')->count())->toBe($before['clients'] + 3)
+        ->and($db->table('capture_sessions')->where('id', $filed)->value('client_id'))->toBe($friendAcme->id);
+    cycleArtisan('migrate');
+    expect($db->table('clients')->count())->toBe($before['clients'] + 3);
+})->after(function () {
+    if (config('database.connections.cycle.driver') === 'sqlite') {
+        DB::disconnect('cycle');
+        @unlink((string) config('database.connections.cycle.database'));
+    }
+});

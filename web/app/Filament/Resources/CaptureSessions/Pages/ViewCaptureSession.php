@@ -288,7 +288,8 @@ class ViewCaptureSession extends ViewRecord
     {
         $this->assertCanChange();
         $session = $this->session();
-        if ($session->client_id === null) {
+        $project = app(ClientWorkspace::class)->projectOf($session);
+        if ($project === null) {
             Notification::make()->title('File this recording under a client first.')->warning()->send();
 
             return;
@@ -302,7 +303,7 @@ class ViewCaptureSession extends ViewRecord
         }
         CallNote::query()->updateOrCreate(['capture_session_id' => $session->id], [
             'workspace_id' => $session->workspace_id,
-            'client_id' => $session->client_id,
+            'client_id' => $project->id,
             'status' => 'pending',
             'error' => null,
             'language' => in_array($language, ['en', 'roman_urdu'], true) ? $language : 'en',

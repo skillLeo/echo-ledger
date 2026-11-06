@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToWorkspace;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -52,6 +53,19 @@ class CallNote extends Model
     public function captureSession(): BelongsTo
     {
         return $this->belongsTo(CaptureSession::class);
+    }
+
+    /**
+     * The notes of [$project] that come from its maker's own recordings (since v1.5): notes of another person's
+     * recording, filed under a shared project before v1.5, are that person's and never shown with it.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeOfProjectMaker(Builder $query, Client $project): Builder
+    {
+        return $query->where('client_id', $project->id)
+            ->whereHas('captureSession', fn (Builder $session) => $session->withoutGlobalScopes()->where('user_id', $project->user_id));
     }
 
     /** @return array<string, mixed> */

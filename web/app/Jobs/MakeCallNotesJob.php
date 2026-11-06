@@ -23,7 +23,7 @@ final class MakeCallNotesJob implements ShouldQueue
     public function handle(ClientWorkspace $workspace): void
     {
         $session = CaptureSession::query()->withoutGlobalScopes()->find($this->sessionId);
-        if ($session !== null && $session->client_id !== null) {
+        if ($session !== null && $workspace->projectOf($session) !== null) {
             $workspace->makeNotes($session);
         }
     }

@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
 use App\Filament\Support\CommandPalette;
+use App\Jobs\MakeCallNotesJob;
 use App\Mail\ShareReceivedMail;
+use App\Models\CallNote;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\ClientMemoryItem;
 use App\Models\FilingRule;
 use App\Models\Screen;
 use App\Models\SessionMarker;
@@ -14,12 +17,15 @@ use App\Models\ShareLink;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Callers\CallerMatcher;
+use App\Services\ClientAi\ClientWorkspace;
+use App\Services\CredentialVault;
 use App\Services\Projects\FilingRules;
 use App\Services\ShareLinks;
 use App\Services\Sharing\RequestLinks;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -303,4 +309,38 @@ it('leaves a removed member\'s content in the workspace, seen by nobody, and the
     app(Workspaces::class)->switchTo($b['bob']->fresh(), $team);
     $this->actingAs($b['bob']->fresh(), 'web');
     expect($this->get(route('filament.admin.resources.sessions.view', ['record' => $b['session']->id]))->status())->toBe(200);
+});
+
+it('keeps the notes and memory lines of a member\'s recording filed under the owner\'s project before v1.5 out of that project', function () {
+    Queue::fake();
+    app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+    $b = privacyWorld();
+    $alices = Fx::client($b['alice'], 'Alice project');
+    $alices->forceFill(['ai_notes' => true])->save();
+    // Projects were shared before v1.5: Bob filed his call under Alice's project, and its notes were written there.
+    unscoped(fn () => CaptureSession::acrossPeople()->whereKey($b['session']->id)->update(['client_id' => $alices->id]));
+    $note = CallNote::query()->withoutGlobalScopes()->create(['workspace_id' => $alices->workspace_id, 'client_id' => $alices->id, 'capture_session_id' => $b['session']->id,
+        'status' => 'ready', 'sections' => ['decisions' => [['text' => 'BOBSECRETNOTE decided', 'verify' => false, 'lines' => [0], 'at_ms' => 0]]]]);
+    $line = ClientMemoryItem::query()->withoutGlobalScopes()->create(['workspace_id' => $alices->workspace_id, 'client_id' => $alices->id, 'kind' => 'decision',
+        'text' => 'BOBSECRETNOTE in memory', 'source_type' => 'call', 'source_id' => $b['session']->id]);
+    ClientMemoryItem::query()->withoutGlobalScopes()->create(['workspace_id' => $alices->workspace_id, 'client_id' => $alices->id, 'kind' => 'scope',
+        'text' => 'Alice wrote this', 'source_type' => 'user']);
+    $alice = $this->api(Fx::token($b['aliceDevice']));
+
+    $workspace = $alice->getJson("/api/clients/{$alices->id}/workspace")->assertOk();
+    expect($workspace->getContent())->not->toContain('BOBSECRETNOTE')->and($workspace->json('data.memory.0.text'))->toBe('Alice wrote this')
+        ->and($workspace->json('data.notes'))->toBe([])
+        ->and($alice->getJson("/api/clients/{$alices->id}/bundle")->assertOk()->getContent())->not->toContain('BOBSECRETNOTE');
+    $alice->patchJson("/api/clients/{$alices->id}/memory/{$line->id}", ['pinned' => true])->assertNotFound()->assertJsonPath('code', 'memory_not_found');
+    $this->app['auth']->forgetGuards();
+    $this->actingAs($b['alice'], 'web');
+    $page = $this->get(route('filament.admin.resources.clients.view', ['record' => $alices->id]))->assertOk();
+    expect((string) $page->getContent())->not->toContain('BOBSECRETNOTE');
+
+    // Nothing new is written there either: a new transcript or Bob asking for notes again.
+    app(ClientWorkspace::class)->afterTranscript($b['transcript']->fresh());
+    $this->app['auth']->forgetGuards();
+    $this->api(Fx::token($b['device']))->postJson("/api/sessions/{$b['session']->id}/notes")->assertStatus(409)->assertJsonPath('code', 'no_client');
+    Queue::assertNotPushed(MakeCallNotesJob::class);
+    expect($note->fresh()->status)->toBe('ready')->and($note->fresh()->client_id)->toBe($alices->id);
 });

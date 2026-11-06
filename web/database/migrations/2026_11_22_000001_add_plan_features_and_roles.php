@@ -6,6 +6,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /*
  * Plans, roles and privacy (since v1.5, docs/API.md "Workspaces, roles and privacy" and "Plans and features"): plans
@@ -13,10 +14,12 @@ use Illuminate\Support\Facades\Schema;
  * plan every existing workspace is on has no limits and every feature, and a Free plan is added for new sign-ups.
  * Roles admin and viewer need no schema change (`workspace_user.role` is a string). Screens record what their two
  * encrypted files take, for the plan's storage. Content keeps the `user_id` of the person who made it; a row without
- * one (none is expected) goes to the first owner of its workspace.
+ * one (none is expected) goes to the first owner of its workspace. What one person filed or nested in another person's
+ * project moves to a project of its own maker (untangle()).
  *
  * Rollback moves workspaces on Free back to Personal, deletes Free, gives Personal its B20 limits again where they are
- * empty and drops the new columns; nothing of the library changes.
+ * empty and drops the new columns. Nothing of the library changes: the projects untangle() made stay, with what moved
+ * into them (B20 shows them to the whole workspace, next to the projects they were made from).
  */
 return new class extends Migration
 {
@@ -96,6 +99,75 @@ return new class extends Migration
                         DB::table($table)->where('workspace_id', $workspaceId)->whereNull('user_id')->update(['user_id' => $owner]);
                     }
                 });
+        }
+
+        $this->untangle();
+    }
+
+    /**
+     * Before v1.5 a team's projects were shared: one person could file a recording under another person's project
+     * (its notes and memory lines were written there), make a folder inside it, or point a request link at it. Each
+     * person keeps what they made, so each of these moves to a top-level project of its own maker named like the other
+     * one ("Acme", or "Acme (2)" when they have an "Acme" already), made once per project and person. Nothing is
+     * deleted, and the other person's project keeps its own brief, files, rules and contacts.
+     */
+    private function untangle(): void
+    {
+        $copies = [];
+        $copyFor = function (string $projectId, int $userId) use (&$copies): string {
+            $key = "{$projectId}:{$userId}";
+            if (isset($copies[$key])) {
+                return $copies[$key];
+            }
+            $project = DB::table('clients')->where('id', $projectId)->first();
+            $base = mb_substr(trim((string) $project->name), 0, 110);
+            $name = $base;
+            $taken = fn (string $candidate): bool => DB::table('clients')->where('workspace_id', $project->workspace_id)->where('user_id', $userId)
+                ->whereNull('parent_id')->whereRaw('LOWER(name) = ?', [mb_strtolower($candidate)])->exists();
+            for ($n = 2; $taken($name); $n++) {
+                $name = "{$base} ({$n})";
+            }
+            $id = strtolower((string) Str::ulid());
+            $now = now();
+            DB::table('clients')->insert([
+                'id' => $id, 'workspace_id' => $project->workspace_id, 'user_id' => $userId, 'parent_id' => null, 'name' => $name,
+                'color' => $project->color, 'avatar' => $project->avatar, 'language' => $project->language, 'retention_days' => $project->retention_days,
+                'ai_notes' => $project->ai_notes, 'screens' => $project->screens, 'created_at' => $now, 'updated_at' => $now,
+            ]);
+
+            return $copies[$key] = $id;
+        };
+
+        // Folders inside another person's project.
+        $folders = DB::table('clients as c')->join('clients as p', 'p.id', '=', 'c.parent_id')->whereColumn('c.user_id', '!=', 'p.user_id')
+            ->orderBy('c.id')->get(['c.id', 'c.user_id', 'c.parent_id']);
+        foreach ($folders as $folder) {
+            DB::table('clients')->where('id', $folder->id)->update(['parent_id' => $copyFor($folder->parent_id, (int) $folder->user_id)]);
+        }
+        // Recordings filed under another person's project, those in the bin too (a restore then lands in the copy).
+        $filed = DB::table('capture_sessions as s')->join('clients as c', 'c.id', '=', 's.client_id')->whereColumn('s.user_id', '!=', 'c.user_id')
+            ->select('s.client_id', 's.user_id')->distinct()->orderBy('s.client_id')->get();
+        foreach ($filed as $row) {
+            DB::table('capture_sessions')->where('client_id', $row->client_id)->where('user_id', $row->user_id)
+                ->update(['client_id' => $copyFor($row->client_id, (int) $row->user_id)]);
+        }
+        // Notes and memory lines of such a recording, also when it was moved out of that project since: to the project it
+        // is in now (always its maker's after the step above), or else to the copy.
+        $notes = DB::table('call_notes as n')->join('capture_sessions as s', 's.id', '=', 'n.capture_session_id')->join('clients as c', 'c.id', '=', 'n.client_id')
+            ->whereColumn('s.user_id', '!=', 'c.user_id')->orderBy('n.id')->get(['n.id', 'n.client_id', 's.user_id', 's.client_id as filed_in']);
+        foreach ($notes as $note) {
+            DB::table('call_notes')->where('id', $note->id)->update(['client_id' => $note->filed_in ?? $copyFor($note->client_id, (int) $note->user_id)]);
+        }
+        $lines = DB::table('client_memory_items as m')->join('capture_sessions as s', 's.id', '=', 'm.source_id')->join('clients as c', 'c.id', '=', 'm.client_id')
+            ->where('m.source_type', 'call')->whereColumn('s.user_id', '!=', 'c.user_id')->orderBy('m.id')->get(['m.id', 'm.client_id', 's.user_id', 's.client_id as filed_in']);
+        foreach ($lines as $line) {
+            DB::table('client_memory_items')->where('id', $line->id)->update(['client_id' => $line->filed_in ?? $copyFor($line->client_id, (int) $line->user_id)]);
+        }
+        // Request links into another person's project file into the copy (they would file into the Inbox otherwise).
+        $links = DB::table('request_links as r')->join('clients as c', 'c.id', '=', 'r.client_id')->whereColumn('r.user_id', '!=', 'c.user_id')
+            ->orderBy('r.id')->get(['r.id', 'r.client_id', 'r.user_id']);
+        foreach ($links as $link) {
+            DB::table('request_links')->where('id', $link->id)->update(['client_id' => $copyFor($link->client_id, (int) $link->user_id)]);
         }
     }
 

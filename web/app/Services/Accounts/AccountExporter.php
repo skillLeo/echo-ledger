@@ -241,7 +241,7 @@ final class AccountExporter
                 $this->addText("{$folder}/brief.json", (string) json_encode($brief->sections, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
                 $files[] = "{$folder}/brief.json";
             }
-            $memory = ClientMemoryItem::query()->withoutGlobalScopes()->where('client_id', $project->id)->orderBy('created_at')->get()
+            $memory = ClientMemoryItem::query()->withoutGlobalScopes()->ofProjectMaker($project)->orderBy('created_at')->get()
                 ->map(fn (ClientMemoryItem $m): array => ['kind' => $m->kind, 'text' => $m->text, 'happened_on' => $m->happened_on?->toDateString(), 'pinned' => $m->pinned])->all();
             if ($memory !== []) {
                 $this->addText("{$folder}/memory.json", (string) json_encode($memory, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
