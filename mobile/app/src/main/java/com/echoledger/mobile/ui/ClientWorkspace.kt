@@ -396,7 +396,7 @@ private fun OverviewTab(
             InlineBanner(PlanState.NO_AI_NOTES, kind = BannerKind.Info)
         } else if (!w.ai.configured) {
             InlineBanner(
-                "Add your Anthropic key in the console's API Credentials to get call notes, the brief and Ask.",
+                "AI is not set up on the server yet: call notes, the brief and Ask need its Anthropic key.",
                 kind = BannerKind.Warning
             )
         }
