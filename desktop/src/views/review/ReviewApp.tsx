@@ -69,10 +69,15 @@ export default function ReviewApp() {
     const timer = window.setTimeout(() => setKept(null), KEPT_MS);
     return () => window.clearTimeout(timer);
   }, [kept]);
-  // A new chip ends the kept one's moment: whatever leaves after it is not the kept one.
+  // A new chip ends the kept one's moment: whatever leaves after it is not the kept one. A chip the core takes away once
+  // its time is up was kept by the core, so it gets the check too.
+  const shownAsk = useRef<PendingItem | null>(null);
   useEffect(() => {
+    const was = shownAsk.current;
+    shownAsk.current = state.ask;
     if (state.ask) lastKept.current = null;
-  }, [state.ask]);
+    else if (was && lastKept.current !== was.id && secondsLeft(was.deadlineAt, Date.now()) === 0) keep(was);
+  }, [state.ask, keep]);
   const saved = usePresence(state.saved);
   const chip = usePresence(state.ask ?? kept);
   const chipKept = !state.ask && !!kept && chip.item?.id === kept.id;
@@ -151,7 +156,7 @@ function SavedPill({ saved, leaving, onGone }: { saved: SavedToast; leaving: boo
   );
 }
 
-/** "Ask me": the title (opens the recording to rename it or pick a client), ✓ Keep and ✕ Discard; kept by the core at
+/** "Ask me": the title (opens the recording to rename it or pick a project), ✓ Keep and ✕ Discard; kept by the core at
  * `deadlineAt` when nobody answers. */
 function KeepChip({ item, kept, leaving, onGone, onKept }: {
   item: PendingItem;

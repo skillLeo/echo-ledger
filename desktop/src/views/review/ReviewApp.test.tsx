@@ -170,6 +170,17 @@ describe("Ask-me chip", () => {
     expect(chip()).not.toBeInTheDocument();
   });
 
+  it("shows the check when the core keeps the chip by itself once its time is up, and not when it goes earlier", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
+    await emitEvent("aftercall:state", makeAfterCallState());
+    expect(keptChip()).toHaveTextContent(/^Kept·/);
+    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
+
+    await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2") }));
+    await emitEvent("aftercall:state", makeAfterCallState());
+    expect(keptChip()).toBeNull();
+  });
+
   it("the title opens the recording in the main window with its title field", async () => {
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
     fireEvent.click(button(/rename or choose a project/));
