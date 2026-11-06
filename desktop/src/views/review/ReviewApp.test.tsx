@@ -23,8 +23,10 @@ async function renderWindow(initial: AfterCallState = makeAfterCallState()) {
   return view;
 }
 
-const toast = () => screen.queryByTestId("saved-toast");
-const chip = () => screen.queryByTestId("keep-chip");
+// What is shown: a toast or chip on its way out (`.leaving`, 150 ms) is no longer shown.
+const toast = () => document.querySelector<HTMLElement>("[data-testid=saved-toast]:not(.leaving)");
+const chip = () => document.querySelector<HTMLElement>("[data-testid=keep-chip]:not(.leaving):not(.kept)");
+const keptChip = () => document.querySelector<HTMLElement>("[data-testid=keep-chip].kept");
 const askChip = () => screen.queryByTestId("ask-chip");
 const button = (name: string | RegExp) => screen.getByRole("button", { name });
 
@@ -102,6 +104,25 @@ describe("Saved toast (Keep automatically)", () => {
     expect(callsOf("saved_undo")).toHaveLength(0);
   });
 
+  it("leaves over 150 ms when it goes: marked leaving, no longer a hit region, then gone (v1.5)", async () => {
+    await renderWindow(makeAfterCallState({ saved: makeSavedToast() }));
+    expect(screen.getByTestId("saved-toast")).toHaveAttribute("data-hit");
+    await emitEvent("aftercall:state", makeAfterCallState());
+    const leaving = screen.getByTestId("saved-toast");
+    expect(leaving).toHaveClass("leaving");
+    expect(leaving).not.toHaveAttribute("data-hit");
+    expect(leaving).toHaveAttribute("aria-hidden", "true");
+    await waitFor(() => expect(screen.queryByTestId("saved-toast")).not.toBeInTheDocument());
+  });
+
+  it("goes at once with reduced motion, and the check is simply there", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("reduced-motion"), media: query, addEventListener() {}, removeEventListener() {} }));
+    await renderWindow(makeAfterCallState({ saved: makeSavedToast() }));
+    expect(screen.getByTestId("saved-toast").querySelector("[data-testid=success-check]")).not.toBeNull();
+    await emitEvent("aftercall:state", makeAfterCallState());
+    expect(screen.queryByTestId("saved-toast")).not.toBeInTheDocument();
+  });
+
   it("follows the core: a newer toast replaces it and an empty state hides it", async () => {
     await renderWindow();
     expect(toast()).not.toBeInTheDocument();
@@ -136,6 +157,11 @@ describe("Ask-me chip", () => {
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }]));
     await flushAsync();
     expect(chip()).not.toBeInTheDocument();
+    // Kept: a check pops in and the chip says so, takes no clicks, then leaves by itself.
+    expect(keptChip()).toHaveTextContent(/^Kept·/);
+    expect(keptChip()!.querySelector("[data-testid=success-check]")).not.toBeNull();
+    expect(keptChip()).not.toHaveAttribute("data-hit");
+    await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
 
     await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2") }));
     fireEvent.click(button("Discard"));

@@ -9,6 +9,7 @@ import { audienceText, downloadText, EXPIRY_CHOICES, expiryTime, linkState, MAX_
 import { CopyIcon, SendIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { SharePanel } from "./TranscriptTools";
+import { SuccessCheck } from "../../components/SuccessCheck";
 
 export type ShareTarget =
   | { kind: "session"; id: string; title: string | null; hasAudio: boolean }
@@ -196,6 +197,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
       {error && <div className="notice error small" role="alert">{error}</div>}
       {made && (
         <div className="share-made" role="status">
+          <div className="share-made-head"><SuccessCheck size={16} /><b className="small">Link made</b></div>
           <span className="small muted">Copy it now. It is shown only once.</span>
           <code className="share-url">{made}</code>
           <button type="button" className="btn" onClick={() => void copy()}><CopyIcon size={14} />Copy link</button>

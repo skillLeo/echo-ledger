@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { RecordView } from "./RecordView";
 import type { AppStatus, MicUser } from "../../lib/ipc";
@@ -38,6 +38,20 @@ const meterWidths = (container: HTMLElement) => [...container.querySelectorAll<H
 
 describe("RecordView main control", () => {
   beforeEach(() => resetTauriMock());
+
+  it("shows Record as a filled dot, a recording as stop, and breathes a ring only while it records (v1.5)", async () => {
+    const idle = await setup();
+    const glyph = () => idle.container.querySelector(".record-glyph svg")!;
+    expect(glyph().querySelector("circle")).toHaveAttribute("fill", "currentColor");
+    expect(screen.getByTestId("record-wrap")).not.toHaveClass("live");
+    idle.unmount();
+    await setup({ recording: makeRecording() });
+    expect(document.querySelector(".record-glyph rect")).toHaveAttribute("fill", "currentColor");
+    expect(screen.getByTestId("record-wrap")).toHaveClass("live");
+    cleanup();
+    await setup({ recording: makeRecording(), paused: true });
+    expect(screen.getByTestId("record-wrap")).not.toHaveClass("live");
+  });
 
   it("offers REC when idle and starts a recording on click", async () => {
     const { run } = await setup();

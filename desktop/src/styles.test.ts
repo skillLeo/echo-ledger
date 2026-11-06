@@ -291,6 +291,35 @@ describe("motion (C5)", () => {
     }
   });
 
+  it("animates no layout property in any keyframes, and only transform and opacity in the v1.5 motion", () => {
+    const LAYOUT = /^(width|height|min-|max-|top|left|right|bottom|inset|margin|padding|grid|flex|font-size|line-height|border-width|gap)/;
+    const V15 = ["glyph-in", "record-pulse", "check-pop", "ctl-slide-in", "ctl-slide-out", "rise", "fade", "bar"];
+    for (const [file, source] of [["styles.css", css], ["controls.css", controls]] as const) {
+      for (const [, name, body] of source.matchAll(/@keyframes\s+([\w-]+)\s*\{((?:[^{}]*\{[^{}]*\})*)\s*\}/g)) {
+        const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]);
+        expect(props.filter((p) => LAYOUT.test(p)), `${file} @keyframes ${name}`).toEqual([]);
+        if (V15.includes(name)) expect(props.every((p) => ["transform", "opacity", "translate", "scale"].includes(p)), `${file} @keyframes ${name}: ${props}`).toBe(true);
+      }
+    }
+  });
+
+  it("moves no layout property in a transition, except the level meters that follow the signal", () => {
+    for (const [file, source] of [["styles.css", css], ["controls.css", controls]] as const) {
+      for (const [, value] of source.matchAll(/transition:\s*([^;]+);/g)) {
+        const meter = /\b(width|height) [\d.]+(ms|s) linear\b/.test(value);
+        if (!meter) expect(value, `${file}: transition: ${value}`).not.toMatch(/(^|,\s*)(width|height|grid-template-columns|top|left|margin|padding)\b/);
+      }
+    }
+  });
+
+  it("keeps the record ring, the check and the record glyph still with reduced motion", () => {
+    const reduced = media("(prefers-reduced-motion: reduce)").filter((r): r is CSSStyleRule => r instanceof CSSStyleRule);
+    const still = (selector: string) => reduced.some((r) => r.selectorText.split(",").map((x) => x.trim()).includes(selector) && r.style.getPropertyValue("animation") === "none");
+    expect(still(".record-wrap.live::before")).toBe(true);
+    expect(still(".success-check")).toBe(true);
+    expect(still(".record-glyph")).toBe(true);
+  });
+
   it("turns motion off with reduced motion", () => {
     const reduced = media("(prefers-reduced-motion: reduce)");
     const all = reduced.find((r) => r instanceof CSSStyleRule && r.selectorText.startsWith("*")) as CSSStyleRule | undefined;

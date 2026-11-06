@@ -12,12 +12,13 @@ export function SourceDeviceBadge({ source, label }: { source?: string; label?: 
   );
 }
 
-export function SourceAppBadge({ app, label }: { app?: string; label?: string }) {
+/** `motion` names the icon for a transition (the recording page's app tile, lib/motion.ts). */
+export function SourceAppBadge({ app, label, motion }: { app?: string; label?: string; motion?: string }) {
   const key = app ?? "other";
   return (
     <span className="badge" data-testid="source-app">
-      <SourceAppIcon app={key} size={14} />
-      {label ?? SOURCE_APP_LABELS[key] ?? key}
+      <SourceAppIcon app={key} size={14} data-motion={motion} />
+      <span>{label ?? SOURCE_APP_LABELS[key] ?? key}</span>
     </span>
   );
 }

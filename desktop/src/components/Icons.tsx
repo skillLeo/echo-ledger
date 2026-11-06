@@ -255,8 +255,8 @@ export function appKind(app?: string): "video" | "chat" | "voice" | "phone" | "o
 }
 
 /** The glyph of a row's app tile: the app's line icon on the tile's tint (the phone's RecordingRow, a drawn glyph). */
-export function AppTileIcon({ app, size = 22 }: { app?: string; size?: number }) {
-  return <SourceAppIcon app={app} size={size} />;
+export function AppTileIcon({ app, size = 22, ...rest }: IconProps & { app?: string }) {
+  return <SourceAppIcon app={app} size={size} {...rest} />;
 }
 
 /** The small device badge on a tile: laptop, phone or web. */

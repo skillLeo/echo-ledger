@@ -85,11 +85,16 @@
   --shadow-1: none;
   --shadow-2: 0 0 0 1px var(--border-strong), 0 8px 24px rgba(0, 0, 0, 0.45);
   --shadow-3: 0 0 0 1px var(--border-strong), 0 12px 32px rgba(0, 0, 0, 0.5);
-  /* motion: 150-300 ms, ease-out; reduced motion turns it off (bottom of this file) */
+  /* motion (the phone's Motion tokens): press 120, exit 150, state 200, enter 300 ms; standard for state changes,
+     decelerate (ease-out) for what comes in, accelerate (ease-in) for what goes; reduced motion turns it off (bottom of
+     this file). Only transform and opacity move, never layout (lib/motion.ts for the page and recording transitions). */
+  --motion-press: 120ms;
   --motion-fast: 150ms;
   --motion-base: 200ms;
   --motion-slow: 300ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-out: cubic-bezier(0, 0, 0, 1);
+  --ease-in: cubic-bezier(0.3, 0, 1, 1);
   /* type */
   --font-sans: "Inter", "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-display: var(--font-sans);
@@ -172,7 +177,8 @@ h1, h2, h3 { font-family: var(--font-display); }
 .tabular, .seg-time, .item-time { font-variant-numeric: tabular-nums; }
 
 /* ---------- main window: a collapsible sidebar and the page ---------- */
-.app { display: grid; grid-template-columns: 232px 1fr; height: 100%; transition: grid-template-columns var(--motion-base) var(--ease-out); }
+/* The sidebar collapses at once: its width is layout, and only transform and opacity ever move. */
+.app { display: grid; grid-template-columns: 232px 1fr; height: 100%; }
 .app.collapsed { grid-template-columns: 68px 1fr; }
 .sidebar { background: var(--bg); border-right: 1px solid var(--border); padding: var(--space-3) var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; overflow: hidden auto; }
 html[data-material] .sidebar { background: transparent; border-right-color: transparent; }
@@ -350,9 +356,14 @@ select.chip option { color: var(--text); background: var(--surface); }
 .spk-1 { color: var(--me); } .spk-2 { color: var(--client); }
 
 .record-hero { display: flex; align-items: center; gap: var(--space-5); }
-.record-btn { width: 72px; height: 72px; border-radius: 50%; border: 0; cursor: pointer; background: var(--danger-strong); box-shadow: 0 0 0 6px var(--danger-soft); color: var(--on-accent); font-weight: 700; font-size: var(--text-sm); letter-spacing: 0.04em; display: grid; place-items: center; align-content: center; gap: 2px; transition: transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
+.record-btn { width: 72px; height: 72px; border-radius: 50%; border: 0; cursor: pointer; background: var(--danger-strong); box-shadow: 0 0 0 6px var(--danger-soft); color: var(--on-accent); font-weight: 700; font-size: var(--text-sm); letter-spacing: 0.04em; display: grid; place-items: center; align-content: center; gap: 2px; transition: background-color var(--motion-base) var(--ease-standard), box-shadow var(--motion-base) var(--ease-standard), transform var(--motion-press) var(--ease-standard); }
 .record-btn.idle { background: var(--accent-strong); box-shadow: 0 0 0 6px var(--accent-soft); }
-.record-glyph { display: grid; place-items: center; }
+.record-glyph { display: grid; place-items: center; animation: glyph-in var(--motion-base) var(--ease-standard) both; }
+@keyframes glyph-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+/* The ring that breathes around the record control while it records (the phone's 1 → 1.18, about 1.1 s each way). */
+.record-wrap { position: relative; display: grid; place-items: center; flex: none; isolation: isolate; }
+.record-wrap.live::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; background: color-mix(in srgb, var(--rec) 30%, transparent); z-index: -1; animation: record-pulse 1.1s var(--ease-standard) infinite alternate; }
+@keyframes record-pulse { from { transform: scale(1); opacity: 0.6; } to { transform: scale(1.14); opacity: 0.2; } }
 .record-btn:hover { transform: scale(1.03); }
 .record-btn:active { transform: scale(0.96); }
 .meter { height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; width: 160px; }
@@ -373,7 +384,7 @@ select.chip option { color: var(--text); background: var(--surface); }
 .notice { border: 1px solid var(--border); border-radius: var(--radius-field); padding: 10px var(--space-3); line-height: 1.5; background: var(--surface-2); }
 .notice.error { border-color: transparent; background: var(--danger-soft); }
 .notice.brand { border-color: transparent; background: var(--accent-soft); }
-.toast { position: fixed; bottom: var(--space-5); left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px var(--space-4); border-radius: var(--radius-field); box-shadow: var(--shadow-2); max-width: min(520px, calc(100% - 48px)); z-index: 30; font-weight: 500; animation: rise var(--motion-base) var(--ease-out) both; }
+.toast { position: fixed; bottom: var(--space-5); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-2); background: var(--text); color: var(--bg); padding: 10px var(--space-4); border-radius: var(--radius-field); box-shadow: var(--shadow-2); max-width: min(520px, calc(100% - 48px)); z-index: 30; font-weight: 500; animation: rise var(--motion-base) var(--ease-out) both; }
 .toast.error { background: var(--danger-strong); color: var(--on-accent); }
 @keyframes rise { from { translate: 0 8px; opacity: 0; } to { translate: 0 0; opacity: 1; } }
 
@@ -546,9 +557,10 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .caption-message { color: var(--danger); }
 .dictation-card { display: block; min-height: 64px; }
 .listening { display: inline-flex; gap: 3px; align-items: flex-end; height: 12px; }
-.listening span { width: 3px; background: var(--accent); border-radius: 2px; animation: bar 1s infinite ease-in-out; }
+/* The bars grow from the bottom by scaling, not by their height (a layout property never moves). */
+.listening span { width: 3px; height: 12px; background: var(--accent); border-radius: 2px; transform-origin: bottom; animation: bar 1s infinite ease-in-out; }
 .listening span:nth-child(2) { animation-delay: 0.15s; } .listening span:nth-child(3) { animation-delay: 0.3s; }
-@keyframes bar { 0%, 100% { height: 4px; } 50% { height: 12px; } }
+@keyframes bar { 0%, 100% { transform: scaleY(0.34); } 50% { transform: none; } }
 
 /* ---------- the recording page ---------- */
 .detail-head { display: grid; gap: var(--space-2); }
@@ -796,8 +808,18 @@ audio.player { display: none; }
 :root[data-theme="light"] .skeleton::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent); }
 @keyframes shimmer { to { transform: translateX(100%); } }
 
+/* A thing just worked (components/SuccessCheck.tsx): the check pops in, a little past its size and back. */
+.success-check { display: inline-grid; place-items: center; flex: none; animation: check-pop var(--motion-slow) var(--ease-out) both; }
+@keyframes check-pop { 0% { opacity: 0; transform: scale(0.4); } 60% { opacity: 1; transform: scale(1.15); } 100% { opacity: 1; transform: none; } }
+.saved-line { display: inline-flex; align-items: center; gap: var(--space-1); }
+.share-sheet .share-made-head { display: flex; align-items: center; gap: var(--space-2); color: var(--success); }
+.share-sheet .share-made-head b { color: var(--text); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; }
+  /* States change at once: the ring stays still, the check and the record glyph are simply there. */
+  .record-wrap.live::before { animation: none; opacity: 0.45; }
+  .success-check, .record-glyph { animation: none; }
   .spinner, .status-dot.live { animation: none; }
   .queue-item { transition: none; }
   .overlay-card { transition: none; }

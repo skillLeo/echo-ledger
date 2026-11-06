@@ -128,12 +128,15 @@ export function RecordView({ status, run, onImport }: {
       <p className="page-sub">Two channels: your microphone is "Me", the other side of the call is "Client".</p>
       <div className="card">
         <div className="record-hero">
-          <button className={`record-btn ${recording ? "" : "idle"}`} onClick={() => run(recording ? api.stopRecording : () => api.startRecording())}
-            aria-label={recording ? "Stop recording" : "Start recording"}>
-            {/* Record is a filled dot (the phone's and the console's record control); a recording shows stop. */}
-            <span className="record-glyph" aria-hidden="true">{recording ? <StopIcon size={18} /> : <RecordDotIcon size={18} />}</span>
-            <span className="record-word">{recording ? "STOP" : "REC"}</span>
-          </button>
+          {/* The record control (since v1.5, as on the phone): its colour changes over 200 ms, it gives a little under a
+              press, and a calm ring breathes around it while it records; Record is a filled dot, a recording shows stop. */}
+          <span className={`record-wrap ${recording && !paused ? "live" : ""}`} data-testid="record-wrap">
+            <button className={`record-btn ${recording ? "" : "idle"}`} onClick={() => run(recording ? api.stopRecording : () => api.startRecording())}
+              aria-label={recording ? "Stop recording" : "Start recording"}>
+              <span key={recording ? "stop" : "rec"} className="record-glyph" aria-hidden="true">{recording ? <StopIcon size={18} /> : <RecordDotIcon size={18} />}</span>
+              <span className="record-word">{recording ? "STOP" : "REC"}</span>
+            </button>
+          </span>
           <div style={{ display: "grid", gap: 8 }}>
             <div className="row">
               <span className={`status-dot ${paused ? "paused" : recording ? "live" : ""}`} />

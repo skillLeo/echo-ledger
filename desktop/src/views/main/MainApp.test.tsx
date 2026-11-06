@@ -4,6 +4,7 @@ import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeNavigate, makePendingItem, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
 import type { AppStatus } from "../../lib/ipc";
+import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -645,5 +646,81 @@ describe("command palette (B9)", () => {
     fireEvent.change(await paletteInput(), { target: { value: "go to settings" } });
     fireEvent.keyDown(await paletteInput(), { key: "Enter" });
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+  });
+});
+
+describe("motion and the brand in the main window (v1.5)", () => {
+  let anim: ReturnType<typeof fakeAnimations>;
+  beforeEach(() => {
+    anim = fakeAnimations();
+    prefersReducedMotion(false);
+  });
+  afterEach(() => {
+    anim.restore();
+    vi.unstubAllGlobals();
+  });
+  const pageParts = () => anim.calls.filter((c) => c.el.matches("main.content"));
+
+  it("shows the brand's mark next to the name in the sidebar, not an icon", async () => {
+    await renderPaired();
+    const brand = sidebar().querySelector(".brand")!;
+    expect(brand.querySelector("svg.brand-mark")).toHaveAttribute("data-mark", "full");
+    expect(brand).toHaveTextContent("EchoLedger");
+  });
+
+  it("draws the active page's icon filled and the others outlined", async () => {
+    await renderPaired();
+    const icon = (name: string) => nav(name).querySelector("svg")!;
+    expect(icon("Library").querySelector("[fill=currentColor]")).not.toBeNull();
+    expect(icon("Projects").querySelector("[fill=currentColor]")).toBeNull();
+    fireEvent.click(nav("Projects"));
+    expect(icon("Projects").querySelector("[fill=currentColor]")).not.toBeNull();
+  });
+
+  it("fades the new page in from the side it sits on in the sidebar, 200 ms, transform and opacity only", async () => {
+    await renderPaired();
+    fireEvent.click(nav("Settings"));
+    await screen.findByRole("heading", { name: "Settings" });
+    expect(pageParts().length).toBeGreaterThan(0);
+    for (const call of pageParts()) {
+      expect(call.keyframes).toEqual([{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }]);
+      expect(call.options).toMatchObject({ duration: 200, fill: "none" });
+    }
+    anim.calls.length = 0;
+    fireEvent.click(nav("Library"));
+    await screen.findByRole("heading", { name: "Library" });
+    expect(pageParts()[0].keyframes[0]).toEqual({ opacity: 0, transform: "translateY(-12px)" });
+  });
+
+  it("never leaves a page half-faded: a click during a switch ends the last one at once", async () => {
+    await renderPaired();
+    fireEvent.click(nav("Settings"));
+    const first = pageParts();
+    fireEvent.click(nav("Record"));
+    expect(first.length).toBeGreaterThan(0);
+    expect(first.every((c) => c.cancel.mock.calls.length === 1)).toBe(true);
+    // Nothing is held by a style: once the animations end, each part is as it is without motion.
+    for (const el of document.querySelectorAll<HTMLElement>("main.content, main.content > *")) {
+      expect(el.style.opacity).toBe("");
+      expect(el.style.transform).toBe("");
+    }
+  });
+
+  it("switches pages at once when the OS asks for reduced motion", async () => {
+    prefersReducedMotion(true);
+    await renderPaired();
+    fireEvent.click(nav("Settings"));
+    await screen.findByRole("heading", { name: "Settings" });
+    expect(anim.animate).not.toHaveBeenCalled();
+  });
+
+  it("puts the check that pops in on a message that confirms something, not on others", async () => {
+    await renderPaired();
+    await emitEvent("app:toast", "Voice note saved");
+    expect(document.querySelector(".toast [data-testid=success-check]")).not.toBeNull();
+    await emitEvent("app:toast", "Recording a voice note. Press N again to stop.");
+    expect(document.querySelector(".toast [data-testid=success-check]")).toBeNull();
+    await emitEvent("app:error", "Saved nothing: the server is offline");
+    expect(document.querySelector(".toast [data-testid=success-check]")).toBeNull();
   });
 });
