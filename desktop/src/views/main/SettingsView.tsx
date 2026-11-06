@@ -2,13 +2,14 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 import { api, listenTo, type AfterCall, type AppStatus, type Corner, type Settings, type ShortcutAction, type SiteRule, type TranscriptionLanguage } from "../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut, sourceAppLabel } from "../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
-import { CallIcon, ChevronRightIcon, KeyboardIcon, MicIcon, SearchIcon, SettingsIcon, SourceAppIcon, TuneIcon } from "../../components/Icons";
+import { CallIcon, ChevronRightIcon, KeyboardIcon, MicIcon, SearchIcon, SettingsIcon, SourceAppIcon, TuneIcon, UserIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SelectRow, Toggle } from "./SettingsControls";
 import { AutoRecordApps, CaptionStyleCard, MicrophoneCard } from "./CaptureSettings";
 import { DictationCard } from "./DictationSettings";
 import { ScreenMomentsCard } from "./ScreenSettings";
 import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./SecuritySettings";
+import { AccountCard, PlanCard, YourDataCard, useAccount } from "./AccountSettings";
 import { conflictFor } from "../../lib/shortcutConflicts";
 import { getVersion } from "@tauri-apps/api/app";
 import { LANGUAGE_OPTIONS, menuLabel } from "../../lib/languages";
@@ -23,19 +24,21 @@ const ACTIONS: [ShortcutAction, string][] = [
   ["mark", "Bookmark this moment of a recording"],
 ];
 
-type Group = "general" | "calls" | "voice" | "shortcuts";
-/** General, then one panel per way of using the app, as on the phone's settings (B19). */
-export const GROUPS: readonly Group[] = ["general", "calls", "voice", "shortcuts"];
+type Group = "account" | "general" | "calls" | "voice" | "shortcuts";
+/** The account (v1.5, when the server has accounts), General, then one panel per way of using the app, as on the
+ * phone's settings (B19). */
+export const GROUPS: readonly Group[] = ["account", "general", "calls", "voice", "shortcuts"];
 export const GROUP_LABEL: Record<Group, string> = {
-  general: "General", calls: "Calls & meetings", voice: "Voice notes & dictation", shortcuts: "Shortcuts",
+  account: "Account", general: "General", calls: "Calls & meetings", voice: "Voice notes & dictation", shortcuts: "Shortcuts",
 };
 const GROUP_SUB: Record<Group, string> = {
+  account: "You, your workspace and plan, your data",
   general: "This computer, look, lock, privacy, storage",
   calls: "Call apps, after a call, captions, microphone, screens",
   voice: "The dictation box, its words and history",
   shortcuts: "Keys for captions, saving, bookmarks, the app",
 };
-const GROUP_ICON: Record<Group | "all", typeof SettingsIcon> = { all: SettingsIcon, general: TuneIcon, calls: CallIcon, voice: MicIcon, shortcuts: KeyboardIcon };
+const GROUP_ICON: Record<Group | "all", typeof SettingsIcon> = { all: SettingsIcon, account: UserIcon, general: TuneIcon, calls: CallIcon, voice: MicIcon, shortcuts: KeyboardIcon };
 const THEMES: readonly [ThemeChoice, string][] = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
 /** Keys of the main window itself (not global; they work while EchoLedger is in front). */
 const APP_KEYS: readonly [string, string][] = [
@@ -46,6 +49,8 @@ const APP_KEYS: readonly [string, string][] = [
   ["Ctrl+F", "Find in the open transcript"],
 ];
 interface SettingsSection { id: string; group: Group; title: string; keywords: string; node: ReactNode }
+/** Signing this computer out (v1.5; "Unpair" before accounts): the token goes, the recordings waiting here stay. */
+const SIGN_OUT_CONFIRM = "Sign out of this computer? Recordings waiting to upload stay here until you sign in again.";
 
 const AFTER_CALL: readonly (readonly [AfterCall, string])[] = [["keep", "Keep automatically"], ["ask", "Ask me"]];
 const AFTER_CALL_HINT: Record<AfterCall, string> = {
@@ -148,6 +153,8 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [group, setGroup] = useState<Group | "all">("all");
   const [query, setQuery] = useState("");
+  // The account (v1.5): none from a server without accounts, and then no Account group.
+  const [account, setAccount] = useAccount();
 
   useEffect(() => {
     api.settings().then(setSettings).catch(() => undefined);
@@ -185,6 +192,14 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
 
   const shortcutConflict = (action: ShortcutAction) => conflictFor(settings.shortcuts[action], status.platform);
   const sections: SettingsSection[] = [
+    ...(account ? [
+      { id: "account", group: "account", title: "Your account", keywords: "account email name workspace role two-factor google sign out everywhere",
+        node: <AccountCard account={account} status={status} run={run} onSignedOut={onUnpaired} /> },
+      { id: "plan", group: "account", title: "Plan", keywords: "plan limits minutes storage usage retention seats features live translate screen moments",
+        node: <PlanCard status={status} /> },
+      { id: "your-data", group: "account", title: "Your data", keywords: "export my data download zip delete my account",
+        node: <YourDataCard account={account} onAccount={setAccount} /> },
+    ] satisfies SettingsSection[] : []),
     { id: "general", group: "general", title: "General", keywords: "start sign in login autostart language transcription client keyterms", node: (
       <div className="card">
         <b>General</b>
@@ -286,14 +301,14 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
     ) },
     { id: "lock", group: "general", title: "App lock", keywords: "lock pin windows hello touch id privacy security", node: <LockCard settings={settings} patch={patch} run={run} /> },
     { id: "devices", group: "general", title: "Devices", keywords: "devices revoke paired activity audit", node: <DevicesCard run={run} /> },
-    { id: "this-device", group: "general", title: "This computer", keywords: "unpair device name", node: (
+    { id: "this-device", group: "general", title: "This computer", keywords: "sign out unpair device name", node: (
       <div className="card">
         <div className="row"><div><b>Device</b><div className="small muted">{status.deviceName}</div></div><span className="spacer" />
-          <button className="btn danger" onClick={async () => { if (window.confirm("Unpair this computer? Pending uploads stay queued until you pair again.")) { const s = await run(api.unpair); if (s) onUnpaired(s); } }}>Unpair</button>
+          <button className="btn danger" onClick={async () => { if (window.confirm(SIGN_OUT_CONFIRM)) { const s = await run(api.unpair); if (s) onUnpaired(s); } }}>Sign out</button>
         </div>
       </div>
     ) },
-    { id: "storage", group: "general", title: "Storage and retention", keywords: "storage disk retention deleted bin", node: <StorageCard /> },
+    { id: "storage", group: "general", title: "Storage and retention", keywords: "storage disk retention deleted bin", node: <StorageCard limitBytes={status.plan.storageBytes} /> },
     { id: "about", group: "general", title: "About", keywords: "version server export import backup settings file", node: <AboutCard status={status} run={run} onImported={setSettings} /> },
   ];
   const q = query.trim().toLowerCase();
@@ -309,7 +324,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings groups">
           <label className="searchbox compact"><SearchIcon size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
-          {(["all", ...GROUPS] as const).map((g) => {
+          {(["all", ...GROUPS.filter((g) => g !== "account" || account)] as const).map((g) => {
             const Icon = GROUP_ICON[g];
             const active = !q && group === g;
             return (

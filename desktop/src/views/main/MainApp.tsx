@@ -20,6 +20,7 @@ import { CommandPalette } from "./CommandPalette";
 import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
 import { fileDropClaim } from "../../lib/dropTarget";
+import { isViewer, viewerSentence } from "../../lib/plan";
 
 type Tab = MainTab;
 const TABS: readonly Tab[] = ["library", "projects", "record", "activity", "settings"];
@@ -110,6 +111,9 @@ export default function MainApp() {
   // Drops count only on the app itself, never on the lock screen, the sign-in form or the first-run wizard.
   const acceptDrops = useRef(false);
   acceptDrops.current = !!status?.paired && restored && !lock?.locked && setupDone !== false;
+  // A viewer (v1.5) imports nothing: a drop or the Import button says why instead of opening the sheet.
+  const viewer = useRef<string | null>(null);
+  viewer.current = isViewer(status) ? viewerSentence(status?.plan.workspace) : null;
 
   // Files dropped anywhere on the window open the import sheet (the core no longer imports a drop by itself).
   useEffect(() => {
@@ -122,6 +126,7 @@ export default function MainApp() {
         if (paths.length === 0 || !acceptDrops.current) return;
         const claim = fileDropClaim();
         if (claim) claim(paths);
+        else if (viewer.current) setToast({ text: viewer.current, error: true });
         else setImportPaths(paths);
       },
     });
@@ -366,6 +371,10 @@ export default function MainApp() {
   const notify = (text: string, error = false) => setToast({ text, error });
   /** The Import button: the core's multi-select picker, then the sheet for the chosen files. */
   const pickImport = async () => {
+    if (viewer.current) {
+      notify(viewer.current, true);
+      return;
+    }
     try {
       const paths = await api.pickImportFiles();
       if (paths.length > 0) setImportPaths(paths);

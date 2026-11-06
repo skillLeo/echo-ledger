@@ -667,6 +667,9 @@ pub fn hide_captions(app: AppHandle) -> AppStatus {
 #[tauri::command]
 pub async fn import_voice_notes(app: AppHandle, paths_list: Vec<String>, client_id: Option<String>, language: Option<String>) -> AppResult<crate::files::ImportSummary> {
     ensure_unlocked(&app.state::<AppState>())?;
+    if let Some(refusal) = app.state::<AppState>().viewer_refusal() {
+        return Err(AppError::Message(refusal));
+    }
     let client_id = client_id.map(|c| c.trim().to_string()).filter(|c| !c.is_empty());
     let language = crate::settings::language_or_none(language.as_deref());
     let sources: Vec<std::path::PathBuf> = paths_list.iter().map(std::path::PathBuf::from).collect();

@@ -7,6 +7,7 @@ import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { useWindowShown } from "../../lib/visibility";
 import { CaptionsIcon, CopyIcon, MicIcon } from "../../components/Icons";
 import { LiveTranslateCard } from "./LiveTranslateCard";
+import { isViewer, viewerSentence } from "../../lib/plan";
 
 /**
  * Live view of which apps hold the microphone and what the core decided for each (A1.8), so a call that was not
@@ -105,6 +106,20 @@ export function RecordView({ status, run, onImport }: {
   const cancel = () => {
     if (window.confirm(DISCARD_CONFIRM)) void run(api.cancelRecording);
   };
+  // A viewer (v1.5) opens what is shared with them and records nothing; Live Translate records nothing either.
+  if (isViewer(status) && !recording) {
+    return (
+      <>
+        <h1 className="page-title">Record</h1>
+        <div className="card notice-card" data-testid="viewer-notice">
+          <div className="row"><MicIcon /><b>Recording is off for viewers</b></div>
+          <p className="small">{viewerSentence(status.plan.workspace)}</p>
+          <p className="small muted">An owner or admin of the workspace can change your role in the console.</p>
+        </div>
+        {status.plan.liveTranslate && <LiveTranslateCard run={run} />}
+      </>
+    );
+  }
   return (
     <>
       <h1 className="page-title">Record</h1>
@@ -166,7 +181,8 @@ export function RecordView({ status, run, onImport }: {
           </div>
         </div>
       </div>
-      <LiveTranslateCard run={run} />
+      {/* Live Translate is hidden when the workspace's plan leaves it out (v1.5). */}
+      {status.plan.liveTranslate && <LiveTranslateCard run={run} />}
       <div className="card dropzone" style={{ marginTop: 14 }}>
         Drop voice notes, audio or video files anywhere in this window to transcribe them (OPUS, OGG, MP3, M4A, AAC, WAV, MP4 or WEBM).
         {onImport && <div className="card-actions dropzone-actions"><button type="button" className="btn" onClick={onImport}>Choose files…</button></div>}

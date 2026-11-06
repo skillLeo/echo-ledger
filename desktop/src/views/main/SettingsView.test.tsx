@@ -87,7 +87,7 @@ describe("SettingsView loading", () => {
   it("shows the device name next to the unpair button", async () => {
     await setup({}, { deviceName: "Studio PC" });
     expect(screen.getByText("Studio PC")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Unpair" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeInTheDocument();
   });
 });
 
@@ -335,8 +335,8 @@ describe("SettingsView unpair", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const { onUnpaired } = await setup();
     respond("unpair", makeStatus({ paired: false }));
-    fireEvent.click(screen.getByRole("button", { name: "Unpair" }));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Unpair this computer?"));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Sign out of this computer?"));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(callsOf("unpair")).toHaveLength(0);
     expect(onUnpaired).not.toHaveBeenCalled();
@@ -347,7 +347,7 @@ describe("SettingsView unpair", () => {
     const { onUnpaired } = await setup();
     const unpaired = makeStatus({ paired: false, deviceName: null, serverUrl: null });
     respond("unpair", unpaired);
-    fireEvent.click(screen.getByRole("button", { name: "Unpair" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(onUnpaired).toHaveBeenCalledWith(unpaired));
     expect(callsOf("unpair")).toHaveLength(1);
   });
@@ -356,7 +356,7 @@ describe("SettingsView unpair", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { onUnpaired, errors } = await setup();
     respondWith("unpair", () => Promise.reject("Keychain error: access denied"));
-    fireEvent.click(screen.getByRole("button", { name: "Unpair" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(errors).toEqual(["Keychain error: access denied"]));
     expect(onUnpaired).not.toHaveBeenCalled();
   });

@@ -425,12 +425,12 @@ describe("MainApp action runner", () => {
     expect(within(sidebar()).getByText("Captions live")).toBeInTheDocument();
   });
 
-  it("unpairing from Settings returns to the pairing form", async () => {
+  it("signing out from Settings returns to the sign-in form", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     await renderPaired();
     respond("unpair", makeStatus({ paired: false, serverUrl: null, deviceName: null }));
     fireEvent.click(nav("Settings"));
-    fireEvent.click(await screen.findByRole("button", { name: "Unpair" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
   });
 });

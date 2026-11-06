@@ -1046,3 +1046,15 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .sign-in-or::before, .sign-in-or::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
 .sign-in-pair { display: flex; margin: var(--space-2) auto 0; }
 .sign-in-wait { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
+/* Settings → Account (since v1.5): the account's facts, the plan's limits next to the usage, deleting the account. */
+.account-facts { display: grid; gap: 0; margin: var(--space-2) 0; }
+.account-facts > div { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.account-facts dt { color: var(--text-muted); }
+.account-facts dd { margin: 0; text-align: end; overflow-wrap: anywhere; }
+.plan-limit { display: grid; gap: var(--space-1); padding: var(--space-2) 0; }
+.plan-limit .flow-bar { margin: 0; height: 6px; border-radius: 3px; }
+.plan-limit .flow-bar.warn > span { background: var(--warning); }
+.plan-limit .flow-bar.full > span { background: var(--danger); }
+.plan-features { margin: var(--space-2) 0; padding-inline-start: var(--space-4); display: grid; gap: 2px; font-size: var(--text-sm); }
+.plan-features li.off { color: var(--text-muted); }
+.account-delete { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--danger-soft); }

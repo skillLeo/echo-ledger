@@ -125,6 +125,10 @@ export const BellIcon = (p: IconProps) => (
 export const UsersIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="9" cy="8.5" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0 1 13 0M15.5 5.2a3.5 3.5 0 0 1 0 6.6M18 14.2a6.5 6.5 0 0 1 3.5 5.8" /></Svg>
 );
+/** Settings → Account (v1.5): one person. */
+export const UserIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="8.5" r="3.8" /><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" /></Svg>
+);
 /** The sidebar's collapse / expand button: a panel with its left side marked. */
 export const SidebarIcon = (p: IconProps) => (
   <Svg {...p}><rect x="3" y="4.5" width="18" height="15" rx="2.5" /><path d="M9 4.5v15" /></Svg>
