@@ -47,7 +47,8 @@ Open **Workspace** in the console.
 - **Invite:** an email address and a role. The email holds a link that works once, for 7 days. If the plan's seats
   are full, the invitation is refused until you raise the seats or remove someone.
 - **Change role** or **Remove** on a person's row. A removed person keeps their own personal workspace, and their
-  devices leave this one.
+  devices leave this one. Their sign-in codes, share links and request links here stop working, and what was sent to
+  them from this workspace ends (copies they saved stay theirs). Coming back does not bring any of it back.
 - **Hand over** makes another member the owner; you become an admin. **Leave** works after that.
 - **Rename** and **Delete workspace** (owner only). **Switch workspace** when you belong to several.
 
@@ -116,7 +117,16 @@ unless the person taps it. Use it to see what works on your team's phones. The l
 
 ## 10. Security at a glance
 
-- Sign-in attempts are limited (5 a minute per address, 5 failures per 15 minutes per email); two-step codes and
-  recovery codes are under Profile.
+- Sign-in attempts are limited (5 a minute per address, 5 failures per 15 minutes per email, on the console's sign-in
+  page as in the apps); two-step codes and recovery codes are under Profile.
+- The server answers only the address in `APP_URL` and builds every link from it: a wrong `APP_URL` makes every request
+  fail with 400 (see `web/DEPLOY.md`).
+- **Forgot password?** signs the account out everywhere: browsers, devices and connected apps. Changing the password
+  on the profile ends other browsers and leaves devices signed in. A new email address counts once the link sent to it is
+  opened; a Google account links only to a confirmed address.
+- An account in its 7-day deletion grace serves no share or request link until it cancels.
+- Only the super admin changes the server's engine order (**Make default** in Engine results, Settings).
+- Usage reports count only for streaming the server granted that device, so nobody can use up the monthly limit by
+  reporting made-up minutes. Only an owner or admin can continue over Live Translate's budget, up to twice the budget.
 - **Security** in the console lists sign-ins, failed bursts, shares, deletions and admin actions (the audit log).
 - Nobody's password, token or key is shown again after it is saved.

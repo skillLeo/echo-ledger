@@ -158,6 +158,15 @@ it('C1 puts APP_URL in the reset email whatever Host the request named', functio
     Mail::assertQueued(ResetPasswordMail::class, fn (ResetPasswordMail $mail): bool => str_starts_with($mail->url, 'https://echoledger.test/'));
 });
 
+it('C1 refuses another Host on the device API too, in its own error shape', function () {
+    asProduction();
+    $user = Fx::user();
+    $device = Fx::device($user);
+    $session = Fx::session($user, $device);
+
+    $this->api(Fx::token($device))->getJson("http://evil.test/api/sessions/{$session->id}")->assertStatus(400)->assertJsonPath('code', 'bad_request');
+});
+
 it('C1 keeps the request\'s address in local, where a phone reaches the laptop by its IP', function () {
     app()['env'] = 'local';
     AppServiceProvider::useAppUrl(app());
@@ -253,6 +262,20 @@ it('M7 lets no ended session link Google, accept an invitation or schedule the a
     });
     $this->withSession($stolen)->post($link)->assertRedirect($login);
     expect($team->roleOf($user->fresh()))->toBeNull();
+});
+
+it('M7 lets an ended session open no people-only link that names the account', function () {
+    $user = Fx::user(['email' => 'victim@corp.test', 'password' => 'old-password-1234']);
+    $session = Fx::session($user, Fx::device($user), ['title' => 'Named people only']);
+    ['url' => $url] = unscoped(fn () => app(ShareLinks::class)->make($session, ['audience' => 'people', 'people' => ['victim@corp.test'], 'include_audio' => true, 'allow_download' => false, 'expires_at' => null], 'x'));
+    $stolen = [Auth::guard('web')->getName() => $user->id, 'password_hash_web' => $user->getAuthPassword()];
+    $this->withSession($stolen)->get($url)->assertOk()->assertSee('Named people only');
+    app('auth')->forgetGuards();
+    $this->flushSession();
+
+    $user->forceFill(['password' => 'new-password-5678'])->save();
+
+    $this->withSession($stolen)->get($url)->assertRedirect(Filament::getPanel('admin')->getLoginUrl());
 });
 
 it('M7 signs an account out everywhere when "Forgot password?" sets a new password, through Filament\'s own page', function () {
@@ -599,6 +622,16 @@ it('M2 counts from the first grant of the last 48 hours, and what was reported s
     $this->api($token)->postJson('/api/usage', usageBody(3_600_000))->assertCreated()->assertJsonPath('report.streamed_ms', 0);
     $this->travel(30)->hours();
     $this->api($token)->postJson('/api/usage', usageBody(1000))->assertCreated()->assertJsonPath('report.streamed_ms', 0);
+});
+
+it('M2 works on the database cache store, which a shared host uses', function () {
+    config(['cache.default' => 'database']);
+    $device = Fx::device();
+    grantStreaming($device, 1);
+    $token = Fx::token($device);
+
+    $this->api($token)->postJson('/api/usage', usageBody(3_600_000))->assertCreated()->assertJsonPath('report.streamed_ms', 3_600_000);
+    $this->api($token)->postJson('/api/usage', usageBody(3_600_000))->assertCreated()->assertJsonPath('report.streamed_ms', 300_000);
 });
 
 it('M2 answers 403 to a viewer\'s report, so a viewer cannot use up a team\'s minutes', function () {

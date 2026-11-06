@@ -85,8 +85,9 @@ Route::middleware(['auth:web', AuthenticateSession::class, $consoleVerified, Ens
         Route::delete('/{recording}', [ConsoleUploadController::class, 'destroy'])->name('destroy');
     });
 
-// Share links (view-only): the token is the only key, so every route is throttled per IP.
-Route::middleware('throttle:share')->group(function (): void {
+// Share links (view-only): the token is the only key, so every route is throttled per IP. A people-only link goes by who
+// is signed in, so a session the password change has ended counts for nobody here either.
+Route::middleware([AuthenticateSession::class, 'throttle:share'])->group(function (): void {
     Route::get('/s/{token}', [PublicShareController::class, 'show'])->name('share.show');
     Route::post('/s/{token}', [PublicShareController::class, 'unlock'])->middleware('throttle:share-password')->name('share.unlock');
     Route::get('/s/{token}/audio', [PublicShareController::class, 'audio'])->name('share.audio');

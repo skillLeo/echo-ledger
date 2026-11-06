@@ -8,7 +8,7 @@ Why move:
 
 - **Workers.** Shared hosting allows no long-running processes. Background jobs (transcription hand-offs, Roman Urdu
   views, screen descriptions, exports) run from cron in 55-second slices, one at a time.
-- **No Redis.** The cache, sessions and the queue live in MariaDB tables.
+- **No Redis.** The cache and the queue live in MariaDB tables.
 - **One disk.** Recordings, screens and exports share the hosting account's disk, with no separate backups.
 - **Neighbours.** Other sites on the same account share its CPU, memory and limits.
 
