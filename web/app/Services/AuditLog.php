@@ -140,7 +140,9 @@ final class AuditLog
         });
 
         CaptureSession::deleted(fn (CaptureSession $s) => $log()->record('session_deleted', $s->user_id, $s, 'Recording deleted: '.$s->displayTitle()));
-        Device::created(fn (Device $d) => $log()->record('device_paired', $d->user_id, $d, "Device paired: {$d->name}"));
+        Device::created(fn (Device $d) => $d->signedInWith === null
+            ? $log()->record('device_paired', $d->user_id, $d, "Device paired: {$d->name}")
+            : $log()->record('device_signed_in', $d->user_id, $d, "Signed in on {$d->name} ({$d->platform->getLabel()}) ".($d->signedInWith === 'browser' ? 'through the browser' : 'with a password'), ['via' => $d->signedInWith]));
         Device::deleted(fn (Device $d) => $log()->record('device_revoked', $d->user_id, $d, "Device revoked: {$d->name}"));
         // A link opens a recording or (since v1.5) a project: the log names whichever it is.
         $shared = fn (ShareLink $l): array => $l->client_id !== null

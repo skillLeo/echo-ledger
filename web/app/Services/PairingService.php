@@ -76,23 +76,39 @@ final class PairingService
                 throw ValidationException::withMessages(['pairing_code' => 'This pairing code is invalid, expired, or already used.']);
             }
 
-            app(PlanLimits::class)->assertDevices($pairing->workspace_id);
-
-            /** @var Device $device */
-            $device = Device::query()->create([
-                'workspace_id' => $pairing->workspace_id,
-                'user_id' => $pairing->user_id,
-                'name' => $attributes['name'],
-                'platform' => DevicePlatform::from($attributes['platform']),
-                'app_version' => $attributes['app_version'] ?? null,
-                'os_version' => $attributes['os_version'] ?? null,
-                'last_seen_at' => now(),
-                'last_ip' => $ip,
-            ]);
+            [$device, $token] = $this->createDevice($pairing->workspace_id, $pairing->user_id, $attributes, $ip);
             $pairing->update(['used_at' => now(), 'device_id' => $device->id]);
 
-            return [$device, $this->issueToken($device)];
+            return [$device, $token];
         });
+    }
+
+    /**
+     * A new device of [$userId] in [$workspaceId] with its token, within the plan's device limit: a pairing code, or
+     * since v1.5 its owner signing in (`$signedInWith` = password or browser). Exactly the same device either way.
+     *
+     * @param  array{name: string, platform: string, app_version?: string|null, os_version?: string|null}  $attributes
+     * @return array{0: Device, 1: NewAccessToken}
+     */
+    public function createDevice(int $workspaceId, int $userId, array $attributes, ?string $ip, ?string $country = null, ?string $signedInWith = null): array
+    {
+        app(PlanLimits::class)->assertDevices($workspaceId);
+
+        $device = new Device([
+            'workspace_id' => $workspaceId,
+            'user_id' => $userId,
+            'name' => $attributes['name'],
+            'platform' => DevicePlatform::from($attributes['platform']),
+            'app_version' => $attributes['app_version'] ?? null,
+            'os_version' => $attributes['os_version'] ?? null,
+            'last_seen_at' => now(),
+            'last_ip' => $ip,
+            'last_country' => $country,
+        ]);
+        $device->signedInWith = $signedInWith;
+        $device->save();
+
+        return [$device, $this->issueToken($device)];
     }
 
     /** @param  list<string>|null  $abilities  null = the full device set; a rotation passes the old token's abilities */

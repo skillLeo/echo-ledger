@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Middleware;
 
 use App\Models\Device;
+use App\Support\ClientCountry;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -16,7 +17,7 @@ final class TouchDevice
     {
         $device = $request->user();
         if ($device instanceof Device && ($device->last_seen_at === null || $device->last_seen_at->lt(now()->subMinute()))) {
-            $device->forceFill(['last_seen_at' => now(), 'last_ip' => $request->ip()])->saveQuietly();
+            $device->forceFill(['last_seen_at' => now(), 'last_ip' => $request->ip(), 'last_country' => ClientCountry::of($request)])->saveQuietly();
         }
 
         return $next($request);

@@ -136,6 +136,9 @@ it('exposes exactly the documented public API routes and guards every other one'
 
     expect($public)->toBe([
         'GET api/recordings/{recording}/audio',
+        // Since v1.5: signing in with an account (the email and password, or the browser sign-in's code).
+        'POST api/auth/device/token',
+        'POST api/auth/password',
         'POST api/devices/register',
         'POST api/webhooks/stt/{provider}',
     ]);

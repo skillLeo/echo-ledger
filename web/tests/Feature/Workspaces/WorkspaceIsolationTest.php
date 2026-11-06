@@ -38,6 +38,8 @@ afterEach(fn () => Fx::cleanupDisks());
 /** API routes outside the device token, each with the reason it is safe without a workspace. */
 const ISO_API_BYPASS = [
     'api.devices.register' => 'pairing: the one-time code decides the workspace',
+    'api.auth.password' => 'signing in: the account decides the workspace (its current one)',
+    'api.auth.device.token' => 'signing in: the approved one-time code decides the workspace',
     'api.webhooks.stt' => 'provider callback: found by transcript id and verified signature',
     'api.recordings.audio' => 'signed, expiring URL issued to a device of the workspace',
 ];
@@ -70,6 +72,8 @@ const ISO_WEB_BYPASS = [
     'auth.google.callback' => 'sign-in with Google, before any workspace',
     'auth.google.confirm' => 'sign-in with Google, before any workspace',
     'auth.google.confirm.store' => 'sign-in with Google, before any workspace',
+    'device.sign-in' => 'the apps\' browser sign-in: the signed-in person approves a device for their own account',
+    'device.sign-in.approve' => 'the apps\' browser sign-in: the signed-in person approves a device for their own account',
 ];
 
 const ISO_SECRETS = ['BOB-SECRET-TITLE', 'BOBSECRETTRANSCRIPT', 'BOB-SECRET-CLIENT', 'BOB-SECRET-DEVICE', 'BOBSECRETTERM', 'bobsecretlabel', 'BOBSECRETNOTE'];

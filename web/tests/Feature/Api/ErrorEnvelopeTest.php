@@ -26,6 +26,8 @@ use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
 uses(InteractsWithDeviceApi::class);
 
+require_once __DIR__.'/../Accounts/Support/account_helpers.php';
+
 /*
  * docs/API.md "Error codes" (since v1.1): every error answer is {"message", "code", "errors"?}, clients branch on code,
  * messages never name internal classes and a 429 always carries Retry-After. Each documented code is produced here
@@ -40,9 +42,8 @@ const ENVELOPE_MISSING_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV';
  */
 const ENVELOPE_PENDING_CODES = [
     'budget_exceeded',
-    // Phase 4: signing in with an account, the account itself, plans.
-    'otp_required', 'email_not_verified', 'owner_of_team', 'invalid_credentials', 'invalid_otp', 'invalid_code',
-    'too_many_attempts', 'feature_not_in_plan', 'seat_limit_reached',
+    // Phase 4: the account itself, plans.
+    'owner_of_team', 'feature_not_in_plan', 'seat_limit_reached',
 ];
 
 /** @return array<string, array{0: int, 1: string}> the docs table as code => [status, code] */
@@ -239,6 +240,31 @@ function produceError(object $test, string $code): TestResponse
             Http::fake(['streaming.assemblyai.com/*' => Http::response(['error' => 'Invalid API key'], 401)]);
 
             return $test->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $test->openSession()]);
+        case 'otp_required':
+        case 'invalid_otp':
+            $person = User::factory()->create(['email' => 'two.step@example.test']);
+            accountsEnrolTotp($person);
+            app('auth')->forgetGuards();
+
+            return $test->flushHeaders()->postJson('/api/auth/password', ['email' => $person->email, 'password' => 'password', 'otp' => $code === 'invalid_otp' ? '000000' : null, 'name' => 'Phone', 'platform' => 'android']);
+        case 'email_not_verified':
+        case 'invalid_credentials':
+            $person = User::factory()->unverified()->create(['email' => 'unconfirmed@example.test']);
+            app('auth')->forgetGuards();
+
+            return $test->flushHeaders()->postJson('/api/auth/password', ['email' => $person->email, 'password' => $code === 'invalid_credentials' ? 'wrong-password-1' : 'password', 'name' => 'Phone', 'platform' => 'android']);
+        case 'too_many_attempts':
+            app('auth')->forgetGuards();
+            $test->flushHeaders();
+            foreach (range(1, 5) as $i) {
+                $test->withServerVariables(['REMOTE_ADDR' => "198.51.100.{$i}"])->postJson('/api/auth/password', ['email' => 'locked@example.test', 'password' => 'wrong-password-1', 'name' => 'Phone', 'platform' => 'android']);
+            }
+
+            return $test->withServerVariables(['REMOTE_ADDR' => '198.51.100.77'])->postJson('/api/auth/password', ['email' => 'locked@example.test', 'password' => 'wrong-password-1', 'name' => 'Phone', 'platform' => 'android']);
+        case 'invalid_code':
+            app('auth')->forgetGuards();
+
+            return $test->flushHeaders()->postJson('/api/auth/device/token', ['code' => 'not-a-code', 'code_verifier' => str_repeat('v', 43), 'name' => 'Laptop', 'platform' => 'windows']);
         case 'provider_not_configured':
             return $test->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $test->openSession()]);
         default:

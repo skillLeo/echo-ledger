@@ -29,6 +29,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string|null $os_version
  * @property Carbon|null $last_seen_at
  * @property string|null $last_ip
+ * @property string|null $last_country two letters, when the server's proxy names the country (since v1.5)
  * @property-read User $user
  */
 class Device extends Model implements Authenticatable
@@ -39,7 +40,10 @@ class Device extends Model implements Authenticatable
     /** Every device token carries exactly these abilities. */
     public const ABILITIES = ['config:read', 'stt:token', 'sessions:write', 'recordings:upload', 'library:read'];
 
-    protected $fillable = ['workspace_id', 'user_id', 'name', 'platform', 'app_version', 'os_version', 'last_seen_at', 'last_ip'];
+    protected $fillable = ['workspace_id', 'user_id', 'name', 'platform', 'app_version', 'os_version', 'last_seen_at', 'last_ip', 'last_country'];
+
+    /** How a new device came (since v1.5): null = a pairing code, `password` or `browser` = its owner signed in. Not stored. */
+    public ?string $signedInWith = null;
 
     public function sourceDevice(): SourceDevice
     {

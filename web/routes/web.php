@@ -6,6 +6,7 @@ use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
 use App\Http\Controllers\AdminPackController;
 use App\Http\Controllers\AppLinksController;
+use App\Http\Controllers\Auth\DeviceSignInController;
 use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
@@ -101,6 +102,13 @@ Route::middleware('throttle:google')->prefix('/auth/google')->name('auth.google.
     Route::get('/callback', [GoogleController::class, 'callback'])->name('callback');
     Route::get('/confirm', [GoogleController::class, 'confirmForm'])->name('confirm');
     Route::post('/confirm', [GoogleController::class, 'confirm'])->name('confirm.store');
+});
+
+// The apps' browser sign-in (v1.5, docs/API.md "Signing in with an account"): PKCE S256, the approval page behind the
+// console's sign-in, then the app's echoledger://signed-in link with a one-time code.
+Route::middleware('throttle:device-sign-in')->group(function (): void {
+    Route::get('/device/sign-in', [DeviceSignInController::class, 'show'])->name('device.sign-in');
+    Route::post('/device/sign-in', [DeviceSignInController::class, 'approve'])->middleware('auth:web')->name('device.sign-in.approve');
 });
 
 // Passkey sign-in on the console login page (B16): a challenge, then the signed answer. Throttled per IP.

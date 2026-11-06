@@ -41,6 +41,7 @@ final class PasskeyLoginController extends Controller
         $request->session()->regenerate();
         $audit->record('passkey_login', $user->id);
 
-        return response()->json(['redirect' => $panel->getUrl()]);
+        // Back to where the sign-in was asked for (the apps' browser sign-in since v1.5), else the console.
+        return response()->json(['redirect' => $request->session()->pull('url.intended', $panel->getUrl())]);
     }
 }

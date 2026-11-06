@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Api\ActivityController;
+use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BinController;
 use App\Http\Controllers\Api\ClientWorkspaceController;
 use App\Http\Controllers\Api\ConfigController;
@@ -38,6 +39,12 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('devices/register', [DeviceController::class, 'register'])
     ->middleware('throttle:pairing')->name('api.devices.register');
+
+// Signing in with an account (v1.5): the email and password, or the browser sign-in's one-time code and PKCE verifier.
+Route::post('auth/password', [AuthController::class, 'password'])
+    ->middleware('throttle:auth-password')->name('api.auth.password');
+Route::post('auth/device/token', [AuthController::class, 'deviceToken'])
+    ->middleware('throttle:auth-token')->name('api.auth.device.token');
 
 Route::post('webhooks/stt/{provider}', SttWebhookController::class)
     ->middleware('throttle:webhooks')->name('api.webhooks.stt');

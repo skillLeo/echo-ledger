@@ -116,6 +116,12 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('request-upload', fn (Request $request) => Limit::perMinute(300)->by('request:'.$request->ip()));
         RateLimiter::for('pairing', fn (Request $request) => Limit::perMinute(5)->by('pair:'.$request->ip()));
         RateLimiter::for('passkey', fn (Request $request) => Limit::perMinute(20)->by('passkey:'.$request->ip()));
+        // Signing in with an account (since v1.5, docs/API.md): the password route answers its own code when throttled,
+        // as it does after 5 failures for one email; the browser sign-in's code exchange and its approval page.
+        RateLimiter::for('auth-password', fn (Request $request) => Limit::perMinute(5)->by('auth-pw:'.$request->ip())
+            ->response(fn (Request $request, array $headers) => response()->json(['message' => 'Too many sign-in attempts. Try again later.', 'code' => 'too_many_attempts'], 429, $headers)));
+        RateLimiter::for('auth-token', fn (Request $request) => Limit::perMinute(10)->by('auth-token:'.$request->ip()));
+        RateLimiter::for('device-sign-in', fn (Request $request) => Limit::perMinute(30)->by('device-sign-in:'.$request->ip()));
         // Sign in with Google (since v1.5): the redirect, Google's answer and the "confirm it is you" step.
         RateLimiter::for('google', fn (Request $request) => Limit::perMinute(20)->by('google:'.$request->ip()));
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by('hook:'.$request->ip()));
