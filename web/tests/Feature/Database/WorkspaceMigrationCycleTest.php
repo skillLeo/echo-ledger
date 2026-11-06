@@ -127,7 +127,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 16;
+const LATER_MIGRATIONS = 17;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
@@ -203,7 +203,7 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
 const PHASE2_STEPS = 5;
 
 /** Migrations that came after them (rolled back first); add yours here as for LATER_MIGRATIONS. */
-const AFTER_PHASE2 = 1;
+const AFTER_PHASE2 = 2;
 
 /** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
 function seedPhase2Library(Connection $db): array
@@ -291,6 +291,53 @@ it('refuses to roll projects back while one person has two projects of the same 
         ->toThrow(RuntimeException::class, 'rename one of them before rolling back');
     expect($db->getSchemaBuilder()->hasColumn('clients', 'parent_id'))->toBeTrue()
         ->and($db->table('migrations')->where('migration', '2026_11_14_000001_add_projects_to_clients')->exists())->toBeTrue();
+})->after(function () {
+    if (config('database.connections.cycle.driver') === 'sqlite') {
+        DB::disconnect('cycle');
+        @unlink((string) config('database.connections.cycle.database'));
+    }
+});
+
+/** The v1.5 Phase 3 migration (screen moments), and how many came after it (rolled back first). */
+const PHASE3_STEPS = 1;
+
+const AFTER_PHASE3 = 0;
+
+it('runs the v1.5 Phase 3 migration down and up again on a library with screen moments', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    $seeded = seedPhase2Library($db);
+    $now = now();
+    $db->table('screens')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $db->table('clients')->value('workspace_id'), 'capture_session_id' => $seeded['session'],
+        'at_ms' => 872000, 'width' => 1920, 'height' => 1080, 'trigger' => 'change', 'sha256' => str_repeat('b', 64), 'mime' => 'image/webp', 'bytes' => 10,
+        'created_at' => $now, 'updated_at' => $now]);
+    $db->table('usage_ledger')->insert(['id' => (string) Str::ulid(), 'workspace_id' => $db->table('clients')->value('workspace_id'), 'user_id' => $seeded['user'],
+        'source' => 'server', 'report_id' => 'screens/x', 'use_case' => 'screen_describe', 'provider' => 'anthropic', 'duration_ms' => 0, 'channels' => 1,
+        'billed_ms' => 0, 'input_tokens' => 1200, 'output_tokens' => 80, 'unit_price_usd' => 0, 'cost_usd' => 0.00016, 'billable' => true, 'occurred_at' => $now,
+        'created_at' => $now, 'updated_at' => $now]);
+    $db->table('clients')->where('id', $seeded['site'])->update(['screens' => false]);
+
+    cycleArtisan('migrate:rollback', ['--step' => PHASE3_STEPS + AFTER_PHASE3]);
+    $schema = $db->getSchemaBuilder();
+    expect($schema->hasTable('screens'))->toBeFalse()
+        ->and($schema->hasColumn('clients', 'screens'))->toBeFalse()
+        ->and($schema->hasColumn('usage_ledger', 'input_tokens'))->toBeFalse()
+        // Nothing else is lost: the recording, its projects and the spend stay.
+        ->and($db->table('capture_sessions')->count())->toBe(1)
+        ->and($db->table('clients')->count())->toBe(2)
+        ->and($db->table('usage_ledger')->count())->toBe(1);
+
+    cycleArtisan('migrate');
+    expect($schema->hasTable('screens'))->toBeTrue()
+        ->and($db->table('screens')->count())->toBe(0)
+        // Projects capture screens again by default.
+        ->and((bool) $db->table('clients')->where('id', $seeded['site'])->value('screens'))->toBeTrue()
+        ->and($db->table('usage_ledger')->value('input_tokens'))->toBeNull();
+    // One picture per recording and SHA-256.
+    $row = ['workspace_id' => $db->table('clients')->value('workspace_id'), 'capture_session_id' => $seeded['session'], 'at_ms' => 1, 'width' => 1, 'height' => 1,
+        'trigger' => 'manual', 'sha256' => str_repeat('c', 64), 'mime' => 'image/png', 'bytes' => 1, 'created_at' => $now, 'updated_at' => $now];
+    $db->table('screens')->insert(['id' => (string) Str::ulid(), ...$row]);
+    expect(fn () => $db->table('screens')->insert(['id' => (string) Str::ulid(), ...$row]))->toThrow(QueryException::class);
 })->after(function () {
     if (config('database.connections.cycle.driver') === 'sqlite') {
         DB::disconnect('cycle');

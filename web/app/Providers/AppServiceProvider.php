@@ -12,6 +12,7 @@ use App\Models\Device;
 use App\Models\DevicePairingCode;
 use App\Models\ProviderDeletion;
 use App\Models\Recording;
+use App\Models\Screen;
 use App\Models\Setting;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
@@ -24,6 +25,8 @@ use App\Services\ClientAi\ClientAi;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
 use App\Services\RecordingCipher;
+use App\Services\Screens\ClaudeScreenDescriber;
+use App\Services\Screens\ScreenDescriber;
 use App\Services\SettingsRepository;
 use App\Services\Views\ClaudeTranscriptConverter;
 use App\Services\Views\TranscriptConverter;
@@ -50,6 +53,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(TranscriptConverter::class, ClaudeTranscriptConverter::class);
         // Client workspaces (v1.4) ask Claude through one interface; tests swap in a fake.
         $this->app->bind(ClientAi::class, ClaudeClientAi::class);
+        // Screen moments (v1.5) are read by Claude Haiku through one interface; tests swap in a fake.
+        $this->app->bind(ScreenDescriber::class, ClaudeScreenDescriber::class);
         // Caches each member's role for one request (C9: no query per table row).
         $this->app->scoped(Workspaces::class);
         $this->app->scoped(SttManager::class);
@@ -95,6 +100,7 @@ class AppServiceProvider extends ServiceProvider
             'webhook_event' => WebhookEvent::class,
             'usage_ledger_entry' => UsageLedgerEntry::class,
             'provider_deletion' => ProviderDeletion::class,
+            'screen' => Screen::class,
         ]);
 
         RateLimiter::for('device', fn (Request $request) => Limit::perMinute(240)->by('device:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));

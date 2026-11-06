@@ -29,6 +29,8 @@ use Illuminate\Support\Carbon;
  * @property int $duration_ms
  * @property int $channels
  * @property int $billed_ms
+ * @property int|null $input_tokens Claude requests (since v1.5): tokens read
+ * @property int|null $output_tokens Claude requests (since v1.5): tokens written
  * @property string $unit_price_usd
  * @property string $cost_usd
  * @property bool $billable
@@ -51,7 +53,7 @@ class UsageLedgerEntry extends Model
 
     protected $fillable = [
         'workspace_id', 'user_id', 'device_id', 'capture_session_id', 'transcript_id', 'source', 'report_id', 'use_case', 'provider',
-        'model', 'duration_ms', 'channels', 'billed_ms', 'unit_price_usd', 'cost_usd', 'billable', 'occurred_at', 'client_id',
+        'model', 'duration_ms', 'channels', 'billed_ms', 'input_tokens', 'output_tokens', 'unit_price_usd', 'cost_usd', 'billable', 'occurred_at', 'client_id',
     ];
 
     /** @return BelongsTo<User, $this> */
@@ -79,6 +81,8 @@ class UsageLedgerEntry extends Model
             'duration_ms' => 'integer',
             'channels' => 'integer',
             'billed_ms' => 'integer',
+            'input_tokens' => 'integer',
+            'output_tokens' => 'integer',
             'unit_price_usd' => 'decimal:4',
             'cost_usd' => 'decimal:6',
             'billable' => 'boolean',

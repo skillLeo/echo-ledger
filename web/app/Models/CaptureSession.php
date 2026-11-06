@@ -12,7 +12,9 @@ use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Models\Concerns\BelongsToWorkspace;
+use App\Models\Scopes\WorkspaceScope;
 use App\Services\ProviderCopyEraser;
+use App\Services\Screens\ScreenStore;
 use App\Services\SettingsRepository;
 use Database\Factories\CaptureSessionFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -61,6 +63,7 @@ use Illuminate\Support\Carbon;
  * @property bool $keep_forever never deleted by the retention rules (B17)
  * @property Carbon|null $media_erased_at when a deleted recording's audio and text were erased (end of the undo bin)
  * @property-read Collection<int, SessionLabel> $labels
+ * @property-read Collection<int, Screen> $screens
  * @property string|null $final_provider
  * @property Carbon $created_at
  * @property Carbon $updated_at
@@ -149,6 +152,17 @@ class CaptureSession extends Model
         $labels = $this->relationLoaded('labels') ? $this->labels : $this->labels()->get();
 
         return $labels->pluck('label')->map(fn ($l): string => (string) $l)->values()->all();
+    }
+
+    /**
+     * Screen moments (since v1.5), in no order (ScreenStore::ordered() numbers them). They are in the recording's
+     * workspace and reached through it, also for a recording a teammate sent (the sender's workspace).
+     *
+     * @return HasMany<Screen, $this>
+     */
+    public function screens(): HasMany
+    {
+        return $this->hasMany(Screen::class)->withoutGlobalScope(WorkspaceScope::class);
     }
 
     /** @return HasOne<Recording, $this> */
@@ -281,10 +295,11 @@ class CaptureSession extends Model
             && $this->deleted_at->gt(now()->subHours(self::BIN_HOURS));
     }
 
-    /** End of the undo bin: the audio and text go for good; the tombstone stays for syncing. */
+    /** End of the undo bin: the audio, text and screens go for good; the tombstone stays for syncing. */
     public function purgeMedia(): void
     {
         $this->recordings()->get()->each(fn (Recording $r) => $r->delete());
+        app(ScreenStore::class)->eraseFor($this);
         // The session is already loaded: hand it to each transcript instead of one query per transcript (C9, N+1).
         $this->allTranscripts()->get()->each(fn (Transcript $t) => $t->setRelation('captureSession', $this)->delete());
         $this->forceFill(['media_erased_at' => now()])->saveQuietly();
@@ -298,6 +313,7 @@ class CaptureSession extends Model
     {
         app(ProviderCopyEraser::class)->eraseFor($this);
         $this->recordings()->get()->each(fn (Recording $r) => $r->delete());
+        app(ScreenStore::class)->eraseFor($this);
         // The session is already loaded: hand it to each transcript instead of one query per transcript (C9, N+1).
         $this->allTranscripts()->get()->each(fn (Transcript $t) => $t->setRelation('captureSession', $this)->delete());
     }
