@@ -104,6 +104,7 @@ function abilityRoutes(): array
         'delete a screen' => ['DELETE', "/api/sessions/{$id}/screens/{$id}", 'sessions:write'],
         'project screens' => ['GET', "/api/clients/{$id}/screens", 'library:read'],
         'meeting pack' => ['GET', "/api/sessions/{$id}/pack", 'library:read'],
+        'sign out everywhere' => ['POST', '/api/account/sign-out-everywhere', 'sessions:write'],
     ];
 }
 

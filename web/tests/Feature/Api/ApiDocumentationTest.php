@@ -85,7 +85,7 @@ function registeredApiRoutes(): array
 const NOT_SERVED_YET = [
     // Phase 4: the account itself.
     'GET /api/account', 'DELETE /api/account',
-    'POST /api/account/sign-out-everywhere', 'POST /api/account/export', 'GET /api/account/export/{}',
+    'POST /api/account/export', 'GET /api/account/export/{}',
 ];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {

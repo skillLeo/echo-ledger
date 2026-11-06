@@ -215,6 +215,9 @@ function isoApiCases(array $b): array
         'api.sessions.screens.destroy' => ['DELETE', "/api/sessions/{$s}/screens/{$b['screen']->id}", [], 404],
         'api.clients.screens' => ['GET', "/api/clients/{$b['client']->id}/screens", [], 404],
         'api.sessions.pack' => ['GET', "/api/sessions/{$s}/pack?format=html", [], 404],
+        // Your account (v1.5): only the device's own person, never workspace B. Signing out everywhere ends this
+        // device's token too, so it comes last.
+        'api.account.sign-out-everywhere' => ['POST', '/api/account/sign-out-everywhere', [], fn (TestResponse $r): bool => $r->status() === 204],
     ];
 }
 

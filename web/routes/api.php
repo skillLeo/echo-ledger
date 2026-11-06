@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BinController;
@@ -92,6 +93,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->name('api.sessions.notes.make');
             Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->name('api.transcripts.suggestions');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
+            // Your account (v1.5): sign out every device and console session.
+            Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->name('api.sessions.restore');
             Route::delete('bin/{id}', [BinController::class, 'destroy'])->name('api.bin.destroy');
             Route::post('sessions/{id}/markers', [SessionController::class, 'storeMarker'])->name('api.sessions.markers.store');
