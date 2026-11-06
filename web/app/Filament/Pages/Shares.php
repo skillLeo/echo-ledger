@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Support\SharingActions;
@@ -30,6 +31,7 @@ use UnitEnum;
 /** Shares (v1.5): every link to the workspace's recordings and projects, who may open it, its views, and Revoke. */
 class Shares extends Page implements HasTable
 {
+    use FullConsoleOnly;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedLink;

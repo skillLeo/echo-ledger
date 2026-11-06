@@ -4,12 +4,16 @@
 --}}
 @auth
     @php
-        $items = [
+        // Since v1.5 the small console (members and viewers) has the library and Shared with me only.
+        $items = \App\Services\Workspaces\ConsoleAccess::full() ? [
             ['label' => 'Library', 'url' => \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('index'), 'route' => 'filament.admin.resources.sessions.*', 'icon' => 'rectangle-stack'],
             ['label' => 'Projects', 'url' => \App\Filament\Resources\Clients\ClientResource::getUrl('index'), 'route' => 'filament.admin.resources.clients.*', 'icon' => 'folder'],
             ['label' => 'Upload', 'url' => \App\Filament\Pages\Upload::getUrl(), 'route' => 'filament.admin.pages.upload', 'icon' => 'arrow-up-tray'],
             ['label' => 'Activity', 'url' => \App\Filament\Pages\Activity::getUrl(), 'route' => 'filament.admin.pages.activity', 'icon' => 'bell', 'badge' => \App\Filament\Pages\Activity::getNavigationBadge()],
-        ];
+        ] : (\App\Services\Workspaces\ConsoleAccess::open() ? [
+            ['label' => 'Library', 'url' => \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('index'), 'route' => 'filament.admin.resources.sessions.*', 'icon' => 'rectangle-stack'],
+            ['label' => 'Shared', 'url' => \App\Filament\Pages\SharedWithMe::getUrl(), 'route' => 'filament.admin.pages.shared-with-me', 'icon' => 'inbox-arrow-down'],
+        ] : []);
     @endphp
     <nav class="el-bottom-nav" aria-label="Main">
         @foreach ($items as $item)

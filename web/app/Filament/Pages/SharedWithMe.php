@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\Teammates;
 use App\Services\TranscriptExporter;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
 use BackedEnum;
@@ -50,6 +51,12 @@ class SharedWithMe extends Page implements HasTable
     protected static ?int $navigationSort = 2;
 
     protected static ?string $title = 'Shared with me';
+
+    /** Since v1.5 in the small console too (members and viewers), unless Settings closes the console to them. */
+    public static function canAccess(): bool
+    {
+        return ConsoleAccess::open();
+    }
 
     protected static ?string $slug = 'shared-with-me';
 

@@ -11,6 +11,7 @@ use App\Filament\Resources\CaptureSessions\Schemas\CaptureSessionInfolist;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Models\CaptureSession;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -42,6 +43,12 @@ class CaptureSessionResource extends Resource
     protected static ?int $navigationSort = 1;
 
     protected static ?string $recordTitleAttribute = 'title';
+
+    /** Every console has the library: since v1.5 the small one (members and viewers) reads it only. */
+    public static function canAccess(): bool
+    {
+        return ConsoleAccess::open();
+    }
 
     public static function canCreate(): bool
     {

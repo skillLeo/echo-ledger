@@ -114,18 +114,17 @@ describe('roles', function () {
         expect(unscoped(fn () => CaptureSession::query()->find($t['ownerSession']->id)))->not->toBeNull();
     });
 
-    it('shows a member in the console only their own recordings and devices', function () {
+    it('shows a member in the console only their own recordings, to open and not to change', function () {
         $t = team();
         $this->actingAs($t['member'], 'web');
         Filament::setCurrentPanel('admin');
 
         Livewire::test(ListCaptureSessions::class)
             ->assertCanSeeTableRecords([$t['memberSession']])
-            ->assertCanNotSeeTableRecords([$t['ownerSession']]);
-        Livewire::test(ListDevices::class)
-            ->assertCanSeeTableRecords([$t['memberDevice']])
-            ->assertCanNotSeeTableRecords([$t['ownerDevice']])
-            ->assertActionVisible(TestAction::make(DeleteAction::class)->table($t['memberDevice']));
+            ->assertCanNotSeeTableRecords([$t['ownerSession']])
+            ->assertActionDoesNotExist(TestAction::make(DeleteAction::class)->table($t['memberSession']));
+        // Devices are on the profile in the small console; the Devices page is the whole console's.
+        $this->get(ListDevices::getUrl())->assertForbidden();
     });
 
     it('shows the owner every device of the workspace to revoke, but only their own recordings', function () {

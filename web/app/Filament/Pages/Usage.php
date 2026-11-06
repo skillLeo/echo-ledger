@@ -9,6 +9,7 @@ use App\Services\SettingsRepository;
 use App\Services\Usage\UsageBreakdown;
 use App\Services\Usage\UsageReport;
 use App\Services\Usage\UsageSummary;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
@@ -48,7 +49,7 @@ class Usage extends Page
             return false;
         }
 
-        return $user->is_super_admin || app(Workspaces::class)->roleOf($user, (int) CurrentWorkspace::id())?->records() === true;
+        return $user->is_super_admin || (ConsoleAccess::open() && app(Workspaces::class)->roleOf($user, (int) CurrentWorkspace::id())?->records() === true);
     }
 
     public function mount(UsageReport $report): void

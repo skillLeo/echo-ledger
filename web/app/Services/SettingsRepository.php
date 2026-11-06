@@ -79,6 +79,7 @@ final class SettingsRepository
         'display.timezone' => 'UTC',                 // IANA zone the admin console shows times in
         // Since v1.5: who may make an account on the console's sign-up page (App\Services\Accounts\SignUp).
         'signup.mode' => 'nobody',                   // nobody | anyone | invited
+        'console.members' => true,                   // since v1.5: members and viewers get the small read-only console
         // Since v1.5: the SMTP server emails go through (the password is in the credential vault, as `mail.password`).
         // No host = the mailer of the server's .env file.
         'mail.host' => null,

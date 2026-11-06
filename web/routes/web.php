@@ -19,6 +19,7 @@ use App\Http\Controllers\RequestLinkPageController;
 use App\Http\Controllers\ScreenMediaController;
 use App\Http\Controllers\SiteController;
 use App\Http\Controllers\WorkspaceSwitchController;
+use App\Http\Middleware\EnsureConsoleAccess;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Illuminate\Support\Facades\Route;
 
@@ -45,7 +46,7 @@ Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app
 
 // Decrypted playback for the admin transcript player (HTTP Range supported).
 Route::get('/admin-media/recordings/{recording}', AdminMediaController::class)
-    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class])
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])
     ->name('admin.recordings.stream');
 
 // Screen moments (v1.5): a picture or thumbnail from the signed link the API hands out (30 minutes, no token), and on
@@ -57,21 +58,21 @@ Route::get('/screen-media/{screen}/{variant}', [ScreenMediaController::class, 's
     ->middleware(['signed', 'throttle:uploads'])->name('screens.media');
 Route::get('/admin-media/screens/{screen}/{variant}', [ScreenMediaController::class, 'console'])
     ->whereUlid('screen')->whereIn('variant', ['image', 'thumb'])
-    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class])->name('admin.screens.media');
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])->name('admin.screens.media');
 
 // Console exports of a transcript (download; `html` opens for printing to PDF).
 Route::get('/admin-export/transcripts/{transcript}/{format}', AdminExportController::class)
-    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class])
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])
     ->name('admin.transcripts.export');
 
 // Export → Meeting pack (v1.5): the transcript with its screens; `html` opens with a Print button, `zip` downloads.
 Route::get('/admin-export/sessions/{session}/pack/{format}', AdminPackController::class)
     ->whereUlid('session')->whereIn('format', ['html', 'zip'])
-    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class])
+    ->middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class])
     ->name('admin.sessions.pack');
 
 // Library → Upload: the browser's chunked, resumable uploads (the devices' chunk path, behind the console session).
-Route::middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, 'throttle:uploads'])
+Route::middleware(['auth:web', $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class.':full', 'throttle:uploads'])
     ->prefix('/admin-upload/recordings')->name('admin.uploads.')->group(function (): void {
         Route::post('/', [ConsoleUploadController::class, 'store'])->name('store');
         Route::get('/{recording}', [ConsoleUploadController::class, 'show'])->name('show');

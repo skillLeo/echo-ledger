@@ -8,6 +8,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceDevice;
 use App\Models\CaptureSession;
 use App\Services\Usage\UsageSummary;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\StatsOverviewWidget;
@@ -17,6 +18,12 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 class SourceStatsOverview extends StatsOverviewWidget
 {
     protected static ?int $sort = -2;
+
+    /** Since v1.5 the dashboard of the whole console; members and viewers see their library instead. */
+    public static function canView(): bool
+    {
+        return ConsoleAccess::full();
+    }
 
     protected ?string $pollingInterval = null;
 

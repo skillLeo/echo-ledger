@@ -154,6 +154,7 @@ class Settings extends Page
             'vocabulary_replacements' => TextReplacements::rules($all['vocabulary.replacements'] ?? []),
             'display_timezone' => is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC',
             'signup_mode' => isset(SignUp::MODES[$all['signup.mode'] ?? '']) ? $all['signup.mode'] : SignUp::NOBODY,
+            'console_members' => (bool) ($all['console.members'] ?? true),
             'mail_host' => $all['mail.host'] ?? null,
             'mail_port' => (int) ($all['mail.port'] ?? 587) ?: 587,
             'mail_encryption' => isset(MailSettings::ENCRYPTIONS[$all['mail.encryption'] ?? '']) ? $all['mail.encryption'] : 'tls',
@@ -412,7 +413,9 @@ class Settings extends Page
                     ]),
                     $this->section('signup')->description('New accounts get their own personal workspace and must confirm their email before they can sign in. People you add on the Workspace page always can.')->schema([
                         Select::make('signup_mode')->label('Who can sign up')->options(SignUp::MODES)->selectablePlaceholder(false)->required()
-                            ->helperText('"Only people with an invitation": the Workspace page\'s Add member emails a sign-up link to an address without an account.'),
+                            ->helperText('"Only people with an invitation": the Workspace page\'s Invite emails a sign-up link to an address without an account.'),
+                        Toggle::make('console_members')->label('Members can use the console')
+                            ->helperText('On: members and viewers open their own library, Shared with me, their profile and devices here, to read. Off: the console shows them the apps instead. Owners and admins always have it.'),
                     ]),
                     $this->section('pins')->schema([
                         TagsInput::make('app_pins')->label('Server certificate pins (SPKI SHA-256)')
@@ -758,6 +761,7 @@ class Settings extends Page
             'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',
             'signup.mode' => isset(SignUp::MODES[$state['signup_mode'] ?? '']) ? $state['signup_mode'] : SignUp::NOBODY,
+            'console.members' => (bool) ($state['console_members'] ?? true),
             'mail.host' => filled($state['mail_host'] ?? null) ? mb_strtolower(trim((string) $state['mail_host'])) : null,
             'mail.port' => (int) ($state['mail_port'] ?? 587) ?: 587,
             'mail.encryption' => isset(MailSettings::ENCRYPTIONS[$state['mail_encryption'] ?? '']) ? $state['mail_encryption'] : 'tls',

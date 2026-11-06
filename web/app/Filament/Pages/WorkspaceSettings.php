@@ -12,6 +12,7 @@ use App\Models\WorkspaceInvitation;
 use App\Services\Accounts\Invitations;
 use App\Services\Accounts\SignUp;
 use App\Services\AuditLog;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\WorkspaceEraser;
@@ -57,6 +58,12 @@ class WorkspaceSettings extends Page implements HasTable
     protected static ?int $navigationSort = 5;
 
     protected static ?string $title = 'Workspace';
+
+    /** Since v1.5 in the small console too (members and viewers), unless Settings closes the console to them. */
+    public static function canAccess(): bool
+    {
+        return ConsoleAccess::open();
+    }
 
     protected static ?string $slug = 'workspace';
 

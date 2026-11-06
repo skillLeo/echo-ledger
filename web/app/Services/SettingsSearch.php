@@ -42,7 +42,7 @@ final class SettingsSearch
         'captions' => ['captions', 'Live captions', 'engine provider channels client only cost streaming'],
         'dictation' => ['dictation', 'Dictation', 'engine provider voice typing keyboard'],
         'access' => ['privacy', 'Sign-in and access', 'two-factor 2fa passkeys browsers sessions audit log password'],
-        'signup' => ['privacy', 'Sign-up', 'who can sign up register registration accounts new people invite invitation anyone nobody google'],
+        'signup' => ['privacy', 'Sign-up', 'who can sign up register registration accounts new people invite invitation anyone nobody google members console viewers'],
         'pins' => ['privacy', 'Certificate pins', 'pinning spki sha256 tls certificate security'],
         'devices' => ['devices', 'Paired devices', 'pair revoke phone computer devices page'],
         'retention' => ['storage', 'Storage and retention', 'delete days undo bin recordings transcripts erase 48 hours'],

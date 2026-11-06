@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\ConsoleUploads;
 use App\Services\LibraryOrganiser;
 use App\Services\Sharing\Teammates;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Stt\LanguageChoice;
 use Filament\Actions\Action;
@@ -142,7 +143,8 @@ class ListCaptureSessions extends ListRecords
     public function content(Schema $schema): Schema
     {
         return $schema->components([
-            View::make('filament.library.uploader')->viewData(fn (): array => ['config' => self::uploaderConfig(), 'compact' => true]),
+            View::make('filament.library.uploader')->visible(fn (): bool => ! ConsoleAccess::readOnly())
+                ->viewData(fn (): array => ['config' => self::uploaderConfig(), 'compact' => true]),
             Grid::make(['default' => 1, 'xl' => 2])->extraAttributes(['class' => 'el-library'])->schema([
                 // The smart views are drawn as chips under the search pill (filament.library.view-chips).
                 Group::make([
@@ -189,6 +191,10 @@ class ListCaptureSessions extends ListRecords
 
     protected function getHeaderActions(): array
     {
+        if (ConsoleAccess::readOnly()) {
+            return [];
+        }
+
         return [
             // Opens the file picker of the drop zone below (several files at once, on phones too).
             Action::make('upload')

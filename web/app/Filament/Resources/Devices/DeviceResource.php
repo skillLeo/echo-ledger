@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\Devices;
 
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Models\Device;
 use App\Models\User;
@@ -24,6 +25,8 @@ use UnitEnum;
 /** Paired phones and desktops. Revoking deletes the device and all of its tokens immediately. */
 class DeviceResource extends Resource
 {
+    use FullConsoleOnly;
+
     protected static ?string $model = Device::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDevicePhoneMobile;

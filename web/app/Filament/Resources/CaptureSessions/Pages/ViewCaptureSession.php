@@ -35,6 +35,7 @@ use App\Services\TextReplacements;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
 use App\Services\Views\TranscriptViews;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Stt\ChannelLanguage;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
@@ -184,6 +185,7 @@ class ViewCaptureSession extends ViewRecord
      */
     public function saveSegment(int $index, string $text): array
     {
+        $this->assertCanChange();
         $final = $this->editableTranscript();
         if ($final === null) {
             return ['error' => 'Only a finished transcript can be edited.'];
@@ -212,6 +214,7 @@ class ViewCaptureSession extends ViewRecord
      */
     public function learnRule(string $from, string $to): array
     {
+        $this->assertCanChange();
         $client = $this->session()->client;
         if ($client === null) {
             return ['error' => 'File this recording under a client first.'];
@@ -233,6 +236,7 @@ class ViewCaptureSession extends ViewRecord
      */
     public function decideFix(int $suggestion, bool $accept): array
     {
+        $this->assertCanChange();
         $final = $this->editableTranscript();
         if ($final === null) {
             return ['error' => 'Only a finished transcript can be changed.'];
@@ -253,6 +257,7 @@ class ViewCaptureSession extends ViewRecord
      */
     public function makeViews(): ?array
     {
+        $this->assertCanChange();
         $transcript = $this->editableTranscript();
         if ($transcript === null) {
             return null;
@@ -281,6 +286,7 @@ class ViewCaptureSession extends ViewRecord
     /** "Write notes" in English or Roman Urdu: like POST /api/sessions/{id}/notes, done on the queue. */
     public function writeNotes(string $language = 'en'): void
     {
+        $this->assertCanChange();
         $session = $this->session();
         if ($session->client_id === null) {
             Notification::make()->title('File this recording under a client first.')->warning()->send();
@@ -319,12 +325,14 @@ class ViewCaptureSession extends ViewRecord
 
     public function togglePin(): void
     {
+        $this->assertCanChange();
         $session = app(LibraryOrganiser::class)->update($this->session(), ['pinned' => ! $this->session()->pinned]);
         Notification::make()->title($session->pinned ? 'Pinned to the top of the Library' : 'Unpinned')->success()->send();
     }
 
     public function toggleKeep(): void
     {
+        $this->assertCanChange();
         $session = app(LibraryOrganiser::class)->update($this->session(), ['keep' => ! $this->session()->keep_forever]);
         Notification::make()->title($session->keep_forever ? 'Kept: never deleted automatically' : 'Deleted after the usual time again')->success()->send();
     }
@@ -374,8 +382,30 @@ class ViewCaptureSession extends ViewRecord
             });
     }
 
+    /**
+     * Since v1.5 members and viewers have a read-only console: they open and play their recordings here, every change
+     * is made in the apps. No action mounts for them, and the page's own changes refuse.
+     */
+    public function mountAction(string $name, array $arguments = [], array $context = []): mixed
+    {
+        if (ConsoleAccess::readOnly()) {
+            return null;
+        }
+
+        return parent::mountAction($name, $arguments, $context);
+    }
+
+    private function assertCanChange(): void
+    {
+        abort_if(ConsoleAccess::readOnly(), 403);
+    }
+
     protected function getHeaderActions(): array
     {
+        if (ConsoleAccess::readOnly()) {
+            return [];
+        }
+
         return [
             ActionGroup::make([
                 $this->speakersAction(),
@@ -765,6 +795,7 @@ class ViewCaptureSession extends ViewRecord
     /** "Make default for <language>" on a run in Engine results. */
     public function pickEngine(string $runId): void
     {
+        $this->assertCanChange();
         $run = $this->session()->trials()->find($runId);
         if (! $run instanceof Transcript) {
             return;
@@ -782,6 +813,7 @@ class ViewCaptureSession extends ViewRecord
     /** "Use this version" on a run in Engine results. */
     public function useEngineRun(string $runId): void
     {
+        $this->assertCanChange();
         $run = $this->session()->trials()->find($runId);
         if (! $run instanceof Transcript) {
             return;

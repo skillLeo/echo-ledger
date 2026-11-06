@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -34,6 +35,8 @@ use UnitEnum;
  */
 class Search extends Page
 {
+    use FullConsoleOnly;
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedMagnifyingGlass;
 
     protected static string|UnitEnum|null $navigationGroup = 'More';

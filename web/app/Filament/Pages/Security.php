@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\AuditEvent;
 use App\Models\Device;
@@ -35,6 +36,7 @@ use UnitEnum;
  */
 class Security extends Page implements HasTable
 {
+    use FullConsoleOnly;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;

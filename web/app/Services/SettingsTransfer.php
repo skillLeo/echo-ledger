@@ -45,6 +45,7 @@ final class SettingsTransfer
         'unsure.note',
         'display.timezone',
         'signup.mode',
+        'console.members',
         'mail.host',
         'mail.port',
         'mail.encryption',

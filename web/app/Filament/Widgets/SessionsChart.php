@@ -7,6 +7,7 @@ namespace App\Filament\Widgets;
 use App\Enums\SourceDevice;
 use App\Models\CaptureSession;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Widgets\ChartWidget;
 use Illuminate\Support\Carbon;
@@ -15,6 +16,12 @@ use Illuminate\Support\Carbon;
 class SessionsChart extends ChartWidget
 {
     protected static ?int $sort = -1;
+
+    /** Since v1.5 the dashboard of the whole console; members and viewers see their library instead. */
+    public static function canView(): bool
+    {
+        return ConsoleAccess::full();
+    }
 
     protected ?string $heading = 'Sessions · last 14 days';
 

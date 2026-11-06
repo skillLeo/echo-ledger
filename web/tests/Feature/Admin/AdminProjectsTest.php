@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SourceApp;
+use App\Enums\WorkspaceRole;
 use App\Filament\Pages\Activity;
 use App\Filament\Pages\RequestLinksPage;
 use App\Filament\Pages\SharedWithMe;
@@ -143,7 +144,8 @@ describe('a project\'s page', function () {
         $member = withoutWorkspace(User::factory()->create());
         app(Workspaces::class)->addMember(Workspace::query()->findOrFail($this->admin->current_workspace_id), $member);
         $beta = adminProject($this->admin, 'Beta');
-        // Since v1.5 someone else's project is not there at all.
+        // Since v1.5 someone else's project is not there at all, for an admin of the workspace either.
+        app(Workspaces::class)->setRole(Workspace::query()->findOrFail($this->admin->current_workspace_id), $member, WorkspaceRole::Admin);
         $this->actingAs($member->refresh(), 'web');
         $this->get(ViewClient::getUrl(['record' => $beta->id]))->assertNotFound();
         $this->panelComponent(ListClients::class)->assertCanNotSeeTableRecords([$beta]);

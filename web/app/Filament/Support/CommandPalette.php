@@ -57,17 +57,18 @@ final class CommandPalette implements GlobalSearchProvider
     /** @return list<array{0: string, 1: string, 2: string}> label, url, words it answers to */
     private function commands(): array
     {
+        // Since v1.5 only the pages the person may open (the small console has fewer).
         $list = [
-            ['Dashboard', Dashboard::getUrl(), 'home overview usage chart'],
-            ['Search recordings', Search::getUrl(), 'find transcript text words'],
-            ['Sessions', CaptureSessionResource::getUrl('index'), 'recordings calls library voice notes upload'],
-            ['Projects', ClientResource::getUrl('index'), 'clients customers folders keyterms vocabulary corrections'],
-            ['Devices', DeviceResource::getUrl('index'), 'phones computers pair unpair'],
-            ['Settings', Settings::getUrl(), 'retention language vocabulary bookmarks limit engines'],
-            ['API credentials', ApiCredentials::getUrl(), 'keys assemblyai elevenlabs azure whisper'],
+            ['Dashboard', Dashboard::getUrl(), 'home overview usage chart', true],
+            ['Search recordings', Search::getUrl(), 'find transcript text words', Search::canAccess()],
+            ['Sessions', CaptureSessionResource::getUrl('index'), 'recordings calls library voice notes upload', CaptureSessionResource::canAccess()],
+            ['Projects', ClientResource::getUrl('index'), 'clients customers folders keyterms vocabulary corrections', ClientResource::canAccess()],
+            ['Devices', DeviceResource::getUrl('index'), 'phones computers pair unpair', DeviceResource::canAccess()],
+            ['Settings', Settings::getUrl(), 'retention language vocabulary bookmarks limit engines', Settings::canAccess()],
+            ['API credentials', ApiCredentials::getUrl(), 'keys assemblyai elevenlabs azure whisper', ApiCredentials::canAccess()],
         ];
 
-        return array_values(array_filter($list, fn (array $c): bool => $c[1] !== ''));
+        return array_values(array_map(fn (array $c): array => [$c[0], $c[1], $c[2]], array_filter($list, fn (array $c): bool => $c[1] !== '' && $c[3])));
     }
 
     /** @return list<GlobalSearchResult> */

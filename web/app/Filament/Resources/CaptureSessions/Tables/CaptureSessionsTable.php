@@ -15,6 +15,7 @@ use App\Models\Client;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
 use App\Services\Views\TranscriptViews;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
@@ -109,14 +110,15 @@ final class CaptureSessionsTable
             // Live status: the list refreshes every few seconds while it shows a recording that is uploading or being
             // transcribed, and stops by itself once none is.
             ->poll(fn (HasTable $livewire): ?string => self::showsPending($livewire->getTableRecords()) ? self::LIVE_POLL : null)
-            ->recordActions([
+            // Since v1.5 members and viewers only open their recordings here (a read-only console).
+            ->recordActions(ConsoleAccess::readOnly() ? [ViewAction::make()->label('Open')] : [
                 ActionGroup::make([
                     ViewAction::make()->label('Open'),
                     self::renameAction(),
                     DeleteAction::make()->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for 48 hours.'),
                 ])->label('More')->tooltip('More')->color('gray'),
             ])
-            ->toolbarActions([BulkActionGroup::make([...self::bulkActions(), DeleteBulkAction::make()->authorizeIndividualRecords('delete')])])
+            ->toolbarActions(ConsoleAccess::readOnly() ? [] : [BulkActionGroup::make([...self::bulkActions(), DeleteBulkAction::make()->authorizeIndividualRecords('delete')])])
             ->emptyStateIcon(Heroicon::OutlinedPlayCircle)
             ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => match (true) {
                 $livewire->hasTableSearch() => 'No recordings match your search',

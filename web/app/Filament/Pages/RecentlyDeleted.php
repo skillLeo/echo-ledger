@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages;
 
 use App\Exceptions\ApiError;
+use App\Filament\Concerns\FullConsoleOnly;
 use App\Models\CaptureSession;
 use App\Services\RetentionPolicy;
 use App\Services\Workspaces\CurrentWorkspace;
@@ -26,6 +27,7 @@ use UnitEnum;
 /** The 48-hour undo bin (plan B17): restore a deleted recording, or erase it now. */
 class RecentlyDeleted extends Page implements HasTable
 {
+    use FullConsoleOnly;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedTrash;
