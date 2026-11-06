@@ -116,6 +116,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('request-upload', fn (Request $request) => Limit::perMinute(300)->by('request:'.$request->ip()));
         RateLimiter::for('pairing', fn (Request $request) => Limit::perMinute(5)->by('pair:'.$request->ip()));
         RateLimiter::for('passkey', fn (Request $request) => Limit::perMinute(20)->by('passkey:'.$request->ip()));
+        // Sign in with Google (since v1.5): the redirect, Google's answer and the "confirm it is you" step.
+        RateLimiter::for('google', fn (Request $request) => Limit::perMinute(20)->by('google:'.$request->ip()));
         RateLimiter::for('webhooks', fn (Request $request) => Limit::perMinute(300)->by('hook:'.$request->ip()));
         // The public site (since v1.5): the landing and downloads pages and the apps' update manifests.
         RateLimiter::for('site', fn (Request $request) => Limit::perMinute(60)->by('site:'.$request->ip()));

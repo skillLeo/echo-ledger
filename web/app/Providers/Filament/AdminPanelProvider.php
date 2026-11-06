@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Providers\Filament;
 
 use App\Filament\Auth\AppAuthentication;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Auth\EmailVerificationPrompt;
 use App\Filament\Auth\Login;
 use App\Filament\Auth\Register;
@@ -55,9 +56,12 @@ class AdminPanelProvider extends PanelProvider
             ->databaseNotificationsPolling('30s')
             // Passkeys (B16): a second way in, next to the password and the optional two-step code.
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn (): View => view('filament.auth.passkey-login'))
+            // Sign in with Google (since v1.5), once API Credentials → Google sign-in is filled in.
+            ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, fn (): View => view('filament.auth.google-login'))
+            ->renderHook(PanelsRenderHook::AUTH_REGISTER_FORM_AFTER, fn (): View => view('filament.auth.google-login', ['label' => 'Sign up with Google']))
             // C6: a quiet notice while the browser is offline.
             ->renderHook(PanelsRenderHook::BODY_END, fn (): View => view('filament.offline-banner'))
-            ->profile(isSimple: false)
+            ->profile(EditProfile::class, isSimple: false)
             // Confirming one's email: required since v1.5 Phase 4 (an unconfirmed account sees only "Confirm your
             // email", and the apps' sign-in answers 403 email_not_verified); people-only share links need it too.
             ->emailVerification(EmailVerificationPrompt::class, isRequired: true)

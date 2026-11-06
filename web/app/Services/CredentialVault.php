@@ -24,6 +24,8 @@ final class CredentialVault
         'anthropic' => ['api_key' => 'API key'],
         'whispercpp' => ['bearer_token' => 'Reverse-proxy bearer token'],
         'openai' => ['api_key' => 'API key (optional, future driver)'],
+        // Since v1.5: "Sign in with Google" on the console (an OAuth client of the Google Cloud console).
+        'google' => ['client_id' => 'Client ID', 'client_secret' => 'Client secret'],
     ];
 
     /** Secrets that EchoLedger can generate for the admin. */

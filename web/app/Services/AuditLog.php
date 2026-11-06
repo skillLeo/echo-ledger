@@ -121,7 +121,9 @@ final class AuditLog
     {
         $log = fn (): self => app(self::class);
         Event::listen(Login::class, function (Login $e) use ($log): void {
-            if ($e->guard === 'web' && $e->user instanceof User && ! session()->pull('audit.passkey_login', false)) {
+            // Passkey and Google sign-ins record their own event.
+            $own = session()->pull('audit.passkey_login', false) || session()->pull('audit.google_login', false);
+            if ($e->guard === 'web' && $e->user instanceof User && ! $own) {
                 $log()->record('login', (int) $e->user->getAuthIdentifier());
             }
         });

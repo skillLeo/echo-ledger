@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages;
 
 use App\Models\User;
+use App\Services\Accounts\GoogleSignIn;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use App\Stt\GroqPacer;
@@ -100,12 +101,16 @@ class ApiCredentials extends Page
                 'whispercpp' => 'whisper.cpp server',
                 'openai' => 'OpenAI (optional)',
                 'gemini' => 'Google Gemini (optional, an Urdu challenger)',
+                'google' => 'Google sign-in (optional)',
             })->columns(2)->collapsible()->schema($inputs);
             if ($provider === 'groq') {
                 $section->description(fn (): ?string => self::groqUse());
             }
             if ($provider === 'gemini') {
                 $section->description('Use a key from a Google Cloud project with billing enabled (the paid tier): on the free tier Google may use the audio and transcripts to improve its products. Each piece of audio is uploaded for one request and deleted right after it.');
+            }
+            if ($provider === 'google') {
+                $section->description('An OAuth client ID of type "Web application" from the Google Cloud console (APIs & Services → Credentials). Its authorised redirect URI: '.GoogleSignIn::redirectUri().' — Sign in with Google appears on the sign-in page once both values are saved.');
             }
             $sections[] = $section;
         }

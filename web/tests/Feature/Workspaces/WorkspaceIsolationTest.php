@@ -66,6 +66,10 @@ const ISO_WEB_BYPASS = [
     'passkeys.login.options' => 'sign-in, before any workspace',
     'passkeys.login' => 'sign-in, before any workspace',
     'screens.media' => 'signed, expiring URL of a screen moment issued to a device of the workspace',
+    'auth.google.redirect' => 'sign-in with Google, before any workspace',
+    'auth.google.callback' => 'sign-in with Google, before any workspace',
+    'auth.google.confirm' => 'sign-in with Google, before any workspace',
+    'auth.google.confirm.store' => 'sign-in with Google, before any workspace',
 ];
 
 const ISO_SECRETS = ['BOB-SECRET-TITLE', 'BOBSECRETTRANSCRIPT', 'BOB-SECRET-CLIENT', 'BOB-SECRET-DEVICE', 'BOBSECRETTERM', 'bobsecretlabel', 'BOBSECRETNOTE'];

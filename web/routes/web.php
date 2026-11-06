@@ -6,6 +6,7 @@ use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
 use App\Http\Controllers\AdminPackController;
 use App\Http\Controllers\AppLinksController;
+use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
 use App\Http\Controllers\PasskeyLoginController;
@@ -91,6 +92,15 @@ Route::middleware('throttle:request-upload')->prefix('/r/{token}/files')->name('
     Route::post('/', [RequestLinkPageController::class, 'store'])->name('store');
     Route::post('/{upload}/chunks/{index}', [RequestLinkPageController::class, 'chunk'])->whereNumber('index')->name('chunk');
     Route::post('/{upload}/complete', [RequestLinkPageController::class, 'complete'])->name('complete');
+});
+
+// Sign in with Google (v1.5): Socialite's redirect and callback, then "confirm it is you" when Google's address matches
+// an account not linked yet, or the account has two-step sign-in. Throttled per IP.
+Route::middleware('throttle:google')->prefix('/auth/google')->name('auth.google.')->group(function (): void {
+    Route::get('/redirect', [GoogleController::class, 'redirect'])->name('redirect');
+    Route::get('/callback', [GoogleController::class, 'callback'])->name('callback');
+    Route::get('/confirm', [GoogleController::class, 'confirmForm'])->name('confirm');
+    Route::post('/confirm', [GoogleController::class, 'confirm'])->name('confirm.store');
 });
 
 // Passkey sign-in on the console login page (B16): a challenge, then the signed answer. Throttled per IP.
