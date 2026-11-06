@@ -379,7 +379,7 @@ final class RequestLinks
             $upload->update(['client_file_id' => $file->id]);
         } finally {
             @unlink($plain);
-            Storage::disk('recordings')->deleteDirectory($upload->partsDirectory());
+            app(RecordingFiles::class)->eraseFolder($upload->partsDirectory());
         }
 
         return $this->received($upload);
@@ -435,7 +435,7 @@ final class RequestLinks
         if ($session !== null && $session->status === SessionStatus::Uploading) {
             $session->delete();
         }
-        Storage::disk('recordings')->deleteDirectory($upload->partsDirectory());
+        app(RecordingFiles::class)->eraseFolder($upload->partsDirectory());
         $upload->update(['status' => 'failed', 'error' => self::ABANDONED]);
     }
 
@@ -446,7 +446,7 @@ final class RequestLinks
             // Still uploading: deleting the session erases the parts at once (CaptureSession::booted).
             Recording::query()->find($upload->recording_id)?->captureSession()->first()?->delete();
         }
-        Storage::disk('recordings')->deleteDirectory($upload->partsDirectory());
+        app(RecordingFiles::class)->eraseFolder($upload->partsDirectory());
         $upload->update(['status' => 'refused', 'error' => $message]);
 
         throw new ApiError($status, $code, $message);
@@ -464,13 +464,13 @@ final class RequestLinks
 
     private function assemble(RequestUpload $upload, string $plain): void
     {
-        $disk = Storage::disk('recordings');
+        $files = app(RecordingFiles::class);
         $out = fopen($plain, 'wb');
         $hash = hash_init('sha256');
         $size = 0;
         try {
             for ($i = 0; $i < $upload->total_chunks; $i++) {
-                app(RecordingFiles::class)->readPart($upload->partsDirectory().'/'.$i.'.part', static function ($part) use ($out, $hash, &$size): void {
+                $files->readPart($upload->partsDirectory().'/'.$i.'.part', static function ($part) use ($out, $hash, &$size): void {
                     while (! feof($part)) {
                         $buffer = (string) fread($part, 1024 * 1024);
                         $size += strlen($buffer);
@@ -484,7 +484,7 @@ final class RequestLinks
         }
         if ($size !== $upload->size_bytes || ! hash_equals($upload->sha256, hash_final($hash))) {
             $upload->update(['received_chunks' => []]);
-            $disk->deleteDirectory($upload->partsDirectory());
+            $files->eraseFolder($upload->partsDirectory());
             throw new ApiError(422, 'verification_failed', ChunkedUploadService::VERIFICATION_FAILED);
         }
     }

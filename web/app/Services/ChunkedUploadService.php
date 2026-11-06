@@ -257,16 +257,12 @@ final class ChunkedUploadService
     public function discard(Recording $recording, string $error): void
     {
         $recording->update(['upload_status' => UploadStatus::Failed, 'error' => $error, 'received_chunks' => []]);
-        $disk = Storage::disk('recordings');
-        if ($disk->directoryExists($recording->partsDirectory())) {
-            $disk->deleteDirectory($recording->partsDirectory());
-        }
+        $this->files()->eraseFolder($recording->partsDirectory());
     }
 
     /** Called by AssembleRecordingJob: concatenate → verify size + SHA-256 → encrypt → delete parts. */
     public function assemble(Recording $recording): void
     {
-        $disk = Storage::disk('recordings');
         $plainPath = $this->tempPath('assemble');
         $out = fopen($plainPath, 'wb');
         if ($out === false) {
@@ -294,7 +290,7 @@ final class ChunkedUploadService
             }
 
             $this->storeEncrypted($recording, $plainPath);
-            $disk->deleteDirectory($recording->partsDirectory());
+            $this->files()->eraseFolder($recording->partsDirectory());
         } finally {
             if (is_resource($out)) {
                 fclose($out);
@@ -357,9 +353,7 @@ final class ChunkedUploadService
             'assembled_at' => now(),
             'error' => null,
         ]);
-        if ($disk->directoryExists($recording->partsDirectory())) {
-            $disk->deleteDirectory($recording->partsDirectory());
-        }
+        $this->files()->eraseFolder($recording->partsDirectory());
 
         return true;
     }

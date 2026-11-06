@@ -14,8 +14,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Storage;
-use Throwable;
 
 /**
  * One uploaded audio artifact of a session (PLAN.md D5). Stored encrypted on the `recordings` disk.
@@ -79,15 +77,10 @@ class Recording extends Model
 
     public function deleteFiles(): void
     {
-        $disk = Storage::disk('recordings');
-        app(RecordingFiles::class)->erase($this->stored_path);
-        try {
-            if ($disk->directoryExists($this->partsDirectory())) {
-                $disk->deleteDirectory($this->partsDirectory());
-            }
-        } catch (Throwable $e) {
-            report($e); // missing files must never block deletion or pruning
-        }
+        // Neither throws: missing files must never block deletion or pruning.
+        $files = app(RecordingFiles::class);
+        $files->erase($this->stored_path);
+        $files->eraseFolder($this->partsDirectory());
     }
 
     protected static function booted(): void

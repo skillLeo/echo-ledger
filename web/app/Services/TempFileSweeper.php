@@ -109,7 +109,8 @@ final class TempFileSweeper
         foreach ($disk->directories('parts') as $relative) {
             $id = basename($relative);
             $recording = Recording::query()->find($id, ['id', 'upload_status']);
-            $orphaned = $recording === null || $recording->upload_status === UploadStatus::Failed;
+            // A ready recording's parts are left only by a delete that failed at the end of its assembly.
+            $orphaned = $recording === null || in_array($recording->upload_status, [UploadStatus::Failed, UploadStatus::Ready], true);
 
             if ($orphaned && $files->newestChange($relative) < $partsCutoff) {
                 $disk->deleteDirectory($relative);
@@ -117,12 +118,9 @@ final class TempFileSweeper
 
                 continue;
             }
-            // A chunk upload that died before its rename leaves "<index>.part.<random>.tmp" behind (a bucket gets only
-            // finished chunks: its work files are in the temp directory).
-            if ($files->isLocal()) {
-                foreach (glob($disk->path($relative).DIRECTORY_SEPARATOR.'*.tmp') ?: [] as $tmp) {
-                    $removed += $this->removeIfOlder($tmp, $tmpCutoff);
-                }
+            // A chunk upload that died before its rename leaves "<index>.part.<random>.tmp" behind.
+            foreach ($files->leftoverWorkFiles($relative) as $tmp) {
+                $removed += $this->removeIfOlder($tmp, $tmpCutoff);
             }
         }
 

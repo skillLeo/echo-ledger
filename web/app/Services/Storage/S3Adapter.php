@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Services\Storage;
 
 use Carbon\CarbonImmutable;
+use GuzzleHttp\Exception\TransferException;
 use GuzzleHttp\Psr7\LimitStream;
 use GuzzleHttp\Psr7\StreamWrapper;
 use GuzzleHttp\Psr7\Utils;
+use GuzzleHttp\Utils as GuzzleUtils;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
@@ -65,6 +67,9 @@ final class S3Adapter implements FilesystemAdapter
     private readonly string $host;
 
     private readonly string $basePath;
+
+    /** One connection for the whole run: assembling a recording asks for hundreds of parts, each costing a TLS handshake otherwise. */
+    private mixed $handler = null;
 
     public function __construct(
         private readonly string $bucket,
@@ -402,7 +407,9 @@ final class S3Adapter implements FilesystemAdapter
         $authorization = $this->signer->authorization($method, $target, $queryString, $signed, $hash, $at);
         unset($signed['host']); // the HTTP client sends the same value itself
 
+        $this->handler ??= GuzzleUtils::chooseHandler();
         $request = Http::withHeaders([...$signed, 'Authorization' => $authorization])
+            ->setHandler($this->handler)
             ->contentType('application/octet-stream')
             ->withOptions(['stream' => $stream, 'expect' => false, 'decode_content' => false, 'allow_redirects' => false])
             ->connectTimeout(self::CONNECT_SECONDS)
@@ -418,7 +425,7 @@ final class S3Adapter implements FilesystemAdapter
     /** A network error, the bucket's own trouble or its asking to slow down; a refusal does not change on a retry. */
     private static function worthRetrying(Throwable $e): bool
     {
-        return $e instanceof ConnectionException
+        return $e instanceof ConnectionException || $e instanceof TransferException
             || ($e instanceof RequestException && ($e->response->serverError() || $e->response->status() === 429));
     }
 

@@ -142,6 +142,17 @@ final class RecordingFiles
         return $this->disk()->path($relative).'.'.bin2hex(random_bytes(6)).'.tmp';
     }
 
+    /**
+     * Work files of chunks in a folder of parts. A bucket gets only finished chunks: its work files are in the temp
+     * directory, which TempFileSweeper goes through anyway.
+     *
+     * @return list<string>
+     */
+    public function leftoverWorkFiles(string $directory): array
+    {
+        return $this->isLocal() ? (glob($this->disk()->path($directory).DIRECTORY_SEPARATOR.'*.tmp') ?: []) : [];
+    }
+
     /** Puts a checked chunk in its place; the work file is gone afterwards, also when this fails. */
     public function finishPart(string $workPath, string $relative): void
     {
@@ -191,7 +202,7 @@ final class RecordingFiles
                 $path = $this->disk()->path($relative);
             } else {
                 $plain = $path = self::tempPath('part');
-                $this->decryptToFile($relative, $plain, $relative);
+                $this->decryptPart($relative, $plain);
             }
             $part = fopen($path, 'rb');
             if ($part === false) {
@@ -299,6 +310,19 @@ final class RecordingFiles
         }
     }
 
+    /**
+     * Deletes a folder of upload parts and never throws: the recording is safe by now, and TempFileSweeper removes
+     * parts a failed delete left behind.
+     */
+    public function eraseFolder(string $directory): void
+    {
+        try {
+            $this->disk()->deleteDirectory($directory);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
     /** stt:reconcile: tries the deletes that are due again, for as long as it takes. Returns how many went through. */
     public function retryErasures(): int
     {
@@ -328,6 +352,20 @@ final class RecordingFiles
             StorageDeletion::query()->updateOrCreate(['path' => $path], ['last_error' => mb_substr($e->getMessage(), 0, 500), 'next_attempt_at' => now()->addMinutes(self::FIRST_RETRY_MINUTES)]);
         } catch (Throwable $queued) {
             report($queued);
+        }
+    }
+
+    /** One request and the part in memory for a moment (5 MB at most), where a file of any size takes two and a stream. */
+    private function decryptPart(string $relative, string $plainPath): void
+    {
+        $encrypted = self::tempPath('fetch');
+        try {
+            if (file_put_contents($encrypted, (string) $this->disk()->get($relative)) === false) {
+                throw new RuntimeException('Cannot write upload chunk.');
+            }
+            $this->cipher()->decryptToFile($encrypted, $plainPath, $relative);
+        } finally {
+            @unlink($encrypted);
         }
     }
 
