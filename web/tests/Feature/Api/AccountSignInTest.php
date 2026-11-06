@@ -78,11 +78,20 @@ describe('POST /api/auth/password', function () {
         {
             public int $checks = 0;
 
+            public int $makes = 0;
+
             public function check(#[SensitiveParameter] $value, $hashedValue, array $options = []): bool
             {
                 $this->checks++;
 
                 return parent::check($value, $hashedValue, $options);
+            }
+
+            public function make(#[SensitiveParameter] $value, array $options = []): string
+            {
+                $this->makes++;
+
+                return parent::make($value, $options);
             }
         };
         app()->instance('hash', $hasher);
@@ -94,7 +103,22 @@ describe('POST /api/auth/password', function () {
         expect($wrongEmail->json())->toBe(['message' => 'Wrong email or password.', 'code' => 'invalid_credentials'])
             ->and($wrongPassword->json())->toBe($wrongEmail->json());
         expect(unscoped(fn () => Device::query()->count()))->toBe(0)
-            ->and($hasher->checks)->toBe(2);
+            ->and($hasher->checks)->toBe(2)
+            ->and($hasher->makes)->toBe(1);
+
+        // The stand-in hash is made once per server, not once per request (PHP-FPM forgets statics between requests),
+        // so a later wrong email costs one hash check, exactly like a wrong password.
+        $hasher->checks = $hasher->makes = 0;
+        $this->postJson('/api/auth/password', passwordBody(['email' => 'someone.else@example.test']))->assertStatus(422);
+        expect($hasher->checks)->toBe(1)->and($hasher->makes)->toBe(0);
+
+        // A change of the hashing cost makes it again at the new cost.
+        config(['hashing.bcrypt.rounds' => 5]);
+        app()->forgetInstance('hash');
+        app()->instance('hash', $hasher = new $hasher(app()));
+        Hash::clearResolvedInstance('hash');
+        $this->postJson('/api/auth/password', passwordBody(['email' => 'third@example.test']))->assertStatus(422);
+        expect($hasher->makes)->toBe(1)->and($hasher->checks)->toBe(1);
     });
 
     it('asks an account with two-step sign-in for its code, and takes a code or a recovery code once', function () {

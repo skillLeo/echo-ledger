@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\PairingService;
 use App\Services\Workspaces\Workspaces;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -30,8 +31,11 @@ final class DeviceSignIn
     /** The only redirect the browser sign-in sends codes to. */
     public const REDIRECT_URI = 'echoledger://signed-in';
 
-    /** A bcrypt hash checked when no account has the email, so a wrong email takes as long as a wrong password. */
-    private static ?string $dummyHash = null;
+    /**
+     * The cache key of the hash checked when no account has the email, so a wrong email takes as long as a wrong
+     * password. It is made once per server, not per request: making it costs as much as checking it.
+     */
+    private const DUMMY_HASH_KEY = 'auth:dummy-password-hash';
 
     public function __construct(
         private readonly PairingService $pairing,
@@ -54,7 +58,7 @@ final class DeviceSignIn
         $this->guard->assertNotLocked($email);
 
         $user = User::query()->where('email', $email)->first();
-        $hash = $user instanceof User ? $user->password : (self::$dummyHash ??= Hash::make(Str::random(32)));
+        $hash = $user instanceof User ? $user->password : self::dummyHash();
         $passwordOk = Hash::check($data['password'], $hash);
         if (! $user instanceof User || ! $passwordOk) {
             $this->failed($email, $user);
@@ -76,6 +80,18 @@ final class DeviceSignIn
         $this->guard->clear($email);
 
         return $this->create($user, $workspaceId, $data, $ip, $country, 'password');
+    }
+
+    /** A hash at the server's current cost that no password matches; made again only when the hashing settings change. */
+    private static function dummyHash(): string
+    {
+        $hash = Cache::get(self::DUMMY_HASH_KEY);
+        if (! is_string($hash) || Hash::needsRehash($hash)) {
+            $hash = Hash::make(Str::random(40));
+            Cache::forever(self::DUMMY_HASH_KEY, $hash);
+        }
+
+        return $hash;
     }
 
     /**
