@@ -3,6 +3,7 @@
 namespace Tests;
 
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Http\Request;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -12,5 +13,8 @@ abstract class TestCase extends BaseTestCase
 
         // Console pages link the Vite-built theme (C3); tests never need the built assets.
         $this->withoutVite();
+        // A test that runs as production goes through TrustHosts, which sets this on Symfony's Request for the whole
+        // process: the next test in the same worker must not inherit it.
+        Request::setTrustedHosts([]);
     }
 }

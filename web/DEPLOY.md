@@ -104,6 +104,17 @@ be restored from the console's Recently deleted page for 48 hours.
 - **Members' console:** Settings → Privacy & security → Members can use the console (on by default); off, members
   and viewers are pointed to the apps.
 
+## The security review of v1.5.0
+- **`APP_URL` is now enforced.** It must be exactly the address people and the apps use, before this deploy (step 3 above).
+  On a VPS, add the first block of the Nginx section in `docs/DEPLOY_VPS.md` too.
+- **Migration `2026_11_25_000001`:** a sent project keeps the list of recordings it holds (`sent_items.session_ids`).
+  Projects sent before this keep what they hold at that moment; nothing is deleted. Rollback (`migrate:rollback
+  --step=1`) drops the column, and a sent project shows whatever is filed in it again.
+- **Restart the workers** (`php artisan queue:restart`) so they encrypt queued emails and read the new usage rules. Emails
+  already waiting in the queue are still sent.
+- **Usage reports count only after a token.** The record of which device was given a token is in the cache: clearing the
+  cache (`cache:clear`) makes the reports of streams open at that moment count as 0, until the device's next token.
+
 ## Claude and ChatGPT connector (since v1.5)
 People add `https://YOUR_DOMAIN/mcp` in Claude or ChatGPT and read their recordings there (`docs/CONNECTOR.md`).
 - **Migrations `2026_11_23_000001` to `000005`:** Passport's four tables (clients, codes, access and refresh tokens) and

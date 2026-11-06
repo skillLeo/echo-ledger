@@ -87,11 +87,7 @@ beforeEach(function () {
 | their fixes, apart from the few that say what must keep working (the super admin, a confirmed account, a profile change).
 */
 
-afterEach(function () {
-    // TrustHosts sets this on Symfony's Request for the whole process, and it would outlive the test.
-    Request::setTrustedHosts([]);
-    Fx::cleanupDisks();
-});
+afterEach(fn () => Fx::cleanupDisks());
 
 /** A team of [$owner], its current workspace, and a device of [$person] in it (the owner when none is named). */
 function reviewTeam(User $owner, ?User $person = null, WorkspaceRole $role = WorkspaceRole::Member): array
@@ -148,7 +144,6 @@ it('C1 puts APP_URL in the reset email whatever Host the request named', functio
     Mail::fake();
     $user = Fx::user(['email' => 'target@corp.test']);
     // A request the host check did not stop: the same code the reset page calls, while the request says evil.test.
-    Request::setTrustedHosts([]);
     $request = Request::create('http://evil.test/admin/password-reset/request');
     app()->instance('request', $request);
     URL::setRequest($request);
