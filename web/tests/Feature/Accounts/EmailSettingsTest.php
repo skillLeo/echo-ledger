@@ -243,7 +243,7 @@ it('keeps a link typed into an email\'s text as text, so nobody can put their ow
     // The words stay, shown as typed; no link (a Markdown one, an autolink or a tag) goes to their address.
     expect($html)->not->toMatch('/<a\\s[^>]*href="https:\\/\\/evil\\.example/i')
         ->toContain('Your account is locked')
-        ->toContain('#3E63DD');
+        ->toContain('/mail-mark.png');
 })->with([
     'invitation: workspace and inviter' => [fn (string $evil) => new InvitationMail($evil, $evil, 'https://ledger.test/invite/1', true, 'Nov 13, 2026')],
     'added to a workspace' => [fn (string $evil) => new InvitationMail($evil, $evil, 'https://ledger.test/admin', false)],
