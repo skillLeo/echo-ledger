@@ -64,8 +64,32 @@ const SERVER_FOLDERS: Partial<Record<SmartFolder, string[]>> = { imported: ["r3"
 type Args = Record<string, unknown>;
 let captions: { onmessage: (e: unknown) => void } | null = null;
 
+// Phase 1C: the Ready check, ready or with two things to fix ("record-not-ready").
+const notReady = screen === "record-not-ready";
+const check = (id: string, label: string, ok: boolean, detail: string | null = null, fix: { label: string; action: string } | null = null) => ({ id, label, ok, detail, fix });
+const READY_REPORT = {
+  ready: !notReady,
+  checkedAt: new Date().toISOString(),
+  checks: [
+    check("account", "Signed in", true),
+    check("microphone", "Microphone", true),
+    check("microphone_permission", "Microphone allowed", true),
+    notReady
+      ? check("other_side", "The other side of calls", false, "EchoLedger may not record this computer's sound: only your voice would be recorded.", { label: "Open System Settings", action: "allow_system_audio" })
+      : check("other_side", "The other side of calls", true),
+    notReady
+      ? check("detection", "Meetings recorded by themselves", false, "Record calls automatically is off: calls are recorded only when you start them.", { label: "Turn on", action: "turn_on_auto_mode" })
+      : check("detection", "Meetings recorded by themselves", true),
+  ],
+};
+
 const commands: Record<string, (args: Args) => unknown> = {
+  ready_last: () => READY_REPORT,
+  ready_check: () => READY_REPORT,
+  auth_options: () => ({ password: true, google: true, signUp: true, signUpUrl: "https://ledger.example.com/admin/register", resetUrl: "https://ledger.example.com/admin/password-reset/request", browserSignIn: true }),
   app_status: () => makeStatus({
+    callsReady: !notReady,
+    readyProblems: notReady ? 2 : 0,
     deviceName: "Work laptop",
     pendingDecisions: empty ? 0 : PENDING.length,
     captionsLive: controls,
@@ -79,7 +103,7 @@ const commands: Record<string, (args: Args) => unknown> = {
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
       : { phase: "up_to_date", current: "1.5.0", version: null, notes: null, checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), message: "You have the latest version.", progress: null },
-  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding }),
+  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false } }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : ITEMS),

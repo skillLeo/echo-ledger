@@ -38,7 +38,7 @@ export function paletteCommands(status: AppStatus, actions: {
   const list: PaletteCommand[] = [
     recording
       ? { id: "stop", label: "Stop recording", keywords: "end finish save", run: () => actions.run(api.stopRecording) }
-      : { id: "start", label: "Start recording", keywords: "record call begin", run: () => actions.run(() => api.startRecording()) },
+      : { id: "start", label: "Record now", keywords: "start recording call meeting voice note begin", run: () => actions.run(api.recordNow) },
   ];
   if (recording) {
     list.push(status.paused
@@ -61,6 +61,7 @@ export function paletteCommands(status: AppStatus, actions: {
     )) : []),
     { id: "projects", label: "Go to Projects", keywords: "clients folders workspace brief notes files ask", run: () => actions.go("projects") },
     { id: "record", label: "Go to Record", keywords: "microphone detection", run: () => actions.go("record") },
+    { id: "ready", label: "Check calls will be recorded", keywords: "ready check permissions microphone fix readiness", run: () => actions.go("record") },
     { id: "activity", label: "Go to Activity", keywords: "notifications bell", run: () => actions.go("activity") },
     { id: "settings", label: "Go to Settings", keywords: "preferences shortcuts captions language", run: () => actions.go("settings") },
   );

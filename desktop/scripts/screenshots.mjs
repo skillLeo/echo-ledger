@@ -82,9 +82,28 @@ const SCREENS = [
     await page.getByRole("button", { name: "Request files" }).click();
     await page.waitForSelector(".share-sheet .links-list");
   }],
-  ["record", "record", async (page) => page.waitForSelector(".record-btn")],
+  ["record", "record", async (page) => {
+    await page.waitForSelector(".record-btn");
+    await page.waitForSelector("[data-testid=ready-card] .check-row");
+  }],
+  // Phase 1C: the Ready check with two things to fix, Settings → Notifications by kind, the Library grouped by project.
+  ["record-not-ready", "record-not-ready", async (page) => page.waitForSelector("[data-testid=ready-card].not-ready .check-row")],
+  ["settings-notifications", "settings", async (page) => {
+    await page.getByRole("textbox", { name: "Search settings" }).fill("notifications");
+    await page.waitForSelector(".notification-categories");
+  }],
+  ["library-grouped", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.getByRole("button", { name: /^Group by:/ }).click();
+    await page.getByRole("menuitemradio", { name: /Project$/ }).click();
+    await page.waitForSelector(".group-head");
+  }],
   // v1.5: signing in, the account and plan, a viewer's Record page, an update ready to install.
-  ["sign-in", "sign-in", async (page) => page.waitForSelector("#sign-in-title")],
+  ["sign-in", "sign-in", async (page) => {
+    await page.waitForSelector("#sign-in-title");
+    await page.getByRole("textbox", { name: "Server address" }).fill("https://ledger.example.com");
+    await page.getByRole("button", { name: "Continue with Google" }).waitFor();
+  }],
   ["settings-account", "settings-account", async (page) => {
     await page.waitForSelector(".settings-row");
     await page.getByRole("button", { name: /^Account/ }).click();
