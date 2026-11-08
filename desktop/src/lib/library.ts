@@ -1,13 +1,16 @@
 // Library search, sorting and date grouping (pure; unit-tested).
 import type { LibraryItem } from "./ipc";
 
-export type SortKey = "newest" | "oldest" | "longest" | "title";
+export type SortKey = "newest" | "oldest" | "longest" | "shortest" | "title" | "opened";
 
+/** Sort by (Phase 1C), in the toolbar menu's order. */
 export const SORT_LABELS: Record<SortKey, string> = {
-  newest: "Newest first",
-  oldest: "Oldest first",
-  longest: "Longest first",
-  title: "Title A–Z",
+  newest: "Newest",
+  oldest: "Oldest",
+  longest: "Longest",
+  shortest: "Shortest",
+  title: "Name A–Z",
+  opened: "Recently opened",
 };
 
 /** Case-insensitive match against the title, transcript preview, client, device, source labels and bookmark tags. */
@@ -19,7 +22,8 @@ export function searchItems(items: LibraryItem[], query: string): LibraryItem[] 
   );
 }
 
-export function sortItems(items: LibraryItem[], key: SortKey): LibraryItem[] {
+/** `opened`: when each recording was last opened on this computer (ms), for Recently opened; the rest follow, newest first. */
+export function sortItems(items: LibraryItem[], key: SortKey, opened: Record<string, number> = {}): LibraryItem[] {
   const time = (i: LibraryItem) => (i.started_at ? Date.parse(i.started_at) || 0 : 0);
   const copy = [...items];
   switch (key) {
@@ -27,6 +31,10 @@ export function sortItems(items: LibraryItem[], key: SortKey): LibraryItem[] {
       return copy.sort((a, b) => time(a) - time(b));
     case "longest":
       return copy.sort((a, b) => (b.duration_ms ?? 0) - (a.duration_ms ?? 0));
+    case "shortest":
+      return copy.sort((a, b) => (a.duration_ms ?? Number.MAX_SAFE_INTEGER) - (b.duration_ms ?? Number.MAX_SAFE_INTEGER));
+    case "opened":
+      return copy.sort((a, b) => (opened[b.id] ?? 0) - (opened[a.id] ?? 0) || time(b) - time(a));
     case "title":
       return copy.sort((a, b) => (a.title ?? "").localeCompare(b.title ?? "", undefined, { sensitivity: "base" }));
     default:

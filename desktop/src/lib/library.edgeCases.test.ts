@@ -59,7 +59,7 @@ describe("sortItems edge cases", () => {
   });
 
   it("offers a label for every sort key", () => {
-    expect(SORT_LABELS).toEqual({ newest: "Newest first", oldest: "Oldest first", longest: "Longest first", title: "Title A–Z" });
+    expect(SORT_LABELS).toEqual({ newest: "Newest", oldest: "Oldest", longest: "Longest", shortest: "Shortest", title: "Name A–Z", opened: "Recently opened" });
   });
 });
 

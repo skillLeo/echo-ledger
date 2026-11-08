@@ -9,7 +9,9 @@ import { activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords,
 import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
 import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
-import { bookmarksOf, filterByTag, groupItems, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
+import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
+import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
+import { ChoiceMenu, GroupHeader } from "./LibraryGrouping";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
 import { AlertIcon, AppTileIcon, appKind, CloseIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
@@ -127,9 +129,23 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("newest");
+  // Group by and Sort by (Phase 1C), remembered per view: the whole Library and each smart folder.
+  const viewKey = smartFolder ?? "all";
+  const [choice, setChoiceState] = useState<LibraryViewChoice>(() => loadChoice(viewKey));
+  useEffect(() => setChoiceState(loadChoice(viewKey)), [viewKey]);
+  const setChoice = (next: Partial<LibraryViewChoice>) => setChoiceState((c) => {
+    const merged = { ...c, ...next };
+    saveChoice(viewKey, merged);
+    return merged;
+  });
+  const sort = choice.sort;
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [opened, setOpened] = useState<Record<string, number>>(loadOpened);
   const [selected, setSelected] = useState<string | null>(initialSelected);
   useEffect(() => onSelectedChange?.(selected), [selected, onSelectedChange]);
+  useEffect(() => {
+    if (selected) setOpened(rememberOpened(selected));
+  }, [selected]);
   const [transcript, setTranscript] = useState<TranscriptDetail | null>(null);
   // How unsure words are marked in copied text (the console's choice, plan A4).
   const [unsure, setUnsure] = useState<UnsureMarkers>(DEFAULT_UNSURE);
@@ -278,8 +294,16 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     const saved = new Map(items.map((i) => [i.id, i]));
     return folderItems.map((i) => saved.get(i.id) ?? i).filter((i) => !i.deleted);
   }, [items, smartFolder, folderItems]);
-  const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(applyFilters(folderBase, filters), label), folder), query), sort), [folderBase, filters, label, folder, query, sort]);
-  const groups = useMemo(() => groupItems(filtered, sort), [filtered, sort]);
+  // Recently opened reads the times kept when the list was shown, so opening a recording does not move it under the pointer.
+  const openedAtSort = useMemo(() => opened, [sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(applyFilters(folderBase, filters), label), folder), query), sort, openedAtSort), [folderBase, filters, label, folder, query, sort, openedAtSort]);
+  const groups = useMemo(() => groupBy(filtered, choice.group, sort), [filtered, choice.group, sort]);
+  const toggleCollapsed = (key: string) => setCollapsedGroups((c) => {
+    const next = new Set(c);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
   // A recording opened from a transcript match stays open even when its title does not match the typed words.
   const [hitSelected, setHitSelected] = useState<string | null>(null);
   const sharedSession = sharedOpen?.session && sharedOpen.session.id === selected ? sharedOpen.session : null;
@@ -971,9 +995,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             {labels.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         )}
-        <select className="chip" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort recordings">
-          {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => <option key={k} value={k}>{SORT_LABELS[k]}</option>)}
-        </select>
+        <ChoiceMenu label="Group by" value={choice.group} options={(Object.keys(GROUP_LABELS) as GroupKey[]).map((k) => [k, GROUP_LABELS[k]] as const)}
+          onChange={(group) => setChoice({ group })} />
+        <ChoiceMenu label="Sort by" value={sort} options={(Object.keys(SORT_LABELS) as SortKey[]).map((k) => [k, SORT_LABELS[k]] as const)}
+          onChange={(next) => setChoice({ sort: next })} />
         <span className="spacer" />
         <button type="button" className="chip" aria-pressed={selecting} onClick={() => (selecting ? endSelecting() : setSelecting(true))}>{selecting ? "Cancel selection" : "Select"}</button>
         <button type="button" className="chip" aria-pressed={binOpen} onClick={() => setBinOpen(!binOpen)}>Recently deleted</button>
@@ -1047,9 +1072,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             )
           )}
           {!shared && groups.map((group) => (
-            <div key={group.label ?? "all"} className="group">
-              {group.label && <div className="group-label">{group.label}</div>}
-              {group.items.map((item) => {
+            <div key={group.key} className="group" role="group" aria-label={group.label || undefined}>
+              {group.label && (
+                <GroupHeader label={group.label} items={group.items} picked={picked} collapsed={collapsedGroups.has(group.key)}
+                  onToggle={() => toggleCollapsed(group.key)}
+                  onPick={() => { setSelecting(true); setPicked((p) => toggleGroup(group.items, p)); }} />
+              )}
+              {!collapsedGroups.has(group.key) && group.items.map((item) => {
                 const state = itemState(item);
                 // Like the phone (v1.4): length, client and bookmarks; the language is a filter and lives on the recording page.
                 const sub = [formatDuration(item.duration_ms) || null, item.client?.name,

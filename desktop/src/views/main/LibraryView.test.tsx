@@ -111,6 +111,7 @@ const selectItem = async (title: string, transcriptText?: string) => {
 
 beforeEach(() => {
   resetTauriMock();
+  window.localStorage.clear();
   TRANSCRIPTS = baseTranscripts();
   installMediaStubs();
   vi.useFakeTimers({ toFake: ["Date"], now: NOW });
@@ -169,21 +170,95 @@ describe("LibraryView list", () => {
     expect(titlesInList()).toEqual(["Zoom with Acme", "WhatsApp call", "Google Meet standup", "Voice note from Sam", "Client briefing"]);
   });
 
-  it("drops the headings for sorts that are not by date", async () => {
+  const choose = (menu: "Group by" | "Sort by", option: string) => {
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${menu}:`) }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: new RegExp(`${option}$`) }));
+  };
+
+  it("drops the headings when grouped by None", async () => {
     await renderLibrary();
-    fireEvent.change(screen.getByLabelText("Sort recordings"), { target: { value: "title" } });
-    expect(list().querySelectorAll(".group-label")).toHaveLength(0);
+    choose("Group by", "None");
+    choose("Sort by", "Name A–Z");
+    expect(list().querySelectorAll(".group-head")).toHaveLength(0);
     expect(titlesInList()).toEqual(["Client briefing", "Google Meet standup", "Voice note from Sam", "WhatsApp call", "Zoom with Acme"]);
   });
 
-  it("offers four sort orders and applies each", async () => {
+  it("offers the sort orders as a toolbar menu and applies each", async () => {
     await renderLibrary();
-    const select = screen.getByLabelText("Sort recordings") as HTMLSelectElement;
-    expect([...select.options].map((o) => o.text)).toEqual(["Newest first", "Oldest first", "Longest first", "Title A–Z"]);
-    fireEvent.change(select, { target: { value: "oldest" } });
+    choose("Group by", "None");
+    fireEvent.click(screen.getByRole("button", { name: /^Sort by: Newest/ }));
+    expect(screen.getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Newest", "Oldest", "Longest", "Shortest", "Name A–Z", "Recently opened"]);
+    expect(screen.getByRole("menuitemradio", { name: /Newest$/ })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Oldest$/ }));
     expect(titlesInList()).toEqual(["Client briefing", "Voice note from Sam", "Google Meet standup", "WhatsApp call", "Zoom with Acme"]);
-    fireEvent.change(select, { target: { value: "longest" } });
+    choose("Sort by", "Longest");
     expect(titlesInList()).toEqual(["WhatsApp call", "Client briefing", "Google Meet standup", "Zoom with Acme", "Voice note from Sam"]);
+    choose("Sort by", "Shortest");
+    expect(titlesInList()).toEqual(["Voice note from Sam", "Zoom with Acme", "Google Meet standup", "Client briefing", "WhatsApp call"]);
+  });
+
+  it("groups by date by default and by each other choice, headers with name and count", async () => {
+    await renderLibrary();
+    fireEvent.click(screen.getByRole("button", { name: /^Group by: Date/ }));
+    expect(screen.getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Date", "App / Type", "Project", "Language", "Status", "Device", "None"]);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Status$/ }));
+    const heads = () => [...list().querySelectorAll(".group-head")].map((h) => `${h.querySelector(".group-label")?.textContent} ${h.querySelector(".group-count")?.textContent}`);
+    expect(heads()).toEqual(["Needs you 1", "Transcribing 1", "Ready 3"]);
+    choose("Group by", "Device");
+    expect(heads()).toEqual(["Desktop 2", "Phone 2", "Web 1"]);
+    choose("Group by", "App / Type");
+    expect(heads()).toContain("Voice notes 1");
+  });
+
+  it("collapses and expands a group from its header", async () => {
+    await renderLibrary();
+    choose("Group by", "Status");
+    const toggle = screen.getByRole("button", { name: /^Ready/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(titlesInList()).toEqual(["Google Meet standup", "WhatsApp call"]);
+    fireEvent.click(toggle);
+    expect(titlesInList()).toHaveLength(5);
+  });
+
+  it("selects a whole group from its header's box, partly ticked when only some are", async () => {
+    await renderLibrary();
+    choose("Group by", "Status");
+    const box = screen.getByRole("checkbox", { name: "Select all in Ready" }) as HTMLInputElement;
+    fireEvent.click(box);
+    expect(screen.getByText("3 selected")).toBeInTheDocument();
+    expect(box.checked).toBe(true);
+    fireEvent.click(itemButton("Zoom with Acme"));
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    expect(box.indeterminate).toBe(true);
+    expect(box).toHaveAttribute("aria-checked", "mixed");
+    fireEvent.click(box);
+    expect(screen.getByText("3 selected")).toBeInTheDocument();
+    fireEvent.click(box);
+    expect(screen.getByText("Select recordings")).toBeInTheDocument();
+  });
+
+  it("remembers Group by and Sort by per view", async () => {
+    const { unmount } = await renderLibrary();
+    choose("Group by", "Project");
+    choose("Sort by", "Longest");
+    unmount();
+    await renderLibrary();
+    expect(screen.getByRole("button", { name: /^Group by: Project/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Sort by: Longest/ })).toBeInTheDocument();
+  });
+
+  it("sorts by recently opened on this computer", async () => {
+    await renderLibrary();
+    choose("Group by", "None");
+    fireEvent.click(itemButton("Client briefing"));
+    await flushAsync();
+    vi.setSystemTime(NOW.getTime() + 60_000);
+    fireEvent.click(itemButton("Voice note from Sam"));
+    await flushAsync();
+    choose("Sort by", "Recently opened");
+    expect(titlesInList().slice(0, 2)).toEqual(["Voice note from Sam", "Client briefing"]);
   });
 });
 

@@ -239,6 +239,13 @@ Dictation types what you say into any app. It is never saved as a recording.
 - Press **Ctrl+K** (**Cmd+K** on a Mac) in the console or the Windows app to jump to a page, a recording or a
   command.
 
+**Group by and Sort by (computer, since v1.5).** Above the Library's list, **Group by** puts recordings under headers by
+**Date** (the default), **App / Type**, **Project**, **Language**, **Status**, **Device** or **None**, and **Sort by**
+orders them **Newest**, **Oldest**, **Longest**, **Shortest**, **Name A–Z** or **Recently opened** (on this computer).
+Each view remembers its own choice (the whole Library, the Inbox and every smart folder). A header shows the group's name
+and how many recordings it holds, stays at the top while you scroll through it, and folds away with a click. Its box
+selects the whole group for **Move**, **Label**, **Export** or **Delete**; it shows a dash when only some are selected.
+
 ## 10. Import, rename, export and share
 
 ### Import files

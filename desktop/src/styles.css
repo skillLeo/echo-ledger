@@ -301,7 +301,18 @@ select.chip option { color: var(--text); background: var(--surface); }
 .library { display: grid; grid-template-columns: minmax(320px, 1fr) minmax(360px, 1.45fr); gap: var(--space-4); min-height: 280px; }
 .list { overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding-right: var(--space-1); }
 .group { display: flex; flex-direction: column; gap: 0; }
-.group-label { font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); padding: var(--space-2) var(--space-3) var(--space-1); }
+.group-label { font-size: var(--text-sm); font-weight: 600; color: var(--text-muted); }
+/* Group headers (Phase 1C): name and count, collapse, a box for the whole group; they stay at the top while it scrolls. */
+.group-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3) var(--space-1); background: var(--surface); }
+.group-box { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); opacity: 0.55; cursor: pointer; }
+.group-head:hover .group-box, .group-box:checked, .group-box:indeterminate, .group-box:focus-visible { opacity: 1; }
+.group-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); padding: 0; border: 0; background: none; color: inherit; cursor: pointer; text-align: left; font: inherit; }
+.group-caret { flex: none; display: grid; place-items: center; color: var(--text-muted); transition: transform var(--motion-fast) var(--ease-out); }
+.group-caret.collapsed { transform: rotate(-90deg); }
+.group-count { flex: none; min-width: 20px; height: 18px; padding: 0 6px; border-radius: var(--radius-full); background: var(--surface-3); color: var(--text-muted); font-size: 11px; font-weight: 600; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
+.choice-menu .menu-pop { left: 0; right: auto; }
+.choice-item { justify-content: flex-start; gap: var(--space-2); }
+.choice-tick { display: inline-grid; place-items: center; width: 14px; }
 /* A row: app tile, title, time, a second line, and a status only when one needs the person. Lists are flat. */
 .item { position: relative; text-align: left; border: 0; background: transparent; border-radius: var(--radius-field); padding: 10px var(--space-3); cursor: pointer; display: grid; gap: var(--space-1); color: inherit; font: inherit; transition: background-color var(--motion-fast) var(--ease-out); }
 .item:hover { background: var(--surface-3); }

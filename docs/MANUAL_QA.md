@@ -630,6 +630,8 @@ with fakes; these rows prove the system around them.
 | 1C-C2 | Open a long Urdu recording while it is transcribed in parts, on a server with Phase 1C. | Row, page and Activity → In progress say "Transcribing… part N of M · about X left"; the time left goes down. Against an older server: "Transcribing… part N of M" only. |
 | 1C-C3 | When the transcript arrives, scroll to the middle and wait for the Roman Urdu view. | The text is readable at once with "Improving Roman Urdu… N%"; when the view is made it swaps in without the page jumping. |
 | 1C-C4 | Press **Notify me when ready**, turn Transcription notifications off, close the main window. | A notification when the transcript is ready (within about a minute). |
+| 1C-D1 | Library with a few hundred recordings: Group by Project, Sort by Longest; open the Inbox, choose None and Name A–Z; restart the app. | Each view comes back with its own choice; scrolling a long group keeps its header at the top; Windows and Mac. |
+| 1C-D2 | Tick a group's box, move the group to a project; tick a box with half the group picked. | All its recordings move; a half-picked box shows a dash and ticks the rest. |
 | 1C-A8 | A 30 s call where the other side plays through a headset that is not the default output (or is muted). | After the call: **Only your voice was recorded**, with the reason and the fix; the banner opens the Ready check. |
 
 ## Appendix B — Accessibility
