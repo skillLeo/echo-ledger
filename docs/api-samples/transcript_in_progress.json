@@ -1,0 +1,38 @@
+{
+    "id": "01m6xwdp7p1p64kejkbkrs5gzd",
+    "session_id": "01m6xwdp65dfs7df1hexxfzzyv",
+    "kind": "final",
+    "provider": "groq",
+    "status": "processing",
+    "language": null,
+    "model": null,
+    "language_label": "Auto",
+    "provider_label": "Groq Whisper large-v3",
+    "script_warning": null,
+    "fallback": false,
+    "backup_engine": false,
+    "backup_reason": null,
+    "retry_at": null,
+    "retry_reason": null,
+    "text": null,
+    "segments": [],
+    "error": null,
+    "error_code": null,
+    "created_at": "2026-11-08T15:28:53+00:00",
+    "completed_at": null,
+    "edited_at": null,
+    "progress": {
+        "done": 1,
+        "total": 3,
+        "eta_seconds": 620
+    },
+    "views": {
+        "available": [
+            "urdu"
+        ],
+        "status": "unavailable",
+        "default": "original",
+        "progress": {}
+    },
+    "suggestions": []
+}

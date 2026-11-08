@@ -101,7 +101,7 @@ it('needs the Anthropic key (saying where to add it), then makes the views on th
     $this->postJson("/api/transcripts/{$transcript->id}/views")->assertStatus(202)->assertJsonPath('status', 'making');
     $this->postJson("/api/transcripts/{$transcript->id}/views")->assertStatus(202);
     Queue::assertPushed(MakeTranscriptViewsJob::class, 1);
-    $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()->assertJsonPath('views', ['available' => ['roman', 'urdu', 'english'], 'status' => 'making', 'default' => 'roman']);
+    $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()->assertJsonPath('views', ['available' => ['roman', 'urdu', 'english'], 'status' => 'making', 'default' => 'roman', 'progress' => []]);
 });
 
 it('checks every line: markers kept, a transliteration within 25 % of the words, no Hindi letters', function () {
@@ -403,8 +403,34 @@ it('translates an English call into Urdu and opens it in the default view from S
     $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('views.default', 'original');
 
     app(SettingsRepository::class)->set('views.default_en', 'urdu');
-    $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('views', ['available' => ['urdu'], 'status' => 'ready', 'default' => 'urdu']);
+    $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('views', ['available' => ['urdu'], 'status' => 'ready', 'default' => 'urdu', 'progress' => []]);
     $this->get("/api/transcripts/{$transcript->id}/export?format=txt&view=urdu")->assertOk()->assertSee('U: I will send the invoice');
     app(SettingsRepository::class)->set('views.default_en', 'english'); // not a view of this transcript
     $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('views.default', 'original');
+});
+
+it('says how many lines of each view are done while they are made, and {} otherwise (since v1.5, Phase 1C)', function () {
+    app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+    $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'ur', 'status' => 'completed']);
+    $long = trim(str_repeat('آپ کیسے ہیں ', 300));
+    $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'groq', 'status' => TranscriptStatus::Completed, 'language' => 'ur',
+        'text' => $long, 'segments' => array_map(fn (int $i): array => ['channel' => 1, 'speaker' => 'Me', 'start_ms' => $i * 1000, 'end_ms' => $i * 1000 + 900, 'text' => $long], range(0, 2))]);
+    $seen = [];
+    app()->instance(TranscriptConverter::class, new class($transcript->id, $seen) implements TranscriptConverter
+    {
+        public function __construct(private readonly string $id, private array &$seen) {}
+
+        public function convert(array $lines, string $language, array $views): array
+        {
+            $this->seen[] = test()->getJson("/api/transcripts/{$this->id}")->json('views.progress');
+
+            return ['lines' => array_map(fn (string $t): array => ['roman' => $t, 'urdu' => $t, 'english' => 'How are you'], $lines), 'input_tokens' => 1, 'output_tokens' => 1, 'model' => 'claude-opus-5-5'];
+        }
+    });
+    $this->postJson("/api/transcripts/{$transcript->id}/views")->assertOk();
+
+    // Three long lines, one request each: 0, 1 and 2 of 3 lines done when each request starts.
+    expect($seen)->toBe(array_map(fn (int $done): array => ['roman' => ['done' => $done, 'total' => 3], 'urdu' => ['done' => $done, 'total' => 3], 'english' => ['done' => $done, 'total' => 3]], [0, 1, 2]));
+    $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('views.status', 'ready')->assertJsonPath('views.progress', []);
+    expect($this->getJson("/api/transcripts/{$transcript->id}/views")->getContent())->toContain('"progress":{}');
 });

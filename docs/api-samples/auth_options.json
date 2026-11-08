@@ -1,0 +1,8 @@
+{
+    "password": true,
+    "google": false,
+    "sign_up": false,
+    "sign_up_url": null,
+    "reset_url": "https://echoledger.test/admin/password-reset/request",
+    "browser_sign_in": true
+}

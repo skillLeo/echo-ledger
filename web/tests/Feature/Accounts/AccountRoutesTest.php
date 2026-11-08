@@ -30,6 +30,7 @@ beforeEach(function () {
  * public page (null = public by design: the sign-in steps, the legal pages, the deletion page's explanation).
  */
 const ACCOUNT_ROUTES = [
+    'api.auth.options' => ['throttle:site', null],
     'api.auth.password' => ['throttle:auth-password', null],
     'api.auth.device.token' => ['throttle:auth-token', null],
     'api.account' => ['throttle:device', 'abilities:config:read'],
@@ -92,6 +93,7 @@ it('answers 429 with Retry-After from every account route\'s limiter', function 
     'POST /account/delete' => ['account', 'POST', fn ($test) => [signedInFor($test, '/account/delete'), null]],
     'GET /account/export/{id}/download' => ['account', 'GET', fn () => [URL::temporarySignedRoute('account.export.download', now()->addHour(), ['export' => (string) Str::ulid()]), null]],
     'POST /device/sign-in' => ['device-sign-in', 'POST', fn ($test) => [signedInFor($test, '/device/sign-in'), null]],
+    'GET /api/auth/options' => ['site', 'GET', fn () => ['/api/auth/options', null]],
     'GET /auth/google/callback' => ['google', 'GET', fn () => ['/auth/google/callback', null]],
     'GET /auth/google/confirm' => ['google', 'GET', fn () => ['/auth/google/confirm', null]],
     'POST /auth/google/confirm' => ['google', 'POST', fn () => ['/auth/google/confirm', null]],

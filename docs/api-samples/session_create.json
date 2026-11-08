@@ -1,7 +1,7 @@
 {
     "session": {
-        "id": "01m6s1x867p53eve51pmnqqb6g",
-        "client_ref": "f8f313c1-bca2-4bc3-a791-daff25a4fea9",
+        "id": "01m6xwdp89czahee51513x37e6",
+        "client_ref": "1f7f2710-dfa4-440f-a208-8a6dfd6455c2",
         "deleted": false,
         "source_device": "phone",
         "source_device_label": "Phone",
@@ -9,12 +9,13 @@
         "source_app": "whatsapp",
         "source_app_label": "WhatsApp",
         "device": {
-            "id": "01m6s1x7sg4bzyqqf2rg5a2cyf",
+            "id": "01m6xwdnzv2tkqxap336p7frxs",
             "name": "Sample phone"
         },
         "client": null,
         "filed_by": null,
         "title": "WhatsApp call",
+        "title_auto": false,
         "caller": null,
         "started_at": "2026-10-24T09:00:00+00:00",
         "ended_at": "2026-10-24T09:10:00+00:00",
@@ -46,11 +47,11 @@
         "pinned": false,
         "keep": false,
         "labels": [],
-        "updated_at": "2026-11-06T18:28:34+00:00"
+        "updated_at": "2026-11-08T15:28:53+00:00"
     },
     "recordings": [
         {
-            "id": "01m6s1x8699qy4drxper92dr6y",
+            "id": "01m6xwdp89czahee51513x37e7",
             "role": "primary",
             "upload": {
                 "chunk_size_bytes": 5242880,

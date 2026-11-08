@@ -129,13 +129,14 @@ describe('route coverage', function () {
         expect($declared)->toBe($tested);
     });
 
-    it('leaves only registration, account sign-in, signed audio and provider webhooks reachable without a token', function () {
+    it('leaves only registration, account sign-in and its options, signed audio and provider webhooks reachable without a token', function () {
         $open = collect(Route::getRoutes()->getRoutes())
             ->filter(fn ($route) => str_starts_with($route->uri(), 'api/') && ! in_array('auth:sanctum', $route->gatherMiddleware(), true))
             ->map(fn ($route) => $route->methods()[0].' /'.$route->uri())
             ->sort()->values()->all();
 
         expect($open)->toBe([
+            'GET /api/auth/options',
             'GET /api/recordings/{recording}/audio',
             'POST /api/auth/device/token',
             'POST /api/auth/password',

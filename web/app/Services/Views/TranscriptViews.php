@@ -142,7 +142,7 @@ final class TranscriptViews
      * What the apps show: `status` none | making | ready | failed | unavailable, and when ready each view as a list
      * aligned with the segments (null for an empty line).
      *
-     * @return array{status: string, available: list<string>, roman: list<string|null>|null, english: list<string|null>|null, urdu: list<string|null>|null, default: string, model: string|null, made_at: string|null, error: string|null}
+     * @return array{status: string, available: list<string>, roman: list<string|null>|null, english: list<string|null>|null, urdu: list<string|null>|null, default: string, model: string|null, made_at: string|null, error: string|null, progress: object|array<string, array{done: int, total: int}>, kept: object|array<string, list<int>>}
      */
     public function state(Transcript $transcript): array
     {
@@ -171,9 +171,43 @@ final class TranscriptViews
             'error' => $status === 'failed' ? ($views['error'] ?? null) : null,
             // Lines shown with their original words in a view because the view's text failed the checks twice.
             // Always a JSON object (view => line indexes), also when empty, so the apps can read it as a map.
+            // Since v1.5 (Phase 1C): lines done of lines per view while the views are being made, {} otherwise.
+            'progress' => self::progressOf($status, $views, $available),
             'kept' => $ready && is_array($views['kept'] ?? null) && $views['kept'] !== []
                 ? array_map(fn ($l): array => array_values(array_map('intval', (array) $l)), $views['kept']) : (object) [],
         ];
+    }
+
+    /**
+     * `{"roman": {"done": 12, "total": 20}, …}` while the views are being made (one entry per view, lines done of
+     * lines), an empty object otherwise, so the apps can read it as a map.
+     *
+     * @param  list<string>  $available
+     * @return object|array<string, array{done: int, total: int}>
+     */
+    private static function progressOf(string $status, mixed $views, array $available): object|array
+    {
+        if ($status !== 'making' || ! is_array($views)) {
+            return (object) [];
+        }
+        $total = max(0, (int) ($views['lines_total'] ?? 0));
+        if ($total === 0) {
+            return (object) [];
+        }
+        $done = max(0, min($total, (int) ($views['lines_done'] ?? 0)));
+
+        return array_combine($available, array_fill(0, count($available), ['done' => $done, 'total' => $total]));
+    }
+
+    /** Keeps how many lines are done while the views are made, without touching anything else of the making state. */
+    private function rememberProgress(Transcript $transcript, int $done, int $total): void
+    {
+        $fresh = Transcript::query()->find($transcript->id);
+        $views = $fresh?->meta['views'] ?? null;
+        if ($fresh === null || ! is_array($views) || ($views['status'] ?? null) !== 'making') {
+            return;
+        }
+        $fresh->forceFill(['meta' => [...($fresh->meta ?? []), 'views' => [...$views, 'lines_done' => $done, 'lines_total' => $total]]])->saveQuietly();
     }
 
     /**
@@ -267,6 +301,8 @@ final class TranscriptViews
         $result = [];
         $kept = [];
         $language = self::sourceLanguage($transcript);
+        $linesDone = 0;
+        $this->rememberProgress($transcript, 0, count($lines));
         try {
             foreach (self::chunks($lines) as $chunk) {
                 $answer = $this->convertAll($chunk, $language, $available, $tokens, $model);
@@ -295,6 +331,8 @@ final class TranscriptViews
                 foreach ($answer as $i => $view) {
                     $result[$i] = $view;
                 }
+                $linesDone += count($chunk);
+                $this->rememberProgress($transcript, $linesDone, count($lines));
             }
         } catch (Throwable $e) {
             Log::warning('Show as failed', ['transcript' => $transcript->id, 'error' => mb_substr($e->getMessage(), 0, 300)]);

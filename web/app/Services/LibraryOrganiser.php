@@ -14,6 +14,7 @@ use App\Models\Client;
 use App\Models\SessionLabel;
 use App\Models\User;
 use App\Services\Callers\CallerMatcher;
+use App\Services\Titles\AutoTitles;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
@@ -212,7 +213,8 @@ final class LibraryOrganiser
      */
     public function update(CaptureSession $session, array $data): CaptureSession
     {
-        DB::transaction(function () use ($session, $data): void {
+        $askTitle = false;
+        DB::transaction(function () use ($session, $data, &$askTitle): void {
             $learn = false;
             if (array_key_exists('client_id', $data)) {
                 $before = $session->client_id;
@@ -222,6 +224,9 @@ final class LibraryOrganiser
             if (array_key_exists('title', $data)) {
                 $title = trim((string) $data['title']);
                 $session->title = $title === '' ? null : $title;
+                // A person's title is never replaced; clearing it asks for the automatic one again (since v1.5, Phase 1C).
+                $session->title_auto = false;
+                $askTitle = $session->title === null;
             }
             if (array_key_exists('pinned', $data)) {
                 $session->pinned = (bool) $data['pinned'];
@@ -239,6 +244,9 @@ final class LibraryOrganiser
                 app(CallerMatcher::class)->learn($session);
             }
         });
+        if ($askTitle) {
+            app(AutoTitles::class)->ask($session);
+        }
 
         return $session->refresh();
     }

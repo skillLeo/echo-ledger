@@ -33,6 +33,9 @@ use App\Services\Screens\ScreenDescriber;
 use App\Services\SettingsRepository;
 use App\Services\Storage\ObjectStorageDisk;
 use App\Services\Storage\S3Adapter;
+use App\Services\Titles\ClaudeTitleWriter;
+use App\Services\Titles\TitleWriter;
+use App\Services\TranscriptionSpeed;
 use App\Services\Views\ClaudeTranscriptConverter;
 use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
@@ -82,9 +85,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(ClientAi::class, ClaudeClientAi::class);
         // Screen moments (v1.5) are read by Claude Haiku through one interface; tests swap in a fake.
         $this->app->bind(ScreenDescriber::class, ClaudeScreenDescriber::class);
+        $this->app->bind(TitleWriter::class, ClaudeTitleWriter::class);
         // Caches each member's role for one request (C9: no query per table row).
         $this->app->scoped(Workspaces::class);
         $this->app->scoped(SttManager::class);
+        $this->app->scoped(TranscriptionSpeed::class);
         $this->app->bind(RecordingCipher::class, fn (): RecordingCipher => RecordingCipher::fromConfig());
     }
 

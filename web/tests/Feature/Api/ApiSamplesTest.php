@@ -193,7 +193,8 @@ it('keeps the shape of every answer the apps read', function () {
     $teammate = User::factory()->create(['email' => 'teammate@example.test']);
     $teammate->workspaces()->syncWithoutDetaching([$me->current_workspace_id => ['role' => 'member']]);
 
-    // Signing in.
+    // Signing in: what the sign-in screen offers (since v1.5, Phase 1C), then the email and password.
+    $record('auth_options', $this->api()->getJson('/api/auth/options'));
     $signedIn = $record('auth_password', $this->api()->postJson('/api/auth/password', [
         'email' => 'sample@example.test', 'password' => 'Sample-password-1234', 'name' => 'Sample phone',
         'platform' => 'android', 'app_version' => '1.5.0', 'os_version' => '14',
@@ -254,6 +255,14 @@ it('keeps the shape of every answer the apps read', function () {
     $record('recording_chunk', $this->putChunk($token, $recordingId, 0, $plain));
     $record('recording_complete', $api()->postJson("/api/recordings/{$recordingId}/complete"));
     $record('session_create', $api()->postJson('/api/sessions', Fx::sessionPayload()));
+    // A transcript while it is being made, in parts, with the time left (since v1.5, Phase 1C).
+    $making = unscoped(fn () => Transcript::query()->updateOrCreate(
+        ['capture_session_id' => $open['session']['id'], 'kind' => 'final'],
+        ['provider' => 'groq', 'status' => 'processing', 'submitted_at' => now(), 'meta' => ['progress' => ['chunks_done' => 1, 'chunks_total' => 3]]],
+    ));
+    unscoped(fn () => Transcript::query()->create(['capture_session_id' => $session->id, 'kind' => 'trial', 'provider' => 'groq', 'status' => 'completed',
+        'submitted_at' => now()->subMinutes(5), 'completed_at' => now()->subMinutes(5)->addSeconds(30)]));
+    $record('transcript_in_progress', $api()->getJson("/api/transcripts/{$making->id}"));
 
     // Projects.
     $project = $record('client_create', $api()->postJson('/api/clients', ['name' => 'Sample project', 'color' => '#8B5CF6']));

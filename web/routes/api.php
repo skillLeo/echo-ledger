@@ -44,6 +44,9 @@ Route::post('devices/register', [DeviceController::class, 'register'])
     ->middleware('throttle:pairing')->name('api.devices.register');
 
 // Signing in with an account (v1.5): the email and password, or the browser sign-in's one-time code and PKCE verifier.
+// Since v1.5 (Phase 1C): what the sign-in screen offers (password, Google, sign-up), public like the site pages.
+Route::get('auth/options', [AuthController::class, 'options'])
+    ->middleware('throttle:site')->name('api.auth.options');
 Route::post('auth/password', [AuthController::class, 'password'])
     ->middleware('throttle:auth-password')->name('api.auth.password');
 Route::post('auth/device/token', [AuthController::class, 'deviceToken'])

@@ -143,6 +143,8 @@ it('exposes exactly the documented public API routes and guards every other one'
     sort($public);
 
     expect($public)->toBe([
+        // Since v1.5 (Phase 1C): what the sign-in screen offers.
+        'GET api/auth/options',
         'GET api/recordings/{recording}/audio',
         // Since v1.5: signing in with an account (the email and password, or the browser sign-in's code).
         'POST api/auth/device/token',
