@@ -464,6 +464,15 @@ on **Zero Data Retention** at Groq. Your administrator has the details per provi
   phone needs a screen lock first. **Hide content in Recents and screenshots** keeps your recordings private.
 - **Web console:** open **Security** to add a passkey, turn on two-step sign-in and see who signed in.
 
+## 13b. Notifications (since v1.5)
+
+**Computer: Settings → General → Notifications.** Every notification belongs to one kind, the same list as the phone's:
+**Recording**, **Transcription**, **Enhancement** (Roman Urdu and other views, briefs, call notes), **Uploads**,
+**Call capture & readiness**, **Sharing**, **Account & security**, **Usage & limits**, **Live Translate**, **App updates**
+and **Other**. Turn each kind on or off, choose **Sound** or **Silent**, and press **Test** to see one. **Show
+notifications** turns them all off. **Quiet hours** (from and to) hold notifications back, except **Call capture &
+readiness**, which is Critical: a call that will not be recorded is always said.
+
 ## 14. Keep recordings for a set time (retention)
 
 - In **Settings → Storage and retention**, choose how long recordings are kept: **7**, **14**, **30** days or a

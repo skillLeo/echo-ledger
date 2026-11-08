@@ -253,7 +253,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
         </div>
       </div>
     ) },
-    { id: "notifications", group: "general", title: "Notifications", keywords: "notifications quiet hours bell activity", node: <NotificationsCard settings={settings} patch={patch} /> },
+    { id: "notifications", group: "general", title: "Notifications", keywords: "notifications quiet hours bell activity sound test critical recording transcription uploads sharing updates", node: <NotificationsCard settings={settings} patch={patch} run={run} /> },
     { id: "consent", group: "general", title: "Privacy & consent", keywords: "consent law participants terms privacy policy", node: (
       <div className="card">
         <b>Privacy &amp; consent</b>

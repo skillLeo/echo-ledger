@@ -828,6 +828,14 @@ audio.player { display: none; }
 .one-sided-banner { align-items: flex-start; }
 .one-sided-banner .one-sided-text { display: grid; gap: 2px; }
 
+/* Settings → Notifications (Phase 1C): one row per kind, its sound, Test and its switch. */
+.notification-categories { list-style: none; margin: var(--space-2) 0; padding: 0; display: grid; gap: var(--space-1); }
+.notification-category { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-top: 1px solid var(--border); }
+.notification-category-text { flex: 1; min-width: 0; }
+.notification-category .btn { flex: none; }
+.sound-toggle:not(.on) { color: var(--text-muted); }
+.critical-chip { display: inline-block; margin-left: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius-full); background: var(--danger-soft); color: var(--danger); font-size: var(--text-xs); font-weight: 600; line-height: 18px; }
+
 /* Loading placeholders (C6): a quiet shimmer while a list loads (the phone's SkeletonRow). */
 .skeleton-item { cursor: default; gap: var(--space-2); padding-block: var(--space-3); }
 .skeleton-item:hover { background: transparent; }
