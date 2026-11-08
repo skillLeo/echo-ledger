@@ -82,6 +82,8 @@ pub struct RecorderLink {
     pub resume_epoch: Arc<AtomicU64>,
     /// When system audio (the other side) was last above [`health::HEARD_LEVEL`].
     pub system_heard: Arc<Mutex<Option<Instant>>>,
+    /// When the microphone (this side) was last above [`health::HEARD_LEVEL`] (the after-call check, Phase 1C).
+    pub mic_heard: Arc<Mutex<Option<Instant>>>,
 }
 
 /// Sent through the keep-alive sender once a paused backend has stopped: every packet captured before the pause
@@ -126,6 +128,9 @@ pub fn recorder_loop(mut recorder: Recorder, rx: Receiver<AudioChunk>, link: &Re
         *link.levels.lock().unwrap_or_else(|p| p.into_inner()) = levels;
         if system && levels[Channel::System.index()] >= health::HEARD_LEVEL {
             *link.system_heard.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
+        }
+        if !system && levels[Channel::Mic.index()] >= health::HEARD_LEVEL {
+            *link.mic_heard.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
         }
     }
     recorder.finish()
@@ -188,6 +193,14 @@ impl CaptureController {
             .filter(|a| a.backend.is_some())
             .map(|a| *a.link.levels.lock().unwrap_or_else(|p| p.into_inner()))
             .unwrap_or([0.0, 0.0])
+    }
+
+    /// Whether a call recording has heard (this side, the other side) at any time; none for a note or when idle.
+    pub fn sides_heard(&self) -> Option<(bool, bool)> {
+        let guard = self.lock();
+        let active = guard.as_ref().filter(|a| a.info.mode == RecordingMode::Call)?;
+        let heard = |m: &Arc<Mutex<Option<Instant>>>| m.lock().unwrap_or_else(|p| p.into_inner()).is_some();
+        Some((heard(&active.link.mic_heard), heard(&active.link.system_heard)))
     }
 
     /// How long a running call recording has not heard the other side (since the last loud system packet, the

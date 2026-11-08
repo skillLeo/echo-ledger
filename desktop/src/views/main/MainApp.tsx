@@ -26,6 +26,8 @@ import { fileDropClaim } from "../../lib/dropTarget";
 import { isViewer, viewerSentence } from "../../lib/plan";
 import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib/motion";
 import { SuccessCheck } from "../../components/SuccessCheck";
+import { ReadyChip } from "./ReadyCheck";
+import type { OneSided } from "../../lib/ipc";
 
 type Tab = MainTab;
 const TABS: readonly Tab[] = ["library", "projects", "record", "activity", "settings"];
@@ -98,6 +100,8 @@ export default function MainApp() {
   const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);
   const [requestFocus, setRequestFocus] = useState<{ id: string; seq: number } | null>(null);
   const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
+  // After a call where one side was never heard (Phase 1C): why and how to fix it, until dismissed.
+  const [oneSided, setOneSided] = useState<OneSided | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
   const [focus, setFocus] = useState<PendingFocus | null>(null);
   const navigations = useRef(0);
@@ -232,6 +236,7 @@ export default function MainApp() {
       listen<AppStatus>("app:status", (e) => setStatus(e.payload)),
       listen<string>("app:error", (e) => setToast({ text: e.payload, error: true })),
       listen<string>("app:toast", (e) => setToast({ text: e.payload })),
+      listenTo("capture:one_sided", (said) => said && setOneSided(said)),
       // Tray "Review recordings (N)" and the after-call chip's title, which opens its title field (contract 4.5).
       listenTo("main:navigate", (nav) => {
         // A share, project or request link (echoledger://open): opened once the app is paired and unlocked.
@@ -424,6 +429,13 @@ export default function MainApp() {
     </div>
   );
 
+  /** After signing in, the Ready check (F1): the Record page opens with it. */
+  const signedIn = (next: AppStatus) => {
+    setStatus(next);
+    setTab("record");
+    void api.readyCheck().catch(() => undefined);
+  };
+
   if (lock?.locked) {
     return (
       <>
@@ -445,7 +457,7 @@ export default function MainApp() {
   if (!status || !status.paired || !restored) {
     return (
       <main className="gate">
-        {status && !status.paired ? <SignInView onSignedIn={setStatus} notify={notify} serverUrl={status.serverUrl} /> : <div className="empty">Starting EchoLedger…</div>}
+        {status && !status.paired ? <SignInView onSignedIn={signedIn} notify={notify} serverUrl={status.serverUrl} /> : <div className="empty">Starting EchoLedger…</div>}
         {toastView}
       </main>
     );
@@ -480,6 +492,8 @@ export default function MainApp() {
           <button type="button" className="sidebar-toggle" aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"} aria-expanded={!collapsed}
             title={collapsed ? "Expand" : "Collapse"} onClick={toggleSidebar}><SidebarIcon size={18} /></button>
         </div>
+        {/* Calls: Ready / Not ready — Fix (Phase 1C): whether the next call will be recorded; opens the Ready check. */}
+        {!isViewer(status) && <ReadyChip status={status} onOpen={() => goTo("record")} />}
         <nav className="nav" aria-label="Main">
           {NAV.map(([id, label, Icon]) => (
             <div key={id} className="nav-group">
@@ -526,6 +540,14 @@ export default function MainApp() {
       <main ref={contentRef} className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
         <UpdateBanner appStatus={status} notify={notify} />
         {status.platform === "macos" && <PermissionLossNotice />}
+        {oneSided && (
+          <div className="banner warn one-sided-banner" role="alert" data-testid="one-sided">
+            <AlertIcon size={16} />
+            <span className="one-sided-text"><b>{oneSided.title}</b><span className="small">{oneSided.reason} {oneSided.fix}</span></span>
+            <button type="button" className="btn compact" onClick={() => { setOneSided(null); goTo("record"); }}>Ready check</button>
+            <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setOneSided(null)}><CloseIcon size={14} /></button>
+          </div>
+        )}
         {status.budget === "reached" && (
           <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
         )}

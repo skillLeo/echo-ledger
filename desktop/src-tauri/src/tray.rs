@@ -167,6 +167,8 @@ struct MenuShape {
     review: usize,
     captions: bool,
     auto: bool,
+    /// "Calls: Ready" or "Calls: Not ready — Fix" (Phase 1C); none before the first Ready check.
+    calls_ready: Option<bool>,
     /// A viewer's computer records nothing (v1.5): the sentence the menu shows instead of the recording lines.
     viewer: Option<String>,
 }
@@ -202,7 +204,13 @@ fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
         entries.push(item("quit", "Quit EchoLedger"));
         return entries;
     }
-    entries.push(item("record", if shape.recording { "Stop recording" } else { "Start recording" }));
+    match shape.calls_ready {
+        Some(true) => entries.push(item("ready", "Calls: Ready")),
+        Some(false) => entries.push(item("ready", "Calls: Not ready — Fix")),
+        None => {}
+    }
+    // Record now (Phase 1C): a meeting or call on screen is recorded with both sides, anything else as a voice note.
+    entries.push(item("record", if shape.recording { "Stop recording" } else { "Record now" }));
     entries.push(Entry::Item {
         id: "pause",
         label: (if shape.paused { "Resume recording" } else { "Pause recording" }).into(),
@@ -275,7 +283,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         crate::actions::navigate(&app, "settings", None, false);
                         Ok(())
                     }
-                    "record" => crate::actions::toggle_recording(&app).await,
+                    "record" => crate::actions::record_now(&app).await,
+                    "ready" => {
+                        crate::actions::navigate(&app, "record", None, false);
+                        Ok(())
+                    }
                     "pause" => crate::actions::toggle_pause(&app).await,
                     "controls" => {
                         crate::actions::set_pill_hidden(&app, false);
@@ -337,6 +349,8 @@ pub fn show_main(app: &AppHandle) {
 pub struct Switches {
     pub captions: bool,
     pub auto: bool,
+    /// The Ready check (Phase 1C): none before the first check or while signed out.
+    pub calls_ready: Option<bool>,
 }
 
 /// Applies a new state to the tray: icon, tooltip and menu, each only when it changed. `mic_note`: the recording is a
@@ -377,6 +391,7 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, p
         review: pending,
         captions: switches.captions,
         auto: switches.auto,
+        calls_ready: switches.calls_ready,
         viewer,
     };
     let mut current = cache.shape.lock().unwrap_or_else(|p| p.into_inner());
@@ -409,7 +424,7 @@ mod tests {
         let shape = MenuShape { auto: true, ..MenuShape::default() };
         assert_eq!(
             labels(&shape),
-            ["Open EchoLedger", "---", "Start recording", "Pause recording", "Capture voice note playing now", "Record a voice note", "---", "[ ] Live captions", "[x] Record calls automatically", "---", "Quit EchoLedger"]
+            ["Open EchoLedger", "---", "Record now", "Pause recording", "Capture voice note playing now", "Record a voice note", "---", "[ ] Live captions", "[x] Record calls automatically", "---", "Quit EchoLedger"]
         );
         let pause = menu_entries(&shape).into_iter().find(|e| matches!(e, Entry::Item { id: "pause", .. })).unwrap();
         assert!(matches!(pause, Entry::Item { enabled: false, .. }), "pause needs a recording");
@@ -417,7 +432,7 @@ mod tests {
 
     #[test]
     fn recording_menu_shows_its_state_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, viewer: None };
+        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None };
         let labels = labels(&shape);
         assert!(labels.contains(&"Stop recording".to_string()));
         assert!(labels.contains(&"Resume recording".to_string()));
@@ -427,6 +442,20 @@ mod tests {
         assert!(labels.contains(&"Review recordings (2)".to_string()));
         assert_eq!(labels.iter().filter(|l| *l == "---").count(), 3);
         assert!(labels.len() <= 13, "the tray menu stays short");
+    }
+
+    #[test]
+    fn the_tray_says_whether_calls_will_be_recorded() {
+        let ready = labels(&MenuShape { calls_ready: Some(true), ..MenuShape::default() });
+        assert_eq!(&ready[2..4], ["Calls: Ready", "Record now"]);
+        let broken = labels(&MenuShape { calls_ready: Some(false), ..MenuShape::default() });
+        assert_eq!(broken[2], "Calls: Not ready — Fix");
+        let ids: Vec<&str> = menu_entries(&MenuShape { calls_ready: Some(false), ..MenuShape::default() })
+            .into_iter()
+            .filter_map(|e| match e { Entry::Item { id, .. } => Some(id), Entry::Separator => None })
+            .collect();
+        assert_eq!(ids[1], "ready", "the line opens the Ready check");
+        assert!(!labels(&MenuShape::default()).iter().any(|l| l.starts_with("Calls:")), "nothing before the first check");
     }
 
     fn mic_note_entry(shape: &MenuShape) -> Entry {

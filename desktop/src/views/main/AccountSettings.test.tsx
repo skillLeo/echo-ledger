@@ -284,7 +284,7 @@ describe("Plan features and the viewer on the Record page", () => {
 
   it("hides Live Translate when the plan leaves it out", async () => {
     await record({ plan: makePlan({ liveTranslate: false }) });
-    expect(screen.getByRole("button", { name: "Start recording" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Record now" })).toBeInTheDocument();
     expect(screen.queryByText("Live Translate")).not.toBeInTheDocument();
   });
 
@@ -296,7 +296,7 @@ describe("Plan features and the viewer on the Record page", () => {
   it("offers a viewer no recording, only the documented sentence", async () => {
     await record({ plan: makePlan({ role: "viewer", workspace: "Acme team" }) });
     expect(screen.getByTestId("viewer-notice")).toHaveTextContent("You are a viewer in Acme team: you can open what is shared with you, not record.");
-    expect(screen.queryByRole("button", { name: "Start recording" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Record now" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Toggle automatic call recording" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Record a voice note" })).not.toBeInTheDocument();
   });

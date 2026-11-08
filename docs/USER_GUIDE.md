@@ -150,7 +150,27 @@ EchoLedger can start recording when a call starts.
 
 The **Record** screen always explains the last decision, for example "Ignored: dictation".
 
-To record by hand, press **Ctrl+Alt+Shift+R** on Windows, or tap **REC** on the phone.
+**Ready to record calls (computer, since v1.5).** The **Ready check** at the top of the **Record** page says whether the
+next call will be recorded, both sides, by itself: signed in, a microphone connected, the microphone allowed, the other
+side's sound allowed (on a Mac: macOS 14.2 or later and Screen & System Audio Recording), and meeting detection running
+with **Record calls automatically** on. It ends in **✓ Ready to record calls**, or lists each problem with a button that
+fixes it (**Turn on**, **Open System Settings**, **Open sound settings**…). It runs by itself when the app starts, every few
+seconds and after every change in Settings; **Check again** runs it at once. The sidebar and the tray menu say it in two
+words: **Calls: Ready** or **Not ready — Fix** (click it to open the check). The moment it breaks by itself (a permission
+taken away, the microphone unplugged, detection stopped), a notification says so, even in quiet hours.
+
+**Record now.** One button records the right thing: a meeting or call on screen is recorded with both sides, anything
+else as a voice note. It is **REC** on the Record page, **Record now** in the tray menu, and **Ctrl+Shift+R** on Windows or
+**⌘⇧R** on a Mac; press it again to stop. Browsers use the same keys to reload a page without the cache, so while
+EchoLedger runs they record instead; change or clear the shortcut in **Settings → Shortcuts**. **Ctrl+Alt+Shift+R**
+(start or stop a call recording) stays as before. On the phone, tap **REC**.
+
+**Backup start.** If a meeting is on and its recording has not started 5 seconds later, EchoLedger starts it and says
+**Recording started (backup)**. A recording you stopped yourself is never started again.
+
+**Only your voice was recorded.** After each call EchoLedger checks that both sides were heard. If the other side was
+silent the whole call, it says **Only your voice was recorded**, why (for example the call played through a device that is
+not the default output, or the permission for this computer's sound is off) and how to fix it.
 
 ## 5. Live captions
 

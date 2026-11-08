@@ -11,6 +11,7 @@ import { RecordDotIcon, StopIcon } from "../../components/ControlIcons";
 import { LiveTranslateCard } from "./LiveTranslateCard";
 import { PermissionBanner } from "./Permissions";
 import { isViewer, viewerSentence } from "../../lib/plan";
+import { ReadyCheckCard } from "./ReadyCheck";
 
 /**
  * Live view of which apps hold the microphone and what the core decided for each (A1.8), so a call that was not
@@ -129,14 +130,16 @@ export function RecordView({ status, run, onImport }: {
       <h1 className="page-title">Record</h1>
       <p className="page-sub">Two channels: your microphone is "Me", the other side of the call is "Client".</p>
       <PermissionBanner recordingRef={recording?.clientRef ?? null} />
+      {!recording && <ReadyCheckCard />}
       {status.systemAudioNote && <div className="banner warn" role="status" data-testid="whole-system-note"><AlertIcon size={16} /><span>{status.systemAudioNote}.</span></div>}
       <div className="card">
         <div className="record-hero">
           {/* The record control (since v1.5, as on the phone): its colour changes over 200 ms, it gives a little under a
               press, and a calm ring breathes around it while it records; Record is a filled dot, a recording shows stop. */}
           <span className={`record-wrap ${recording && !paused ? "live" : ""}`} data-testid="record-wrap">
-            <button className={`record-btn ${recording ? "" : "idle"}`} onClick={() => run(recording ? api.stopRecording : () => api.startRecording())}
-              aria-label={recording ? "Stop recording" : "Start recording"}>
+            {/* Record now (Phase 1C): the meeting or call on screen with both sides, otherwise a voice note. */}
+            <button className={`record-btn ${recording ? "" : "idle"}`} onClick={() => run(recording ? api.stopRecording : api.recordNow)}
+              aria-label={recording ? "Stop recording" : "Record now"}>
               <span key={recording ? "stop" : "rec"} className="record-glyph" aria-hidden="true">{recording ? <StopIcon size={18} /> : <RecordDotIcon size={18} />}</span>
               <span className="record-word">{recording ? "STOP" : "REC"}</span>
             </button>
@@ -146,6 +149,7 @@ export function RecordView({ status, run, onImport }: {
               <span className={`status-dot ${paused ? "paused" : recording ? "live" : ""}`} />
               {recording ? `${paused ? "Paused" : "Recording"} · ${what}` : "Not recording"}
             </div>
+            {!recording && <div className="small muted" data-testid="record-now-hint">Record now: a meeting or call on screen is recorded with both sides, anything else as a voice note.</div>}
             {recording && <div className="small muted">{BACKEND_LABEL[recording.backend] ?? recording.backend}</div>}
             {recording && (
               <div className="record-controls">

@@ -76,7 +76,9 @@ describe("MainApp start-up and pairing gate", () => {
     fireEvent.change(screen.getByLabelText(/Sign-in code/), { target: { value: "ABCD-1234" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in with code" }));
 
-    expect(await screen.findByRole("heading", { name: "Library" })).toBeInTheDocument();
+    // After signing in, the Ready check (Phase 1C): the Record page with it.
+    expect(await screen.findByRole("heading", { name: "Record" })).toBeInTheDocument();
+    expect(screen.getByTestId("ready-card")).toBeInTheDocument();
     expect(screen.getByText("Studio PC")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Signed in. Your library will sync now.");
   });
@@ -397,9 +399,9 @@ describe("MainApp events, toasts and polling", () => {
 describe("MainApp action runner", () => {
   it("turns a rejected action into an error toast and keeps the screen", async () => {
     await renderPaired();
-    respondWith("start_recording", () => Promise.reject("Audio error: no input device"));
+    respondWith("record_now", () => Promise.reject("Audio error: no input device"));
     fireEvent.click(nav("Record"));
-    fireEvent.click(screen.getByRole("button", { name: "Start recording" }));
+    fireEvent.click(screen.getByRole("button", { name: "Record now" }));
     const toast = await screen.findByRole("status");
     expect(toast).toHaveTextContent("Audio error: no input device");
     expect(toast).toHaveClass("error");

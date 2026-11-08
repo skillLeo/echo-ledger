@@ -379,14 +379,13 @@ async fn run_check(app: &AppHandle, quiet: bool) -> UpdateStatus {
         s.message = None;
         s.progress = None;
     });
-    if quiet && settings.activity_notifications {
-        use tauri_plugin_notification::NotificationExt;
-        let _ = app
-            .notification()
-            .builder()
-            .title(format!("EchoLedger {} is ready", update.version))
-            .body("It installs the next time EchoLedger starts, or now from Settings → About → Restart now.")
-            .show();
+    if quiet {
+        crate::notifications::send(
+            app,
+            crate::notifications::Category::AppUpdates,
+            &format!("EchoLedger {} is ready", update.version),
+            "It installs the next time EchoLedger starts, or now from Settings → About → Restart now.",
+        );
     }
     status
 }

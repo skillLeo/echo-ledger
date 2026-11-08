@@ -20,6 +20,7 @@ import { LANGUAGE_OPTIONS, menuLabel } from "../../lib/languages";
 import { SKIP_SHORTER_THAN } from "../../lib/pending";
 
 const ACTIONS: [ShortcutAction, string][] = [
+  ["record_now", "Record now (the meeting on screen, else a voice note)"],
   ["toggle_captions", "Show / hide live captions"],
   ["toggle_saving", "Start / stop saving a recording"],
   ["copy_last2_min", "Copy the last 2 minutes of captions"],

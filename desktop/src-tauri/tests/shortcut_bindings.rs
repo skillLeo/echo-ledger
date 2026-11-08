@@ -11,7 +11,8 @@ fn map(entries: &[(Action, &str)]) -> HashMap<Action, String> {
 #[test]
 fn the_defaults_are_the_documented_chords() {
     let defaults = default_map();
-    assert_eq!(defaults.len(), 5);
+    assert_eq!(defaults.len(), 6);
+    assert_eq!(defaults[&Action::RecordNow], "CommandOrControl+Shift+R");
     assert_eq!(
         defaults[&Action::ToggleCaptions],
         "CommandOrControl+Shift+Space"
@@ -37,12 +38,12 @@ fn every_default_chord_parses() {
 fn the_action_list_is_complete_and_unique() {
     let mut all = Action::ALL.to_vec();
     all.dedup();
-    assert_eq!(all.len(), 6);
+    assert_eq!(all.len(), 7);
     let defaults: Vec<Option<&str>> = Action::ALL
         .iter()
         .map(|a| a.default_accelerator())
         .collect();
-    assert_eq!(defaults.iter().filter(|d| d.is_some()).count(), 5);
+    assert_eq!(defaults.iter().filter(|d| d.is_some()).count(), 6);
 }
 
 #[test]
@@ -60,6 +61,7 @@ fn action_names_in_settings_files_and_ipc_are_snake_case() {
     assert_eq!(
         names,
         [
+            "record_now",
             "toggle_captions",
             "toggle_saving",
             "copy_last2_min",

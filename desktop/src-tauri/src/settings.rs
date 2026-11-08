@@ -270,6 +270,10 @@ pub struct Settings {
     pub quiet_hours: bool,
     pub quiet_from: String,
     pub quiet_to: String,
+    /// Notification categories (Phase 1C) by wire name (`notifications::Category`): `false` turns one off; missing is on.
+    pub notification_categories: HashMap<String, bool>,
+    /// The sound of each category where the system plays one; missing is on.
+    pub notification_sounds: HashMap<String, bool>,
     /// The first-run wizard (B19) was finished or skipped. Installs paired before v1.1 count as done.
     pub onboarding_done: bool,
     /// Screen moments (v1.5): keep what was on the meeting's screen during call recordings.
@@ -321,6 +325,8 @@ impl Default for Settings {
             quiet_hours: false,
             quiet_from: "22:00".into(),
             quiet_to: "07:00".into(),
+            notification_categories: HashMap::new(),
+            notification_sounds: HashMap::new(),
             onboarding_done: false,
             screen_moments: true,
             screen_target: crate::screens::privacy::MEETING_WINDOW.into(),
@@ -358,6 +364,7 @@ impl Settings {
                 "shortcuts" => known_shortcuts(value),
                 "siteRules" => parsable_site_rules(value),
                 "autoRecordApps" => known_app_switches(value),
+                "notificationCategories" | "notificationSounds" => crate::notifications::known_switches(value),
                 "captionStyle" => tolerant_caption_style(value),
                 "transcriptionLanguage" => language_or_none(value.as_str()).map_or(Value::Null, Value::from),
                 "dictationMode" => Value::from(if value.as_str() == Some("push_to_talk") { "push_to_talk" } else { "toggle" }),
@@ -387,6 +394,11 @@ impl Settings {
         }
         let mut settings: Settings = serde_json::from_value(Value::Object(merged)).unwrap_or_default();
         settings.onboarding_done |= set_up_before;
+        for action in crate::shortcuts::ADDED_LATER {
+            if let Some(accelerator) = action.default_accelerator() {
+                settings.shortcuts.entry(action).or_insert_with(|| accelerator.to_string());
+            }
+        }
         settings
     }
 

@@ -807,7 +807,7 @@ audio.player { display: none; }
 .permission-banner { display: grid; gap: var(--space-2); margin-bottom: var(--space-3); }
 .permission-banner .banner { margin-bottom: 0; }
 /* The Mac check's results: a mark, the sentence, the button that fixes it. */
-.mac-check .check-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+.mac-check .check-list, .ready-card .check-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; gap: var(--space-2); }
 .check-row { display: flex; align-items: flex-start; gap: var(--space-2); }
 .check-mark { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-full); margin-top: 1px; }
 .check-row.ok .check-mark { color: var(--success); }
@@ -815,6 +815,18 @@ audio.player { display: none; }
 .check-row.off .check-mark, .check-row.failed .check-mark { color: var(--danger); }
 .check-main { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .check-row > .btn { flex: none; }
+
+/* The Ready check (Phase 1C): the card on the Record page and the chip at the top of the sidebar. */
+.ready-card { margin-bottom: var(--space-3); }
+.ready-card.not-ready { box-shadow: inset 3px 0 0 var(--danger); }
+.ready-chip { display: flex; align-items: center; gap: var(--space-2); height: 32px; margin: 0 0 var(--space-2); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-full); background: var(--surface-2); color: var(--text); font-size: var(--text-xs); font-weight: 600; cursor: pointer; white-space: nowrap; overflow: hidden; }
+.ready-chip:hover { background: var(--surface-3); }
+.ready-chip.not-ready { background: var(--danger-soft); }
+.ready-chip-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.app.collapsed .ready-chip { justify-content: center; padding: 0; }
+.app.collapsed .ready-chip-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+.one-sided-banner { align-items: flex-start; }
+.one-sided-banner .one-sided-text { display: grid; gap: 2px; }
 
 /* Loading placeholders (C6): a quiet shimmer while a list loads (the phone's SkeletonRow). */
 .skeleton-item { cursor: default; gap: var(--space-2); padding-block: var(--space-3); }

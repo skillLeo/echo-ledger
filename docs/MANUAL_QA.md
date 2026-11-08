@@ -610,6 +610,22 @@ second person or device to share a screen, and a slide deck with a few slides.
 | SM-W8 | Windows, whole-screen, EchoLedger's main window open on the meeting's monitor (also opened during the capture). | Kept screens show what is behind it, never EchoLedger; Zoom's own share and Snipping Tool do not show it while screens are on, and do again after pausing or stopping. |
 | SM-X1 | Both: unplug the network, start a call filed under a project; plug it back in. | The chip says "starting" and nothing is kept; within about 30 s screens start if the project keeps them, and stay off if not. |
 
+### Desktop v1.5 Phase 1C: easy, trustworthy, clear (what only a real computer can prove)
+
+Use the CI build of the branch (Actions → "Desktop (macOS)" or "Desktop (Windows)" → Artifacts). Tests cover the decisions
+with fakes; these rows prove the system around them.
+
+| # | Check | Expected |
+|---|---|---|
+| 1C-A1 | Start the app signed in, with everything allowed. | Within a few seconds the sidebar and the tray say **Calls: Ready**; Record shows **✓ Ready to record calls**. |
+| 1C-A2 | Turn off **Record calls automatically**, then press **Turn on** in the Ready check. | The chip turns to **Not ready — Fix** at once and back to **Calls: Ready** after the button. No notification for your own choice. |
+| 1C-A3 | Mac: in System Settings take away Screen & System Audio Recording (or the microphone) while the app runs; also with quiet hours on all day. | Within about 10 s a notification "Calls will not be recorded fully" names the problem, also in quiet hours; the chip says **Not ready — Fix**; the fix button opens the right pane. |
+| 1C-A4 | Windows: unplug the only microphone (USB headset) while the app runs. | The Critical notification and **Not ready — Fix**; plugging it back turns the chip ready again. |
+| 1C-A5 | With a Zoom or Meet call running, press Ctrl+Shift+R (⌘⇧R); then again. With no call, press it again. | A call recording with both sides starts ("Recording the call, both sides"), then stops; without a call a voice note starts. Same from the tray's **Record now**. |
+| 1C-A6 | Settings → Shortcuts: Record now shows the browser warning; change it to another key and back. | The warning names the browser reload; the new key works at once. |
+| 1C-A7 | Make a call start fail once (for example a second app holding an exclusive device), so auto mode does not start it. | About 5 s after the call is detected: **Recording started (backup)**. Stop it yourself mid-call: it stays stopped. |
+| 1C-A8 | A 30 s call where the other side plays through a headset that is not the default output (or is muted). | After the call: **Only your voice was recorded**, with the reason and the fix; the banner opens the Ready check. |
+
 ## Appendix B — Accessibility
 
 | # | Check | Expected |

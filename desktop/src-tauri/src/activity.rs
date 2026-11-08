@@ -95,6 +95,14 @@ impl Seen {
     }
 }
 
+/// The category the notifications of `items` sound as: theirs when they share one, else Other (a summary of several).
+pub fn category_of(items: &[ActivityItem]) -> crate::notifications::Category {
+    use crate::notifications::Category;
+    let mut kinds = items.iter().map(|i| Category::of_activity(i.kind.as_deref()));
+    let first = kinds.next().unwrap_or(Category::Other);
+    if kinds.all(|k| k == first) { first } else { Category::Other }
+}
+
 /// What the OS notification says. While the app is locked it says nothing about the recording.
 pub fn notification_text(items: &[ActivityItem], locked: bool) -> Vec<(String, String)> {
     if locked {

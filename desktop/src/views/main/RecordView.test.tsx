@@ -20,6 +20,7 @@ function makeRun() {
 async function setup(status: Partial<AppStatus> = {}, users: MicUser[] = []) {
   respond("mic_users", users);
   respond("start_recording", makeStatus());
+  respond("record_now", makeStatus());
   respond("stop_recording", makeStatus());
   respond("toggle_captions", makeStatus());
   respond("toggle_voice_note", makeStatus());
@@ -53,18 +54,19 @@ describe("RecordView main control", () => {
     expect(screen.getByTestId("record-wrap")).not.toHaveClass("live");
   });
 
-  it("offers REC when idle and starts a recording on click", async () => {
+  it("offers REC when idle and records now on click: the meeting on screen, else a voice note", async () => {
     const { run } = await setup();
     expect(screen.getByRole("heading", { name: "Record" })).toBeInTheDocument();
-    const button = screen.getByRole("button", { name: "Start recording" });
+    const button = screen.getByRole("button", { name: "Record now" });
     expect(button).toHaveTextContent("REC");
     expect(screen.getByText("Not recording")).toBeInTheDocument();
     expect(screen.queryByText(/loopback|Core Audio|Simulated/)).not.toBeInTheDocument();
 
     fireEvent.click(button);
     expect(run).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(callsOf("start_recording")).toEqual([{ sourceApp: null }]));
+    await waitFor(() => expect(callsOf("record_now")).toHaveLength(1));
     expect(callsOf("stop_recording")).toHaveLength(0);
+    expect(screen.getByTestId("record-now-hint")).toHaveTextContent("both sides");
   });
 
   it("offers STOP while recording and stops on click", async () => {

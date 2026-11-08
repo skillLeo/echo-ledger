@@ -3,7 +3,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** `translate_lock` and `translate_hide` (v1.3, Live Translate) are bound only while it runs and never shown in Settings. */
-export type ShortcutAction = "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "translate_lock" | "translate_hide";
+export type ShortcutAction = "record_now" | "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "translate_lock" | "translate_hide";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 /** After a call (v1.5): kept at once with "Saved · Undo", or a small chip that keeps it by itself after 10 s. */
 export type AfterCall = "keep" | "ask";
@@ -55,7 +55,36 @@ export interface AppStatus {
   systemAudioNote?: string | null;
   /** The running recording's devices (since v1.5). */
   deviceNote?: DeviceNote | null;
+  /** The last Ready check (Phase 1C): null before the first one. */
+  callsReady?: boolean | null;
+  readyProblems?: number;
 }
+
+/** The Ready check (Phase 1C): one check per thing that can stop the next call from being recorded. */
+export type ReadyFixAction = "sign_in" | "allow_microphone" | "allow_system_audio" | "open_sound_settings" | "software_update"
+  | "turn_on_auto_mode" | "turn_on_apps" | "restart_detection";
+export interface ReadyCheck {
+  id: "account" | "microphone" | "microphone_permission" | "other_side" | "detection";
+  label: string;
+  ok: boolean;
+  detail: string | null;
+  fix: { label: string; action: ReadyFixAction } | null;
+}
+export interface ReadyReport {
+  ready: boolean;
+  checks: ReadyCheck[];
+  checkedAt: string;
+}
+/** After a call where one side was never heard (`capture:one_sided`, Phase 1C). */
+export interface OneSided {
+  title: string;
+  reason: string;
+  fix: string;
+}
+
+/** Notification categories (Phase 1C), the phone's channels; `call_capture` is Critical (never held by quiet hours). */
+export type NotificationCategory = "recording" | "transcription" | "enhancement" | "uploads" | "call_capture" | "sharing"
+  | "account" | "usage" | "live_translate" | "app_updates" | "other";
 
 /** The plan and role (since v1.5); `known` is false on a server without plans (every feature on, no plan limits). */
 export interface PlanInfo {
@@ -160,6 +189,8 @@ export interface Settings {
   quietHours: boolean;
   quietFrom: string;
   quietTo: string;
+  notificationCategories: Partial<Record<NotificationCategory, boolean>>;
+  notificationSounds: Partial<Record<NotificationCategory, boolean>>;
   onboardingDone: boolean;
   screenMoments: boolean;
   screenTarget: ScreenTarget;
@@ -283,6 +314,8 @@ export interface SettingsPatch {
   quietHours?: boolean;
   quietFrom?: string;
   quietTo?: string;
+  notificationCategories?: Partial<Record<NotificationCategory, boolean>>;
+  notificationSounds?: Partial<Record<NotificationCategory, boolean>>;
   onboardingDone?: boolean;
   screenMoments?: boolean;
   screenTarget?: ScreenTarget;
@@ -1082,6 +1115,8 @@ export interface EventPayloads {
   /** A link of another browser sign-in (an earlier tab): what to say while this one keeps waiting. */
   "signin:other": string;
   "update:status": UpdateStatus;
+  "ready:changed": ReadyReport;
+  "capture:one_sided": OneSided;
 }
 
 export type AppEvent = keyof EventPayloads;
@@ -1133,6 +1168,15 @@ export const api = {
   stopRecording: () => invoke<AppStatus>("stop_recording"),
   toggleVoiceNote: () => invoke<AppStatus>("toggle_voice_note"),
   toggleMicNote: () => invoke<AppStatus>("toggle_mic_note"),
+  /** Record now (Phase 1C): the meeting on screen with both sides, else a voice note; again to stop. */
+  recordNow: () => invoke<AppStatus>("record_now"),
+  // The Ready check (Phase 1C).
+  readyCheck: () => invoke<ReadyReport>("ready_check"),
+  readyLast: () => invoke<ReadyReport | null>("ready_last"),
+  readyFix: (action: ReadyFixAction) => invoke<ReadyReport>("ready_fix", { action }),
+  // Notification categories (Phase 1C).
+  notificationTest: (category: NotificationCategory) => invoke<boolean>("notification_test", { category }),
+  notificationSend: (category: NotificationCategory, title: string, body: string) => invoke<boolean>("notification_send", { category, title, body }),
   hideCaptions: () => invoke<AppStatus>("hide_captions"),
   micUsers: () => invoke<MicUser[]>("mic_users"),
   /** One recording per file, with one client and language for the batch (null: no client / automatic). */

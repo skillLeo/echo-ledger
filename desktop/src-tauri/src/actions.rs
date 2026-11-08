@@ -30,6 +30,7 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
     let result = match (action, pressed) {
         (Action::ToggleCaptions, true) => toggle_captions(&app).await,
         (Action::ToggleSaving, true) => toggle_recording(&app).await,
+        (Action::RecordNow, true) => record_now(&app).await,
         (Action::CopyLast2Min, true) => copy_last_minutes(&app, 2).map(|_| ()),
         (Action::VoiceNote, true) => toggle_voice_note(&app).await,
         (Action::Mark, true) => mark_moment(&app, None, None).map(|_| ()),
@@ -291,6 +292,44 @@ async fn toggle_note(app: &AppHandle, mode: RecordingMode) -> AppResult<()> {
     Ok(())
 }
 
+/// Record now (Phase 1C, A4), from the tray, the shortcut and the Record page: stops a running recording; else a meeting
+/// or call on screen is recorded with call capture (both sides), anything else is a voice note into the microphone. It
+/// counts as started by hand: it is never skipped as a short automatic call, and pressing again stops it.
+pub async fn record_now(app: &AppHandle) -> AppResult<()> {
+    use crate::call_guard::RecordNow;
+    let state = app.state::<crate::AppState>();
+    let meeting = if state.capture.is_recording() { None } else { state.detect.meeting().map(|m| m.app) };
+    match crate::call_guard::record_now(state.capture.is_recording(), meeting) {
+        RecordNow::Stop => stop_recording(app, false).await,
+        RecordNow::Call(source) => {
+            start_call_recording(app, source.as_str(), false).await?;
+            let _ = app.emit("app:toast", "Recording the call, both sides");
+            Ok(())
+        }
+        RecordNow::VoiceNote => {
+            toggle_mic_note(app).await?;
+            let _ = app.emit("app:toast", "Recording a voice note");
+            Ok(())
+        }
+    }
+}
+
+/// The watchdog's start (Phase 1C, A5): a detected meeting that was not recording after 5 s.
+pub async fn start_backup(app: &AppHandle, source: crate::detect::classify::SourceApp) {
+    use crate::call_guard::{BACKUP_BODY, BACKUP_TITLE};
+    let state = app.state::<crate::AppState>();
+    if state.capture.is_recording() {
+        return;
+    }
+    match start_call_recording(app, source.as_str(), true).await {
+        Ok(()) => {
+            let _ = app.emit("app:toast", BACKUP_TITLE);
+            crate::notifications::send(app, crate::notifications::Category::CallCapture, BACKUP_TITLE, BACKUP_BODY);
+        }
+        Err(e) => crate::refusal::say(app, &e.to_string(), crate::refusal::asked_by_meeting(&e)),
+    }
+}
+
 pub async fn toggle_recording(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if state.capture.is_recording() {
@@ -355,7 +394,11 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     let session = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).begin_stop();
     // Screens first, while the recording's clock still runs (a screen being written keeps its moment).
     crate::screens::on_recording_ended(app).await;
+    let sides = state.capture.sides_heard();
     let finished = state.capture.stop()?;
+    if let (Some(heard), Some(done)) = (sides, finished.as_ref()) {
+        check_sides(app, done.output.duration_ms, heard);
+    }
     state.bluetooth_mic.store(false, Ordering::SeqCst);
     state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()).clear();
     *state.device_status.lock().unwrap_or_else(|p| p.into_inner()) = Default::default();
@@ -363,6 +406,16 @@ async fn end_capture(app: &AppHandle) -> AppResult<Option<(FinishedRecording, Op
     crate::overlay::set_pill_visible(app, false);
     *state.recording_started_at.lock().unwrap() = None;
     Ok(finished.map(|f| (f, session, provider)))
+}
+
+/// After each call (Phase 1C, A5): a side that was never heard is said, with why and how to fix it, as Call capture &
+/// readiness, and on the page (`capture:one_sided`).
+fn check_sides(app: &AppHandle, duration_ms: u64, heard: (bool, bool)) {
+    let state = app.state::<crate::AppState>();
+    let whole_system = crate::audio::platform::system_audio_note().is_some();
+    let Some(said) = crate::call_guard::one_sided(duration_ms, heard, &state.permissions_now(), whole_system) else { return };
+    let _ = app.emit("capture:one_sided", &said);
+    crate::notifications::send(app, crate::notifications::Category::CallCapture, said.title, &format!("{} {}", said.reason, said.fix));
 }
 
 /// Stops the recording; "After a call" decides what comes next (the Saved toast, or the chip). Auto mode never stops a
@@ -1561,7 +1614,7 @@ pub fn spawn_activity_poll(app: AppHandle) {
 }
 
 async fn poll_activity(app: &AppHandle) -> AppResult<()> {
-    use tauri_plugin_notification::NotificationExt;
+    use crate::notifications::{Category, allowed, local_minutes};
     let state = app.state::<crate::AppState>();
     let answer = state.api()?.activity(20).await?;
     let items: Vec<crate::activity::ActivityItem> = serde_json::from_value(answer.get("data").cloned().unwrap_or_default()).unwrap_or_default();
@@ -1571,16 +1624,18 @@ async fn poll_activity(app: &AppHandle) -> AppResult<()> {
     let _ = seen.save(&path);
     let _ = app.emit("activity:updated", answer.get("unread_count").and_then(serde_json::Value::as_u64).unwrap_or(0));
     let settings = state.settings();
-    let now = chrono::Local::now();
-    let minutes = now.format("%H").to_string().parse::<u32>().unwrap_or(0) * 60 + now.format("%M").to_string().parse::<u32>().unwrap_or(0);
-    if fresh.is_empty() || !settings.activity_notifications || crate::activity::in_quiet_hours(settings.quiet_hours, &settings.quiet_from, &settings.quiet_to, minutes) {
+    let minutes = local_minutes();
+    // Each item goes through its own category (Phase 1C): its switch, its sound and the quiet hours.
+    let shown: Vec<_> = fresh.into_iter().filter(|i| allowed(&settings, Category::of_activity(i.kind.as_deref()), minutes)).collect();
+    if shown.is_empty() {
         return Ok(());
     }
-    if let Some(id) = fresh.iter().rev().find_map(|i| i.session_id.clone()) {
+    if let Some(id) = shown.iter().rev().find_map(|i| i.session_id.clone()) {
         *state.notified.lock().unwrap_or_else(|p| p.into_inner()) = Some((id, Instant::now()));
     }
-    for (title, body) in crate::activity::notification_text(&fresh, state.lock.is_locked()) {
-        let _ = app.notification().builder().title(title).body(body).show();
+    let category = crate::activity::category_of(&shown);
+    for (title, body) in crate::activity::notification_text(&shown, state.lock.is_locked()) {
+        crate::notifications::show(app, &settings, category, &title, &body);
     }
     Ok(())
 }
