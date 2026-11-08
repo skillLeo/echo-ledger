@@ -315,7 +315,14 @@ fun PairingScreen(vm: MainViewModel) {
 }
 
 @Composable
-fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, startAtMs: Long? = null, onCaptureTest: () -> Unit = {}) {
+fun SessionScreen(
+    vm: MainViewModel,
+    item: LibraryItem,
+    onBack: () -> Unit,
+    startAtMs: Long? = null,
+    onCaptureTest: () -> Unit = {},
+    backToSource: Pair<String, () -> Unit>? = null
+) {
     var transcript by remember { mutableStateOf<TranscriptDto?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var loadFailed by remember { mutableStateOf(false) }
@@ -493,6 +500,8 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
                             menuOpen = false
                             action()
                         }
+                        // A voice note shared from another app (since v1.5): back to that app, while Back goes to the Library.
+                        backToSource?.let { (label, go) -> DropdownMenuItem(text = { Text("Back to $label") }, onClick = { pick(go) }) }
                         if (canCopy) {
                             DropdownMenuItem(text = {
                                 Text("Copy for AI")

@@ -223,6 +223,7 @@ class MainActivity : FragmentActivity() {
         var showWaiting by rememberSaveable { mutableStateOf(false) }
         // Voice notes just shared from another app (local ids, comma-separated): their page, until Back leaves the app.
         var sharedNotes by rememberSaveable { mutableStateOf<String?>(null) }
+        var sharedFrom by rememberSaveable { mutableStateOf<String?>(null) }
         val libraryItems by vm.library.collectAsState()
         val openItem = libraryItems.firstOrNull { it.id == openItemId && !it.deleted } ?: openItemCache?.takeIf { it.id == openItemId }
         fun showItem(item: LibraryItem?) {
@@ -349,6 +350,7 @@ class MainActivity : FragmentActivity() {
             open?.takeIf { it.startsWith(OPEN_SESSION_PREFIX) }?.let { openSession = it.removePrefix(OPEN_SESSION_PREFIX) }
             open?.takeIf { it.startsWith(OPEN_SHARED_PREFIX) }?.let {
                 sharedNotes = it.removePrefix(OPEN_SHARED_PREFIX)
+                sharedFrom = intent?.getStringExtra(EXTRA_SOURCE_APP)
                 showItem(null)
                 showSetup = false
             }
@@ -528,9 +530,21 @@ class MainActivity : FragmentActivity() {
                             sharedNotes.orEmpty().split(',').filter {
                                 it.isNotBlank()
                             },
+                            // Since v1.5 (Phase 1C): the arrow and Back go to the Library, never out of the app mid-task;
+                            // "Back to WhatsApp" returns to the app the note came from.
                             onLeave = {
                                 sharedNotes = null
-                                // Back to the app the note was shared from (WhatsApp), not to the Library.
+                                showItem(null)
+                                tab = TAB_LIBRARY
+                            },
+                            sourceApp = sharedFrom?.let { pkg ->
+                                runCatching {
+                                    packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                                }.getOrNull()
+                            },
+                            onBackToSource = {
+                                sharedNotes = null
+                                tab = TAB_LIBRARY
                                 moveTaskToBack(true)
                             }
                         )
@@ -644,6 +658,9 @@ class MainActivity : FragmentActivity() {
 
         /** Setup (call capture): from "Call capture isn't ready" and "Run capture test". */
         const val OPEN_SETUP = "setup"
+
+        /** The package of the app a voice note was shared from (since v1.5): "Back to WhatsApp" on its page. */
+        const val EXTRA_SOURCE_APP = "source_app"
 
         /** The Ready check (since v1.5, Phase 1C): from the critical alert; [EXTRA_FIX] names the fix to run at once. */
         const val OPEN_READY = "ready"

@@ -98,6 +98,8 @@ class ShareImportActivity : ComponentActivity() {
                 else -> startActivity(
                     Intent(this@ShareImportActivity, MainActivity::class.java)
                         .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SHARED_PREFIX + ids.joinToString(","))
+                        // Since v1.5: the app the note came from, for "Back to WhatsApp" on the note's page.
+                        .putExtra(MainActivity.EXTRA_SOURCE_APP, referrer?.takeIf { it.scheme == "android-app" }?.host)
                 )
             }
             finish()

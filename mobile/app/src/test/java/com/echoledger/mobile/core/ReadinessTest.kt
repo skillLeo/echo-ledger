@@ -25,8 +25,20 @@ class ReadinessTest {
         freeMb: Long = 10_000,
         battery: Boolean = true,
         oneSided: String? = null
-    ) =
-        ReadyFacts(caps, autoRecord, shizukuInstalled, shizukuRunning, shizukuAllowed, seen, stale, arm, signedIn, freeMb, battery, oneSided)
+    ) = ReadyFacts(
+        caps,
+        autoRecord,
+        shizukuInstalled,
+        shizukuRunning,
+        shizukuAllowed,
+        seen,
+        stale,
+        arm,
+        signedIn,
+        freeMb,
+        battery,
+        oneSided
+    )
 
     @Test
     fun `everything in place is Ready, with nothing to fix`() {

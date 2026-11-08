@@ -17,6 +17,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,10 +43,17 @@ private const val SHARED_POLL_MS = 3_000L
 /**
  * The voice notes just shared to EchoLedger from another app (since v1.3): their status live (uploading, transcribing,
  * ready), then the note itself in its default view with Copy and Copy for AI. One note opens straight on its page once
- * the transcript is ready; several are listed. Back leaves for the app the note was shared from ([onLeave]).
+ * the transcript is ready; several are listed. Since v1.5 the arrow and Back go to the Library ([onLeave]); "Back to
+ * WhatsApp" ([onBackToSource]) returns to the app the note came from.
  */
 @Composable
-internal fun SharedNotesScreen(vm: MainViewModel, localIds: List<String>, onLeave: () -> Unit) {
+internal fun SharedNotesScreen(
+    vm: MainViewModel,
+    localIds: List<String>,
+    onLeave: () -> Unit,
+    sourceApp: String? = null,
+    onBackToSource: () -> Unit = {}
+) {
     val context = LocalContext.current
     val pending by vm.pending.collectAsState()
     val library by vm.library.collectAsState()
@@ -73,7 +81,12 @@ internal fun SharedNotesScreen(vm: MainViewModel, localIds: List<String>, onLeav
     val item = showing?.let { s -> library.firstOrNull { it.id == s } }
     if (item != null) {
         // One note goes back to the app it came from; from a list, back returns to the list.
-        SessionScreen(vm, item, onBack = { if (opened != null && localIds.size > 1) opened = null else onLeave() })
+        SessionScreen(
+            vm,
+            item,
+            onBack = { if (opened != null && localIds.size > 1) opened = null else onLeave() },
+            backToSource = (sourceApp ?: "the app") to onBackToSource
+        )
         return
     }
 
@@ -81,7 +94,13 @@ internal fun SharedNotesScreen(vm: MainViewModel, localIds: List<String>, onLeav
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onLeave) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
-            Text(if (localIds.size == 1) "Voice note" else "${localIds.size} voice notes", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(
+                if (localIds.size == 1) "Voice note" else "${localIds.size} voice notes",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onBackToSource) { Text("Back to ${sourceApp ?: "the app"}") }
         }
         statuses.forEachIndexed { i, status ->
             SectionCard {

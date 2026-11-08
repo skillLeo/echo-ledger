@@ -426,14 +426,15 @@ class MainActivityTest : AppTest() {
 
     private fun pendingIntent() = Intent(app, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_PENDING)
 
-    private fun openShared(vararg localIds: String) {
+    private fun openShared(vararg localIds: String, from: String? = null): MainActivity {
         val intent = Intent(app, MainActivity::class.java).putExtra(
             MainActivity.EXTRA_OPEN,
             MainActivity.OPEN_SHARED_PREFIX + localIds.joinToString(",")
-        )
+        ).putExtra(MainActivity.EXTRA_SOURCE_APP, from)
         val controller = buildActivity(MainActivity::class.java, intent).create()
         controller.get().simulateBiometrics(false)
         controller.start().postCreate(null).resume().visible()
+        return controller.get()
     }
 
     @Test
@@ -463,6 +464,24 @@ class MainActivityTest : AppTest() {
         awaitText("Shared voice note")
         awaitText("Preparing…")
         assertTrue(!present("Weekly sync"))
+    }
+
+    @Test
+    fun `Back from a shared note lands on the Library, and Back to the app names where it came from`() {
+        serve()
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.library.refresh()
+        }
+        SharedNotes.remember(app, listOf("L2"))
+
+        val activity = openShared("L2", from = app.packageName)
+
+        awaitText("Shared voice note")
+        compose.onNodeWithText("Back to EchoLedger", substring = true).assertExists()
+        activity.onBackPressedDispatcher.onBackPressed()
+        awaitText("Weekly sync")
+        assertTrue("the app stays open", !activity.isFinishing)
     }
 
     @Test
