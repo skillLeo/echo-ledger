@@ -109,6 +109,13 @@ same with Google or a passkey: the browser opens, you sign in there, and the pho
 Your account's page on the phone (**You → Account**) exports your data, signs out every device, or deletes the
 account (you have 7 days to change your mind by signing in again).
 
+**Sign in (computer, since v1.5).** The first screen asks for the server address, then offers what your server allows:
+email and password (**Forgot password?** opens the server's reset page), **Continue with Google** when the server has
+Google sign-in (the browser opens and the app continues by itself), and **Create account** when the server lets anyone
+sign up (otherwise ask the owner for an invitation). The code from your authenticator app is asked for when your account
+has two-step sign-in. After signing in, the **Record** page opens with the **Ready check**, so you see at once whether
+calls will be recorded.
+
 **Signing in with a code** also works, for older apps too. It connects a device to your server with a one-time code; you
 need the web console.
 

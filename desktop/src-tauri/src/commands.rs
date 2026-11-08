@@ -225,6 +225,25 @@ pub async fn sign_in_password(app: AppHandle, server_url: String, email: String,
     }
 }
 
+/// What the sign-in screen offers on this server (Phase 1C): none from an older server, which shows the screen as before.
+#[tauri::command]
+pub async fn auth_options(app: AppHandle, server_url: String) -> AppResult<Option<crate::net::models::AuthOptions>> {
+    let state = app.state::<AppState>();
+    let pins = known_pins(&state, &server_url);
+    let api = ApiClient::new(&server_url, &pins, None)?;
+    Ok(api.auth_options().await?.map(|o| crate::account::checked_options(o, api.base_url())))
+}
+
+/// Create account and Forgot password: the server's page in the browser, only one on the server's own address.
+#[tauri::command]
+pub fn auth_page_open(app: AppHandle, server_url: String, url: String) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    if !crate::account::on_server(&url, &server_url) {
+        return Err(AppError::msg("That page is not on your server."));
+    }
+    app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(format!("The browser could not be opened: {e}")))
+}
+
 /// "Sign in in the browser (Google, passkeys)": opens the server's sign-in page with a PKCE challenge; the page sends
 /// the browser back to `echoledger://signed-in`, which `finish_browser_sign_in` takes. False (and no browser) when the
 /// server has no account sign-in yet.

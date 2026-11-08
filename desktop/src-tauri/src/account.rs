@@ -187,6 +187,30 @@ pub fn export_link_ok(server: &str, link: &str) -> bool {
     (link.starts_with("https://") || crate::net::pinning::is_local_dev(link)) && crate::net::api::same_server(server, link)
 }
 
+/// The scheme and host (with port) of an address, lower-case (pure).
+fn origin(url: &str) -> Option<String> {
+    let (scheme, rest) = url.trim().split_once("://")?;
+    let scheme = scheme.to_ascii_lowercase();
+    if scheme != "https" && scheme != "http" {
+        return None;
+    }
+    let host = rest.split(['/', '?', '#']).next()?.to_ascii_lowercase();
+    (!host.is_empty() && !host.contains('@')).then(|| format!("{scheme}://{host}"))
+}
+
+/// Whether `url` is a page of the server at `server_url` (same scheme and host): the sign-in screen opens only those.
+pub fn on_server(url: &str, server_url: &str) -> bool {
+    matches!((origin(url), origin(server_url)), (Some(a), Some(b)) if a == b)
+}
+
+/// The sign-in options with their links kept only when they are on the server's own address (Phase 1C).
+pub fn checked_options(mut options: crate::net::models::AuthOptions, server_url: &str) -> crate::net::models::AuthOptions {
+    options.sign_up_url = options.sign_up_url.filter(|u| on_server(u, server_url));
+    options.reset_url = options.reset_url.filter(|u| on_server(u, server_url));
+    options.sign_up &= options.sign_up_url.is_some();
+    options
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,5 +331,33 @@ mod tests {
         assert!(!export_link_ok(server, "https://ledger.example.test@evil.example.test/x"));
         assert!(!export_link_ok(server, "javascript:alert(1)"));
         assert!(export_link_ok("http://localhost:8000", "http://localhost:8000/account/export/1"));
+    }
+
+    #[test]
+    fn sign_in_pages_open_only_on_the_server_itself() {
+        assert!(on_server("https://ledger.example.com/admin/register", "https://ledger.example.com"));
+        assert!(on_server("https://LEDGER.example.com/admin/password-reset/request", "https://ledger.example.com/"));
+        assert!(!on_server("https://evil.example.net/admin/register", "https://ledger.example.com"));
+        assert!(!on_server("https://ledger.example.com@evil.example.net/", "https://ledger.example.com"));
+        assert!(!on_server("javascript:alert(1)", "https://ledger.example.com"));
+        assert!(!on_server("http://ledger.example.com/admin/register", "https://ledger.example.com"), "not down to http");
+    }
+
+    #[test]
+    fn options_keep_only_their_own_links_and_read_tolerantly() {
+        let read: crate::net::models::AuthOptions = serde_json::from_value(serde_json::json!({
+            "password": true, "google": true, "sign_up": true, "sign_up_url": "https://elsewhere.example/register",
+            "reset_url": "https://ledger.example.com/admin/password-reset/request", "browser_sign_in": true
+        }))
+        .unwrap();
+        let checked = checked_options(read, "https://ledger.example.com");
+        assert!(checked.google && checked.browser_sign_in && checked.password);
+        assert_eq!(checked.sign_up_url, None);
+        assert!(!checked.sign_up, "no Create account without its page");
+        assert_eq!(checked.reset_url.as_deref(), Some("https://ledger.example.com/admin/password-reset/request"));
+        let empty: crate::net::models::AuthOptions = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert!(empty.password && !empty.google && !empty.sign_up && !empty.browser_sign_in, "a field left out reads as before");
+        let wire = serde_json::to_value(&checked).unwrap();
+        assert!(wire.get("signUpUrl").is_some() && wire.get("browserSignIn").is_some(), "the page reads camelCase");
     }
 }

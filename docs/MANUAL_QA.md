@@ -634,6 +634,8 @@ with fakes; these rows prove the system around them.
 | 1C-D2 | Tick a group's box, move the group to a project; tick a box with half the group picked. | All its recordings move; a half-picked box shows a dash and ticks the rest. |
 | 1C-E1 | Open an 18 s Urdu voice note; switch Original, Roman Urdu, English and Urdu while it plays. | The player shows 0:18 in every view and keeps playing. |
 | 1C-E4 | A new voice note without a title, once its transcript is ready; then rename it; then empty the title. | An automatic short title marked Automatic title; your title stays after a re-sync and on the phone; emptying brings an automatic one back. |
+| 1C-F1 | Sign out; on the sign-in screen type the staging server's address. With Settings → Who can sign up on Anyone and Google set, then Invite only and no Google. | First: Continue with Google, Create account and Forgot password (each opens the server's page in the browser). Second: email and password, Forgot password, the passkey browser button; no Google, no Create account. |
+| 1C-F2 | Sign in with an account that has two-step sign-in. | The code field appears; after it, Record opens with the Ready check. |
 | 1C-A8 | A 30 s call where the other side plays through a headset that is not the default output (or is muted). | After the call: **Only your voice was recorded**, with the reason and the fix; the banner opens the Ready check. |
 
 ## Appendix B — Accessibility

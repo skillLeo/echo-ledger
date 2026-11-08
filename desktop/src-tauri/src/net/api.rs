@@ -152,6 +152,16 @@ impl ApiClient {
         Ok(!Self::answer_error(resp).await.is_missing_route())
     }
 
+    /// `GET /api/auth/options` (Phase 1C, public); none from an older server, which answers 404.
+    pub async fn auth_options(&self) -> AppResult<Option<crate::net::models::AuthOptions>> {
+        let resp = self.http.get(self.url("auth/options")).header("Accept", "application/json").send().await?;
+        match Self::parse(resp).await {
+            Ok(options) => Ok(Some(options)),
+            Err(e) if e.is_missing_route() => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     /// `GET /api/account` (since v1.5); none from a server without accounts.
     pub async fn account(&self) -> AppResult<Option<AccountDto>> {
         let resp = self.authed(self.http.get(self.url("account")))?.send().await?;

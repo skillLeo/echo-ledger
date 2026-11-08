@@ -621,3 +621,26 @@ pub struct DeviceReportAnswer {
 pub struct DeviceReportReceipt {
     pub reported_at: String,
 }
+
+/// `GET /api/auth/options` (Phase 1C): what a sign-in screen offers on this server. Every field is optional, so a server
+/// that leaves one out reads as before (email and password, no sign-up page, no reset link).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthOptions {
+    #[serde(default = "yes", alias = "password")]
+    pub password: bool,
+    #[serde(default)]
+    pub google: bool,
+    #[serde(default, alias = "sign_up")]
+    pub sign_up: bool,
+    #[serde(default, alias = "sign_up_url")]
+    pub sign_up_url: Option<String>,
+    #[serde(default, alias = "reset_url")]
+    pub reset_url: Option<String>,
+    #[serde(default, alias = "browser_sign_in")]
+    pub browser_sign_in: bool,
+}
+
+fn yes() -> bool {
+    true
+}

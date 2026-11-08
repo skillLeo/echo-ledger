@@ -408,6 +408,8 @@ pub fn run() {
             commands::pair_device,
             commands::sign_in_password,
             commands::sign_in_browser,
+            commands::auth_options,
+            commands::auth_page_open,
             commands::sign_in_browser_cancel,
             commands::unpair,
             commands::account_get,

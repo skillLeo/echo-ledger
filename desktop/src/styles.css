@@ -866,6 +866,10 @@ audio.player { display: none; }
 /* An automatic title (Phase 1C): a quiet note beside it. */
 .auto-title { display: inline-flex; align-items: center; gap: 4px; margin-left: var(--space-2); font-weight: 400; vertical-align: middle; }
 
+/* Sign-in (Phase 1C): Forgot password under the password, Create account under the buttons. */
+.sign-in-forgot { display: flex; margin: 0 0 0 auto; }
+.sign-in-create { margin: var(--space-3) 0 0; text-align: center; color: var(--text-muted); }
+
 /* Loading placeholders (C6): a quiet shimmer while a list loads (the phone's SkeletonRow). */
 .skeleton-item { cursor: default; gap: var(--space-2); padding-block: var(--space-3); }
 .skeleton-item:hover { background: transparent; }

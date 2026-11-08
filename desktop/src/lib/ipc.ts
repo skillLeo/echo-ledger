@@ -60,6 +60,16 @@ export interface AppStatus {
   readyProblems?: number;
 }
 
+/** `GET /api/auth/options` (Phase 1C): what this server's sign-in offers; links only on the server's own address. */
+export interface AuthOptions {
+  password: boolean;
+  google: boolean;
+  signUp: boolean;
+  signUpUrl: string | null;
+  resetUrl: string | null;
+  browserSignIn: boolean;
+}
+
 /** The Ready check (Phase 1C): one check per thing that can stop the next call from being recorded. */
 export type ReadyFixAction = "sign_in" | "allow_microphone" | "allow_system_audio" | "open_sound_settings" | "software_update"
   | "turn_on_auto_mode" | "turn_on_apps" | "restart_detection";
@@ -1147,6 +1157,10 @@ export const api = {
    * comes back as `signin:done` or `signin:failed` (`signin:other` for an earlier sign-in's link). */
   signInBrowser: (serverUrl: string, deviceName: string) => invoke<boolean>("sign_in_browser", { serverUrl, deviceName }),
   signInBrowserCancel: () => invoke<void>("sign_in_browser_cancel"),
+  /** What the sign-in screen offers on this server (Phase 1C); null from an older server (the screen stays as before). */
+  authOptions: (serverUrl: string) => invoke<AuthOptions | null>("auth_options", { serverUrl }),
+  /** Create account or Forgot password: the server's own page in the browser. */
+  openAuthPage: (serverUrl: string, url: string) => invoke<void>("auth_page_open", { serverUrl, url }),
   /** null on a server without accounts. */
   account: () => invoke<Account | null>("account_get"),
   /** Every device and console session of the account, this computer too: the answer is the signed-out status. */
