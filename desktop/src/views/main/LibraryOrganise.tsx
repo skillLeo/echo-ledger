@@ -91,6 +91,7 @@ export function TitleEditor({ initial, className = "", onSave, onCancel }: {
   };
   return (
     <input className={`input ${className}`.trim()} aria-label="Title" autoFocus maxLength={MAX_TITLE_CHARS} value={text} dir="auto"
+      placeholder="Empty: an automatic title from what was said"
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setText(e.target.value)}
       onKeyDown={(e) => {

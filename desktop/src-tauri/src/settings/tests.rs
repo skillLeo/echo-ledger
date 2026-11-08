@@ -69,6 +69,8 @@ fn customised() -> Settings {
         quiet_hours: true,
         quiet_from: "23:30".into(),
         quiet_to: "06:15".into(),
+        notification_categories: HashMap::from([("sharing".to_string(), false)]),
+        notification_sounds: HashMap::from([("recording".to_string(), false)]),
         onboarding_done: true,
         screen_moments: false,
         screen_target: "whole_screen".into(),
@@ -96,7 +98,7 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert_eq!(s.overlay_corner, Corner::BottomRight);
     assert_eq!(s.dictation_output, "type");
     assert_eq!(s.shortcuts, default_map());
-    assert_eq!(s.shortcuts.len(), 5, "voice note has no default shortcut");
+    assert_eq!(s.shortcuts.len(), 6, "voice note has no default shortcut");
     assert!(!s.ask_unknown_apps, "the unknown-app chip is off by default");
     assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
     assert!(!s.browser_automation, "reading browser tabs is opt-in");
@@ -172,6 +174,8 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "farSideWarning",
             "inputDevice",
             "lockAfterMinutes",
+            "notificationCategories",
+            "notificationSounds",
             "onboardingDone",
             "overlayCorner",
             "pillPosition",
@@ -189,7 +193,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 40, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 42, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");
@@ -409,8 +413,15 @@ fn an_unknown_shortcut_action_is_dropped_and_the_known_ones_are_kept() {
     let s = Settings::from_value(json!({
         "shortcuts": {"toggle_captions": "Ctrl+Shift+K", "pause_recording": "Ctrl+Shift+P", "voice_note": 42}
     }));
-    assert_eq!(s.shortcuts.len(), 1, "{:?}", s.shortcuts);
+    assert_eq!(s.shortcuts.len(), 2, "{:?}", s.shortcuts);
     assert_eq!(s.shortcuts[&Action::ToggleCaptions], "Ctrl+Shift+K");
+    assert_eq!(s.shortcuts[&Action::RecordNow], "CommandOrControl+Shift+R", "a shortcut added later gets its default");
+}
+
+#[test]
+fn a_cleared_record_now_stays_cleared() {
+    let s = Settings::from_value(json!({"shortcuts": {"record_now": ""}}));
+    assert_eq!(s.shortcuts[&Action::RecordNow], "");
 }
 
 #[test]

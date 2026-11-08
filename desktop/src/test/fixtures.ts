@@ -87,6 +87,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     deviceId: "dev-1",
     deviceName: "Work laptop",
     shortcuts: {
+      record_now: "CommandOrControl+Shift+R",
       toggle_captions: "CommandOrControl+Shift+Space",
       toggle_saving: "CommandOrControl+Shift+R",
       copy_last2_min: "CommandOrControl+Shift+C",
@@ -124,6 +125,8 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     quietHours: false,
     quietFrom: "22:00",
     quietTo: "07:00",
+    notificationCategories: {},
+    notificationSounds: {},
     onboardingDone: true,
     screenMoments: true,
     screenTarget: "meeting_window",

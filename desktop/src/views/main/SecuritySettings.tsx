@@ -1,7 +1,7 @@
 // Settings → Privacy & security (plan B16): the app lock with Windows Hello / Touch ID and a PIN, the devices paired
 // with the server (revoke the others) and the recent audit log.
 import { useEffect, useId, useState } from "react";
-import { api, errorMessage, type LockAfterMinutes, type LockStatus, type SecurityDevice, type SecurityEvent, type Settings, type SettingsPatch, type StorageInfo } from "../../lib/ipc";
+import { api, errorMessage, type LockAfterMinutes, type LockStatus, type NotificationCategory, type SecurityDevice, type SecurityEvent, type Settings, type SettingsPatch, type StorageInfo } from "../../lib/ipc";
 import { fileSize, formatWhen } from "../../lib/format";
 import { fillWidth } from "../../lib/motion";
 import { SelectRow, Toggle } from "./SettingsControls";
@@ -154,16 +154,67 @@ export function StorageCard({ limitBytes = null }: { limitBytes?: number | null 
   );
 }
 
-/** Settings → Notifications (B18): OS notifications for new activity, and quiet hours. */
-export function NotificationsCard({ settings, patch }: { settings: Settings; patch: (p: SettingsPatch) => Promise<boolean> }) {
+/** The notification categories (Phase 1C), in the phone's channel order; Call capture & readiness is Critical. */
+export const NOTIFICATION_CATEGORIES: readonly (readonly [NotificationCategory, string, string])[] = [
+  ["recording", "Recording", "A recording that could not start or was not saved."],
+  ["transcription", "Transcription", "A transcript is ready, or could not be made."],
+  ["enhancement", "Enhancement", "Roman Urdu and other views, briefs, call notes and answers that are ready."],
+  ["uploads", "Uploads", "An upload that needs you."],
+  ["call_capture", "Call capture & readiness", "Calls will not be recorded fully, a backup start, only one side heard. Critical: quiet hours never hold these back."],
+  ["sharing", "Sharing", "Something shared with you."],
+  ["account", "Account & security", "A new device signed in to your account."],
+  ["usage", "Usage & limits", "The monthly transcription limit."],
+  ["live_translate", "Live Translate", "Live Translate news."],
+  ["app_updates", "App updates", "A new version is ready to install."],
+  ["other", "Other", "Anything else."],
+];
+
+export const NOT_SHOWN = "The system did not show it. Allow notifications for EchoLedger in your computer's settings.";
+const isOn = (map: Partial<Record<NotificationCategory, boolean>> | undefined, c: NotificationCategory) => map?.[c] !== false;
+
+/** Settings → Notifications (B18, Phase 1C): every kind of notification on or off with its sound and a Test button, and
+ * the quiet hours, which never hold back Call capture & readiness. */
+export function NotificationsCard({ settings, patch, run }: {
+  settings: Settings;
+  patch: (p: SettingsPatch) => Promise<boolean>;
+  /** Runs the Test button and says how it went. */
+  run?: Run;
+}) {
   const fromId = useId();
   const toId = useId();
+  const all = settings.activityNotifications;
+  const test = (category: NotificationCategory, label: string) => {
+    const send = () => api.notificationTest(category).then((shown) => {
+      if (!shown) throw NOT_SHOWN;
+    });
+    void (run ? run(send, `Test sent: ${label}`) : send().catch(() => undefined));
+  };
   return (
     <div className="card notifications-settings">
       <b>Notifications</b>
-      <Toggle label="Show notifications" hint="Transcript ready, upload failed, a new device or the monthly limit. Clicking one opens the recording."
-        on={settings.activityNotifications} onChange={(v) => void patch({ activityNotifications: v })} />
-      <Toggle label="Quiet hours" hint="No notifications in this time. They still wait in the bell." on={settings.quietHours} onChange={(v) => void patch({ quietHours: v })} />
+      <Toggle label="Show notifications" hint="The switch for all of them. Clicking one opens what it is about."
+        on={all} onChange={(v) => void patch({ activityNotifications: v })} />
+      <ul className="notification-categories" aria-label="Kinds of notification">
+        {NOTIFICATION_CATEGORIES.map(([category, label, hint]) => {
+          const on = isOn(settings.notificationCategories, category);
+          const sound = isOn(settings.notificationSounds, category);
+          return (
+            <li key={category} className={`notification-category ${category === "call_capture" ? "critical" : ""}`} data-testid={`notify-${category}`}>
+              <div className="notification-category-text">
+                <div>{label}{category === "call_capture" && <span className="critical-chip">Critical</span>}</div>
+                <div className="small muted">{hint}</div>
+              </div>
+              <button type="button" className={`btn compact ghost sound-toggle ${sound ? "on" : ""}`} aria-pressed={sound} disabled={!all || !on}
+                aria-label={`Sound for ${label}`} title={sound ? "Plays a sound" : "Silent"}
+                onClick={() => void patch({ notificationSounds: { [category]: !sound } })}>{sound ? "Sound" : "Silent"}</button>
+              <button type="button" className="btn compact" onClick={() => test(category, label)} aria-label={`Test ${label}`}>Test</button>
+              <button type="button" className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label={label} disabled={!all}
+                onClick={() => void patch({ notificationCategories: { [category]: !on } })} />
+            </li>
+          );
+        })}
+      </ul>
+      <Toggle label="Quiet hours" hint="No notifications in this time, except Call capture & readiness. They still wait in the bell." on={settings.quietHours} onChange={(v) => void patch({ quietHours: v })} />
       <div className="row organise-field">
         <label htmlFor={fromId} className="small muted">From</label>
         <input id={fromId} className="input" type="time" value={settings.quietFrom} disabled={!settings.quietHours} onChange={(e) => e.target.value && void patch({ quietFrom: e.target.value })} />

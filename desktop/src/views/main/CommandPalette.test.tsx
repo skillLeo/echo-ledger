@@ -23,6 +23,8 @@ describe("command palette (B9)", () => {
     const recording = paletteCommands(makeStatus({ recording: makeRecording() }), actions).map((c) => c.id);
     const paused = paletteCommands(makeStatus({ recording: makeRecording(), paused: true }), actions).map((c) => c.id);
     expect(idle).toContain("start");
+    expect(idle).toContain("ready");
+    expect(paletteCommands(makeStatus(), actions).find((c) => c.id === "start")?.label).toBe("Record now");
     expect(idle).not.toContain("pause");
     expect(recording).toEqual(expect.arrayContaining(["stop", "pause", "mark"]));
     expect(paused).toContain("resume");

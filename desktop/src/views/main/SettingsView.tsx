@@ -20,6 +20,7 @@ import { LANGUAGE_OPTIONS, menuLabel } from "../../lib/languages";
 import { SKIP_SHORTER_THAN } from "../../lib/pending";
 
 const ACTIONS: [ShortcutAction, string][] = [
+  ["record_now", "Record now (the meeting on screen, else a voice note)"],
   ["toggle_captions", "Show / hide live captions"],
   ["toggle_saving", "Start / stop saving a recording"],
   ["copy_last2_min", "Copy the last 2 minutes of captions"],
@@ -252,7 +253,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
         </div>
       </div>
     ) },
-    { id: "notifications", group: "general", title: "Notifications", keywords: "notifications quiet hours bell activity", node: <NotificationsCard settings={settings} patch={patch} /> },
+    { id: "notifications", group: "general", title: "Notifications", keywords: "notifications quiet hours bell activity sound test critical recording transcription uploads sharing updates", node: <NotificationsCard settings={settings} patch={patch} run={run} /> },
     { id: "consent", group: "general", title: "Privacy & consent", keywords: "consent law participants terms privacy policy", node: (
       <div className="card">
         <b>Privacy &amp; consent</b>

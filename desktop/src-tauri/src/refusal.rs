@@ -45,7 +45,7 @@ pub fn route(main_focused: bool, asked: Asked) -> Route {
 pub fn asked_by_shortcut(action: Action, pressed: bool, recording: bool) -> Asked {
     match action {
         Action::Dictation if pressed => Asked::PageOnly,
-        Action::ToggleSaving | Action::VoiceNote | Action::ToggleCaptions if !recording => Asked::Start,
+        Action::ToggleSaving | Action::RecordNow | Action::VoiceNote | Action::ToggleCaptions if !recording => Asked::Start,
         _ => Asked::Other,
     }
 }
@@ -64,8 +64,8 @@ pub fn asked_by_meeting(error: &AppError) -> Asked {
     if matches!(error, AppError::NotPaired) { Asked::PageOnly } else { Asked::Meeting }
 }
 
-/// Says `message` the way `asked` calls for. This is not activity from the server, so neither "Show notifications" nor
-/// the quiet hours hold it back: it answers something the person did, or a call that is not being recorded.
+/// Says `message` the way `asked` calls for. A notification goes through its category (Phase 1C): a meeting that is not
+/// being recorded is Call capture & readiness, which the quiet hours never hold back; the rest is Recording.
 pub fn say(app: &AppHandle, message: &str, asked: Asked) {
     let focused = app.get_webview_window(MAIN).is_some_and(|window| window.is_focused().unwrap_or(false));
     match route(focused, asked) {
@@ -74,10 +74,12 @@ pub fn say(app: &AppHandle, message: &str, asked: Asked) {
         }
         Route::OpenMain => open_main_with(app, message),
         Route::Notification => {
-            use tauri_plugin_notification::NotificationExt;
+            use crate::notifications::{Category, allowed, local_minutes, show};
             // A window behind others has it too, for when the person comes back to it.
             let _ = app.emit("app:error", message);
-            if app.notification().builder().title("EchoLedger").body(message).show().is_err() {
+            let category = if asked == Asked::Meeting { Category::CallCapture } else { Category::Recording };
+            let Some(settings) = app.try_state::<crate::AppState>().map(|s| s.settings()) else { return };
+            if allowed(&settings, category, local_minutes()) && !show(app, &settings, category, "EchoLedger", message) {
                 open_main_with(app, message);
             }
         }

@@ -232,3 +232,59 @@ describe("SignInView: in the browser (Google, passkeys)", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Network error");
   });
 });
+
+describe("SignInView: what the server offers (Phase 1C)", () => {
+  const OPTIONS = {
+    password: true, google: true, signUp: true, signUpUrl: "https://ledger.example.test/admin/register",
+    resetUrl: "https://ledger.example.test/admin/password-reset/request", browserSignIn: true,
+  };
+
+  it("offers Google, Create account and Forgot password only when the server does, and opens its pages", async () => {
+    respond("auth_options", OPTIONS);
+    respond("auth_page_open", undefined);
+    setup("https://ledger.example.test");
+    fireEvent.click(await screen.findByRole("button", { name: "Forgot password?" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    expect(callsOf("auth_options")).toEqual([{ serverUrl: "https://ledger.example.test" }]);
+    expect(callsOf("auth_page_open")).toEqual([
+      { serverUrl: "https://ledger.example.test", url: OPTIONS.resetUrl },
+      { serverUrl: "https://ledger.example.test", url: OPTIONS.signUpUrl },
+    ]);
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(email()).toBeInTheDocument();
+  });
+
+  it("leaves out what is not offered: no Google, no sign-up", async () => {
+    respond("auth_options", { ...OPTIONS, google: false, signUp: false, signUpUrl: null });
+    setup("https://ledger.example.test");
+    expect(await screen.findByRole("button", { name: "Sign in in the browser (passkeys)" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue with Google" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create account" })).not.toBeInTheDocument();
+  });
+
+  it("shows only the browser when the server signs in without passwords", async () => {
+    respond("auth_options", { ...OPTIONS, password: false });
+    setup("https://ledger.example.test");
+    expect(await screen.findByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Email/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
+  });
+
+  it("stays as before with an older server (404) or offline", async () => {
+    respond("auth_options", null);
+    setup("https://ledger.example.test");
+    await waitFor(() => expect(callsOf("auth_options")).toHaveLength(1));
+    expect(browserButton()).toBeInTheDocument();
+    expect(email()).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Forgot password?" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create account" })).not.toBeInTheDocument();
+  });
+
+  it("asks again for another server once its address rests", async () => {
+    respondWith("auth_options", ({ serverUrl }) => (serverUrl === "https://other.example.test" ? OPTIONS : null));
+    setup("https://ledger.example.test");
+    await waitFor(() => expect(callsOf("auth_options")).toHaveLength(1));
+    fireEvent.change(server(), { target: { value: "https://other.example.test" } });
+    expect(await screen.findByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
+  });
+});

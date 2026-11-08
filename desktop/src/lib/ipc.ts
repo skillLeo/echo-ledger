@@ -3,7 +3,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** `translate_lock` and `translate_hide` (v1.3, Live Translate) are bound only while it runs and never shown in Settings. */
-export type ShortcutAction = "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "translate_lock" | "translate_hide";
+export type ShortcutAction = "record_now" | "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "translate_lock" | "translate_hide";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 /** After a call (v1.5): kept at once with "Saved · Undo", or a small chip that keeps it by itself after 10 s. */
 export type AfterCall = "keep" | "ask";
@@ -55,7 +55,46 @@ export interface AppStatus {
   systemAudioNote?: string | null;
   /** The running recording's devices (since v1.5). */
   deviceNote?: DeviceNote | null;
+  /** The last Ready check (Phase 1C): null before the first one. */
+  callsReady?: boolean | null;
+  readyProblems?: number;
 }
+
+/** `GET /api/auth/options` (Phase 1C): what this server's sign-in offers; links only on the server's own address. */
+export interface AuthOptions {
+  password: boolean;
+  google: boolean;
+  signUp: boolean;
+  signUpUrl: string | null;
+  resetUrl: string | null;
+  browserSignIn: boolean;
+}
+
+/** The Ready check (Phase 1C): one check per thing that can stop the next call from being recorded. */
+export type ReadyFixAction = "sign_in" | "allow_microphone" | "allow_system_audio" | "open_sound_settings" | "software_update"
+  | "turn_on_auto_mode" | "turn_on_apps" | "restart_detection";
+export interface ReadyCheck {
+  id: "account" | "microphone" | "microphone_permission" | "other_side" | "detection";
+  label: string;
+  ok: boolean;
+  detail: string | null;
+  fix: { label: string; action: ReadyFixAction } | null;
+}
+export interface ReadyReport {
+  ready: boolean;
+  checks: ReadyCheck[];
+  checkedAt: string;
+}
+/** After a call where one side was never heard (`capture:one_sided`, Phase 1C). */
+export interface OneSided {
+  title: string;
+  reason: string;
+  fix: string;
+}
+
+/** Notification categories (Phase 1C), the phone's channels; `call_capture` is Critical (never held by quiet hours). */
+export type NotificationCategory = "recording" | "transcription" | "enhancement" | "uploads" | "call_capture" | "sharing"
+  | "account" | "usage" | "live_translate" | "app_updates" | "other";
 
 /** The plan and role (since v1.5); `known` is false on a server without plans (every feature on, no plan limits). */
 export interface PlanInfo {
@@ -160,6 +199,8 @@ export interface Settings {
   quietHours: boolean;
   quietFrom: string;
   quietTo: string;
+  notificationCategories: Partial<Record<NotificationCategory, boolean>>;
+  notificationSounds: Partial<Record<NotificationCategory, boolean>>;
   onboardingDone: boolean;
   screenMoments: boolean;
   screenTarget: ScreenTarget;
@@ -283,6 +324,8 @@ export interface SettingsPatch {
   quietHours?: boolean;
   quietFrom?: string;
   quietTo?: string;
+  notificationCategories?: Partial<Record<NotificationCategory, boolean>>;
+  notificationSounds?: Partial<Record<NotificationCategory, boolean>>;
   onboardingDone?: boolean;
   screenMoments?: boolean;
   screenTarget?: ScreenTarget;
@@ -405,6 +448,8 @@ export interface LibraryItem {
   device?: { id: string; name: string } | null;
   client?: { id: string; name: string; color?: string | null; avatar?: string | null } | null;
   title?: string;
+  /** The server named it from what was said (Phase 1C); false or missing for a title a person set. */
+  title_auto?: boolean;
   started_at?: string;
   duration_ms?: number | null;
   status?: string;
@@ -691,11 +736,17 @@ export interface Segment {
   check?: { provider: string; label: string; text: string } | null;
 }
 
-/** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
+/** Parts done of all parts while a recording is transcribed (since v1.2; for every run since v1.5 Phase 1C, `total` 1 for
+ * a run in one piece), and the time left from the server's measured speed (null until there is a measure; missing on an
+ * older server). */
 export interface TranscriptProgress {
   done: number;
   total: number;
+  eta_seconds?: number | null;
 }
+
+/** Lines done of lines per view while the views are being made (`views.progress`, Phase 1C); `{}` otherwise. */
+export type ViewsProgress = Partial<Record<TranscriptView, { done: number; total: number }>>;
 
 export interface TranscriptDetail {
   id: string;
@@ -716,7 +767,7 @@ export interface TranscriptDetail {
   /** Parts done of all parts while it is being made in pieces (since v1.2). */
   progress?: TranscriptProgress | null;
   /** Show as: the views this transcript can have and whether they are made (since v1.2). */
-  views?: { available: TranscriptView[]; status: TranscriptViewsStatus; default?: "original" | TranscriptView } | null;
+  views?: { available: TranscriptView[]; status: TranscriptViewsStatus; default?: "original" | TranscriptView; progress?: ViewsProgress } | null;
   /** Suggested fixes: likely mishearings of the client's words, nothing changes until a person decides (since v1.4). */
   suggestions?: TranscriptSuggestion[];
   /**
@@ -761,6 +812,8 @@ export interface TranscriptViewsState {
   english: (string | null)[] | null;
   urdu?: (string | null)[] | null;
   default?: "original" | TranscriptView;
+  /** Lines done per view while making (Phase 1C). */
+  progress?: ViewsProgress;
   model: string | null;
   made_at: string | null;
   error: string | null;
@@ -1082,6 +1135,8 @@ export interface EventPayloads {
   /** A link of another browser sign-in (an earlier tab): what to say while this one keeps waiting. */
   "signin:other": string;
   "update:status": UpdateStatus;
+  "ready:changed": ReadyReport;
+  "capture:one_sided": OneSided;
 }
 
 export type AppEvent = keyof EventPayloads;
@@ -1102,6 +1157,10 @@ export const api = {
    * comes back as `signin:done` or `signin:failed` (`signin:other` for an earlier sign-in's link). */
   signInBrowser: (serverUrl: string, deviceName: string) => invoke<boolean>("sign_in_browser", { serverUrl, deviceName }),
   signInBrowserCancel: () => invoke<void>("sign_in_browser_cancel"),
+  /** What the sign-in screen offers on this server (Phase 1C); null from an older server (the screen stays as before). */
+  authOptions: (serverUrl: string) => invoke<AuthOptions | null>("auth_options", { serverUrl }),
+  /** Create account or Forgot password: the server's own page in the browser. */
+  openAuthPage: (serverUrl: string, url: string) => invoke<void>("auth_page_open", { serverUrl, url }),
   /** null on a server without accounts. */
   account: () => invoke<Account | null>("account_get"),
   /** Every device and console session of the account, this computer too: the answer is the signed-out status. */
@@ -1133,6 +1192,17 @@ export const api = {
   stopRecording: () => invoke<AppStatus>("stop_recording"),
   toggleVoiceNote: () => invoke<AppStatus>("toggle_voice_note"),
   toggleMicNote: () => invoke<AppStatus>("toggle_mic_note"),
+  /** Record now (Phase 1C): the meeting on screen with both sides, else a voice note; again to stop. */
+  recordNow: () => invoke<AppStatus>("record_now"),
+  // The Ready check (Phase 1C).
+  readyCheck: () => invoke<ReadyReport>("ready_check"),
+  readyLast: () => invoke<ReadyReport | null>("ready_last"),
+  readyFix: (action: ReadyFixAction) => invoke<ReadyReport>("ready_fix", { action }),
+  /** "Notify me when ready" (Phase 1C): a notification when this recording's transcript is ready, whatever the switches say. */
+  notifyWhenReady: (sessionId: string) => invoke<void>("notify_when_ready", { sessionId }),
+  // Notification categories (Phase 1C).
+  notificationTest: (category: NotificationCategory) => invoke<boolean>("notification_test", { category }),
+  notificationSend: (category: NotificationCategory, title: string, body: string) => invoke<boolean>("notification_send", { category, title, body }),
   hideCaptions: () => invoke<AppStatus>("hide_captions"),
   micUsers: () => invoke<MicUser[]>("mic_users"),
   /** One recording per file, with one client and language for the batch (null: no client / automatic). */

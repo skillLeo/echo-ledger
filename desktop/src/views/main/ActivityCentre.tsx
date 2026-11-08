@@ -2,12 +2,61 @@
 // waiting for Keep or Discard, uploads that stopped), the quiet "Skipped 3 short calls" line (v1.5), then the
 // notifications by day. A notification about a recording opens it; the unread count shows beside Activity in the sidebar.
 import { useEffect, useState } from "react";
-import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type PendingItem, type SkippedItem } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type ActivityItem, type AppStatus, type LibraryItem, type PendingItem, type SkippedItem, type UploadItem } from "../../lib/ipc";
+import { LIVE_STATUS_MS, needsLiveStatus } from "../../lib/library";
+import { stepOf, uploadLine } from "../../lib/progress";
+import { useWindowShown } from "../../lib/visibility";
 import { formatWhen } from "../../lib/format";
 import { dayGroup } from "../../lib/library";
 import { skippedLine, skippedMeta, waitingItems, waitingSummary } from "../../lib/pending";
 import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon } from "../../components/Icons";
 import { CheckIcon } from "../../components/ControlIcons";
+
+/** What is on its way (Phase 1C, C4): uploads with their %, and recordings being transcribed, the Library's words. */
+export interface InProgressRow {
+  id: string;
+  title: string;
+  line: string;
+  /** Opens the recording (not for an upload still on this computer). */
+  recordingId: string | null;
+}
+
+/** The rows of In progress (pure): this computer's uploads first, then the Library's recordings still moving. */
+export function inProgressRows(uploads: UploadItem[], items: LibraryItem[]): InProgressRow[] {
+  const sending = uploads.filter((u) => u.state !== "failed" && !u.heldFor).map((u) => ({ id: `upload-${u.id}`, title: u.title ?? "Recording", line: uploadLine(u), recordingId: null }));
+  const moving = items
+    .filter((i) => !i.deleted)
+    .map((i) => ({ item: i, step: stepOf(i) }))
+    .filter(({ step }) => step.step !== null)
+    .map(({ item, step }) => ({ id: item.id, title: item.title ?? "Recording", line: step.line ?? "", recordingId: item.id }));
+  return [...sending, ...moving];
+}
+
+function useInProgress(): InProgressRow[] {
+  const [rows, setRows] = useState<InProgressRow[]>([]);
+  const shown = useWindowShown();
+  useEffect(() => {
+    if (!shown) return;
+    let alive = true;
+    let timer = 0;
+    const read = async () => {
+      const [uploads, items] = await Promise.all([api.uploadList().catch(() => []), api.library().catch(() => [])]);
+      if (!alive) return;
+      const list = Array.isArray(items) ? items : [];
+      const next = inProgressRows(Array.isArray(uploads) ? uploads : [], list.filter((i) => needsLiveStatus([i])));
+      setRows(next);
+      if (next.length > 0) timer = window.setTimeout(() => void read(), LIVE_STATUS_MS);
+    };
+    void read();
+    const subs = [listenTo("uploads:changed", () => void read()), listenTo("library:updated", () => void read())];
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+      subs.forEach((p) => p.then((f) => f()).catch(() => undefined));
+    };
+  }, [shown]);
+  return rows;
+}
 
 /** The unread count of the activity centre, kept current by the core's `activity:updated`. */
 export function useActivityUnread(): [number, (n: number) => void] {
@@ -55,6 +104,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onUnre
   const [skipped, setSkipped] = useState<SkippedItem[]>([]);
   const [showSkipped, setShowSkipped] = useState(false);
   const [restoring, setRestoring] = useState<string | null>(null);
+  const moving = useInProgress();
 
   const load = () =>
     api.activity().then((r) => {
@@ -167,6 +217,23 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onUnre
             </div>
           )}
           {needsAction.length > 0 && <ul className="activity-list">{needsAction.map(row)}</ul>}
+        </section>
+      )}
+      {moving.length > 0 && (
+        <section aria-labelledby="activity-moving" data-testid="in-progress">
+          <h2 id="activity-moving" className="section-title">In progress</h2>
+          <ul className="activity-list">
+            {moving.map((r) => (
+              <li key={r.id} className="activity-row progress-row">
+                <span className="spinner" aria-hidden="true" />
+                <div className="activity-main">
+                  <span className="activity-title" dir="auto">{r.title}</span>
+                  <span className="small muted">{r.line}</span>
+                </div>
+                {r.recordingId && <button type="button" className="btn text compact" onClick={() => onOpenRecording(r.recordingId!)}>Open</button>}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
       {error && (

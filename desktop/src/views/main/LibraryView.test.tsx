@@ -111,6 +111,7 @@ const selectItem = async (title: string, transcriptText?: string) => {
 
 beforeEach(() => {
   resetTauriMock();
+  window.localStorage.clear();
   TRANSCRIPTS = baseTranscripts();
   installMediaStubs();
   vi.useFakeTimers({ toFake: ["Date"], now: NOW });
@@ -148,7 +149,7 @@ describe("LibraryView list", () => {
     expect(within(row).getByText(/^9:30\s?AM$/)).toHaveClass("item-time");
     expect(within(row).getByText("2:05 · Acme Holdings")).toBeInTheDocument();
     expect(within(row).queryByText("Ready")).not.toBeInTheDocument();
-    expect(within(itemButton("WhatsApp call")).getByText("Transcribing")).toHaveClass("pill", "processing");
+    expect(within(itemButton("WhatsApp call")).getByText("Transcribing…")).toHaveClass("pill", "processing");
     expect(within(itemButton("WhatsApp call")).getByText(/^8:15\s?AM$/)).toBeInTheDocument();
     expect(within(itemButton("Google Meet standup")).getByText("Transcription failed")).toHaveClass("pill", "failed");
     expect(within(itemButton("Google Meet standup")).getByText(/^4:00\s?PM$/)).toBeInTheDocument();
@@ -169,21 +170,95 @@ describe("LibraryView list", () => {
     expect(titlesInList()).toEqual(["Zoom with Acme", "WhatsApp call", "Google Meet standup", "Voice note from Sam", "Client briefing"]);
   });
 
-  it("drops the headings for sorts that are not by date", async () => {
+  const choose = (menu: "Group by" | "Sort by", option: string) => {
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${menu}:`) }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: new RegExp(`${option}$`) }));
+  };
+
+  it("drops the headings when grouped by None", async () => {
     await renderLibrary();
-    fireEvent.change(screen.getByLabelText("Sort recordings"), { target: { value: "title" } });
-    expect(list().querySelectorAll(".group-label")).toHaveLength(0);
+    choose("Group by", "None");
+    choose("Sort by", "Name A–Z");
+    expect(list().querySelectorAll(".group-head")).toHaveLength(0);
     expect(titlesInList()).toEqual(["Client briefing", "Google Meet standup", "Voice note from Sam", "WhatsApp call", "Zoom with Acme"]);
   });
 
-  it("offers four sort orders and applies each", async () => {
+  it("offers the sort orders as a toolbar menu and applies each", async () => {
     await renderLibrary();
-    const select = screen.getByLabelText("Sort recordings") as HTMLSelectElement;
-    expect([...select.options].map((o) => o.text)).toEqual(["Newest first", "Oldest first", "Longest first", "Title A–Z"]);
-    fireEvent.change(select, { target: { value: "oldest" } });
+    choose("Group by", "None");
+    fireEvent.click(screen.getByRole("button", { name: /^Sort by: Newest/ }));
+    expect(screen.getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Newest", "Oldest", "Longest", "Shortest", "Name A–Z", "Recently opened"]);
+    expect(screen.getByRole("menuitemradio", { name: /Newest$/ })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Oldest$/ }));
     expect(titlesInList()).toEqual(["Client briefing", "Voice note from Sam", "Google Meet standup", "WhatsApp call", "Zoom with Acme"]);
-    fireEvent.change(select, { target: { value: "longest" } });
+    choose("Sort by", "Longest");
     expect(titlesInList()).toEqual(["WhatsApp call", "Client briefing", "Google Meet standup", "Zoom with Acme", "Voice note from Sam"]);
+    choose("Sort by", "Shortest");
+    expect(titlesInList()).toEqual(["Voice note from Sam", "Zoom with Acme", "Google Meet standup", "Client briefing", "WhatsApp call"]);
+  });
+
+  it("groups by date by default and by each other choice, headers with name and count", async () => {
+    await renderLibrary();
+    fireEvent.click(screen.getByRole("button", { name: /^Group by: Date/ }));
+    expect(screen.getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Date", "App / Type", "Project", "Language", "Status", "Device", "None"]);
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Status$/ }));
+    const heads = () => [...list().querySelectorAll(".group-head")].map((h) => `${h.querySelector(".group-label")?.textContent} ${h.querySelector(".group-count")?.textContent}`);
+    expect(heads()).toEqual(["Needs you 1", "Transcribing 1", "Ready 3"]);
+    choose("Group by", "Device");
+    expect(heads()).toEqual(["Desktop 2", "Phone 2", "Web 1"]);
+    choose("Group by", "App / Type");
+    expect(heads()).toContain("Voice notes 1");
+  });
+
+  it("collapses and expands a group from its header", async () => {
+    await renderLibrary();
+    choose("Group by", "Status");
+    const toggle = screen.getByRole("button", { name: /^Ready/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(titlesInList()).toEqual(["Google Meet standup", "WhatsApp call"]);
+    fireEvent.click(toggle);
+    expect(titlesInList()).toHaveLength(5);
+  });
+
+  it("selects a whole group from its header's box, partly ticked when only some are", async () => {
+    await renderLibrary();
+    choose("Group by", "Status");
+    const box = screen.getByRole("checkbox", { name: "Select all in Ready" }) as HTMLInputElement;
+    fireEvent.click(box);
+    expect(screen.getByText("3 selected")).toBeInTheDocument();
+    expect(box.checked).toBe(true);
+    fireEvent.click(itemButton("Zoom with Acme"));
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    expect(box.indeterminate).toBe(true);
+    expect(box).toHaveAttribute("aria-checked", "mixed");
+    fireEvent.click(box);
+    expect(screen.getByText("3 selected")).toBeInTheDocument();
+    fireEvent.click(box);
+    expect(screen.getByText("Select recordings")).toBeInTheDocument();
+  });
+
+  it("remembers Group by and Sort by per view", async () => {
+    const { unmount } = await renderLibrary();
+    choose("Group by", "Project");
+    choose("Sort by", "Longest");
+    unmount();
+    await renderLibrary();
+    expect(screen.getByRole("button", { name: /^Group by: Project/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Sort by: Longest/ })).toBeInTheDocument();
+  });
+
+  it("sorts by recently opened on this computer", async () => {
+    await renderLibrary();
+    choose("Group by", "None");
+    fireEvent.click(itemButton("Client briefing"));
+    await flushAsync();
+    vi.setSystemTime(NOW.getTime() + 60_000);
+    fireEvent.click(itemButton("Voice note from Sam"));
+    await flushAsync();
+    choose("Sort by", "Recently opened");
+    expect(titlesInList().slice(0, 2)).toEqual(["Voice note from Sam", "Client briefing"]);
   });
 });
 
@@ -1162,6 +1237,95 @@ describe("LibraryView transcription progress", () => {
     await renderLibrary(items);
     await selectItem("Long Urdu call");
     expect(within(detail()).getByText("Transcribing… part 3 of 5")).toBeInTheDocument();
+    expect(within(list()).getByText("Transcribing… part 3 of 5")).toHaveClass("pill");
+  });
+});
+
+describe("LibraryView clear progress (Phase 1C)", () => {
+  const urdu = (): Segment[] => [
+    { channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "آپ کیسے ہیں" },
+    { channel: 2, speaker: "Client", start_ms: 1_500, end_ms: 3_000, text: "میں ٹھیک ہوں" },
+  ];
+
+  it("shows the steps with parts and time left in the row and on the page, and notifies when ready on request", async () => {
+    respond("notify_when_ready", undefined);
+    const items = [makeItem("p", { title: "Long Urdu call", status: "processing",
+      transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null, final_progress: { done: 2, total: 5, eta_seconds: 20 } } })];
+    await renderLibrary(items);
+    expect(within(list()).getByText("Transcribing… part 3 of 5 · about 20 s left")).toBeInTheDocument();
+    await selectItem("Long Urdu call");
+    expect(within(detail()).getByTestId("step-upload")).toHaveTextContent("Uploaded");
+    expect(within(detail()).getByTestId("step-transcribe")).toHaveTextContent("Transcribing");
+    expect(within(detail()).getByText("Transcribing… part 3 of 5 · about 20 s left")).toBeInTheDocument();
+    expect(within(detail()).getByTestId("step-improve")).toHaveTextContent("Improve");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Notify me when ready" }));
+    await flushAsync();
+    expect(callsOf("notify_when_ready")).toEqual([{ sessionId: "p" }]);
+    expect(within(detail()).getByText("You will get a notification when it is ready.")).toBeInTheDocument();
+  });
+
+  it("shows the transcript at once with a slim Improving bar, and swaps the default view in when it is made", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(),
+      views: { available: ["roman"], status: "making", default: "roman", progress: { roman: { done: 12, total: 20 } } } });
+    const making = { status: "making", available: ["roman"], roman: null, english: null, default: "roman", progress: { roman: { done: 12, total: 20 } }, model: null, made_at: null, error: null };
+    const ready = { ...making, status: "ready", progress: {}, roman: ["aap kaise hain", "main theek hoon"], model: "m" };
+    let reads = 0;
+    respondWith("transcript_views", () => (++reads === 1 ? making : ready));
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    expect(within(detail()).getByTestId("improving-bar")).toHaveTextContent("Improving Roman Urdu… 60%");
+    expect(within(detail()).getByRole("progressbar", { name: "Improving Roman Urdu… 60%" })).toHaveAttribute("aria-valuenow", "60");
+    expect(within(detail()).getByTestId("step-improve")).toHaveTextContent("Improving");
+    await waitFor(() => expect(within(detail()).getByText("aap kaise hain")).toBeInTheDocument(), { timeout: 8000 });
+    expect(within(detail()).queryByTestId("improving-bar")).not.toBeInTheDocument();
+    expect(within(detail()).queryByTestId("recording-steps")).not.toBeInTheDocument();
+  }, 15_000);
+
+  it("keeps the original when the person chose it while the views were made", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(),
+      views: { available: ["roman"], status: "making", default: "roman", progress: { roman: { done: 1, total: 2 } } } });
+    const making = { status: "making", available: ["roman"], roman: null, english: null, default: "roman", progress: { roman: { done: 1, total: 2 } }, model: null, made_at: null, error: null };
+    let reads = 0;
+    respondWith("transcript_views", () => (++reads === 1 ? making : { ...making, status: "ready", progress: {}, roman: ["aap kaise hain", "main theek hoon"] }));
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Original" }));
+    await waitFor(() => expect(reads).toBeGreaterThan(1), { timeout: 8000 });
+    await flushAsync();
+    expect(within(detail()).getByText("آپ کیسے ہیں")).toBeInTheDocument();
+  }, 15_000);
+});
+
+describe("LibraryView player length (E1)", () => {
+  const urdu = (): Segment[] => [
+    { channel: 1, speaker: "Me", start_ms: 0, end_ms: 9_000, text: "آپ کیسے ہیں" },
+    { channel: 2, speaker: "Client", start_ms: 9_500, end_ms: 18_000, text: "میں ٹھیک ہوں" },
+  ];
+
+  it("shows the real length in every view, Roman Urdu as Original", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman", "english"], status: "ready" } });
+    respond("transcript_views", { status: "ready", available: ["roman", "english"], roman: ["aap kaise hain", "main theek hoon"], english: ["How are you?", "I am fine."], model: "m", made_at: null, error: null });
+    const items = [makeItem("a", { title: "Zoom with Acme", duration_ms: null, transcript: { final_status: "completed", final_transcript_id: "tr-a", live_available: false, preview: null } })];
+    await renderLibrary(items);
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    const time = () => detail().querySelector(".player-time")?.textContent;
+    expect(time()).toBe("0:00 / 0:18");
+    for (const view of ["Roman Urdu", "English", "Original"]) {
+      fireEvent.click(within(detail()).getByRole("button", { name: view }));
+      await flushAsync();
+      expect(time()).toBe("0:00 / 0:18");
+    }
+  });
+
+  it("takes the audio file's own length for a voice note the server has no length for", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", segments: [] });
+    const items = [makeItem("a", { title: "Voice note", source_app: "voice_note", duration_ms: null, transcript: { final_status: "completed", final_transcript_id: "tr-a", live_available: false, preview: null } })];
+    await renderLibrary(items);
+    await selectItem("Voice note");
+    const audio = screen.getByTestId("player") as HTMLAudioElement;
+    Object.defineProperty(audio, "duration", { configurable: true, value: 42.4 });
+    fireEvent.loadedMetadata(audio);
+    expect(detail().querySelector(".player-time")?.textContent).toBe("0:00 / 0:42");
   });
 });
 

@@ -49,6 +49,9 @@ pub struct AppStatus {
     pub system_audio_note: Option<&'static str>,
     /// The running recording's devices: one that is gone, or news of a change (Phase 1B).
     pub device_note: Option<crate::audio::devices::DeviceNote>,
+    /// The last Ready check (Phase 1C): ready to record calls, and how many problems; none before the first check.
+    pub calls_ready: Option<bool>,
+    pub ready_problems: usize,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
@@ -67,8 +70,14 @@ pub fn status(app: &AppHandle) -> AppStatus {
     // Only recordings that wait for the person: one whose after-call chip counts down needs nothing (v1.5).
     let pending_decisions = DecisionFiles::in_dir(&state.data_dir).load().waiting();
     let tray_state = crate::tray::tray_state(recording.is_some(), paused, pending_decisions, queue.failed(), budget == BudgetState::Reached, active > 0);
-    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode };
     let mic_note = recording.as_ref().is_some_and(|r| r.mode == crate::audio::RecordingMode::MicNote);
+    let (calls_ready, ready_problems) = {
+        let ready = state.ready.lock().unwrap_or_else(|p| p.into_inner());
+        (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
+    };
+    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()) };
+    // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
+    let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
     crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
     AppStatus {
         paired: state.is_paired(),
@@ -93,6 +102,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
         tray_state,
         plan: state.plan_info(),
         system_audio_note: crate::audio::platform::system_audio_note(),
+        calls_ready,
+        ready_problems,
         device_note: state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()),
     }
 }
@@ -214,6 +225,25 @@ pub async fn sign_in_password(app: AppHandle, server_url: String, email: String,
         Err(e) if e.is_missing_route() => Ok(SignInOutcome { result: SignInResult::PairingOnly, status: None }),
         Err(e) => Err(e),
     }
+}
+
+/// What the sign-in screen offers on this server (Phase 1C): none from an older server, which shows the screen as before.
+#[tauri::command]
+pub async fn auth_options(app: AppHandle, server_url: String) -> AppResult<Option<crate::net::models::AuthOptions>> {
+    let state = app.state::<AppState>();
+    let pins = known_pins(&state, &server_url);
+    let api = ApiClient::new(&server_url, &pins, None)?;
+    Ok(api.auth_options().await?.map(|o| crate::account::checked_options(o, api.base_url())))
+}
+
+/// Create account and Forgot password: the server's page in the browser, only one on the server's own address.
+#[tauri::command]
+pub fn auth_page_open(app: AppHandle, server_url: String, url: String) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    if !crate::account::on_server(&url, &server_url) {
+        return Err(AppError::msg("That page is not on your server."));
+    }
+    app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(format!("The browser could not be opened: {e}")))
 }
 
 /// "Sign in in the browser (Google, passkeys)": opens the server's sign-in page with a PKCE challenge; the page sends
@@ -452,6 +482,9 @@ pub struct SettingsPatch {
     quiet_hours: Option<bool>,
     quiet_from: Option<String>,
     quiet_to: Option<String>,
+    /// Switches to merge: category wire name → on/off; unknown categories are refused.
+    notification_categories: Option<HashMap<String, bool>>,
+    notification_sounds: Option<HashMap<String, bool>>,
     onboarding_done: Option<bool>,
     screen_moments: Option<bool>,
     /// `meeting_window` or `whole_screen`; anything else is refused.
@@ -499,6 +532,8 @@ impl SettingsPatch {
         if let Some(v) = self.quiet_hours { s.quiet_hours = v; }
         if let Some(v) = &self.quiet_from && crate::activity::parse_hhmm(v).is_some() { s.quiet_from = v.clone(); }
         if let Some(v) = &self.quiet_to && crate::activity::parse_hhmm(v).is_some() { s.quiet_to = v.clone(); }
+        if let Some(v) = &self.notification_categories { s.notification_categories.extend(v.iter().map(|(k, on)| (k.clone(), *on))); }
+        if let Some(v) = &self.notification_sounds { s.notification_sounds.extend(v.iter().map(|(k, on)| (k.clone(), *on))); }
         if let Some(v) = self.onboarding_done { s.onboarding_done = v; }
         if let Some(v) = self.screen_moments { s.screen_moments = v; }
         if let Some(v) = &self.screen_target { s.screen_target = crate::settings::screen_target_or_default(Some(v)).to_string(); }
@@ -549,6 +584,9 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
     {
         return Err(AppError::msg("That app cannot be recorded automatically."));
     }
+    if [&patch.notification_categories, &patch.notification_sounds].into_iter().flatten().any(|m| m.keys().any(|k| crate::notifications::Category::from_wire(k).is_none())) {
+        return Err(AppError::msg("That kind of notification is not in the list."));
+    }
     if let Some(target) = &patch.screen_target
         && ![crate::screens::privacy::MEETING_WINDOW, crate::screens::privacy::WHOLE_SCREEN].contains(&target.as_str())
     {
@@ -560,6 +598,7 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
     let state = app.state::<AppState>();
     let updated = state.update_settings(|s| patch.apply(s))?;
     let _ = app.emit("settings:changed", &updated);
+    crate::readiness::wake(&app);
     if patch.content_protection.is_some() {
         crate::overlay::set_content_protection(&app, updated.content_protection);
     }
@@ -666,6 +705,34 @@ pub async fn stop_recording(app: AppHandle) -> AppResult<AppStatus> {
 pub async fn toggle_voice_note(app: AppHandle) -> AppResult<AppStatus> {
     crate::actions::toggle_voice_note(&app).await?;
     Ok(status(&app))
+}
+
+/// Record now (Phase 1C): the meeting on screen with both sides, else a voice note; again to stop.
+#[tauri::command]
+pub async fn record_now(app: AppHandle) -> AppResult<AppStatus> {
+    crate::actions::record_now(&app).await?;
+    Ok(status(&app))
+}
+
+/// Settings → Notifications → Test: one notification of the category, whatever its switch and the quiet hours say.
+#[tauri::command]
+pub fn notification_test(app: AppHandle, category: crate::notifications::Category) -> bool {
+    let settings = app.state::<AppState>().settings();
+    let (title, body) = category.test_text();
+    crate::notifications::show(&app, &settings, category, &title, &body)
+}
+
+/// "Notify me when ready" (Phase 1C): the activity poll shows this recording's "Transcript ready" even when
+/// Transcription is turned off or it is quiet hours, because the person asked for it.
+#[tauri::command]
+pub fn notify_when_ready(state: State<'_, AppState>, session_id: String) {
+    state.notify_ready.lock().unwrap_or_else(|p| p.into_inner()).insert(session_id);
+}
+
+/// A notification from a page (a brief, call notes or an answer that is ready), through its category.
+#[tauri::command]
+pub fn notification_send(app: AppHandle, category: crate::notifications::Category, title: String, body: String) -> bool {
+    crate::notifications::send(&app, category, &title, &body)
 }
 
 /// Record a voice note with the microphone (mono). Unlike `toggle_voice_note`, which captures audio playing here.
@@ -2117,6 +2184,25 @@ pub fn open_privacy_settings(app: AppHandle, kind: String) -> AppResult<()> {
     use tauri_plugin_opener::OpenerExt;
     let url = privacy_settings_url(&kind, cfg!(target_os = "macos")).ok_or_else(|| AppError::msg("There is no setting for that here."))?;
     app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))
+}
+
+/// The Ready check (Phase 1C): runs it now.
+#[tauri::command]
+pub async fn ready_check(app: AppHandle) -> AppResult<crate::readiness::ReadyReport> {
+    tauri::async_runtime::spawn_blocking(move || crate::readiness::run(&app)).await.map_err(|e| AppError::msg(e.to_string()))
+}
+
+/// The last Ready check, without running it; none before the first.
+#[tauri::command]
+pub fn ready_last(state: State<'_, AppState>) -> Option<crate::readiness::ReadyReport> {
+    state.ready.lock().unwrap_or_else(|p| p.into_inner()).clone()
+}
+
+/// A Ready check's one-click fix, then the check again.
+#[tauri::command]
+pub async fn ready_fix(app: AppHandle, action: crate::readiness::FixAction) -> AppResult<crate::readiness::ReadyReport> {
+    crate::readiness::apply_fix(&app, action)?;
+    ready_check(app).await
 }
 
 /// Help & diagnostics → Run Mac check (Phase 1B): every check, one at a time, each step told as `mac_check:progress`.

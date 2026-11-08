@@ -120,6 +120,13 @@ recordings unless they are shared with them.
 - **Sharing** is how anyone sees a recording of yours: **Send to a teammate**, or a share link you make and can take
   back.
 
+**Sign in (computer, since v1.5).** The first screen asks for the server address, then offers what your server allows:
+email and password (**Forgot password?** opens the server's reset page), **Continue with Google** when the server has
+Google sign-in (the browser opens and the app continues by itself), and **Create account** when the server lets anyone
+sign up (otherwise ask the owner for an invitation). The code from your authenticator app is asked for when your account
+has two-step sign-in. After signing in, the **Record** page opens with the **Ready check**, so you see at once whether
+calls will be recorded.
+
 **Signing in with a code** also works, for older apps too. It connects a device to your server with a one-time code; you
 need the web console.
 
@@ -161,7 +168,27 @@ EchoLedger can start recording when a call starts.
 
 The **Record** screen always explains the last decision, for example "Ignored: dictation".
 
-To record by hand, press **Ctrl+Alt+Shift+R** on Windows, or tap **REC** on the phone.
+**Ready to record calls (computer, since v1.5).** The **Ready check** at the top of the **Record** page says whether the
+next call will be recorded, both sides, by itself: signed in, a microphone connected, the microphone allowed, the other
+side's sound allowed (on a Mac: macOS 14.2 or later and Screen & System Audio Recording), and meeting detection running
+with **Record calls automatically** on. It ends in **✓ Ready to record calls**, or lists each problem with a button that
+fixes it (**Turn on**, **Open System Settings**, **Open sound settings**…). It runs by itself when the app starts, every few
+seconds and after every change in Settings; **Check again** runs it at once. The sidebar and the tray menu say it in two
+words: **Calls: Ready** or **Not ready — Fix** (click it to open the check). The moment it breaks by itself (a permission
+taken away, the microphone unplugged, detection stopped), a notification says so, even in quiet hours.
+
+**Record now.** One button records the right thing: a meeting or call on screen is recorded with both sides, anything
+else as a voice note. It is **REC** on the Record page, **Record now** in the tray menu, and **Ctrl+Shift+R** on Windows or
+**⌘⇧R** on a Mac; press it again to stop. Browsers use the same keys to reload a page without the cache, so while
+EchoLedger runs they record instead; change or clear the shortcut in **Settings → Shortcuts**. **Ctrl+Alt+Shift+R**
+(start or stop a call recording) stays as before. On the phone, tap **REC**.
+
+**Backup start.** If a meeting is on and its recording has not started 5 seconds later, EchoLedger starts it and says
+**Recording started (backup)**. A recording you stopped yourself is never started again.
+
+**Only your voice was recorded.** After each call EchoLedger checks that both sides were heard. If the other side was
+silent the whole call, it says **Only your voice was recorded**, why (for example the call played through a device that is
+not the default output, or the permission for this computer's sound is off) and how to fix it.
 
 ## 5. Live captions
 
@@ -230,6 +257,13 @@ Dictation types what you say into any app. It is never saved as a recording.
 - Press **Ctrl+K** (**Cmd+K** on a Mac) in the console or the Windows app to jump to a page, a recording or a
   command.
 
+**Group by and Sort by (computer, since v1.5).** Above the Library's list, **Group by** puts recordings under headers by
+**Date** (the default), **App / Type**, **Project**, **Language**, **Status**, **Device** or **None**, and **Sort by**
+orders them **Newest**, **Oldest**, **Longest**, **Shortest**, **Name A–Z** or **Recently opened** (on this computer).
+Each view remembers its own choice (the whole Library, the Inbox and every smart folder). A header shows the group's name
+and how many recordings it holds, stays at the top while you scroll through it, and folds away with a click. Its box
+selects the whole group for **Move**, **Label**, **Export** or **Delete**; it shows a dash when only some are selected.
+
 ## 10. Import, rename, export and share
 
 ### Import files
@@ -243,12 +277,26 @@ WebM videos.
   marked **Already in your Library**.
 - Imports show under **Uploading** at the top of the Library until the server has them. Hold one that has not started
   to cancel it; tap a failed one to try again.
+- **Computer:** imported files are listed under **Importing** at the top of the Library, each with its own percent and
+  **Cancel**.
+
+**Where a recording is (computer, since v1.5).** Each recording goes through three steps: **Upload** (the percent sent),
+**Transcribing** (which part, and the time left, for example "Transcribing… part 2 of 3 · about 20 s left") and
+**Improving** (the Roman Urdu and other views). The Library row, the recording page and **Activity → In progress** say it
+the same way. The transcript shows as soon as it is ready, with a slim **Improving Roman Urdu… 60%** bar; the view swaps
+in where you are reading when it is made (unless you chose Original). **Notify me when ready** on the recording page
+sends a notification when the transcript is ready, even if Transcription notifications are off.
 
 ### Rename
 
 Give any recording a clear name: select it in the Library and choose **⋮ → Rename**, or tap its title on the
 recording page. The new name shows on all your devices. A call waiting for Keep or Discard can be named on its card
 (the pencil).
+
+**Automatic titles (since v1.5).** A recording nobody named gets a short title from what was said, for example
+"Laptop — 16 vs 32 GB"; on the computer it is marked **Automatic title**. Type your own and it is never replaced. Empty
+the title field to have the automatic one again. The player always shows the recording's real length, in every view
+(Original, Roman Urdu, English and Urdu), also for a voice note whose length the server does not know yet.
 
 ### Export and share
 
@@ -454,6 +502,15 @@ on **Zero Data Retention** at Groq. Your administrator has the details per provi
 - **Phone:** **Settings → Privacy & security → App lock**. It uses your fingerprint, face or phone PIN, so your
   phone needs a screen lock first. **Hide content in Recents and screenshots** keeps your recordings private.
 - **Web console:** open **Security** to add a passkey, turn on two-step sign-in and see who signed in.
+
+## 13b. Notifications (since v1.5)
+
+**Computer: Settings → General → Notifications.** Every notification belongs to one kind, the same list as the phone's:
+**Recording**, **Transcription**, **Enhancement** (Roman Urdu and other views, briefs, call notes), **Uploads**,
+**Call capture & readiness**, **Sharing**, **Account & security**, **Usage & limits**, **Live Translate**, **App updates**
+and **Other**. Turn each kind on or off, choose **Sound** or **Silent**, and press **Test** to see one. **Show
+notifications** turns them all off. **Quiet hours** (from and to) hold notifications back, except **Call capture &
+readiness**, which is Critical: a call that will not be recorded is always said.
 
 ## 14. Keep recordings for a set time (retention)
 

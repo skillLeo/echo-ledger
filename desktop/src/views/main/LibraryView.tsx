@@ -5,11 +5,13 @@ import { folderLabel, inFolderHere } from "../../lib/folders";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { SharedWithMe, sentLine } from "./SharedWithMe";
 import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialogs";
-import { activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
+import { playerLength, activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
 import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
-import { bookmarksOf, filterByTag, groupItems, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
+import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
+import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
+import { ChoiceMenu, GroupHeader } from "./LibraryGrouping";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
 import { AlertIcon, AppTileIcon, appKind, CloseIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
@@ -20,10 +22,12 @@ import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./Librar
 import { useWindowShown } from "../../lib/visibility";
 import { MotionGroup, openFromRow, snapshotRow, type RowSnapshot } from "../../lib/motion";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcribingText, usedBackupEngine } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
+import { improvingView, stepOf, transcribingLine, viewPercent } from "../../lib/progress";
+import { ImprovingBar, RecordingSteps } from "./RecordingProgress";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -125,9 +129,23 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("newest");
+  // Group by and Sort by (Phase 1C), remembered per view: the whole Library and each smart folder.
+  const viewKey = smartFolder ?? "all";
+  const [choice, setChoiceState] = useState<LibraryViewChoice>(() => loadChoice(viewKey));
+  useEffect(() => setChoiceState(loadChoice(viewKey)), [viewKey]);
+  const setChoice = (next: Partial<LibraryViewChoice>) => setChoiceState((c) => {
+    const merged = { ...c, ...next };
+    saveChoice(viewKey, merged);
+    return merged;
+  });
+  const sort = choice.sort;
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [opened, setOpened] = useState<Record<string, number>>(loadOpened);
   const [selected, setSelected] = useState<string | null>(initialSelected);
   useEffect(() => onSelectedChange?.(selected), [selected, onSelectedChange]);
+  useEffect(() => {
+    if (selected) setOpened(rememberOpened(selected));
+  }, [selected]);
   const [transcript, setTranscript] = useState<TranscriptDetail | null>(null);
   // How unsure words are marked in copied text (the console's choice, plan A4).
   const [unsure, setUnsure] = useState<UnsureMarkers>(DEFAULT_UNSURE);
@@ -135,6 +153,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     api.unsureMarkers().then((m) => { if (m) setUnsure({ ...DEFAULT_UNSURE, ...m }); }).catch(() => undefined);
   }, []);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  // What the audio file says its length is (E1): the player's length when the server has none yet.
+  const [mediaSeconds, setMediaSeconds] = useState<number | null>(null);
+  useEffect(() => setMediaSeconds(null), [playbackUrl]);
   const [activeSegment, setActiveSegment] = useState(-1);
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const [nowMs, setNowMs] = useState(0);
@@ -276,8 +297,16 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     const saved = new Map(items.map((i) => [i.id, i]));
     return folderItems.map((i) => saved.get(i.id) ?? i).filter((i) => !i.deleted);
   }, [items, smartFolder, folderItems]);
-  const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(applyFilters(folderBase, filters), label), folder), query), sort), [folderBase, filters, label, folder, query, sort]);
-  const groups = useMemo(() => groupItems(filtered, sort), [filtered, sort]);
+  // Recently opened reads the times kept when the list was shown, so opening a recording does not move it under the pointer.
+  const openedAtSort = useMemo(() => opened, [sort]); // eslint-disable-line react-hooks/exhaustive-deps
+  const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(applyFilters(folderBase, filters), label), folder), query), sort, openedAtSort), [folderBase, filters, label, folder, query, sort, openedAtSort]);
+  const groups = useMemo(() => groupBy(filtered, choice.group, sort), [filtered, choice.group, sort]);
+  const toggleCollapsed = (key: string) => setCollapsedGroups((c) => {
+    const next = new Set(c);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
   // A recording opened from a transcript match stays open even when its title does not match the typed words.
   const [hitSelected, setHitSelected] = useState<string | null>(null);
   const sharedSession = sharedOpen?.session && sharedOpen.session.id === selected ? sharedOpen.session : null;
@@ -502,9 +531,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [showAs, setShowAs] = useState<"original" | TranscriptView>("original");
   const [views, setViews] = useState<TranscriptViewsState | null>(null);
   const transcriptId = transcript?.id ?? null;
+  // The person picked a view (or Original) on this recording: views that become ready never switch it for them.
+  const viewPicked = useRef(false);
   useEffect(() => {
     setShowAs("original");
     setViews(null);
+    viewPicked.current = false;
     // Open in the default view (console setting) when it is made for this recording.
     const summary = transcript?.views;
     if (summary?.status === "ready" && summary.default && summary.default !== "original" && summary.available.includes(summary.default)) void chooseView(summary.default);
@@ -513,14 +545,48 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   useEffect(() => {
     if (editing) setShowAs("original");
   }, [editing]);
-  // While the server is writing the views, ask again every few seconds.
+  // While the server is writing the views, ask again every few seconds: for the chosen view, and (Phase 1C) for the slim
+  // "Improving Roman Urdu… 60%" bar over the transcript, which is readable meanwhile.
+  const viewsMaking = views ? views.status === "making" : transcript?.views?.status === "making";
+  const viewsProgress = views?.progress ?? transcript?.views?.progress;
+  const barView = viewsMaking ? improvingView(viewsProgress, showAs, transcript?.views?.default) : null;
+  const barPercent = barView ? viewPercent(viewsProgress, barView) : null;
   useEffect(() => {
-    if (!transcriptId || showAs === "original" || views?.status !== "making") return;
+    if (!transcriptId || !viewsMaking || (showAs === "original" && readOnly)) return;
     const timer = window.setTimeout(() => {
       api.transcriptViews(transcriptId).then((v) => setViews(v)).catch(() => undefined);
-    }, VIEWS_POLL_MS);
+    }, views ? VIEWS_POLL_MS : 0);
     return () => window.clearTimeout(timer);
-  }, [transcriptId, showAs, views]);
+  }, [transcriptId, showAs, views, viewsMaking, readOnly]);
+  // Views that become ready swap in where the reader is (C3): the default view, unless the person chose one.
+  const anchor = useRef<{ index: number; top: number } | null>(null);
+  const keepPlace = () => {
+    const rows = detailRef.current?.querySelectorAll<HTMLElement>(".segments .segment");
+    const box = detailRef.current?.getBoundingClientRect();
+    if (!rows || !box) return;
+    const index = Array.from(rows).findIndex((r) => r.getBoundingClientRect().bottom > box.top);
+    if (index >= 0) anchor.current = { index, top: rows[index].getBoundingClientRect().top };
+  };
+  useLayoutEffect(() => {
+    const kept = anchor.current;
+    anchor.current = null;
+    const row = kept && detailRef.current?.querySelectorAll<HTMLElement>(".segments .segment")[kept.index];
+    if (kept && row && detailRef.current) detailRef.current.scrollTop += row.getBoundingClientRect().top - kept.top;
+  }, [showAs, views]);
+  const wasMaking = useRef(false);
+  useEffect(() => {
+    const making = views?.status === "making";
+    const becameReady = wasMaking.current && views?.status === "ready";
+    wasMaking.current = making;
+    const preferred = transcript?.views?.default;
+    if (becameReady && !viewPicked.current && showAs === "original" && preferred && preferred !== "original" && views?.available.includes(preferred)) {
+      keepPlace();
+      setShowAs(preferred);
+    } else if (becameReady) {
+      keepPlace();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [views]);
   const chooseView = async (view: "original" | TranscriptView) => {
     setShowAs(view);
     if (view === "original" || !transcriptId || views?.status === "ready") return;
@@ -613,6 +679,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const onLoaded = () => {
     const audio = audioRef.current;
     if (audio) audio.playbackRate = rate;
+    if (audio) setMediaSeconds(audio.duration);
     if (pendingSeek.current !== null && audio) {
       audio.currentTime = pendingSeek.current / 1000;
       pendingSeek.current = null;
@@ -806,14 +873,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     setRenaming(null);
     const title = text.trim();
     if (title === (item.title ?? "").trim()) return;
-    // An empty title clears it: the server says what the recording is called then.
-    if (title) replaceItem(item.id, (i) => ({ ...i, title }));
+    // An empty title asks the server for its automatic one again (Phase 1C, `title: null`); a title the person types is
+    // theirs, and the server never replaces it.
+    if (title) replaceItem(item.id, (i) => ({ ...i, title, title_auto: false }));
     try {
-      const answer = await api.organiseSession(item.id, { title });
+      const answer = await api.organiseSession(item.id, { title: title || null });
       if (answer?.data?.id === item.id) replaceItem(item.id, () => answer.data);
-      notify(title ? "Renamed" : "Title cleared");
+      notify(title ? "Renamed" : "The automatic title will be used");
     } catch (e) {
-      replaceItem(item.id, (i) => ({ ...i, title: item.title }));
+      replaceItem(item.id, (i) => ({ ...i, title: item.title, title_auto: item.title_auto }));
       notify(errorMessage(e), true);
     }
   };
@@ -885,7 +953,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   };
 
   const total = items.filter((i) => !i.deleted).length;
-  const durationMs = current && transcript ? Math.max(current.duration_ms ?? 0, ...transcript.segments.map((s) => s.end_ms)) : current?.duration_ms ?? 0;
+  const durationMs = current ? playerLength(current.duration_ms, transcript?.segments, mediaSeconds) : 0;
   const pendingFix = readOnly ? null : openSuggestions.find((f) => f.id === openSuggestion) ?? null;
   return (
     <>
@@ -932,9 +1000,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             {labels.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         )}
-        <select className="chip" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sort recordings">
-          {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => <option key={k} value={k}>{SORT_LABELS[k]}</option>)}
-        </select>
+        <ChoiceMenu label="Group by" value={choice.group} options={(Object.keys(GROUP_LABELS) as GroupKey[]).map((k) => [k, GROUP_LABELS[k]] as const)}
+          onChange={(group) => setChoice({ group })} />
+        <ChoiceMenu label="Sort by" value={sort} options={(Object.keys(SORT_LABELS) as SortKey[]).map((k) => [k, SORT_LABELS[k]] as const)}
+          onChange={(next) => setChoice({ sort: next })} />
         <span className="spacer" />
         <button type="button" className="chip" aria-pressed={selecting} onClick={() => (selecting ? endSelecting() : setSelecting(true))}>{selecting ? "Cancel selection" : "Select"}</button>
         <button type="button" className="chip" aria-pressed={binOpen} onClick={() => setBinOpen(!binOpen)}>Recently deleted</button>
@@ -1008,9 +1077,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             )
           )}
           {!shared && groups.map((group) => (
-            <div key={group.label ?? "all"} className="group">
-              {group.label && <div className="group-label">{group.label}</div>}
-              {group.items.map((item) => {
+            <div key={group.key} className="group" role="group" aria-label={group.label || undefined}>
+              {group.label && (
+                <GroupHeader label={group.label} items={group.items} picked={picked} collapsed={collapsedGroups.has(group.key)}
+                  onToggle={() => toggleCollapsed(group.key)}
+                  onPick={() => { setSelecting(true); setPicked((p) => toggleGroup(group.items, p)); }} />
+              )}
+              {!collapsedGroups.has(group.key) && group.items.map((item) => {
                 const state = itemState(item);
                 // Like the phone (v1.4): length, client and bookmarks; the language is a filter and lives on the recording page.
                 const sub = [formatDuration(item.duration_ms) || null, item.client?.name,
@@ -1061,7 +1134,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                             {state === "ready" ? <span>{sub}</span> : (
                               <span className={`pill ${state}`}>
                                 {state === "processing" ? <span className="spinner" aria-hidden="true" /> : state === "failed" ? <AlertIcon size={14} /> : null}
-                                {STATE_LABEL[state]}
+                                {state === "processing" ? stepOf(item).line ?? STATE_LABEL[state] : STATE_LABEL[state]}
                               </span>
                             )}
                           </div>
@@ -1118,12 +1191,18 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   ) : (
                     <h2 className="detail-title" data-motion="title">
                       <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{current.title}</button>
+                      {current.title_auto && (
+                        <span className="auto-title small muted" data-testid="auto-title" title="EchoLedger named it from what was said. Click the title to give it your own; yours is never replaced.">
+                          <SparkleIcon size={12} />Automatic title
+                        </span>
+                      )}
                     </h2>
                   )}
                   <div className="detail-meta">
                     {formatWhen(current.started_at)} · {formatDuration(current.duration_ms)}
                     {current.client ? <> · {onOpenClient && !readOnly ? <button type="button" className="btn text compact" style={{ height: 22, padding: "0 4px" }} onClick={() => onOpenClient(current.client!.id)}>{current.client.name}</button> : current.client.name}</> : null}
                   </div>
+                  {!readOnly && <RecordingSteps key={current.id} item={current} improving={barView !== null && transcript?.kind === "final"} notify={notify} />}
                   {engineLine(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {engineLine(current.transcript)}</div>}
                   {retrying && (
                     <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason, providerName(waitingFinal?.provider) || "The engine") ?? undefined}>{retrying}</div>
@@ -1194,7 +1273,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     </div>
                   ) : isTranscribing(transcript.status) ? (
                     // The library's progress is the fresher one: live status re-reads it every few seconds.
-                    <div className="empty-state"><span className="spinner" aria-hidden="true" /><p>{transcribingText(current.transcript?.final_progress ?? transcript.progress)}</p></div>
+                    <div className="empty-state"><span className="spinner" aria-hidden="true" /><p>{transcribingLine(current.transcript?.final_progress ?? transcript.progress)}</p></div>
                   ) : (
                     <>
                       <div className="transcript-bar">
@@ -1203,12 +1282,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                           && (!readOnly || transcript.views?.status === "ready") && (
                           <span className="segmented view-switch" role="group" aria-label="Show as">
                             {VIEW_ORDER.filter((v) => transcript.views!.available.includes(v)).map((v) => (
-                              <button key={v} type="button" lang={v === "urdu" ? "ur" : undefined} aria-pressed={showAs === v} onClick={() => void chooseView(v)}>{VIEW_LABELS[v]}</button>
+                              <button key={v} type="button" lang={v === "urdu" ? "ur" : undefined} aria-pressed={showAs === v} onClick={() => { viewPicked.current = true; void chooseView(v); }}>{VIEW_LABELS[v]}</button>
                             ))}
-                            <button type="button" aria-pressed={showAs === "original"} onClick={() => void chooseView("original")}>Original</button>
+                            <button type="button" aria-pressed={showAs === "original"} onClick={() => { viewPicked.current = true; void chooseView("original"); }}>Original</button>
                           </span>
                         )}
                       </div>
+                      {barView !== null && transcript.kind === "final" && <ImprovingBar view={barView} percent={barPercent} />}
                       <div className="copy-row">
                         <button className="btn compact" onClick={() => copy(false)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy text</button>
                         <button className="btn compact" onClick={() => copy(true)} disabled={transcript.segments.length === 0}><CopyIcon size={14} />Copy with timestamps</button>
@@ -1309,7 +1389,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <button type="button" className="btn compact" onClick={() => setTranscriptAttempt((n) => n + 1)}>Retry</button>
                     </div>
                   ) : (
-                    <div className="empty">{isTranscribing(finalStatus) ? transcribingText(current.transcript?.final_progress) : finalStatus ? `Transcript ${finalStatus.replace("_", " ")}` : "Transcript not available yet."}</div>
+                    <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress) : finalStatus ? `Transcript ${finalStatus.replace("_", " ")}` : "Transcript not available yet."}</div>
                   )
                 )}
                 {current.client && !readOnly && <CallNotesSection key={current.id} sessionId={current.id} clientName={current.client.name} onSeek={seek} notify={notify} />}
@@ -1318,7 +1398,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 <PlayerDock playing={playing} nowMs={nowMs} durationMs={durationMs} onToggle={togglePlay} onSkip={skipBy}
                   below={<PlayerControls rate={rate} onRate={changeRate} skipSilence={skipSilence} onSkipSilence={setSkipSilence} follow={follow} onFollow={setFollow} />}>
                   <audio ref={audioRef} className="player" preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} onError={onPlaybackError}
-                    onLoadedMetadata={onLoaded} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} data-testid="player" />
+                    onLoadedMetadata={onLoaded} onDurationChange={() => setMediaSeconds(audioRef.current?.duration ?? null)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} data-testid="player" />
                   <Waveform segments={transcript?.segments ?? []} bookmarks={bookmarks} durationMs={durationMs} nowMs={nowMs} onSeek={seek} />
                 </PlayerDock>
               )}

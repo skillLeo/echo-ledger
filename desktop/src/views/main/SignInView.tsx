@@ -2,7 +2,7 @@
 // password (and the two-factor code when the account has one), or the browser for Google and passkeys. The pairing
 // code / QR stays for servers older than accounts.
 import { useEffect, useRef, useState } from "react";
-import { api, errorMessage, listenTo, type AppStatus } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type AppStatus, type AuthOptions } from "../../lib/ipc";
 import { PairingView } from "./PairingView";
 import { ShieldIcon } from "../../components/Icons";
 import { Wordmark } from "../../components/BrandMark";
@@ -15,6 +15,30 @@ const SIGNED_IN = "Signed in. Your library will sync now.";
 /** A server address worth sending: more than the "https://" the field starts with. */
 function usableServer(url: string): boolean {
   return /^https?:\/\/[^/\s]+/.test(url.trim());
+}
+
+/** How long the server field rests before its sign-in options are asked for. */
+export const OPTIONS_AFTER_MS = 500;
+
+/**
+ * What the server's sign-in offers (Phase 1C, `GET /api/auth/options`), asked once the address rests; null while not
+ * known, from an older server or offline: the screen then shows what it always did.
+ */
+function useAuthOptions(server: string): AuthOptions | null {
+  const [options, setOptions] = useState<{ server: string; options: AuthOptions | null } | null>(null);
+  useEffect(() => {
+    const url = server.trim();
+    if (!usableServer(url)) return;
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      api.authOptions(url).then((o) => alive && setOptions({ server: url, options: o ?? null }), () => alive && setOptions({ server: url, options: null }));
+    }, OPTIONS_AFTER_MS);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [server]);
+  return options && options.server === server.trim() ? options.options : null;
 }
 
 export function SignInView({ onSignedIn, notify, serverUrl }: {
@@ -32,6 +56,11 @@ export function SignInView({ onSignedIn, notify, serverUrl }: {
   const [waiting, setWaiting] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [pairing, setPairing] = useState<"chosen" | "only" | null>(null);
+  const options = useAuthOptions(server);
+  // An older server (no options) shows the screen as before: email and password, and the browser for Google and passkeys.
+  const offersPassword = options?.password !== false;
+  const browserLabel = !options ? "Sign in in the browser (Google, passkeys)" : options.google ? "Continue with Google" : options.browserSignIn ? "Sign in in the browser (passkeys)" : null;
+  const openPage = (url: string) => void api.openAuthPage(server.trim(), url).catch((e) => setProblem(errorMessage(e)));
   const parent = useRef({ onSignedIn, notify });
   parent.current = { onSignedIn, notify };
 
@@ -118,30 +147,44 @@ export function SignInView({ onSignedIn, notify, serverUrl }: {
           </div>
         ) : (
           <>
-            <label className="field">Email
-              <input className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
-            </label>
-            <label className="field">Password
-              <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-            </label>
-            {otp !== null && (
-              <label className="field">Two-factor code
-                <input className="input" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value)}
-                  placeholder="123456" aria-describedby="sign-in-otp-hint" required autoFocus />
-                <span id="sign-in-otp-hint" className="small muted">{OTP_ASKED}</span>
-              </label>
+            {offersPassword && (
+              <>
+                <label className="field">Email
+                  <input className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+                </label>
+                <label className="field">Password
+                  <input className="input" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                </label>
+                {options?.resetUrl && (
+                  <button type="button" className="btn text compact sign-in-forgot" onClick={() => openPage(options.resetUrl!)}>Forgot password?</button>
+                )}
+                {otp !== null && (
+                  <label className="field">Two-factor code
+                    <input className="input" inputMode="numeric" autoComplete="one-time-code" value={otp} onChange={(e) => setOtp(e.target.value)}
+                      placeholder="123456" aria-describedby="sign-in-otp-hint" required autoFocus />
+                    <span id="sign-in-otp-hint" className="small muted">{OTP_ASKED}</span>
+                  </label>
+                )}
+              </>
             )}
             <label className="field">Name for this computer (optional)
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Work laptop" />
             </label>
             {problem && <div className="notice error small" role="alert">{problem}</div>}
-            <button className="btn primary" type="submit" disabled={busy} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>
-              {busy ? "Signing in…" : "Sign in"}
-            </button>
-            <div className="sign-in-or" aria-hidden="true"><span>or</span></div>
-            <button className="btn" type="button" disabled={busy || !usableServer(server)} onClick={() => void browser()} style={{ width: "100%", justifyContent: "center" }}>
-              Sign in in the browser (Google, passkeys)
-            </button>
+            {offersPassword && (
+              <button className="btn primary" type="submit" disabled={busy} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>
+                {busy ? "Signing in…" : "Sign in"}
+              </button>
+            )}
+            {offersPassword && browserLabel && <div className="sign-in-or" aria-hidden="true"><span>or</span></div>}
+            {browserLabel && (
+              <button className="btn" type="button" disabled={busy || !usableServer(server)} onClick={() => void browser()} style={{ width: "100%", justifyContent: "center" }}>
+                {browserLabel}
+              </button>
+            )}
+            {options?.signUp && options.signUpUrl && (
+              <p className="small sign-in-create">New to EchoLedger? <button type="button" className="btn text compact" onClick={() => openPage(options.signUpUrl!)}>Create account</button></p>
+            )}
             <button type="button" className="btn ghost small sign-in-pair" onClick={() => setPairing("chosen")}>Use a sign-in code or QR instead</button>
           </>
         )}

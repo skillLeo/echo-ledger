@@ -6,6 +6,7 @@ pub mod activity;
 pub mod after_call;
 pub mod app_menu;
 pub mod audio;
+pub mod call_guard;
 mod commands;
 pub mod deep_link;
 pub mod detect;
@@ -17,12 +18,14 @@ pub mod lock;
 pub mod mac_check;
 pub mod material;
 pub mod net;
+pub mod notifications;
 pub mod overlay;
 pub mod owner;
 pub mod pending;
 pub mod permissions;
 pub mod plan;
 pub mod projects;
+pub mod readiness;
 pub mod recovery;
 pub mod refusal;
 pub mod screens;
@@ -120,6 +123,12 @@ pub struct AppState {
     pub device_status: Mutex<audio::devices::DeviceStatus>,
     /// The last Mac check of this run (Phase 1B).
     pub mac_check: Mutex<Option<mac_check::CheckReport>>,
+    /// The last Ready check (Phase 1C), what had broken at it, and the wake-up for a check now.
+    pub ready: Mutex<Option<readiness::ReadyReport>>,
+    pub ready_watch: Mutex<readiness::ReadyWatch>,
+    pub ready_wake: tokio::sync::Notify,
+    /// Recordings whose transcript the person asked to be told about ("Notify me when ready", Phase 1C).
+    pub notify_ready: Mutex<std::collections::HashSet<String>>,
 }
 
 impl AppState {
@@ -177,6 +186,10 @@ impl AppState {
             permission_memory: Mutex::new(permission_memory),
             device_status: Mutex::new(audio::devices::DeviceStatus::default()),
             mac_check: Mutex::new(None),
+            ready: Mutex::new(None),
+            ready_watch: Mutex::new(readiness::ReadyWatch::default()),
+            ready_wake: tokio::sync::Notify::new(),
+            notify_ready: Mutex::new(std::collections::HashSet::new()),
         }
     }
 
@@ -331,6 +344,7 @@ pub fn run() {
             let errors = shortcuts::register_all(&handle, &settings.shortcuts);
             *app.state::<AppState>().shortcut_errors.lock().unwrap() = errors;
             detect::spawn_auto_mode(handle.clone());
+            readiness::spawn(handle.clone());
             actions::spawn_upload_worker(handle.clone());
             actions::restore_pending(&handle);
             // Recordings cut short by a crash or a forced quit come back as "Recovered recording" (since v1.3) and
@@ -394,6 +408,8 @@ pub fn run() {
             commands::pair_device,
             commands::sign_in_password,
             commands::sign_in_browser,
+            commands::auth_options,
+            commands::auth_page_open,
             commands::sign_in_browser_cancel,
             commands::unpair,
             commands::account_get,
@@ -419,6 +435,10 @@ pub fn run() {
             commands::stop_recording,
             commands::toggle_voice_note,
             commands::toggle_mic_note,
+            commands::record_now,
+            commands::notification_test,
+            commands::notification_send,
+            commands::notify_when_ready,
             commands::hide_captions,
             commands::mic_users,
             commands::ask_answer,
@@ -448,6 +468,9 @@ pub fn run() {
             commands::permission_request,
             commands::permission_notice_dismiss,
             commands::open_privacy_settings,
+            commands::ready_check,
+            commands::ready_last,
+            commands::ready_fix,
             commands::mac_check_run,
             commands::mac_check_last,
             commands::mac_check_copy,

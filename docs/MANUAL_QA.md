@@ -610,6 +610,34 @@ second person or device to share a screen, and a slide deck with a few slides.
 | SM-W8 | Windows, whole-screen, EchoLedger's main window open on the meeting's monitor (also opened during the capture). | Kept screens show what is behind it, never EchoLedger; Zoom's own share and Snipping Tool do not show it while screens are on, and do again after pausing or stopping. |
 | SM-X1 | Both: unplug the network, start a call filed under a project; plug it back in. | The chip says "starting" and nothing is kept; within about 30 s screens start if the project keeps them, and stay off if not. |
 
+### Desktop v1.5 Phase 1C: easy, trustworthy, clear (what only a real computer can prove)
+
+Use the CI build of the branch (Actions → "Desktop (macOS)" or "Desktop (Windows)" → Artifacts). Tests cover the decisions
+with fakes; these rows prove the system around them.
+
+| # | Check | Expected |
+|---|---|---|
+| 1C-A1 | Start the app signed in, with everything allowed. | Within a few seconds the sidebar and the tray say **Calls: Ready**; Record shows **✓ Ready to record calls**. |
+| 1C-A2 | Turn off **Record calls automatically**, then press **Turn on** in the Ready check. | The chip turns to **Not ready — Fix** at once and back to **Calls: Ready** after the button. No notification for your own choice. |
+| 1C-A3 | Mac: in System Settings take away Screen & System Audio Recording (or the microphone) while the app runs; also with quiet hours on all day. | Within about 10 s a notification "Calls will not be recorded fully" names the problem, also in quiet hours; the chip says **Not ready — Fix**; the fix button opens the right pane. |
+| 1C-A4 | Windows: unplug the only microphone (USB headset) while the app runs. | The Critical notification and **Not ready — Fix**; plugging it back turns the chip ready again. |
+| 1C-A5 | With a Zoom or Meet call running, press Ctrl+Shift+R (⌘⇧R); then again. With no call, press it again. | A call recording with both sides starts ("Recording the call, both sides"), then stops; without a call a voice note starts. Same from the tray's **Record now**. |
+| 1C-A6 | Settings → Shortcuts: Record now shows the browser warning; change it to another key and back. | The warning names the browser reload; the new key works at once. |
+| 1C-A7 | Make a call start fail once (for example a second app holding an exclusive device), so auto mode does not start it. | About 5 s after the call is detected: **Recording started (backup)**. Stop it yourself mid-call: it stays stopped. |
+| 1C-B1 | Settings → Notifications: press **Test** on each kind, with Sound and with Silent. | Each shows a notification titled "Test: <kind>"; Silent ones make no sound (Windows and Mac). |
+| 1C-B2 | Turn Sharing off and quiet hours on all day; have a teammate share a call; then cause 1C-A3. | No Sharing notification (it waits in the bell); the readiness one still shows. |
+| 1C-C1 | Import five audio files at once (one of them 100 MB). | Each file is a row under Importing with its own percent; Cancel on one leaves the others going. |
+| 1C-C2 | Open a long Urdu recording while it is transcribed in parts, on a server with Phase 1C. | Row, page and Activity → In progress say "Transcribing… part N of M · about X left"; the time left goes down. Against an older server: "Transcribing… part N of M" only. |
+| 1C-C3 | When the transcript arrives, scroll to the middle and wait for the Roman Urdu view. | The text is readable at once with "Improving Roman Urdu… N%"; when the view is made it swaps in without the page jumping. |
+| 1C-C4 | Press **Notify me when ready**, turn Transcription notifications off, close the main window. | A notification when the transcript is ready (within about a minute). |
+| 1C-D1 | Library with a few hundred recordings: Group by Project, Sort by Longest; open the Inbox, choose None and Name A–Z; restart the app. | Each view comes back with its own choice; scrolling a long group keeps its header at the top; Windows and Mac. |
+| 1C-D2 | Tick a group's box, move the group to a project; tick a box with half the group picked. | All its recordings move; a half-picked box shows a dash and ticks the rest. |
+| 1C-E1 | Open an 18 s Urdu voice note; switch Original, Roman Urdu, English and Urdu while it plays. | The player shows 0:18 in every view and keeps playing. |
+| 1C-E4 | A new voice note without a title, once its transcript is ready; then rename it; then empty the title. | An automatic short title marked Automatic title; your title stays after a re-sync and on the phone; emptying brings an automatic one back. |
+| 1C-F1 | Sign out; on the sign-in screen type the staging server's address. With Settings → Who can sign up on Anyone and Google set, then Invite only and no Google. | First: Continue with Google, Create account and Forgot password (each opens the server's page in the browser). Second: email and password, Forgot password, the passkey browser button; no Google, no Create account. |
+| 1C-F2 | Sign in with an account that has two-step sign-in. | The code field appears; after it, Record opens with the Ready check. |
+| 1C-A8 | A 30 s call where the other side plays through a headset that is not the default output (or is muted). | After the call: **Only your voice was recorded**, with the reason and the fix; the banner opens the Ready check. |
+
 ## Appendix B — Accessibility
 
 | # | Check | Expected |

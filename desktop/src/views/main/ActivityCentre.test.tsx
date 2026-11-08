@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ActivityView } from "./ActivityCentre";
-import { NotificationsCard } from "./SecuritySettings";
+import { NOTIFICATION_CATEGORIES, NOT_SHOWN, NotificationsCard } from "./SecuritySettings";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makePendingItem, makeSettings, makeSkippedItem, makeStatus } from "../../test/fixtures";
@@ -215,6 +215,51 @@ describe("notification settings", () => {
     render(<NotificationsCard settings={makeSettings()} patch={vi.fn(async () => true)} />);
     expect(screen.getByLabelText("From")).toBeDisabled();
   });
+
+  it("mirrors the phone's categories, each on or off with its sound, and marks Critical", () => {
+    expect(NOTIFICATION_CATEGORIES.map(([, label]) => label)).toEqual([
+      "Recording", "Transcription", "Enhancement", "Uploads", "Call capture & readiness", "Sharing", "Account & security",
+      "Usage & limits", "Live Translate", "App updates", "Other",
+    ]);
+    const patch = vi.fn(async () => true);
+    render(<NotificationsCard settings={makeSettings({ notificationCategories: { sharing: false }, notificationSounds: { uploads: false } })} patch={patch} />);
+    expect(screen.getByRole("switch", { name: "Sharing" })).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("switch", { name: "Transcription" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("button", { name: "Sound for Uploads" })).toHaveTextContent("Silent");
+    expect(screen.getByRole("button", { name: "Sound for Sharing" })).toBeDisabled();
+    expect(screen.getByTestId("notify-call_capture")).toHaveTextContent("Critical");
+    expect(screen.getByTestId("notify-call_capture")).toHaveTextContent("quiet hours never hold these back");
+    fireEvent.click(screen.getByRole("switch", { name: "Sharing" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Uploads" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sound for Uploads" }));
+    expect(patch.mock.calls).toEqual([[{ notificationCategories: { sharing: true } }], [{ notificationCategories: { uploads: false } }], [{ notificationSounds: { uploads: true } }]]);
+  });
+
+  it("turns every kind off with Show notifications", () => {
+    render(<NotificationsCard settings={makeSettings({ activityNotifications: false })} patch={vi.fn(async () => true)} />);
+    expect(screen.getByRole("switch", { name: "Recording" })).toBeDisabled();
+  });
+
+  it("sends a test of a kind and says when the system would not show it", async () => {
+    respondWith("notification_test", ({ category }) => category !== "other");
+    const said: string[] = [];
+    const run = vi.fn(async <T,>(fn: () => Promise<T>, ok?: string) => {
+      try {
+        const r = await fn();
+        if (ok) said.push(ok);
+        return r;
+      } catch (e) {
+        said.push(String(e));
+        return undefined;
+      }
+    });
+    render(<NotificationsCard settings={makeSettings()} patch={vi.fn(async () => true)} run={run as never} />);
+    fireEvent.click(screen.getByRole("button", { name: "Test Transcription" }));
+    fireEvent.click(screen.getByRole("button", { name: "Test Other" }));
+    await waitFor(() => expect(said).toHaveLength(2));
+    expect(callsOf("notification_test")).toEqual([{ category: "transcription" }, { category: "other" }]);
+    expect(said).toEqual(["Test sent: Transcription", NOT_SHOWN]);
+  });
 });
 
 describe("a clicked notification opens its recording", () => {
@@ -234,5 +279,21 @@ describe("a clicked notification opens its recording", () => {
     await screen.findAllByText("Acme kickoff");
     await emitEvent("main:navigate", { view: "library", pendingId: null, rename: false, recordingId: "s1" });
     await waitFor(() => expect(callsOf("session_detail")).toContainEqual({ id: "s1" }));
+  });
+});
+
+describe("In progress (Phase 1C)", () => {
+  it("lists uploads with their percent and recordings being transcribed, as the Library says them", async () => {
+    const { inProgressRows } = await import("./ActivityCentre");
+    const rows = inProgressRows(
+      [{ id: "u1", sourceApp: "zoom", title: "Imported memo", startedAt: "", durationMs: 0, state: "uploading", lastError: null, attempts: 0, imported: true, progress: 42 },
+        { id: "u2", sourceApp: "zoom", title: "Stopped", startedAt: "", durationMs: 0, state: "failed", lastError: "x", attempts: 3, imported: false, progress: null }],
+      [makeItem("s1", { title: "Acme call", status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null, final_progress: { done: 0, total: 1, eta_seconds: 20 } } }),
+        makeItem("s2", { title: "Done call" })],
+    );
+    expect(rows).toEqual([
+      { id: "upload-u1", title: "Imported memo", line: "Uploading… 42%", recordingId: null },
+      { id: "s1", title: "Acme call", line: "Transcribing… about 20 s left", recordingId: "s1" },
+    ]);
   });
 });

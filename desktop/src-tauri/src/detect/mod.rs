@@ -142,6 +142,10 @@ pub struct DetectState {
     ask: Mutex<AskTracker>,
     far_side: Mutex<crate::audio::health::FarSideMonitor>,
     meeting: Mutex<Option<crate::screens::platform::MeetingTree>>,
+    /// When the loop last looked (the Ready check's heartbeat, Phase 1C).
+    looked: Mutex<Option<Instant>>,
+    /// Starts a detected meeting that did not start recording after 5 s (Phase 1C).
+    watchdog: Mutex<crate::call_guard::Watchdog>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -152,6 +156,11 @@ impl DetectState {
     /// The last observation with its decisions (refreshed once per second by the loop).
     pub fn mic_users(&self) -> Vec<MicUser> {
         lock(&self.users).clone()
+    }
+
+    /// Whether the loop looked at the microphone within `limit` (it stops only if its thread died).
+    pub fn looked_within(&self, limit: Duration) -> bool {
+        crate::readiness::looked_within(*lock(&self.looked), Instant::now(), limit)
     }
 
     /// The meeting app screen moments look at (refreshed once per second by the loop).
@@ -196,6 +205,7 @@ pub fn spawn_auto_mode(app: AppHandle) {
 fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, trees: &[TreeAudio]) {
     let state = app.state::<crate::AppState>();
     let detect = &state.detect;
+    *lock(&detect.looked) = Some(Instant::now());
     let recording = state.capture.is_recording();
     let rules = &settings.site_rules;
     // A viewer records nothing (v1.5): no automatic start and no "Record?" chip, as if auto-record were off.
@@ -225,6 +235,13 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
         let chip = ask.tick(now_ms, trees, &verdicts, recording);
         (event, call.recorded(), chip)
     };
+
+    // The watchdog (Phase 1C, A5): the meeting auto mode would record, recorded by now or started here.
+    let detected = auto_mode.then(|| pick_candidate(trees, &verdicts).map(|(_, app)| app)).flatten().or(recorded.map(|(_, app)| app).filter(|_| auto_mode));
+    if let Some(source) = lock(&detect.watchdog).tick(now_ms, detected, recording) {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { crate::actions::start_backup(&app, source).await });
+    }
 
     let silent_ms = state.capture.far_side_silent_ms();
     if let Some(payload) = lock(&detect.far_side).tick(silent_ms, settings.far_side_warning) {

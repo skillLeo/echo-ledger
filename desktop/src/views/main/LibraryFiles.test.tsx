@@ -95,7 +95,7 @@ describe("Rename", () => {
     expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { title: "Call with Acme about the invoice" } }]);
   });
 
-  it("clears the title when the field is emptied and shows the name the server gives", async () => {
+  it("clears the title when the field is emptied, asking for the automatic one, and shows the name the server gives", async () => {
     respond("session_organise", { data: done("a", "Zoom call") });
     const { notify } = await renderLibrary();
     await open("Zoom with Acme");
@@ -104,9 +104,24 @@ describe("Rename", () => {
     fireEvent.change(field, { target: { value: "   " } });
     fireEvent.keyDown(field, { key: "Enter" });
     await flushAsync();
-    expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { title: "" } }]);
+    expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { title: null } }]);
     expect(within(detail()).getByRole("heading", { name: "Zoom call" })).toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith("Title cleared");
+    expect(notify).toHaveBeenCalledWith("The automatic title will be used");
+  });
+
+  it("marks an automatic title, and a title the person types replaces the mark (E4)", async () => {
+    const auto = { ...done("a", "Laptop — 16 vs 32 GB"), title_auto: true };
+    respond("session_organise", { data: { ...auto, title: "Laptop prices", title_auto: false } });
+    await renderLibrary([auto]);
+    await open("Laptop — 16 vs 32 GB");
+    expect(within(detail()).getByTestId("auto-title")).toHaveTextContent("Automatic title");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Laptop — 16 vs 32 GB" }));
+    const field = within(detail()).getByRole("textbox", { name: "Title" });
+    fireEvent.change(field, { target: { value: "Laptop prices" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    await flushAsync();
+    expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { title: "Laptop prices" } }]);
+    expect(within(detail()).queryByTestId("auto-title")).not.toBeInTheDocument();
   });
 
   it("sends nothing for Escape or an unchanged title", async () => {
@@ -314,7 +329,7 @@ describe("Live status", () => {
     useClock();
     await renderLibrary([transcribing("b", "WhatsApp call")], { "tr-b": makeTranscript({ id: "tr-b", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 900, text: "Ready at last." }] }) });
     await open("WhatsApp call");
-    expect(within(detail()).getByText(/Transcribing/)).toBeInTheDocument();
+    expect(within(detail()).getByText("Transcribing…")).toBeInTheDocument();
     respond("library_refresh", [done("b", "WhatsApp call")]);
     await advance(5_000);
     await flushAsync();
