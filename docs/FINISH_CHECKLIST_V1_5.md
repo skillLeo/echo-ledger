@@ -129,7 +129,7 @@ Accuracy, every language, cheapest first (added 2026-11-08; Arabic first, then w
 
 Share flow, progress, widgets (added 2026-11-08):
 - [ ] I1 From a shared voice note, a deep link or a notification, the arrow and system Back go to the logical parent (the Library), never out of the app; a "Back to WhatsApp" button; Back from the Library leaves normally; predictive back.
-- [ ] I2 Uploads never stop with the screen ("Upload failed (JobCancellationException)"): unique, expedited, network-constrained WorkManager work with backoff, surviving app kill and reboot; friendly text and Retry, never an exception name.
+- [x] I2 Uploads never stop with the screen ("Upload failed (JobCancellationException)"): unique, expedited, network-constrained WorkManager work with backoff, surviving app kill and reboot; friendly text and Retry, never an exception name. **Fixed** 2026-11-08: opening the app replaced the running upload ("Retry now" on every queued note) and a stopped run was marked failed with the exception's name; now a running upload is never replaced, a stopped one stays queued and runs again, uploads are expedited, and no message names an exception (UploadStoppedTest).
 - [ ] I3 Library rows show Uploading %, Transcribing % with time left, Improving %; the transcript opens when transcribing is done; several shared notes each with their own.
 - [ ] I4 Resizable Glance widgets (2×1 Record now + Ready dot; 4×2 readiness, Record now, last 2 with progress; 4×4 last 5–6, tap to open), Material You, light and dark, updated on events, a hide-titles option, picker previews; on the S25 in the next phone window.
 

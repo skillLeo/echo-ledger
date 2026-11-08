@@ -5,8 +5,11 @@ import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
+import androidx.work.ForegroundInfo
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -26,7 +29,9 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 /**
  * Resumable upload of one encrypted local recording (WorkManager; survives restarts, waits for network).
@@ -67,21 +72,49 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                     Result.retry()
                 }
             }
-        } catch (e: NotPairedException) {
-            graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
-            Result.failure()
-        } catch (e: ApiException) {
-            onApiError(id, e)
-        } catch (e: IOException) {
-            graph.recordings.update(id) { it.copy(state = "queued", lastError = friendly(e)) }
-            if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
         } catch (e: Throwable) {
-            // Anything unexpected (an HTML page instead of JSON, a broken answer): never leave it "uploading" (A6.M1).
-            graph.recordings.update(id) {
-                it.copy(state = "failed", lastError = friendly(e))
+            // Android stopped this run (the work was replaced, a constraint went, the system needed the resources): it
+            // is not a failure, whatever the answer that arrived after the stop. The recording waits and WorkManager
+            // runs it again (since v1.5; it showed "Upload failed (JobCancellationException)" when the share page was
+            // left).
+            if (e is kotlinx.coroutines.CancellationException || !currentCoroutineContext().isActive) {
+                graph.recordings.update(id) { it.copy(state = "queued", lastError = null) }
+                throw e as? kotlinx.coroutines.CancellationException ?: kotlinx.coroutines.CancellationException("upload stopped")
             }
-            Result.failure()
+            when (e) {
+                is NotPairedException -> {
+                    graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
+                    Result.failure()
+                }
+
+                is ApiException -> onApiError(id, e)
+
+                is IOException -> {
+                    graph.recordings.update(id) { it.copy(state = "queued", lastError = friendly(e)) }
+                    if (runAttemptCount < MAX_ATTEMPTS) Result.retry() else Result.failure()
+                }
+
+                // Anything unexpected (an HTML page instead of JSON, a broken answer): never left "uploading" (A6.M1).
+                else -> {
+                    graph.recordings.update(id) { it.copy(state = "failed", lastError = friendly(e)) }
+                    Result.failure()
+                }
+            }
         }
+    }
+
+    /** Android 11 and older run expedited work as a foreground service: a quiet "Uploading" on the Uploads channel. */
+    override suspend fun getForegroundInfo(): ForegroundInfo {
+        val notification = androidx.core.app.NotificationCompat.Builder(
+            applicationContext,
+            com.echoledger.mobile.core.NotifyCategory.UPLOADS.channelId
+        )
+            .setSmallIcon(com.echoledger.mobile.R.drawable.ic_stat_rec)
+            .setContentTitle("Uploading a recording")
+            .setSilent(true)
+            .setOngoing(true)
+            .build()
+        return ForegroundInfo(UPLOAD_NOTIFICATION_ID, notification)
     }
 
     private enum class Outcome { READY, STILL_VERIFYING }
@@ -251,11 +284,14 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
     companion object {
         private const val KEY_ID = "recording_id"
+        private const val UPLOAD_NOTIFICATION_ID = 7_450
         private const val MAX_ATTEMPTS = 12
         const val MISSING_FILE = "The recording file is missing on this phone, so it cannot be uploaded."
         const val DUPLICATE = "duplicate_recording"
         const val ALREADY_THERE = "Already in your Library"
         const val NO_CONNECTION = "No connection to your server. It uploads by itself when the phone is back online."
+        const val INTERRUPTED = "The upload was interrupted. It tries again by itself; tap Retry to try now."
+        const val FAILED = "The upload did not go through. Tap Retry; if it keeps failing, copy diagnostics in You → General → Help."
 
         /** The line a recording made under another account shows while it waits for that account. */
         fun held(owner: Owner): String = "Waits for ${owner.label()}: sign in as that account to send it."
@@ -271,11 +307,10 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             is java.net.UnknownHostException, is java.net.ConnectException, is java.net.SocketTimeoutException,
             is java.net.NoRouteToHostException -> NO_CONNECTION
 
-            is IOException ->
-                "The upload was interrupted (${e.message ?: e.javaClass.simpleName}). It tries again by itself; tap Retry to try now."
+            // Never an exception's name or message (since v1.5): what happened and what to do.
+            is IOException -> INTERRUPTED
 
-            else ->
-                "The upload failed (${e.javaClass.simpleName}). Tap Retry; if it keeps failing, copy diagnostics in You → General → Help."
+            else -> FAILED
         }
 
         /** A `Retry-After` up to this long is left to WorkManager's back-off; longer waits are scheduled exactly. */
@@ -295,12 +330,31 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             .setInputData(workDataOf(KEY_ID to recordingId))
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-            .apply { if (delaySeconds > 0) setInitialDelay(delaySeconds, TimeUnit.SECONDS) }
+            // Since v1.5: started at once (Android's expedited work, else ordinary work when its quota is used up); an
+            // expedited job cannot have an initial delay.
+            .apply {
+                if (delaySeconds > 0) {
+                    setInitialDelay(delaySeconds, TimeUnit.SECONDS)
+                } else {
+                    setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                }
+            }
             .build()
+
+        /**
+         * Whether "Retry now" may replace the work in [states]: never a run that is going on (replacing it cancelled the
+         * upload of a just-shared note), only one waiting out a back-off or finished.
+         */
+        fun mayReplace(states: List<WorkInfo.State>): Boolean = states.none { it == WorkInfo.State.RUNNING }
 
         /** Restarts the upload immediately, replacing any run that is waiting out a retry back-off. */
         fun retryNow(context: Context, recordingId: String) {
-            WorkManager.getInstance(context).enqueueUniqueWork("upload-$recordingId", ExistingWorkPolicy.REPLACE, request(recordingId))
+            val work = WorkManager.getInstance(context)
+            val states = runCatching {
+                work.getWorkInfosForUniqueWork("upload-$recordingId").get().map { it.state }
+            }.getOrDefault(emptyList())
+            if (!mayReplace(states)) return
+            work.enqueueUniqueWork("upload-$recordingId", ExistingWorkPolicy.REPLACE, request(recordingId))
         }
 
         /** Calls off the upload of [recordingId] (an import cancelled before it started). */
