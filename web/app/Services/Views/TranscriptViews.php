@@ -230,6 +230,30 @@ final class TranscriptViews
      * @param  list<string>  $available
      * @return object|array<string, array{done: int, total: int}>
      */
+    /**
+     * The views in a Library row (since v1.5, Phase 1C): whether they are being made and how far, from what is stored,
+     * without reading the lines (a list may hold many recordings). Null when the transcript has no views to make.
+     *
+     * @return array{status: string, default: string, progress: object|array<string, array{done: int, total: int}>}|null
+     */
+    public static function rowSummary(?Transcript $transcript): ?array
+    {
+        if ($transcript === null || $transcript->status !== TranscriptStatus::Completed) {
+            return null;
+        }
+        $available = self::available($transcript);
+        if ($available === []) {
+            return null;
+        }
+        $views = $transcript->meta['views'] ?? null;
+        $status = is_array($views) ? (string) ($views['status'] ?? 'none') : 'none';
+        if ($status === 'making' && isset($views['started_at']) && now()->subMinutes(self::STALE_AFTER_MINUTES)->gt($views['started_at'])) {
+            $status = 'none';
+        }
+
+        return ['status' => $status, 'default' => self::defaultView($available, self::sourceLanguage($transcript)), 'progress' => self::progressOf($status, $views, $available)];
+    }
+
     private static function progressOf(string $status, mixed $views, array $available): object|array
     {
         if ($status !== 'making' || ! is_array($views)) {

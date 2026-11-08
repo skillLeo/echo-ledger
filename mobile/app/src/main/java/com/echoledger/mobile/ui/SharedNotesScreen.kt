@@ -57,6 +57,7 @@ internal fun SharedNotesScreen(
     val context = LocalContext.current
     val pending by vm.pending.collectAsState()
     val library by vm.library.collectAsState()
+    val sending by com.echoledger.mobile.core.RowProgress.uploads.collectAsState()
     val statuses = localIds.map { id ->
         val session = SharedNotes.sessionFor(context, id)
         SharedNotes.status(
@@ -64,7 +65,8 @@ internal fun SharedNotesScreen(
                 it.id == id
             },
             session,
-            session?.let { s -> library.firstOrNull { it.id == s && !it.deleted } }
+            session?.let { s -> library.firstOrNull { it.id == s && !it.deleted } },
+            sending[id]
         )
     }
     val allDone = statuses.all { SharedNotes.done(it.stage) }

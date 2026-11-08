@@ -1289,6 +1289,10 @@ the usage ledger:
   is present for every run while it is being made, not only for runs in parts: `{"done": 1, "total": 3, "eta_seconds":
   20}` (`total` 1 for a run in one piece; `eta_seconds` from the audio still to do and the engine's measured speed on
   this server, `null` until there is a measure). `null` once the run is finished or failed.
+- **Views in Library items.** A library item's `transcript.views` (since v1.5, Phase 1C) is null until the final
+  transcript is finished, then `{"status": "none" | "making" | "ready" | "failed", "default": "roman", "progress":
+  {"roman": {"done": 12, "total": 20}}}` from what the server stored (no lines are read), so a row can say "Improving
+  Roman Urdu… 60%".
 - **Views progress.** While a view is being made, `views.progress` carries `{"roman": {"done": 12, "total": 20}}` (lines
   done of lines), `{}` otherwise. `views.status` is unchanged.
 - **Views only transliterate.** The Roman Urdu, English and Urdu views keep every word of the original: a view line whose

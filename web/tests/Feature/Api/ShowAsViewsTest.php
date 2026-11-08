@@ -516,3 +516,17 @@ describe('views only transliterate (since v1.5, Phase 1C)', function () {
             ->and(TranscriptViews::failures('میں تعل رہا ہوں', ['roman' => 'main dekh raha hoon', 'english' => 'I am looking'], ['roman', 'english'], 'ur'))->toBe(['roman']);
     });
 });
+
+it('says in the Library row how far the views are, without reading the lines (since v1.5, Phase 1C)', function () {
+    $transcript = urduTranscript($this);
+    $transcript->update(['meta' => ['views' => ['status' => 'making', 'started_at' => now()->toAtomString(), 'lines_done' => 12, 'lines_total' => 20]]]);
+
+    $row = collect($this->getJson('/api/library')->assertOk()->json('data'))->firstWhere('id', $transcript->capture_session_id);
+
+    expect($row['transcript']['views'])->toBe(['status' => 'making', 'default' => 'roman', 'progress' => [
+        'roman' => ['done' => 12, 'total' => 20], 'urdu' => ['done' => 12, 'total' => 20], 'english' => ['done' => 12, 'total' => 20],
+    ]]);
+    $transcript->update(['meta' => ['views' => ['status' => 'ready']]]);
+    $row = collect($this->getJson('/api/library')->json('data'))->firstWhere('id', $transcript->capture_session_id);
+    expect($row['transcript']['views']['status'])->toBe('ready')->and($row['transcript']['views']['progress'])->toBe([]);
+});

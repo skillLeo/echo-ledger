@@ -9,6 +9,7 @@ use App\Enums\TranscriptStatus;
 use App\Http\Controllers\Api\SessionController;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Services\Views\TranscriptViews;
 use App\Stt\LanguageChoice;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -89,6 +90,9 @@ final class LibraryItemResource extends JsonResource
                 'alternate_language' => $other?->language,
                 // Since v1.2: parts done of all parts while a long recording is transcribed in pieces.
                 'final_progress' => TranscriptResource::progress($final),
+                // Since v1.5 (Phase 1C): the views of a finished transcript in the row, so it can say "Improving Roman
+                // Urdu 60 %": {"status": "making", "default": "roman", "progress": {"roman": {"done": 12, "total": 20}}}.
+                'views' => TranscriptViews::rowSummary($final),
             ],
             'marker_count' => $markers->count(),
             // Since v1.5: screen moments kept during the meeting (counted with the query where it was asked for).

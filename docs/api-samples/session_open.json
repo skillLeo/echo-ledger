@@ -1,7 +1,7 @@
 {
     "session": {
-        "id": "01m6xwdp65dfs7df1hexxfzzyv",
-        "client_ref": "7224bcfc-bfb5-45e5-aad3-4e07462c5ed2",
+        "id": "01m6ye2pvszvzew4zy685qrj6j",
+        "client_ref": "7d90eb25-4e06-4ea2-b350-9728ba46af61",
         "deleted": false,
         "source_device": "phone",
         "source_device_label": "Phone",
@@ -9,7 +9,7 @@
         "source_app": "whatsapp",
         "source_app_label": "WhatsApp",
         "device": {
-            "id": "01m6xwdnzv2tkqxap336p7frxs",
+            "id": "01m6ye2pnrhfvby1w5a6vjex61",
             "name": "Sample phone"
         },
         "client": null,
@@ -39,7 +39,8 @@
             "alternate_transcript_id": null,
             "alternate_status": null,
             "alternate_language": null,
-            "final_progress": null
+            "final_progress": null,
+            "views": null
         },
         "marker_count": 0,
         "screen_count": 0,
@@ -47,7 +48,7 @@
         "pinned": false,
         "keep": false,
         "labels": [],
-        "updated_at": "2026-11-08T15:28:53+00:00"
+        "updated_at": "2026-11-08T20:37:28+00:00"
     },
     "recordings": [],
     "required_artifacts": [

@@ -311,8 +311,14 @@ data class TranscriptSummary(
     @SerialName("alternate_status") val alternateStatus: String? = null,
     @SerialName("alternate_language") val alternateLanguage: String? = null,
     /** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
-    @SerialName("final_progress") val finalProgress: ProgressDto? = null
+    @SerialName("final_progress") val finalProgress: ProgressDto? = null,
+    /** The views of the finished transcript (since v1.5): being made and how far, for "Improving Roman Urdu… 60%". */
+    val views: RowViewsDto? = null
 )
+
+/** A Library row's views (since v1.5, Phase 1C): `{"status": "making", "default": "roman", "progress": {"roman": {…}}}`. */
+@Serializable
+data class RowViewsDto(val status: String = "none", val default: String = "original", val progress: Map<String, ProgressDto> = emptyMap())
 
 /**
  * Parts done of all parts while a recording is transcribed (since v1.2 for runs in pieces, since v1.5 for every run), and

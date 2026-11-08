@@ -120,7 +120,10 @@ fun LibraryScreen(
     val uploading = pendingLocal.filter { it.state in UPLOADING_STATES }
     // Live status (since 1.3.2): while something is uploading or being transcribed, the list asks again every 5 s,
     // and stops by itself once all is done.
-    val busy = uploading.any { it.state in MOVING_STATES } || items.any { ItemStatus.of(it) == ItemStatus.PROCESSING }
+    // Since v1.5 (Phase 1C) also while views are being made, so "Improving… 60%" moves and goes.
+    val busy = uploading.any { it.state in MOVING_STATES } ||
+        items.any { ItemStatus.of(it) == ItemStatus.PROCESSING || it.transcript?.views?.status == "making" }
+    val sending by com.echoledger.mobile.core.RowProgress.uploads.collectAsState()
     LaunchedEffect(busy) {
         while (busy) {
             kotlinx.coroutines.delay(LIVE_REFRESH_MS)
@@ -369,7 +372,7 @@ fun LibraryScreen(
                                     RecordingRow(
                                         title = rec.title ?: Notifications.decisionText(rec, null).substringBefore(" · "),
                                         time = rowTime(rec.startedAt, today),
-                                        meta = UploadRow.meta(rec.state),
+                                        meta = UploadRow.meta(rec.state, sending[rec.id]),
                                         tile = { SourceAppTile(SourceApp.from(rec.sourceApp)) },
                                         onClick = {
                                             when (rec.state) {
@@ -577,11 +580,12 @@ private val MOVING_STATES = setOf("queued", "uploading")
 
 /** The line under a recording on its way to the server. */
 object UploadRow {
-    fun meta(state: String): String = when (state) {
+    /** [sent]: chunks sent of all chunks while it uploads (since v1.5): "Uploading 40%". */
+    fun meta(state: String, sent: Pair<Int, Int>? = null): String = when (state) {
         "failed" -> "Upload failed · Tap to retry, hold to remove"
         "duplicate" -> "Already in your Library · Tap to dismiss"
         "queued" -> "Waiting to upload · Hold to cancel"
-        else -> "Uploading…"
+        else -> sent?.let { com.echoledger.mobile.core.RowProgress.uploading(it.first, it.second).text } ?: "Uploading…"
     }
 }
 

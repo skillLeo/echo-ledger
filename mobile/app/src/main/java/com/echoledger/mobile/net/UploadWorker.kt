@@ -15,6 +15,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.core.Owner
+import com.echoledger.mobile.core.RowProgress
 import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.ArtifactDto
 import com.echoledger.mobile.data.CallerDto
@@ -233,10 +234,19 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     private suspend fun sendChunks(api: ApiClient, rec: LocalRecording, slot: RecordingUpload) {
         val graph = (applicationContext as EchoLedgerApp).graph
         val plan = ChunkPlanner.plan(rec.plainSize, slot.upload.chunkSizeBytes)
-        for (index in ChunkPlanner.missing(plan.size, slot.upload.receivedChunks)) {
-            val chunk = plan[index]
-            val bytes = graph.recordings.readSlice(rec.id, chunk.offset, chunk.length)
-            api.uploadChunk(slot.id, index, bytes, sha256(bytes))
+        val missing = ChunkPlanner.missing(plan.size, slot.upload.receivedChunks)
+        var sent = plan.size - missing.size
+        // Since v1.5 (Phase 1C): "Uploading 40%" in the Library and on a shared note's page.
+        RowProgress.sent(rec.id, sent, plan.size)
+        try {
+            for (index in missing) {
+                val chunk = plan[index]
+                val bytes = graph.recordings.readSlice(rec.id, chunk.offset, chunk.length)
+                api.uploadChunk(slot.id, index, bytes, sha256(bytes))
+                RowProgress.sent(rec.id, ++sent, plan.size)
+            }
+        } finally {
+            RowProgress.doneSending(rec.id)
         }
     }
 

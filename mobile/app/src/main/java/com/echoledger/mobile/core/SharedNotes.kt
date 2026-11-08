@@ -46,17 +46,21 @@ object SharedNotes {
 
     data class Status(val stage: Stage, val text: String, val sessionId: String? = null)
 
-    /** Pure: the stage of one shared note. */
-    fun status(local: LocalRecording?, sessionId: String?, item: LibraryItem?): Status {
+    /**
+     * Pure: the stage of one shared note. [upload]: chunks sent of all chunks while it uploads in this process (since
+     * v1.5, [RowProgress]); the words are the Library row's.
+     */
+    fun status(local: LocalRecording?, sessionId: String?, item: LibraryItem?, upload: Pair<Int, Int>? = null): Status {
         val transcript = item?.transcript
         return when {
             item != null && transcript?.finalErrorCode == "no_audio" -> Status(Stage.NO_AUDIO, "No audio in this voice note", item.id)
 
-            item != null && transcript?.finalStatus == "completed" -> Status(Stage.READY, "Transcript ready", item.id)
+            item != null && transcript?.finalStatus == "completed" ->
+                Status(Stage.READY, listOfNotNull("Transcript ready", RowProgress.of(item)?.text).joinToString(" · "), item.id)
 
             item != null && transcript?.finalStatus == "failed" -> Status(Stage.FAILED, "Transcription failed. Open it to retry.", item.id)
 
-            item != null -> Status(Stage.TRANSCRIBING, TranscriptText.transcribing(transcript?.finalProgress), item.id)
+            item != null -> Status(Stage.TRANSCRIBING, RowProgress.transcribing(transcript?.finalProgress).text, item.id)
 
             local?.state == "failed" -> Status(
                 Stage.FAILED,
@@ -64,7 +68,15 @@ object SharedNotes {
                 sessionId
             )
 
-            local != null -> Status(Stage.UPLOADING, if (local.state == "uploading") "Uploading…" else "Waiting to upload…", sessionId)
+            local != null -> Status(
+                Stage.UPLOADING,
+                when {
+                    upload != null -> RowProgress.uploading(upload.first, upload.second).text
+                    local.state == "uploading" -> "Uploading…"
+                    else -> "Waiting to upload…"
+                },
+                sessionId
+            )
 
             sessionId != null -> Status(Stage.TRANSCRIBING, "Transcribing…", sessionId)
 

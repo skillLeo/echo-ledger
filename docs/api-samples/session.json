@@ -1,6 +1,6 @@
 {
-    "id": "01m6xwdne02fsra7nvskx4vqh8",
-    "client_ref": "2121e27a-4d0b-4d33-a2e1-531feb54fa48",
+    "id": "01m6ye2p5g4pzdswx5zk8k6mqd",
+    "client_ref": "7f821531-fecc-4421-b541-6def5e83e13a",
     "deleted": false,
     "source_device": "phone",
     "source_device_label": "Phone",
@@ -8,11 +8,11 @@
     "source_app": "whatsapp",
     "source_app_label": "WhatsApp",
     "device": {
-        "id": "01m6xwdndb84wdjz93a2wv0nsc",
+        "id": "01m6ye2p56zjcp7wg7e84ad5f3",
         "name": "Galaxy S25 Ultra"
     },
     "client": {
-        "id": "01m6xwdnd581nxz8wa1neb5gb4",
+        "id": "01m6ye2p510yakvjp2wg2xn348",
         "name": "Acme Holdings",
         "color": "#8B5CF6",
         "avatar": null
@@ -29,7 +29,7 @@
     "language_chip": "EN",
     "transcript": {
         "final_status": "completed",
-        "final_transcript_id": "01m6xwdnjvt64rghegvnashjhb",
+        "final_transcript_id": "01m6ye2pa0hrvg3cmb68rrfrfs",
         "live_available": false,
         "live_transcript_id": null,
         "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
@@ -43,7 +43,12 @@
         "alternate_transcript_id": null,
         "alternate_status": null,
         "alternate_language": null,
-        "final_progress": null
+        "final_progress": null,
+        "views": {
+            "status": "none",
+            "default": "original",
+            "progress": {}
+        }
     },
     "marker_count": 1,
     "screen_count": 1,
@@ -56,10 +61,10 @@
         "Sample"
     ],
     "opened": {},
-    "updated_at": "2026-11-08T15:28:53+00:00",
+    "updated_at": "2026-11-08T20:37:28+00:00",
     "recordings": [
         {
-            "id": "01m6xwdnjezm0v8b35wwnc7093",
+            "id": "01m6ye2p9q78ph11emy94kn2za",
             "role": "primary",
             "mime": "audio/wav",
             "size_bytes": 1240044,
@@ -69,7 +74,7 @@
     ],
     "transcripts": [
         {
-            "id": "01m6xwdnjvt64rghegvnashjhb",
+            "id": "01m6ye2pa0hrvg3cmb68rrfrfs",
             "kind": "final",
             "provider": "assemblyai",
             "status": "completed",
@@ -84,12 +89,12 @@
     ],
     "markers": [
         {
-            "id": "01m6xwdp4506zsgkrny8t1t26t",
+            "id": "01m6ye2pt9ck654zrrjv3d6hqk",
             "at_ms": 1000,
             "tag": "Decision",
             "note": "They agreed.",
             "source": "device",
-            "created_at": "2026-11-08T15:28:53+00:00"
+            "created_at": "2026-11-08T20:37:28+00:00"
         }
     ],
     "pauses": [
@@ -107,5 +112,5 @@
     "speaker_names": {
         "Me": "Ali"
     },
-    "playback_url": "https://echoledger.test/api/recordings/01m6xwdnjezm0v8b35wwnc7093/audio?expires=sample&signature=sample"
+    "playback_url": "https://echoledger.test/api/recordings/01m6ye2p9q78ph11emy94kn2za/audio?expires=sample&signature=sample"
 }

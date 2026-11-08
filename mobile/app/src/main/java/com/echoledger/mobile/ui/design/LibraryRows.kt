@@ -187,11 +187,14 @@ fun LibraryItemRow(
     val c = LocalEchoColors.current
     val status = ItemStatus.of(item)
     val app = SourceApp.from(item.sourceApp)
+    // Since v1.5 (Phase 1C): Transcribing with the part and the time left, then Improving Roman Urdu… 60% while the
+    // views are made (the transcript opens already).
+    val stage = if (status == ItemStatus.PROCESSING || status == ItemStatus.READY) com.echoledger.mobile.core.RowProgress.of(item) else null
     val meta = when (status) {
         ItemStatus.FAILED -> "Transcription failed · Tap to retry"
         ItemStatus.NO_AUDIO -> "No audio"
-        ItemStatus.PROCESSING -> listOf("Transcribing", rowMeta(item)).filter { it.isNotEmpty() }.joinToString(" · ")
-        ItemStatus.READY -> rowMeta(item)
+        ItemStatus.PROCESSING -> listOf(stage?.text ?: "Transcribing", rowMeta(item)).filter { it.isNotEmpty() }.joinToString(" · ")
+        ItemStatus.READY -> listOfNotNull(stage?.text, rowMeta(item).ifEmpty { null }).joinToString(" · ")
     }
     RecordingRow(
         title = item.title?.takeIf { it.isNotBlank() } ?: untitled(app),
@@ -211,7 +214,7 @@ fun LibraryItemRow(
             ItemStatus.PROCESSING -> ({ Spinner(14.dp) })
             ItemStatus.FAILED -> ({ Icon(Icons.Rounded.ErrorOutline, null, tint = c.danger, modifier = Modifier.size(16.dp)) })
             ItemStatus.NO_AUDIO -> ({ Icon(Icons.Rounded.MicOff, null, tint = c.textMuted, modifier = Modifier.size(16.dp)) })
-            ItemStatus.READY -> null
+            ItemStatus.READY -> if (stage != null) ({ Spinner(14.dp) }) else null
         },
         badge = { DeviceBadge(SourceDevice.from(item.sourceDevice)) },
         stateLabel = status.label,

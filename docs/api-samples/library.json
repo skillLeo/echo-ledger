@@ -1,8 +1,8 @@
 {
     "data": [
         {
-            "id": "01m6xwdnxajc6255xaewz4jjzn",
-            "client_ref": "318eb0e4-f674-4488-aa81-616dfbe831d3",
+            "id": "01m6ye2pkthc4f1zspxadqp8cn",
+            "client_ref": "97214f5e-7afc-468f-83a6-a499bd7b3315",
             "deleted": false,
             "source_device": "web",
             "source_device_label": "Web",
@@ -23,7 +23,7 @@
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m6xwdnycfa1aer8p3pj5h0ps",
+                "final_transcript_id": "01m6ye2pmxrwx1y165zmt1sr3d",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Speaker: Hey, just a reminder that the client meeting moved to three PM tomorrow.",
@@ -37,7 +37,12 @@
                 "alternate_transcript_id": null,
                 "alternate_status": null,
                 "alternate_language": null,
-                "final_progress": null
+                "final_progress": null,
+                "views": {
+                    "status": "none",
+                    "default": "original",
+                    "progress": {}
+                }
             },
             "marker_count": 0,
             "screen_count": 0,
@@ -46,11 +51,11 @@
             "keep": false,
             "labels": [],
             "opened": false,
-            "updated_at": "2026-11-08T15:28:53+00:00"
+            "updated_at": "2026-11-08T20:37:27+00:00"
         },
         {
-            "id": "01m6xwdnvbjf0af58xj0b6b38x",
-            "client_ref": "39ae7ac3-8b30-4633-b396-2e6889a66f9f",
+            "id": "01m6ye2phz7cf6dkbew334bfyf",
+            "client_ref": "99a62429-4859-4ce0-ae2b-3146e26f1124",
             "deleted": false,
             "source_device": "phone",
             "source_device_label": "Phone",
@@ -58,11 +63,11 @@
             "source_app": "whatsapp_business",
             "source_app_label": "WhatsApp Business",
             "device": {
-                "id": "01m6xwdndb84wdjz93a2wv0nsc",
+                "id": "01m6ye2p56zjcp7wg7e84ad5f3",
                 "name": "Galaxy S25 Ultra"
             },
             "client": {
-                "id": "01m6xwdnd581nxz8wa1neb5gb4",
+                "id": "01m6ye2p510yakvjp2wg2xn348",
                 "name": "Acme Holdings",
                 "color": "#8B5CF6",
                 "avatar": null
@@ -79,7 +84,7 @@
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m6xwdnx9mkbytchcy6fsan6q",
+                "final_transcript_id": "01m6ye2pksasjsmyfcvkpb6jmr",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Client: Following up on the invoice for September.\nMe: Got it, I will forward it to finance today.",
@@ -93,7 +98,12 @@
                 "alternate_transcript_id": null,
                 "alternate_status": null,
                 "alternate_language": null,
-                "final_progress": null
+                "final_progress": null,
+                "views": {
+                    "status": "none",
+                    "default": "original",
+                    "progress": {}
+                }
             },
             "marker_count": 0,
             "screen_count": 0,
@@ -102,11 +112,11 @@
             "keep": false,
             "labels": [],
             "opened": false,
-            "updated_at": "2026-11-08T15:28:53+00:00"
+            "updated_at": "2026-11-08T20:37:27+00:00"
         },
         {
-            "id": "01m6xwdnqc61kfx3dj1sv62kby",
-            "client_ref": "af7e1b1a-6194-4a63-b4d0-060e3e5cfcbd",
+            "id": "01m6ye2pecnmrr0k9zsk9ahd8c",
+            "client_ref": "410e7571-9e44-4d37-9b79-4203cd5fd4a3",
             "deleted": false,
             "source_device": "desktop",
             "source_device_label": "Desktop",
@@ -114,7 +124,7 @@
             "source_app": "google_meet",
             "source_app_label": "Google Meet",
             "device": {
-                "id": "01m6xwdndx80a1panxqqvsxyxh",
+                "id": "01m6ye2p5eh4371mm3fw9wf5p2",
                 "name": "Work laptop"
             },
             "client": null,
@@ -130,7 +140,7 @@
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m6xwdnv9cegd60twx7906w45",
+                "final_transcript_id": "01m6ye2phx3t5bzjmrnta5mpjg",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Me: Quick status: the desktop overlay is ready for testing.\nClient: Nice. Is the click-through working on Windows 11?\nMe: It compiles and the hit-testing is un…",
@@ -144,7 +154,12 @@
                 "alternate_transcript_id": null,
                 "alternate_status": null,
                 "alternate_language": null,
-                "final_progress": null
+                "final_progress": null,
+                "views": {
+                    "status": "none",
+                    "default": "original",
+                    "progress": {}
+                }
             },
             "marker_count": 0,
             "screen_count": 0,
@@ -153,11 +168,11 @@
             "keep": false,
             "labels": [],
             "opened": false,
-            "updated_at": "2026-11-08T15:28:53+00:00"
+            "updated_at": "2026-11-08T20:37:27+00:00"
         },
         {
-            "id": "01m6xwdnjyc22201f48cqqh4n8",
-            "client_ref": "23ca73a2-8959-4be8-9477-b8870cdf54c2",
+            "id": "01m6ye2pa2mt1686gemt8axgep",
+            "client_ref": "dba63d57-bd25-49f3-aebd-4d0d7e2f5858",
             "deleted": false,
             "source_device": "desktop",
             "source_device_label": "Desktop",
@@ -165,11 +180,11 @@
             "source_app": "zoom",
             "source_app_label": "Zoom",
             "device": {
-                "id": "01m6xwdndx80a1panxqqvsxyxh",
+                "id": "01m6ye2p5eh4371mm3fw9wf5p2",
                 "name": "Work laptop"
             },
             "client": {
-                "id": "01m6xwdnd9nz4j88t13q7berbq",
+                "id": "01m6ye2p54085ba7sw5ndqv06c",
                 "name": "Nova Clinics",
                 "color": "#22D3EE",
                 "avatar": null
@@ -186,7 +201,7 @@
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m6xwdnqb3wa0wt69b54m0vtm",
+                "final_transcript_id": "01m6ye2peak1dzm4f3trcjmnky",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Client: Dr. Rehaan here, can you hear me clearly?\nMe: Yes, perfectly. Shall we review the telehealth timeline?\nClient: Please. Nova Clinics wants two pilot sit…",
@@ -200,7 +215,12 @@
                 "alternate_transcript_id": null,
                 "alternate_status": null,
                 "alternate_language": null,
-                "final_progress": null
+                "final_progress": null,
+                "views": {
+                    "status": "none",
+                    "default": "original",
+                    "progress": {}
+                }
             },
             "marker_count": 0,
             "screen_count": 0,
@@ -209,11 +229,11 @@
             "keep": false,
             "labels": [],
             "opened": false,
-            "updated_at": "2026-11-08T15:28:52+00:00"
+            "updated_at": "2026-11-08T20:37:27+00:00"
         },
         {
-            "id": "01m6xwdne02fsra7nvskx4vqh8",
-            "client_ref": "2121e27a-4d0b-4d33-a2e1-531feb54fa48",
+            "id": "01m6ye2p5g4pzdswx5zk8k6mqd",
+            "client_ref": "7f821531-fecc-4421-b541-6def5e83e13a",
             "deleted": false,
             "source_device": "phone",
             "source_device_label": "Phone",
@@ -221,11 +241,11 @@
             "source_app": "whatsapp",
             "source_app_label": "WhatsApp",
             "device": {
-                "id": "01m6xwdndb84wdjz93a2wv0nsc",
+                "id": "01m6ye2p56zjcp7wg7e84ad5f3",
                 "name": "Galaxy S25 Ultra"
             },
             "client": {
-                "id": "01m6xwdnd581nxz8wa1neb5gb4",
+                "id": "01m6ye2p510yakvjp2wg2xn348",
                 "name": "Acme Holdings",
                 "color": "#8B5CF6",
                 "avatar": null
@@ -242,7 +262,7 @@
             "language_chip": "EN",
             "transcript": {
                 "final_status": "completed",
-                "final_transcript_id": "01m6xwdnjvt64rghegvnashjhb",
+                "final_transcript_id": "01m6ye2pa0hrvg3cmb68rrfrfs",
                 "live_available": false,
                 "live_transcript_id": null,
                 "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
@@ -256,7 +276,12 @@
                 "alternate_transcript_id": null,
                 "alternate_status": null,
                 "alternate_language": null,
-                "final_progress": null
+                "final_progress": null,
+                "views": {
+                    "status": "none",
+                    "default": "original",
+                    "progress": {}
+                }
             },
             "marker_count": 0,
             "screen_count": 0,
@@ -265,9 +290,9 @@
             "keep": false,
             "labels": [],
             "opened": false,
-            "updated_at": "2026-11-08T15:28:52+00:00"
+            "updated_at": "2026-11-08T20:37:27+00:00"
         }
     ],
     "next_cursor": null,
-    "server_time": "2026-11-08T15:28:53+00:00"
+    "server_time": "2026-11-08T20:37:27+00:00"
 }

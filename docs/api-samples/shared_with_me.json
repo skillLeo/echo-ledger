@@ -1,7 +1,7 @@
 {
     "data": [
         {
-            "id": "01m6xwdpaedrtzzan7pcbbqask",
+            "id": "01m6ye2pzngtxhnxm4hxnkn8kq",
             "kind": "session",
             "from": {
                 "name": "Sample Owner",
@@ -9,11 +9,11 @@
             },
             "note": "Please look.",
             "title": "Retainer check-in, renamed",
-            "sent_at": "2026-11-08T15:28:53+00:00",
+            "sent_at": "2026-11-08T20:37:28+00:00",
             "saved_at": null,
             "session": {
-                "id": "01m6xwdne02fsra7nvskx4vqh8",
-                "client_ref": "2121e27a-4d0b-4d33-a2e1-531feb54fa48",
+                "id": "01m6ye2p5g4pzdswx5zk8k6mqd",
+                "client_ref": "7f821531-fecc-4421-b541-6def5e83e13a",
                 "deleted": false,
                 "source_device": "phone",
                 "source_device_label": "Phone",
@@ -34,7 +34,7 @@
                 "language_chip": "EN",
                 "transcript": {
                     "final_status": "completed",
-                    "final_transcript_id": "01m6xwdnjvt64rghegvnashjhb",
+                    "final_transcript_id": "01m6ye2pa0hrvg3cmb68rrfrfs",
                     "live_available": false,
                     "live_transcript_id": null,
                     "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
@@ -48,7 +48,12 @@
                     "alternate_transcript_id": null,
                     "alternate_status": null,
                     "alternate_language": null,
-                    "final_progress": null
+                    "final_progress": null,
+                    "views": {
+                        "status": "ready",
+                        "default": "original",
+                        "progress": {}
+                    }
                 },
                 "marker_count": 1,
                 "screen_count": 1,
@@ -60,7 +65,7 @@
                 "labels": [
                     "Sample"
                 ],
-                "updated_at": "2026-11-08T15:28:53+00:00"
+                "updated_at": "2026-11-08T20:37:28+00:00"
             },
             "client": null
         }
