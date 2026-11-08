@@ -12,7 +12,7 @@ fn map(entries: &[(Action, &str)]) -> HashMap<Action, String> {
 fn the_defaults_are_the_documented_chords() {
     let defaults = default_map();
     assert_eq!(defaults.len(), 6);
-    assert_eq!(defaults[&Action::RecordNow], "CommandOrControl+Shift+R");
+    assert_eq!(defaults[&Action::RecordNow], "CommandOrControl+Alt+R");
     assert_eq!(
         defaults[&Action::ToggleCaptions],
         "CommandOrControl+Shift+Space"
