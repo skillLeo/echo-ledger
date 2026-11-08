@@ -1,7 +1,7 @@
 {
     "data": {
-        "id": "01m6s1x6v38xtqnqa6exvtgtmn",
-        "client_ref": "2f93ca0e-5e65-4014-ab2d-f14bee0fe1da",
+        "id": "01m6xwdne02fsra7nvskx4vqh8",
+        "client_ref": "2121e27a-4d0b-4d33-a2e1-531feb54fa48",
         "deleted": false,
         "source_device": "phone",
         "source_device_label": "Phone",
@@ -9,27 +9,28 @@
         "source_app": "whatsapp",
         "source_app_label": "WhatsApp",
         "device": {
-            "id": "01m6s1x6sjc06e3qqmga95r8v1",
+            "id": "01m6xwdndb84wdjz93a2wv0nsc",
             "name": "Galaxy S25 Ultra"
         },
         "client": {
-            "id": "01m6s1x86j0z17y6qtyyr062mp",
+            "id": "01m6xwdp8j82214har6rmvasp6",
             "name": "Sample project, renamed",
             "color": "#8b5cf6",
             "avatar": null
         },
         "filed_by": "user",
         "title": "Retainer check-in, renamed",
+        "title_auto": false,
         "caller": null,
-        "started_at": "2026-11-05T10:15:00+00:00",
-        "ended_at": "2026-11-05T10:15:19+00:00",
+        "started_at": "2026-11-07T10:15:00+00:00",
+        "ended_at": "2026-11-07T10:15:19+00:00",
         "duration_ms": 19375,
         "status": "completed",
         "language": null,
         "language_chip": "EN",
         "transcript": {
             "final_status": "completed",
-            "final_transcript_id": "01m6s1x743024zzgyrceszd9zs",
+            "final_transcript_id": "01m6xwdnjvt64rghegvnashjhb",
             "live_available": false,
             "live_transcript_id": null,
             "preview": "Me: Hi Farah, thanks for making time today.\nClient: Of course. I wanted to confirm the Q3 retainer scope.\nMe: Sure. We kept the Karachi office onboarding in ph…",
@@ -55,6 +56,6 @@
         "labels": [
             "Sample"
         ],
-        "updated_at": "2026-11-06T18:28:34+00:00"
+        "updated_at": "2026-11-08T15:28:53+00:00"
     }
 }

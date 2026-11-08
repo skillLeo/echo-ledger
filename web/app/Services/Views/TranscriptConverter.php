@@ -13,7 +13,9 @@ interface TranscriptConverter
     /**
      * @param  array<int, string>  $lines  segment index => text
      * @param  list<string>  $views  the views wanted (keys of TranscriptViews::VIEWS)
-     * @return array{lines: array<int, array<string, string>>, input_tokens: int, output_tokens: int, model: string}
+     *                               `misheard` (since v1.5, Phase 1C, optional): per line, the words the model believes were misheard (`from` as in the
+     *                               line, `to` what was probably said); the views keep them as they are, and they become suggested fixes.
+     * @return array{lines: array<int, array<string, string>>, misheard?: array<int, list<array{from: string, to: string}>>, input_tokens: int, output_tokens: int, model: string}
      */
     public function convert(array $lines, string $language, array $views): array;
 }

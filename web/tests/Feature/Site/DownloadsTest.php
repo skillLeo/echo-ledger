@@ -190,3 +190,10 @@ it('starts queue workers from the scheduler on shared hosting only', function ()
     config(['queue.via_scheduler' => false]);
     expect($worker->filtersPass(app()))->toBeFalse();
 });
+
+it('says how to get started in three steps (since v1.5, Phase 1C)', function () {
+    $html = $this->get('/downloads')->assertOk()->getContent();
+
+    expect($html)->toContain('How to get started')->toContain('Download and install')->toContain('Sign in')->toContain('Run the Ready check')
+        ->and(substr_count((string) preg_replace('/.*How to get started(.*?)<\/ol>.*/s', '$1', $html), '<li'))->toBe(3);
+});

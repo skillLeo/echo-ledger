@@ -44,6 +44,7 @@ use Illuminate\Support\Carbon;
  * @property SourceDevice $source_device
  * @property SourceApp $source_app
  * @property string|null $title
+ * @property bool $title_auto the title was written by the server from what was said (since v1.5, Phase 1C)
  * @property string|null $language
  * @property Carbon $started_at
  * @property Carbon|null $ended_at
@@ -93,7 +94,7 @@ class CaptureSession extends Model
     public const ORIGIN_SAVED = 'saved';
 
     protected $fillable = [
-        'workspace_id', 'user_id', 'device_id', 'client_id', 'filed_by', 'origin', 'client_ref', 'source_device', 'source_app', 'title', 'language',
+        'workspace_id', 'user_id', 'device_id', 'client_id', 'filed_by', 'origin', 'client_ref', 'source_device', 'source_app', 'title', 'title_auto', 'language',
         'started_at', 'ended_at', 'duration_ms', 'pauses', 'language_marks', 'speaker_names', 'status', 'pinned', 'keep_forever', 'final_provider',
     ];
 
@@ -360,6 +361,7 @@ class CaptureSession extends Model
             'reference_set_at' => 'datetime',
             'speaker_names' => 'array',
             'pinned' => 'boolean',
+            'title_auto' => 'boolean',
             'keep_forever' => 'boolean',
             'media_erased_at' => 'datetime',
         ];

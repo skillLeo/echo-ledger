@@ -71,6 +71,18 @@ it('still suggests fixes on a plan without AI notes, and writes no notes', funct
     $this->api(Fx::token($this->device))->getJson("/api/transcripts/{$transcript->id}")->assertOk()->assertJsonCount(1, 'suggestions');
 });
 
+it('keeps the views\' own suggested fixes (since v1.5, Phase 1C) when the client fixes are made', function () {
+    fakeClientAi();
+    $transcript = gatedCall($this->owner, $this->client);
+    $transcript->update(['meta' => ['suggestions' => [['line' => 0, 'from' => 'Ali', 'to' => 'Aali', 'reason' => 'view_check', 'status' => 'open']]]]);
+
+    app(ClientWorkspace::class)->afterTranscript($transcript->refresh());
+
+    $open = $this->api(Fx::token($this->device))->getJson("/api/transcripts/{$transcript->id}")->assertOk()->json('suggestions');
+    expect(collect($open)->pluck('reason', 'id')->all())->toBe([0 => 'view_check', 1 => $open[1]['reason']])
+        ->and($open[1]['to'])->toBe('Login page');
+});
+
 it('queues the fixes on their own, not the notes', function () {
     Queue::fake();
     $transcript = gatedCall($this->owner, $this->client);

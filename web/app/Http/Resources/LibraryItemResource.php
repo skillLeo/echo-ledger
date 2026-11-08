@@ -57,6 +57,8 @@ final class LibraryItemResource extends JsonResource
             // Since v1.5: how it got into its project (user, contact, rule), null in the Inbox.
             'filed_by' => $session->client !== null ? $session->filed_by : null,
             'title' => $session->displayTitle(),
+            // Since v1.5 (Phase 1C): the title was written by the server from what was said; a person's title is false.
+            'title_auto' => (bool) $session->title_auto,
             // Since v1.2: who the recording was with (name, number, where the device saw it), or null.
             'caller' => SessionController::caller($session),
             'started_at' => $session->started_at->toAtomString(),

@@ -17,6 +17,7 @@ use App\Jobs\TranscribeFinalJob;
 use App\Models\Transcript;
 use App\Models\TranscriptRevision;
 use App\Services\ClientAi\ClientWorkspace;
+use App\Services\Titles\AutoTitles;
 use App\Services\Usage\UsageLedger;
 use App\Services\Views\TranscriptViews;
 use App\Stt\Data\NormalizedTranscript;
@@ -108,6 +109,8 @@ final class TranscriptStore
         if (! $shortCheck && in_array($transcript->kind, [TranscriptKind::Final, TranscriptKind::Alternate], true)) {
             app(TranscriptViews::class)->autoMake($transcript);
         }
+        // An untitled recording gets a short title from what was said (since v1.5, Phase 1C), on the queue.
+        app(AutoTitles::class)->afterTranscript($transcript);
         // A client's recording gets its call notes and memory lines (v1.4), on the queue.
         app(ClientWorkspace::class)->afterTranscript($transcript);
 

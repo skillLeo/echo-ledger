@@ -28,17 +28,51 @@ never their recordings. A workspace always has one owner, so an owner who wants 
    tries the values on the page before you save them. Then add the SPF, DKIM and DMARC records in
    [EMAIL_DNS.md](EMAIL_DNS.md) at your domain's DNS host. Invitations, confirmations, password resets and sign-in
    alerts all need this.
-2. **Google sign-in (optional).** API Credentials → Google sign-in shows the exact redirect address. In the Google
-   Cloud console create an OAuth client of type *Web application* with that address, then paste its client ID and
-   secret here.
-3. **Who can sign up.** Settings → Privacy & security → Who can sign up: *Nobody* (the default), *Only invited people*,
-   or *Anyone*. Keep it on *Nobody* or *Only invited people* until the server is ready for the public (VPS, legal
-   pages reviewed).
+2. **Google sign-in (optional).** One OAuth client of type *Web application*: the steps are in
+   [Google sign-in: the OAuth client](#google-sign-in-the-oauth-client) below.
+3. **Who can sign up.** Settings → Privacy & security → Who can sign up:
+   - **On** (*Anyone*): family and friends make their own free account on the sign-up page, or with **Create account**
+     in the apps. Each account gets its own private workspace: they never see your recordings and you never see theirs
+     unless one of you shares.
+   - **Off** (*Nobody*, the default): there is no sign-up page. You add people on the Workspace page; they join your
+     workspace as teammates.
+   - **Invite only**: the Workspace page's **Invite** emails a sign-up link to an address without an account.
+
+   Keep it Off or Invite only until the server is ready for the public (VPS, legal pages reviewed).
 4. **Members in the console.** Settings → Members can use the console (on by default). When it is on, members and
    viewers get a small read-only console: their own library, Shared with me, their profile and devices. When it is
    off, the console points them to the apps.
 5. **Legal pages.** `/terms` and `/privacy` are drafts marked "Draft — for review". Have them read before anyone
    outside your team signs up.
+
+### Google sign-in: the OAuth client
+
+The phone and computer apps sign in with Google **through the console in the browser**: they open
+`https://<your server>/device/sign-in`, the console sends the browser to Google, and Google sends it back to the console.
+So the server needs **only one OAuth client, of type Web application**. No Android client (no SHA-1 fingerprint) and no
+desktop client are needed; create them only if the apps ever sign in with Google without the browser.
+
+1. Open [console.cloud.google.com](https://console.cloud.google.com) and pick or create a project (for example
+   *EchoLedger*).
+2. **Google Auth Platform → Branding** (older consoles: *APIs & Services → OAuth consent screen*): app name
+   *EchoLedger*, your support email, your domain under *Authorised domains*, and a developer contact email.
+3. **Audience:** *External*. Press **Publish app** so it is *In production*; while it says *Testing*, only the test users
+   listed there can sign in.
+4. **Data access:** add the scopes `openid`, `.../auth/userinfo.email` and `.../auth/userinfo.profile`. They are not
+   sensitive, so Google asks for no review of them.
+5. **Clients → Create client** (older consoles: *Credentials → Create credentials → OAuth client ID*):
+   - Application type: **Web application**; name: *EchoLedger console*.
+   - Authorised JavaScript origins: `https://<your server>` (optional).
+   - Authorised redirect URIs: the address the console shows under **API Credentials → Google sign-in**, exactly, for
+     example `https://echoledger.example.com/auth/google/callback`. It is the server's address followed by
+     `/auth/google/callback`; `http://` works only for `localhost`.
+6. **Create**, then copy the **Client ID** and **Client secret** into **API Credentials → Google sign-in** in the console
+   and save. *Sign in with Google* appears on the console's sign-in page at once, and the apps offer Google too
+   (`GET /api/auth/options` says `"google": true`).
+7. Check it: sign out, choose **Sign in with Google**, and sign in with an account whose email has an account here.
+
+If Google answers *redirect_uri_mismatch*, the address in step 5 differs from the one the console shows (a missing
+`www`, `http` instead of `https`, or a slash at the end).
 
 ## 3. People and workspaces
 
@@ -46,6 +80,8 @@ Open **Workspace** in the console.
 
 - **Invite:** an email address and a role. The email holds a link that works once, for 7 days. If the plan's seats
   are full, the invitation is refused until you raise the seats or remove someone.
+- **Pending invitations** lists the invitations not used yet. **Resend** emails a new link for 7 more days (the old
+  link stops working) and counts against the same 20 an hour as Invite; **Cancel** stops the link and frees its seat.
 - **Change role** or **Remove** on a person's row. A removed person keeps their own personal workspace, and their
   devices leave this one. Their sign-in codes, share links and request links here stop working, and what was sent to
   them from this workspace ends (copies they saved stay theirs). Coming back does not bring any of it back.

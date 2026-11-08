@@ -7,6 +7,8 @@ namespace App\Http\Controllers\Api;
 use App\Enums\DevicePlatform;
 use App\Http\Controllers\Controller;
 use App\Services\Accounts\DeviceSignIn;
+use App\Services\Accounts\GoogleSignIn;
+use App\Services\Accounts\SignUp;
 use App\Services\DeviceConfigPayload;
 use App\Support\ClientCountry;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +19,24 @@ use Illuminate\Validation\Rule;
 final class AuthController extends Controller
 {
     public function __construct(private readonly DeviceSignIn $signIn, private readonly DeviceConfigPayload $config) {}
+
+    /**
+     * GET /api/auth/options — public, throttled like the site pages (since v1.5, Phase 1C): what a sign-in screen
+     * offers on this server. Sign-up is offered only when anyone may make an account; the pages open in the browser.
+     */
+    public function options(SignUp $signUp, GoogleSignIn $google): JsonResponse
+    {
+        $signUpOpen = $signUp->mode() === SignUp::ANYONE;
+
+        return response()->json([
+            'password' => true,
+            'google' => $google->configured(),
+            'sign_up' => $signUpOpen,
+            'sign_up_url' => $signUpOpen ? route('filament.admin.auth.register') : null,
+            'reset_url' => route('filament.admin.auth.password-reset.request'),
+            'browser_sign_in' => true,
+        ]);
+    }
 
     /** POST /api/auth/password — public, throttled (5/min/IP, and 5 failures per 15 minutes per email). */
     public function password(Request $request): JsonResponse

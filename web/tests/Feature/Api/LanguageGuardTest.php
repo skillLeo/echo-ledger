@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Jobs\MakeAutoTitleJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -111,7 +112,8 @@ describe('enforcing the allowed languages', function () {
         $urdu = guardedTranscript($this, 'ur');
         app(TranscriptStore::class)->complete($urdu, spoken('Please send the invoice tomorrow morning, thank you.', 'en'));
         expect($urdu->refresh()->status)->toBe(TranscriptStatus::Completed)->and($urdu->language)->toBe('ur');
-        Queue::assertNothingPushed();
+        // Nothing is run again; only the automatic titles (since v1.5, Phase 1C) are queued.
+        expect(array_keys(Queue::pushedJobs()))->toBe([MakeAutoTitleJob::class]);
     });
 
     it('does not second-guess an engine that names no language, and never re-runs live captions', function () {
@@ -124,6 +126,7 @@ describe('enforcing the allowed languages', function () {
         $live = $session->transcripts()->create(['kind' => TranscriptKind::Live, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Processing]);
         app(TranscriptStore::class)->complete($live, spoken(str_repeat('नमस्ते आप कैसे हैं ', 5), 'hi'));
         expect($live->refresh()->status)->toBe(TranscriptStatus::Completed);
-        Queue::assertNothingPushed();
+        // Nothing is run again; only the automatic titles (since v1.5, Phase 1C) are queued.
+        expect(array_keys(Queue::pushedJobs()))->toBe([MakeAutoTitleJob::class]);
     });
 });

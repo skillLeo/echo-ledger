@@ -6,6 +6,7 @@ use App\Enums\RecordingRole;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Enums\UploadStatus;
+use App\Jobs\MakeAutoTitleJob;
 use App\Jobs\ProcessSttWebhookJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
@@ -76,7 +77,9 @@ it('processes a valid AssemblyAI webhook immediately and is idempotent on replay
     expect($transcript->text)->toBe("Me: Hello there.\nClient: Hi, thanks for calling.");
     expect($transcript->provider_deleted_at)->not->toBeNull();
     expect(WebhookEvent::first()->status)->toBe('processed');
-    Queue::assertNothingPushed();
+    // Only the automatic title of the untitled recording (since v1.5, Phase 1C) is queued.
+    Queue::assertPushed(MakeAutoTitleJob::class, 1);
+    expect(Queue::pushedJobs())->toHaveCount(1);
 
     // A replayed delivery is recorded once and does no work twice.
     $post()->assertOk();

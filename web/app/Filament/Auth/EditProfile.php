@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Accounts\AccountExports;
 use App\Services\Accounts\AccountSessions;
+use App\Services\Accounts\EmailPreferences;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
@@ -102,24 +103,28 @@ class EditProfile extends BaseEditProfile
         };
     }
 
-    /** Emails that are a choice (sign-in alerts, invitations and the like always come). */
+    /**
+     * Profile → Emails (since v1.5, Phase 1C): on or off per category, as the apps' notification categories; Account &
+     * security emails always come and say so.
+     */
     private function emailsSection(): Section
     {
         return Section::make('Emails')
+            ->description('Choose which emails you get. The bell in the console and the apps tell you either way.')
             ->schema([
-                Text::make(fn (): string => $this->account()->notify_transcript_ready
-                    ? 'You get an email when a transcript of yours is ready.'
-                    : 'No email when a transcript is ready: the bell in the console and the apps tell you.'),
-                Actions::make([
-                    Action::make('toggleTranscriptEmails')->color('gray')->icon(Heroicon::OutlinedEnvelope)
-                        ->label(fn (): string => $this->account()->notify_transcript_ready ? 'Stop the transcript emails' : 'Email me when a transcript is ready')
-                        ->action(function (): void {
-                            $on = ! $this->account()->notify_transcript_ready;
-                            $this->account()->forceFill(['notify_transcript_ready' => $on])->save();
-                            Notification::make()->title($on ? 'Transcript emails on' : 'Transcript emails off')->success()->send();
-                        }),
-                ])->key('email-actions'),
+                View::make('filament.profile.emails')->viewData(fn (): array => ['rows' => EmailPreferences::rows($this->account()), 'always' => EmailPreferences::ALWAYS]),
             ]);
+    }
+
+    /** One category of emails on or off (Profile → Emails). */
+    public function toggleEmail(string $category): void
+    {
+        if (! isset(EmailPreferences::CATEGORIES[$category])) {
+            return;
+        }
+        $on = ! EmailPreferences::wants($this->account(), $category);
+        EmailPreferences::set($this->account(), $category, $on);
+        Notification::make()->title(EmailPreferences::CATEGORIES[$category]['label'].' emails '.($on ? 'on' : 'off'))->success()->send();
     }
 
     /** Profile → Devices: every phone, computer and browser signed in to this account, with Revoke. */

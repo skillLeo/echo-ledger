@@ -23,7 +23,9 @@ use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -417,6 +419,70 @@ describe('invitations', function () {
 
         expect(WorkspaceInvitation::query()->whereKey($id)->exists())->toBeFalse()->and(app(PlanLimits::class)->seatsUsed($ws->id))->toBe(1);
         expect($url)->toContain('invite=');
+    });
+});
+
+describe('pending invitations: resend and cancel (since v1.5, Phase 1C)', function () {
+    it('sends a pending invitation again with a new link, the old one no longer works', function () {
+        Mail::fake();
+        $owner = Fx::user();
+        $ws = Workspace::query()->findOrFail($owner->current_workspace_id);
+        $first = app(Invitations::class)->invite($ws, $owner, 'again@example.test', WorkspaceRole::Member);
+        $old = WorkspaceInvitation::query()->where('email', 'again@example.test')->sole();
+        $this->actingAs($owner, 'web');
+
+        Livewire::test(WorkspaceSettings::class)->assertSee('Pending invitations')->assertSee('Resend')->assertSee('Cancel')
+            ->call('resendInvitation', $old->id)->assertNotified('Invitation sent again to again@example.test');
+
+        $new = WorkspaceInvitation::query()->where('email', 'again@example.test')->sole();
+        expect($new->id)->not->toBe($old->id)->and($new->role)->toBe(WorkspaceRole::Member)
+            ->and(app(Invitations::class)->find(Str::after($first, 'invite=')))->toBeNull();
+        Mail::assertQueued(InvitationMail::class, 2);
+    });
+
+    it('counts resending against the same hourly limit as Invite, and limits cancelling too', function () {
+        Mail::fake();
+        $owner = Fx::user();
+        $ws = Workspace::query()->findOrFail($owner->current_workspace_id);
+        app(Invitations::class)->invite($ws, $owner, 'limit@example.test', WorkspaceRole::Member);
+        $this->actingAs($owner, 'web');
+        foreach (range(1, WorkspaceSettings::ADDS_PER_HOUR) as $_) {
+            RateLimiter::hit('add-member:'.$owner->id, 3600);
+        }
+        $id = WorkspaceInvitation::query()->where('email', 'limit@example.test')->value('id');
+
+        Livewire::test(WorkspaceSettings::class)->call('resendInvitation', $id)->assertNotified('Too many invitations sent for now');
+        Mail::assertQueued(InvitationMail::class, 1);
+
+        foreach (range(1, WorkspaceSettings::CANCELS_PER_HOUR) as $_) {
+            RateLimiter::hit('cancel-invitation:'.$owner->id, 3600);
+        }
+        Livewire::test(WorkspaceSettings::class)->call('revokeInvitation', $id)->assertNotified('Too many invitations cancelled for now');
+        expect(WorkspaceInvitation::query()->whereKey($id)->exists())->toBeTrue();
+    });
+
+    it('lets only those who may invite resend or cancel, and only in their workspace', function () {
+        Mail::fake();
+        ['ws' => $ws, 'people' => $p] = everyRole();
+        app(Invitations::class)->invite($ws, $p['owner'], 'kept@example.test', WorkspaceRole::Member);
+        $id = WorkspaceInvitation::query()->where('email', 'kept@example.test')->value('id');
+        $stranger = Fx::user();
+        $this->actingAs($stranger, 'web');
+        Livewire::test(WorkspaceSettings::class)->call('resendInvitation', $id)->call('revokeInvitation', $id);
+        $this->actingAs($p['member'], 'web');
+        Livewire::test(WorkspaceSettings::class)->call('resendInvitation', $id)->call('revokeInvitation', $id);
+
+        expect(WorkspaceInvitation::query()->whereKey($id)->exists())->toBeTrue();
+        Mail::assertQueued(InvitationMail::class, 1);
+    });
+});
+
+describe('who can sign up, in plain words (since v1.5, Phase 1C)', function () {
+    it('says what On and Off mean for family and friends', function () {
+        expect(SignUp::SETTING_LABELS)->toHaveKeys([SignUp::ANYONE, SignUp::NOBODY, SignUp::INVITED])
+            ->and(SignUp::SETTING_LABELS[SignUp::ANYONE])->toContain('family and friends')
+            ->and(SignUp::SETTING_HELP)->toContain('own free account')->toContain('Nobody sees anyone else\'s recordings unless they are shared')
+            ->toContain('Off: there is no sign-up page');
     });
 });
 

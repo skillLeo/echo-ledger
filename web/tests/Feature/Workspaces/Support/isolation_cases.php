@@ -24,6 +24,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 /** API routes outside the device token, each with the reason it is safe without a workspace. */
 const ISO_API_BYPASS = [
     'api.devices.register' => 'pairing: the one-time code decides the workspace',
+    'api.auth.options' => 'sign-in options: server-wide settings (password, Google, sign-up), no workspace data',
     'api.auth.password' => 'signing in: the account decides the workspace (its current one)',
     'api.auth.device.token' => 'signing in: the approved one-time code decides the workspace',
     'api.webhooks.stt' => 'provider callback: found by transcript id and verified signature',

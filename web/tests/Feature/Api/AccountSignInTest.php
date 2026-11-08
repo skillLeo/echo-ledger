@@ -10,6 +10,8 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Accounts\DeviceSignIn;
+use App\Services\Accounts\SignUp;
+use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Hashing\HashManager;
 use Illuminate\Support\Facades\DB;
@@ -310,5 +312,32 @@ describe('browser sign-in', function () {
 
         $dump = json_encode([DB::table('device_sign_in_codes')->get(), DB::table('audit_events')->get()]);
         expect($dump)->not->toContain($code);
+    });
+});
+
+describe('GET /api/auth/options (since v1.5, Phase 1C)', function () {
+    it('offers email and password only on a server without Google and closed sign-up', function () {
+        $this->getJson('/api/auth/options')->assertOk()->assertExactJson([
+            'password' => true,
+            'google' => false,
+            'sign_up' => false,
+            'sign_up_url' => null,
+            'reset_url' => route('filament.admin.auth.password-reset.request'),
+            'browser_sign_in' => true,
+        ]);
+    });
+
+    it('offers Google once the client is set and Create account only when anyone may sign up', function () {
+        fakeGoogle();
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        $this->getJson('/api/auth/options')->assertOk()->assertJsonPath('google', true)->assertJsonPath('sign_up', false)->assertJsonPath('sign_up_url', null);
+
+        app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+        $this->getJson('/api/auth/options')->assertOk()->assertJsonPath('sign_up', true)->assertJsonPath('sign_up_url', route('filament.admin.auth.register'));
+    });
+
+    it('needs no token and reads nothing of anyone', function () {
+        $body = $this->getJson('/api/auth/options')->assertOk()->json();
+        expect(array_keys($body))->toBe(['password', 'google', 'sign_up', 'sign_up_url', 'reset_url', 'browser_sign_in']);
     });
 });

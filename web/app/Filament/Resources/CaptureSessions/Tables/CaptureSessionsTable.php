@@ -10,6 +10,7 @@ use App\Enums\SourceDevice;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Filament\Resources\Devices\DeviceResource;
+use App\Filament\Support\LibraryView;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\LibraryOrganiser;
@@ -54,7 +55,15 @@ final class CaptureSessionsTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->defaultSort('started_at', 'desc')
+            // Since v1.5 (Phase 1C): Group by and Sort by from the Library's toolbar menus, remembered per person and view.
+            ->defaultSort(fn (Builder $query, HasTable $livewire): Builder => LibraryView::applySort(
+                $query,
+                property_exists($livewire, 'librarySort') ? (string) $livewire->librarySort : LibraryView::DEFAULT_SORT,
+                CurrentWorkspace::userId(),
+            ))
+            ->groups(LibraryView::groups())
+            ->groupingSettingsHidden()
+            ->groupingDirectionSettingHidden()
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('labels'))
             // The phone's list: one row per recording (tile, title, time, a second line, a status only when needed).
             ->columns([
@@ -257,11 +266,23 @@ final class CaptureSessionsTable
         return $final !== null && in_array($final->status, [TranscriptStatus::Pending, TranscriptStatus::Submitted, TranscriptStatus::Processing], true);
     }
 
+    /** Pending, or its transcript is done and the view it opens in is being made (since v1.5, Phase 1C). */
+    public static function isMoving(CaptureSession $session): bool
+    {
+        if (self::isPending($session)) {
+            return true;
+        }
+        $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
+
+        return $final !== null && $final->status === TranscriptStatus::Completed && ($final->meta['views']['status'] ?? null) === 'making'
+            && app(TranscriptViews::class)->state($final)['status'] === 'making';
+    }
+
     /** @param  iterable<mixed>|null  $records  the rows the list shows now */
     public static function showsPending(?iterable $records): bool
     {
         foreach ($records ?? [] as $record) {
-            if ($record instanceof CaptureSession && self::isPending($record)) {
+            if ($record instanceof CaptureSession && self::isMoving($record)) {
                 return true;
             }
         }

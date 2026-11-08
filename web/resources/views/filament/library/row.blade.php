@@ -14,7 +14,9 @@
         <span class="el-row-sub">
             <span class="el-sr">{{ $row['app'] }} · {{ $row['device'] }} · </span>
             <span class="el-row-meta">{{ $row['meta'] }}</span>
-            @if ($row['status'] !== null)
+            @if ($row['progress'] !== null && ! in_array($row['status']['label'] ?? null, ['Waiting', 'Failed', 'No audio'], true))
+                @include('filament.library.progress', ['progress' => $row['progress'], 'compact' => true])
+            @elseif ($row['status'] !== null)
                 @include('filament.library.status', ['status' => $row['status']])
             @endif
         </span>
