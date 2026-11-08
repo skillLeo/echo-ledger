@@ -414,8 +414,9 @@ class Settings extends Page
                         Actions::make([Action::make('openSecurity')->label('Open Security')->color('gray')->url(fn (): string => Security::getUrl())]),
                     ]),
                     $this->section('signup')->description('New accounts get their own personal workspace and must confirm their email before they can sign in. People you add on the Workspace page always can.')->schema([
-                        Select::make('signup_mode')->label('Who can sign up')->options(SignUp::MODES)->selectablePlaceholder(false)->required()
-                            ->helperText('"Only people with an invitation": the Workspace page\'s Invite emails a sign-up link to an address without an account.'),
+                        Select::make('signup_mode')->label('Who can sign up')->options(SignUp::SETTING_LABELS)->selectablePlaceholder(false)->required()
+                            // Since v1.5 (Phase 1C): what On and Off mean for family and friends, in plain words.
+                            ->helperText(SignUp::SETTING_HELP),
                         Toggle::make('console_members')->label('Members can use the console')
                             ->helperText('On: members and viewers open their own library, Shared with me, their profile and devices here, to read. Off: the console shows them the apps instead. Owners and admins always have it.'),
                     ]),

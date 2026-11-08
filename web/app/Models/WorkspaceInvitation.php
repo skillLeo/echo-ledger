@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $invited_by
  * @property Carbon $expires_at
  * @property Carbon|null $accepted_at
+ * @property Carbon|null $created_at
  * @property-read Workspace $workspace
  */
 class WorkspaceInvitation extends Model

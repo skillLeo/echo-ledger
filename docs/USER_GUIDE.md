@@ -109,6 +109,17 @@ same with Google or a passkey: the browser opens, you sign in there, and the pho
 Your account's page on the phone (**You → Account**) exports your data, signs out every device, or deletes the
 account (you have 7 days to change your mind by signing in again).
 
+**Family, friends and teammates (since v1.5).** Everyone has their own account, and nobody sees anyone else's
+recordings unless they are shared with them.
+
+- **Family and friends** make their own free account when the server allows it (**Create account** in the apps, or
+  the sign-up page of the console). Their account has its own private workspace: they do not see your recordings and
+  you do not see theirs.
+- **Teammates** are invited: the workspace's owner or an admin invites them by email on the console's **Workspace**
+  page (or adds them there). Being in the same workspace still keeps each person's recordings their own.
+- **Sharing** is how anyone sees a recording of yours: **Send to a teammate**, or a share link you make and can take
+  back.
+
 **Signing in with a code** also works, for older apps too. It connects a device to your server with a one-time code; you
 need the web console.
 

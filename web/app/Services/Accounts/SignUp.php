@@ -34,6 +34,15 @@ final class SignUp
         self::INVITED => 'Only people with an invitation',
     ];
 
+    /** How Settings → Who can sign up names the three choices (since v1.5, Phase 1C): On, Off and invite only. */
+    public const SETTING_LABELS = [
+        self::ANYONE => 'On: anyone can make a free account (family and friends too)',
+        self::NOBODY => 'Off: only people you add on the Workspace page',
+        self::INVITED => 'Invite only: people you invite by email',
+    ];
+
+    public const SETTING_HELP = 'On: family and friends open the sign-up page (or Create account in the apps) and make their own free account with its own private workspace. Nobody sees anyone else\'s recordings unless they are shared, you included. Off: there is no sign-up page; you add people on the Workspace page and they join your workspace as teammates. Invite only: the Workspace page\'s Invite emails a sign-up link to an address without an account.';
+
     public function __construct(
         private readonly SettingsRepository $settings,
         private readonly Workspaces $workspaces,

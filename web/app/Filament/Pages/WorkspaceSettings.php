@@ -211,17 +211,59 @@ class WorkspaceSettings extends Page implements HasTable
         ];
     }
 
-    /** Takes back an invitation that was not used yet; its seat is free again. */
-    public function revokeInvitation(int $id): void
+    /** Cancels taken back per hour by one account (since v1.5, Phase 1C). */
+    public const CANCELS_PER_HOUR = 60;
+
+    /**
+     * Sends a pending invitation again (since v1.5, Phase 1C): a new link for 7 more days, the old one stops working.
+     * Each one emails the address, so it counts against the same 20 an hour as Invite.
+     */
+    public function resendInvitation(int $id): void
     {
         if (! $this->can('invite')) {
             return;
         }
         $invitation = WorkspaceInvitation::query()->where('workspace_id', CurrentWorkspace::id())->whereNull('accepted_at')->find($id);
+        if (! $invitation instanceof WorkspaceInvitation) {
+            Notification::make()->title('That invitation is no longer pending.')->warning()->send();
+
+            return;
+        }
+        if (! $this->can('assignRole', $invitation->role)) {
+            Notification::make()->title('You cannot give that role.')->danger()->send();
+
+            return;
+        }
+        $key = 'add-member:'.$this->user()->id;
+        if (RateLimiter::tooManyAttempts($key, self::ADDS_PER_HOUR)) {
+            Notification::make()->title('Too many invitations sent for now')
+                ->body('Try again in '.ceil(RateLimiter::availableIn($key) / 60).' minutes.')->danger()->send();
+
+            return;
+        }
+        RateLimiter::hit($key, 3600);
+        $this->attempt(fn () => app(Invitations::class)->invite($this->workspaceOrFail(), $this->user(), $invitation->email, $invitation->role), "Invitation sent again to {$invitation->email}");
+    }
+
+    /** Cancels an invitation that was not used yet; its link stops working and its seat is free again. */
+    public function revokeInvitation(int $id): void
+    {
+        if (! $this->can('invite')) {
+            return;
+        }
+        $key = 'cancel-invitation:'.$this->user()->id;
+        if (RateLimiter::tooManyAttempts($key, self::CANCELS_PER_HOUR)) {
+            Notification::make()->title('Too many invitations cancelled for now')
+                ->body('Try again in '.ceil(RateLimiter::availableIn($key) / 60).' minutes.')->danger()->send();
+
+            return;
+        }
+        RateLimiter::hit($key, 3600);
+        $invitation = WorkspaceInvitation::query()->where('workspace_id', CurrentWorkspace::id())->whereNull('accepted_at')->find($id);
         if ($invitation instanceof WorkspaceInvitation) {
             $invitation->delete();
             app(AuditLog::class)->record('invitation_revoked', $this->user()->id, $this->workspaceOrFail(), "Took back the invitation of {$invitation->email}");
-            Notification::make()->title("Invitation for {$invitation->email} taken back")->success()->send();
+            Notification::make()->title(e("Invitation for {$invitation->email} cancelled"))->success()->send();
         }
     }
 
@@ -300,12 +342,13 @@ class WorkspaceSettings extends Page implements HasTable
             ->mapWithKeys(fn (WorkspaceRole $r): array => [$r->value => $r->label()])->all();
     }
 
-    /** @return list<array{id: int, email: string, role: string, expires: string}> */
+    /** @return list<array{id: int, email: string, role: string, expires: string, sent: string|null}> */
     private function openInvitations(): array
     {
         return WorkspaceInvitation::query()->where('workspace_id', CurrentWorkspace::id())->whereNull('accepted_at')->where('expires_at', '>', now())
             ->orderBy('expires_at')->limit(100)->get()
-            ->map(fn (WorkspaceInvitation $i): array => ['id' => $i->id, 'email' => $i->email, 'role' => $i->role->label(), 'expires' => $i->expires_at->diffForHumans()])
+            ->map(fn (WorkspaceInvitation $i): array => ['id' => $i->id, 'email' => $i->email, 'role' => $i->role->label(), 'expires' => $i->expires_at->diffForHumans(),
+                'sent' => $i->created_at?->diffForHumans()])
             ->all();
     }
 

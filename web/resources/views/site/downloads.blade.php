@@ -13,6 +13,16 @@
         (Windows: <code>certutil -hashfile &lt;file&gt; SHA256</code>; Mac: <code>shasum -a 256 &lt;file&gt;</code>).
     </p>
 
+    {{-- Since v1.5 (Phase 1C): how to get started, in three steps. --}}
+    <section class="card" style="margin-bottom: 24px;" aria-labelledby="get-started">
+        <h2 id="get-started">How to get started</h2>
+        <ol style="margin: 0; padding-left: 20px;">
+            <li style="margin-bottom: 8px;"><strong>Download and install</strong> the app for your phone or computer below.</li>
+            <li style="margin-bottom: 8px;"><strong>Sign in</strong> with your email and password or with Google. No account yet? Choose Create account when this server offers it, or ask whoever runs it to invite you.</li>
+            <li><strong>Run the Ready check</strong> the app opens with, fix anything it shows with one tap, then record a call or a voice note. Your recordings are private to you until you share them.</li>
+        </ol>
+    </section>
+
     @if ($latest->isEmpty())
         <div class="card"><p class="muted" style="margin: 0;">No builds are published yet.</p></div>
     @else
