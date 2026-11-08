@@ -31,8 +31,8 @@ impl Action {
         [Action::RecordNow, Action::ToggleCaptions, Action::ToggleSaving, Action::CopyLast2Min, Action::Dictation, Action::VoiceNote, Action::Mark];
 
     /// Defaults (Cmd on macOS). Copying uses Alt+Shift: Ctrl+Shift+C opens DevTools in every browser (B19). Record now
-    /// is Ctrl / ⌘ + Shift + R as on the phone's keyboard shortcut (Phase 1C), although browsers use it for a hard
-    /// reload: Settings says so next to it and it can be changed or cleared there.
+    /// is Ctrl / ⌘ + Alt + R (Phase 1C, chosen by Hassam over Ctrl+Shift+R, the browsers' hard reload); on a Mac Safari
+    /// uses ⌘⌥R to reload from the server, which Settings says next to it; it can be changed or cleared there.
     pub fn default_accelerator(self) -> Option<&'static str> {
         match self {
             Action::ToggleCaptions => Some("CommandOrControl+Shift+Space"),
@@ -41,7 +41,7 @@ impl Action {
             Action::Dictation => Some("CommandOrControl+Shift+D"),
             Action::VoiceNote => None,
             Action::Mark => Some("CommandOrControl+Shift+B"),
-            Action::RecordNow => Some("CommandOrControl+Shift+R"),
+            Action::RecordNow => Some("CommandOrControl+Alt+R"),
             Action::TranslateLock => Some("CommandOrControl+Shift+T"),
             Action::TranslateHide => Some("CommandOrControl+Shift+H"),
         }
@@ -172,16 +172,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn record_now_is_ctrl_shift_r_and_clashes_with_no_other_action() {
+    fn record_now_is_ctrl_alt_r_and_clashes_with_no_other_action() {
         let map = default_map();
-        assert_eq!(map[&Action::RecordNow], "CommandOrControl+Shift+R");
+        assert_eq!(map[&Action::RecordNow], "CommandOrControl+Alt+R");
         assert!(duplicates(&map).is_empty(), "{:?}", duplicates(&map));
         let saving = parse(&map[&Action::ToggleSaving]).unwrap();
         assert_ne!(parse(&map[&Action::RecordNow]).unwrap(), saving, "Start / stop saving keeps its Alt");
         for live_only in [Action::TranslateLock, Action::TranslateHide] {
             assert_ne!(parse(live_only.default_accelerator().unwrap()).unwrap(), parse(&map[&Action::RecordNow]).unwrap());
         }
-        assert_eq!(label(&map[&Action::RecordNow], true), "⌘⇧R");
-        assert_eq!(label(&map[&Action::RecordNow], false), "Ctrl + Shift + R");
+        assert_eq!(label(&map[&Action::RecordNow], true), "⌘⌥R");
+        assert_eq!(label(&map[&Action::RecordNow], false), "Ctrl + Alt + R");
     }
 }

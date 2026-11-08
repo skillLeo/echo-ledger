@@ -87,7 +87,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     deviceId: "dev-1",
     deviceName: "Work laptop",
     shortcuts: {
-      record_now: "CommandOrControl+Shift+R",
+      record_now: "CommandOrControl+Alt+R",
       toggle_captions: "CommandOrControl+Shift+Space",
       toggle_saving: "CommandOrControl+Shift+R",
       copy_last2_min: "CommandOrControl+Shift+C",

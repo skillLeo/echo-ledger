@@ -178,8 +178,8 @@ words: **Calls: Ready** or **Not ready — Fix** (click it to open the check). T
 taken away, the microphone unplugged, detection stopped), a notification says so, even in quiet hours.
 
 **Record now.** One button records the right thing: a meeting or call on screen is recorded with both sides, anything
-else as a voice note. It is **REC** on the Record page, **Record now** in the tray menu, and **Ctrl+Shift+R** on Windows or
-**⌘⇧R** on a Mac; press it again to stop. Browsers use the same keys to reload a page without the cache, so while
+else as a voice note. It is **REC** on the Record page, **Record now** in the tray menu, and **Ctrl+Alt+R** on Windows or
+**⌘⌥R** on a Mac; press it again to stop. On a Mac, Safari uses the same keys to reload a page from the server, so while
 EchoLedger runs they record instead; change or clear the shortcut in **Settings → Shortcuts**. **Ctrl+Alt+Shift+R**
 (start or stop a call recording) stays as before. On the phone, tap **REC**.
 

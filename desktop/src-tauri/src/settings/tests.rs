@@ -415,7 +415,7 @@ fn an_unknown_shortcut_action_is_dropped_and_the_known_ones_are_kept() {
     }));
     assert_eq!(s.shortcuts.len(), 2, "{:?}", s.shortcuts);
     assert_eq!(s.shortcuts[&Action::ToggleCaptions], "Ctrl+Shift+K");
-    assert_eq!(s.shortcuts[&Action::RecordNow], "CommandOrControl+Shift+R", "a shortcut added later gets its default");
+    assert_eq!(s.shortcuts[&Action::RecordNow], "CommandOrControl+Alt+R", "a shortcut added later gets its default");
 }
 
 #[test]

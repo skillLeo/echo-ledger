@@ -22,6 +22,9 @@ describe("shortcut conflicts (B19)", () => {
   it("knows the browser and system shortcuts a global one would take over", () => {
     expect(conflictFor("CommandOrControl+Shift+C", "windows")).toMatch(/DevTools/);
     expect(conflictFor("CommandOrControl+Shift+R", "macos")).toMatch(/hard-reloads/);
+    // Record now's default since 2026-11-09: free on Windows, Safari's reload from the server on a Mac.
+    expect(conflictFor("CommandOrControl+Alt+R", "windows")).toBeNull();
+    expect(conflictFor("CommandOrControl+Alt+R", "macos")).toMatch(/Safari/);
     expect(conflictFor("Alt+F4", "windows")).toMatch(/closes the active window/);
     expect(conflictFor("Command+Space", "macos")).toMatch(/Spotlight/);
     expect(conflictFor("CommandOrControl+Alt+Shift+R", "windows")).toBeNull();

@@ -33,6 +33,7 @@ const MACOS: Record<string, string> = {
   "Ctrl+Space": "switches the input source",
   "Cmd+Shift+C": "opens the element picker (DevTools) in browsers",
   "Cmd+Shift+R": "hard-reloads the page in browsers",
+  "Cmd+Alt+R": "reloads the page from the server in Safari",
   "Cmd+Shift+N": "opens a private window in browsers",
   "Cmd+Shift+T": "reopens the last closed tab in browsers",
 };
