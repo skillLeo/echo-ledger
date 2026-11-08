@@ -183,12 +183,16 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
      * One recorder feeding the capture: its rate, its channels (2 only for a phone line that gives each direction apart),
      * which lane of the recording it fills (0 = me, 1 = the other side), and whether it is the microphone.
      */
+
+    // One recorder. Its rate is the rate the recorder really runs at (AudioRecord.getSampleRate()), never the one asked
+    // for: a phone line may run at its own rate, and its audio must be resampled from that.
     private class Side(val record: AudioRecord, val rate: Int, val lane: Int, val mic: Boolean, val channels: Int = 1) {
         val chunk = rate / 100 // 10 ms
         val buf = ShortArray(chunk * channels * 8)
         val last = ShortArray(2)
         private val stamp = AudioTimestamp()
-        private var framesRead = 0L
+        var framesRead = 0L
+            private set
 
         /** Whether any sound at all has arrived (a blocked phone line gives exact zeros). */
         var heard = false
@@ -235,7 +239,7 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             // During another app's call the microphone is an ordinary recorder (MIC, not privacy-sensitive): Android then
             // keeps the call app's recorder and never mutes it for ours. VOICE_COMMUNICATION is fed zeros on One UI.
             val source = if (inCallNow() || micSource <= 0) MediaRecorder.AudioSource.MIC else micSource
-            near = openMic(rate, source, problems)?.let { Side(it, rate, lane = 0, mic = true) }
+            near = openMic(rate, source, problems)?.let { Side(it, it.sampleRate, lane = 0, mic = true) }
             // Below Android 14 only your voice is recorded, on one channel: never a silent second one.
             if (Build.VERSION.SDK_INT >= FAR_PARTY_SDK) {
                 far = runCatching { farMix.openSink(context) }
@@ -345,7 +349,9 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
 
                         MicRetake.Step.OPEN_CANDIDATE -> {
                             candidate =
-                                openMic(rate, MediaRecorder.AudioSource.MIC, mutableListOf())?.let { Side(it, rate, lane = 0, mic = true) }
+                                openMic(rate, MediaRecorder.AudioSource.MIC, mutableListOf())?.let {
+                                    Side(it, it.sampleRate, lane = 0, mic = true)
+                                }
                             if (candidate == null) retake.candidateFailed()
                             state(if (candidate == null) "mic_retake_failed" else "mic_retake_open")
                         }
@@ -392,6 +398,11 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
             report("Capture stopped: ${e.message}")
         } finally {
             runCatching { out.write(Pcm.toLittleEndianBytes(pairer.flush())) }
+            // How the capture went, for the capture log: time written, and any silence put in or audio dropped as late.
+            state(
+                "stats written ${pairer.releasedFrames * 1000 / rate} ms; gaps ${pairer.gapMs(0)}/${pairer.gapMs(1)} ms; " +
+                    "late ${pairer.lateMs(0)}/${pairer.lateMs(1)} ms; read ${near?.framesRead ?: 0} frames at ${near?.rate ?: 0} Hz"
+            )
             near?.release()
             candidate?.release()
             farMix.closeSink()
@@ -505,9 +516,9 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
     private fun openPhoneLine(rate: Int, problems: MutableList<String>): Side? {
         for (lineRate in listOf(rate, Pcm.STT_RATE).distinct()) {
             open(MediaRecorder.AudioSource.VOICE_CALL, lineRate, CHANNEL_IN_UPLINK_DOWNLINK, "phone line (both directions)", problems)
-                ?.let { return Side(it, lineRate, lane = 0, mic = false, channels = 2) }
+                ?.let { return Side(it, it.sampleRate, lane = 0, mic = false, channels = 2) }
             open(MediaRecorder.AudioSource.VOICE_CALL, lineRate, AudioFormat.CHANNEL_IN_MONO, "phone line", problems)
-                ?.let { return Side(it, lineRate, lane = 0, mic = false) }
+                ?.let { return Side(it, it.sampleRate, lane = 0, mic = false) }
         }
         return null
     }

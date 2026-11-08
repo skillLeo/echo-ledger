@@ -513,6 +513,8 @@ class RecordingService : LifecycleService() {
             "self_muted" -> refresh(session, "You muted yourself in the call")
 
             "self_unmuted" -> refresh(session)
+
+            else -> if (state.startsWith("stats ")) CaptureLog.add(this, "helper", state)
         }
     }
 
@@ -1273,7 +1275,13 @@ class RecordingService : LifecycleService() {
          * together). Settled before the first audio arrives; the encoder is made with it.
          */
         @Volatile var channels = channels
-        val encoder by lazy { OpusOggEncoder(file, Pcm.CAPTURE_RATE, this.channels, settings.opusBitsPerSide * this.channels) }
+        private val encoderMade = lazy { OpusOggEncoder(file, Pcm.CAPTURE_RATE, this.channels, settings.opusBitsPerSide * this.channels) }
+
+        /**
+         * Made on the first audio, never earlier: a stereo encoder made before [channels] said "one track" turned a 25 s
+         * call into 12 s.
+         */
+        val encoder by encoderMade
 
         /** Since v1.3: why this recording may be one-sided (the helper's own words), shown after the call. */
         @Volatile var warning: String? = null
@@ -1340,7 +1348,7 @@ class RecordingService : LifecycleService() {
         fun ageMs(): Long = (System.nanoTime() - startNanos) / 1_000_000
 
         /** Recorded time: what the file holds (paused stretches excluded). */
-        fun recordedMs(): Long = Pcm.durationMs(encoder.framesWritten)
+        fun recordedMs(): Long = if (encoderMade.isInitialized()) Pcm.durationMs(encoder.framesWritten) else 0L
 
         /** How long a running two-sided recording has not heard the other side; null when paused or one-sided. */
         fun silentMs(nowNanos: Long): Long? =
