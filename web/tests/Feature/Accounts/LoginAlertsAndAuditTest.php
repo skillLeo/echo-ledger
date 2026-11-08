@@ -14,6 +14,7 @@ use App\Models\AuditEvent;
 use App\Models\CaptureSession;
 use App\Models\KnownBrowser;
 use App\Models\Workspace;
+use App\Services\Accounts\EmailPreferences;
 use App\Services\Accounts\KnownBrowsers;
 use App\Services\PairingService;
 use App\Services\Sharing\Teammates;
@@ -94,8 +95,8 @@ it('emails a teammate who was sent a recording and logs the sending', function (
 it('emails a finished transcript only to people who asked for it in their profile', function () {
     $user = Fx::user(['email' => 'reader@example.test']);
     $this->actingAs($user, 'web');
-    Livewire::test(EditProfile::class)->callAction(TestAction::make('toggleTranscriptEmails')->schemaComponent('email-actions', schema: 'content'))
-        ->assertNotified('Transcript emails on');
+    Livewire::test(EditProfile::class)->call('toggleEmail', 'transcription')
+        ->assertNotified('Transcription emails on');
     expect($user->fresh()->notify_transcript_ready)->toBeTrue();
 
     $session = CaptureSession::factory()->create(['user_id' => $user->id, 'title' => 'Site visit']);
@@ -125,4 +126,27 @@ it('puts admin actions in the audit log: members, roles, the workspace name and 
     $events = AuditEvent::query()->where('user_id', $owner->id)->pluck('event')->all();
     expect($events)->toContain('role_changed', 'member_removed', 'workspace_renamed', 'settings_changed')
         ->and(AuditEvent::query()->where('event', 'settings_changed')->value('meta'))->toBe(['keys' => ['retention_days']]);
+});
+
+it('lets a person choose their emails per category, and always sends account and security ones (since v1.5, Phase 1C)', function () {
+    $user = Fx::user(['email' => 'chooser@example.test']);
+    $this->actingAs($user, 'web');
+    $html = Livewire::test(EditProfile::class)->html();
+    expect($html)->toContain('Transcription')->toContain('Enhancement')->toContain('Sharing')->toContain('Usage &amp; limits')
+        ->toContain('App updates')->toContain('Other')->toContain('Account &amp; security')->toContain('Always on')
+        ->toContain('data-email="sharing"');
+
+    Livewire::test(EditProfile::class)->call('toggleEmail', 'sharing')->assertNotified('Sharing emails off');
+    expect(EmailPreferences::wants($user->fresh(), 'sharing'))->toBeFalse()
+        ->and(EmailPreferences::wants($user->fresh(), 'usage'))->toBeTrue()
+        ->and(EmailPreferences::wants($user->fresh(), 'account'))->toBeTrue();
+    Livewire::test(EditProfile::class)->call('toggleEmail', 'account')->assertNotNotified();
+
+    // Sharing off: the bell still says so, no email comes; a sign-in alert still does.
+    $sender = Fx::user(['name' => 'Farah']);
+    $sender->workspaces()->syncWithoutDetaching([$user->current_workspace_id => ['role' => 'member']]);
+    $user->workspaces()->syncWithoutDetaching([$sender->current_workspace_id => ['role' => 'member']]);
+    $session = CaptureSession::factory()->create(['user_id' => $sender->id, 'title' => 'Budget call']);
+    expect(app(Teammates::class)->send($sender, $session, ['chooser@example.test'], null))->toBe(1);
+    Mail::assertNotQueued(ShareReceivedMail::class);
 });

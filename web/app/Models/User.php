@@ -45,6 +45,8 @@ use Laravel\Passport\HasApiTokens;
  * @property Carbon|null $deletes_at when the account is erased (7 days after it asked); null = not being deleted
  * @property Carbon|null $consent_seen_at when the recording-consent notice was shown after sign-up
  * @property bool $notify_transcript_ready an email when a transcript of theirs is ready (off by default)
+ * @property array<string, bool>|null $email_preferences Profile → Emails per category (since v1.5, Phase 1C; App\Services\Accounts\EmailPreferences)
+ * @property array<string, mixed>|null $console_preferences the console's Library group and sort per view (since v1.5, Phase 1C)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
  */
@@ -137,6 +139,8 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'deletes_at' => 'datetime',
             'consent_seen_at' => 'datetime',
             'notify_transcript_ready' => 'boolean',
+            'email_preferences' => 'array',
+            'console_preferences' => 'array',
         ];
     }
 }

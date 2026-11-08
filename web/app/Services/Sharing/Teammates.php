@@ -19,6 +19,7 @@ use App\Models\SentItem;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Services\Accounts\EmailPreferences;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
 use App\Services\ChunkedUploadService;
@@ -86,7 +87,9 @@ final class Teammates
         });
         // Since v1.5 each person also gets an email, and the sending is in the sender's audit log.
         foreach ($people as $person) {
-            Mail::to($person->email)->queue(new ShareReceivedMail($sender->name, $title, $kind === 'project', url('/admin/shared-with-me'), $note));
+            if (EmailPreferences::wants($person, EmailPreferences::SHARING)) {
+                Mail::to($person->email)->queue(new ShareReceivedMail($sender->name, $title, $kind === 'project', url('/admin/shared-with-me'), $note));
+            }
         }
         app(AuditLog::class)->record('sent_to_teammate', $sender->id, $target, 'Sent '.($kind === 'project' ? 'project ' : '').$title.' to '.Str::limit($people->pluck('email')->implode(', '), 160, '…'));
 

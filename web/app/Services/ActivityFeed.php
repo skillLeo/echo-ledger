@@ -20,6 +20,7 @@ use App\Models\Screen;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
+use App\Services\Accounts\EmailPreferences;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Usage\UsagePeriod;
 use App\Services\Usage\UsageSummary;
@@ -95,7 +96,7 @@ final class ActivityFeed
     private function transcriptReady(CaptureSession $session): void
     {
         $this->post($session->user, 'transcript_ready', 'Transcript ready', $session->displayTitle(), $session, 'heroicon-o-document-text');
-        if ($session->user->notify_transcript_ready) {
+        if (EmailPreferences::wants($session->user, EmailPreferences::TRANSCRIPTION)) {
             Mail::to($session->user->email)->queue(new TranscriptReadyMail($session->displayTitle(), url('/admin/sessions/'.$session->id)));
         }
     }
