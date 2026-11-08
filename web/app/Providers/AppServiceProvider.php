@@ -37,6 +37,7 @@ use App\Services\Views\ClaudeTranscriptConverter;
 use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
+use Filament\Actions\Action;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\PasswordReset;
@@ -148,6 +149,12 @@ class AppServiceProvider extends ServiceProvider
         // The account emails carry text people typed (a note, a title, a workspace or device name): with secured
         // encoding a "[link](…)" in it stays text, so nobody can put their own link in an email this server signs.
         Markdown::withSecuredEncoding();
+
+        // A dialog's main button says what it does: the action's own name ("Invite", "Move to project"), never
+        // Filament's generic "Submit" or "Confirm". An action that names its button keeps that name.
+        Action::configureUsing(static function (Action $action): void {
+            $action->modalSubmitActionLabel(static fn (Action $action): ?string => rtrim((string) $action->getLabel(), ' ….') ?: null);
+        });
 
         // Times are stored in UTC and shown in the zone chosen under Settings (read lazily: no query at boot).
         FilamentTimezone::set(fn (): string => app(SettingsRepository::class)->displayTimezone());

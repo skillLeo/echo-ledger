@@ -119,8 +119,8 @@ Everywhere:
 
 ## Phase 8 — Release + verify
 
-- [ ] Full suites green; security review of auth, sharing and MCP (authorisation test for every route); performance check. **Performance check done** (20,000 recordings on MariaDB, HANDOFF). **Security review done**: 1 critical, 8 major and 7 minor findings fixed with `ReleaseReviewTest`, each reproduced first and checked again after; the critical one also over real HTTP in production mode.
-- [ ] Web deploy (migrations tested on a production copy first); Windows installer; Mac DMG (CI); APK full (+ Play AAB).
+- [x] Full suites green; security review of auth, sharing and MCP (authorisation test for every route); performance check. **Performance check done** (20,000 recordings on MariaDB, HANDOFF). **Security review done**: 1 critical, 8 major and 7 minor findings fixed with `ReleaseReviewTest`, each reproduced first and checked again after; the critical one also over real HTTP in production mode.
+- [ ] Web deploy (migrations tested on a production copy first; **rehearsed** 2026-11-08 from beta.3 code and data on MariaDB 11.8, up, down and up again, HANDOFF); Windows installer; Mac DMG (CI); APK full (+ Play AAB).
 - [ ] **(phone)** unanswered WhatsApp call skipped; connected call starts at pick-up; after-call chip; Projects auto-filing; teammate share; Google sign-in; test-account deletion.
 - [ ] **(mac)** screen moments in a Meet call with screen share; the meeting pack PDF in Claude.
 - [ ] Docs: USER_GUIDE, ADMIN_GUIDE, MANUAL_QA, HANDOFF; tag v1.5.0; push; final report.
