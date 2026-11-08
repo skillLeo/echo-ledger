@@ -142,6 +142,7 @@ class Settings extends Page
             'arabic_dialect' => is_string($all['arabic.dialect'] ?? null) ? $all['arabic.dialect'] : null,
             'client_ai_monthly_usd' => (float) ($all['client_ai.monthly_usd'] ?? 5.0),
             'claude_model' => (string) ($all['claude.model'] ?? 'claude-sonnet-5-5'),
+            'views_short_model' => is_string($all['views.short_model'] ?? null) ? $all['views.short_model'] : null,
             'screens_describe' => (bool) ($all['screens.describe'] ?? true),
             'live_translate_game_target' => (string) ($all['live_translate.game_target'] ?? 'en'),
             'live_translate_game_spoken' => array_values(array_intersect(array_keys(self::LIVE_TRANSLATE_LANGUAGES), (array) ($all['live_translate.game_spoken'] ?? ['ar', 'en']))),
@@ -330,6 +331,8 @@ class Settings extends Page
                                 ->helperText('Call notes, briefs, file reading and Ask stop for the month when this is used up. Default $5.'),
                             Select::make('claude_model')->label('Show as (Roman Urdu, اردو and English views)')->options(self::CLAUDE_MODELS)->required()->columnSpan(2)
                                 ->helperText('The Claude model that writes the views (key on API Credentials → Anthropic). An hour of Urdu call costs about US$0.50 with Sonnet, about US$1 with Opus.'),
+                            Select::make('views_short_model')->label('Views of short notes (3 minutes or less)')->options(self::CLAUDE_MODELS)->placeholder('Same as above')->columnSpan(2)
+                                ->helperText('A cheaper model for the views of voice notes and short calls, for example Claude Haiku 5.5. Pick it only when it is as good on your own notes.'),
                             Select::make('views_default_ur')->label('Open Urdu calls as')->required()
                                 ->options(['original' => 'Original (as transcribed)', 'roman' => 'Roman Urdu', 'urdu' => 'اردو', 'english' => 'English'])
                                 ->helperText('Roman Urdu is made as soon as the transcript is ready; the original is always one tap away.'),
@@ -762,6 +765,7 @@ class Settings extends Page
             'arabic.dialect' => array_key_exists((string) ($state['arabic_dialect'] ?? ''), DialectHint::OPTIONS) ? $state['arabic_dialect'] : null,
             'client_ai.monthly_usd' => max(0.0, min(1000.0, (float) ($state['client_ai_monthly_usd'] ?? 5.0))),
             'claude.model' => in_array($state['claude_model'] ?? null, array_keys(self::CLAUDE_MODELS), true) ? $state['claude_model'] : 'claude-sonnet-5-5',
+            'views.short_model' => in_array($state['views_short_model'] ?? null, array_keys(self::CLAUDE_MODELS), true) ? $state['views_short_model'] : null,
             'screens.describe' => (bool) ($state['screens_describe'] ?? true),
             'views.default_ur' => in_array($state['views_default_ur'] ?? null, ['original', 'roman', 'urdu', 'english'], true) ? $state['views_default_ur'] : 'roman',
             'views.default_en' => in_array($state['views_default_en'] ?? null, ['original', 'urdu'], true) ? $state['views_default_en'] : 'original',

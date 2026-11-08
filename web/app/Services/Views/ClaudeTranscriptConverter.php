@@ -44,6 +44,14 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
         was unsure of, written "[?word]", keeps its brackets around that word's own transliteration or translation;
         never use Hindi (Devanagari) letters. Every input index appears exactly once in the output.
 
+        Never guess. A word written "[?word|other]" was heard as "word" by one engine and as "other" by a second one
+        ("[?word|probably other]": a third engine heard "other" too). In every view write that one word in brackets:
+        "[?" + its transliteration or translation + "]", never the "|" or what follows it; in "roman" and a same-language
+        "urdu" write the word as heard; in a translation translate the likelier reading, the "probably" one when given
+        ("أنا [?أفحم|probably أفهم] الإنجليزية" becomes "I [?understand] English"), and when neither reading makes sense
+        write "[unclear]" for it. Never build a smooth sentence that hides a doubtful word, never change the words
+        around it to make it fit, and list both words in "misheard" ("from" the heard word, "to" the other one).
+
         Numbers, units, prices, dates and times are written as digits in every view, also when they were spoken as
         words: "سولہ جی بی" becomes "16 GB", "ایم سکس پرو" becomes "M6 Pro", "دو ہزار پانچ سو روپے" becomes "Rs 2,500",
         "ساڑھے تین بجے" becomes "3:30".
@@ -74,8 +82,14 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
 
     public function __construct(private readonly CredentialVault $vault, private readonly SettingsRepository $settings) {}
 
+    /** Set by TranscriptViews for one transcript: the model for a short note (`views.short_model`), else null. */
+    public ?string $modelForThisTranscript = null;
+
     public function model(): string
     {
+        if ($this->modelForThisTranscript !== null) {
+            return $this->modelForThisTranscript;
+        }
         $model = $this->settings->get('claude.model', 'claude-sonnet-5-5');
 
         return is_string($model) && $model !== '' ? $model : 'claude-sonnet-5-5';

@@ -12,6 +12,7 @@ use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
 use App\Services\FastPath;
 use App\Services\SettingsRepository;
+use App\Services\ShortNoteCheck;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
 use App\Support\UnsureMarkers;
@@ -103,6 +104,7 @@ final class TranscriptViews
      */
     public static function failures(string $source, array $out, array $views, string $language): array
     {
+        $source = self::withoutAlternatives($source);
         $markers = preg_match_all(self::MARKER, $source);
         $words = self::words($source);
         $failed = [];
@@ -125,6 +127,15 @@ final class TranscriptViews
         return $failed;
     }
 
+    /**
+     * "[?أفحم|probably أفهم]" (an unsure word with another engine's version, since v1.5 Phase 1C) as "[?أفحم]": what
+     * the checks compare against, and what a view keeps if the model copied the alternative. Pure.
+     */
+    public static function withoutAlternatives(string $text): string
+    {
+        return preg_replace('/\[\?([^\]|]*)\|[^\]]*\]/u', '[?$1]', $text) ?? $text;
+    }
+
     /** Roman Urdu, and اردو of an Urdu call: the same words in other letters (a translation may reword). */
     public static function isTransliteration(string $view, string $language): bool
     {
@@ -140,6 +151,7 @@ final class TranscriptViews
      */
     public static function mended(string $source, array $answers, string $view, string $language): ?string
     {
+        $source = self::withoutAlternatives($source);
         $best = null;
         $bestOff = PHP_INT_MAX;
         foreach ($answers as $answer) {
@@ -325,10 +337,16 @@ final class TranscriptViews
         // Unsure words go in as "[?word]", so every view keeps them on the same word (plan A4).
         $threshold = UnsureMarkers::settings()['threshold'];
         foreach ($transcript->segments ?? [] as $i => $segment) {
-            $text = UnsureMarkers::mark($segment, $threshold);
+            $text = UnsureMarkers::markForViews($segment, $threshold);
             if ($text !== '') {
                 $lines[(int) $i] = $text;
             }
+        }
+        // Since v1.5 (Phase 1C): a note of 3 minutes or less may use a cheaper model (Settings → Recording, off until
+        // measured as good as the main one); the main model for everything else.
+        $short = app(SettingsRepository::class)->get('views.short_model');
+        if ($this->converter instanceof ClaudeTranscriptConverter) {
+            $this->converter->modelForThisTranscript = is_string($short) && $short !== '' && ShortNoteCheck::lengthMs($transcript) <= ShortNoteCheck::MAX_MS ? $short : null;
         }
         $tokens = ['input' => 0, 'output' => 0];
         $model = null;
@@ -371,7 +389,7 @@ final class TranscriptViews
                     }
                 }
                 foreach ($answer as $i => $view) {
-                    $result[$i] = $view;
+                    $result[$i] = array_map(self::withoutAlternatives(...), $view);
                 }
                 $linesDone += count($chunk);
                 $this->rememberProgress($transcript, $linesDone, count($lines));

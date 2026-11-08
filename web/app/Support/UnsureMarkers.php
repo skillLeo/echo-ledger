@@ -64,6 +64,36 @@ final class UnsureMarkers
         return $out.mb_substr($line, $at);
     }
 
+    /**
+     * The text the views are made from (since v1.5, Phase 1C): as [mark], and an unsure word a second engine heard
+     * otherwise carries that version too, "[?أفحم|أفهم]", or "[?أفحم|probably أفهم]" when a third engine agreed with
+     * it. The views never keep the alternative: they write "[?word]" and list the pair as misheard.
+     *
+     * @param  array<string, mixed>  $segment
+     */
+    public static function markForViews(array $segment, float $threshold): string
+    {
+        $line = trim((string) ($segment['text'] ?? ''));
+        $words = is_array($segment['words'] ?? null) ? $segment['words'] : [];
+        $out = '';
+        $at = 0;
+        foreach ($words as $word) {
+            $text = trim((string) ($word['text'] ?? $word['word'] ?? ''));
+            $pos = $text === '' ? false : mb_strpos($line, $text, $at);
+            if ($pos === false) {
+                continue;
+            }
+            $confidence = $word['confidence'] ?? null;
+            $unsure = is_numeric($confidence) && (float) $confidence < $threshold && ! str_starts_with($text, '[');
+            $alt = is_string($word['probably'] ?? null) ? 'probably '.trim($word['probably']) : (is_string($word['alt'] ?? null) ? trim($word['alt']) : '');
+            $marked = $unsure ? '[?'.$text.($alt !== '' && $alt !== 'probably ' && trim($alt) !== $text ? '|'.$alt : '').']' : $text;
+            $out .= mb_substr($line, $at, $pos - $at).$marked;
+            $at = $pos + mb_strlen($text);
+        }
+
+        return $out.mb_substr($line, $at);
+    }
+
     /** "[?word]" in the chosen style: kept, "word(?)", or plain. */
     public static function restyle(string $text, string $style): string
     {

@@ -38,6 +38,7 @@ final class SettingsTransfer
         'arabic.dialect',
         'client_ai.monthly_usd',
         'claude.model',
+        'views.short_model',
         'screens.describe',
         'views.default_ur',
         'views.default_en',

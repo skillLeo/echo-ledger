@@ -1310,6 +1310,10 @@ the usage ledger:
   `check` (`{"provider", "label", "text"}`) with the second engine's words. Apps show `alt` (and `probably`) on a tap
   of the word: «أفحم» → "probably أفهم". The transcript's `meta.short_check` summarises it (`provider`,
   `tie_breaker`, `disputed`, `probably`, `cost_usd`). The text is never changed by the check.
+- **Views never guess.** An unsure word with another engine's version reaches the views model with it; every view keeps
+  that word as `[?word]` (a translation gives the likelier reading in the brackets: "I [?understand] English"), never a
+  smooth sentence over it, and the two words become a suggested fix (`reason: "view_check"`). Settings →
+  `views.short_model` may give notes of up to 3 minutes a cheaper model (off until measured).
 - **Engines, cheapest first.** Every language starts on Whisper large-v3 (Groq) except Arabic, which starts on
   ElevenLabs Scribe v2; a recording on Auto that turns out to be a language with another first engine is transcribed
   again there (`meta.rerouted_from`), and the first run becomes the second opinion of the check.

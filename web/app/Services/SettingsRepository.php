@@ -46,7 +46,8 @@ final class SettingsRepository
         'live_translate.game_speed' => 'fastest',       // fastest | balanced | accurate
         'live_translate.watch_target' => 'ur',
         'live_translate.watch_speed' => 'balanced',
-        'claude.model' => 'claude-sonnet-5-5',           // Show as (Roman Urdu / اردو / English views), plan A3
+        'claude.model' => 'claude-sonnet-5-5',
+        'views.short_model' => null,                     // since v1.5: the views model for notes of 3 minutes or less (null = claude.model)           // Show as (Roman Urdu / اردو / English views), plan A3
         'views.default_ur' => 'roman',                   // the view Urdu and mixed calls open in (plan A3)
         'views.default_en' => 'original',                // English calls (the Urdu translation is one tap away)
         'views.default_ar' => 'original',                // Arabic calls
