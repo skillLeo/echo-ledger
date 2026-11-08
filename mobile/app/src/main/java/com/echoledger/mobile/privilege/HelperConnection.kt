@@ -52,6 +52,8 @@ class HelperConnection(private val context: Context) {
         _state.value = State(error = "Capture helper stopped (reboot or Wireless debugging off). Re-enable it from Setup.")
         // Since v1.5: the phone maker's system stopped it while Shizuku stays up: it comes back by itself.
         reconnect()
+        // Phase 1C: if it has not come back in 15 s, the critical alert says so (the Ready check).
+        com.echoledger.mobile.recording.ReadinessWatch.checkSoon(context, HELPER_GONE_CHECK_MS, "helper stopped")
     }
 
     /** Starts the helper again when it is gone and Shizuku is up and allowed (after a kill, and on the 15-minute check). */
@@ -60,6 +62,7 @@ class HelperConnection(private val context: Context) {
     fun attach(binder: ICaptureHelper, source: String) {
         if (helper?.asBinder() === binder.asBinder() && _state.value.connected) return // the ADB helper repeats its hand-off
         helper = binder
+        com.echoledger.mobile.recording.ReadinessWatch.helperSeen(context)
         runCatching { binder.asBinder().linkToDeath(death, 0) }
         callListener?.let { runCatching { binder.setCallListener(it) } }
         val version = runCatching { binder.version() }.getOrNull()
@@ -73,6 +76,8 @@ class HelperConnection(private val context: Context) {
         pushCallApps(binder)
         if (armWanted) applyArm(binder, true)
         if (games.isNotEmpty()) armGames(binder)
+        // Back: a critical alert still showing goes away once the check agrees.
+        com.echoledger.mobile.recording.ReadinessWatch.checkSoon(context, HELPER_BACK_CHECK_MS, "helper connected")
     }
 
     fun setCallListener(listener: ICallListener?) {
@@ -177,6 +182,11 @@ class HelperConnection(private val context: Context) {
 
     fun unbindShizuku() {
         runCatching { Shizuku.unbindUserService(userServiceArgs, serviceConnection, true) }
+    }
+
+    companion object {
+        const val HELPER_GONE_CHECK_MS = 15_000L
+        const val HELPER_BACK_CHECK_MS = 2_000L
     }
 
     // ---- ADB command mode ---------------------------------------------------------------------------------------

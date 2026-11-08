@@ -11,6 +11,7 @@ import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
 import com.echoledger.mobile.testsupport.FakeServer
+import com.echoledger.mobile.testsupport.ReadinessFixtures
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
@@ -50,7 +51,7 @@ class AccessibilityTest : ScreenTest() {
 
     @Test
     fun `the Library names everything that can be tapped`() {
-        show { LibraryScreen(vm, showCallSetup = true, onSetup = {}, onOpen = {}) }
+        show { LibraryScreen(vm, readiness = ReadinessFixtures.HELPER_STOPPED, onReady = {}, onOpen = {}) }
         compose.waitForIdle()
         assertEquals(emptyList<String>(), unnamedClickables())
     }

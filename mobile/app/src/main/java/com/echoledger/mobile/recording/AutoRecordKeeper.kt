@@ -61,7 +61,10 @@ object AutoRecordKeeper {
         runCatching {
             val settings = app.graph.settings.current()
             ensure(app, settings, "app started")
-            if (settings.autoRecordArmed) keepChecking(app)
+            if (settings.autoRecordArmed) {
+                keepChecking(app)
+                ReadinessWatch.check(app, "app started")
+            }
             com.echoledger.mobile.calls.UndecidedKeepWorker.schedule(app)
         }
     }

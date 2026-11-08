@@ -112,11 +112,16 @@ fun RecordSheet(
     autoRecordOn: Boolean,
     onPick: (RecordMode) -> Unit,
     onDismiss: () -> Unit,
-    liveTranslate: Boolean = true
+    liveTranslate: Boolean = true,
+    readyChip: com.echoledger.mobile.core.ReadyChip = com.echoledger.mobile.core.ReadyChip.NONE,
+    onReady: () -> Unit = {}
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Surface) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.screen).padding(bottom = Space.s5)) {
-            Text("New", style = LocalEchoType.current.titleM, color = Brand.Text, modifier = Modifier.padding(bottom = Space.s4))
+            Row(Modifier.fillMaxWidth().padding(bottom = Space.s4), verticalAlignment = Alignment.CenterVertically) {
+                Text("New", style = LocalEchoType.current.titleM, color = Brand.Text, modifier = Modifier.weight(1f))
+                ReadyChipView(readyChip, onReady)
+            }
             val calls = when (capabilities.appCalls) {
                 AppCallCapture.NOT_IN_THIS_BUILD -> "Calls: website version only"
                 AppCallCapture.NONE -> "Calls: needs Android 12"

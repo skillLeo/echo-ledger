@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.testsupport.FakeServer
+import com.echoledger.mobile.testsupport.ReadinessFixtures
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
@@ -43,8 +44,14 @@ class LibraryScreenTest : ScreenTest() {
         runBlocking { app.graph.library.refresh() }
     }
 
-    private fun showLibrary(showCallSetup: Boolean = false) =
-        show { LibraryScreen(vm, showCallSetup = showCallSetup, onSetup = { setupTaps++ }, onOpen = { opened = it }) }
+    private fun showLibrary(showCallSetup: Boolean = false) = show {
+        LibraryScreen(
+            vm,
+            readiness = if (showCallSetup) ReadinessFixtures.HELPER_STOPPED else ReadinessFixtures.READY,
+            onReady = { setupTaps++ },
+            onOpen = { opened = it }
+        )
+    }
 
     private fun search(text: String) {
         if (compose.onAllNodes(hasSetTextAction()).fetchSemanticsNodes().isEmpty()) {
@@ -400,13 +407,15 @@ class LibraryScreenTest : ScreenTest() {
     // ---- banner and sync -----------------------------------------------------------------------------------------------------
 
     @Test
-    fun `the call setup banner is shown only when asked and opens the setup guide`() {
+    fun `a helper gone after a restart says so in its own words and opens the Ready check`() {
         seed(item("a"))
         showLibrary(showCallSetup = true)
 
-        compose.onNodeWithText("WhatsApp calls are not being recorded", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Calls are not being recorded: the helper stopped when the phone restarted.").assertIsDisplayed()
+        compose.onAllNodesWithText("one-time setup", substring = true).assertCountEquals(0)
+        compose.onNodeWithContentDescription("Not ready — Fix").assertIsDisplayed()
 
-        compose.onNodeWithText("Set up").performClick()
+        compose.onNodeWithText("Fix").performClick()
 
         assertEquals(1, setupTaps)
     }
@@ -415,7 +424,8 @@ class LibraryScreenTest : ScreenTest() {
     fun `no banner appears when call capture is already set up`() {
         showLibrary(showCallSetup = false)
 
-        compose.onAllNodesWithText("WhatsApp calls are not being recorded", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Calls are not being recorded", substring = true).assertCountEquals(0)
+        compose.onNodeWithContentDescription("Calls: Ready").assertIsDisplayed()
         assertEquals(0, setupTaps)
     }
 

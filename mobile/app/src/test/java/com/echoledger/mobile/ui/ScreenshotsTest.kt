@@ -31,6 +31,7 @@ import com.echoledger.mobile.recording.LiveRecording
 import com.echoledger.mobile.recording.PillState
 import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.testsupport.FakeServer
+import com.echoledger.mobile.testsupport.ReadinessFixtures
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
@@ -144,13 +145,13 @@ class ScreenshotsTest : ScreenTest() {
     @Test
     fun library() {
         seedLibrary()
-        shoot { LibraryScreen(vm, showCallSetup = false, onSetup = {}, onOpen = {}) }
+        shoot { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) }
         capture("library")
     }
 
     @Test
     fun libraryEmpty() {
-        shoot { LibraryScreen(vm, showCallSetup = false, onSetup = {}, onOpen = {}) }
+        shoot { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) }
         capture("library-empty")
     }
 
@@ -249,7 +250,7 @@ class ScreenshotsTest : ScreenTest() {
     @Test
     fun libraryLargeText() {
         seedLibrary()
-        shoot { LargeText { LibraryScreen(vm, showCallSetup = false, onSetup = {}, onOpen = {}) } }
+        shoot { LargeText { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) } }
         capture("library-font200")
     }
 

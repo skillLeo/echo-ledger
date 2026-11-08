@@ -206,10 +206,13 @@ class MainActivityTest : AppTest() {
     }
 
     @Test
-    fun `the call setup guide opens from the library banner and closes with its back arrow`() {
+    fun `the call setup guide opens from the library banner through the Ready check and closes with its back arrow`() {
         launch(preload = true)
-        awaitText("Set up")
+        awaitText("Calls are not being recorded: call capture is not set up yet.")
+        compose.onNodeWithContentDescription("Not ready — Fix").assertIsDisplayed()
 
+        compose.onNodeWithText("Fix").performClick()
+        awaitText("Ready check")
         compose.onNodeWithText("Set up").performClick()
         awaitText("1 · Permissions")
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)

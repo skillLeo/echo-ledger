@@ -10,8 +10,10 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.core.NotifyCategory
 import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.notify.Notifications
+import com.echoledger.mobile.notify.NotifyGate
 import java.util.concurrent.TimeUnit
 
 /**
@@ -39,6 +41,9 @@ class SharedNotesWorker(context: Context, params: WorkerParameters) : CoroutineW
             )
             if (!SharedNotes.done(status.stage)) return@filter true
             val preview = library.firstOrNull { it.id == status.sessionId }?.transcript?.preview?.takeIf { it.isNotBlank() }
+            if (!NotifyGate.allowed(applicationContext as EchoLedgerApp, NotifyCategory.TRANSCRIPTION)) {
+                return@filter false
+            }
             Notifications.activity(
                 applicationContext,
                 key = "shared:$id",
@@ -49,7 +54,8 @@ class SharedNotesWorker(context: Context, params: WorkerParameters) : CoroutineW
                 },
                 body = preview ?: status.text,
                 sessionId = status.sessionId,
-                silent = true
+                silent = true,
+                category = NotifyCategory.TRANSCRIPTION
             )
             false
         }

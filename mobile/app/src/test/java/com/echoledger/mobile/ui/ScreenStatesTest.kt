@@ -6,6 +6,7 @@ import androidx.compose.ui.test.performClick
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.TranscriptSummary
 import com.echoledger.mobile.testsupport.FakeServer
+import com.echoledger.mobile.testsupport.ReadinessFixtures
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
@@ -21,7 +22,7 @@ class ScreenStatesTest : ScreenTest() {
         runBlocking { app.pairLocally(server) }
         server.on("GET", "/api/library", FakeServer.json(500, """{"message":"down"}"""))
         server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
-        show { LibraryScreen(vm, showCallSetup = false, onSetup = {}, onOpen = {}) }
+        show { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) }
         vm.refresh()
         compose.waitUntil(5_000) { hasText("You're offline") }
 

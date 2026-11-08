@@ -22,9 +22,15 @@ class RearmReceiver : BroadcastReceiver() {
             try {
                 val why = if (intent.action == Intent.ACTION_BOOT_COMPLETED) "after restart" else "after update"
                 AutoRecordKeeper.ensure(context, app.graph.settings.current(), why)
+                // Phase 1C: a minute later (Shizuku and the helper had their chance), say if calls are not recorded.
+                ReadinessWatch.checkSoon(context, AFTER_BOOT_CHECK_MS, why)
             } finally {
                 pending.finish()
             }
         }
+    }
+
+    companion object {
+        const val AFTER_BOOT_CHECK_MS = 60_000L
     }
 }

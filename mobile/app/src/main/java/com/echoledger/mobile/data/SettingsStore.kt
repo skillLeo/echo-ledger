@@ -90,6 +90,8 @@ data class AppSettings(
     val quietHours: Boolean = false,
     val quietFrom: String = "22:00",
     val quietTo: String = "07:00",
+    /** Since v1.5 (Phase 1C): the notification categories ([com.echoledger.mobile.core.NotifyCategory] keys) switched off. */
+    val notifyOff: List<String> = emptyList(),
     /** The first-run wizard has been finished or skipped (B19). Installs paired before v1.1 count as done. */
     val onboardingDone: Boolean = false,
     /** App theme (C4): `system`, `light` or `dark`. */

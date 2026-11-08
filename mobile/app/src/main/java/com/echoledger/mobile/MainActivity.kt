@@ -66,8 +66,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.lifecycleScope
 import com.echoledger.mobile.core.AppLinks
+import com.echoledger.mobile.core.Readiness
+import com.echoledger.mobile.core.ReadyFix
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
+import com.echoledger.mobile.recording.ReadinessWatch
 import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.ui.ActivityBadge
 import com.echoledger.mobile.ui.ActivityScreen
@@ -86,6 +89,7 @@ import com.echoledger.mobile.ui.OnboardingScreen
 import com.echoledger.mobile.ui.PairingScreen
 import com.echoledger.mobile.ui.ProjectsScreen
 import com.echoledger.mobile.ui.ProjectsTarget
+import com.echoledger.mobile.ui.ReadyCheckSheet
 import com.echoledger.mobile.ui.RecordMode
 import com.echoledger.mobile.ui.RecordScreen
 import com.echoledger.mobile.ui.RecordSheet
@@ -228,6 +232,14 @@ class MainActivity : FragmentActivity() {
         var recheck by remember { mutableIntStateOf(0) }
         val context = LocalContext.current
         val caps = remember(helper.connected, recheck) { context.capabilities(helper.connected) }
+        // The Ready check (since v1.5, Phase 1C): the chip on the Library and the Record sheet, and its sheet.
+        var showReady by rememberSaveable { mutableStateOf(false) }
+        var readyFix by remember { mutableStateOf<ReadyFix?>(null) }
+        val armState by (application as EchoLedgerApp).graph.helper.armState.collectAsState()
+        val readiness = remember(helper, armState, recheck, currentSettings.autoRecordArmed, currentSettings.paired) {
+            Readiness.evaluate(ReadinessWatch.facts(context, currentSettings, (application as EchoLedgerApp).graph.helper))
+        }
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { recheck++ }
 
         // ---- app lock: decided only once the stored settings are known, then on every trip to the background ----
         val machine = rememberSaveable(saver = lockMachineSaver) { AppLockMachine(SystemClock::elapsedRealtime) }
@@ -329,6 +341,11 @@ class MainActivity : FragmentActivity() {
                 showItem(null)
                 showSetup = true
             }
+            if (open == OPEN_READY) {
+                showReady = true
+                readyFix = intent?.getStringExtra(EXTRA_FIX)?.let { f -> ReadyFix.entries.firstOrNull { it.name == f } }
+                intent?.removeExtra(EXTRA_FIX)
+            }
             open?.takeIf { it.startsWith(OPEN_SESSION_PREFIX) }?.let { openSession = it.removePrefix(OPEN_SESSION_PREFIX) }
             open?.takeIf { it.startsWith(OPEN_SHARED_PREFIX) }?.let {
                 sharedNotes = it.removePrefix(OPEN_SHARED_PREFIX)
@@ -403,8 +420,28 @@ class MainActivity : FragmentActivity() {
         }
 
         CompositionLocalProvider(LocalUnlockPrompter provides prompter) {
+            if (showReady) {
+                ReadyCheckSheet(
+                    vm,
+                    readiness,
+                    onDismiss = {
+                        showReady = false
+                        readyFix = null
+                    },
+                    onSetup = {
+                        showReady = false
+                        showItem(null)
+                        showSetup = true
+                    },
+                    onRecheck = { recheck++ },
+                    autoFix = readyFix
+                )
+            }
             if (recordSheet) {
-                RecordSheet(caps, settings.autoRecordArmed, onPick = {
+                RecordSheet(caps, settings.autoRecordArmed, readyChip = readiness.chip, onReady = {
+                    recordSheet = false
+                    showReady = true
+                }, onPick = {
                     recordMode = it
                     tab = TAB_RECORD
                     recordSheet = false
@@ -564,8 +601,8 @@ class MainActivity : FragmentActivity() {
 
                                                 else -> LibraryScreen(
                                                     vm,
-                                                    showCallSetup = caps.callCaptureSupportedByOs && !caps.helperConnected,
-                                                    onSetup = { showSetup = true },
+                                                    readiness = readiness,
+                                                    onReady = { showReady = true },
                                                     onOpenAt = { item, ms ->
                                                         openAtMs = ms
                                                         showItem(item)
@@ -607,6 +644,10 @@ class MainActivity : FragmentActivity() {
 
         /** Setup (call capture): from "Call capture isn't ready" and "Run capture test". */
         const val OPEN_SETUP = "setup"
+
+        /** The Ready check (since v1.5, Phase 1C): from the critical alert; [EXTRA_FIX] names the fix to run at once. */
+        const val OPEN_READY = "ready"
+        const val EXTRA_FIX = "fix"
 
         /** `session:<id>` opens that recording (an activity notification was tapped, B18). */
         const val OPEN_SESSION_PREFIX = "session:"

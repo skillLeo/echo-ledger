@@ -13,8 +13,8 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.core.Activity
+import com.echoledger.mobile.core.NotifyCategory
 import java.io.File
-import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
 /**
@@ -28,21 +28,26 @@ class ActivityWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val api = graph.api() ?: return Result.success()
         val answer = runCatching { api.activity(20) }.getOrElse { return Result.success() }
         val fresh = seen(applicationContext).fresh(answer.data)
-        val settings = graph.settings.current()
-        val now = LocalTime.now().let { it.hour * 60 + it.minute }
-        val allowed =
-            settings.activityNotifications && !Activity.inQuietHours(settings.quietHours, settings.quietFrom, settings.quietTo, now)
         val canPost =
             ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.POST_NOTIFICATIONS) ==
                 PackageManager.PERMISSION_GRANTED
-        if (fresh.isNotEmpty() && allowed && canPost) {
-            val texts = Activity.notificationText(fresh)
-            if (texts.size == 1 && fresh.size > 1) {
-                Notifications.activity(applicationContext, "activity-summary", texts[0].first, texts[0].second, null)
-            } else {
-                fresh.zip(texts).forEach { (item, text) ->
-                    Notifications.activity(applicationContext, item.id, text.first, text.second, item.sessionId)
-                }
+        if (!canPost || fresh.isEmpty()) return Result.success()
+        // Each kind has its own switch and Android channel (since v1.5); quiet hours hold back all but critical ones.
+        val app = applicationContext as EchoLedgerApp
+        val shown = fresh.filter { NotifyGate.allowed(app, NotifyCategory.forActivity(it.kind)) }
+        val texts = Activity.notificationText(shown)
+        if (texts.size == 1 && shown.size > 1) {
+            Notifications.activity(applicationContext, "activity-summary", texts[0].first, texts[0].second, null)
+        } else {
+            shown.zip(texts).forEach { (item, text) ->
+                Notifications.activity(
+                    applicationContext,
+                    item.id,
+                    text.first,
+                    text.second,
+                    item.sessionId,
+                    category = NotifyCategory.forActivity(item.kind)
+                )
             }
         }
         return Result.success()

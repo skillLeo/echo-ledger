@@ -51,7 +51,8 @@ object SettingsTransfer {
         "activityNotifications",
         "quietHours",
         "quietFrom",
-        "quietTo"
+        "quietTo",
+        "notifyOff"
     )
 
     /**

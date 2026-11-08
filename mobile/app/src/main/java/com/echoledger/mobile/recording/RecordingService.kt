@@ -472,6 +472,7 @@ class RecordingService : LifecycleService() {
                 Notifications.captureNotReady(this@RecordingService)
             }
             if (!inCall) warnedThisCall = false
+            backupIfMissed(ready)
             main.postDelayed(this, WATCHDOG_MS)
         }
     }
@@ -526,6 +527,29 @@ class RecordingService : LifecycleService() {
 
     /** "Record" was tapped on the ask notification: the call is on, so nothing waits for an answer. */
     private var recordingAskedCall = false
+
+    /** The call the backup start already tried, so a helper that refuses is not asked again every 5 s. */
+    private var backupTried: String? = null
+
+    /**
+     * A5 (since v1.5): a call was detected but nothing records it 5 s later (a missed start, a helper that came back
+     * late): recording starts by itself, and the pill says "Recording started (backup)".
+     */
+    private fun backupIfMissed(helperReady: Boolean) {
+        val call = callState as? CallState.InCall ?: return
+        val due = com.echoledger.mobile.core.AfterCallCheck.backupDue(
+            call.startedAtMs,
+            System.currentTimeMillis(),
+            recording = capture != null || finalizing > 0,
+            helperReady = helperReady,
+            alreadyTried = backupTried == call.recordingId
+        )
+        if (!due) return
+        backupTried = call.recordingId
+        CaptureLog.add(this, "backup start", "${call.app.wire}: call seen without a recording")
+        startHelperCapture(call.app.wire, call.recordingId, fromCall = true)
+        capture?.let { refresh(it, "Recording started (backup)") }
+    }
 
     private fun onCallEvent(event: CallEvent) {
         if (event is CallEvent.CallStarted && event.app == SourceApp.PHONE_CALL) {
@@ -1169,6 +1193,20 @@ class RecordingService : LifecycleService() {
             // was never answered is not a capture problem: it is skipped like the short ones.
             val unanswered = skip == SkippedCalls.Reason.NOT_ANSWERED
             val silent = stored != null && !unanswered && (stored.durationMs <= 0 || session.levels.silent())
+            // A5: both sides of a kept call are checked; only your voice says why, in a notification and the Ready check.
+            val oneSided = if (isCall && stored != null && !silent && skip == null && session.channels == 2) {
+                com.echoledger.mobile.core.AfterCallCheck.oneSided(
+                    session.channels,
+                    session.levels.peakDb(0),
+                    session.levels.peakDb(1),
+                    session.warning
+                )
+            } else {
+                null
+            }
+            if (isCall && stored != null && skip == null && !silent) {
+                if (oneSided != null) OneSidedCalls.record(this, oneSided) else OneSidedCalls.clear(this)
+            }
             CaptureLog.add(
                 this,
                 "recording saved",
@@ -1209,6 +1247,7 @@ class RecordingService : LifecycleService() {
                 } else if (stored != null && skip == null) {
                     if (isCall) {
                         PostCallPrompt.show(this, stored, afterCall, themeMode)
+                        oneSided?.let { Notifications.onlyYourVoice(this, it) }
                     } else {
                         UploadWorker.enqueue(this, stored.id)
                     }

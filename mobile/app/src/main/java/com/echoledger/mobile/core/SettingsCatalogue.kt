@@ -109,6 +109,7 @@ object SettingsReset {
                 quietHours = d.quietHours,
                 quietFrom = d.quietFrom,
                 quietTo = d.quietTo,
+                notifyOff = d.notifyOff,
                 transcriptionLanguage = d.transcriptionLanguage
             )
 

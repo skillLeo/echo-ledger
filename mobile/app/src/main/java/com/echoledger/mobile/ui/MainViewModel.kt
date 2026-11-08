@@ -994,6 +994,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /** Ready check → Restart: the helper is stopped and started again through Shizuku (an older one gets this version). */
+    fun restartHelper() {
+        val h = graph.helper
+        if (!h.shizukuAvailable()) {
+            _message.value = "Shizuku is not running. Start it (Wireless debugging) and try again."
+            return
+        }
+        h.unbindShizuku()
+        if (!h.bindShizuku()) _message.value = "Could not start the capture helper through Shizuku."
+    }
+
     fun adbCommand(): String = graph.helper.adbCommand()
 
     /** Send to my admin on the device check (since v1.5): the only thing that uploads it. */

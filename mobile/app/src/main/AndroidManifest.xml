@@ -28,6 +28,8 @@
 
     <!-- The capture test checks that WhatsApp or WhatsApp Business is installed (package visibility). -->
     <queries>
+        <!-- The Ready check (since v1.5): whether Shizuku is installed, and its Start screen one tap away. -->
+        <package android:name="moe.shizuku.privileged.api" />
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
         <!-- The other call apps: only to show their own icon next to their recordings. -->

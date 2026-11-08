@@ -110,7 +110,7 @@ class AutoRecordKeeperTest : AppTest() {
 
         assertFalse(asked)
         val posted = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.single()
-        assertEquals(Notifications.CHANNEL_ACTIVITY, posted.channelId)
+        assertEquals(Notifications.CHANNEL_READINESS, posted.channelId)
         assertEquals("Auto-record is off — tap to turn it on", shadowOf(posted).contentTitle.toString())
         val tap = shadowOf(posted.contentIntent)
         assertTrue("the tap starts the service, not a screen", tap.isForegroundService)

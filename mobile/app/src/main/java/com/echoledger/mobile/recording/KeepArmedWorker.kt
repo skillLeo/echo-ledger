@@ -17,6 +17,8 @@ class KeepArmedWorker(context: Context, params: WorkerParameters) : CoroutineWor
             settings.autoRecordArmed -> {
                 graph.helper.reconnect()
                 AutoRecordKeeper.ensure(applicationContext, settings, "periodic check")
+                // Phase 1C: a permission taken away, a full phone or a helper that did not come back alerts here.
+                runCatching { ReadinessWatch.check(applicationContext as EchoLedgerApp, "periodic check") }
             }
 
             // Off in Settings (an arm still saving "on" counts as on): nothing to keep on any more.

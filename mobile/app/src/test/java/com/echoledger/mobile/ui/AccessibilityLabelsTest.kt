@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.testsupport.FakeServer
+import com.echoledger.mobile.testsupport.ReadinessFixtures
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
@@ -48,7 +49,7 @@ class AccessibilityLabelsTest : ScreenTest() {
     @Test
     fun `library controls are labelled`() {
         seed()
-        show { LibraryScreen(vm, showCallSetup = true, onSetup = {}, onOpen = {}) }
+        show { LibraryScreen(vm, readiness = ReadinessFixtures.HELPER_STOPPED, onReady = {}, onOpen = {}) }
         compose.waitForIdle()
         assertEquals(emptyList<String>(), unlabelled())
     }

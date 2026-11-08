@@ -77,17 +77,17 @@ Everywhere:
 ## Phase 1C — Easy, trustworthy, clear
 
 Never miss a recording:
-- [ ] A1 Ready check, one tap and automatic (phone: helper, permissions, mic, far-side test, server, storage, battery; desktop: devices, per-app capture, meeting detection, permissions incl. Mac): "✓ Ready to record calls" or each problem with a one-tap fix.
-- [ ] A2 Status chip "Calls: Ready" / "Not ready — Fix" on the Library top bar, the Record sheet, the desktop sidebar and tray.
-- [ ] A3 Critical alert the moment readiness breaks (helper killed, not re-armed after reboot or update, permission revoked, mic blocked); quiet hours never silence it.
+- [ ] A1 Ready check, one tap and automatic (phone: helper, permissions, mic, far-side test, server, storage, battery; desktop: devices, per-app capture, meeting detection, permissions incl. Mac): "✓ Ready to record calls" or each problem with a one-tap fix. **Phone done** 2026-11-08 (Readiness, ReadyCheckSheet; ReadinessTest); desktop with its helper.
+- [ ] A2 Status chip "Calls: Ready" / "Not ready — Fix" on the Library top bar, the Record sheet, the desktop sidebar and tray. **Phone done** 2026-11-08 (Library top bar, Record sheet).
+- [x] A3 Critical alert the moment readiness breaks (helper killed, not re-armed after reboot or update, permission revoked, mic blocked); quiet hours never silence it. **Done** 2026-11-08 (phone): ReadinessWatch on helper death (15 s), restart/update (60 s), every 15 min and app start; once per problem, cleared when ready.
 - [ ] A4 One smart Record now: an active call or meeting is recorded through call capture (both sides), else a voice note; from the notification, Quick Settings tile, widget, app shortcut, in-call pill, desktop tray and Ctrl/⌘+Shift+R.
-- [ ] A5 Watchdog: a call detected but not recording after 5 s starts by itself ("Recording started (backup)"); after each call both channels are checked and "Only your voice was recorded" says why and how to fix it.
-- [ ] A6 Why the S25 lost its WhatsApp setup; setup survives reinstalls, updates and sign-in changes.
+- [ ] A5 Watchdog: a call detected but not recording after 5 s starts by itself ("Recording started (backup)"); after each call both channels are checked and "Only your voice was recorded" says why and how to fix it. **Phone done** 2026-11-08: backup start after 5 s, after-call check of both sides (AfterCallCheck).
+- [x] A6 Why the S25 lost its WhatsApp setup; setup survives reinstalls, updates and sign-in changes. **Found** 2026-11-08: a restart turns Wireless debugging off, which stops Shizuku and the helper; the banner wrongly said "one-time setup". Now: "The helper stopped when the phone restarted" with Open Shizuku, a critical alert a minute after the restart, and the helper starts by itself once Shizuku is back. Updates and sign-in changes never lost it.
 
 Notifications:
-- [ ] B1 One Android channel per category (Recording, Transcription, Enhancement, Uploads, Call capture & readiness (Critical), Sharing, Account & security, Usage & limits, Live Translate, App updates, Other), mirrored in Settings → Notifications on phone and desktop; web: email preferences.
+- [x] B1 One Android channel per category (Recording, Transcription, Enhancement, Uploads, Call capture & readiness (Critical), Sharing, Account & security, Usage & limits, Live Translate, App updates, Other), mirrored in Settings → Notifications on phone and desktop; web: email preferences. **Phone done** 2026-11-08 (NotifyCategory; the old "Transcripts ready" channel is split, and kept off if it was off).
 - [ ] B2 Per category on/off, sound and vibration where the OS allows, a Test button.
-- [ ] B3 Quiet hours with start and end; Critical bypasses them.
+- [x] B3 Quiet hours with start and end; Critical bypasses them. **Phone done** 2026-11-08 (NotifyGate).
 - [ ] B4 A category turned off in Android's own settings is shown with a link to that channel.
 
 Clear progress:
@@ -118,6 +118,14 @@ Sign-in and people:
 
 Ease of use:
 - [ ] G The 15 most common tasks counted in taps and clicks on phone and desktop; the top 10 at 2 or fewer; before and after reported.
+
+Arabic and short voice note accuracy (added 2026-11-08):
+- [ ] H1 Arabic and Arabic+English: ElevenLabs Scribe v2 first, Groq Whisper as the checker; checked with the Accuracy Lab on real Arabic notes.
+- [ ] H2 Double-check short recordings (≤ 3 min, every language): two engines, words aligned; agreement is plain text, disagreement an unsure word with both versions; Gemini breaks ties when its key exists; cost per note in Usage; "Double-check short notes" (on).
+- [ ] H3 Views never guess: they get word confidences and alternatives; an unsure word stays, flagged ("I [understand?] English", «أفحم → probably أفهم»); Haiku 5.5 for short notes only if measured equal.
+- [ ] H4 Fast path for notes ≤ 60 s: transcript under 15 s, views under 30 s; long recordings keep the queue.
+- [ ] H5 Arabic dialect hint (Gulf/Saudi, Egyptian, Levantine, Standard) for engines that take context.
+- [ ] H6 Tests (alignment, the «أفحم» no-guess fixture, routing, fast-path timing); the 8:19 pm note re-run, its new Original and English shown.
 
 - [ ] Phase 1C suites green; verified on the S25 in the next phone window (after "keys copied").
 

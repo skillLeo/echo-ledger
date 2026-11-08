@@ -18,6 +18,8 @@ import com.echoledger.mobile.MainActivity
 import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.DecisionTimeoutWorker
 import com.echoledger.mobile.calls.SaveDecisionReceiver
+import com.echoledger.mobile.core.NotifyCategory
+import com.echoledger.mobile.core.ReadyProblem
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.data.SegmentDto
@@ -38,46 +40,147 @@ object Notifications {
     /** An empty "Status" channel of earlier versions: nothing was ever posted to it (removed in v1.3). */
     const val OLD_CHANNEL_STATUS = "status"
 
-    /** Activity centre (B18): transcript ready, upload failed, new device, monthly limit. */
-    const val CHANNEL_ACTIVITY = "activity"
+    /** Activity of earlier versions in one channel; since v1.5 each kind has its own ([NotifyCategory]). */
+    const val CHANNEL_ACTIVITY = NotifyCategory.OLD_ACTIVITY_CHANNEL
+
+    /** Call capture & readiness (critical): recording calls stopped working (since v1.5, Phase 1C). */
+    val CHANNEL_READINESS = NotifyCategory.READINESS.channelId
     const val ID_FOREGROUND = 1001
 
-    /** Recording · Calls and problems · Transcripts ready: the three channels people see in the phone's settings. */
+    /**
+     * One channel per kind of notification ([NotifyCategory], since v1.5), plus the question after a call, which is part
+     * of Recording but pops up. The old "Transcripts ready" channel is gone: what it carried has a channel of its own.
+     */
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
+        val oldActivityBlocked = manager.getNotificationChannel(CHANNEL_ACTIVITY)?.importance == NotificationManager.IMPORTANCE_NONE
         manager.deleteNotificationChannel(OLD_CHANNEL_DECISIONS)
         manager.deleteNotificationChannel(OLD_CHANNEL_STATUS)
-        manager.createNotificationChannels(
-            listOf(
-                NotificationChannel(
-                    CHANNEL_RECORDING,
-                    context.getString(R.string.channel_recording),
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
-                    description = context.getString(R.string.channel_recording_desc)
-                    setShowBadge(false)
-                },
-                NotificationChannel(
-                    CHANNEL_DECISIONS,
-                    context.getString(R.string.channel_decisions),
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = context.getString(R.string.channel_decisions_desc)
-                    setSound(null, null)
-                    enableVibration(false)
-                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-                },
-                NotificationChannel(
-                    CHANNEL_ACTIVITY,
-                    context.getString(R.string.channel_activity),
-                    NotificationManager.IMPORTANCE_DEFAULT
-                ).apply {
-                    description = context.getString(R.string.channel_activity_desc)
-                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-                }
-            )
+        manager.deleteNotificationChannel(CHANNEL_ACTIVITY)
+        val serverKinds = setOf(
+            NotifyCategory.TRANSCRIPTION,
+            NotifyCategory.ENHANCEMENT,
+            NotifyCategory.UPLOADS,
+            NotifyCategory.SHARING,
+            NotifyCategory.ACCOUNT,
+            NotifyCategory.USAGE,
+            NotifyCategory.OTHER
         )
+        val channels = NotifyCategory.entries.map { category ->
+            val importance = when (category.level) {
+                NotifyCategory.Level.LOW -> NotificationManager.IMPORTANCE_LOW
+                NotifyCategory.Level.DEFAULT -> NotificationManager.IMPORTANCE_DEFAULT
+                NotifyCategory.Level.HIGH -> NotificationManager.IMPORTANCE_HIGH
+            }
+            // Someone who had switched off the old channel in Android's settings keeps those kinds off.
+            val blocked = oldActivityBlocked && category in serverKinds
+            NotificationChannel(
+                category.channelId,
+                category.title,
+                if (blocked) NotificationManager.IMPORTANCE_NONE else importance
+            ).apply {
+                description = category.description
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+                if (category == NotifyCategory.RECORDING || category == NotifyCategory.LIVE_TRANSLATE) setShowBadge(false)
+            }
+        } + NotificationChannel(
+            CHANNEL_DECISIONS,
+            context.getString(R.string.channel_decisions),
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = context.getString(R.string.channel_decisions_desc)
+            setSound(null, null)
+            enableVibration(false)
+            lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        }
+        manager.createNotificationChannels(channels)
     }
+
+    /** Whether Android shows [category] (the person may have switched its channel off in Android's own settings). */
+    fun channelOn(context: Context, category: NotifyCategory): Boolean {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        if (!manager.areNotificationsEnabled()) return false
+        return manager.getNotificationChannel(category.channelId)?.importance != NotificationManager.IMPORTANCE_NONE
+    }
+
+    /** Android's own page of one channel, where sound, vibration and pop-up are set. */
+    fun channelSettings(context: Context, category: NotifyCategory): Intent =
+        Intent(android.provider.Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+            .putExtra(android.provider.Settings.EXTRA_CHANNEL_ID, category.channelId)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    private fun canPost(context: Context): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
+    /** Settings → Notifications → Test: one notification of that kind, marked as a test. */
+    fun test(context: Context, category: NotifyCategory): Boolean {
+        if (!canPost(context)) return false
+        val builder = NotificationCompat.Builder(context, category.channelId)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(category.testTitle)
+            .setContentText(category.testBody)
+            .setSubText("Test")
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context))
+            .setTimeoutAfter(TEST_TIMEOUT_MS)
+        return runCatching { NotificationManagerCompat.from(context).notify(TEST_ID + category.ordinal, builder.build()) }.isSuccess
+    }
+
+    private const val TEST_ID = 7_500
+    private const val TEST_TIMEOUT_MS = 60_000L
+    private const val READINESS_ID = 7_440
+
+    /**
+     * The critical alert (since v1.5, Phase 1C A3): recording calls just stopped working. It pops up with sound, comes
+     * through in quiet hours, says what broke, and its button is the one-tap fix (it opens the Ready check).
+     */
+    fun readinessAlert(context: Context, problem: ReadyProblem) {
+        if (!canPost(context)) return
+        val text = problem.detail
+        val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Calls are not being recorded: ${problem.title.replaceFirstChar { it.lowercase() }}")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ERROR)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(true)
+            .setContentIntent(openReady(context))
+        problem.fix?.let { builder.addAction(0, it.label, openReady(context, it.name)) }
+        runCatching { NotificationManagerCompat.from(context).notify(READINESS_ID, builder.build()) }
+    }
+
+    /** A5: a kept call recorded only your voice; says why, and opens the Ready check. */
+    fun onlyYourVoice(context: Context, why: String) {
+        if (!canPost(context)) return
+        val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Only your voice was recorded")
+            .setContentText(why)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(why))
+            .setAutoCancel(true)
+            .setContentIntent(openReady(context))
+        runCatching { NotificationManagerCompat.from(context).notify(ONE_SIDED_ID, builder.build()) }
+    }
+
+    private const val ONE_SIDED_ID = 7_441
+
+    fun cancelReadinessAlert(context: Context) {
+        NotificationManagerCompat.from(context).cancel(READINESS_ID)
+    }
+
+    /** Opens the Ready check; with [fix], the app runs that fix as it opens. */
+    private fun openReady(context: Context, fix: String? = null): PendingIntent = PendingIntent.getActivity(
+        context,
+        if (fix == null) 40 else 41,
+        Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_READY)
+            .apply { fix?.let { putExtra(MainActivity.EXTRA_FIX, it) } },
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+    )
 
     private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
         context,
@@ -280,7 +383,7 @@ object Notifications {
             return
         }
         val text = "This call is not being recorded because the capture helper is not running. Tap to open Setup and start it."
-        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+        val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle("Call capture isn't ready — tap to fix")
             .setContentText(text)
@@ -304,7 +407,7 @@ object Notifications {
         val first = if (callNotRecorded) "This call could not be recorded." else "The recording had no sound, so it was not kept."
         val text = listOfNotNull(first, reason?.let { "Reason: $it" }, "Open Setup, Call capture and restart the helper, then test a call.")
             .joinToString(" ")
-        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+        val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(if (callNotRecorded) "Call not recorded" else "No audio was captured")
             .setContentText(text)
@@ -376,7 +479,7 @@ object Notifications {
             return
         }
         val text = "Android stopped auto-record, so calls are not being recorded. Tap to turn it back on."
-        val builder = NotificationCompat.Builder(context, CHANNEL_ACTIVITY)
+        val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle("Auto-record is off — tap to turn it on")
             .setContentText(text)
@@ -414,7 +517,15 @@ object Notifications {
 
     /** One activity notification; tapping it opens [sessionId] (or the app). Hidden content on the lock screen. */
     @SuppressLint("MissingPermission") // checked by the caller (POST_NOTIFICATIONS)
-    fun activity(context: Context, key: String, title: String, body: String, sessionId: String?, silent: Boolean = false) {
+    fun activity(
+        context: Context,
+        key: String,
+        title: String,
+        body: String,
+        sessionId: String?,
+        silent: Boolean = false,
+        category: NotifyCategory = NotifyCategory.OTHER
+    ) {
         val open = PendingIntent.getActivity(
             context,
             key.hashCode(),
@@ -423,7 +534,7 @@ object Notifications {
                 .apply { sessionId?.let { putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SESSION_PREFIX + it) } },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val notification = NotificationCompat.Builder(context, CHANNEL_ACTIVITY)
+        val notification = NotificationCompat.Builder(context, category.channelId)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(title)
             .setContentText(body)

@@ -68,6 +68,8 @@ import com.echoledger.mobile.core.LibraryFilters
 import com.echoledger.mobile.core.LibraryQuery
 import com.echoledger.mobile.core.LibrarySort
 import com.echoledger.mobile.core.Organise
+import com.echoledger.mobile.core.Readiness
+import com.echoledger.mobile.core.ReadyChip
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.LocalRecording
@@ -103,8 +105,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun LibraryScreen(
     vm: MainViewModel,
-    showCallSetup: Boolean,
-    onSetup: () -> Unit,
+    readiness: Readiness,
+    onReady: () -> Unit,
     onOpenAt: (LibraryItem, Long) -> Unit = { _, _ -> },
     waiting: List<LocalRecording> = emptyList(),
     onOpenWaiting: () -> Unit = {},
@@ -221,6 +223,7 @@ fun LibraryScreen(
                 }
             } else if (!searching) {
                 EchoTopBar("Library", actions = {
+                    ReadyChipView(readiness.chip, onReady, Modifier.padding(end = Space.s1))
                     Box {
                         BarIcon(Icons.Rounded.MoreVert, "More", { menuOpen = true })
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -300,14 +303,17 @@ fun LibraryScreen(
                             )
                         }
                     }
-                    if (showCallSetup && !searching) {
+                    // Since v1.5 (Phase 1C): what stops calls being recorded, in its own words ("The helper stopped when the
+                    // phone restarted"), never "one-time setup" for a phone that was set up.
+                    val blocking = readiness.problems.firstOrNull { it.blocking }
+                    if (readiness.chip == ReadyChip.NOT_READY && blocking != null && !searching) {
                         item(key = "call-setup") {
                             InlineBanner(
-                                "WhatsApp calls are not being recorded yet. The one-time setup takes about 2 minutes.",
+                                "Calls are not being recorded: ${blocking.title.replaceFirstChar { it.lowercase() }}.",
                                 Modifier.padding(horizontal = Space.screen, vertical = Space.s2),
                                 kind = BannerKind.Warning,
-                                action = "Set up",
-                                onAction = onSetup
+                                action = "Fix",
+                                onAction = onReady
                             )
                         }
                     }
