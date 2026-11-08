@@ -275,6 +275,11 @@ Give any recording a clear name: select it in the Library and choose **⋮ → R
 recording page. The new name shows on all your devices. A call waiting for Keep or Discard can be named on its card
 (the pencil).
 
+**Automatic titles (since v1.5).** A recording nobody named gets a short title from what was said, for example
+"Laptop — 16 vs 32 GB"; on the computer it is marked **Automatic title**. Type your own and it is never replaced. Empty
+the title field to have the automatic one again. The player always shows the recording's real length, in every view
+(Original, Roman Urdu, English and Urdu), also for a voice note whose length the server does not know yet.
+
 ### Export and share
 
 **Export** saves a transcript as a file: Word, PDF (use **Print or save as PDF**), plain text, Markdown, SRT or

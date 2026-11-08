@@ -632,6 +632,8 @@ with fakes; these rows prove the system around them.
 | 1C-C4 | Press **Notify me when ready**, turn Transcription notifications off, close the main window. | A notification when the transcript is ready (within about a minute). |
 | 1C-D1 | Library with a few hundred recordings: Group by Project, Sort by Longest; open the Inbox, choose None and Name A–Z; restart the app. | Each view comes back with its own choice; scrolling a long group keeps its header at the top; Windows and Mac. |
 | 1C-D2 | Tick a group's box, move the group to a project; tick a box with half the group picked. | All its recordings move; a half-picked box shows a dash and ticks the rest. |
+| 1C-E1 | Open an 18 s Urdu voice note; switch Original, Roman Urdu, English and Urdu while it plays. | The player shows 0:18 in every view and keeps playing. |
+| 1C-E4 | A new voice note without a title, once its transcript is ready; then rename it; then empty the title. | An automatic short title marked Automatic title; your title stays after a re-sync and on the phone; emptying brings an automatic one back. |
 | 1C-A8 | A 30 s call where the other side plays through a headset that is not the default output (or is muted). | After the call: **Only your voice was recorded**, with the reason and the fix; the banner opens the Ready check. |
 
 ## Appendix B — Accessibility

@@ -863,6 +863,9 @@ audio.player { display: none; }
 .improving-track > div.indeterminate { transform: scaleX(0.3); }
 .activity-row.progress-row { display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-3); }
 
+/* An automatic title (Phase 1C): a quiet note beside it. */
+.auto-title { display: inline-flex; align-items: center; gap: 4px; margin-left: var(--space-2); font-weight: 400; vertical-align: middle; }
+
 /* Loading placeholders (C6): a quiet shimmer while a list loads (the phone's SkeletonRow). */
 .skeleton-item { cursor: default; gap: var(--space-2); padding-block: var(--space-3); }
 .skeleton-item:hover { background: transparent; }

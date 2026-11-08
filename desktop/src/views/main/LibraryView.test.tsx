@@ -1296,6 +1296,39 @@ describe("LibraryView clear progress (Phase 1C)", () => {
   }, 15_000);
 });
 
+describe("LibraryView player length (E1)", () => {
+  const urdu = (): Segment[] => [
+    { channel: 1, speaker: "Me", start_ms: 0, end_ms: 9_000, text: "آپ کیسے ہیں" },
+    { channel: 2, speaker: "Client", start_ms: 9_500, end_ms: 18_000, text: "میں ٹھیک ہوں" },
+  ];
+
+  it("shows the real length in every view, Roman Urdu as Original", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman", "english"], status: "ready" } });
+    respond("transcript_views", { status: "ready", available: ["roman", "english"], roman: ["aap kaise hain", "main theek hoon"], english: ["How are you?", "I am fine."], model: "m", made_at: null, error: null });
+    const items = [makeItem("a", { title: "Zoom with Acme", duration_ms: null, transcript: { final_status: "completed", final_transcript_id: "tr-a", live_available: false, preview: null } })];
+    await renderLibrary(items);
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    const time = () => detail().querySelector(".player-time")?.textContent;
+    expect(time()).toBe("0:00 / 0:18");
+    for (const view of ["Roman Urdu", "English", "Original"]) {
+      fireEvent.click(within(detail()).getByRole("button", { name: view }));
+      await flushAsync();
+      expect(time()).toBe("0:00 / 0:18");
+    }
+  });
+
+  it("takes the audio file's own length for a voice note the server has no length for", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", segments: [] });
+    const items = [makeItem("a", { title: "Voice note", source_app: "voice_note", duration_ms: null, transcript: { final_status: "completed", final_transcript_id: "tr-a", live_available: false, preview: null } })];
+    await renderLibrary(items);
+    await selectItem("Voice note");
+    const audio = screen.getByTestId("player") as HTMLAudioElement;
+    Object.defineProperty(audio, "duration", { configurable: true, value: 42.4 });
+    fireEvent.loadedMetadata(audio);
+    expect(detail().querySelector(".player-time")?.textContent).toBe("0:00 / 0:42");
+  });
+});
+
 describe("LibraryView Show as", () => {
   const urdu = (): Segment[] => [
     { channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "آپ کیسے ہیں" },

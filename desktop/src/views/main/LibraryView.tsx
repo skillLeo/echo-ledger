@@ -5,7 +5,7 @@ import { folderLabel, inFolderHere } from "../../lib/folders";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { SharedWithMe, sentLine } from "./SharedWithMe";
 import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialogs";
-import { activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
+import { playerLength, activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
 import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
@@ -153,6 +153,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     api.unsureMarkers().then((m) => { if (m) setUnsure({ ...DEFAULT_UNSURE, ...m }); }).catch(() => undefined);
   }, []);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
+  // What the audio file says its length is (E1): the player's length when the server has none yet.
+  const [mediaSeconds, setMediaSeconds] = useState<number | null>(null);
+  useEffect(() => setMediaSeconds(null), [playbackUrl]);
   const [activeSegment, setActiveSegment] = useState(-1);
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const [nowMs, setNowMs] = useState(0);
@@ -676,6 +679,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const onLoaded = () => {
     const audio = audioRef.current;
     if (audio) audio.playbackRate = rate;
+    if (audio) setMediaSeconds(audio.duration);
     if (pendingSeek.current !== null && audio) {
       audio.currentTime = pendingSeek.current / 1000;
       pendingSeek.current = null;
@@ -869,14 +873,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     setRenaming(null);
     const title = text.trim();
     if (title === (item.title ?? "").trim()) return;
-    // An empty title clears it: the server says what the recording is called then.
-    if (title) replaceItem(item.id, (i) => ({ ...i, title }));
+    // An empty title asks the server for its automatic one again (Phase 1C, `title: null`); a title the person types is
+    // theirs, and the server never replaces it.
+    if (title) replaceItem(item.id, (i) => ({ ...i, title, title_auto: false }));
     try {
-      const answer = await api.organiseSession(item.id, { title });
+      const answer = await api.organiseSession(item.id, { title: title || null });
       if (answer?.data?.id === item.id) replaceItem(item.id, () => answer.data);
-      notify(title ? "Renamed" : "Title cleared");
+      notify(title ? "Renamed" : "The automatic title will be used");
     } catch (e) {
-      replaceItem(item.id, (i) => ({ ...i, title: item.title }));
+      replaceItem(item.id, (i) => ({ ...i, title: item.title, title_auto: item.title_auto }));
       notify(errorMessage(e), true);
     }
   };
@@ -948,7 +953,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   };
 
   const total = items.filter((i) => !i.deleted).length;
-  const durationMs = current && transcript ? Math.max(current.duration_ms ?? 0, ...transcript.segments.map((s) => s.end_ms)) : current?.duration_ms ?? 0;
+  const durationMs = current ? playerLength(current.duration_ms, transcript?.segments, mediaSeconds) : 0;
   const pendingFix = readOnly ? null : openSuggestions.find((f) => f.id === openSuggestion) ?? null;
   return (
     <>
@@ -1186,6 +1191,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   ) : (
                     <h2 className="detail-title" data-motion="title">
                       <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{current.title}</button>
+                      {current.title_auto && (
+                        <span className="auto-title small muted" data-testid="auto-title" title="EchoLedger named it from what was said. Click the title to give it your own; yours is never replaced.">
+                          <SparkleIcon size={12} />Automatic title
+                        </span>
+                      )}
                     </h2>
                   )}
                   <div className="detail-meta">
@@ -1388,7 +1398,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 <PlayerDock playing={playing} nowMs={nowMs} durationMs={durationMs} onToggle={togglePlay} onSkip={skipBy}
                   below={<PlayerControls rate={rate} onRate={changeRate} skipSilence={skipSilence} onSkipSilence={setSkipSilence} follow={follow} onFollow={setFollow} />}>
                   <audio ref={audioRef} className="player" preload="metadata" src={playbackUrl} onTimeUpdate={onTimeUpdate} onSeeked={onTimeUpdate} onError={onPlaybackError}
-                    onLoadedMetadata={onLoaded} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} data-testid="player" />
+                    onLoadedMetadata={onLoaded} onDurationChange={() => setMediaSeconds(audioRef.current?.duration ?? null)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} data-testid="player" />
                   <Waveform segments={transcript?.segments ?? []} bookmarks={bookmarks} durationMs={durationMs} nowMs={nowMs} onSeek={seek} />
                 </PlayerDock>
               )}

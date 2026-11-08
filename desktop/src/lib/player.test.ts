@@ -124,3 +124,14 @@ describe("Find in a transcript", () => {
     expect(suggestionSpan("We use Laravel here", "la ravel")).toBeNull();
   });
 });
+
+describe("playerLength (E1)", () => {
+  it("is the longest of the recording, the last line and the audio file, whatever the view", async () => {
+    const { playerLength } = await import("./player");
+    expect(playerLength(18_000, [{ end_ms: 12_000 }], null)).toBe(18_000);
+    expect(playerLength(null, [{ end_ms: 12_000 }], null)).toBe(12_000);
+    expect(playerLength(null, [], 42.4)).toBe(42_400);
+    expect(playerLength(undefined, undefined, Number.NaN)).toBe(0);
+    expect(playerLength(null, null, Infinity)).toBe(0);
+  });
+});

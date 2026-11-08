@@ -201,3 +201,13 @@ export function newTerms(before: string, after: string): string[] {
   }
   return terms.slice(0, 3);
 }
+
+/**
+ * The length the player shows (Phase 1C, E1): the longest of the recording's length, the transcript's last line and what
+ * the audio file itself says. It never depends on the view shown (Roman Urdu, English, Urdu or Original), so every view
+ * shows the real length, also for a voice note the server has no length for yet.
+ */
+export function playerLength(itemMs: number | null | undefined, segments: readonly { end_ms: number }[] | null | undefined, mediaSeconds: number | null | undefined): number {
+  const media = typeof mediaSeconds === "number" && Number.isFinite(mediaSeconds) && mediaSeconds > 0 ? Math.round(mediaSeconds * 1000) : 0;
+  return Math.max(itemMs ?? 0, media, ...(segments ?? []).map((s) => (Number.isFinite(s.end_ms) ? s.end_ms : 0)));
+}

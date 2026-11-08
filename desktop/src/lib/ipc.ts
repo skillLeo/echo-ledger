@@ -438,6 +438,8 @@ export interface LibraryItem {
   device?: { id: string; name: string } | null;
   client?: { id: string; name: string; color?: string | null; avatar?: string | null } | null;
   title?: string;
+  /** The server named it from what was said (Phase 1C); false or missing for a title a person set. */
+  title_auto?: boolean;
   started_at?: string;
   duration_ms?: number | null;
   status?: string;
