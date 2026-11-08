@@ -10,7 +10,7 @@
         x-data="{
             d: @js($data), active: -1, word: -1, raf: null, playing: false, now: 0, rate: 1, skipSilence: false, follow: true,
             editing: false, saving: null, error: null, copied: null, view: 'original', find: '', hitAt: 0, peaks: null,
-            learn: [], deciding: null, panel: 'transcript', shot: null,
+            learn: [], deciding: null, panel: 'transcript', shot: null, picked: false,
             init() {
                 // Show as: open in the default view (Settings) when it is made for this recording.
                 if (this.d.views && this.d.views.status === 'ready' && this.d.views.default && this.d.views[this.d.views.default]) this.view = this.d.views.default;
@@ -25,7 +25,20 @@
                 });
                 this.loadPeaks();
             },
-            load(next) { this.d = next; this.active = -1; this.word = -1; this.$nextTick(() => this.sync()); },
+            // Since v1.5 (Phase 1C) the default view swaps in once it is made, unless the person chose one, and the line at
+            // the top of the window stays where it was (Roman Urdu is longer than Urdu letters: no jump).
+            load(next) {
+                const root = this.$el && this.$el.querySelectorAll ? this.$el : null;
+                const anchor = root ? [...root.querySelectorAll('[data-seg]')].find(el => el.getBoundingClientRect().bottom > 0) : null;
+                const seg = anchor ? anchor.dataset.seg : null, top = anchor ? anchor.getBoundingClientRect().top : 0;
+                this.d = next; this.active = -1; this.word = -1;
+                if (!this.picked && !this.editing && next.views && next.views.status === 'ready' && next.views.default && next.views[next.views.default]) this.view = next.views.default;
+                this.$nextTick(() => {
+                    const again = root && seg !== null ? root.querySelector('[data-seg=\'' + seg + '\']') : null;
+                    if (again) window.scrollBy(0, again.getBoundingClientRect().top - top);
+                    this.sync();
+                });
+            },
             name(s) { return this.d.speaker_names[s.speaker] || s.speaker; },
             initial(s) { return (this.name(s) || '?').trim().charAt(0).toUpperCase(); },
             clock(ms) { const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
@@ -150,6 +163,7 @@
             },
             // Show as: a view that is not made yet is made on the queue; the page swaps it in when it is ready.
             async pickView(v) {
+                this.picked = true;
                 if (v === 'original' || this.viewReady(v)) { this.view = v; this.editing = v === 'original' && this.editing; return; }
                 if (!this.d.views || this.d.views.status === 'making') return;
                 try { const views = await $wire.makeViews(); if (views) { this.d.views = views; if (this.viewReady(v)) this.view = v; } }

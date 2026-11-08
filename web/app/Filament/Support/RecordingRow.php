@@ -22,7 +22,8 @@ final class RecordingRow
 {
     /**
      * @return array{id: string, title: string, app: string, device: string, tile: string, icon: string, device_icon: string,
-     *     time: string, full_time: string, iso: string, meta: string, status: array{label: string, tone: string, icon: string, spin: bool}|null}
+     *     time: string, full_time: string, iso: string, meta: string, status: array{label: string, tone: string, icon: string, spin: bool}|null,
+     *     progress: array{active: string, steps: list<array{key: string, label: string, state: string, detail: string|null, percent: int|null}>, summary: string}|null}
      */
     public static function for(CaptureSession $session): array
     {
@@ -44,6 +45,8 @@ final class RecordingRow
             'iso' => $session->started_at->toIso8601ZuluString(),
             'meta' => implode(' · ', array_filter([CaptureSessionsTable::duration($session->duration_ms), $with, $labels[0] ?? null])),
             'status' => self::status($session),
+            // Since v1.5 (Phase 1C): Upload · Transcribing · Improving while one of them is moving.
+            'progress' => RecordingProgress::for($session),
         ];
     }
 

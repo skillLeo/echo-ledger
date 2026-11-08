@@ -257,11 +257,23 @@ final class CaptureSessionsTable
         return $final !== null && in_array($final->status, [TranscriptStatus::Pending, TranscriptStatus::Submitted, TranscriptStatus::Processing], true);
     }
 
+    /** Pending, or its transcript is done and the view it opens in is being made (since v1.5, Phase 1C). */
+    public static function isMoving(CaptureSession $session): bool
+    {
+        if (self::isPending($session)) {
+            return true;
+        }
+        $final = $session->relationLoaded('finalTranscript') ? $session->finalTranscript : $session->finalTranscript()->first();
+
+        return $final !== null && $final->status === TranscriptStatus::Completed && ($final->meta['views']['status'] ?? null) === 'making'
+            && app(TranscriptViews::class)->state($final)['status'] === 'making';
+    }
+
     /** @param  iterable<mixed>|null  $records  the rows the list shows now */
     public static function showsPending(?iterable $records): bool
     {
         foreach ($records ?? [] as $record) {
-            if ($record instanceof CaptureSession && self::isPending($record)) {
+            if ($record instanceof CaptureSession && self::isMoving($record)) {
                 return true;
             }
         }

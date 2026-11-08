@@ -12,6 +12,7 @@ use App\Exceptions\ApiError;
 use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
+use App\Filament\Support\RecordingProgress;
 use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SharingActions;
 use App\Filament\Support\StopsSharing;
@@ -85,6 +86,14 @@ class ViewCaptureSession extends ViewRecord
     /** The Show as views are being made on the queue: the page polls until they are, then hands them to the player. */
     public bool $viewsMaking = false;
 
+    /**
+     * Since v1.5 (Phase 1C): the slim "Improving Roman Urdu… 60 %" bar while the view the page opens in is made; it
+     * stays (as "Roman Urdu is ready") once the view is in, so the transcript below never moves.
+     *
+     * @var array{label: string, percent: int}|null
+     */
+    public ?array $viewsBar = null;
+
     /** Opening the page counts as opening the recording (the apps stop showing it as new for this user). */
     public function mount(int|string $record): void
     {
@@ -95,6 +104,7 @@ class ViewCaptureSession extends ViewRecord
         }
         $transcript = $this->editableTranscript();
         $this->viewsMaking = $transcript !== null && app(TranscriptViews::class)->state($transcript)['status'] === 'making';
+        $this->viewsBar = RecordingProgress::improvingBar($this->session());
     }
 
     public function getTitle(): string
@@ -133,10 +143,10 @@ class ViewCaptureSession extends ViewRecord
         return $schema->components([
             ViewComponent::make('filament.library.live-status')
                 ->visible(fn (): bool => CaptureSessionsTable::isPending($this->session()))
-                ->viewData(fn (): array => ['interval' => CaptureSessionsTable::LIVE_POLL, 'message' => $this->liveMessage()]),
+                ->viewData(fn (): array => ['interval' => CaptureSessionsTable::LIVE_POLL, 'message' => $this->liveMessage(), 'progress' => RecordingProgress::for($this->session())]),
             ViewComponent::make('filament.recording.work-poll')
-                ->visible(fn (): bool => ! CaptureSessionsTable::isPending($this->session()) && $this->hasWorkInProgress())
-                ->viewData(['interval' => CaptureSessionsTable::LIVE_POLL]),
+                ->visible(fn (): bool => ! CaptureSessionsTable::isPending($this->session()) && ($this->hasWorkInProgress() || $this->viewsBar !== null))
+                ->viewData(fn (): array => ['interval' => CaptureSessionsTable::LIVE_POLL, 'bar' => $this->viewsBar]),
             $this->getInfolistContentComponent(),
             $this->getRelationManagersContentComponent(),
         ]);
@@ -152,6 +162,10 @@ class ViewCaptureSession extends ViewRecord
         if (CaptureSessionsTable::isPending($session)) {
             return;
         }
+        // The transcript is readable at once; the view it opens in may still be being made (then the bar shows).
+        $transcript = $this->editableTranscript();
+        $this->viewsMaking = $transcript !== null && app(TranscriptViews::class)->state($transcript)['status'] === 'making';
+        $this->viewsBar = RecordingProgress::improvingBar($session);
         $this->pushPlayer();
         match ($session->finalTranscript?->status) {
             TranscriptStatus::Completed => Notification::make()->title('The transcript is ready')->success()->send(),
@@ -282,7 +296,14 @@ class ViewCaptureSession extends ViewRecord
         $transcript = $this->editableTranscript()?->refresh();
         if ($this->viewsMaking && ($transcript === null || app(TranscriptViews::class)->state($transcript)['status'] !== 'making')) {
             $this->viewsMaking = false;
+            if ($this->viewsBar !== null) {
+                $view = $transcript !== null ? app(TranscriptViews::class)->state($transcript) : null;
+                $this->viewsBar = $view !== null && $view['status'] === 'ready'
+                    ? ['label' => (TranscriptViews::VIEWS[$view['default']] ?? 'The view').' is ready', 'percent' => 100] : null;
+            }
             $this->pushPlayer();
+        } elseif ($this->viewsMaking) {
+            $this->viewsBar = RecordingProgress::improvingBar($this->session()->refresh()) ?? $this->viewsBar;
         }
     }
 
