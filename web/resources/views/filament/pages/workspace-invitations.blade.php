@@ -19,8 +19,7 @@
                             <td style="{{ $cell }}">{{ $invitation['sent'] }}</td><td style="{{ $cell }}">{{ $invitation['expires'] }}</td>
                             <td style="{{ $cell }}text-align:right;white-space:nowrap">
                                 <x-filament::link tag="button" size="sm" wire:click="resendInvitation({{ $invitation['id'] }})" aria-label="Resend the invitation to {{ $invitation['email'] }}">Resend</x-filament::link>
-                                <x-filament::link tag="button" color="danger" size="sm" style="margin-left:.75rem" wire:click="revokeInvitation({{ $invitation['id'] }})"
-                                    wire:confirm="Cancel the invitation to {{ $invitation['email'] }}? Its link stops working." aria-label="Cancel the invitation to {{ $invitation['email'] }}">Cancel</x-filament::link>
+                                <x-filament::link tag="button" color="danger" size="sm" style="margin-left:.75rem" wire:click="revokeInvitation({{ $invitation['id'] }})" aria-label="Cancel the invitation to {{ $invitation['email'] }}">Cancel</x-filament::link>
                             </td>
                         </tr>
                     @endforeach
