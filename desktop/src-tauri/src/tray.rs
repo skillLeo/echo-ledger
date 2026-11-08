@@ -50,6 +50,14 @@ pub fn tray_state(
     }
 }
 
+/// The tray state when the Ready check says calls will not be recorded (pure): the attention dot, under a recording.
+pub fn with_readiness(state: TrayState, calls_not_ready: bool) -> TrayState {
+    match state {
+        TrayState::Idle | TrayState::Uploading if calls_not_ready => TrayState::Attention,
+        other => other,
+    }
+}
+
 pub fn tooltip(state: TrayState) -> &'static str {
     match state {
         TrayState::Idle => "EchoLedger",
@@ -442,6 +450,14 @@ mod tests {
         assert!(labels.contains(&"Review recordings (2)".to_string()));
         assert_eq!(labels.iter().filter(|l| *l == "---").count(), 3);
         assert!(labels.len() <= 13, "the tray menu stays short");
+    }
+
+    #[test]
+    fn calls_that_will_not_be_recorded_show_on_the_icon() {
+        assert_eq!(with_readiness(TrayState::Idle, true), TrayState::Attention);
+        assert_eq!(with_readiness(TrayState::Uploading, true), TrayState::Attention);
+        assert_eq!(with_readiness(TrayState::Recording, true), TrayState::Recording, "a recording's indicator always wins");
+        assert_eq!(with_readiness(TrayState::Idle, false), TrayState::Idle);
     }
 
     #[test]

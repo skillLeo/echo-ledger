@@ -76,6 +76,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()) };
+    // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
+    let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
     crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
     AppStatus {
         paired: state.is_paired(),
