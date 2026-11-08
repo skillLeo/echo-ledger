@@ -74,6 +74,53 @@ Everywhere:
 - [ ] D Supported devices on the download page and in USER_GUIDE, saying what works where. *Accept:* page test. **Done** (`DownloadsTest`, USER_GUIDE "What works where"); live with the next deploy.
 - [ ] Acceptance: CI green on macOS (both chips) and Windows; the Mac check on a real Mac with a simulated Meet call and screen share; reports from 3 non-Samsung phones; docs updated. **CI green and docs done**; the real Mac is N17, the phones N19.
 
+## Phase 1C — Easy, trustworthy, clear
+
+Never miss a recording:
+- [ ] A1 Ready check, one tap and automatic (phone: helper, permissions, mic, far-side test, server, storage, battery; desktop: devices, per-app capture, meeting detection, permissions incl. Mac): "✓ Ready to record calls" or each problem with a one-tap fix.
+- [ ] A2 Status chip "Calls: Ready" / "Not ready — Fix" on the Library top bar, the Record sheet, the desktop sidebar and tray.
+- [ ] A3 Critical alert the moment readiness breaks (helper killed, not re-armed after reboot or update, permission revoked, mic blocked); quiet hours never silence it.
+- [ ] A4 One smart Record now: an active call or meeting is recorded through call capture (both sides), else a voice note; from the notification, Quick Settings tile, widget, app shortcut, in-call pill, desktop tray and Ctrl/⌘+Shift+R.
+- [ ] A5 Watchdog: a call detected but not recording after 5 s starts by itself ("Recording started (backup)"); after each call both channels are checked and "Only your voice was recorded" says why and how to fix it.
+- [ ] A6 Why the S25 lost its WhatsApp setup; setup survives reinstalls, updates and sign-in changes.
+
+Notifications:
+- [ ] B1 One Android channel per category (Recording, Transcription, Enhancement, Uploads, Call capture & readiness (Critical), Sharing, Account & security, Usage & limits, Live Translate, App updates, Other), mirrored in Settings → Notifications on phone and desktop; web: email preferences.
+- [ ] B2 Per category on/off, sound and vibration where the OS allows, a Test button.
+- [ ] B3 Quiet hours with start and end; Critical bypasses them.
+- [ ] B4 A category turned off in Android's own settings is shown with a link to that channel.
+
+Clear progress:
+- [ ] C1 Sharing several notes at once shows all of them, each with its own status.
+- [ ] C2 Three steps with real progress: Upload (% of bytes), Transcribing (parts done, time left), Improving (views, % of lines).
+- [ ] C3 The transcript shows as soon as it is ready, with a slim "Improving Roman Urdu… 60%" bar; views swap in without jumping.
+- [ ] C4 "Notify me when ready"; the same progress in the Library row and in Activity.
+
+Group by and sort by:
+- [ ] D1 Group by Date (default), App/Type, Project, Language, Status, Device, None; sort by Newest, Oldest, Longest, Shortest, Name A–Z, Recently opened; remembered per view.
+- [ ] D2 Group headers with name and count, collapse and expand, sticky.
+- [ ] D3 A tri-state select box on each header selects the whole group (phone: in selection mode or by long-pressing a header).
+- [ ] D4 Phone: a View sheet (Group by, Sort by, Density); desktop and web: toolbar menus.
+
+Fixes from the screenshots:
+- [ ] E1 The player shows the real length in every view (Roman Urdu showed 0:00 / 0:00).
+- [ ] E2 Views only transliterate; a likely mishearing is a Suggested fix; report how many lines the views changed on the last 20 recordings. Baseline by word count on production, 2026-11-08: 14 OK, 4 to check, 2 with a problem.
+- [ ] E3 Numbers and units as digits in every view.
+- [ ] E4 Voice notes show their length and an automatic short title; editable, never overwriting a title set by a person.
+
+Sign-in and people:
+- [ ] F1 Phone and desktop open on a clean sign-in: email and password, Google, Create account, Forgot password, 2FA; then the Ready check.
+- [ ] F2 Exact steps for the Google OAuth clients (web, Android, desktop) and where they go.
+- [ ] F3 Console → People: invite by email with a role; pending invitations with resend and cancel.
+- [ ] F4 Public sign-up toggle (on: family and friends make free accounts; off: invite only).
+- [ ] F5 Download page with "How to get started" in 3 steps.
+- [ ] F6 USER_GUIDE: family and friends have their own private accounts, teammates are invited, nobody sees another's recordings unless shared.
+
+Ease of use:
+- [ ] G The 15 most common tasks counted in taps and clicks on phone and desktop; the top 10 at 2 or fewer; before and after reported.
+
+- [ ] Phase 1C suites green; verified on the S25 in the next phone window (after "keys copied").
+
 ## Phase 2 — Projects, smart folders, sharing
 
 - [x] 2.1 Library unchanged (everything, newest first, filters). **Live** 2026-11-04 (beta.2).

@@ -1277,6 +1277,31 @@ the usage ledger:
 
 ---
 
+## Easy, trustworthy, clear (since v1.5, Phase 1C)
+
+- **`GET /api/auth/options`** — public, throttled like the site pages: what a sign-in screen offers on this server.
+  `200 {"password": true, "google": false, "sign_up": false, "sign_up_url": "https://…/admin/register" | null,
+  "reset_url": "https://…/admin/password-reset/request", "browser_sign_in": true}`. `sign_up` follows Settings →
+  Who can sign up (`true` only for *Anyone*); `google` is true when the Google client is set. Apps show Create account
+  and Google only when offered, and open these pages in the browser. An older server answers `404`: show email and
+  password only.
+- **Transcription progress with time left.** A transcript's `progress` (and a library item's `transcript.final_progress`)
+  is present for every run while it is being made, not only for runs in parts: `{"done": 1, "total": 3, "eta_seconds":
+  20}` (`total` 1 for a run in one piece; `eta_seconds` from the audio still to do and the engine's measured speed on
+  this server, `null` until there is a measure). `null` once the run is finished or failed.
+- **Views progress.** While a view is being made, `views.progress` carries `{"roman": {"done": 12, "total": 20}}` (lines
+  done of lines), `{}` otherwise. `views.status` is unchanged.
+- **Views only transliterate.** The Roman Urdu, English and Urdu views keep every word of the original: a view line whose
+  words do not match the original's words sound for sound is made again, and if it still does not match, the original's
+  word is kept in a plain transliteration. A word the model believes was misheard is never changed in the view: it
+  becomes a suggested fix (`suggestions`, `reason: "view_check"`), accepted or dismissed as other suggestions are.
+  Numbers, units, prices, dates and times are written as digits in every view ("16 GB", "M6 Pro", "Rs 2,500", "3:30").
+- **Automatic titles.** When a recording's final transcript is ready and nobody has given it a title, the server gives it
+  a short one from what was said (at most 60 characters, digits for numbers, for example "Laptop — 16 vs 32 GB"). Library
+  items and `GET /api/sessions/{id}` carry `title_auto: true` for such a title. A title set by a person (`PATCH` with
+  `title`, or at upload) is `title_auto: false` and is never replaced. Setting `title` to `null` asks for the automatic
+  one again.
+
 ## Claude and ChatGPT connector (since v1.5)
 An MCP server, so that Claude (Customize → Connectors → Add custom connector) and ChatGPT read a person's recordings
 the way the person can in the apps. It only reads: it never records, edits, shares or deletes.
