@@ -254,7 +254,7 @@ describe("Library screen fed with server data", () => {
     }
     // A status shows only when it needs the person: ready recordings show their second line instead.
     expect(within(list).queryAllByText("Ready")).toHaveLength(0);
-    expect(within(list).getAllByText("Transcribing")).toHaveLength(1);
+    expect(within(list).getAllByText("Transcribing…")).toHaveLength(1);
     expect(within(list).getAllByText("Transcription failed")).toHaveLength(1);
     expect(screen.getByText(/5 recordings from your phone/)).toBeInTheDocument();
     // The transcript preview is what the list search matches.
@@ -311,6 +311,7 @@ describe("Library screen fed with server data", () => {
       for (let i = 0; i < 25; i++) await Promise.resolve();
     });
     expect(screen.queryByText(/no speech was detected/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Transcribing…")).toBeInTheDocument();
+    // The row's status and the recording page both say it.
+    expect(within(document.querySelector(".detail") as HTMLElement).getByText("Transcribing…")).toBeInTheDocument();
   });
 });

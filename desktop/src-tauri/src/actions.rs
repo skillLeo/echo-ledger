@@ -1625,8 +1625,12 @@ async fn poll_activity(app: &AppHandle) -> AppResult<()> {
     let _ = app.emit("activity:updated", answer.get("unread_count").and_then(serde_json::Value::as_u64).unwrap_or(0));
     let settings = state.settings();
     let minutes = local_minutes();
-    // Each item goes through its own category (Phase 1C): its switch, its sound and the quiet hours.
-    let shown: Vec<_> = fresh.into_iter().filter(|i| allowed(&settings, Category::of_activity(i.kind.as_deref()), minutes)).collect();
+    // Each item goes through its own category (Phase 1C): its switch, its sound and the quiet hours; a recording the
+    // person asked about ("Notify me when ready") is said whatever they say.
+    let shown: Vec<_> = {
+        let mut asked = state.notify_ready.lock().unwrap_or_else(|p| p.into_inner());
+        fresh.into_iter().filter(|i| crate::activity::asked_for(&mut asked, i) || allowed(&settings, Category::of_activity(i.kind.as_deref()), minutes)).collect()
+    };
     if shown.is_empty() {
         return Ok(());
     }

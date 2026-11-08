@@ -281,3 +281,19 @@ describe("a clicked notification opens its recording", () => {
     await waitFor(() => expect(callsOf("session_detail")).toContainEqual({ id: "s1" }));
   });
 });
+
+describe("In progress (Phase 1C)", () => {
+  it("lists uploads with their percent and recordings being transcribed, as the Library says them", async () => {
+    const { inProgressRows } = await import("./ActivityCentre");
+    const rows = inProgressRows(
+      [{ id: "u1", sourceApp: "zoom", title: "Imported memo", startedAt: "", durationMs: 0, state: "uploading", lastError: null, attempts: 0, imported: true, progress: 42 },
+        { id: "u2", sourceApp: "zoom", title: "Stopped", startedAt: "", durationMs: 0, state: "failed", lastError: "x", attempts: 3, imported: false, progress: null }],
+      [makeItem("s1", { title: "Acme call", status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null, final_progress: { done: 0, total: 1, eta_seconds: 20 } } }),
+        makeItem("s2", { title: "Done call" })],
+    );
+    expect(rows).toEqual([
+      { id: "upload-u1", title: "Imported memo", line: "Uploading… 42%", recordingId: null },
+      { id: "s1", title: "Acme call", line: "Transcribing… about 20 s left", recordingId: "s1" },
+    ]);
+  });
+});

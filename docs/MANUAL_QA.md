@@ -626,6 +626,10 @@ with fakes; these rows prove the system around them.
 | 1C-A7 | Make a call start fail once (for example a second app holding an exclusive device), so auto mode does not start it. | About 5 s after the call is detected: **Recording started (backup)**. Stop it yourself mid-call: it stays stopped. |
 | 1C-B1 | Settings → Notifications: press **Test** on each kind, with Sound and with Silent. | Each shows a notification titled "Test: <kind>"; Silent ones make no sound (Windows and Mac). |
 | 1C-B2 | Turn Sharing off and quiet hours on all day; have a teammate share a call; then cause 1C-A3. | No Sharing notification (it waits in the bell); the readiness one still shows. |
+| 1C-C1 | Import five audio files at once (one of them 100 MB). | Each file is a row under Importing with its own percent; Cancel on one leaves the others going. |
+| 1C-C2 | Open a long Urdu recording while it is transcribed in parts, on a server with Phase 1C. | Row, page and Activity → In progress say "Transcribing… part N of M · about X left"; the time left goes down. Against an older server: "Transcribing… part N of M" only. |
+| 1C-C3 | When the transcript arrives, scroll to the middle and wait for the Roman Urdu view. | The text is readable at once with "Improving Roman Urdu… N%"; when the view is made it swaps in without the page jumping. |
+| 1C-C4 | Press **Notify me when ready**, turn Transcription notifications off, close the main window. | A notification when the transcript is ready (within about a minute). |
 | 1C-A8 | A 30 s call where the other side plays through a headset that is not the default output (or is muted). | After the call: **Only your voice was recorded**, with the reason and the fix; the banner opens the Ready check. |
 
 ## Appendix B — Accessibility

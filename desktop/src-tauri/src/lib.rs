@@ -127,6 +127,8 @@ pub struct AppState {
     pub ready: Mutex<Option<readiness::ReadyReport>>,
     pub ready_watch: Mutex<readiness::ReadyWatch>,
     pub ready_wake: tokio::sync::Notify,
+    /// Recordings whose transcript the person asked to be told about ("Notify me when ready", Phase 1C).
+    pub notify_ready: Mutex<std::collections::HashSet<String>>,
 }
 
 impl AppState {
@@ -187,6 +189,7 @@ impl AppState {
             ready: Mutex::new(None),
             ready_watch: Mutex::new(readiness::ReadyWatch::default()),
             ready_wake: tokio::sync::Notify::new(),
+            notify_ready: Mutex::new(std::collections::HashSet::new()),
         }
     }
 
@@ -433,6 +436,7 @@ pub fn run() {
             commands::record_now,
             commands::notification_test,
             commands::notification_send,
+            commands::notify_when_ready,
             commands::hide_captions,
             commands::mic_users,
             commands::ask_answer,

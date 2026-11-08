@@ -314,7 +314,7 @@ describe("Live status", () => {
     useClock();
     await renderLibrary([transcribing("b", "WhatsApp call")], { "tr-b": makeTranscript({ id: "tr-b", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 900, text: "Ready at last." }] }) });
     await open("WhatsApp call");
-    expect(within(detail()).getByText(/Transcribing/)).toBeInTheDocument();
+    expect(within(detail()).getByText("Transcribing…")).toBeInTheDocument();
     respond("library_refresh", [done("b", "WhatsApp call")]);
     await advance(5_000);
     await flushAsync();

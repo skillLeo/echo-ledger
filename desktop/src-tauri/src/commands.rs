@@ -701,6 +701,13 @@ pub fn notification_test(app: AppHandle, category: crate::notifications::Categor
     crate::notifications::show(&app, &settings, category, &title, &body)
 }
 
+/// "Notify me when ready" (Phase 1C): the activity poll shows this recording's "Transcript ready" even when
+/// Transcription is turned off or it is quiet hours, because the person asked for it.
+#[tauri::command]
+pub fn notify_when_ready(state: State<'_, AppState>, session_id: String) {
+    state.notify_ready.lock().unwrap_or_else(|p| p.into_inner()).insert(session_id);
+}
+
 /// A notification from a page (a brief, call notes or an answer that is ready), through its category.
 #[tauri::command]
 pub fn notification_send(app: AppHandle, category: crate::notifications::Category, title: String, body: String) -> bool {

@@ -724,11 +724,17 @@ export interface Segment {
   check?: { provider: string; label: string; text: string } | null;
 }
 
-/** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
+/** Parts done of all parts while a recording is transcribed (since v1.2; for every run since v1.5 Phase 1C, `total` 1 for
+ * a run in one piece), and the time left from the server's measured speed (null until there is a measure; missing on an
+ * older server). */
 export interface TranscriptProgress {
   done: number;
   total: number;
+  eta_seconds?: number | null;
 }
+
+/** Lines done of lines per view while the views are being made (`views.progress`, Phase 1C); `{}` otherwise. */
+export type ViewsProgress = Partial<Record<TranscriptView, { done: number; total: number }>>;
 
 export interface TranscriptDetail {
   id: string;
@@ -749,7 +755,7 @@ export interface TranscriptDetail {
   /** Parts done of all parts while it is being made in pieces (since v1.2). */
   progress?: TranscriptProgress | null;
   /** Show as: the views this transcript can have and whether they are made (since v1.2). */
-  views?: { available: TranscriptView[]; status: TranscriptViewsStatus; default?: "original" | TranscriptView } | null;
+  views?: { available: TranscriptView[]; status: TranscriptViewsStatus; default?: "original" | TranscriptView; progress?: ViewsProgress } | null;
   /** Suggested fixes: likely mishearings of the client's words, nothing changes until a person decides (since v1.4). */
   suggestions?: TranscriptSuggestion[];
   /**
@@ -794,6 +800,8 @@ export interface TranscriptViewsState {
   english: (string | null)[] | null;
   urdu?: (string | null)[] | null;
   default?: "original" | TranscriptView;
+  /** Lines done per view while making (Phase 1C). */
+  progress?: ViewsProgress;
   model: string | null;
   made_at: string | null;
   error: string | null;
@@ -1174,6 +1182,8 @@ export const api = {
   readyCheck: () => invoke<ReadyReport>("ready_check"),
   readyLast: () => invoke<ReadyReport | null>("ready_last"),
   readyFix: (action: ReadyFixAction) => invoke<ReadyReport>("ready_fix", { action }),
+  /** "Notify me when ready" (Phase 1C): a notification when this recording's transcript is ready, whatever the switches say. */
+  notifyWhenReady: (sessionId: string) => invoke<void>("notify_when_ready", { sessionId }),
   // Notification categories (Phase 1C).
   notificationTest: (category: NotificationCategory) => invoke<boolean>("notification_test", { category }),
   notificationSend: (category: NotificationCategory, title: string, body: string) => invoke<boolean>("notification_send", { category, title, body }),

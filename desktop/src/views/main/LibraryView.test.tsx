@@ -148,7 +148,7 @@ describe("LibraryView list", () => {
     expect(within(row).getByText(/^9:30\s?AM$/)).toHaveClass("item-time");
     expect(within(row).getByText("2:05 · Acme Holdings")).toBeInTheDocument();
     expect(within(row).queryByText("Ready")).not.toBeInTheDocument();
-    expect(within(itemButton("WhatsApp call")).getByText("Transcribing")).toHaveClass("pill", "processing");
+    expect(within(itemButton("WhatsApp call")).getByText("Transcribing…")).toHaveClass("pill", "processing");
     expect(within(itemButton("WhatsApp call")).getByText(/^8:15\s?AM$/)).toBeInTheDocument();
     expect(within(itemButton("Google Meet standup")).getByText("Transcription failed")).toHaveClass("pill", "failed");
     expect(within(itemButton("Google Meet standup")).getByText(/^4:00\s?PM$/)).toBeInTheDocument();
@@ -1162,7 +1162,63 @@ describe("LibraryView transcription progress", () => {
     await renderLibrary(items);
     await selectItem("Long Urdu call");
     expect(within(detail()).getByText("Transcribing… part 3 of 5")).toBeInTheDocument();
+    expect(within(list()).getByText("Transcribing… part 3 of 5")).toHaveClass("pill");
   });
+});
+
+describe("LibraryView clear progress (Phase 1C)", () => {
+  const urdu = (): Segment[] => [
+    { channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "آپ کیسے ہیں" },
+    { channel: 2, speaker: "Client", start_ms: 1_500, end_ms: 3_000, text: "میں ٹھیک ہوں" },
+  ];
+
+  it("shows the steps with parts and time left in the row and on the page, and notifies when ready on request", async () => {
+    respond("notify_when_ready", undefined);
+    const items = [makeItem("p", { title: "Long Urdu call", status: "processing",
+      transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null, final_progress: { done: 2, total: 5, eta_seconds: 20 } } })];
+    await renderLibrary(items);
+    expect(within(list()).getByText("Transcribing… part 3 of 5 · about 20 s left")).toBeInTheDocument();
+    await selectItem("Long Urdu call");
+    expect(within(detail()).getByTestId("step-upload")).toHaveTextContent("Uploaded");
+    expect(within(detail()).getByTestId("step-transcribe")).toHaveTextContent("Transcribing");
+    expect(within(detail()).getByText("Transcribing… part 3 of 5 · about 20 s left")).toBeInTheDocument();
+    expect(within(detail()).getByTestId("step-improve")).toHaveTextContent("Improve");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Notify me when ready" }));
+    await flushAsync();
+    expect(callsOf("notify_when_ready")).toEqual([{ sessionId: "p" }]);
+    expect(within(detail()).getByText("You will get a notification when it is ready.")).toBeInTheDocument();
+  });
+
+  it("shows the transcript at once with a slim Improving bar, and swaps the default view in when it is made", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(),
+      views: { available: ["roman"], status: "making", default: "roman", progress: { roman: { done: 12, total: 20 } } } });
+    const making = { status: "making", available: ["roman"], roman: null, english: null, default: "roman", progress: { roman: { done: 12, total: 20 } }, model: null, made_at: null, error: null };
+    const ready = { ...making, status: "ready", progress: {}, roman: ["aap kaise hain", "main theek hoon"], model: "m" };
+    let reads = 0;
+    respondWith("transcript_views", () => (++reads === 1 ? making : ready));
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    expect(within(detail()).getByTestId("improving-bar")).toHaveTextContent("Improving Roman Urdu… 60%");
+    expect(within(detail()).getByRole("progressbar", { name: "Improving Roman Urdu… 60%" })).toHaveAttribute("aria-valuenow", "60");
+    expect(within(detail()).getByTestId("step-improve")).toHaveTextContent("Improving");
+    await waitFor(() => expect(within(detail()).getByText("aap kaise hain")).toBeInTheDocument(), { timeout: 8000 });
+    expect(within(detail()).queryByTestId("improving-bar")).not.toBeInTheDocument();
+    expect(within(detail()).queryByTestId("recording-steps")).not.toBeInTheDocument();
+  }, 15_000);
+
+  it("keeps the original when the person chose it while the views were made", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(),
+      views: { available: ["roman"], status: "making", default: "roman", progress: { roman: { done: 1, total: 2 } } } });
+    const making = { status: "making", available: ["roman"], roman: null, english: null, default: "roman", progress: { roman: { done: 1, total: 2 } }, model: null, made_at: null, error: null };
+    let reads = 0;
+    respondWith("transcript_views", () => (++reads === 1 ? making : { ...making, status: "ready", progress: {}, roman: ["aap kaise hain", "main theek hoon"] }));
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Original" }));
+    await waitFor(() => expect(reads).toBeGreaterThan(1), { timeout: 8000 });
+    await flushAsync();
+    expect(within(detail()).getByText("آپ کیسے ہیں")).toBeInTheDocument();
+  }, 15_000);
 });
 
 describe("LibraryView Show as", () => {

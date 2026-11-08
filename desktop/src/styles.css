@@ -836,6 +836,22 @@ audio.player { display: none; }
 .sound-toggle:not(.on) { color: var(--text-muted); }
 .critical-chip { display: inline-block; margin-left: var(--space-2); padding: 0 var(--space-2); border-radius: var(--radius-full); background: var(--danger-soft); color: var(--danger); font-size: var(--text-xs); font-weight: 600; line-height: 18px; }
 
+/* Clear progress (Phase 1C): the three steps on a recording, the slim Improving bar and Activity's In progress. */
+.recording-steps { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin-top: var(--space-2); }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-3); font-size: var(--text-xs); color: var(--text-muted); }
+.step { display: inline-flex; align-items: center; gap: 6px; }
+.step-dot { width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--border-strong); flex: none; }
+.step.done .step-dot { background: var(--success); }
+.step.active { color: var(--text); font-weight: 600; }
+.step.active .step-dot { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.step.failed { color: var(--danger); }
+.step.failed .step-dot { background: var(--danger); }
+.improving-bar { display: grid; gap: 4px; margin: var(--space-2) 0; }
+.improving-track { height: 3px; border-radius: var(--radius-full); background: var(--surface-3); overflow: hidden; }
+.improving-track > div { height: 100%; background: var(--accent); border-radius: inherit; transform-origin: left; transition: transform var(--motion-base) var(--ease-out); }
+.improving-track > div.indeterminate { transform: scaleX(0.3); }
+.activity-row.progress-row { display: flex; align-items: center; gap: var(--space-3); padding: 10px var(--space-3); }
+
 /* Loading placeholders (C6): a quiet shimmer while a list loads (the phone's SkeletonRow). */
 .skeleton-item { cursor: default; gap: var(--space-2); padding-block: var(--space-3); }
 .skeleton-item:hover { background: transparent; }

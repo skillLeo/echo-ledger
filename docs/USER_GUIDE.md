@@ -252,6 +252,15 @@ WebM videos.
   marked **Already in your Library**.
 - Imports show under **Uploading** at the top of the Library until the server has them. Hold one that has not started
   to cancel it; tap a failed one to try again.
+- **Computer:** imported files are listed under **Importing** at the top of the Library, each with its own percent and
+  **Cancel**.
+
+**Where a recording is (computer, since v1.5).** Each recording goes through three steps: **Upload** (the percent sent),
+**Transcribing** (which part, and the time left, for example "Transcribing… part 2 of 3 · about 20 s left") and
+**Improving** (the Roman Urdu and other views). The Library row, the recording page and **Activity → In progress** say it
+the same way. The transcript shows as soon as it is ready, with a slim **Improving Roman Urdu… 60%** bar; the view swaps
+in where you are reading when it is made (unless you chose Original). **Notify me when ready** on the recording page
+sends a notification when the transcript is ready, even if Transcription notifications are off.
 
 ### Rename
 

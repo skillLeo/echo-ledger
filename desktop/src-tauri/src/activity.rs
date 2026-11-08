@@ -95,6 +95,13 @@ impl Seen {
     }
 }
 
+/// Whether `item` answers a "Notify me when ready" (its recording's transcript is ready or failed); the request is used
+/// up by it.
+pub fn asked_for(asked: &mut std::collections::HashSet<String>, item: &ActivityItem) -> bool {
+    let done = matches!(item.kind.as_deref(), Some("transcript_ready" | "transcript_failed"));
+    done && item.session_id.as_ref().is_some_and(|id| asked.remove(id))
+}
+
 /// The category the notifications of `items` sound as: theirs when they share one, else Other (a summary of several).
 pub fn category_of(items: &[ActivityItem]) -> crate::notifications::Category {
     use crate::notifications::Category;
@@ -112,4 +119,29 @@ pub fn notification_text(items: &[ActivityItem], locked: bool) -> Vec<(String, S
         return vec![("EchoLedger".into(), format!("{} new notifications", items.len()))];
     }
     items.iter().map(|i| (i.title.clone(), i.body.clone())).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn notify_me_when_ready_is_answered_once_by_its_transcript() {
+        let mut asked = std::collections::HashSet::from(["s1".to_string()]);
+        let item = |kind: &str, session: &str| ActivityItem {
+            id: format!("{kind}-{session}"),
+            kind: Some(kind.into()),
+            title: String::new(),
+            body: String::new(),
+            session_id: Some(session.into()),
+            read: false,
+            at: None,
+        };
+        assert!(!asked_for(&mut asked, &item("upload_failed", "s1")), "only the transcript answers it");
+        assert!(!asked_for(&mut asked, &item("transcript_ready", "s2")));
+        assert!(asked_for(&mut asked, &item("transcript_ready", "s1")));
+        assert!(!asked_for(&mut asked, &item("transcript_ready", "s1")), "used up");
+        assert_eq!(category_of(&[item("transcript_ready", "a"), item("transcript_failed", "b")]), crate::notifications::Category::Transcription);
+        assert_eq!(category_of(&[item("transcript_ready", "a"), item("shared_with_you", "b")]), crate::notifications::Category::Other);
+    }
 }
