@@ -224,13 +224,6 @@ final class TranscriptViews
     }
 
     /**
-     * `{"roman": {"done": 12, "total": 20}, …}` while the views are being made (one entry per view, lines done of
-     * lines), an empty object otherwise, so the apps can read it as a map.
-     *
-     * @param  list<string>  $available
-     * @return object|array<string, array{done: int, total: int}>
-     */
-    /**
      * The views in a Library row (since v1.5, Phase 1C): whether they are being made and how far, from what is stored,
      * without reading the lines (a list may hold many recordings). Null when the transcript has no views to make.
      *
@@ -254,6 +247,13 @@ final class TranscriptViews
         return ['status' => $status, 'default' => self::defaultView($available, self::sourceLanguage($transcript)), 'progress' => self::progressOf($status, $views, $available)];
     }
 
+    /**
+     * `{"roman": {"done": 12, "total": 20}, …}` while the views are being made (one entry per view, lines done of
+     * lines), an empty object otherwise, so the apps can read it as a map.
+     *
+     * @param  list<string>  $available
+     * @return object|array<string, array{done: int, total: int}>
+     */
     private static function progressOf(string $status, mixed $views, array $available): object|array
     {
         if ($status !== 'making' || ! is_array($views)) {

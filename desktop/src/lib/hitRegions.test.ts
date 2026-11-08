@@ -72,4 +72,20 @@ describe("useHitRegions", () => {
     await settle();
     expect(callsOf("overlay_set_hit_regions")).toHaveLength(2);
   });
+
+  it("still reports regions where ResizeObserver does not exist", () => {
+    resetTauriMock();
+    respond("overlay_set_hit_regions", undefined);
+    vi.stubGlobal("ResizeObserver", undefined);
+    vi.stubGlobal("devicePixelRatio", 1);
+    const button = document.createElement("div");
+    button.setAttribute("data-hit", "");
+    button.getBoundingClientRect = () => box(0, 0, 10, 10);
+    document.body.append(button);
+
+    const { unmount } = renderHook(() => useHitRegions([]));
+    expect(callsOf("overlay_set_hit_regions")).toHaveLength(1);
+    unmount();
+    vi.unstubAllGlobals();
+  });
 });

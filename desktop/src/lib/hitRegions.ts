@@ -38,8 +38,10 @@ export function useHitRegions(deps: unknown[]): void {
       });
     };
     report();
-    const resize = new ResizeObserver(schedule);
-    resize.observe(document.body);
+    // Every webview has ResizeObserver; a test environment that just removed its stand-in may not (an effect that ran
+    // after the test ended failed the Intel Mac CI): the mutation observer, resize events and the safety timer remain.
+    const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
+    resize?.observe(document.body);
     const mutations = new MutationObserver(schedule);
     mutations.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
     window.addEventListener("resize", schedule);
@@ -47,7 +49,7 @@ export function useHitRegions(deps: unknown[]): void {
     document.addEventListener("scroll", schedule, { capture: true, passive: true });
     const safetyTimer = window.setInterval(report, 750);
     return () => {
-      resize.disconnect();
+      resize?.disconnect();
       mutations.disconnect();
       window.removeEventListener("resize", schedule);
       document.removeEventListener("scroll", schedule, { capture: true });
