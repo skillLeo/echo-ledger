@@ -37,3 +37,28 @@
         @endforeach
     </div>
 @endif
+@if (property_exists($this, 'libraryGroup'))
+    {{-- Since v1.5 (Phase 1C): Group by and Sort by as toolbar menus, remembered per person and per view. --}}
+    <div class="el-library-menus" role="toolbar" aria-label="Group and sort">
+        @foreach ([['group', 'Group by', \App\Filament\Support\LibraryView::GROUPS, $this->libraryGroup, 'setLibraryGroup', 'heroicon-o-rectangle-group'], ['sort', 'Sort by', \App\Filament\Support\LibraryView::SORTS, $this->librarySort, 'setLibrarySort', 'heroicon-o-arrows-up-down']] as [$menu, $label, $options, $current, $method, $icon])
+            <x-filament::dropdown placement="bottom-start" wire:key="library-menu-{{ $menu }}">
+                <x-slot name="trigger">
+                    <button type="button" class="el-chip el-menu-trigger" data-menu="{{ $menu }}" aria-haspopup="menu">
+                        @svg($icon, ['aria-hidden' => 'true'])
+                        <span>{{ $label }}: <strong>{{ $options[$current] }}</strong></span>
+                        @svg('heroicon-m-chevron-down', ['aria-hidden' => 'true'])
+                    </button>
+                </x-slot>
+                <x-filament::dropdown.list>
+                    @foreach ($options as $key => $option)
+                        <x-filament::dropdown.list.item wire:click="{{ $method }}('{{ $key }}')" x-on:click="close()"
+                            :icon="$key === $current ? 'heroicon-m-check' : null" data-option="{{ $menu }}-{{ $key }}"
+                            role="menuitemradio" aria-checked="{{ $key === $current ? 'true' : 'false' }}">
+                            {{ $option }}
+                        </x-filament::dropdown.list.item>
+                    @endforeach
+                </x-filament::dropdown.list>
+            </x-filament::dropdown>
+        @endforeach
+    </div>
+@endif

@@ -10,6 +10,7 @@ use App\Enums\SourceDevice;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Filament\Resources\Devices\DeviceResource;
+use App\Filament\Support\LibraryView;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\LibraryOrganiser;
@@ -54,7 +55,15 @@ final class CaptureSessionsTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->defaultSort('started_at', 'desc')
+            // Since v1.5 (Phase 1C): Group by and Sort by from the Library's toolbar menus, remembered per person and view.
+            ->defaultSort(fn (Builder $query, HasTable $livewire): Builder => LibraryView::applySort(
+                $query,
+                property_exists($livewire, 'librarySort') ? (string) $livewire->librarySort : LibraryView::DEFAULT_SORT,
+                CurrentWorkspace::userId(),
+            ))
+            ->groups(LibraryView::groups())
+            ->groupingSettingsHidden()
+            ->groupingDirectionSettingHidden()
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('labels'))
             // The phone's list: one row per recording (tile, title, time, a second line, a status only when needed).
             ->columns([

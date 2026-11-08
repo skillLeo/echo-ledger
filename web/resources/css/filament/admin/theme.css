@@ -2815,3 +2815,35 @@ textarea.el-field-input {
         transition: none;
     }
 }
+
+/* Group by and Sort by (since v1.5, Phase 1C): two toolbar menus; group headers with a count, sticky under the top bar. */
+.el-library-menus {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}
+
+.el-menu-trigger strong {
+    font-weight: 600;
+}
+
+.el-library .fi-ta-group-header {
+    position: sticky;
+    top: 4rem;
+    z-index: 2;
+    background-color: var(--bg);
+    border-bottom: 1px solid var(--border);
+}
+
+.el-library .fi-ta-group-header > div {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+}
+
+.el-library .fi-ta-group-description {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}

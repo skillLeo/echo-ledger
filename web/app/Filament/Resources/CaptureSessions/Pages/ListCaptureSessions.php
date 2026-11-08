@@ -7,6 +7,7 @@ namespace App\Filament\Resources\CaptureSessions\Pages;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
+use App\Filament\Support\LibraryView;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\User;
@@ -85,6 +86,109 @@ class ListCaptureSessions extends ListRecords
     #[Url]
     public ?string $folder = null;
 
+    /** Since v1.5 (Phase 1C): the order within the groups (LibraryView::SORTS), remembered per person and view. */
+    public string $librarySort = LibraryView::DEFAULT_SORT;
+
+    /** The Group by of the Library (LibraryView::GROUPS), remembered per person and view. */
+    public string $libraryGroup = LibraryView::DEFAULT_GROUP;
+
+    public function mount(): void
+    {
+        parent::mount();
+        $this->loadLibraryView();
+    }
+
+    public function updatedActiveTab(): void
+    {
+        parent::updatedActiveTab();
+        $this->loadLibraryView();
+    }
+
+    /** The view the choice is remembered for: the smart view, and the smart folder when one is chosen. */
+    public function libraryViewKey(): string
+    {
+        return ((string) ($this->activeTab ?: 'all')).($this->folder !== null ? ':'.$this->folder : '');
+    }
+
+    /** Group by from the toolbar menu. */
+    public function setLibraryGroup(string $group): void
+    {
+        if (isset(LibraryView::GROUPS[$group])) {
+            $this->applyLibraryView($group, $this->librarySort, remember: true);
+        }
+    }
+
+    /** Sort by from the toolbar menu. */
+    public function setLibrarySort(string $sort): void
+    {
+        if (isset(LibraryView::SORTS[$sort])) {
+            $this->applyLibraryView($this->libraryGroup, $sort, remember: true);
+        }
+    }
+
+    /** A click on the Date column is the menu's Newest or Oldest, so the days follow it too. */
+    public function sortTable(?string $column = null, ?string $direction = null): void
+    {
+        parent::sortTable($column, $direction);
+        if ($column !== 'started_at') {
+            return;
+        }
+        $sort = $this->getTableSortDirection() === 'asc' ? 'oldest' : 'newest';
+        $this->librarySort = $sort;
+        if ($this->libraryGroup !== 'none') {
+            $this->tableGrouping = $this->libraryGroup.':'.LibraryView::groupDirection($this->libraryGroup, $sort);
+        }
+        $user = auth()->user();
+        if ($user instanceof User) {
+            LibraryView::remember($user, $this->libraryViewKey(), $this->libraryGroup, $sort);
+        }
+    }
+
+    /**
+     * The group's select box selects the whole group (every page), read for all the groups with one query instead of
+     * one per header.
+     *
+     * @return list<string>
+     */
+    public function getGroupedSelectableTableRecordKeys(?string $group): array
+    {
+        $grouping = $this->getTableGrouping();
+        if ($grouping === null || ! isset(LibraryView::GROUPS[$grouping->getId()])) {
+            return parent::getGroupedSelectableTableRecordKeys($group);
+        }
+
+        return LibraryView::buckets($grouping->getId(), $this)[(string) $group] ?? [];
+    }
+
+    /** The group counts are counted once per render (LibraryView). */
+    public function rendering(): void
+    {
+        LibraryView::forgetCounts();
+    }
+
+    private function loadLibraryView(): void
+    {
+        $user = auth()->user();
+        $choice = LibraryView::remembered($user instanceof User ? $user : null, $this->libraryViewKey());
+        $this->applyLibraryView($choice['group'], $choice['sort'], remember: false);
+    }
+
+    private function applyLibraryView(string $group, string $sort, bool $remember): void
+    {
+        $this->libraryGroup = $group;
+        $this->librarySort = $sort;
+        // The menus decide the order: a click on a column's sort is dropped.
+        $this->tableSort = null;
+        $this->tableGrouping = $group === 'none' ? null : $group.':'.LibraryView::groupDirection($group, $sort);
+        if (isset($this->table)) {
+            $this->resetPage();
+        }
+        $user = auth()->user();
+        if ($remember && $user instanceof User) {
+            LibraryView::remember($user, $this->libraryViewKey(), $group, $sort);
+        }
+    }
+
     /** Files up to this size are hashed by the browser's own SHA-256 (it needs the whole file in memory). */
     public const NATIVE_HASH_MAX_BYTES = 100 * 1024 * 1024;
 
@@ -126,6 +230,7 @@ class ListCaptureSessions extends ListRecords
     {
         $this->folder = $folder !== null && $folder !== $this->folder && array_key_exists($folder, self::FOLDER_LABELS) && $folder !== 'shared' ? $folder : null;
         $this->resetPage();
+        $this->loadLibraryView();
     }
 
     /**
