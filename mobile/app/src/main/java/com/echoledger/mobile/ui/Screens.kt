@@ -335,6 +335,7 @@ fun SessionScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, star
     }
     val clipboard = LocalClipboard.current
     val player = rememberRecordingPlayer(playbackUrl)
+    player.knownMs = item.durationMs ?: 0L
     // The newest version is shown first; the previous one (after Re-transcribe as) is one tap away.
     var version by remember(item.id) { mutableStateOf(TranscriptVersion.CURRENT) }
     // The recording's details are read once per load; switching the version reads only the other transcript.

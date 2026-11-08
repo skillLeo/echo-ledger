@@ -103,7 +103,7 @@ Group by and sort by:
 - [ ] D4 Phone: a View sheet (Group by, Sort by, Density); desktop and web: toolbar menus.
 
 Fixes from the screenshots:
-- [ ] E1 The player shows the real length in every view (Roman Urdu showed 0:00 / 0:00).
+- [x] E1 The player shows the real length in every view (Roman Urdu showed 0:00 / 0:00). **Done** 2026-11-08 (phone): the library's length is shown until the file reports its own; an Ogg file without an index reported 0 (RecordingPlayerLengthTest).
 - [ ] E2 Views only transliterate; a likely mishearing is a Suggested fix; report how many lines the views changed on the last 20 recordings. Baseline by word count on production, 2026-11-08: 14 OK, 4 to check, 2 with a problem.
 - [ ] E3 Numbers and units as digits in every view.
 - [ ] E4 Voice notes show their length and an automatic short title; editable, never overwriting a title set by a person.

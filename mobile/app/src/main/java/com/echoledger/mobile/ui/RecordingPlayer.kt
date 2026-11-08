@@ -81,12 +81,18 @@ class RecordingPlayerState(context: Context) {
         addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 ready = state == Player.STATE_READY || state == Player.STATE_BUFFERING
-                if (state == Player.STATE_READY) durationMs = duration.coerceAtLeast(0)
+                if (state == Player.STATE_READY && duration > 0) durationMs = duration
                 if (state == Player.STATE_ENDED) playing = false
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 playing = isPlaying
+                if (duration > 0) durationMs = duration
+            }
+
+            // Some files (an Ogg stream without an index) report their length only later.
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                if (duration > 0) durationMs = duration
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -103,6 +109,12 @@ class RecordingPlayerState(context: Context) {
         private set
     var durationMs by mutableLongStateOf(0L)
         private set
+
+    /** The recording's length as the library knows it, shown until the player reports its own. */
+    var knownMs by mutableLongStateOf(0L)
+
+    /** What the player shows as the whole length: never 0:00 for a recording whose length is known (since v1.5). */
+    val totalMs: Long get() = if (durationMs > 0) durationMs else knownMs
     var error by mutableStateOf<String?>(null)
         private set
     var speed by mutableFloatStateOf(1f)
@@ -190,7 +202,7 @@ fun RecordingPlayer(state: RecordingPlayerState, modifier: Modifier = Modifier) 
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "${TranscriptText.stamp(state.positionMs)} / ${TranscriptText.stamp(state.durationMs)}",
+                "${TranscriptText.stamp(state.positionMs)} / ${TranscriptText.stamp(state.totalMs)}",
                 style = type.labelM.tabular(),
                 color = c.textMuted,
                 modifier = Modifier.padding(start = Space.s2).weight(1f)
@@ -231,17 +243,17 @@ fun RecordingPlayer(state: RecordingPlayerState, modifier: Modifier = Modifier) 
 @Composable
 private fun Scrubber(state: RecordingPlayerState, enabled: Boolean, modifier: Modifier) {
     val c = LocalEchoColors.current
-    val fraction = if (state.durationMs > 0) (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f) else 0f
+    val fraction = if (state.totalMs > 0) (state.positionMs.toFloat() / state.totalMs).coerceIn(0f, 1f) else 0f
     fun seekAt(x: Float, width: Int) {
-        if (enabled && width > 0 && state.durationMs > 0) state.seekTo(((x / width).coerceIn(0f, 1f) * state.durationMs).toLong())
+        if (enabled && width > 0 && state.totalMs > 0) state.seekTo(((x / width).coerceIn(0f, 1f) * state.totalMs).toLong())
     }
     Box(
         modifier
             .height(20.dp)
-            .pointerInput(enabled, state.durationMs) {
+            .pointerInput(enabled, state.totalMs) {
                 detectTapGestures { seekAt(it.x, size.width) }
             }
-            .pointerInput(enabled, state.durationMs) {
+            .pointerInput(enabled, state.totalMs) {
                 detectHorizontalDragGestures { change, _ -> seekAt(change.position.x, size.width) }
             }
             .semantics {
@@ -249,7 +261,7 @@ private fun Scrubber(state: RecordingPlayerState, enabled: Boolean, modifier: Mo
                 progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
                 if (enabled) {
                     setProgress { target ->
-                        state.seekTo((target.coerceIn(0f, 1f) * state.durationMs).toLong())
+                        state.seekTo((target.coerceIn(0f, 1f) * state.totalMs).toLong())
                         true
                     }
                 }
