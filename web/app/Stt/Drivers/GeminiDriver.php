@@ -12,6 +12,7 @@ use App\Services\ChunkedUploadService;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use App\Stt\Audio\AudioPrep;
+use App\Stt\Contracts\ClipTranscriber;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\NormalizedTranscript;
@@ -21,6 +22,7 @@ use App\Stt\Data\StreamingGrant;
 use App\Stt\Data\StreamingRequest;
 use App\Stt\Data\SubmitResult;
 use App\Stt\Data\WebhookEnvelope;
+use App\Stt\DialectHint;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\UnsupportedFeature;
 use App\Stt\KeytermPolicy;
@@ -51,7 +53,7 @@ use Throwable;
  * for 48 hours). Without ffmpeg each side is sent whole. Hindi letters are handled by the usual script check (the
  * transcript runs once more as Urdu, then such lines are flagged). Synchronous: the job stores the result directly.
  */
-final class GeminiDriver implements SttProvider
+final class GeminiDriver implements ClipTranscriber, SttProvider
 {
     public const DEFAULT_MODEL = 'gemini-3.1-pro-preview';
 
@@ -256,6 +258,9 @@ final class GeminiDriver implements SttProvider
             null => 'Language: not given. Most of these calls are Urdu with English words; some are English.',
             default => 'Language: '.LanguageChoice::label($language).'.',
         }];
+        if (($dialect = DialectHint::text($language)) !== null) {
+            $lines[] = 'Dialect: '.$dialect;
+        }
         if ($seconds > 0) {
             $lines[] = sprintf('The audio is %d:%02d long.', intdiv((int) round($seconds), 60), (int) round($seconds) % 60);
         }
@@ -266,6 +271,21 @@ final class GeminiDriver implements SttProvider
         $lines[] = 'Transcribe this audio.';
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * The tie-breaker of the short-note double-check (since v1.5, Phase 1C): one side of a short note, words only.
+     *
+     * @return array{text: string, billed_ms: int}
+     */
+    public function transcribeClip(string $path, float $seconds, ?string $language): array
+    {
+        $key = $this->vault->require('gemini', 'api_key');
+        $mime = str_ends_with($path, '.wav') ? 'audio/wav' : 'audio/flac';
+        $answer = $this->transcribe($key, ['path' => $path, 'mime' => $mime, 'start' => 0.0, 'end' => $seconds, 'keep_from' => 0.0], LanguageChoice::normalize($language), []);
+        $text = trim(implode(' ', array_map(fn (array $s): string => trim((string) ($s['text'] ?? '')), $answer['segments'])));
+
+        return ['text' => $text, 'billed_ms' => (int) round($seconds * 1000)];
     }
 
     /**

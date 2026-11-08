@@ -127,7 +127,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 29;
+const LATER_MIGRATIONS = 30;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
@@ -203,7 +203,7 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
 const PHASE2_STEPS = 5;
 
 /** Migrations that came after them (rolled back first); add yours here as for LATER_MIGRATIONS. */
-const AFTER_PHASE2 = 14;
+const AFTER_PHASE2 = 15;
 
 /** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
 function seedPhase2Library(Connection $db): array
@@ -301,7 +301,7 @@ it('refuses to roll projects back while one person has two projects of the same 
 /** The v1.5 Phase 3 migration (screen moments), and how many came after it (rolled back first). */
 const PHASE3_STEPS = 1;
 
-const AFTER_PHASE3 = 12;
+const AFTER_PHASE3 = 13;
 
 it('runs the v1.5 Phase 3 migration down and up again on a library with screen moments', function () {
     $db = cycleConnection();
@@ -348,7 +348,7 @@ it('runs the v1.5 Phase 3 migration down and up again on a library with screen m
 /** The v1.5 account migrations (accounts, data exports), and how many came after them (rolled back first). */
 const ACCOUNT_STEPS = 2;
 
-const AFTER_ACCOUNTS = 10;
+const AFTER_ACCOUNTS = 11;
 
 it('runs the v1.5 account migrations down and up again without touching the library', function () {
     $db = cycleConnection();
@@ -404,12 +404,12 @@ it('runs the v1.5 account migrations down and up again without touching the libr
 });
 
 /** The v1.5 plans, roles and privacy migration; add later ones to the count as for LATER_MIGRATIONS. */
-const AFTER_PLANS = 9;
+const AFTER_PLANS = 10;
 
 /** Passport's four tables and Connected apps (v1.5, the Claude and ChatGPT connector); add later ones as for LATER_MIGRATIONS. */
 const CONNECTOR_STEPS = 5;
 
-const AFTER_CONNECTOR = 2;
+const AFTER_CONNECTOR = 3;
 
 const CONNECTOR_TABLES = ['oauth_auth_codes', 'oauth_access_tokens', 'oauth_refresh_tokens', 'oauth_clients', 'connected_apps'];
 
@@ -601,10 +601,14 @@ it('gives each person a project of their own for what they filed or nested in so
     }
 });
 
+/** Migrations after the sent_items session_ids one (v1.5 Phase 1C: cheapest-first engine routes). */
+const AFTER_SENT_ITEMS = 1;
+
 it('fills what a project sent before this release holds, keeps every row and can go back', function () {
     $db = cycleConnection();
     cycleArtisan('migrate:fresh');
-    cycleArtisan('migrate:rollback', ['--step' => 1]);
+    // The session_ids migration and the ones after it (AFTER_SENT_ITEMS); add later ones to the count.
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_SENT_ITEMS]);
     expect($db->getSchemaBuilder()->hasColumn('sent_items', 'session_ids'))->toBeFalse();
 
     $now = now();
@@ -656,7 +660,7 @@ it('fills what a project sent before this release holds, keeps every row and can
         ->and($db->table('sent_items')->where('id', $sessionItem)->value('session_ids'))->toBeNull()
         ->and($db->table('sent_items')->count())->toBe(3);
 
-    cycleArtisan('migrate:rollback', ['--step' => 1]);
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_SENT_ITEMS]);
     expect($db->getSchemaBuilder()->hasColumn('sent_items', 'session_ids'))->toBeFalse()
         ->and($db->table('sent_items')->count())->toBe(3);
     cycleArtisan('migrate', ['--step' => 1]);

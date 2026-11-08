@@ -10,6 +10,7 @@ use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
+use App\Services\FastPath;
 use App\Services\SettingsRepository;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
@@ -243,7 +244,8 @@ final class TranscriptViews
             return $state;
         }
         $this->remember($transcript, ['status' => 'making', 'fingerprint' => self::fingerprint($transcript), 'started_at' => now()->toAtomString()]);
-        MakeTranscriptViewsJob::dispatch($transcript->id);
+        // Since v1.5: a note of a minute or less gets its views on the fast path, not after the next queue run.
+        FastPath::dispatch(new MakeTranscriptViewsJob($transcript->id), FastPath::isShortTranscript($transcript));
 
         return $this->state($transcript->refresh());
     }

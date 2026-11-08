@@ -171,7 +171,8 @@ it('uses ElevenLabs when Whisper wrote the transcript, and skips without a secon
 
 it('runs after a final transcript is done only when it is on and there is something unsure', function () {
     Queue::fake();
-    $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'ur']);
+    // A long recording: one of 3 minutes or less gets the short-note check instead (ShortNoteAccuracyTest).
+    $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'ur', 'duration_ms' => 600_000]);
     $make = fn () => $session->transcripts()->updateOrCreate(['kind' => TranscriptKind::Final->value], ['provider' => 'assemblyai', 'status' => TranscriptStatus::Processing, 'language' => 'ur']);
     $unsure = new NormalizedTranscript('Me: فرح خان', [new Segment(1, 'Me', 0, 2000, 'فرح خان', [new Word('فرح', 0, 900, 0.3), new Word('خان', 950, 2000, 0.9)])], 'ur');
     $sure = new NormalizedTranscript('Me: فرح خان', [new Segment(1, 'Me', 0, 2000, 'فرح خان', [new Word('فرح', 0, 900, 0.9), new Word('خان', 950, 2000, 0.9)])], 'ur');

@@ -255,7 +255,7 @@ it('routes Urdu to Groq first, English to AssemblyAI, Arabic to ElevenLabs, and 
     }
     $router = app(LanguageRouter::class);
     expect($router->final('ur', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::Groq)
-        ->and($router->final('en', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::AssemblyAi)
+        ->and($router->final('en', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::Groq)
         ->and($router->final('ar', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::ElevenLabs);
 
     app(CredentialVault::class)->forget('groq', 'api_key');

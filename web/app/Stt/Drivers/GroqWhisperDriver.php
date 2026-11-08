@@ -25,6 +25,7 @@ use App\Stt\Data\StreamingRequest;
 use App\Stt\Data\SubmitResult;
 use App\Stt\Data\WebhookEnvelope;
 use App\Stt\Data\Word;
+use App\Stt\DialectHint;
 use App\Stt\Exceptions\ProviderBusy;
 use App\Stt\Exceptions\UnsupportedFeature;
 use App\Stt\GroqPacer;
@@ -448,7 +449,8 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     {
         $style = match ($language) {
             'ur' => 'السلام علیکم، آج کی meeting میں ہم invoice، payment اور deadline کی بات کریں گے۔ ٹھیک ہے، میں email بھیج دوں گا۔',
-            'ar' => 'مرحبا، في اجتماع اليوم سنتحدث عن invoice و payment و deadline. حسناً، سأرسل email.',
+            // Since v1.5: in the dialect set under Settings → Recording, when one is set.
+            'ar' => DialectHint::whisperStyle('ar') ?? 'مرحبا، في اجتماع اليوم سنتحدث عن invoice و payment و deadline. حسناً، سأرسل email.',
             'en' => 'Hello, in today\'s meeting we will discuss the invoice, the payment and the deadline.',
             default => '',
         };

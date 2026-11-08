@@ -119,13 +119,19 @@ Sign-in and people:
 Ease of use:
 - [ ] G The 15 most common tasks counted in taps and clicks on phone and desktop; the top 10 at 2 or fewer; before and after reported.
 
-Arabic and short voice note accuracy (added 2026-11-08):
-- [ ] H1 Arabic and Arabic+English: ElevenLabs Scribe v2 first, Groq Whisper as the checker; checked with the Accuracy Lab on real Arabic notes.
-- [ ] H2 Double-check short recordings (≤ 3 min, every language): two engines, words aligned; agreement is plain text, disagreement an unsure word with both versions; Gemini breaks ties when its key exists; cost per note in Usage; "Double-check short notes" (on).
-- [ ] H3 Views never guess: they get word confidences and alternatives; an unsure word stays, flagged ("I [understand?] English", «أفحم → probably أفهم»); Haiku 5.5 for short notes only if measured equal.
-- [ ] H4 Fast path for notes ≤ 60 s: transcript under 15 s, views under 30 s; long recordings keep the queue.
-- [ ] H5 Arabic dialect hint (Gulf/Saudi, Egyptian, Levantine, Standard) for engines that take context.
+Accuracy, every language, cheapest first (added 2026-11-08; Arabic first, then widened to all languages):
+- [ ] H1 Engines cheapest first: Groq Whisper for Urdu, English, German and the rest; ElevenLabs Scribe v2 for Arabic; a language moves only when the Accuracy Lab shows another engine clearly better. **Server done** 2026-11-08 (defaults; stored lists still equal to the old defaults moved by a reversible migration; Auto that hears Arabic is run again on Arabic's engine). Waiting: the ElevenLabs key (Needs Hassam), then the Accuracy Lab on the Arabic notes.
+- [x] H2 Double-check short recordings (≤ 3 min, every language) with the two cheapest engines (Groq + Soniox), words aligned; disagreement an unsure word with both versions; Gemini or ElevenLabs only as tie-breakers; cost per note and per language per month in Usage; "Double-check short notes" (on). **Server done** 2026-11-08 (ShortNoteCheck, WordAlign; ShortNoteAccuracyTest, ShortNoteCheckMarkTest).
+- [ ] H3 Views never guess, in every language and view: they get word confidences and alternatives; an unsure word stays, flagged ("I [understand?] English", «أفحم → probably أفهم»); Haiku 5.5 for short-note translations unless measured worse. Views now wait for the check, so they receive the marks; the prompt change follows the merge of the views work (E2).
+- [ ] H4 Fast path for notes ≤ 60 s: transcript under 15 s, views under 30 s; long recordings keep the queue. **Server done** 2026-11-08 (FastPath: after the response, any engine); timing measured on production after the deploy.
+- [x] H5 Arabic dialect hint (Gulf/Saudi, Egyptian, Levantine, Standard) for engines that take context. **Done** 2026-11-08 (Whisper style sentence, Soniox and Gemini context; Scribe takes none).
 - [ ] H6 Tests (alignment, the «أفحم» no-guess fixture, routing, fast-path timing); the 8:19 pm note re-run, its new Original and English shown.
+
+Share flow, progress, widgets (added 2026-11-08):
+- [ ] I1 From a shared voice note, a deep link or a notification, the arrow and system Back go to the logical parent (the Library), never out of the app; a "Back to WhatsApp" button; Back from the Library leaves normally; predictive back.
+- [ ] I2 Uploads never stop with the screen ("Upload failed (JobCancellationException)"): unique, expedited, network-constrained WorkManager work with backoff, surviving app kill and reboot; friendly text and Retry, never an exception name.
+- [ ] I3 Library rows show Uploading %, Transcribing % with time left, Improving %; the transcript opens when transcribing is done; several shared notes each with their own.
+- [ ] I4 Resizable Glance widgets (2×1 Record now + Ready dot; 4×2 readiness, Record now, last 2 with progress; 4×4 last 5–6, tap to open), Material You, light and dark, updated on events, a hide-titles option, picker previews; on the S25 in the next phone window.
 
 - [ ] Phase 1C suites green; verified on the S25 in the next phone window (after "keys copied").
 

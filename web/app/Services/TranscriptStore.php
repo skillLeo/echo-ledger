@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\SessionStatus;
+use App\Enums\SttProviderKey;
 use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Jobs\DoubleCheckJob;
 use App\Jobs\EngineFallbackJob;
 use App\Jobs\ScoreAccuracyJob;
+use App\Jobs\ShortNoteCheckJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\Transcript;
 use App\Models\TranscriptRevision;
@@ -19,6 +21,7 @@ use App\Services\Usage\UsageLedger;
 use App\Services\Views\TranscriptViews;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\LanguageChoice;
+use App\Stt\LanguageRouter;
 use App\Stt\ScriptCheck;
 use App\Stt\Support\PartCache;
 use Illuminate\Http\Client\Response;
@@ -37,6 +40,11 @@ final class TranscriptStore
         // run once more with the language forced (the billed first run stays in the usage ledger).
         if (($forced = $this->forcedLanguage($transcript, $result)) !== null) {
             return $this->rerunForced($transcript, $result, $forced[0], $forced[1]);
+        }
+        // Since v1.5 (Phase 1C): Auto heard a language whose own engine is another one (Arabic → ElevenLabs Scribe):
+        // run it there; this first run stays as the second opinion of the short-note check.
+        if (($engine = $this->rerouteEngine($transcript, $result)) !== null) {
+            return $this->rerouteDetected($transcript, $result, $engine);
         }
         $detected = LanguageChoice::fromDetected($result->language);
         $segments = $result->segmentsArray();
@@ -87,12 +95,17 @@ final class TranscriptStore
         if ($transcript->kind === TranscriptKind::Trial && $transcript->captureSession->hasReference()) {
             ScoreAccuracyJob::dispatch($transcript->capture_session_id);
         }
-        // Double-check (when it is on): a second engine hears the unsure lines again, on the queue.
-        if (app(DoubleCheck::class)->wanted($transcript->refresh())) {
+        // Since v1.5 (Phase 1C): a short note is heard by a second engine first, then gets its views (the job makes
+        // them), so a disputed word reaches them marked unsure; a minute or less runs on the fast path.
+        $shortCheck = app(ShortNoteCheck::class)->wanted($transcript->refresh());
+        if ($shortCheck) {
+            FastPath::dispatch(new ShortNoteCheckJob($transcript->id), FastPath::isShortTranscript($transcript));
+        } elseif (app(DoubleCheck::class)->wanted($transcript)) {
+            // Double-check (when it is on): a second engine hears the unsure lines again, on the queue.
             DoubleCheckJob::dispatch($transcript->id);
         }
         // Roman Urdu (or the view its language opens in) is made at once, so the transcript opens in it (plan A3).
-        if (in_array($transcript->kind, [TranscriptKind::Final, TranscriptKind::Alternate], true)) {
+        if (! $shortCheck && in_array($transcript->kind, [TranscriptKind::Final, TranscriptKind::Alternate], true)) {
             app(TranscriptViews::class)->autoMake($transcript);
         }
         // A client's recording gets its call notes and memory lines (v1.4), on the queue.
@@ -126,6 +139,64 @@ final class TranscriptStore
         }
 
         return null;
+    }
+
+    /**
+     * The engine a recording on Auto should go to once its language is known, or null to keep this result: only a
+     * final transcript, once, when the detected language's own list starts with another engine that has its key.
+     */
+    private function rerouteEngine(Transcript $transcript, NormalizedTranscript $result): ?SttProviderKey
+    {
+        $meta = $transcript->meta ?? [];
+        if ($transcript->kind !== TranscriptKind::Final || $transcript->language !== null || isset($meta['rerouted_from']) || isset($meta['forced_language'])) {
+            return null;
+        }
+        $detected = LanguageChoice::fromDetected($result->language);
+        if ($detected === null || trim($result->text) === '') {
+            return null;
+        }
+        $session = $transcript->captureSession;
+        $route = app(LanguageRouter::class)->final($detected, FinalTranscriptCoordinator::useCaseFor($session), $session);
+
+        return $route->provider !== $transcript->providerKey() && ! $route->fallback ? $route->provider : null;
+    }
+
+    /** Bills this run, keeps its text per side as the first opinion, and queues [$engine] in the detected language. */
+    private function rerouteDetected(Transcript $transcript, NormalizedTranscript $result, SttProviderKey $engine): Transcript
+    {
+        $this->ledger->recordFinal($transcript, $result);
+        $provider = $transcript->providerKey();
+        if ($provider !== null && $transcript->provider_job_id !== null && $transcript->provider_job_id !== '') {
+            app(ProviderCopyEraser::class)->schedule($provider, $transcript->provider_job_id, $transcript->provider_transcript_id);
+        }
+        $channels = [];
+        foreach ($result->segmentsArray() as $segment) {
+            $channel = (int) ($segment['channel'] ?? 1) === 2 ? 2 : 1;
+            $channels[(string) $channel] = trim(($channels[(string) $channel] ?? '').' '.trim((string) ($segment['text'] ?? '')));
+        }
+        $language = LanguageChoice::fromDetected($result->language);
+        $meta = $transcript->meta ?? [];
+        if (is_array($meta['route'] ?? null)) {
+            $meta['route'] = EngineWait::cleared($meta['route']);
+        }
+        $transcript->update([
+            'provider' => $engine->value,
+            'status' => TranscriptStatus::Pending,
+            'provider_job_id' => null,
+            'provider_transcript_id' => null,
+            'provider_deleted_at' => null,
+            'attempts' => 0,
+            'language' => $language,
+            'meta' => array_merge($meta, [
+                'rerouted_from' => $provider?->value,
+                'first_detected_language' => $result->language,
+                'first_run' => ['provider' => $provider?->value, 'channels' => $channels],
+            ]),
+        ]);
+        $transcript->captureSession->update(['final_provider' => $engine->value]);
+        FastPath::dispatch(new TranscribeFinalJob($transcript->id), FastPath::isShortTranscript($transcript));
+
+        return $transcript->refresh();
     }
 
     /** Bills the finished run, erases the provider's copy and queues the same engine again in [$language]. */

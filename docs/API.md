@@ -1301,6 +1301,20 @@ the usage ledger:
   items and `GET /api/sessions/{id}` carry `title_auto: true` for such a title. A title set by a person (`PATCH` with
   `title`, or at upload) is `title_auto: false` and is never replaced. Setting `title` to `null` asks for the automatic
   one again.
+- **Two engines on every short note** (Settings → Recording → Double-check short notes, on by default). A recording of
+  up to 3 minutes is heard by a second engine, the cheapest other one with a key; the words are lined up. A segment word
+  the engines disagree on keeps the first engine's `text` and gains `alt` (the other engine's word, `""` when it heard
+  none) and `alt_by` (that engine); its `confidence` is lowered below 0.5, so it is unsure in every app. When a paid
+  engine broke the tie (`tie_by`): on the first engine's side the word is not unsure and keeps `alt`; on the second's it
+  also has `probably` (the word two engines heard). A line with a disagreement has `uncertain: true` and the line-level
+  `check` (`{"provider", "label", "text"}`) with the second engine's words. Apps show `alt` (and `probably`) on a tap
+  of the word: «أفحم» → "probably أفهم". The transcript's `meta.short_check` summarises it (`provider`,
+  `tie_breaker`, `disputed`, `probably`, `cost_usd`). The text is never changed by the check.
+- **Engines, cheapest first.** Every language starts on Whisper large-v3 (Groq) except Arabic, which starts on
+  ElevenLabs Scribe v2; a recording on Auto that turns out to be a language with another first engine is transcribed
+  again there (`meta.rerouted_from`), and the first run becomes the second opinion of the check.
+- **Fast path.** A recording of a minute or less is transcribed, checked and given its views right after `complete`
+  answers, not on the next queue run.
 
 ## Claude and ChatGPT connector (since v1.5)
 An MCP server, so that Claude (Customize → Connectors → Add custom connector) and ChatGPT read a person's recordings

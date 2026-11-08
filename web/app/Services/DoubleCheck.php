@@ -249,7 +249,7 @@ final class DoubleCheck
      * @param  list<string>  $temps
      * @return array<int, string>
      */
-    private function sides(array $recordings, array &$temps): array
+    public function sides(array $recordings, array &$temps): array
     {
         $out = [];
         $one = $recordings[RecordingRole::Channel1->value] ?? null;

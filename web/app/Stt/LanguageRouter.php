@@ -50,14 +50,30 @@ final class LanguageRouter
 
     /** @var array<string, list<string>> */
     public const DEFAULT_FINAL_ROUTES = [
-        // Starting defaults until the Accuracy Lab proves otherwise: Urdu → Whisper large-v3 (Groq), English →
-        // AssemblyAI (Universal-3.5 Pro), Arabic and the rest → ElevenLabs Scribe v2. A missing key moves to the next.
+        // Since v1.5 (Phase 1C), cheapest first: Whisper large-v3 on Groq for every language but Arabic, where
+        // ElevenLabs Scribe v2 is far better on Gulf Arabic with English (13.2% WER against 39-44% for the others,
+        // arXiv 2605.19069). The Accuracy Lab moves a language to another engine only when it is clearly better there;
+        // a missing key moves to the next engine on the list.
+        'en' => ['groq', 'soniox', 'assemblyai', 'elevenlabs'],
+        'ur' => ['groq', 'soniox', 'elevenlabs', 'assemblyai'],
+        'ar' => ['elevenlabs', 'groq', 'soniox', 'assemblyai'],
+        self::OTHER => ['groq', 'soniox', 'elevenlabs', 'assemblyai'],
+        // Auto: Whisper decides each side's language over the whole side (App\Stt\ChannelLanguage); a language whose
+        // own list starts with another engine is then run there (TranscriptStore).
+        self::AUTO => ['groq', 'soniox', 'assemblyai', 'elevenlabs'],
+    ];
+
+    /**
+     * The defaults before v1.5 Phase 1C: a stored list still equal to one of them was never chosen by anyone, so the
+     * migration 2026_11_27_000001 moves it to the new default.
+     *
+     * @var array<string, list<string>>
+     */
+    public const PREVIOUS_FINAL_ROUTES = [
         'en' => ['assemblyai', 'groq', 'elevenlabs', 'soniox'],
         'ur' => ['groq', 'soniox', 'elevenlabs', 'assemblyai'],
         'ar' => ['elevenlabs', 'soniox', 'groq', 'assemblyai'],
         self::OTHER => ['elevenlabs', 'soniox', 'groq', 'assemblyai'],
-        // Auto (since v1.3): most Auto recordings are mixed Urdu/English calls, which AssemblyAI can only give to
-        // Universal-2; Whisper decides each side's language over the whole side (App\Stt\ChannelLanguage).
         self::AUTO => ['groq', 'assemblyai', 'soniox', 'elevenlabs'],
     ];
 

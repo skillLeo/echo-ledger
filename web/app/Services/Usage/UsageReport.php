@@ -6,14 +6,17 @@ namespace App\Services\Usage;
 
 use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
+use App\Enums\TranscriptKind;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
+use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\Screens\ScreenDescriptions;
 use App\Services\SettingsRepository;
+use App\Stt\LanguageChoice;
 use Illuminate\Support\Carbon;
 
 /**
@@ -46,6 +49,7 @@ final class UsageReport
      *     providers: list<array{provider: string, label: string, streaming_minutes: float, final_minutes: float, cost_usd: float, recordings: int, per_hour_usd: float|null, check_usd: float}>,
      *     devices: list<array{name: string, minutes: float, cost_usd: float}>,
      *     clients: list<array{name: string, minutes: float, cost_usd: float}>,
+     *     languages: list<array{language: string, label: string, recordings: int, minutes: float, cost_usd: float, check_usd: float}>,
      *     live_translate: list<array{mode: string, minutes: float, cost_usd: float}>,
      *     daily: array{labels: list<string>, minutes: list<float>}}
      */
@@ -61,6 +65,7 @@ final class UsageReport
         $providers = [];
         $devices = [];
         $sessions = [];
+        $checks = [];
         $modes = [];
         $days = [];
         for ($day = $start->copy(); $day->lt($end); $day->addDay()) {
@@ -104,6 +109,9 @@ final class UsageReport
             $devices[$key] = [($devices[$key][0] ?? 0.0) + $minutes, ($devices[$key][1] ?? 0.0) + $cost];
             if ($row->capture_session_id !== null) {
                 $sessions[$row->capture_session_id] = [($sessions[$row->capture_session_id][0] ?? 0.0) + $minutes, ($sessions[$row->capture_session_id][1] ?? 0.0) + $cost];
+                if ($row->model === 'double-check') {
+                    $checks[$row->capture_session_id] = ($checks[$row->capture_session_id] ?? 0.0) + $cost;
+                }
             }
             $day = Carbon::parse($row->occurred_at, 'UTC')->setTimezone($zone)->format('Y-m-d');
             if (array_key_exists($day, $days)) {
@@ -118,6 +126,8 @@ final class UsageReport
             'providers' => $this->providerRows($providers),
             'devices' => $this->deviceRows($workspaceId, $devices),
             'clients' => $this->clientRows($workspaceId, $sessions),
+            // Since v1.5 (Phase 1C): what each language costs this month, and the double-check's part of it.
+            'languages' => $this->languageRows($sessions, $checks),
             // Since v1.3: Game and Watch translate per mode (they have their own budget).
             'live_translate' => array_map(
                 fn (string $key, array $v): array => ['mode' => SttUseCase::from($key)->getLabel(), 'minutes' => round($v[0], 1), 'cost_usd' => round($v[1], 2)],
@@ -159,6 +169,42 @@ final class UsageReport
             ];
         }
         usort($rows, fn (array $a, array $b): int => ($b['streaming_minutes'] + $b['final_minutes']) <=> ($a['streaming_minutes'] + $a['final_minutes']));
+
+        return $rows;
+    }
+
+    /**
+     * Per language of the recordings (the final transcript's, else the recording's own; Auto when none is known).
+     *
+     * @param  array<string, array{0: float, 1: float}>  $sessions  session id => [minutes, cost]
+     * @param  array<string, float>  $checks  session id => double-check cost
+     * @return list<array{language: string, label: string, recordings: int, minutes: float, cost_usd: float, check_usd: float}>
+     */
+    private function languageRows(array $sessions, array $checks): array
+    {
+        if ($sessions === []) {
+            return [];
+        }
+        $languages = [];
+        foreach (array_chunk(array_keys($sessions), 500) as $ids) {
+            $own = CaptureSession::query()->withoutGlobalScopes()->withTrashed()->whereIn('id', $ids)->pluck('language', 'id')->all();
+            $heard = Transcript::query()->withoutGlobalScopes()->whereIn('capture_session_id', $ids)->where('kind', TranscriptKind::Final->value)
+                ->pluck('language', 'capture_session_id')->all();
+            foreach ($ids as $id) {
+                $languages[$id] = LanguageChoice::normalize($heard[$id] ?? null) ?? LanguageChoice::normalize($own[$id] ?? null) ?? 'auto';
+            }
+        }
+        $out = [];
+        foreach ($sessions as $id => [$minutes, $cost]) {
+            $key = $languages[$id] ?? 'auto';
+            $out[$key] ??= ['language' => $key, 'label' => $key === 'auto' ? 'Auto (not known)' : LanguageChoice::label($key), 'recordings' => 0, 'minutes' => 0.0, 'cost_usd' => 0.0, 'check_usd' => 0.0];
+            $out[$key]['recordings']++;
+            $out[$key]['minutes'] += $minutes;
+            $out[$key]['cost_usd'] += $cost;
+            $out[$key]['check_usd'] += $checks[$id] ?? 0.0;
+        }
+        $rows = array_map(fn (array $r): array => [...$r, 'minutes' => round($r['minutes'], 1), 'cost_usd' => round($r['cost_usd'], 4), 'check_usd' => round($r['check_usd'], 4)], array_values($out));
+        usort($rows, fn (array $a, array $b): int => $b['cost_usd'] <=> $a['cost_usd']);
 
         return $rows;
     }

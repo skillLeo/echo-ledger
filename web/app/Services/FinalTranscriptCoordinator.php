@@ -106,7 +106,12 @@ final class FinalTranscriptCoordinator
         // scheduled queue run; otherwise queue it (large recordings, or when assembly ran on the queue).
         // An inline attempt that gives the transcript back (still pending) is queued again by maybeStart().
         // Whisper on Groq and Gemini (since v1.5) work through every chunk inside the job: never on the upload request.
-        if ($sync && ! in_array($provider, [SttProviderKey::Groq, SttProviderKey::Gemini], true)) {
+        if (FastPath::isShort($session)) {
+            // Since v1.5 (Phase 1C): a note of a minute or less, with any engine, right after the upload answers.
+            // Marked as queued, so a repeated `complete` does not start it a second time.
+            Cache::put(self::queuedKey($transcript), true, now()->addMinutes(self::REQUEUE_WINDOW_MINUTES));
+            FastPath::dispatch(new TranscribeFinalJob($transcript->id), true);
+        } elseif ($sync && ! in_array($provider, [SttProviderKey::Groq, SttProviderKey::Gemini], true)) {
             Cache::forget(self::queuedKey($transcript));
             Bus::dispatchNow(new TranscribeFinalJob($transcript->id));
         } else {

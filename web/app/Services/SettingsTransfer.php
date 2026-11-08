@@ -34,6 +34,8 @@ final class SettingsTransfer
         'languages.auto_fallback',
         'accuracy.double_check',
         'accuracy.double_check_clients',
+        'accuracy.double_check_short',
+        'arabic.dialect',
         'client_ai.monthly_usd',
         'claude.model',
         'screens.describe',

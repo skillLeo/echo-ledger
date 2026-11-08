@@ -112,7 +112,7 @@ describe('routing each language to an engine', function () {
         expect(app(LanguageRouter::class)->final(null, SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::ElevenLabs);
     });
 
-    it('sends Auto and Urdu to Whisper on Groq once its key is there, English stays on AssemblyAI', function () {
+    it('sends Auto, Urdu and (since v1.5, cheapest first) English to Whisper on Groq once its key is there', function () {
         keys('assemblyai');
         $router = app(LanguageRouter::class);
         // Without a Groq key Auto keeps working on AssemblyAI, and says it is not the engine it wanted.
@@ -124,7 +124,7 @@ describe('routing each language to an engine', function () {
         expect($router->final(null, SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::Groq)
             ->and($router->final(null, SttUseCase::VoiceNote)->provider)->toBe(SttProviderKey::Groq)
             ->and($router->final('ur', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::Groq)
-            ->and($router->final('en', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::AssemblyAi)
+            ->and($router->final('en', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::Groq)
             ->and($router->final(null, SttUseCase::FinalTranscript)->fallback)->toBeFalse();
     });
 
@@ -155,7 +155,7 @@ describe('routing each language to an engine', function () {
         app(SettingsRepository::class)->set('routing.final', ['ur' => ['skynet', 'soniox', 'elevenlabs']]);
 
         expect(app(LanguageRouter::class)->final('ur', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::Soniox)
-            ->and(app(LanguageRouter::class)->final('en', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::AssemblyAi);
+            ->and(app(LanguageRouter::class)->final('en', SttUseCase::FinalTranscript)->provider)->toBe(SttProviderKey::Soniox);
     });
 
     it('never picks Azure MAI or Parakeet for Urdu, which they do not support', function () {

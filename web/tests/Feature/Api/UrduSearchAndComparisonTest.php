@@ -162,6 +162,6 @@ describe('compare engines', function () {
         $page->fillForm(['route_ur_1' => 'soniox', 'route_ur_2' => 'elevenlabs', 'route_ur_3' => null, 'route_ur_4' => null])->call('save')->assertHasNoFormErrors();
 
         expect(app(SettingsRepository::class)->get('routing.final')['ur'])->toBe(['soniox', 'elevenlabs'])
-            ->and(app(SettingsRepository::class)->get('routing.final')['en'])->toBe(['assemblyai', 'groq', 'elevenlabs', 'soniox']);
+            ->and(app(SettingsRepository::class)->get('routing.final')['en'])->toBe(LanguageRouter::DEFAULT_FINAL_ROUTES['en']);
     });
 });

@@ -116,6 +116,20 @@
             @endif
         </x-filament::section>
 
+        <x-filament::section heading="Per language" description="What each language's recordings cost this month: transcription, the double-check of short notes and the views.">
+            @if (($report['languages'] ?? []) === [])
+                <p style="opacity:.6">No billable minutes in {{ $report['label'] }}.</p>
+            @else
+                <table style="width:100%;font-size:.85rem;border-collapse:collapse">
+                    <tbody>
+                        @foreach ($report['languages'] as $row)
+                            <tr><td style="{{ $cell }}">{{ $row['label'] }}</td><td style="{{ $num }}">{{ $row['recordings'] }} {{ $row['recordings'] === 1 ? 'recording' : 'recordings' }}</td><td style="{{ $num }}">{{ $min($row['minutes']) }} min</td><td style="{{ $num }}">{{ $usd($row['cost_usd']) }}@if ($row['check_usd'] > 0) <span style="opacity:.6">(check {{ $usd($row['check_usd']) }})</span>@endif</td></tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endif
+        </x-filament::section>
+
         @if ($report['live_translate'] !== [])
             <x-filament::section heading="Live Translate" description="Game and Watch translate on the phone (Soniox real-time). Counted against Live Translate's own budget, not the limit above.">
                 <table style="width:100%;font-size:.85rem;border-collapse:collapse">

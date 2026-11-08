@@ -24,6 +24,7 @@ use App\Services\SettingsTransfer;
 use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
+use App\Stt\DialectHint;
 use App\Stt\Drivers\GeminiDriver;
 use App\Stt\GroqPacer;
 use App\Stt\KeytermPolicy;
@@ -137,6 +138,8 @@ class Settings extends Page
             'languages_auto_fallback' => LanguageChoice::fallback(),
             'double_check' => (bool) ($all['accuracy.double_check'] ?? false),
             'double_check_clients' => (bool) ($all['accuracy.double_check_clients'] ?? true),
+            'double_check_short' => (bool) ($all['accuracy.double_check_short'] ?? true),
+            'arabic_dialect' => is_string($all['arabic.dialect'] ?? null) ? $all['arabic.dialect'] : null,
             'client_ai_monthly_usd' => (float) ($all['client_ai.monthly_usd'] ?? 5.0),
             'claude_model' => (string) ($all['claude.model'] ?? 'claude-sonnet-5-5'),
             'screens_describe' => (bool) ($all['screens.describe'] ?? true),
@@ -319,6 +322,10 @@ class Settings extends Page
                                 ->helperText('Whisper on Groq (or ElevenLabs Scribe when Whisper wrote the transcript) listens again to up to 12 lines the first engine was not sure of. When they disagree, both are shown; the transcript is never changed. Each line is billed (Groq: at least 10 seconds).'),
                             Toggle::make('double_check_clients')->label('Always double-check recordings filed under a project')->columnSpan(2)
                                 ->helperText('On by default: calls in a project are the ones you rely on, so their unsure lines get a second listen even with the switch above off.'),
+                            Toggle::make('double_check_short')->label('Double-check short notes')->columnSpan(2)
+                                ->helperText('On by default. A recording of up to 3 minutes is heard by a second engine too, the cheapest other one with a key (Whisper on Groq, Soniox). Words they disagree on are marked unsure and show both versions; Gemini or ElevenLabs breaks the tie only then, when its key is set. A minute of note costs about US$0.002 more; Usage shows it per language.'),
+                            Select::make('arabic_dialect')->label('Arabic dialect')->options(DialectHint::OPTIONS)->placeholder('Not set')->columnSpan(2)
+                                ->helperText('A hint for the engines that take one (Whisper, Soniox, Gemini): it helps them spell dialect words. ElevenLabs Scribe takes no hint.'),
                             TextInput::make('client_ai_monthly_usd')->label('AI budget for projects (US$ a month)')->numeric()->minValue(0)->maxValue(1000)->step(0.5)->required()->columnSpan(2)
                                 ->helperText('Call notes, briefs, file reading and Ask stop for the month when this is used up. Default $5.'),
                             Select::make('claude_model')->label('Show as (Roman Urdu, اردو and English views)')->options(self::CLAUDE_MODELS)->required()->columnSpan(2)
@@ -750,6 +757,8 @@ class Settings extends Page
             'languages.auto_fallback' => LanguageChoice::normalize($state['languages_auto_fallback'] ?? null) ?? 'ur',
             'accuracy.double_check' => (bool) ($state['double_check'] ?? false),
             'accuracy.double_check_clients' => (bool) ($state['double_check_clients'] ?? true),
+            'accuracy.double_check_short' => (bool) ($state['double_check_short'] ?? true),
+            'arabic.dialect' => array_key_exists((string) ($state['arabic_dialect'] ?? ''), DialectHint::OPTIONS) ? $state['arabic_dialect'] : null,
             'client_ai.monthly_usd' => max(0.0, min(1000.0, (float) ($state['client_ai_monthly_usd'] ?? 5.0))),
             'claude.model' => in_array($state['claude_model'] ?? null, array_keys(self::CLAUDE_MODELS), true) ? $state['claude_model'] : 'claude-sonnet-5-5',
             'screens.describe' => (bool) ($state['screens_describe'] ?? true),

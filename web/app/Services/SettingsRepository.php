@@ -54,6 +54,8 @@ final class SettingsRepository
         'unsure.threshold' => 0.5,                      // a word scored below this is unsure
         'unsure.note' => true,                          // the "Note: [?word] = …" line on copies and exports
         'accuracy.double_check' => false,                // a second engine hears the unsure lines again (DoubleCheck)
+        'accuracy.double_check_short' => true,           // since v1.5: a second engine hears every note up to 3 minutes
+        'arabic.dialect' => null,                         // since v1.5: gulf | egyptian | levantine | msa (a hint)
         'accuracy.double_check_clients' => true,         // since v1.4: always for recordings filed under a client
         'client_ai.monthly_usd' => 5.0,                  // since v1.4: Claude spend of client workspaces per month
         'screens.describe' => true,                      // since v1.5: Claude Haiku reads each screen moment's text and describes it

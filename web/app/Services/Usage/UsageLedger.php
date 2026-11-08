@@ -143,7 +143,8 @@ final class UsageLedger
         }
 
         return UsageLedgerEntry::query()->firstOrCreate(
-            ['user_id' => $session->user_id, 'report_id' => 'check/'.$transcript->id.'/'.now()->format('YmdHis')],
+            // The engine is in the id: the second engine and the tie-breaker of one note may be billed in the same second.
+            ['user_id' => $session->user_id, 'report_id' => 'check/'.$transcript->id.'/'.$provider->value.'/'.now()->format('YmdHis')],
             [
                 'workspace_id' => $session->workspace_id,
                 'device_id' => $session->device_id,

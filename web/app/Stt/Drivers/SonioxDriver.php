@@ -9,6 +9,7 @@ use App\Enums\SttProviderKey;
 use App\Models\Transcript;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
+use App\Stt\Contracts\ClipTranscriber;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\NormalizedTranscript;
@@ -18,6 +19,7 @@ use App\Stt\Data\StreamingRequest;
 use App\Stt\Data\SubmitResult;
 use App\Stt\Data\WebhookEnvelope;
 use App\Stt\Data\Word;
+use App\Stt\DialectHint;
 use App\Stt\Exceptions\InvalidWebhookSignature;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\UnsupportedFeature;
@@ -43,7 +45,7 @@ use RuntimeException;
  * "Speaker 1" / "Speaker 2". Job ids and file ids are kept comma-separated (channel order) in provider_job_id and
  * provider_transcript_id. Live captions are not offered: the apps do not speak Soniox's WebSocket protocol yet.
  */
-final class SonioxDriver implements SttProvider
+final class SonioxDriver implements ClipTranscriber, SttProvider
 {
     public const WEBHOOK_HEADER = 'X-EchoLedger-Webhook-Token';
 
@@ -302,6 +304,57 @@ final class SonioxDriver implements SttProvider
         }
 
         return array_values(array_filter($words, fn (Word $w): bool => $w->text !== ''));
+    }
+
+    /** How long a clip may take at Soniox before the double-check gives up on it (short notes answer in seconds). */
+    public const CLIP_WAIT_S = 45;
+
+    /**
+     * Double-check (since v1.5, Phase 1C): one side of a short note, transcribed and waited for here; the file and the
+     * job are deleted at once. [$language] is a strict hint; the Arabic dialect hint goes in as context.
+     *
+     * @return array{text: string, billed_ms: int}
+     */
+    public function transcribeClip(string $path, float $seconds, ?string $language): array
+    {
+        $fileId = $this->upload($path, str_ends_with($path, '.wav') ? 'audio/wav' : 'audio/flac');
+        $job = null;
+        try {
+            $body = ['model' => (string) $this->settings->get('soniox.async_model', 'stt-async-v5'), 'file_id' => $fileId];
+            $codes = LanguageChoice::codes($language);
+            if ($codes === []) {
+                $body['enable_language_identification'] = true;
+                $body['language_hints'] = LanguageChoice::autoLanguages($this->settings);
+            } else {
+                $body['language_hints'] = $codes;
+                $body['language_hints_strict'] = true;
+            }
+            $hint = DialectHint::text($language, $this->settings);
+            if ($hint !== null) {
+                $body['context'] = ['text' => $hint];
+            }
+            $job = (string) $this->http()->post('/v1/transcriptions', $body)->throw()->json('id');
+            $deadline = microtime(true) + self::CLIP_WAIT_S;
+            do {
+                $status = (array) $this->http()->get('/v1/transcriptions/'.rawurlencode($job))->throw()->json();
+                $state = (string) ($status['status'] ?? '');
+                if ($state === 'error') {
+                    throw new ProviderJobFailed((string) ($status['error_message'] ?? 'Soniox reported an error.'));
+                }
+                if ($state === 'completed') {
+                    $data = (array) $this->http()->get('/v1/transcriptions/'.rawurlencode($job).'/transcript')->throw()->json();
+                    $words = self::words(array_values(array_filter((array) ($data['tokens'] ?? []), 'is_array')));
+                    $text = trim(implode(' ', array_map(fn (Word $w): string => $w->text, $words)));
+
+                    return ['text' => $text, 'billed_ms' => (int) round($seconds * 1000)];
+                }
+                usleep(700_000);
+            } while (microtime(true) < $deadline);
+
+            throw new RuntimeException('Soniox did not answer within '.self::CLIP_WAIT_S.' s.');
+        } finally {
+            $this->deleteIds($job !== null && $job !== '' ? [$job] : [], [$fileId]);
+        }
     }
 
     public function deleteRemote(Transcript $transcript): void
