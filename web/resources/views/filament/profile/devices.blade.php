@@ -15,7 +15,7 @@
                 <div>{{ $device['name'] }} <span class="muted">· {{ $device['platform'] }}</span></div>
                 <div class="muted">{{ $device['workspace'] }} · {{ $device['last_seen'] ? 'last seen '.$device['last_seen'] : 'never seen' }}@if ($device['country']) · {{ $device['country'] }}@endif</div>
             </div>
-            <x-filament::button size="sm" color="gray" wire:click="revokeDevice(@js($device['id']))" wire:confirm="Revoke {{ $device['name'] }}? It loses access at once; its recordings stay.">Revoke</x-filament::button>
+            <x-filament::button size="sm" color="gray" wire:click="revokeDevice('{{ $device['id'] }}')" wire:confirm="Revoke {{ $device['name'] }}? It loses access at once; its recordings stay.">Revoke</x-filament::button>
         </div>
     @empty
         <p class="muted">No phone or computer is signed in. Use "Sign in a device" below, or sign in from the app.</p>
@@ -32,7 +32,7 @@
                     <div class="muted">{{ $browser['ip'] ?? 'Unknown address' }}@if ($browser['country']) · {{ $browser['country'] }}@endif · active {{ $browser['last_active']->diffForHumans() }}</div>
                 </div>
                 @unless ($browser['current'])
-                    <x-filament::button size="sm" color="gray" wire:click="signOutBrowser(@js($browser['id']))">Sign out</x-filament::button>
+                    <x-filament::button size="sm" color="gray" wire:click="signOutBrowser('{{ $browser['id'] }}')">Sign out</x-filament::button>
                 @endunless
             </div>
         @endforeach

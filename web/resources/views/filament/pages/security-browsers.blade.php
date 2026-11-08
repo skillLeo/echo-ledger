@@ -17,7 +17,7 @@
                     <div class="muted">{{ $browser['ip'] ?? 'Unknown address' }} · active {{ $browser['last_active']->diffForHumans() }}</div>
                 </div>
                 @unless ($browser['current'])
-                    <x-filament::button size="sm" color="gray" wire:click="signOutBrowser(@js($browser['id']))">Sign out</x-filament::button>
+                    <x-filament::button size="sm" color="gray" wire:click="signOutBrowser('{{ $browser['id'] }}')">Sign out</x-filament::button>
                 @endunless
             </div>
         @endforeach

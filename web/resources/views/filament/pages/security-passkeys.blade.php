@@ -29,7 +29,7 @@
                 <div>{{ $passkey->name }}</div>
                 <div class="muted">Added {{ $passkey->created_at->diffForHumans() }} · {{ $passkey->last_used_at ? 'last used '.$passkey->last_used_at->diffForHumans() : 'not used yet' }}</div>
             </div>
-            <x-filament::button size="sm" color="danger" outlined wire:click="removePasskey(@js($passkey->id))" wire:confirm="Remove this passkey? It will no longer sign you in.">Remove</x-filament::button>
+            <x-filament::button size="sm" color="danger" outlined wire:click="removePasskey('{{ $passkey->id }}')" wire:confirm="Remove this passkey? It will no longer sign you in.">Remove</x-filament::button>
         </div>
     @empty
         <p class="muted">No passkeys yet.</p>
