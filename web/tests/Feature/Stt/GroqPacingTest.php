@@ -101,7 +101,7 @@ function pacingWholeFile(): void
 /** @param  array<string, string>  $headers */
 function pacingAnswer(string $text, float $start = 1.0, array $headers = []): mixed
 {
-    return Http::response(['task' => 'transcribe', 'language' => 'english', 'duration' => 30.0, 'text' => $text,
+    return Http::response(['task' => 'transcribe', 'language' => 'english', 'text' => $text,
         'segments' => [['id' => 0, 'start' => $start, 'end' => $start + 2.0, 'text' => $text, 'avg_logprob' => -0.2, 'compression_ratio' => 1.3, 'no_speech_prob' => 0.01]], 'words' => []], 200, $headers);
 }
 

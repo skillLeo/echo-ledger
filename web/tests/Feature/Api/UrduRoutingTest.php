@@ -83,7 +83,7 @@ function engineWaitRateLimited(?int $retryAfter = null): mixed
 
 function engineWaitHeard(string $text = 'آپ کل کی meeting reschedule کر دیں'): mixed
 {
-    return Http::response(['task' => 'transcribe', 'language' => 'urdu', 'duration' => 30.0, 'text' => $text,
+    return Http::response(['task' => 'transcribe', 'language' => 'urdu', 'text' => $text,
         'segments' => [['id' => 0, 'start' => 1.0, 'end' => 3.5, 'text' => $text, 'avg_logprob' => -0.2, 'compression_ratio' => 1.3, 'no_speech_prob' => 0.01]], 'words' => []], 200);
 }
 

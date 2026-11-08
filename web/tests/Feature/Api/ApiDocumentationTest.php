@@ -82,7 +82,8 @@ function registeredApiRoutes(): array
  * The contract is written ahead of the server (v1.5): endpoints documented for a phase that is not built yet. Each
  * phase removes its own lines when it serves them; nothing else may be documented without a route.
  */
-const NOT_SERVED_YET = [];
+/** Phase 1C: served by the console branch (v15-1c-web), merged after the urgent Whisper fix went out. */
+const NOT_SERVED_YET = ['GET /api/auth/options'];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();

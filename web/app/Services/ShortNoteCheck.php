@@ -78,7 +78,8 @@ final class ShortNoteCheck
     public function wanted(Transcript $transcript): bool
     {
         return $this->enabled()
-            && in_array($transcript->kind, [TranscriptKind::Final, TranscriptKind::Alternate], true)
+            // The final transcript only: the second version a wild disagreement starts is not checked again.
+            && $transcript->kind === TranscriptKind::Final
             && $transcript->status === TranscriptStatus::Completed
             && ! isset(($transcript->meta ?? [])['short_check'])
             && trim((string) $transcript->text) !== ''
@@ -211,6 +212,18 @@ final class ShortNoteCheck
             'cost_usd' => round($cost, 6),
             'at' => now()->toAtomString(),
         ];
+        // The engines heard different things altogether (one of them did not transcribe this audio): every line is
+        // unsure, so no view smooths over it, and the second engine writes a whole second version beside it, once.
+        $heardSides = array_keys(array_filter($heard, fn (string $t): bool => trim($t) !== ''));
+        $wild = $heardSides !== [] && array_diff($heardSides, $marked['stats']['unreliable']) === [];
+        if ($wild) {
+            foreach ($marked['segments'] as $i => $s) {
+                if (trim((string) ($s['text'] ?? '')) !== '') {
+                    $marked['segments'][$i]['uncertain'] = true;
+                }
+            }
+            $summary['unreliable'] = true;
+        }
         $before = $segments;
         DB::transaction(function () use ($transcript, $marked, $summary, $before): void {
             $fresh = Transcript::query()->lockForUpdate()->find($transcript->id);
@@ -221,6 +234,16 @@ final class ShortNoteCheck
             $segments = TranscriptEditor::plainText($fresh->segments ?? []) === TranscriptEditor::plainText($before) ? $marked['segments'] : ($fresh->segments ?? []);
             $fresh->forceFill(['segments' => $segments, 'meta' => [...($fresh->meta ?? []), 'short_check' => $summary]])->save();
         });
+
+        if ($wild) {
+            try {
+                $summary['second_version'] = app(Retranscriber::class)->start($transcript->captureSession, $checker, $transcript->language)->id;
+            } catch (Throwable $e) {
+                Log::info('Short-note check: no second version', ['transcript' => $transcript->id, 'error' => mb_substr($e->getMessage(), 0, 200)]);
+            }
+            $fresh = Transcript::query()->find($transcript->id);
+            $fresh?->forceFill(['meta' => [...($fresh->meta ?? []), 'short_check' => $summary]])->save();
+        }
 
         return $summary;
     }

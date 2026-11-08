@@ -119,6 +119,9 @@ Sign-in and people:
 Ease of use:
 - [ ] G The 15 most common tasks counted in taps and clicks on phone and desktop; the top 10 at 2 or fewer; before and after reported.
 
+Urgent accuracy bug (2026-11-08):
+- [x] U1 A shared 18.7 s Urdu voice note came back as nonsense and as a loop. Cause: on Auto, Whisper wrote Hindi letters, the forced Urdu retry carried our style prompt, and Whisper wrote the prompt's last sentence back («ٹھیک ہے، میں email بھیج دوں گا۔»). The audio path was right (the converted chunk is 18.50 s, gives the same text as the original file). Fixed: Whisper's prompt holds names only; WhisperChecks refuses a prompt echo, a loop, far too few words for the speech and a wrong length, asks once more without a prompt, else the next engine writes it; two engines that disagree altogether mark every line unsure and start a second version. CER against the reference 76-91% before, 27% after (16% without the opening clause TurboScribe left out). **Done**, deploy below.
+
 Accuracy, every language, cheapest first (added 2026-11-08; Arabic first, then widened to all languages):
 - [ ] H1 Engines cheapest first: Groq Whisper for Urdu, English, German and the rest; ElevenLabs Scribe v2 for Arabic; a language moves only when the Accuracy Lab shows another engine clearly better. **Server done** 2026-11-08 (defaults; stored lists still equal to the old defaults moved by a reversible migration; Auto that hears Arabic is run again on Arabic's engine). Waiting: the ElevenLabs key (Needs Hassam), then the Accuracy Lab on the Arabic notes.
 - [x] H2 Double-check short recordings (≤ 3 min, every language) with the two cheapest engines (Groq + Soniox), words aligned; disagreement an unsure word with both versions; Gemini or ElevenLabs only as tie-breakers; cost per note and per language per month in Usage; "Double-check short notes" (on). **Server done** 2026-11-08 (ShortNoteCheck, WordAlign; ShortNoteAccuracyTest, ShortNoteCheckMarkTest).

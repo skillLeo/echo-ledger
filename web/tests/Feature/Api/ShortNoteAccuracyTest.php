@@ -165,12 +165,12 @@ it('takes the fast path for a note of a minute or less and the queue for longer 
         ->and(FastPath::isShort(voiceNoteTranscript($this, 'en', 'groq', 61_000)->captureSession))->toBeFalse();
 });
 
-it('gives Whisper and Gemini the Arabic dialect, and nothing for other languages or without one', function () {
-    expect(GroqWhisperDriver::stylePrompt('ar', []))->toContain('سنتحدث')
-        ->and(DialectHint::text('ar'))->toBeNull();
+it('gives Soniox and Gemini the Arabic dialect, Whisper never a sentence it could write back', function () {
+    expect(DialectHint::text('ar'))->toBeNull();
 
     app(SettingsRepository::class)->set(DialectHint::SETTING, 'gulf');
-    expect(GroqWhisperDriver::stylePrompt('ar', []))->toContain('شلونك')
+    expect(GroqWhisperDriver::stylePrompt('ar', []))->toBe('')
+        ->and(GroqWhisperDriver::stylePrompt('ur', ['Omar']))->toBe('Omar.')
         ->and(DialectHint::text('ar'))->toBe('Gulf (Saudi) Arabic speech, with English words.')
         ->and(DialectHint::text('ur'))->toBeNull()
         ->and(GeminiDriver::prompt('ar', [], 2.0))->toContain('Dialect: Gulf (Saudi) Arabic');
@@ -224,4 +224,25 @@ it('hears a clip on Soniox, waits for it, and deletes the file and the job at on
     Http::assertSent(fn ($r): bool => str_ends_with($r->url(), '/v1/transcriptions') && $r->method() === 'POST'
         && in_array('ar', (array) $r['language_hints'], true) && $r['language_hints_strict'] === true && $r['context']['text'] === 'Egyptian Arabic speech, with English words.');
     @unlink($clip);
+});
+
+it('marks every line unsure and starts a second version when the engines heard different things altogether', function () {
+    Queue::fake();
+    $transcript = voiceNoteTranscript($this, 'ur', 'groq', 18_700);
+    $transcript->update([
+        'status' => TranscriptStatus::Completed,
+        'text' => 'Speaker: ٹھیک ہے، میں email بھیج دوں گا۔',
+        'segments' => [['channel' => 1, 'speaker' => 'Speaker', 'start_ms' => 0, 'end_ms' => 18_500, 'text' => 'ٹھیک ہے، میں email بھیج دوں گا۔']],
+        'meta' => ['first_run' => ['provider' => 'soniox', 'channels' => ['1' => 'فوڈ منیجمنٹ تو کرنا ہے لیکن فوڈ منیجمنٹ کے علاوہ وہ جو اس میں ساری چیزیں تھی']]],
+    ]);
+
+    $summary = app(ShortNoteCheck::class)->run($transcript->refresh());
+
+    expect($summary['unreliable'])->toBeTrue()
+        ->and($transcript->refresh()->segments[0]['uncertain'])->toBeTrue()
+        ->and($transcript->meta['short_check']['second_version'])->toBeString();
+    $second = Transcript::query()->find($transcript->meta['short_check']['second_version']);
+    expect($second->kind)->toBe(TranscriptKind::Alternate)->and($second->provider)->toBe('soniox');
+    Queue::assertPushed(TranscribeFinalJob::class, fn (TranscribeFinalJob $j): bool => $j->transcriptId === $second->id);
+    expect(app(ShortNoteCheck::class)->wanted($second->refresh()->forceFill(['status' => TranscriptStatus::Completed, 'text' => 'x'])))->toBeFalse();
 });

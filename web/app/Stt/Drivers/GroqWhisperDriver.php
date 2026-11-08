@@ -25,14 +25,15 @@ use App\Stt\Data\StreamingRequest;
 use App\Stt\Data\SubmitResult;
 use App\Stt\Data\WebhookEnvelope;
 use App\Stt\Data\Word;
-use App\Stt\DialectHint;
 use App\Stt\Exceptions\ProviderBusy;
+use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\UnsupportedFeature;
 use App\Stt\GroqPacer;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
 use App\Stt\Support\PartCache;
 use App\Stt\TranscriptNormalizer;
+use App\Stt\WhisperChecks;
 use App\Stt\WhisperGuards;
 use App\Support\UrduText;
 use Illuminate\Http\Request;
@@ -73,6 +74,12 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     /** The transcript being made, whose finished parts are kept (PartCache); null for a Double-check clip. */
     private ?string $transcriptId = null;
 
+    /** The temperature of the one retry of an answer that failed WhisperChecks. */
+    public const GUARD_RETRY_TEMPERATURE = '0.2';
+
+    /** Chunks asked again because their first answer failed WhisperChecks (meta.guard_retries). */
+    private int $guardRetries = 0;
+
     public function __construct(
         private readonly CredentialVault $vault,
         private readonly SettingsRepository $settings,
@@ -107,6 +114,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     {
         $language = LanguageChoice::normalize($request->language);
         $this->transcriptId = $request->transcript->id;
+        $this->guardRetries = 0;
         // The chip changed during the recording: each chunk takes the language in effect where it starts (the user's
         // marks win over detection); without marks every chunk has the recording's language.
         $this->marks = SessionMarkers::cleanLanguageMarks($request->session->language_marks ?? []);
@@ -204,6 +212,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
                 'forced_chunks' => $forced,
                 'removed_segments' => array_slice($removed, 0, 50),
                 'removed_count' => count($removed),
+                'guard_retries' => $this->guardRetries,
                 'audio_prep' => $this->prep->available() ? 'ffmpeg' : 'whole_file',
             ], fn ($v): bool => $v !== []),
         ));
@@ -283,7 +292,12 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
         // Cuts inside speech overlap by 1 s; the join keeps each word once (see toSegments).
         foreach (AudioPrep::overlapHardCuts($plan, $silences) as $i => $piece) {
             $file = $temps[] = $this->uploads->tempPath('groq-chunk-'.$i).'.flac';
-            $out[] = ['path' => $this->prep->cut($wav, $piece['start'], $piece['end'], $file), 'url' => null, 'start' => $piece['start'], 'end' => $piece['end'], 'keep_from' => $piece['keep_from'], 'side' => $channel];
+            $quiet = 0.0;
+            foreach ($silences as [$from, $to]) {
+                $quiet += max(0.0, min($to, $piece['end']) - max($from, $piece['start']));
+            }
+            $out[] = ['path' => $this->prep->cut($wav, $piece['start'], $piece['end'], $file), 'url' => null, 'start' => $piece['start'], 'end' => $piece['end'], 'keep_from' => $piece['keep_from'], 'side' => $channel,
+                'speech' => max(0.0, $piece['end'] - $piece['start'] - $quiet)];
         }
 
         return $out;
@@ -293,7 +307,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
      * One chunk, with the language rules: a forced language is sent as is; Auto takes what Whisper detects when it
      * is one Auto may pick (Hindi is Urdu), else runs again in the fallback; Hindi letters run again as Urdu.
      *
-     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float, side?: int}  $chunk
+     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float, side?: int, speech?: float}  $chunk
      * @return array{segments: list<array<string, mixed>>, words: list<array<string, mixed>>, language: ?string, forced: int, requests: int}
      */
     private function transcribeChunk(array $chunk, ?string $language, string $prompt): array
@@ -313,10 +327,27 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
             $retry = 'ur';
         }
         if ($retry !== null) {
-            $json = $this->request($chunk, $retry, self::stylePrompt($retry, []).' '.$prompt);
+            $json = $this->request($chunk, $retry, trim(self::stylePrompt($retry, []).' '.$prompt));
             $used = $retry;
             $requests++;
             $forced++;
+        }
+        // Since v1.5: an answer that is not a transcript of this audio (an echo of the prompt, a loop, far too few
+        // words for the speech, another length than was sent) is asked again without any prompt; if it still fails,
+        // this engine's run is refused and the next engine writes the transcript. It is never shown.
+        // Length and words are only judged on audio this server cut (it knows how long it is and where the speech is).
+        $seconds = isset($chunk['speech']) ? max(0.0, $chunk['end'] - $chunk['start']) : 0.0;
+        $speech = (float) ($chunk['speech'] ?? 0.0);
+        $problem = WhisperChecks::problem($json, $seconds, $speech, $prompt);
+        if ($problem !== null) {
+            $this->guardRetries++;
+            // Without a prompt, and a little above temperature 0 (at 0 the same audio always gives the same answer).
+            $json = $this->request($chunk, $used, '', self::GUARD_RETRY_TEMPERATURE);
+            $requests++;
+            $problem = WhisperChecks::problem($json, $seconds, $speech, '');
+            if ($problem !== null) {
+                throw new ProviderJobFailed("Whisper's text did not match the audio ({$problem}), so the next engine writes this transcript.");
+            }
         }
 
         return [
@@ -338,13 +369,13 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
      * One request. Since v1.5 it waits for room within Groq's limits (GroqPacer: ProviderBusy, the transcript goes on
      * later) and the answer for a part of a transcript is kept, so a run that goes on later does not send it again.
      *
-     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float, side?: int}  $chunk
+     * @param  array{path: ?string, url: ?string, start: float, end: float, keep_from: float, side?: int, speech?: float}  $chunk
      * @return array<string, mixed>
      */
-    private function request(array $chunk, ?string $language, string $prompt): array
+    private function request(array $chunk, ?string $language, string $prompt, string $temperature = '0'): array
     {
         $part = $this->transcriptId !== null && isset($chunk['side'])
-            ? sprintf('groq:%s:%d:%.3f-%.3f:%s:%s', $this->model(), $chunk['side'], $chunk['start'], $chunk['end'], $language ?? 'auto', sha1($prompt))
+            ? sprintf('groq:%s:%d:%.3f-%.3f:%s:%s', $this->model(), $chunk['side'], $chunk['start'], $chunk['end'], $language ?? 'auto', sha1($prompt)).($temperature === '0' ? '' : ':t'.$temperature)
             : null;
         $kept = $part !== null ? $this->parts->get((string) $this->transcriptId, $part) : null;
         if ($kept !== null) {
@@ -360,7 +391,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
         $fields = [
             'model' => $this->model(),
             'response_format' => 'verbose_json',
-            'temperature' => '0',
+            'temperature' => $temperature,
             'timestamp_granularities[]' => ['segment', 'word'],
         ];
         if ($language !== null) {
@@ -439,25 +470,19 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     }
 
     /**
-     * The style prompt: Whisper continues in the style of its prompt, so an Urdu prompt in Urdu script with English
-     * business words in Latin letters keeps Urdu in Urdu script and English words in English. Names and terms
-     * follow (spelling only). Kept well under the 224-token limit.
+     * The prompt: the names and terms that may be said, for their spelling, and nothing else. Until v1.5 it began with an
+     * example sentence in the recording's language ("…ٹھیک ہے، میں email بھیج دوں گا۔") so English words stayed in
+     * Latin letters; Whisper wrote that sentence back instead of a shared 18.7 s Urdu voice note, and on other notes
+     * looped. Without it the same file comes back right (WhisperChecks keeps a prompt echo from ever being kept).
+     * The language is not used any more; it stays in the signature for the callers. Kept well under 224 tokens.
      *
      * @param  list<string>  $keyterms
      */
     public static function stylePrompt(?string $language, array $keyterms): string
     {
-        $style = match ($language) {
-            'ur' => 'السلام علیکم، آج کی meeting میں ہم invoice، payment اور deadline کی بات کریں گے۔ ٹھیک ہے، میں email بھیج دوں گا۔',
-            // Since v1.5: in the dialect set under Settings → Recording, when one is set.
-            'ar' => DialectHint::whisperStyle('ar') ?? 'مرحبا، في اجتماع اليوم سنتحدث عن invoice و payment و deadline. حسناً، سأرسل email.',
-            'en' => 'Hello, in today\'s meeting we will discuss the invoice, the payment and the deadline.',
-            default => '',
-        };
         $names = array_slice(array_values(array_filter(array_map('trim', $keyterms), fn (string $k): bool => $k !== '')), 0, 20);
-        $tail = $names === [] ? '' : ' '.implode(', ', $names).'.';
 
-        return mb_substr(trim($style.$tail), 0, 600);
+        return $names === [] ? '' : mb_substr(implode(', ', $names).'.', 0, 600);
     }
 
     /** Double-check (since v1.2): one short clip, in the recording's language. Groq keeps no copy. */

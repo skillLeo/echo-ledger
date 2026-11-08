@@ -79,7 +79,7 @@ function fakePrep(): void
 /** @param  list<array<string, mixed>>  $segments */
 function groqAnswer(string $language, array $segments, array $words = []): array
 {
-    return ['task' => 'transcribe', 'language' => $language, 'duration' => 30.0, 'text' => implode(' ', array_column($segments, 'text')), 'segments' => $segments, 'words' => $words];
+    return ['task' => 'transcribe', 'language' => $language, 'text' => implode(' ', array_column($segments, 'text')), 'segments' => $segments, 'words' => $words];
 }
 
 function seg(float $start, float $end, string $text, array $extra = []): array
@@ -101,7 +101,7 @@ function runGroq(object $test, ?string $language, array $sessionAttributes = [])
     return $transcript->refresh();
 }
 
-it('sends large-v3 at temperature 0 with segment and word timestamps, the language and an Urdu-script prompt', function () {
+it('sends large-v3 at temperature 0 with segment and word timestamps and the language, and no sample sentence to write back', function () {
     noPrep();
     $bodies = [];
     Http::fake(['api.groq.com/*' => function (HttpRequest $r) use (&$bodies) {
@@ -119,7 +119,7 @@ it('sends large-v3 at temperature 0 with segment and word timestamps, the langua
         ->toMatch('/name="timestamp_granularities\[\]"\s+segment/')
         ->toMatch('/name="timestamp_granularities\[\]"\s+word/')
         ->toMatch('/name="language"\s+ur\s/')
-        ->toContain('meeting میں ہم invoice');
+        ->not->toContain('name="prompt"');
     expect($transcript->status)->toBe(TranscriptStatus::Completed)
         ->and($transcript->segments[0]['text'])->toBe('آپ کل کی meeting reschedule کر دیں')
         ->and($transcript->meta['model'])->toBe('whisper-large-v3')
@@ -262,4 +262,38 @@ it('routes Urdu to Groq first, English to AssemblyAI, Arabic to ElevenLabs, and 
     $decision = app(LanguageRouter::class)->final('ur', SttUseCase::FinalTranscript);
     expect($decision->provider)->toBe(SttProviderKey::ElevenLabs)->and($decision->wanted)->toBe(SttProviderKey::Groq)->and($decision->fallback)->toBeTrue();
     expect(GroqWhisperDriver::stylePrompt('ur', ['Omar', 'Acme Ltd']))->toEndWith('Omar, Acme Ltd.');
+});
+
+it('asks a chunk again without a prompt when Whisper loops, and keeps the good answer', function () {
+    noPrep();
+    $bodies = [];
+    $answers = [
+        groqAnswer('urdu', [seg(0, 18, 'ملتے ہیں، میں ملتے ہوں، میں ملتے ہوں۔')]),
+        groqAnswer('urdu', [seg(0, 4, 'فوڈ منیجمنٹ تو کرنا ہے لیکن فوڈ منیجمنٹ کے علاوہ')]),
+    ];
+    Http::fake(['api.groq.com/*' => function (HttpRequest $r) use (&$bodies, &$answers) {
+        $bodies[] = $r->body();
+
+        return Http::response(array_shift($answers), 200);
+    }]);
+
+    $transcript = runGroq($this, 'ur');
+
+    expect($bodies)->toHaveCount(2)
+        ->and($bodies[1])->not->toContain('name="prompt"')
+        ->and($bodies[1])->toMatch('/name="temperature"\s+0\.2\s/')
+        ->and($transcript->status)->toBe(TranscriptStatus::Completed)
+        ->and($transcript->segments[0]['text'])->toBe('فوڈ منیجمنٹ تو کرنا ہے لیکن فوڈ منیجمنٹ کے علاوہ')
+        ->and($transcript->meta['guard_retries'])->toBe(1);
+});
+
+it('never keeps an answer that still loops: the run is refused and nothing of it is shown', function () {
+    noPrep();
+    Http::fake(['api.groq.com/*' => Http::response(groqAnswer('urdu', [seg(0, 18, 'ملتے ہیں، میں ملتے ہوں، میں ملتے ہوں۔')]), 200)]);
+
+    $transcript = runGroq($this, 'ur');
+
+    expect($transcript->status)->not->toBe(TranscriptStatus::Completed)
+        ->and((string) $transcript->text)->not->toContain('ملتے')
+        ->and((string) $transcript->error)->toContain('did not match the audio');
 });
