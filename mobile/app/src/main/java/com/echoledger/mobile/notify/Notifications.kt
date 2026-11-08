@@ -114,6 +114,7 @@ object Notifications {
         ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
     /** Settings → Notifications → Test: one notification of that kind, marked as a test. */
+    @SuppressLint("MissingPermission") // checked by canPost() first
     fun test(context: Context, category: NotifyCategory): Boolean {
         if (!canPost(context)) return false
         val builder = NotificationCompat.Builder(context, category.channelId)
@@ -135,6 +136,7 @@ object Notifications {
      * The critical alert (since v1.5, Phase 1C A3): recording calls just stopped working. It pops up with sound, comes
      * through in quiet hours, says what broke, and its button is the one-tap fix (it opens the Ready check).
      */
+    @SuppressLint("MissingPermission") // checked by canPost() first
     fun readinessAlert(context: Context, problem: ReadyProblem) {
         if (!canPost(context)) return
         val text = problem.detail
@@ -153,6 +155,7 @@ object Notifications {
     }
 
     /** A5: a kept call recorded only your voice; says why, and opens the Ready check. */
+    @SuppressLint("MissingPermission") // checked by canPost() first
     fun onlyYourVoice(context: Context, why: String) {
         if (!canPost(context)) return
         val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)

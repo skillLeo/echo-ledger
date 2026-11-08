@@ -9,6 +9,7 @@ use App\Models\Client;
 use App\Models\Recording;
 use App\Services\SessionLifecycle;
 use App\Services\SettingsRepository;
+use Illuminate\Support\Str;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 use Tests\Feature\Api\Support\Shape;
@@ -69,6 +70,26 @@ describe('opening a session', function () {
         $id = $this->openSession(['started_at' => '2026-10-24T14:00:00+05:00']);
 
         expect(CaptureSession::query()->find($id)->started_at->toIso8601String())->toBe('2026-10-24T09:00:00+00:00');
+    });
+
+    it('answers 200 with the session a simultaneous request made, never a 500, when two arrive at once', function () {
+        // The other request inserts the same client_ref between this one's lookup and its insert.
+        $raced = false;
+        CaptureSession::creating(function (CaptureSession $session) use (&$raced): void {
+            if ($raced || $session->client_ref !== 'raced-ref') {
+                return;
+            }
+            $raced = true;
+            $other = $session->replicate();
+            $other->id = (string) Str::ulid();
+            $other->saveQuietly();
+        });
+
+        $response = $this->postJson('/api/sessions', Fixtures::openSessionBody(['client_ref' => 'raced-ref']))->assertOk();
+
+        expect($raced)->toBeTrue()
+            ->and(CaptureSession::query()->where('client_ref', 'raced-ref')->count())->toBe(1)
+            ->and($response->json('session.id'))->toBe(CaptureSession::query()->where('client_ref', 'raced-ref')->value('id'));
     });
 
     it('answers 200 with the same session when the open request is repeated', function () {

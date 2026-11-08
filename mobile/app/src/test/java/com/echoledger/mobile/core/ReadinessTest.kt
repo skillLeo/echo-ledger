@@ -45,7 +45,7 @@ class ReadinessTest {
         val r = Readiness.evaluate(facts())
         assertEquals(ReadyChip.READY, r.chip)
         assertEquals("Calls: Ready", r.chip.text)
-        assertEquals("✓ Ready to record calls", r.headline)
+        assertEquals("Ready to record calls", r.headline)
         assertTrue(r.problems.isEmpty())
     }
 

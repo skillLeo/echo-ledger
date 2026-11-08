@@ -73,10 +73,10 @@ data class Readiness(val problems: List<ReadyProblem>, val chip: ReadyChip) {
     val ready: Boolean get() = chip == ReadyChip.READY
     val critical: List<ReadyProblem> get() = problems.filter { it.critical }
 
-    /** The line under the check: "✓ Ready to record calls" or the first problem. */
+    /** The line under the check: "Ready to record calls" (shown with a check mark) or the first problem. */
     val headline: String
         get() = when (chip) {
-            ReadyChip.READY -> "✓ Ready to record calls"
+            ReadyChip.READY -> "Ready to record calls"
             ReadyChip.OFF -> "Calls are not recorded automatically"
             ReadyChip.NONE -> "Voice notes are ready"
             ReadyChip.NOT_READY -> problems.first { it.blocking }.title

@@ -265,6 +265,8 @@ data class LibraryItem(
     val device: NamedRef? = null,
     val client: NamedRef? = null,
     val title: String? = null,
+    /** The server wrote this title from what was said (since v1.5); a title a person set is false and never replaced. */
+    @SerialName("title_auto") val titleAuto: Boolean = false,
     @SerialName("started_at") val startedAt: String? = null,
     @SerialName("duration_ms") val durationMs: Long? = null,
     val status: String? = null,
@@ -312,9 +314,24 @@ data class TranscriptSummary(
     @SerialName("final_progress") val finalProgress: ProgressDto? = null
 )
 
-/** Parts done of all parts while a long recording is transcribed in pieces (since v1.2). */
+/**
+ * Parts done of all parts while a recording is transcribed (since v1.2 for runs in pieces, since v1.5 for every run), and
+ * the seconds left from the engine's measured speed (null until the server has a measure). Also lines done of lines of a
+ * view being made (`views.progress`, since v1.5).
+ */
 @Serializable
-data class ProgressDto(val done: Int = 0, val total: Int = 0)
+data class ProgressDto(val done: Int = 0, val total: Int = 0, @SerialName("eta_seconds") val etaSeconds: Long? = null)
+
+/** `GET /api/auth/options` (since v1.5, Phase 1C): what the sign-in screen offers on this server. */
+@Serializable
+data class AuthOptionsDto(
+    val password: Boolean = true,
+    val google: Boolean = false,
+    @SerialName("sign_up") val signUp: Boolean = false,
+    @SerialName("sign_up_url") val signUpUrl: String? = null,
+    @SerialName("reset_url") val resetUrl: String? = null,
+    @SerialName("browser_sign_in") val browserSignIn: Boolean = true
+)
 
 @Serializable
 data class CreateSessionResponse(
@@ -450,7 +467,13 @@ data class SuggestionDto(val id: Int, val index: Int, val from: String, val to: 
 
 /** Show as (since v1.2): `roman` and/or `english`, and `status` unavailable | none | making | ready | failed. */
 @Serializable
-data class ViewsSummaryDto(val available: List<String> = emptyList(), val status: String = "unavailable", val default: String = "original")
+data class ViewsSummaryDto(
+    val available: List<String> = emptyList(),
+    val status: String = "unavailable",
+    val default: String = "original",
+    /** While views are being made (since v1.5): lines done of lines per view, `{"roman": {"done": 12, "total": 20}}`. */
+    val progress: Map<String, ProgressDto> = emptyMap()
+)
 
 /**
  * `GET /api/transcripts/{id}/views` (since v1.2): the Roman Urdu and English reading views, each a list aligned with the
@@ -466,7 +489,9 @@ data class TranscriptViewsDto(
     val model: String? = null,
     val error: String? = null,
     /** Lines shown with their original words in a view because the view failed the checks twice (since v1.3). */
-    val kept: Map<String, List<Int>> = emptyMap()
+    val kept: Map<String, List<Int>> = emptyMap(),
+    /** While being made (since v1.5): lines done of lines per view. */
+    val progress: Map<String, ProgressDto> = emptyMap()
 )
 
 /** The part of GET /api/sessions/{id} the app needs: a temporary signed URL to stream the decrypted recording. */

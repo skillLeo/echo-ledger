@@ -123,11 +123,13 @@ fun ReadyCheckSheet(
             verticalArrangement = Arrangement.spacedBy(Space.s3)
         ) {
             Text("Ready check", style = LocalEchoType.current.titleM, color = Brand.Text)
-            Text(
-                readiness.headline,
-                style = LocalEchoType.current.bodyL,
-                color = if (readiness.ready) Brand.Success else Brand.Text
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (readiness.ready) {
+                    com.echoledger.mobile.ui.design.SuccessCheck(Brand.Success)
+                    Spacer(Modifier.width(Space.s2))
+                }
+                Text(readiness.headline, style = LocalEchoType.current.bodyL, color = if (readiness.ready) Brand.Success else Brand.Text)
+            }
             readiness.problems.forEach { ProblemRow(it) { fix -> run(fix) } }
             Spacer(Modifier.height(Space.s1))
             EchoButton("Check again", onRecheck, Modifier.fillMaxWidth(), kind = ButtonKind.Secondary)

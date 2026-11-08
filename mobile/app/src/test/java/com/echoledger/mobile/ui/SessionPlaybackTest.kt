@@ -75,7 +75,8 @@ class SessionPlaybackTest : ScreenTest() {
             compose.waitForIdle()
             server.requestsTo("GET", "/api/recordings/.+/audio").isNotEmpty()
         }
-        compose.onNodeWithText("0:00 / 0:00").assertExists() // the docked player's elapsed and total time
+        // The docked player's elapsed and total time: the recording's own 30 s while the file has not said (E1, v1.5).
+        compose.onNodeWithText("0:00 / 0:30").assertExists()
         compose.onAllNodesWithText("0:00").assertCountEquals(1) // the transcript stamp
     }
 

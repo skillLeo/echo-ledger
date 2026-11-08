@@ -40,6 +40,7 @@ use App\Stt\TranscriptNormalizer;
 use Closure;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -131,7 +132,16 @@ final class SessionController extends Controller
             }
         }
 
-        $session = $withArtifacts ? $lifecycle->createWithArtifacts($device, $data) : $lifecycle->open($device, $data);
+        try {
+            $session = $withArtifacts ? $lifecycle->createWithArtifacts($device, $data) : $lifecycle->open($device, $data);
+        } catch (UniqueConstraintViolationException $e) {
+            // Two requests with the same client_ref at once (an app that started the same upload twice): the other one
+            // made it a moment ago, so this one answers with it, as a repeated request does (it was a 500).
+            $session = CaptureSession::withTrashed()->where('device_id', $device->id)->where('client_ref', $data['client_ref'])->first()
+                ?? throw $e;
+
+            return $this->sessionCreatedResponse($session, $stt, 200);
+        }
 
         return $this->sessionCreatedResponse($session, $stt, 201);
     }
