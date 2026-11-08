@@ -348,7 +348,16 @@ final class ClientWorkspace
             }
             $fixes[] = ['line' => $line, 'from' => mb_substr($from, 0, 100), 'to' => mb_substr($to, 0, 100), 'reason' => mb_substr(trim($fix['reason']), 0, 120), 'status' => 'open'];
         }
-        $transcript->forceFill(['meta' => [...($transcript->meta ?? []), 'suggestions' => array_slice($fixes, 0, 10)]])->save();
+        // Since v1.5 (Phase 1C) the views add their own ("view_check"): those stay, with their ids; this run's earlier
+        // fixes still open are put aside for the new ones.
+        $suggestions = $transcript->meta['suggestions'] ?? [];
+        $suggestions = is_array($suggestions) ? $suggestions : [];
+        foreach ($suggestions as $n => $s) {
+            if (is_array($s) && ($s['reason'] ?? null) !== 'view_check' && ($s['status'] ?? 'open') === 'open') {
+                $suggestions[$n]['status'] = 'stale';
+            }
+        }
+        $transcript->forceFill(['meta' => [...($transcript->meta ?? []), 'suggestions' => [...$suggestions, ...array_slice($fixes, 0, 10)]]])->save();
     }
 
     /** Accepts (the words are changed in that line, as an edit) or dismisses one suggestion. */

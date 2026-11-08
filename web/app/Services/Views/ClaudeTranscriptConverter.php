@@ -39,11 +39,19 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
           may stay in English letters.
         - "english": a faithful English translation. A line already in English is copied unchanged.
 
-        Rules for every view: names, numbers, amounts, dates and product names exactly as spoken; never merge, split,
-        summarise or explain lines; markers stay on the same word: "[unclear]" and "[unclear: ...]" are copied as they
-        are, and a word the engine was unsure of, written "[?word]", keeps its brackets around that word's own
-        transliteration or translation; never use Hindi (Devanagari) letters. Every input index appears exactly once in
-        the output.
+        Rules for every view: names and product names exactly as spoken; never merge, split, summarise or explain lines;
+        markers stay on the same word: "[unclear]" and "[unclear: ...]" are copied as they are, and a word the engine
+        was unsure of, written "[?word]", keeps its brackets around that word's own transliteration or translation;
+        never use Hindi (Devanagari) letters. Every input index appears exactly once in the output.
+
+        Numbers, units, prices, dates and times are written as digits in every view, also when they were spoken as
+        words: "سولہ جی بی" becomes "16 GB", "ایم سکس پرو" becomes "M6 Pro", "دو ہزار پانچ سو روپے" becomes "Rs 2,500",
+        "ساڑھے تین بجے" becomes "3:30".
+
+        The views keep every word that was said, sound for sound, even a word that looks wrong. Never correct a word you
+        believe the engine misheard ("تعل رہا ہوں" stays "tal raha hoon", never "dekh raha hoon"): write it as it is and
+        list it in "misheard" with "from", the word or words exactly as written in the input line, and "to", what was
+        probably said, in the same script as the input. "misheard" is an empty list when every word looks right.
         TXT;
 
     /** Since v1.5, for lines whose Roman Urdu lost words: one transliteration per input word, nothing else. */
@@ -53,7 +61,9 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
         the same index and "roman": a list with exactly one entry for each input word, in the same order.
         - Each entry is that one word in Latin letters, the way Pakistanis type it ("کیا" becomes "kya", "ٹھیک" becomes
           "theek"). An English word written in Urdu letters gets its normal English spelling ("میٹنگ" becomes
-          "meeting"). A word already in Latin letters, a number or an amount is copied unchanged.
+          "meeting"). A word already in Latin letters, a number or an amount is copied unchanged; a number word is
+          written in digits ("سولہ" becomes "16"). A word that looks misheard is still written as it sounds, never
+          corrected.
         - "[unclear]" and "[unclear: ...]" are copied as they are; "[?word]" keeps its brackets around that word's own
           transliteration.
         - An entry may hold two Latin words only when one Urdu word is written as two in Roman Urdu ("کیلئے" becomes
@@ -116,6 +126,7 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
             throw new RuntimeException('Claude did not return the views in the expected form.');
         }
         $out = [];
+        $misheard = [];
         foreach ($data['lines'] as $line) {
             if (is_array($line) && isset($line['index']) && array_key_exists((int) $line['index'], $lines)) {
                 $out[(int) $line['index']] = [];
@@ -125,11 +136,17 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
                         $out[(int) $line['index']][$view] = $text;
                     }
                 }
+                foreach (is_array($line['misheard'] ?? null) ? $line['misheard'] : [] as $word) {
+                    if (is_array($word) && is_string($word['from'] ?? null) && is_string($word['to'] ?? null)) {
+                        $misheard[(int) $line['index']][] = ['from' => trim($word['from']), 'to' => trim($word['to'])];
+                    }
+                }
             }
         }
 
         return [
             'lines' => $out,
+            'misheard' => $misheard,
             'input_tokens' => $message->usage->inputTokens + (int) $message->usage->cacheReadInputTokens + (int) $message->usage->cacheCreationInputTokens,
             'output_tokens' => $message->usage->outputTokens,
             'model' => $message->model,
@@ -232,8 +249,17 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
                             'roman' => ['type' => 'string'],
                             'english' => ['type' => 'string'],
                             'urdu' => ['type' => 'string'],
+                            'misheard' => [
+                                'type' => 'array',
+                                'items' => [
+                                    'type' => 'object',
+                                    'properties' => ['from' => ['type' => 'string'], 'to' => ['type' => 'string']],
+                                    'required' => ['from', 'to'],
+                                    'additionalProperties' => false,
+                                ],
+                            ],
                         ],
-                        'required' => ['index', 'roman', 'english', 'urdu'],
+                        'required' => ['index', 'roman', 'english', 'urdu', 'misheard'],
                         'additionalProperties' => false,
                     ],
                 ],

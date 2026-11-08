@@ -16,6 +16,7 @@ use App\Services\SettingsRepository;
 use App\Services\TranscriptEditor;
 use App\Services\TranscriptStore;
 use App\Services\Views\ClaudeTranscriptConverter;
+use App\Services\Views\SoundCheck;
 use App\Services\Views\TooLongForOneRequest;
 use App\Services\Views\TranscriptConverter;
 use App\Services\Views\TranscriptViews;
@@ -37,7 +38,10 @@ uses(InteractsWithDeviceApi::class, AdminTestHelpers::class);
  * queue and kept with the transcript; the transcript itself never changes.
  */
 
-/** A converter that writes "R:" / "E:" before each line and records the chunks it was given. */
+/**
+ * A converter that writes each line's Roman Urdu letter by letter (a real transliteration, as the views check wants since
+ * v1.5, Phase 1C), "E:" / "U:" before the translations, and records the chunks it was given.
+ */
 function fakeConverter(int $maxLines = 1000): object
 {
     $fake = new class($maxLines) implements TranscriptConverter
@@ -55,7 +59,7 @@ function fakeConverter(int $maxLines = 1000): object
             $this->chunks[] = $lines;
 
             return [
-                'lines' => array_map(fn (string $t): array => array_intersect_key(['roman' => 'R: '.$t, 'english' => 'E: '.$t, 'urdu' => 'U: '.$t], array_flip($views)), $lines),
+                'lines' => array_map(fn (string $t): array => array_intersect_key(['roman' => fakeRoman($t), 'english' => 'E: '.$t, 'urdu' => 'U: '.$t], array_flip($views)), $lines),
                 'input_tokens' => 1000, 'output_tokens' => 2000, 'model' => 'claude-opus-5-5',
             ];
         }
@@ -63,6 +67,12 @@ function fakeConverter(int $maxLines = 1000): object
     app()->instance(TranscriptConverter::class, $fake);
 
     return $fake;
+}
+
+/** Roman Urdu letter by letter ("آپ کیسے ہیں" → "aap kese hen"). */
+function fakeRoman(string $text): string
+{
+    return implode(' ', array_map(SoundCheck::plainRoman(...), SoundCheck::words($text)));
 }
 
 function urduTranscript(object $test, string $language = 'ur'): Transcript
@@ -116,7 +126,7 @@ it('checks every line: markers kept, a transliteration within 25 % of the words,
         ->and(TranscriptViews::failures('I will send it', ['urdu' => 'میں اسے کل صبح ای میل پر بھیج دوں گا'], ['urdu'], 'en'))->toBe([]);
 });
 
-it('asks once more for the lines that fail, and keeps the original words where the second answer fails too', function () {
+it('asks once more for the lines that fail, and mends a line whose second answer fails too with the original words in plain letters', function () {
     app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
     $fake = new class implements TranscriptConverter
     {
@@ -152,20 +162,24 @@ it('asks once more for the lines that fail, and keeps the original words where t
 
     $state = app(TranscriptViews::class)->state($transcript->fresh());
     expect($fake->calls)->toBe(2)
-        ->and($state['roman'])->toBe(['aap kaise hain', 'main bilkul theek hoon', 'کل صبح دس بجے آفس میں ملتے ہیں'])
-        ->and($state['kept'])->toBe(['roman' => [2]]);
+        // Since v1.5 (Phase 1C) no word of "ok" sounds like the line, so each word is the original's in plain letters.
+        ->and($state['roman'])->toBe(['aap kaise hain', 'main bilkul theek hoon', 'kal sabh das baje aafs men malte hen'])
+        ->and($state['kept'])->toEqual((object) []);
+    expect($transcript->fresh()->meta['views']['mended'])->toBe(['roman' => [2]]);
 });
 
-it('lets Roman Urdu have more words than the original (split words) but hardly fewer (dropped words), since v1.5', function () {
+it('lets Roman Urdu split a word in two but never drop or add one (since v1.5, word by word since Phase 1C)', function () {
     $source = implode(' ', array_fill(0, 40, 'لفظ'));
     $roman = fn (int $n): string => implode(' ', array_fill(0, $n, 'lafz'));
-    expect(TranscriptViews::failures($source, ['roman' => $roman(44)], ['roman'], 'ur'))->toBe([])
-        ->and(TranscriptViews::failures($source, ['roman' => $roman(38)], ['roman'], 'ur'))->toBe([])
+    expect(TranscriptViews::failures($source, ['roman' => $roman(40)], ['roman'], 'ur'))->toBe([])
+        ->and(TranscriptViews::failures('یہ آپ کیلئے ہے', ['roman' => 'yeh aap ke liye hai'], ['roman'], 'ur'))->toBe([])
+        ->and(TranscriptViews::failures($source, ['roman' => $roman(41)], ['roman'], 'ur'))->toBe(['roman'])
+        ->and(TranscriptViews::failures($source, ['roman' => $roman(39)], ['roman'], 'ur'))->toBe(['roman'])
         ->and(TranscriptViews::failures($source, ['roman' => $roman(36)], ['roman'], 'ur'))->toBe(['roman'])
         ->and(TranscriptViews::wordList('کل [unclear: دو لفظ] ٹھیک [?ہے]،'))->toBe(['کل', '[unclear: دو لفظ]', 'ٹھیک', '[?ہے]،']);
 });
 
-it('redoes Roman Urdu word by word when a line lost words twice, and keeps the original when the words still do not match', function () {
+it('redoes Roman Urdu word by word when a line lost words twice, and mends it when the words still do not match', function () {
     app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
     $fake = new class implements TranscriptConverter, WordByWordConverter
     {
@@ -206,8 +220,9 @@ it('redoes Roman Urdu word by word when a line lost words twice, and keeps the o
 
     $state = app(TranscriptViews::class)->state($transcript->fresh());
     expect($fake->byWord)->toBe([1 => ['میں', 'بالکل', 'ٹھیک', 'ہوں'], 2 => ['کل', 'صبح', 'دس', 'بجے', 'ملتے', 'ہیں']])
-        ->and($state['roman'])->toBe(['aap kaise hain', 'main bilkul theek hoon', 'کل صبح دس بجے ملتے ہیں'])
-        ->and($state['kept'])->toBe(['roman' => [2]]);
+        // The words that sound right stay ("theek" was not one of them), the others are the original's in plain letters.
+        ->and($state['roman'])->toBe(['aap kaise hain', 'main bilkul theek hoon', 'kal sabh das baje malte hen'])
+        ->and($state['kept'])->toEqual((object) []);
 });
 
 it('makes Roman Urdu as soon as an Urdu transcript is finished, and makes the views searchable in Roman Urdu', function () {
@@ -243,7 +258,7 @@ it('stores both views aligned with the lines, bills the tokens and serves them u
 
     $state = $this->getJson("/api/transcripts/{$transcript->id}/views")->assertOk()->json();
     expect($state['status'])->toBe('ready')
-        ->and($state['roman'])->toBe(['R: آپ کیسے ہیں', 'R: میں ٹھیک ہوں'])
+        ->and($state['roman'])->toBe(['aap kese hen', 'men thek hon'])
         ->and($state['english'])->toBe(['E: آپ کیسے ہیں', 'E: میں ٹھیک ہوں'])
         ->and($state['model'])->toBe('claude-opus-5-5')
         ->and($transcript->fresh()->segments[0]['text'])->toBe('آپ کیسے ہیں');
@@ -256,7 +271,7 @@ it('stores both views aligned with the lines, bills the tokens and serves them u
     // An edit makes the views stale; Urdu opens in Roman Urdu, so they are made again from the edited lines.
     app(TranscriptEditor::class)->edit($transcript->fresh(), [1 => 'میں بالکل ٹھیک ہوں']);
     $this->getJson("/api/transcripts/{$transcript->id}/views")->assertOk()->assertJsonPath('status', 'ready')
-        ->assertJsonPath('roman', ['R: آپ کیسے ہیں', 'R: میں بالکل ٹھیک ہوں']);
+        ->assertJsonPath('roman', ['aap kese hen', 'men balkl thek hon']);
 
     // With the original as the default, an edit only makes them stale (made again on the next request).
     app(SettingsRepository::class)->set('views.default_ur', 'original');
@@ -303,7 +318,7 @@ it('exports a view instead of the original words and shows the views in the cons
 
     $roman = $this->get("/api/transcripts/{$transcript->id}/export?format=txt&view=roman")->assertOk()->getContent();
     $original = $this->get("/api/transcripts/{$transcript->id}/export?format=txt")->assertOk()->getContent();
-    expect($roman)->toContain('R: آپ کیسے ہیں')->and($original)->not->toContain('R: ')->and($original)->toContain('آپ کیسے ہیں');
+    expect($roman)->toContain('aap kese hen')->and($original)->not->toContain('aap kese hen')->and($original)->toContain('آپ کیسے ہیں');
     $this->getJson("/api/transcripts/{$transcript->id}/export?format=txt&view=klingon")->assertStatus(422);
 
     $player = TranscriptPlayerEntry::payload(CaptureSession::query()->findOrFail($transcript->capture_session_id));
@@ -433,4 +448,71 @@ it('says how many lines of each view are done while they are made, and {} otherw
     expect($seen)->toBe(array_map(fn (int $done): array => ['roman' => ['done' => $done, 'total' => 3], 'urdu' => ['done' => $done, 'total' => 3], 'english' => ['done' => $done, 'total' => 3]], [0, 1, 2]));
     $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('views.status', 'ready')->assertJsonPath('views.progress', []);
     expect($this->getJson("/api/transcripts/{$transcript->id}/views")->getContent())->toContain('"progress":{}');
+});
+
+describe('views only transliterate (since v1.5, Phase 1C)', function () {
+    it('never turns "تعل رہا ہوں" into "dekh raha hoon": asked again, then the word kept in plain letters, and the guess a suggested fix', function () {
+        app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+        $fake = new class implements TranscriptConverter
+        {
+            public int $calls = 0;
+
+            public function convert(array $lines, string $language, array $views): array
+            {
+                $this->calls++;
+                $out = [];
+                $misheard = [];
+                foreach ($lines as $i => $text) {
+                    $out[$i] = $i === 0
+                        // The model "corrects" what it believes was misheard, both times, and says so.
+                        ? ['roman' => 'main dekh raha hoon', 'urdu' => 'میں دیکھ رہا ہوں', 'english' => 'I am looking']
+                        : ['roman' => 'mujhe 16 GB wala chahiye', 'urdu' => 'مجھے 16 GB والا چاہیے', 'english' => 'I want the 16 GB one'];
+                    if ($i === 0) {
+                        $misheard[$i] = [['from' => 'تعل', 'to' => 'دیکھ'], ['from' => 'not in the line', 'to' => 'x']];
+                    }
+                }
+
+                return ['lines' => $out, 'misheard' => $misheard, 'input_tokens' => 10, 'output_tokens' => 10, 'model' => 'claude-sonnet-5-5'];
+            }
+        };
+        app()->instance(TranscriptConverter::class, $fake);
+        $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'ur', 'status' => 'completed']);
+        $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'groq', 'status' => TranscriptStatus::Completed, 'language' => 'ur', 'text' => 'x', 'segments' => [
+            ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'میں تعل رہا ہوں'],
+            ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 1000, 'end_ms' => 1900, 'text' => 'مجھے سولہ جی بی والا چاہیے'],
+        ]]);
+
+        app(TranscriptViews::class)->make($transcript);
+
+        $state = app(TranscriptViews::class)->state($transcript->fresh());
+        // Asked twice; the word that changed is the original's in plain letters, the rest stays; numbers in digits pass.
+        expect($fake->calls)->toBe(2)
+            ->and($state['roman'])->toBe(['main tal raha hoon', 'mujhe 16 GB wala chahiye'])
+            ->and($state['urdu'])->toBe(['میں تعل رہا ہوں', 'مجھے 16 GB والا چاہیے'])
+            ->and($state['english'][0])->toBe('I am looking');
+
+        $suggestions = $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()->json('suggestions');
+        expect($suggestions)->toBe([['id' => 0, 'index' => 0, 'from' => 'تعل', 'to' => 'دیکھ', 'reason' => 'view_check', 'status' => 'open']]);
+        // Accepted like any suggested fix: the transcript's word changes, as an edit.
+        $this->postJson("/api/transcripts/{$transcript->id}/suggestions/0", ['accept' => true])->assertOk()
+            ->assertJsonPath('segments.0.text', 'میں دیکھ رہا ہوں')->assertJsonPath('suggestions', []);
+    });
+
+    it('puts the guesses of an earlier run aside when the views are made again, and keeps them when the client fixes run', function () {
+        app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
+        $transcript = urduTranscript($this);
+        $transcript->update(['meta' => ['suggestions' => [['line' => 0, 'from' => 'کیسے', 'to' => 'کیسی', 'reason' => 'view_check', 'status' => 'open']]]]);
+        fakeConverter();
+
+        app(TranscriptViews::class)->make($transcript->fresh());
+
+        expect($transcript->fresh()->meta['suggestions'][0]['status'])->toBe('stale');
+        $this->getJson("/api/transcripts/{$transcript->id}")->assertJsonPath('suggestions', []);
+    });
+
+    it('checks the numbers as digits in every transliteration', function () {
+        expect(TranscriptViews::failures('مجھے سولہ جی بی والا چاہیے', ['roman' => 'mujhe 16 GB wala chahiye', 'urdu' => 'مجھے 16 GB والا چاہیے'], ['roman', 'urdu'], 'ur'))->toBe([])
+            ->and(TranscriptViews::failures('دو ہزار پانچ سو روپے دے دیں', ['roman' => 'Rs 2,500 de dein'], ['roman'], 'ur'))->toBe([])
+            ->and(TranscriptViews::failures('میں تعل رہا ہوں', ['roman' => 'main dekh raha hoon', 'english' => 'I am looking'], ['roman', 'english'], 'ur'))->toBe(['roman']);
+    });
 });

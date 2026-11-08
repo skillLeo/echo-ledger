@@ -47,12 +47,6 @@ final class TranscriptViews
      */
     private const WORD_SLACK = 0.25;
 
-    /**
-     * Since v1.5 it may have only this share fewer (and always 2: "واٹس ایپ" → "WhatsApp"): fewer words than that means
-     * words were dropped (the Roman Urdu check found long lines that lost 10 % of their words within the old slack).
-     */
-    private const DROP_SLACK = 0.05;
-
     /** Source characters per request; a chunk whose answer does not fit is split again. */
     public const CHUNK_CHARS = 6000;
 
@@ -99,7 +93,8 @@ final class TranscriptViews
     /**
      * The views of a converted line that fail the checks, given its original [$source]: a missing or empty view, Hindi
      * letters, a marker lost or added, and for a transliteration (Roman Urdu, and اردو of an Urdu call) a word count more
-     * than 25 % away from the original. Pure; unit-tested.
+     * than 25 % away from the original or, since v1.5 (Phase 1C), a word whose sound is not the original's
+     * (App\Services\Views\SoundCheck). Pure; unit-tested.
      *
      * @param  array<string, string>  $out  view => text
      * @param  list<string>  $views
@@ -114,17 +109,54 @@ final class TranscriptViews
             $text = trim((string) ($out[$view] ?? ''));
             $transliteration = $view === 'roman' || ($view === 'urdu' && $language === 'ur');
             $more = max(2, (int) round($words * self::WORD_SLACK));
-            $fewer = max(2, (int) ceil($words * self::DROP_SLACK));
             $difference = self::words($text) - $words;
             if ($text === ''
                 || ScriptCheck::hasDevanagari($text)
                 || preg_match_all(self::MARKER, $text) !== $markers
-                || ($transliteration && ($difference > $more || -$difference > $fewer))) {
+                || ($transliteration && $difference > $more)
+                // Since v1.5 (Phase 1C): every word keeps its sound ("تعل" never becomes "dekh"); a dropped word fails
+                // here too, while number words written as digits ("دو ہزار پانچ سو" → "2,500") may make fewer words.
+                || ($transliteration && ! SoundCheck::matches($source, $text))) {
                 $failed[] = $view;
             }
         }
 
         return $failed;
+    }
+
+    /** Roman Urdu, and اردو of an Urdu call: the same words in other letters (a translation may reword). */
+    public static function isTransliteration(string $view, string $language): bool
+    {
+        return $view === 'roman' || ($view === 'urdu' && $language === 'ur');
+    }
+
+    /**
+     * A transliteration that failed twice, mended word by word (since v1.5, Phase 1C): of the two answers the one with
+     * fewer words off, with the words that sound right kept and each other word of the original in plain letters (Roman
+     * Urdu) or as it is (اردو). Null when nothing usable came back or the mended line still fails (Hindi letters).
+     *
+     * @param  list<string|null>  $answers
+     */
+    public static function mended(string $source, array $answers, string $view, string $language): ?string
+    {
+        $best = null;
+        $bestOff = PHP_INT_MAX;
+        foreach ($answers as $answer) {
+            if (! is_string($answer) || trim($answer) === '' || ScriptCheck::hasDevanagari($answer)) {
+                continue;
+            }
+            $off = count(SoundCheck::failing($source, $answer)) + SoundCheck::added($source, $answer);
+            if ($off < $bestOff) {
+                [$best, $bestOff] = [$answer, $off];
+            }
+        }
+        if ($best === null) {
+            return null;
+        }
+        $plain = $view === 'roman' ? SoundCheck::plainRoman(...) : fn (string $word): string => $word;
+        $mended = SoundCheck::repair($source, $best, $plain);
+
+        return self::failures($source, [$view => $mended], [$view], $language) === [] ? $mended : null;
     }
 
     private static function words(string $text): int
@@ -300,16 +332,18 @@ final class TranscriptViews
         $model = null;
         $result = [];
         $kept = [];
+        $mendedLines = [];
+        $misheard = [];
         $language = self::sourceLanguage($transcript);
         $linesDone = 0;
         $this->rememberProgress($transcript, 0, count($lines));
         try {
             foreach (self::chunks($lines) as $chunk) {
-                $answer = $this->convertAll($chunk, $language, $available, $tokens, $model);
+                $answer = $this->convertAll($chunk, $language, $available, $tokens, $model, $misheard);
                 // Lines that fail the checks are asked once more (Roman Urdu word by word, since v1.5); a view that fails
                 // again keeps the original words.
                 $bad = array_filter($chunk, fn (string $text, int $i): bool => self::failures($text, $answer[$i] ?? [], $available, $language) !== [], ARRAY_FILTER_USE_BOTH);
-                $again = $bad === [] ? [] : $this->convertAll($bad, $language, $available, $tokens, $model);
+                $again = $bad === [] ? [] : $this->convertAll($bad, $language, $available, $tokens, $model, $misheard);
                 $romanAgainBad = array_filter(
                     $bad,
                     fn (string $text, int $i): bool => in_array('roman', self::failures($text, $answer[$i] ?? [], $available, $language), true)
@@ -320,8 +354,14 @@ final class TranscriptViews
                 foreach ($bad as $i => $text) {
                     foreach (self::failures($text, $answer[$i] ?? [], $available, $language) as $view) {
                         $retry = $view === 'roman' && isset($byWord[$i]) ? $byWord[$i] : ($again[$i][$view] ?? null);
+                        $mended = null;
                         if (is_string($retry) && self::failures($text, [$view => $retry], [$view], $language) === []) {
                             $answer[$i][$view] = $retry;
+                        } elseif (self::isTransliteration($view, $language)
+                            && ($mended = self::mended($text, [$answer[$i][$view] ?? null, is_string($retry) ? $retry : null], $view, $language)) !== null) {
+                            // Since v1.5 (Phase 1C): the words that sound right stay, the others are the original's.
+                            $answer[$i][$view] = $mended;
+                            $mendedLines[$view][] = $i;
                         } else {
                             unset($answer[$i][$view]);
                             $kept[$view][] = $i;
@@ -341,7 +381,7 @@ final class TranscriptViews
 
             return;
         }
-        $views = ['status' => 'ready', 'fingerprint' => $fingerprint, 'model' => $model, 'made_at' => now()->toAtomString(), 'kept' => $kept];
+        $views = ['status' => 'ready', 'fingerprint' => $fingerprint, 'model' => $model, 'made_at' => now()->toAtomString(), 'kept' => $kept, 'mended' => $mendedLines];
         foreach ($available as $view) {
             $views[$view] = [];
             foreach ($lines as $i => $text) {
@@ -350,7 +390,57 @@ final class TranscriptViews
             }
         }
         $this->remember($transcript, $views);
+        $this->suggestMisheard($transcript, $misheard);
         $this->bill($transcript, $model, $tokens);
+    }
+
+    /** Open suggested fixes from one run of the views at most (the model's "probably misheard"). */
+    public const MAX_VIEW_SUGGESTIONS = 20;
+
+    /**
+     * The words the model believes were misheard become suggested fixes (`reason: "view_check"`, since v1.5, Phase 1C):
+     * nothing changes until a person accepts one. Those of an earlier run of the views that are still open are put aside
+     * (the lines may have changed since); ids stay what they were.
+     *
+     * @param  array<int, list<array{from: string, to: string}>>  $misheard
+     */
+    private function suggestMisheard(Transcript $transcript, array $misheard): void
+    {
+        $fresh = Transcript::query()->find($transcript->id);
+        if ($fresh === null) {
+            return;
+        }
+        $suggestions = $fresh->meta['suggestions'] ?? [];
+        $suggestions = is_array($suggestions) ? $suggestions : [];
+        $changed = false;
+        foreach ($suggestions as $n => $s) {
+            if (is_array($s) && ($s['reason'] ?? null) === 'view_check' && ($s['status'] ?? 'open') === 'open') {
+                $suggestions[$n]['status'] = 'stale';
+                $changed = true;
+            }
+        }
+        $segments = $fresh->segments ?? [];
+        $added = 0;
+        $seen = [];
+        foreach ($misheard as $line => $words) {
+            foreach ($words as $word) {
+                $from = mb_substr(trim($word['from']), 0, 100);
+                $to = mb_substr(trim($word['to']), 0, 100);
+                $key = $line."\0".$from;
+                if ($added >= self::MAX_VIEW_SUGGESTIONS || $from === '' || $to === '' || $from === $to || isset($seen[$key])
+                    || ! str_contains((string) ($segments[$line]['text'] ?? ''), $from)) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $suggestions[] = ['line' => (int) $line, 'from' => $from, 'to' => $to, 'reason' => 'view_check', 'status' => 'open'];
+                $added++;
+                $changed = true;
+            }
+        }
+        if ($changed) {
+            $fresh->forceFill(['meta' => [...($fresh->meta ?? []), 'suggestions' => $suggestions]])->save();
+            $transcript->setRawAttributes($fresh->getAttributes(), true);
+        }
     }
 
     /**
@@ -406,9 +496,10 @@ final class TranscriptViews
      * @param  array<int, string>  $chunk
      * @param  array{input: int, output: int}  $tokens
      * @param  list<string>  $views
+     * @param  array<int, list<array{from: string, to: string}>>  $misheard  the words the model believes were misheard, per line
      * @return array<int, array<string, string>>
      */
-    private function convertAll(array $chunk, string $language, array $views, array &$tokens, ?string &$model): array
+    private function convertAll(array $chunk, string $language, array $views, array &$tokens, ?string &$model, array &$misheard): array
     {
         try {
             $answer = $this->converter->convert($chunk, $language, $views);
@@ -419,13 +510,18 @@ final class TranscriptViews
             $half = (int) ceil(count($chunk) / 2);
 
             return array_replace(
-                $this->convertAll(array_slice($chunk, 0, $half, true), $language, $views, $tokens, $model),
-                $this->convertAll(array_slice($chunk, $half, null, true), $language, $views, $tokens, $model),
+                $this->convertAll(array_slice($chunk, 0, $half, true), $language, $views, $tokens, $model, $misheard),
+                $this->convertAll(array_slice($chunk, $half, null, true), $language, $views, $tokens, $model, $misheard),
             );
         }
         $tokens['input'] += $answer['input_tokens'];
         $tokens['output'] += $answer['output_tokens'];
         $model = $answer['model'];
+        foreach ($answer['misheard'] ?? [] as $line => $words) {
+            foreach ($words as $word) {
+                $misheard[(int) $line][] = $word;
+            }
+        }
 
         return $answer['lines'];
     }
