@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { LibraryView } from "./LibraryView";
 import type { CallNotes, LibraryItem, TranscriptDetail } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeTranscript } from "../../test/fixtures";
+import { makeItem, makeTranscript, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -162,7 +162,7 @@ describe("Always write X as Y (learn after an edit)", () => {
     expect(within(detail()).queryByText(/Add to Acme’s vocabulary/)).not.toBeInTheDocument();
     fireEvent.click(within(offer).getByRole("button", { name: "Yes" }));
     await waitFor(() => expect(callsOf("vocabulary_replace_add")).toEqual([{ from: "la ravel", to: "Laravel", clientId: "c1" }]));
-    expect(notify).toHaveBeenCalledWith("Acme's transcripts will write “Laravel” from now on");
+    expect(notify).toHaveBeenCalledWith("Acme's transcripts will write “Laravel” from now on", false, { kind: "project", id: expect.any(String) });
     expect(within(detail()).queryByRole("group", { name: "Always write it this way" })).not.toBeInTheDocument();
   });
 

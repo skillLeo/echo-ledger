@@ -6,6 +6,7 @@ import { timestamp } from "../../lib/format";
 import { usePoll } from "../../lib/usePoll";
 import { notifyWhenAway } from "../../lib/notify";
 import { AlertIcon, SparkleIcon } from "../../components/Icons";
+import type { Notify } from "../../lib/notice";
 
 const CHANGE_KIND: Record<NonNullable<NoteItem["kind"]>, string> = { add: "Add", remove: "Remove", modify: "Change" };
 
@@ -47,7 +48,7 @@ export function CallNotesSection({ sessionId, clientName, onSeek, notify }: {
   clientName: string;
   /** Plays the recording from a moment. */
   onSeek: (ms: number) => void;
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
 }) {
   // undefined: loading; null: none written yet.
   const [notes, setNotes] = useState<CallNotes | null | undefined>(undefined);

@@ -5,8 +5,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, listenTo, type MissingPermission, type PermissionKind, type PermissionState, type PermissionsStatus } from "../../lib/ipc";
 import { useWindowShown } from "../../lib/visibility";
-import { AlertIcon, CloseIcon } from "../../components/Icons";
+import { AlertIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
+import { Notice } from "../../components/Notice";
+import { StateBanner } from "../../components/StateBanner";
 
 export interface PermissionStepText {
   title: string;
@@ -133,13 +135,16 @@ export function PermissionBanner({ recordingRef }: { recordingRef: string | null
   if (missing.length === 0 || !permissions) return null;
   return (
     <div className="permission-banner" data-testid="permission-banner">
-      {missing.map((m) => (
-        <div className="banner warn" role="status" key={m.kind}>
-          <AlertIcon size={16} />
-          <span>{m.sentence}</span>
-          <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings(m.kind).catch(() => undefined)}>{SETTINGS_LABEL[permissions.platform] || "Open settings"}</button>
-        </div>
-      ))}
+      {/* A state: no timer; closed until it changes; a click opens the fix (v1.6.1 Notices). */}
+      {missing.map((m) => {
+        const fix = () => void api.openPrivacySettings(m.kind).catch(() => undefined);
+        return (
+          <StateBanner key={m.kind} id={`permission-${m.kind}`} state={m.sentence} role="status" icon={<AlertIcon size={16} />} onOpen={fix}
+            actions={<button type="button" className="btn compact" onClick={fix}>{SETTINGS_LABEL[permissions.platform] || "Open settings"}</button>}>
+            <span>{m.sentence}</span>
+          </StateBanner>
+        );
+      })}
     </div>
   );
 }
@@ -162,12 +167,11 @@ export function PermissionLossNotice() {
   return (
     <>
       {lost && !dismissed && (
-        <div className="banner warn" role="status" data-testid="permission-loss">
-          <AlertIcon size={16} />
+        <Notice kind="banner" tone="warn" className="banner warn" role="status" testId="permission-loss" icon={<AlertIcon size={16} />} timeoutMs={null}
+          onOpen={() => setGuide(true)} onDismiss={dismiss}
+          actions={<button type="button" className="btn compact" onClick={() => setGuide(true)}>Set up</button>}>
           <span>{lost}</span>
-          <button type="button" className="btn compact" onClick={() => setGuide(true)}>Set up</button>
-          <button type="button" className="banner-close" aria-label="Dismiss" onClick={dismiss}><CloseIcon size={14} /></button>
-        </div>
+        </Notice>
       )}
       {guide && <PermissionGuide permissions={permissions} onChange={setPermissions} onClose={closeGuide} />}
     </>

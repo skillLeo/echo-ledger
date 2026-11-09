@@ -23,8 +23,8 @@ import { ClientAvatar, clientSummary } from "./ClientAvatar";
 import { MenuButton, type MenuItem } from "./MenuButton";
 import { PlanBadge } from "./Upgrade";
 import { ProjectScreens } from "./ScreenMoments";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
-type Notify = (text: string, error?: boolean) => void;
 type Tab = "recordings" | "files" | "notes" | "screens" | "ai_notes";
 const TABS: readonly [Tab, string][] = [["recordings", "Recordings"], ["files", "Files"], ["notes", "Notes"], ["screens", "Screens"], ["ai_notes", "AI notes"]];
 
@@ -157,7 +157,7 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
     try {
       const text = await api.clientBundle(client.id);
       await navigator.clipboard.writeText(text);
-      notify("Copied the brief, memory and recent call notes for AI");
+      notify("Copied the brief, memory and recent call notes for AI", false, NO_TARGET);
     } catch (e) {
       notify(typeof e === "string" ? e : "Could not copy the project's context", true);
     }
@@ -372,7 +372,7 @@ function Brief({ ws, clientId, notify, onChange, onReload, canMake = true }: { w
       const { data } = await api.saveClientBrief(clientId, next);
       onChange({ ...ws, brief: data });
       setEditing(false);
-      notify("Brief saved");
+      notify("Brief saved", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {
@@ -649,7 +649,7 @@ function Files({ ws, clientId, notify, onChange }: { ws: Workspace; clientId: st
 
   const upload = async (paths: string[]) => {
     const wanted = paths.filter((p) => (CLIENT_FILE_TYPES as readonly string[]).includes(fileExtension(p)));
-    if (wanted.length < paths.length) notify("Only PDF, Word (.docx), text and Markdown files can be added.", wanted.length === 0);
+    if (wanted.length < paths.length) notify("Only PDF, Word (.docx), text and Markdown files can be added.", wanted.length === 0, NO_TARGET);
     for (const path of wanted) {
       setUploading((list) => [...list, path]);
       try {

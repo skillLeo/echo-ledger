@@ -11,8 +11,8 @@ import { CloseIcon, PinIcon } from "../../components/Icons";
 import { ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
 import { MoveRecordingsDialog } from "./ProjectDialogs";
 import { FiledByLine } from "./FilingRules";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
-type Notify = (message: string, error?: boolean) => void;
 
 const NEW_CLIENT = "__new__";
 const EXPORT_FORMATS: readonly (readonly [BulkExportFormat, string])[] = [
@@ -187,7 +187,7 @@ export function OrganisePanel({ item, clients, knownLabels, notify, onClientCrea
     setBusy(true);
     try {
       await api.organiseSession(item.id, patch);
-      if (done) notify(done);
+      if (done) notify(done, false, { kind: "recording", id: item.id });
       return true;
     } catch (e) {
       notify(errorMessage(e), true);
@@ -269,7 +269,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
     setBusy(true);
     try {
       const changed = await api.bulkSessions(ids, action, clientId, value);
-      notify(action === "delete" ? `${changed} deleted` : changed === 1 ? "1 recording updated" : `${changed} recordings updated`);
+      notify(action === "delete" ? `${changed} deleted` : changed === 1 ? "1 recording updated" : `${changed} recordings updated`, false, NO_TARGET);
       if (action === "delete") onDone();
       setLabel("");
     } catch (e) {
@@ -284,7 +284,7 @@ export function BulkBar({ ids, clients, knownLabels, notify, onDone, onClientCre
     try {
       // The core asks where to save the zip; null means the person cancelled there.
       const path = await api.exportSessions(ids, format);
-      if (path) notify(`Saved ${path}`);
+      if (path) notify(`Saved ${path}`, false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {
@@ -359,7 +359,8 @@ export function BinPanel({ notify, onClose }: { notify: Notify; onClose: () => v
     setBusy(id);
     try {
       await fn();
-      notify(done);
+      // A restored recording is back in the Library.
+      notify(done, false, done.startsWith("Restored") ? { kind: "recording", id } : NO_TARGET);
       await load();
     } catch (e) {
       notify(errorMessage(e), true);

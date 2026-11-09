@@ -12,6 +12,7 @@ import { DEFAULT_SERVER, cleanServer, serverHost } from "../../lib/server";
 import { PairingView } from "./PairingView";
 import { ShieldIcon } from "../../components/Icons";
 import { Wordmark } from "../../components/BrandMark";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 const PAIRING_ONLY = "This server does not sign in with accounts yet. Sign in with a code from the console instead.";
 const OTP_ASKED = "Your account has two-factor sign-in. Type the code your authenticator app shows, or a recovery code.";
@@ -79,7 +80,7 @@ type Step =
 
 export function SignInView({ onSignedIn, notify, serverUrl, defaultServer = DEFAULT_SERVER }: {
   onSignedIn: (s: AppStatus) => void;
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
   /** The server this computer used before (signed out). */
   serverUrl?: string | null;
   /** The server built into the app (lib/server.ts); empty asks for the address. Tests pass their own. */
@@ -120,7 +121,7 @@ export function SignInView({ onSignedIn, notify, serverUrl, defaultServer = DEFA
     const subs = [
       listenTo("signin:done", (status) => {
         setWaiting(false);
-        parent.current.notify(SIGNED_IN);
+        parent.current.notify(SIGNED_IN, false, NO_TARGET);
         parent.current.onSignedIn(status);
       }),
       listenTo("signin:failed", (text) => {
@@ -147,7 +148,7 @@ export function SignInView({ onSignedIn, notify, serverUrl, defaultServer = DEFA
   };
 
   const signedIn = (status: AppStatus, text = SIGNED_IN) => {
-    notify(text);
+    notify(text, false, NO_TARGET);
     onSignedIn(status);
   };
 

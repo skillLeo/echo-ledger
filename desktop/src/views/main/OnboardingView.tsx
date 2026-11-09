@@ -10,6 +10,7 @@ import { Wordmark } from "../../components/BrandMark";
 import { CheckIcon } from "../../components/ControlIcons";
 import { CONSENT_TICK } from "../../lib/consent";
 import { PERMISSION_STEP, PermissionStep } from "./Permissions";
+import type { Notify } from "../../lib/notice";
 
 export const STEPS = ["Permissions", "Sign in", "Test", "Done"] as const;
 /** On a Mac the welcome comes first and each permission is a step of its own. */
@@ -26,7 +27,7 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
   status: AppStatus;
   onStatus: (s: AppStatus) => void;
   onFinished: () => void;
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
 }) {
   const steps = stepsFor(status.platform);
   const [step, setStep] = useState<Step>(steps[0]);

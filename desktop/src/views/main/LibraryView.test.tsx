@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { LibraryView } from "./LibraryView";
 import type { LibraryItem, Segment, TranscriptDetail } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeEntitlements, makeItem, makeTranscript } from "../../test/fixtures";
+import { makeEntitlements, makeItem, makeTranscript, anyTarget } from "../../test/fixtures";
 import { OPEN_SECTION_EVENT, resetEntitlementsForTests } from "../../lib/entitlements";
 import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
 
@@ -562,7 +562,7 @@ describe("LibraryView transcript", () => {
     expect(sent).toContain(TRANSCRIPTS["tr-a"].segments[0].text);
     expect(writeText).toHaveBeenCalledWith(sent);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).not.toBeInTheDocument());
-    expect(notify).toHaveBeenCalledWith("Opening WhatsApp with the text");
+    expect(notify).toHaveBeenCalledWith("Opening WhatsApp with the text", false, anyTarget);
 
     // From another recording's row menu: it opens, and so does the sheet.
     fireEvent.click(within(list()).getByRole("button", { name: "More for Client briefing" }));
@@ -939,7 +939,7 @@ describe("LibraryView copy", () => {
     fireEvent.click(within(detail()).getByRole("button", { name: "Copy text" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     expect(writeText).toHaveBeenCalledWith(EXPECTED_PLAIN);
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Copied"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Copied", false, anyTarget));
   });
 
   it("'Copy with timestamps' prefixes every line with [m:ss] / [h:mm:ss]", async () => {
@@ -947,7 +947,7 @@ describe("LibraryView copy", () => {
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     fireEvent.click(within(detail()).getByRole("button", { name: "Copy with timestamps" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(EXPECTED_TIMED));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Copied with timestamps"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Copied with timestamps", false, anyTarget));
   });
 
   it("'Copy for AI' starts with the note on unsure words", async () => {
@@ -955,7 +955,7 @@ describe("LibraryView copy", () => {
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     fireEvent.click(within(detail()).getByRole("button", { name: "Copy for AI" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(`Note: [?word] = the transcription is unsure about this word; [unclear] = inaudible audio.\n\n${EXPECTED_PLAIN}`));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Copied for AI, with the note on unsure words"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Copied for AI, with the note on unsure words", false, anyTarget));
   });
 
   it("omits the speaker label for a single-speaker voice note", async () => {
@@ -1002,7 +1002,8 @@ describe("LibraryView delete", () => {
     respond("library_list", ITEMS.filter((i) => i.id !== "a"));
     fireEvent.click(within(detail()).getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(callsOf("delete_session")).toEqual([{ id: "a" }]));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Deleted"));
+    // The toast goes to Recently deleted, where it can be restored (DESIGN_SYSTEM.md "Notices").
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Deleted. Restore it from Recently deleted for 48 hours.", false, expect.objectContaining({ kind: "action" })));
     expect(screen.queryByText("Zoom with Acme")).not.toBeInTheDocument();
     expect(within(detail()).getByText("Select a recording to read its transcript.")).toBeInTheDocument();
   });
@@ -1153,7 +1154,7 @@ describe("transcript tools in the library (B6-B12)", () => {
     fireEvent.change(within(detail()).getByLabelText("Export"), { target: { value: "docx" } });
     await flushAsync();
     expect(callsOf("export_transcript")[0]).toEqual({ id: "tr-a", format: "docx", timestamps: true, speakers: true, view: null });
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Saved to"));
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Saved to"), false, undefined);
   });
 
   it("finds a moment in any transcript and opens the recording there", async () => {
@@ -1242,7 +1243,7 @@ describe("LibraryView Re-transcribe as", () => {
     await flushAsync();
 
     expect(callsOf("session_retranscribe")).toEqual([{ id: "a", language: "ur" }]);
-    expect(notify).toHaveBeenCalledWith("Re-transcribing in Urdu. The current transcript stays until the new one is ready.");
+    expect(notify).toHaveBeenCalledWith("Re-transcribing in Urdu. The current transcript stays until the new one is ready.", false, anyTarget);
     expect(within(detail()).getByText("Hello, this is Sam.")).toBeInTheDocument();
   });
 
@@ -1577,7 +1578,7 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     fireEvent.click(within(line).getByRole("button", { name: "Re-transcribe" }));
     await flushAsync();
     expect(callsOf("session_retranscribe")).toEqual([{ id: "u", language: "ur" }]);
-    expect(notify).toHaveBeenCalledWith("Re-transcribing in Urdu. The current transcript stays until the new one is ready.");
+    expect(notify).toHaveBeenCalledWith("Re-transcribing in Urdu. The current transcript stays until the new one is ready.", false, anyTarget);
   });
 
   it("sends no language for an Auto recording", async () => {

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type AppStatus, type ReadyCheck, type ReadyReport } from "../../lib/ipc";
 import { CheckIcon } from "../../components/ControlIcons";
 import { CloseIcon } from "../../components/Icons";
+import type { Notify } from "../../lib/notice";
 
 export const READY = "Ready to record calls";
 
@@ -54,7 +55,7 @@ function ReadyRow({ check, busy, onFix }: { check: ReadyCheck; busy: boolean; on
 }
 
 /** The Ready check card: on the Record page and after signing in. Problems first, each with its fix. */
-export function ReadyCheckCard({ notify }: { notify?: (text: string, error?: boolean) => void }) {
+export function ReadyCheckCard({ notify }: { notify?: Notify }) {
   const [report, setReport] = useReadyReport();
   const [busy, setBusy] = useState(false);
   const run = useCallback(async (job: () => Promise<ReadyReport>) => {

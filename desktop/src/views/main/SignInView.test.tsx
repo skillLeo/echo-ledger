@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SignInView } from "./SignInView";
 import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeStatus } from "../../test/fixtures";
+import { makeStatus, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -113,7 +113,7 @@ describe("SignInView: one flow, the email first (v1.6)", () => {
 
     await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith(signedIn));
     expect(callsOf("auth_sign_up")).toEqual([{ name: "Sam Khan", acceptTerms: true }]);
-    expect(notify).toHaveBeenCalledWith("Welcome to EchoLedger. Your account is ready.");
+    expect(notify).toHaveBeenCalledWith("Welcome to EchoLedger. Your account is ready.", false, anyTarget);
   });
 
   it("goes back to the email when a sign-up waited too long", async () => {
@@ -158,7 +158,7 @@ describe("SignInView: one flow, the email first (v1.6)", () => {
       { serverUrl: BUILT_IN, email: "sam@example.test", password: " pass word ", otp: null, deviceName: "" },
       { serverUrl: BUILT_IN, email: "sam@example.test", password: " pass word ", otp: "123 456", deviceName: "" },
     ]);
-    expect(notify).toHaveBeenCalledWith("Signed in. Your library will sync now.");
+    expect(notify).toHaveBeenCalledWith("Signed in. Your library will sync now.", false, anyTarget);
   });
 
   it("emails an existing account a code instead of the password, with the two-factor code after it", async () => {
@@ -300,7 +300,7 @@ describe("SignInView: Google in the browser, and QR / code", () => {
     const status = makeStatus({ deviceName: "Studio Mac" });
     await emitEvent("signin:done", status);
     expect(onSignedIn).toHaveBeenCalledWith(status);
-    expect(notify).toHaveBeenCalledWith("Signed in. Your library will sync now.");
+    expect(notify).toHaveBeenCalledWith("Signed in. Your library will sync now.", false, anyTarget);
   });
 
   it("keeps waiting for an earlier sign-in's link, says why a link failed, and stops on Cancel", async () => {

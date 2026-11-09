@@ -7,7 +7,7 @@ import { BulkBar } from "./LibraryOrganise";
 import type { LibraryItem, TranscriptDetail } from "../../lib/ipc";
 import { needsLiveStatus } from "../../lib/library";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeTranscript } from "../../test/fixtures";
+import { makeItem, makeTranscript, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -77,7 +77,7 @@ describe("Rename", () => {
     expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { title: "Acme kickoff" } }]);
     answer({ data: done("a", "Acme kickoff") });
     await flushAsync();
-    expect(notify).toHaveBeenCalledWith("Renamed");
+    expect(notify).toHaveBeenCalledWith("Renamed", false, { kind: "recording", id: expect.any(String) });
     expect(titles()).toContain("Acme kickoff");
   });
 
@@ -106,7 +106,7 @@ describe("Rename", () => {
     await flushAsync();
     expect(callsOf("session_organise")).toEqual([{ id: "a", patch: { title: null } }]);
     expect(within(detail()).getByRole("heading", { name: "Zoom call" })).toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith("The automatic title will be used");
+    expect(notify).toHaveBeenCalledWith("The automatic title will be used", false, anyTarget);
   });
 
   it("marks an automatic title, and a title the person types replaces the mark (E4)", async () => {
@@ -211,7 +211,7 @@ describe("Save and export", () => {
     fireEvent.change(menu, { target: { value: "srt" } });
     await flushAsync();
     expect(callsOf("export_transcript")).toEqual([{ id: "tr-a", format: "srt", timestamps: true, speakers: true, view: "roman" }]);
-    expect(notify).toHaveBeenCalledWith("Saved to D:\\Clients\\Acme call.srt");
+    expect(notify).toHaveBeenCalledWith("Saved to D:\\Clients\\Acme call.srt", false, anyTarget);
   });
 
   it("exports the original words when Original is shown", async () => {
@@ -244,7 +244,7 @@ describe("Save and export", () => {
     fireEvent.change(menu, { target: { value: "html" } });
     await flushAsync();
     expect(callsOf("export_transcript")[0]).toMatchObject({ format: "html" });
-    expect(notify).toHaveBeenCalledWith("Opened the print page in your browser: choose Save as PDF there");
+    expect(notify).toHaveBeenCalledWith("Opened the print page in your browser: choose Save as PDF there", false, anyTarget);
   });
 
   it("saves the audio of the open recording", async () => {
@@ -254,7 +254,7 @@ describe("Save and export", () => {
     fireEvent.click(within(detail()).getByRole("button", { name: "Save audio" }));
     await flushAsync();
     expect(callsOf("save_audio")).toEqual([{ id: "a" }]);
-    expect(notify).toHaveBeenCalledWith("Saved to D:\\Audio\\a.flac");
+    expect(notify).toHaveBeenCalledWith("Saved to D:\\Audio\\a.flac", false, undefined);
   });
 
   it("offers no Save audio when the recording has no audio on the server", async () => {

@@ -145,7 +145,7 @@ describe("first-run wizard (B19)", () => {
     render(<OnboardingView status={makeStatus()} onStatus={vi.fn()} onFinished={onFinished} notify={vi.fn()} />);
     const steps = screen.getByRole("list", { name: "Setup steps" });
     expect(within(steps).getByText("Permissions")).toHaveAttribute("aria-current", "step");
-    expect(screen.getByTestId("consent-notice")).toHaveTextContent("Tell participants you are recording where required.");
+    expect(screen.getByTestId("consent-notice")).toHaveTextContent("Tell the people in your meeting that you are recording where the law requires it.");
     fireEvent.click(await screen.findByRole("button", { name: "Open settings" }));
     expect(callsOf("open_privacy_settings")).toEqual([{ kind: "microphone" }]);
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));

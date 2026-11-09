@@ -303,12 +303,12 @@ pub async fn record_now(app: &AppHandle) -> AppResult<()> {
         RecordNow::Stop => stop_recording(app, false).await,
         RecordNow::Call(source) => {
             start_call_recording(app, source.as_str(), false).await?;
-            let _ = app.emit("app:toast", "Recording the call, both sides");
+            toast_to(app, "Recording the call, both sides", Target::Page("record"));
             Ok(())
         }
         RecordNow::VoiceNote => {
             toggle_mic_note(app).await?;
-            let _ = app.emit("app:toast", "Recording a voice note");
+            toast_to(app, "Recording a voice note", Target::Page("record"));
             Ok(())
         }
     }
@@ -323,7 +323,7 @@ pub async fn start_backup(app: &AppHandle, source: crate::detect::classify::Sour
     }
     match start_call_recording(app, source.as_str(), true).await {
         Ok(()) => {
-            let _ = app.emit("app:toast", BACKUP_TITLE);
+            toast_to(app, BACKUP_TITLE, Target::Page("record"));
             crate::notifications::send(app, crate::notifications::Category::CallCapture, BACKUP_TITLE, BACKUP_BODY);
         }
         Err(e) => crate::refusal::say(app, &e.to_string(), crate::refusal::asked_by_meeting(&e)),
@@ -1267,7 +1267,7 @@ pub(crate) fn forget_client(app: &AppHandle, client_id: &str) {
         emit_pending(app);
         refresh_after_call(app);
     }
-    let _ = app.emit("app:toast", "The project chosen for keyterms was removed on the server, so no project is set now.");
+    toast_to(app, "The project chosen for keyterms was removed on the server, so no project is set now.", Target::Account("general"));
 }
 
 /// Imports files (the Import button or a drop on the main window), one recording each, with one client and language
@@ -1575,7 +1575,8 @@ async fn run_upload_cycle(app: &AppHandle) {
         notices.push(crate::files::duplicates_notice(duplicates));
     }
     if !notices.is_empty() {
-        let _ = app.emit("app:toast", notices.join(". "));
+        // Uploaded recordings are in the Library: the toast goes there (v1.6.1).
+        toast_to(app, &notices.join(". "), Target::Page("library"));
     }
     emit_status(app);
 }
@@ -1622,6 +1623,35 @@ pub fn open_app_link(app: &AppHandle, link: String) {
     crate::tray::show_main(app);
     let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: None, link: Some(link) };
     crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
+}
+
+/// Where a toast from the core goes when it is clicked (v1.6.1, docs/DESIGN_SYSTEM.md "Notices"); the window's
+/// `NoticeTarget` (lib/notice.ts) reads it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    /// A page of the main window (`record` is Home, `library`, `activity`…).
+    Page(&'static str),
+    /// A tab or a section of Account (`general`, `devices`, `plan`…).
+    Account(&'static str),
+}
+
+impl Target {
+    pub fn json(self) -> serde_json::Value {
+        match self {
+            Self::Page(page) => serde_json::json!({"kind": "page", "page": page}),
+            Self::Account(section) => serde_json::json!({"kind": "account", "section": section}),
+        }
+    }
+}
+
+/// The payload of a toast that goes somewhere: `{"text", "target"}` (a plain string is a toast about nothing).
+pub fn toast_payload(text: &str, target: Target) -> serde_json::Value {
+    serde_json::json!({"text": text, "target": target.json()})
+}
+
+/// A toast in the main window that goes to `target` when clicked.
+pub fn toast_to(app: &AppHandle, text: &str, target: Target) {
+    let _ = app.emit("app:toast", toast_payload(text, target));
 }
 
 /// Polls the activity centre every minute and shows new notifications (B18), outside the quiet hours.
@@ -1688,4 +1718,18 @@ async fn poll_activity(app: &AppHandle) -> AppResult<()> {
         crate::notifications::show(app, &settings, category, &title, &body);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod notice_tests {
+    use super::{Target, toast_payload};
+
+    #[test]
+    fn a_toast_that_goes_somewhere_carries_its_target_for_the_window() {
+        assert_eq!(
+            toast_payload("Uploaded 2 recording(s) for transcription", Target::Page("library")),
+            serde_json::json!({"text": "Uploaded 2 recording(s) for transcription", "target": {"kind": "page", "page": "library"}})
+        );
+        assert_eq!(Target::Account("general").json(), serde_json::json!({"kind": "account", "section": "general"}));
+    }
 }

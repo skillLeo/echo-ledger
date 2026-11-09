@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { UpdateBanner, UpdatesPanel, updateLine } from "./UpdateSettings";
 import type { UpdateStatus } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeRecording, makeStatus } from "../../test/fixtures";
+import { makeRecording, makeStatus, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -104,7 +104,7 @@ describe("the update prompt", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Later" }));
     expect(screen.queryByTestId("update-banner")).not.toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith("The update installs the next time EchoLedger starts.");
+    expect(notify).toHaveBeenCalledWith("The update installs the next time EchoLedger starts.", false, anyTarget);
     // A newer download asks again.
     await emitEvent("update:status", update({ phase: "ready", version: "1.5.2" }));
     expect(screen.getByTestId("update-banner")).toHaveTextContent("1.5.2");

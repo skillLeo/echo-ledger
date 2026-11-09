@@ -484,7 +484,10 @@ select.chip option { color: var(--text); background: var(--surface); }
 .notice { border: 1px solid var(--border); border-radius: var(--radius-field); padding: 10px var(--space-3); line-height: 1.5; background: var(--surface-2); }
 .notice.error { border-color: transparent; background: var(--danger-soft); }
 .notice.brand { border-color: transparent; background: var(--accent-soft); }
-.toast { position: fixed; bottom: var(--space-5); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: var(--space-2); background: var(--text); color: var(--bg); padding: 10px var(--space-4); border-radius: var(--radius-field); box-shadow: var(--shadow-2); max-width: min(520px, calc(100% - 48px)); z-index: 30; font-weight: 500; animation: rise var(--motion-base) var(--ease-out) both; }
+/* Toasts (v1.6.1, DESIGN_SYSTEM.md "Notices"): one at the bottom centre, in a region that lets clicks through around it,
+   so the toast itself is free to follow a swipe. */
+.toast-region { position: fixed; left: 0; right: 0; bottom: var(--space-5); z-index: 30; display: flex; justify-content: center; pointer-events: none; padding: 0 var(--space-5); }
+.toast { pointer-events: auto; background: var(--text); color: var(--bg); padding: 8px var(--space-2) 10px var(--space-4); border-radius: var(--radius-field); box-shadow: var(--shadow-2); max-width: min(560px, 100%); font-weight: 500; animation: rise var(--motion-base) var(--ease-out) both; overflow: hidden; }
 .toast.error { background: var(--danger-strong); color: var(--on-accent); }
 @keyframes rise { from { translate: 0 8px; opacity: 0; } to { translate: 0 0; opacity: 1; } }
 
@@ -587,7 +590,7 @@ button.segment.active { background: var(--accent-soft); }
 /* Monthly transcription limit (A5.2): an inline banner above the page. */
 .banner { display: flex; align-items: center; gap: var(--space-3); min-height: 44px; margin-bottom: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-field); border: 0; background: var(--surface-2); line-height: 1.4; flex: none; }
 .banner > svg { flex: none; }
-.banner > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.banner > span:not(.notice-icon):not(.notice-actions):not(.notice-timer) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .banner.danger { background: var(--danger-soft); }
 .banner.danger > svg { color: var(--danger); }
 .banner.warn { background: color-mix(in srgb, var(--warning-fill) 18%, var(--surface)); }
@@ -1426,3 +1429,27 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .whatsapp-saved { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; color: var(--success); }
 .whatsapp-saved b { color: var(--text); overflow-wrap: anywhere; }
 .whatsapp-done p { margin: 0 0 var(--space-3); line-height: 1.5; }
+
+/* ---------- notices (v1.6.1, DESIGN_SYSTEM.md "Notices"): click to go, ×, a timer bar, swipe to close ---------- */
+.notice-shell { position: relative; display: flex; align-items: center; gap: var(--space-2); min-width: 0; touch-action: pan-y; }
+.notice-shell.dragging { cursor: grabbing; user-select: none; }
+.notice-shell.settling { transition: transform var(--motion-base) var(--ease-out), opacity var(--motion-base) var(--ease-out); }
+.notice-icon { flex: none; display: grid; place-items: center; }
+.notice-text, .notice-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--space-2); overflow-wrap: anywhere; line-height: 1.4; }
+.notice-open { border: 0; background: none; padding: 2px 0; margin: 0; color: inherit; font: inherit; text-align: start; cursor: pointer; border-radius: var(--radius-tag); }
+.notice-shell.has-target { cursor: pointer; }
+.notice-shell.has-target .notice-open:hover { text-decoration: underline; text-underline-offset: 3px; }
+.notice-actions { flex: none; display: flex; align-items: center; gap: var(--space-1); }
+.notice-close { flex: none; width: 28px; height: 28px; border: 0; border-radius: var(--radius-full); background: transparent; color: inherit; opacity: 0.7; cursor: pointer; display: grid; place-items: center; transition: opacity var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out); }
+.notice-close:hover, .notice-close:focus-visible { opacity: 1; background: color-mix(in srgb, currentColor 14%, transparent); }
+/* The time left: a thin bar along the bottom edge that empties; it stops while the notice is pointed at, touched or
+   focused. With reduced motion it does not move (the time still runs). */
+.notice-timer { position: absolute; left: var(--space-3); right: var(--space-3); bottom: 3px; height: 2px; border-radius: 1px; overflow: hidden; background: color-mix(in srgb, currentColor 18%, transparent); pointer-events: none; }
+.notice-timer > span { display: block; height: 100%; background: currentColor; opacity: 0.65; transform-origin: left center; animation-name: notice-countdown; animation-timing-function: linear; animation-fill-mode: forwards; }
+.notice-timer > span.paused { animation-play-state: paused; }
+@keyframes notice-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.banner.notice-shell .notice-close { color: var(--text-muted); }
+@media (prefers-reduced-motion: reduce) {
+  .notice-timer > span { animation: none !important; }
+  .notice-shell.settling { transition: none; }
+}

@@ -1,6 +1,7 @@
 // Filing rules on a project's page (docs/API.md "Filing rules", since v1.5): the list, adding a title, app or contact
 // rule, removing one, and the core's refusals in plain words.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { anyTarget } from "../../test/fixtures";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { RulesSection } from "./FilingRules";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
@@ -45,7 +46,7 @@ describe("filing rules", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Title contains" }), { target: { value: "  weekly sync " } });
     fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
     await waitFor(() => expect(callsOf("client_rule_add")).toEqual([{ id: "c1", kind: "title", value: "weekly sync" }]));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Rule added: Title contains “weekly sync”"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Rule added: Title contains “weekly sync”", false, anyTarget));
     expect(within(await screen.findByRole("list", { name: "Acme filing rules" })).getByText("Title contains “weekly sync”")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Title contains" })).toHaveValue("");
   });

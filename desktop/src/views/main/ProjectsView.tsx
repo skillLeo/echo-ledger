@@ -12,8 +12,8 @@ import { DeleteProjectDialog, MoveProjectDialog, moveRecordings, movedText, Name
 import { RulesSection } from "./FilingRules";
 import { ShareDialog } from "./ShareDialog";
 import { RequestLinksSheet } from "./RequestLinks";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
-type Notify = (text: string, error?: boolean) => void;
 type Dialog =
   | { kind: "new"; parentId: string | null }
   | { kind: "rename"; project: ClientFolder }
@@ -105,7 +105,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       if (parentId && !expanded.has(parentId)) onToggle(parentId);
       close();
       onOpenProject(data.id);
-      notify(parentId ? `${data.name} added to ${projectLabel(list, parentId)}` : `${data.name} added`);
+      notify(parentId ? `${data.name} added to ${projectLabel(list, parentId)}` : `${data.name} added`, false, { kind: "project", id: data.id });
       void onReload();
       return true;
     } catch (e) {
@@ -118,7 +118,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       const { data } = await api.updateClient(target.id, { name });
       onChanged((all) => all.map((c) => (c.id === target.id ? { ...c, ...data, name: data?.name ?? name } : c)));
       close();
-      notify("Renamed");
+      notify("Renamed", false, { kind: "project", id: target.id });
       void onReload();
       return true;
     } catch (e) {
@@ -131,7 +131,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       await api.updateClient(target.id, { parent_id: parentId });
       onChanged((all) => all.map((c) => (c.id === target.id ? { ...c, parent_id: parentId } : c)));
       close();
-      notify(parentId ? `Moved ${target.name} into ${projectLabel(list, parentId)}` : `Moved ${target.name} to the top level`);
+      notify(parentId ? `Moved ${target.name} into ${projectLabel(list, parentId)}` : `Moved ${target.name} to the top level`, false, { kind: "project", id: target.id });
       if (parentId && !expanded.has(parentId)) onToggle(parentId);
       void onReload();
       return true;
@@ -144,7 +144,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   const dropMove = async (ids: string[], target: string | null) => {
     try {
       await moveRecordings(ids, target);
-      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, list, target));
+      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, list, target), false, target ? { kind: "project", id: target } : { kind: "library", folder: "inbox" });
       void onReload();
     } catch (e) {
       notify(errorMessage(e), true);
@@ -156,7 +156,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       onChanged((all) => all.filter((c) => c.id !== target.id).map((c) => (c.parent_id === target.id ? { ...c, parent_id: target.parent_id ?? null } : c)));
       close();
       onOpenProject(target.parent_id ?? null);
-      notify(deletedText(target.name, answer ?? {}));
+      notify(deletedText(target.name, answer ?? {}), false, (answer?.moved_sessions ?? 0) > 0 ? { kind: "library", folder: "inbox" } : NO_TARGET);
       void onReload();
       return true;
     } catch (e) {

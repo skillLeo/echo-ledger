@@ -173,6 +173,15 @@ describe("command names and arguments", () => {
 describe("wire types", () => {
   const settingsPatchKeys = rustFields(commandsRs, "SettingsPatch");
 
+  it("sends toasts only to pages and Account sections the window has (v1.6.1 Notices)", () => {
+    const actionsRs = allRustSources["../../src-tauri/src/actions.rs"];
+    const pages = [...actionsRs.matchAll(/Target::Page\("(\w+)"\)/g)].map((m) => m[1]);
+    const sections = [...actionsRs.matchAll(/Target::Account\("([\w-]+)"\)/g)].map((m) => m[1]);
+    expect(pages.length).toBeGreaterThan(0);
+    for (const page of pages) expect(["library", "projects", "record", "activity", "shared", "settings"], page).toContain(page);
+    for (const section of sections) expect(settingsViewTsx, section).toMatch(new RegExp(`(\\b${section}: "|id: "${section}")`));
+  });
+
   it("says a held request in the core's own words (error.rs, v1.6 P2.7)", () => {
     expect(errorRs).toContain(`pub const MAINTENANCE_TEXT: &str = "${MAINTENANCE_TEXT}";`);
     expect(errorRs).toContain(`pub const UPDATE_REQUIRED_TEXT: &str = "${UPDATE_REQUIRED_TEXT}";`);

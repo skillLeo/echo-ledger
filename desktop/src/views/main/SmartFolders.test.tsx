@@ -8,7 +8,7 @@ import { LibraryView } from "./LibraryView";
 import { sentLine } from "./SharedWithMe";
 import type { LibraryItem, SharedItem } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeSettings, makeStatus, makeTranscript } from "../../test/fixtures";
+import { makeItem, makeSettings, makeStatus, makeTranscript, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -170,7 +170,7 @@ describe("Shared with me", () => {
     const props = await renderShared();
     fireEvent.click(within(screen.getAllByRole("listitem")[0]).getByRole("button", { name: "Save to my library" }));
     await waitFor(() => expect(callsOf("shared_save")).toEqual([{ id: "01JDSHARE1" }]));
-    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Saved to your Library"));
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Saved to your Library", false, anyTarget));
     await waitFor(() => expect(props.onSmartFolder).toHaveBeenCalledWith(null));
     expect(screen.getAllByText("Saved to your Library").length).toBeGreaterThan(0);
   });
@@ -180,7 +180,7 @@ describe("Shared with me", () => {
     const props = await renderShared();
     fireEvent.click(within(screen.getAllByRole("listitem")[1]).getByRole("button", { name: "Save to my library" }));
     await waitFor(() => expect(props.onOpenClient).toHaveBeenCalledWith("c-new"));
-    expect(props.notify).toHaveBeenCalledWith("Saved Northwind to your projects");
+    expect(props.notify).toHaveBeenCalledWith("Saved Northwind to your projects", false, anyTarget);
   });
 
   it("takes an item off the list", async () => {

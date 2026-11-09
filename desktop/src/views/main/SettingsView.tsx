@@ -48,7 +48,9 @@ export const GROUP_LABEL: Record<Group, string> = {
 const ACCOUNT_GROUPS: ReadonlySet<Group> = new Set(["profile", "sign-in", "devices", "notifications", "preferences", "plan", "key", "privacy"]);
 /** The tabs "Find a page" and the palette open (`section` ids). */
 /** Sections other parts of the app open by id, and the tab each is in. */
-const SECTION_GROUP: Record<string, Group> = { "transcription-key": "key", plan: "plan", devices: "devices", shortcuts: "preferences", "your-data": "privacy" };
+const SECTION_GROUP: Record<string, Group> = {
+  "transcription-key": "key", plan: "plan", devices: "devices", shortcuts: "preferences", "your-data": "privacy", general: "computer", about: "computer",
+};
 export const ACCOUNT_TABS: readonly (readonly [Group, string])[] = GROUPS.map((g) => [g, GROUP_LABEL[g]] as const);
 const GROUP_ICON: Record<Group | "all", typeof SettingsIcon> = {
   all: SettingsIcon, profile: UserIcon, "sign-in": LockIcon, devices: DesktopIcon, notifications: BellIcon, preferences: PaletteIcon, plan: SparkleIcon,

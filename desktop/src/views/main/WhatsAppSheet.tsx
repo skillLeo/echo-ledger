@@ -6,6 +6,7 @@ import { useState } from "react";
 import { api, errorMessage } from "../../lib/ipc";
 import { Sheet } from "./ProjectDialogs";
 import { CheckIcon } from "../../components/ControlIcons";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 /** A link from Send to WhatsApp works this long (the phone's choice). */
 export const WHATSAPP_LINK_SECONDS = 7 * 24 * 3600;
@@ -29,7 +30,7 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
   hasAudio: boolean;
   /** The text of the view being read; null while there is no transcript. */
   text: string | null;
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
   onClose: () => void;
 }) {
   const [working, setWorking] = useState<"text" | "voice" | "link" | null>(null);
@@ -46,7 +47,7 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
   /** Opens WhatsApp with `message`; says so, and that the whole text is on the clipboard when it had to be cut. */
   const open = async (message: string, copied: boolean) => {
     const cut = await api.whatsappOpen(message);
-    if (cut) notify(copied ? "WhatsApp opens with the start of the text. The whole text is copied: paste it there." : "WhatsApp opens with the start of the text.");
+    if (cut) notify(copied ? "WhatsApp opens with the start of the text. The whole text is copied: paste it there." : "WhatsApp opens with the start of the text.", false, NO_TARGET);
     return cut;
   };
 
@@ -56,7 +57,7 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
     try {
       const copied = await copy(text);
       const cut = await open(text, copied);
-      if (!cut) notify("Opening WhatsApp with the text");
+      if (!cut) notify("Opening WhatsApp with the text", false, NO_TARGET);
       onClose();
     } catch (e) {
       notify(errorMessage(e), true);
@@ -88,7 +89,7 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
       if (!link.url) throw new Error("The server made the link but did not send it. Try again.");
       await copy(link.url);
       await open(linkMessage(title, link.url), false);
-      notify("Link made (it works for 7 days) and copied");
+      notify("Link made (it works for 7 days) and copied", false, { kind: "shared", tab: "links" });
       onClose();
     } catch (e) {
       notify(errorMessage(e), true);

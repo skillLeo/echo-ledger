@@ -7,6 +7,7 @@ import { Menu } from "../../components/Menu";
 import { DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, savePreferences, stepIndex, type Density, type Preferences } from "../../lib/shell";
 import { LibraryTable, loadColumns, saveColumns, TABLE_COLUMNS, type TableColumn } from "./LibraryTable";
 import { WhatsAppSheet } from "./WhatsAppSheet";
+import { StateBanner } from "../../components/StateBanner";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { SharedWithMe, sentLine } from "./SharedWithMe";
 import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialogs";
@@ -35,6 +36,7 @@ import { improvingView, stepOf, transcribingLine, viewPercent } from "../../lib/
 import { LockedChip, NEEDS_KEY_TEXT } from "./Upgrade";
 import { openSettingsSection } from "../../lib/entitlements";
 import { ImprovingBar, RecordingSteps } from "./RecordingProgress";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -107,7 +109,7 @@ const initialOf = (name: string): string => [...name.trim()][0]?.toUpperCase() ?
  * `focus` brings one of them into view.
  */
 export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange, onImport, onOpenClient, smartFolder = null, onSmartFolder, sharedFocus = null, projects = null, smartView = null, crumb = null, aside = null }: {
-  notify: (t: string, e?: boolean) => void;
+  notify: Notify;
   focus?: PendingFocus | null;
   onFocusHandled?: () => void;
   /** Open a recording at a moment (from the command palette, a client's notes or an Ask source). */
@@ -341,7 +343,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const dropMove = async (ids: string[], projectId: string | null) => {
     try {
       await moveRecordings(ids, projectId);
-      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, folders, projectId));
+      notify(movedText(ids.length, items.find((i) => i.id === ids[0])?.title, folders, projectId), false,
+        projectId ? { kind: "project", id: projectId } : { kind: "library", folder: "inbox" });
       if (ids.length > 1) endSelecting();
     } catch (e) {
       notify(errorMessage(e), true);
@@ -439,7 +442,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
     try {
       await api.retranscribe(current.id, (retranscribeLanguage || null) as TranscriptionLanguage | null);
-      notify(`Re-transcribing in ${languageLabel(retranscribeLanguage || null)}. The current transcript stays until the new one is ready.`);
+      notify(`Re-transcribing in ${languageLabel(retranscribeLanguage || null)}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -450,7 +453,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     const language = (current.language ?? null) as TranscriptionLanguage | null;
     try {
       await api.retranscribe(current.id, language);
-      notify(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`);
+      notify(`Re-transcribing in ${languageLabel(language)}. The current transcript stays until the new one is ready.`, false, { kind: "recording", id: current.id });
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -681,7 +684,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       await api.deleteScreen(current.id, screen.id);
       setScreenOpen(null);
       reloadScreens();
-      notify(`Deleted screen ${screen.index}`);
+      notify(`Deleted screen ${screen.index}`, false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -699,7 +702,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       const segments = transcript.segments.map((s) => ({ ...s, speaker: speakerName(speakerNames, s.speaker) }));
       const after = (i: number) => (screensAfter.get(i) ?? []).map(screenMarker);
       await navigator.clipboard.writeText(copiedTranscript(segments, viewText, withTimestamps, unsure, forAi, after));
-      notify(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied");
+      notify(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied", false, NO_TARGET);
     } catch {
       notify("Could not access the clipboard", true);
     }
@@ -884,7 +887,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (!yes) return;
     try {
       await api.addReplacement(offer.from, offer.to, offer.client_id);
-      notify(`${offer.client_name}'s transcripts will write “${offer.to}” from now on`);
+      notify(`${offer.client_name}'s transcripts will write “${offer.to}” from now on`, false, { kind: "project", id: offer.client_id });
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -899,7 +902,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       setTranscript(next);
       // The next open fix (if any) stays one click away; the decided one closes.
       setOpenSuggestion(null);
-      notify(accept ? `Changed to “${suggestion.to}”` : "Suggestion dismissed");
+      notify(accept ? `Changed to “${suggestion.to}”` : "Suggestion dismissed", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {
@@ -924,7 +927,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     try {
       setTranscript(await api.restoreTranscript(transcript.id));
       setPanel(null);
-      notify("The original transcript is back");
+      notify("The original transcript is back", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -934,7 +937,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (!current) return false;
     try {
       setSpeakerNames((await api.renameSpeakers(current.id, names, remember)).speaker_names ?? {});
-      notify("Speaker names saved");
+      notify("Speaker names saved", false, NO_TARGET);
       return true;
     } catch (e) {
       notify(errorMessage(e), true);
@@ -949,8 +952,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     try {
       const path = await api.exportTranscript(transcript.id, format, true, true, exportView);
       // null: the save dialog was cancelled, nothing to say.
-      if (format === "html") notify("Opened the print page in your browser: choose Save as PDF there");
-      else if (path) notify(`Saved to ${path}`);
+      if (format === "html") notify("Opened the print page in your browser: choose Save as PDF there", false, NO_TARGET);
+      else if (path) notify(`Saved to ${path}`, false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -960,8 +963,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (!current) return;
     try {
       const path = await api.meetingPack(current.id, format, exportView, withAudio);
-      if (format === "pdf") notify("Opened the meeting pack in your browser: choose Save as PDF there");
-      else if (path) notify(`Saved to ${path}`);
+      if (format === "pdf") notify("Opened the meeting pack in your browser: choose Save as PDF there", false, NO_TARGET);
+      else if (path) notify(`Saved to ${path}`, false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -971,7 +974,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     try {
       await api.addToVocabulary(term, current?.client?.id ?? null);
       setVocabTerms((terms) => terms.filter((t) => t !== term));
-      notify(`Added “${term}” to the vocabulary`);
+      notify(`Added “${term}” to the vocabulary`, false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -984,7 +987,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       // Deleting another row from its menu leaves the open recording open.
       setSelected((open) => (open === id ? null : open));
       setItems(await api.library());
-      notify("Deleted");
+      notify("Deleted. Restore it from Recently deleted for 48 hours.", false, { kind: "action", run: () => setBinOpen(true) });
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -1004,7 +1007,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     try {
       const answer = await api.organiseSession(item.id, { title: title || null });
       if (answer?.data?.id === item.id) replaceItem(item.id, () => answer.data);
-      notify(title ? "Renamed" : "The automatic title will be used");
+      notify(title ? "Renamed" : "The automatic title will be used", false, { kind: "recording", id: item.id });
     } catch (e) {
       replaceItem(item.id, (i) => ({ ...i, title: item.title, title_auto: item.title_auto }));
       notify(errorMessage(e), true);
@@ -1014,7 +1017,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     try {
       await api.organiseSession(item.id, { pinned: !item.pinned });
       replaceItem(item.id, (i) => ({ ...i, pinned: !item.pinned }));
-      notify(item.pinned ? "Unpinned" : "Pinned");
+      notify(item.pinned ? "Unpinned" : "Pinned", false, item.pinned ? NO_TARGET : { kind: "library", view: "pinned" });
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -1024,7 +1027,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (!current) return;
     try {
       const path = await api.saveAudio(current.id);
-      if (path) notify(`Saved to ${path}`);
+      if (path) notify(`Saved to ${path}`, false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -1152,11 +1155,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               }} />
           )}
           {selecting && !shared && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} onSelectAll={() => setPicked(new Set(filtered.map((i) => i.id)))} />}
+          {/* Offline (a state, v1.6.1 Notices): no timer; a click tries again; closed until the next problem. */}
           {syncError && (
-            <div className="notice error sync-error" role="alert">
+            <StateBanner id="library-sync" state={syncError} tone="danger" role="alert" className="sync-error" onOpen={() => void refresh()} openLabel="Couldn't sync with the server. Try again"
+              actions={<button type="button" className="btn compact" onClick={refresh} disabled={loading}>Retry</button>}>
               <span>Couldn't sync with the server. Showing what is saved on this computer.</span>
-              <button type="button" className="btn compact" onClick={refresh} disabled={loading}>Retry</button>
-            </div>
+            </StateBanner>
           )}
           {!smartFolder && smartView !== "pinned" && <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />}
           {shownHits.length > 0 && (

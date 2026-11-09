@@ -4,7 +4,7 @@ import { activitySubtitle, ActivityView } from "./ActivityCentre";
 import { NOTIFICATION_CATEGORIES, NOT_SHOWN, NotificationsCard } from "./SecuritySettings";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makePendingItem, makeSettings, makeSkippedItem, makeStatus } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeSettings, makeSkippedItem, makeStatus, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -162,7 +162,7 @@ describe("skipped calls (v1.5)", () => {
     await waitFor(() => expect(callsOf("skipped_restore")).toEqual([{ id: "b" }]));
     await waitFor(() => expect(screen.getByText("Skipped 2 short calls")).toBeInTheDocument());
     expect(screen.queryByText(/Call with Omar Khan/)).not.toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith("Restored. It uploads now and shows in the Library.");
+    expect(notify).toHaveBeenCalledWith("Restored. It uploads now and shows in the Library.", false, anyTarget);
   });
 
   it("says why a Restore failed and reads the list again", async () => {

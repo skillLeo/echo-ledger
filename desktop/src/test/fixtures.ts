@@ -349,3 +349,6 @@ export function makeEntitlements(overrides: Partial<Entitlements> = {}): Entitle
     ...overrides,
   };
 }
+
+/** Any notice target, none included (v1.6.1: every notify call says where it goes; a test that is not about that). */
+export const anyTarget = { asymmetricMatch: () => true, toString: () => "anyTarget", toAsymmetricMatcher: () => "anyTarget" };

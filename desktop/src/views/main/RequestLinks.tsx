@@ -8,6 +8,7 @@ import { projectLabel, projectTree, visibleRows } from "../../lib/projects";
 import { EXPIRY_CHOICES, expiryTime, limitsText, receivedText, requestState, type ExpiryChoice } from "../../lib/sharing";
 import { CopyIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 /** A whole number from a field, or null when it is empty. */
 const count = (text: string): number | null => (text.trim() === "" ? null : Number.parseInt(text, 10));
@@ -18,7 +19,7 @@ export function RequestLinksSheet({ projects, projectId = null, focusId = null, 
   projectId?: string | null;
   /** A link to bring into view (an echoledger link to it was opened). */
   focusId?: string | null;
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
   onClose: () => void;
 }) {
   const [links, setLinks] = useState<RequestLink[] | null>(null);
@@ -65,7 +66,7 @@ export function RequestLinksSheet({ projects, projectId = null, focusId = null, 
     if (!made) return;
     try {
       await navigator.clipboard.writeText(made);
-      notify("Link copied");
+      notify("Link copied", false, { kind: "shared", tab: "requests" });
     } catch {
       notify("Could not access the clipboard", true);
     }
@@ -74,7 +75,7 @@ export function RequestLinksSheet({ projects, projectId = null, focusId = null, 
     try {
       await api.revokeRequestLink(link.id);
       await load();
-      notify("Request link revoked: it stops taking files at once");
+      notify("Request link revoked: it stops taking files at once", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     }

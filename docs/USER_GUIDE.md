@@ -258,6 +258,11 @@ transcripts, and every look shows in your activity log. **Stop now** ends it at 
   **Transcription key** (Free plan), **Privacy & data** (export your data, delete your account), then this computer's:
   **Calls & meetings**, **Voice notes & dictation** and **This computer**. **Saved · just now** at the top right says a
   change was kept.
+- **Messages and banners (since v1.6.1).** A message at the bottom of the window ("Moved to Acme", "Link copied") goes
+  where it is about when you click it, closes with **×** or a swipe left or right (a finger, the trackpad or a mouse
+  drag) and hides after 6 seconds (10 for a problem); the thin bar along its bottom shows the time left and stops while
+  you point at it. **Esc** closes it. A banner about something still true (calls not recorded, an update, maintenance,
+  a limit, no connection) stays until you close it, and comes back only if it changes or when the app starts again.
 
 **Updates and server notices (phone, since v1.6).** When the server asks for a newer EchoLedger, the phone's Library
 says so with **Update**. If the server no longer takes recordings from your version, they wait on the phone and are sent

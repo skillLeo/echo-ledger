@@ -20,6 +20,7 @@ import {
   waitingSummary,
 } from "../../lib/pending";
 import { AlertIcon, AppTileIcon, HourglassIcon, ImportIcon, appKind } from "../../components/Icons";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 /** A `main:navigate` request to bring one waiting recording into view, optionally with its title open for editing. */
 export interface PendingFocus {
@@ -30,7 +31,6 @@ export interface PendingFocus {
 }
 
 type Client = { id: string; name: string };
-type Notify = (text: string, error?: boolean) => void;
 
 const HIGHLIGHT_MS = 4000;
 const asList = <T,>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
@@ -142,7 +142,8 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     setBusy(id);
     try {
       await fn();
-      if (ok) notify(ok);
+      // Kept calls go up and show in the Library; what was discarded is gone.
+      if (ok) notify(ok, false, ok.startsWith("Kept") ? { kind: "library", view: null } : NO_TARGET);
       return true;
     } catch (e) {
       notify(errorMessage(e), true);
@@ -183,7 +184,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     } finally {
       setBulkBusy(false);
     }
-    if (done > 0) notify(bulkNotice(verb, done));
+    if (done > 0) notify(bulkNotice(verb, done), false, verb === "Kept" ? { kind: "library", view: null } : NO_TARGET);
   };
 
   const keepAll = () => decideAll("Kept", (id) => api.pendingKeep(id));
@@ -272,7 +273,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
     } finally {
       setBulkBusy(false);
     }
-    if (done > 0) notify(bulkNotice("Discarded", done));
+    if (done > 0) notify(bulkNotice("Discarded", done), false, NO_TARGET);
   };
 
   const cancelImport = async (item: UploadItem) => {

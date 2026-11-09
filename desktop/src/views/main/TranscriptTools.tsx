@@ -7,6 +7,7 @@ import { SPEEDS, timelinePercent, waveformBars } from "../../lib/player";
 import type { Bookmark } from "../../lib/library";
 import { ChevronRightIcon, CloseIcon, SearchIcon, SkipIcon } from "../../components/Icons";
 import { ChevronLeftIcon, PauseIcon, PlayIcon } from "../../components/ControlIcons";
+import type { Notify } from "../../lib/notice";
 
 /** Speed, skip silence and follow. */
 export function PlayerControls({ rate, onRate, skipSilence, onSkipSilence, follow, onFollow }: {
@@ -314,7 +315,7 @@ const LIFETIMES: [number, string][] = [[3_600, "1 hour"], [86_400, "1 day"], [60
 export function SharePanel({ sessionId, hasAudio, notify, onClose }: {
   sessionId: string;
   hasAudio: boolean;
-  notify: (t: string, e?: boolean) => void;
+  notify: Notify;
   onClose: () => void;
 }) {
   const [expiresIn, setExpiresIn] = useState(86_400);
@@ -347,7 +348,7 @@ export function SharePanel({ sessionId, hasAudio, notify, onClose }: {
     if (!made) return;
     try {
       await navigator.clipboard.writeText(made);
-      notify("Link copied");
+      notify("Link copied", false, { kind: "shared", tab: "links" });
     } catch {
       notify("Could not access the clipboard", true);
     }

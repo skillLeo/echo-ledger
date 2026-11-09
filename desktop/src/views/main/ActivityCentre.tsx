@@ -13,6 +13,7 @@ import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon } from "../../component
 import { actionCount, BADGE_READ_LIMIT, isProblem, needsAction as asksForAction } from "../../lib/badge";
 import { PageHeader } from "../../components/Page";
 import { CheckIcon } from "../../components/ControlIcons";
+import type { Notify } from "../../lib/notice";
 
 /** What is on its way (Phase 1C, C4): uploads with their %, and recordings being transcribed, the Library's words. */
 export interface InProgressRow {
@@ -103,7 +104,7 @@ function shortWhen(iso: string | null): string {
 export function ActivityView({ status, notify, onOpenRecording, onReview, onItems }: {
   status: AppStatus;
   /** The main window's toast (Restore says what happened). */
-  notify?: (text: string, error?: boolean) => void;
+  notify?: Notify;
   onOpenRecording: (id: string) => void;
   /** Opens the waiting recordings in the Library (the first one in view). */
   onReview: (pendingId: string | null) => void;
@@ -151,7 +152,7 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
     try {
       await api.skippedRestore(item.id);
       setSkipped((list) => list.filter((s) => s.id !== item.id));
-      notify?.("Restored. It uploads now and shows in the Library.");
+      notify?.("Restored. It uploads now and shows in the Library.", false, { kind: "library", view: null });
     } catch (e) {
       notify?.(errorMessage(e), true);
       api.skippedList().then((s) => setSkipped(Array.isArray(s) ? s : [])).catch(() => undefined);
