@@ -239,6 +239,28 @@ describe("LibraryView list", () => {
     expect(screen.getByText("Select recordings")).toBeInTheDocument();
   });
 
+  it("ticking a header's box selects its group and never folds it (P5.1)", async () => {
+    await renderLibrary();
+    choose("Group by", "Status");
+    const toggle = screen.getByRole("button", { name: /^Ready/ });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all in Ready" }));
+    expect(screen.getByText("3 selected")).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(titlesInList()).toHaveLength(5);
+  });
+
+  it("folding a group from its chevron or name never selects it (P5.1)", async () => {
+    await renderLibrary();
+    choose("Group by", "Status");
+    const toggle = screen.getByRole("button", { name: /^Ready/ });
+    fireEvent.click(toggle.querySelector(".group-caret")!);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle.querySelector(".group-label")!);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByText(/selected$/)).not.toBeInTheDocument();
+    expect((screen.getByRole("checkbox", { name: "Select all in Ready" }) as HTMLInputElement).checked).toBe(false);
+  });
+
   it("remembers Group by and Sort by per view", async () => {
     const { unmount } = await renderLibrary();
     choose("Group by", "Project");

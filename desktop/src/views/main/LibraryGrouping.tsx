@@ -50,7 +50,11 @@ export function ChoiceMenu<T extends string>({ label, value, options, onChange }
   );
 }
 
-/** A group's header: its box (all, some or none picked), its name and count, and collapse or expand. */
+/**
+ * A group's header (P5.1): two controls that never do each other's job. The box only selects (none, some or all of the
+ * group's recordings, tri-state); the chevron, the name and the count only fold and unfold the group. The box sits in
+ * its own label, a target big enough that a click meant for it never lands on the name, and its clicks stop there.
+ */
 export function GroupHeader({ label, items, picked, collapsed, onToggle, onPick }: {
   label: string;
   items: readonly LibraryItem[];
@@ -64,14 +68,17 @@ export function GroupHeader({ label, items, picked, collapsed, onToggle, onPick 
   useEffect(() => {
     if (boxRef.current) boxRef.current.indeterminate = state === "some";
   }, [state]);
+  const count = `${items.length} recording${items.length === 1 ? "" : "s"}`;
   return (
     <div className="group-head" data-testid="group-head">
-      <input ref={boxRef} type="checkbox" className="group-box" checked={state === "all"} aria-checked={state === "some" ? "mixed" : state === "all"}
-        aria-label={`Select all in ${label}`} onChange={onPick} />
-      <button type="button" className="group-toggle" aria-expanded={!collapsed} onClick={onToggle}>
+      <label className="group-pick" title={state === "all" ? `Clear ${label}` : `Select all in ${label}`} onClick={(e) => e.stopPropagation()}>
+        <input ref={boxRef} type="checkbox" className="group-box" checked={state === "all"} aria-checked={state === "some" ? "mixed" : state === "all"}
+          aria-label={`Select all in ${label}`} onChange={onPick} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} />
+      </label>
+      <button type="button" className="group-toggle" aria-expanded={!collapsed} title={collapsed ? `Show ${label}` : `Fold ${label}`} onClick={onToggle}>
         <span className={`group-caret ${collapsed ? "collapsed" : ""}`} aria-hidden="true"><ChevronDownIcon size={14} /></span>
         <span className="group-label">{label}</span>
-        <span className="group-count" aria-label={`${items.length} recording${items.length === 1 ? "" : "s"}`}>{items.length}</span>
+        <span className="group-count" aria-label={count}>{items.length}</span>
       </button>
     </div>
   );
