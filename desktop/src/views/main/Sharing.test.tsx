@@ -289,9 +289,10 @@ describe("sharing from the pages", () => {
     respond("session_detail", { playback_url: null, markers: [], speaker_names: {} });
     respond("shares_of", { data: [] });
     render(<LibraryView notify={vi.fn()} initialSelected="s1" />);
-    // Under a full parallel run the recording's page can take longer than the default second to appear.
-    fireEvent.click(await screen.findByRole("button", { name: "Share" }, { timeout: 3000 }));
-    expect(await screen.findByRole("dialog", { name: "Share Kick-off" })).toBeInTheDocument();
+    // Under a full parallel run (and on the slow Intel Mac runner) the page and then the dialog can each take longer
+    // than the default second to appear.
+    fireEvent.click(await screen.findByRole("button", { name: "Share" }, { timeout: 5000 }));
+    expect(await screen.findByRole("dialog", { name: "Share Kick-off" }, { timeout: 5000 })).toBeInTheDocument();
     expect(callsOf("shares_of")).toEqual([{ sessionId: "s1", clientId: null }]);
   });
 });
