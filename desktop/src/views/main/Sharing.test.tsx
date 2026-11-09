@@ -79,6 +79,10 @@ describe("the share dialog", () => {
     expect(expires - before).toBeLessThan(86_400_000 + 60_000);
     const made = await screen.findByRole("status");
     expect(made).toHaveTextContent("Copy it now. It is shown only once.");
+    // v1.6 (P6): the new link is copied at once, one click fewer.
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://ledger.example.test/s/tok"));
+    expect(props.notify).toHaveBeenCalledWith("Link made and copied");
+    writeText.mockClear();
     // A share made: the check pops in next to "Link made" (v1.5).
     expect(made).toHaveTextContent("Link made");
     expect(made.querySelector("[data-testid=success-check]")).not.toBeNull();
