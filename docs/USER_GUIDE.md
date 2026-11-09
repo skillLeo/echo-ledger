@@ -203,6 +203,12 @@ key". **Pro** and **Business** transcribe for you, with no key of your own.
 side by side. **Request upgrade** (a message is optional) shows how to pay; we switch the plan on once the payment is
 confirmed, and you get an email and a notification.
 
+### Support access (since v1.6)
+
+EchoLedger's support never sees your recordings. If you want help with one, open **Profile → Support access → Let
+support look** and choose for how long (1 hour, 1 day or 7 days). Until then support can open your recordings and their
+transcripts, and every look shows in your activity log. **Stop now** ends it at once.
+
 ## 4. Record automatically
 
 EchoLedger can start recording when a call starts.

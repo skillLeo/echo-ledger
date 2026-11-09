@@ -57,6 +57,7 @@ use Laravel\Passport\HasApiTokens;
  * @property Carbon|null $suspended_at since v1.6: the super admin's suspend switch (signs in nowhere, devices refused)
  * @property string|null $suspended_reason
  * @property Carbon|null $terms_accepted_at when the Terms and the Privacy Policy were accepted at sign-up (since v1.6)
+ * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
  */
@@ -172,6 +173,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'transcription_key_checked_at' => 'datetime',
             'suspended_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
+            'support_access_until' => 'datetime',
         ];
     }
 }

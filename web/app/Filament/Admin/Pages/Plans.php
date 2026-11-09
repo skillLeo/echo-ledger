@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Pages;
 
+use App\Filament\Admin\Support\OverridesForm;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
@@ -143,19 +144,15 @@ class Plans extends Page implements HasTable
                             ->getSearchResultsUsing(fn (string $search): array => User::query()->where('email', 'like', '%'.str_replace(['%', '_'], ['\\%', '\\_'], $search).'%')
                                 ->orderBy('email')->limit(20)->pluck('email', 'id')->all())
                             ->getOptionLabelUsing(fn ($value): ?string => User::query()->whereKey($value)->value('email'))
-                            ->afterStateUpdated(fn ($state, $set) => collect(self::overridesToForm(User::query()->find($state)))->each(fn ($v, $k) => $set($k, $v))),
-                        Grid::make(['default' => 2])->schema(array_map(fn (string $f): Select => Select::make("override_feature_{$f}")->label(Plan::FEATURE_LABELS[$f])
-                            ->options(['plan' => 'The plan\'s', 'on' => 'On', 'off' => 'Off'])->default('plan')->selectablePlaceholder(false), Plan::FEATURES)),
-                        Grid::make(['default' => 2])->schema(array_map(fn (string $l): TextInput => TextInput::make("override_limit_{$l}")->label(Features::LIMIT_LABELS[$l])
-                            ->placeholder('The plan\'s')->helperText($l === 'storage_bytes' ? 'In GB. "none" for no limit.' : '"none" for no limit.')
-                            ->regex('/^(none|\d+(\.\d+)?)$/i'), array_keys(Features::LIMITS))),
+                            ->afterStateUpdated(fn ($state, $set) => collect(OverridesForm::toForm(User::query()->find($state)))->each(fn ($v, $k) => $set($k, $v))),
+                        ...OverridesForm::fields(),
                     ])
                     ->action(function (array $data): void {
                         $user = User::query()->find((int) $data['user_id']);
                         if (! $user instanceof User) {
                             return;
                         }
-                        $user->forceFill(['entitlement_overrides' => self::overridesFromForm($data)])->save();
+                        $user->forceFill(['entitlement_overrides' => OverridesForm::fromForm($data)])->save();
                         app(Entitlements::class)->forget();
                         app(AuditLog::class)->record('entitlements_changed', (int) auth()->id(), $user, 'Features and limits changed for '.Str::limit($user->email, 120, ''));
                         Notification::make()->title(e("Saved for {$user->email}"))->success()->send();
@@ -274,57 +271,6 @@ class Plans extends Page implements HasTable
 
         return Workspace::query()->orderBy('name')->limit(1000)->get(['id', 'name'])
             ->mapWithKeys(fn (Workspace $w): array => [$w->id => $w->name.(isset($owners[$w->id]) ? ' · '.$owners[$w->id] : '')])->all();
-    }
-
-    /** @return array<string, string|null> */
-    private static function overridesToForm(?User $user): array
-    {
-        $raw = $user === null ? [] : ($user->entitlement_overrides ?? []);
-        $form = [];
-        foreach (Plan::FEATURES as $feature) {
-            $value = $raw['features'][$feature] ?? null;
-            $form["override_feature_{$feature}"] = $value === true ? 'on' : ($value === false ? 'off' : 'plan');
-        }
-        foreach (array_keys(Features::LIMITS) as $limit) {
-            if (! is_array($raw['limits'] ?? null) || ! array_key_exists($limit, $raw['limits'])) {
-                $form["override_limit_{$limit}"] = null;
-
-                continue;
-            }
-            $value = $raw['limits'][$limit];
-            $form["override_limit_{$limit}"] = $value === null ? 'none' : (string) ($limit === 'storage_bytes' ? round((int) $value / 1024 ** 3, 2) : $value);
-        }
-
-        return $form;
-    }
-
-    /**
-     * @param  array<string, mixed>  $data
-     * @return array{features: array<string, bool>, limits: array<string, int|float|null>}|null
-     */
-    private static function overridesFromForm(array $data): ?array
-    {
-        $features = [];
-        foreach (Plan::FEATURES as $feature) {
-            $choice = $data["override_feature_{$feature}"] ?? 'plan';
-            if ($choice === 'on' || $choice === 'off') {
-                $features[$feature] = $choice === 'on';
-            }
-        }
-        $limits = [];
-        foreach (array_keys(Features::LIMITS) as $limit) {
-            $value = trim((string) ($data["override_limit_{$limit}"] ?? ''));
-            if ($value === '') {
-                continue;
-            }
-            $limits[$limit] = strtolower($value) === 'none' ? null : match ($limit) {
-                'storage_bytes' => (int) round((float) $value * 1024 ** 3),
-                'ai_usd_month' => (float) $value,
-                default => (int) $value,
-            };
-        }
-
-        return $features === [] && $limits === [] ? null : ['features' => $features, 'limits' => $limits];
     }
 
     /** One plan is the default for sign-ups: marking another one moves it. */

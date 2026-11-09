@@ -32,6 +32,7 @@ use chillerlan\QRCode\QRCode;
 use Filament\Actions\Action;
 use Filament\Auth\Pages\EditProfile as BaseEditProfile;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
 use Filament\Notifications\Notification;
@@ -77,6 +78,7 @@ class EditProfile extends BaseEditProfile
                 Text::make(RecordingConsent::TEXT.' '.RecordingConsent::APPS),
             ]),
             $this->emailsSection(),
+            $this->supportAccessSection(),
             $this->dataSection(),
         ]);
     }
@@ -204,6 +206,43 @@ class EditProfile extends BaseEditProfile
             ->description('Choose which emails you get. The bell in the console and the apps tell you either way.')
             ->schema([
                 View::make('filament.profile.emails')->viewData(fn (): array => ['rows' => EmailPreferences::rows($this->account()), 'always' => EmailPreferences::ALWAYS]),
+            ]);
+    }
+
+    /**
+     * Profile → Support access (since v1.6, P2.2): EchoLedger's support never sees anyone's recordings, unless the
+     * person lets them for a while, to help with a problem. Until the end staff may open the recordings and their
+     * transcripts; every look is in the person's activity log. Off by default; Stop now ends it at once.
+     */
+    private function supportAccessSection(): Section
+    {
+        return Section::make('Support access')
+            ->description('Support never sees your recordings. To get help with one, you can let support look for a while; every look is in your activity log.')
+            ->schema([
+                Text::make(fn (): string => ($until = $this->account()->support_access_until) !== null && $until->isFuture()
+                    ? 'On until '.$until->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, Y H:i').'.'
+                    : 'Off.'),
+                Actions::make([
+                    Action::make('grantSupportAccess')->label('Let support look')->icon(Heroicon::OutlinedLifebuoy)->color('gray')
+                        ->modalDescription('Support can open your recordings and their transcripts until the time you choose. You can stop it at any time.')
+                        ->schema([Select::make('hours')->label('For')->required()->selectablePlaceholder(false)->default('24')
+                            ->options(['1' => '1 hour', '24' => '1 day', '168' => '7 days'])])
+                        ->action(function (array $data): void {
+                            $hours = in_array((int) ($data['hours'] ?? 0), [1, 24, 168], true) ? (int) $data['hours'] : 24;
+                            $user = $this->account();
+                            $user->forceFill(['support_access_until' => now()->addHours($hours)])->save();
+                            app(AuditLog::class)->record('support_access_granted', $user->id, $user, "Support access on for {$hours} h");
+                            Notification::make()->title('Support can look until '.$user->support_access_until?->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, H:i'))->success()->send();
+                        }),
+                    Action::make('endSupportAccess')->label('Stop now')->icon(Heroicon::OutlinedXMark)->color('gray')
+                        ->visible(fn (): bool => $this->account()->support_access_until?->isFuture() === true)
+                        ->action(function (): void {
+                            $user = $this->account();
+                            $user->forceFill(['support_access_until' => null])->save();
+                            app(AuditLog::class)->record('support_access_ended', $user->id, $user, 'Support access turned off');
+                            Notification::make()->title('Support access is off')->success()->send();
+                        }),
+                ])->key('support-access-actions'),
             ]);
     }
 

@@ -125,6 +125,24 @@ their name and the Terms (no password needed; they can set one later with **Forg
 - **Device limit:** each plan's devices per person; one more is refused with "Your plan signs in 2 devices. Sign one
   out (Account → Devices), or upgrade."
 
+### Customers (since v1.6)
+
+**Admin panel → Customers** lists every account: name and email, the plan badge, status (Active, Suspended, Not
+confirmed, Being deleted), devices signed in, minutes and US dollars this month (per provider under the total), how
+much of the plan's minutes is used, storage, last active and the sign-up date. Search by name or email, filter by plan
+or status, and select rows to **Change plan** (until a date or not), **Suspend**, **Restore** or **Download CSV**.
+
+A customer's page has this month's numbers and a chart of the last 30 days, their devices (**Revoke** one), their
+workspaces with roles, the plan with **Change plan** (with an end date: then the default plan) and **Features and
+limits** (their own, on top of the plan), staff **Notes** (never shown to them), their activity log, and **Support**:
+send the confirmation email again, reset two-step sign-in (when they lost their authenticator; make sure it is really
+them), sign out every device, suspend or restore, and delete the account (as if they asked: 7 days, then erased).
+
+**Privacy.** The admin panel shows metadata and usage only, never recordings or transcripts. A customer who wants help
+with a recording turns on **Support access** in their profile for 1 hour, 1 day or 7 days; until then their page lists
+their recordings and **Open** shows a transcript. Every look is in the activity log (theirs too), and it ends by itself
+or when they press **Stop now**.
+
 ## 4. Plans (super admin)
 
 **Admin panel → Plans.** Prices stay at 0 until billing comes (backlog); **Price as shown** is the text the apps show
