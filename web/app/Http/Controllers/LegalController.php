@@ -7,8 +7,8 @@ namespace App\Http\Controllers;
 use Illuminate\Contracts\View\View;
 
 /**
- * The Terms of Service and the Privacy Policy (since v1.5, docs/API.md "Public pages and app downloads"). Drafts for
- * review until the operator's lawyer has read them; the apps open them in the browser.
+ * The Terms of Service and the Privacy Policy (since v1.5, docs/API.md "Public pages and app downloads"), final since
+ * 2026-11-09; the apps open them in the browser.
  */
 final class LegalController
 {

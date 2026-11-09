@@ -13,8 +13,8 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 beforeEach(fn () => Filament::setCurrentPanel('app'));
 
-it('serves the Terms and the Privacy Policy as marked drafts, phone-sized, without signing in', function (string $url, string $heading) {
-    $page = $this->get($url)->assertOk()->assertSee($heading)->assertSee('Draft — for review')
+it('serves the final Terms and Privacy Policy, phone-sized, without signing in', function (string $url, string $heading) {
+    $page = $this->get($url)->assertOk()->assertSee($heading)->assertDontSee('Draft — for review')
         ->assertSee('width=device-width', false)->getContent();
 
     expect($page)->toContain(route('legal.terms'))->toContain(route('legal.privacy'))->toContain(route('account.delete'));
