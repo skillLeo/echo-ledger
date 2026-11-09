@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Auth;
 
 use App\Exceptions\ApiError;
+use App\Filament\Concerns\WatchesPairing;
 use App\Filament\Support\PlanLock;
 use App\Models\ConnectedApp;
 use App\Models\Device;
@@ -51,6 +52,8 @@ use Illuminate\Support\HtmlString;
  */
 class EditProfile extends BaseEditProfile
 {
+    use WatchesPairing;
+
     public function mount(): void
     {
         parent::mount();
@@ -233,6 +236,7 @@ class EditProfile extends BaseEditProfile
                             } catch (ApiError $e) {
                                 return ['pairing' => ['error' => $e->getMessage()]]; // the plan's device limit
                             }
+                            $this->watchPairing($code);
 
                             return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($pairing->qrPayload($code)), 'url' => rtrim((string) config('app.url'), '/')]];
                         })
@@ -261,7 +265,10 @@ class EditProfile extends BaseEditProfile
         return [
             'devices' => $devices->map(fn (Device $d): array => [
                 'id' => $d->id,
-                'name' => $d->name,
+                'name' => $d->readableName(),
+                'status' => $d->status(),
+                'status_label' => Device::STATUS_LABELS[$d->status()],
+                'signed_out' => $d->signed_out_at?->diffForHumans(),
                 'platform' => $d->platform->getLabel(),
                 'workspace' => $workspaces[$d->getAttribute('workspace_id')] ?? 'A workspace',
                 'last_seen' => $d->last_seen_at?->diffForHumans(),
@@ -294,7 +301,14 @@ class EditProfile extends BaseEditProfile
     public function revokeDevice(string $id): void
     {
         $done = app(AccountSessions::class)->revokeDevice($this->account(), $id);
-        Notification::make()->title($done ? 'Device revoked' : 'That device was already revoked')->success()->send();
+        Notification::make()->title($done ? 'Device signed out' : 'That device was already signed out')->success()->send();
+    }
+
+    /** "Remove from list" (since v1.6): a signed-out device's row goes. */
+    public function removeDevice(string $id): void
+    {
+        $done = app(AccountSessions::class)->removeDevice($this->account(), $id);
+        Notification::make()->title($done ? 'Removed from the list' : 'That device was already removed')->success()->send();
     }
 
     public function signOutBrowser(string $id): void

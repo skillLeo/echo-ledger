@@ -19,6 +19,9 @@ use Illuminate\Validation\Rule;
 /** Signing in with an account (since v1.5, docs/API.md): the apps' two public sign-in routes. */
 final class AuthController extends Controller
 {
+    /** `install_id` (since v1.6, docs/API.md): opaque, 8 to 64 of A-Z a-z 0-9 and "-". */
+    public const INSTALL_ID_RULE = ['nullable', 'string', 'regex:/^[A-Za-z0-9-]{8,64}$/'];
+
     public function __construct(private readonly DeviceSignIn $signIn, private readonly DeviceConfigPayload $config) {}
 
     /**
@@ -131,8 +134,9 @@ final class AuthController extends Controller
             'platform' => ['required', Rule::enum(DevicePlatform::class)],
             'app_version' => ['nullable', 'string', 'max:32'],
             'os_version' => ['nullable', 'string', 'max:32'],
-            // Since v1.6 (P3): the app's own id of this install; the same one signs in again on its own row.
-            'install_id' => ['nullable', 'string', 'max:128', 'regex:/^[A-Za-z0-9._:\-]+$/'],
+            // Since v1.6 (P3): the app's own id of this install (an opaque 8-64 characters: the phone sends a UUID, the
+            // desktop 64 hex); the same one signs in again on its own row.
+            'install_id' => self::INSTALL_ID_RULE,
         ];
     }
 }

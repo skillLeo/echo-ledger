@@ -105,9 +105,12 @@ describe('the device security API', function () {
         $this->deleteJson("/api/devices/{$this->stranger->id}")->assertNotFound()->assertJsonPath('code', 'device_not_found');
         $this->deleteJson("/api/devices/{$this->laptop->id}")->assertNoContent();
 
-        expect(Device::query()->find($this->laptop->id))->toBeNull()->and(unscoped(fn () => Device::query()->find($this->stranger->id)))->not->toBeNull();
-        $revoked = AuditEvent::query()->where('event', 'device_revoked')->firstOrFail();
-        expect($revoked->device_id)->toBe($this->device->id)->and($revoked->summary)->toContain($this->laptop->name);
+        // Since v1.6 the row stays, "Signed out by you", and its tokens are gone.
+        expect(Device::query()->find($this->laptop->id)->status())->toBe(Device::SIGNED_OUT)
+            ->and($this->laptop->tokens()->count())->toBe(0)
+            ->and(unscoped(fn () => Device::query()->find($this->stranger->id))->status())->toBe(Device::ACTIVE);
+        $revoked = AuditEvent::query()->where('event', 'device_signed_out')->firstOrFail();
+        expect($revoked->device_id)->toBe($this->device->id)->and($revoked->summary)->toContain($this->laptop->readableName());
     });
 });
 

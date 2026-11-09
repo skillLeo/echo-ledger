@@ -90,11 +90,11 @@ final class PlanLimits
 
     /**
      * The devices that count against the limit: since v1.6 a person's own in the workspace ([$userId]), the whole
-     * workspace's when no person is named. Signed-out devices (P3) do not count.
+     * workspace's when no person is named. Signed-out devices and those 90 days without a call (P3) do not count.
      */
     public function devicesUsed(int $workspaceId, ?int $userId = null): int
     {
-        return Device::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)
+        return Device::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $workspaceId)->counting()
             ->when($userId !== null, fn ($q) => $q->where('user_id', $userId))->count();
     }
 

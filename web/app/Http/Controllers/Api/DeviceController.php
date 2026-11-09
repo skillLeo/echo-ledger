@@ -27,6 +27,8 @@ final class DeviceController extends Controller
             'platform' => ['required', Rule::enum(DevicePlatform::class)],
             'app_version' => ['nullable', 'string', 'max:32'],
             'os_version' => ['nullable', 'string', 'max:32'],
+            // Since v1.6 (P3): the same install pairing again reuses its row.
+            'install_id' => AuthController::INSTALL_ID_RULE,
         ], [], ['pairing_code' => 'code']);
 
         [$device, $token] = $pairing->redeem($data['pairing_code'], $data, $request->ip());

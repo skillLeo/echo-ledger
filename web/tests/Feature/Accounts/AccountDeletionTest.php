@@ -76,7 +76,8 @@ describe('DELETE /api/account', function () {
         expect($response->json())->toBe(['deletes_at' => $deletesAt->toAtomString()])
             ->and(abs($deletesAt->diffInHours(now()->addDays(7))))->toBeLessThan(1)
             ->and(PersonalAccessToken::findToken($token))->toBeNull()
-            ->and(unscoped(fn () => Device::query()->where('user_id', $user->id)->count()))->toBe(0)
+            // Since v1.6 signed-out rows stay listed (no token); the account's erasure removes them.
+            ->and(unscoped(fn () => Device::query()->where('user_id', $user->id)->whereNull('signed_out_at')->count()))->toBe(0)
             ->and(AuditEvent::query()->where('event', 'account_deletion_requested')->where('user_id', $user->id)->exists())->toBeTrue();
         Mail::assertQueued(DeletionScheduledMail::class, fn (DeletionScheduledMail $mail): bool => $mail->hasTo('leaving@example.test'));
     });

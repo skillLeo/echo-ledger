@@ -146,7 +146,13 @@ need the web console.
 3. **Windows:** type the server address and the code.
 4. The library appears. Repeat for each device.
 
-To remove a device, open **Profile → Devices** in the console and revoke it. It is signed out at once.
+**Your devices (since v1.6).** **Profile → Devices** (and **Devices** in the menu) lists each phone and computer
+once, by a name you can read ("Galaxy S25 Ultra", "Windows 11 PC", "MacBook Pro"), with its status: **Active** (and
+when it was last seen), **Signed out by you**, **Revoked by admin**, or **Expired** (not used for 90 days). Signing in
+again on the same phone or computer uses the same row. **Rename** gives it your own name; **Sign out** stops it at
+once (its recordings stay) and keeps it in the list until you **Remove from list**; the **Show** filter shows the
+signed-out ones. While the **Sign in a device** code is open, it says **Waiting for the app…**, then "✓ Galaxy S25
+Ultra signed in" and closes by itself. Your plan says how many devices can be signed in at once.
 
 **Changing your email:** on your profile, type the new address. It takes effect when you open the link sent to it, signed
 in; the old address is told, and your devices stay signed in. **Forgot password?** on the sign-in page signs your account

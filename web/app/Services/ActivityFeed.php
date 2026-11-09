@@ -74,7 +74,7 @@ final class ActivityFeed
             }
         });
         Screen::created(fn (Screen $s) => $feed()->planLimitChanged($s->workspace_id, self::LIMIT_STORAGE));
-        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->name} signed in", 'It can now record, sync and see the library.', null, $d->sourceDevice() === SourceDevice::Desktop ? 'heroicon-o-computer-desktop' : 'heroicon-o-device-phone-mobile'));
+        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->readableName()} signed in", 'It can now record, sync and see the library.', null, $d->sourceDevice() === SourceDevice::Desktop ? 'heroicon-o-computer-desktop' : 'heroicon-o-device-phone-mobile'));
         UsageLedgerEntry::created(fn (UsageLedgerEntry $e) => $feed()->budgetChanged($e));
     }
 

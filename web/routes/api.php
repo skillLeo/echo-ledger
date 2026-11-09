@@ -121,6 +121,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->middleware($own)->name('api.sessions.notes.make');
             Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->middleware($own)->name('api.transcripts.suggestions');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
+            // Since v1.6 (P3): a readable name of the person's own choosing.
+            Route::patch('devices/{id}', [SecurityController::class, 'renameDevice'])->name('api.devices.rename');
             // Your account (v1.5): sign out every device and console session; delete the account after 7 days.
             // Your own transcription key (v1.6, the Free plan): checked with Groq once, kept encrypted, never sent back.
             Route::put('me/transcription-key', [EntitlementsController::class, 'putKey'])->middleware('throttle:transcription-key')->name('api.me.transcription-key.put');

@@ -66,7 +66,7 @@ final class UpgradeRequests
             User::query()->whereKey($user->id)->lockForUpdate()->first();
             $pending = $this->pendingFor($user);
             if ($pending instanceof UpgradeRequest) {
-                throw new ApiError(409, 'request_pending', "Your request for {$this->planName($pending->plan)} is still waiting. We will tell you once it is decided.", ['request' => $this->payload($pending)]);
+                throw new ApiError(409, 'request_pending', "Your request for {$this->planName($pending->plan)} is still waiting. We will tell you once it is decided.", ['request' => $this->payload($pending, created: true)]);
             }
 
             return UpgradeRequest::query()->create([

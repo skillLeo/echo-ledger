@@ -6,7 +6,6 @@ namespace App\Http\Middleware;
 
 use App\Exceptions\ApiError;
 use App\Models\Device;
-use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -23,7 +22,7 @@ final class EnsureNotSuspended
     {
         $device = $request->user();
         // The device's person, loaded once for the request (the routes after this read the same relation).
-        if ($device instanceof Device && $device->user instanceof User && $device->user->isSuspended()) {
+        if ($device instanceof Device && $device->user->isSuspended()) {
             throw new ApiError(403, 'account_suspended', self::MESSAGE);
         }
 

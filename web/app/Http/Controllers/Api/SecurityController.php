@@ -22,19 +22,12 @@ final class SecurityController extends Controller
         $device = $this->device($request);
         // The person's own devices in this workspace; owners manage everyone's from the console.
         $devices = Device::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->orderByDesc('last_seen_at')->get();
-        $names = $devices->pluck('name', 'id');
         $events = AuditEvent::query()->where('user_id', $device->user_id)->latest('id')->limit(50)->get();
 
+        $names = $devices->mapWithKeys(fn (Device $d): array => [$d->id => $d->readableName()]);
+
         return response()->json([
-            'devices' => $devices->map(fn (Device $d): array => [
-                'id' => $d->id,
-                'name' => $d->name,
-                'platform' => $d->platform->value,
-                'app_version' => $d->app_version,
-                'last_seen_at' => $d->last_seen_at?->toAtomString(),
-                'paired_at' => $d->created_at?->toAtomString(),
-                'current' => $d->id === $device->id,
-            ])->values(),
+            'devices' => $devices->map(fn (Device $d): array => $d->listItem($device->id))->values(),
             'events' => $events->map(fn (AuditEvent $e): array => [
                 'id' => $e->id,
                 'event' => $e->event,
@@ -58,9 +51,28 @@ final class SecurityController extends Controller
         if ($target->id === $device->id) {
             throw new ApiError(409, 'current_device', 'This is the device you are using. Sign out of it in its settings instead.');
         }
-        $target->delete();
+        // Since v1.6 the row stays as "Signed out by you" (its tokens stop working at once).
+        if ($target->signed_out_at === null) {
+            $target->signOut('self');
+        }
 
         return response()->noContent();
+    }
+
+    /** PATCH /api/devices/{id} (since v1.6): renames one of the person's own devices of this workspace. */
+    public function renameDevice(Request $request, string $id): JsonResponse
+    {
+        $device = $this->device($request);
+        $request->merge(['name' => is_string($request->input('name')) ? trim($request->input('name')) : $request->input('name')]);
+        $data = $request->validate(['name' => ['required', 'string', 'min:1', 'max:60']]);
+        $target = Device::query()->where('workspace_id', $device->workspace_id)->where('user_id', $device->user_id)->find($id);
+        if (! $target instanceof Device) {
+            throw new ApiError(404, 'device_not_found', 'Device not found.');
+        }
+        $target->forceFill(['name' => $data['name'], 'name_chosen' => true])->save();
+        app(AuditLog::class)->record('device_renamed', $device->user_id, $target, 'Device renamed: '.$target->name);
+
+        return response()->json($target->listItem($device->id));
     }
 
     private function device(Request $request): Device

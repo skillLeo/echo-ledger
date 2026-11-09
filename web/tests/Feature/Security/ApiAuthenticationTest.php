@@ -27,6 +27,7 @@ function secDeviceGuardedRoutes(): array
         'PUT me/transcription-key' => ['PUT', '/api/me/transcription-key', 'sessions:write'],
         'DELETE me/transcription-key' => ['DELETE', '/api/me/transcription-key', 'sessions:write'],
         'POST upgrade-requests' => ['POST', '/api/upgrade-requests', 'sessions:write'],
+        'PATCH devices/{id}' => ['PATCH', '/api/devices/'.Fx::MISSING_ID, 'sessions:write'],
         'GET upgrade-requests/latest' => ['GET', '/api/upgrade-requests/latest', 'config:read'],
         'GET clients' => ['GET', '/api/clients', 'library:read'],
         'DELETE clients/{id}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID, 'sessions:write'],
@@ -163,7 +164,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(96);
+    expect($guarded)->toBe(97);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

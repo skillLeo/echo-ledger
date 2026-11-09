@@ -34,19 +34,29 @@ final class AccountSessions
     public function revokeDevice(User $user, string $id): bool
     {
         $device = Device::query()->withoutGlobalScopes()->where('user_id', $user->id)->whereKey($id)->first();
-        if (! $device instanceof Device) {
+        if (! $device instanceof Device || $device->signed_out_at !== null) {
             return false;
         }
+        // Since v1.6 the row stays, "Signed out by you"; Remove from list deletes it.
+        $device->signOut('self');
 
-        return (bool) $device->delete();
+        return true;
+    }
+
+    /** "Remove from list" (since v1.6): the row goes (signed out first, so its tokens are gone too). */
+    public function removeDevice(User $user, string $id): bool
+    {
+        $device = Device::query()->withoutGlobalScopes()->where('user_id', $user->id)->whereKey($id)->first();
+
+        return $device instanceof Device && (bool) $device->delete();
     }
 
     /** Returns how many devices were signed out. */
     public function signOutEverywhere(User $user): int
     {
-        $devices = $this->devices($user);
+        $devices = $this->devices($user)->filter(fn (Device $d): bool => $d->signed_out_at === null);
         foreach ($devices as $device) {
-            $device->delete();
+            $device->signOut('self');
         }
         // A code made a minute ago would otherwise still bring a device in afterwards.
         DevicePairingCode::query()->withoutGlobalScopes()->where('user_id', $user->id)->whereNull('used_at')->delete();

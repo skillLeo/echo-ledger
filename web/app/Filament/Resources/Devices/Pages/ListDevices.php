@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Resources\Devices\Pages;
 
 use App\Exceptions\ApiError;
+use App\Filament\Concerns\WatchesPairing;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\User;
 use App\Services\PairingService;
@@ -16,6 +17,8 @@ use Filament\Support\Icons\Heroicon;
 
 class ListDevices extends ListRecords
 {
+    use WatchesPairing;
+
     protected static string $resource = DeviceResource::class;
 
     protected function getHeaderActions(): array
@@ -36,6 +39,7 @@ class ListDevices extends ListRecords
                         return ['pairing' => ['error' => $e->getMessage()]]; // plan device limit (B20)
                     }
                     $payload = $pairing->qrPayload($code);
+                    $this->watchPairing($code);
 
                     return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($payload), 'url' => rtrim((string) config('app.url'), '/')]];
                 })

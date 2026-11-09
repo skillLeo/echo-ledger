@@ -184,6 +184,7 @@ function isoApiCases(array $b): array
         'api.sessions.notes.make' => ['POST', "/api/sessions/{$s}/notes", [], 404],
         'api.transcripts.suggestions' => ['POST', "/api/transcripts/{$t}/suggestions/0", ['accept' => true], 404],
         'api.devices.revoke' => ['DELETE', "/api/devices/{$b['device']->id}", [], 404],
+        'api.devices.rename' => ['PATCH', "/api/devices/{$b['device']->id}", ['name' => 'hijacked'], 404],
         'api.sessions.restore' => ['POST', "/api/sessions/{$b['binned']->id}/restore", [], 404],
         'api.bin.destroy' => ['DELETE', "/api/bin/{$b['binned']->id}", [], 404],
         'api.sessions.markers.store' => ['POST', "/api/sessions/{$s}/markers", ['at_ms' => 10], 404],
