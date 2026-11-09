@@ -87,7 +87,7 @@ class ScreenStore
             return [$existing, false];
         }
         $this->assertRoom($session);
-        app(PlanLimits::class)->assertStorage($session->workspace_id, (int) filesize($plainPath));
+        app(PlanLimits::class)->assertStorage($session->workspace_id, (int) filesize($plainPath), $session->user_id);
 
         $id = (string) Str::ulid();
         $folder = 'screens/'.now()->format('Y/m');

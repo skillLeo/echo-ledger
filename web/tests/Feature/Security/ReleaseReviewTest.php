@@ -289,7 +289,9 @@ it('M7 signs an account out everywhere when "Forgot password?" sets a new passwo
         ->call('resetPassword');
 
     expect(Hash::check('taken-back-password-1', (string) $user->fresh()->password))->toBeTrue()
-        ->and(Device::query()->withoutGlobalScopes()->whereKey($device->id)->exists())->toBeFalse()
+        // Since v1.6 the device stays listed, signed out, with no token.
+        ->and(Device::query()->withoutGlobalScopes()->whereKey($device->id)->whereNull('signed_out_at')->exists())->toBeFalse()
+        ->and(DB::table('personal_access_tokens')->where('tokenable_id', $device->id)->count())->toBe(0)
         ->and(DB::table('sessions')->where('user_id', $user->id)->count())->toBe(0)
         ->and(ConnectedApp::query()->connected()->where('user_id', $user->id)->count())->toBe(0)
         ->and(DevicePairingCode::query()->withoutGlobalScopes()->where('user_id', $user->id)->whereNull('used_at')->count())->toBe(0);

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Auth\Register;
+use App\Models\EmailCode;
 use App\Models\User;
 use App\Services\Accounts\SignUp;
 use App\Services\SettingsRepository;
@@ -121,16 +122,15 @@ it('refuses an export link that is not signed or has expired', function () {
     $this->get(URL::temporarySignedRoute('account.export.download', now()->subMinute(), ['export' => $id]))->assertForbidden();
 });
 
-it('slows sign-up down after two tries in a minute from one address', function () {
+it('slows the console sign-in down after ten tries in a minute from one address', function () {
     app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
-    $form = fn (int $i): array => ['name' => "Person {$i}", 'email' => "person{$i}@example.test", 'password' => 'a-good-password-42', 'passwordConfirmation' => 'a-good-password-42'];
-
-    foreach ([1, 2] as $i) {
-        Livewire::test(Register::class)->fillForm($form($i))->call('register')->assertHasNoFormErrors();
-        auth('web')->logout();
+    $page = Livewire::test(Register::class);
+    foreach (range(1, 10) as $i) {
+        $page->fillForm(['email' => "person{$i}@example.test"])->call('authenticate');
+        $page->call('startOver');
     }
-    Livewire::test(Register::class)->fillForm($form(3))->call('register')->assertNotified();
+    $page->fillForm(['email' => 'person11@example.test'])->call('authenticate')->assertNotified();
 
-    expect(User::query()->where('email', 'person3@example.test')->exists())->toBeFalse()
-        ->and(User::query()->whereIn('email', ['person1@example.test', 'person2@example.test'])->count())->toBe(2);
+    expect(EmailCode::query()->where('email', 'person11@example.test')->exists())->toBeFalse()
+        ->and(EmailCode::query()->count())->toBe(10);
 });

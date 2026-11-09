@@ -52,7 +52,7 @@ final class LiveTranslateTokenController extends Controller
             'language_hints.*' => ['string', 'regex:/^[a-z]{2}$/'],
             'continue_over_budget' => ['sometimes', 'boolean'],
         ]);
-        app(PlanLimits::class)->assertFeature($device->workspace_id, 'live_translate');
+        app(PlanLimits::class)->assertFeature($device->workspace_id, 'live_translate', $device->user_id);
         $spending = $budget->state($device->workspace_id);
         if ($spending['reached']) {
             $this->assertMayContinue($device, (float) $spending['used_usd'], (float) $spending['limit_usd'], $request->boolean('continue_over_budget'));

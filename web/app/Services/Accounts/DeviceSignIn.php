@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Services\Accounts;
 
 use App\Exceptions\ApiError;
+use App\Http\Middleware\EnsureNotSuspended;
 use App\Models\Device;
 use App\Models\DeviceSignInCode;
 use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\PairingService;
 use App\Services\Workspaces\Workspaces;
+use App\Support\DeviceNames;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -44,6 +46,8 @@ final class DeviceSignIn
         private readonly Workspaces $workspaces,
         private readonly LoginAlerts $alerts,
         private readonly AuditLog $audit,
+        private readonly EmailCodes $emailCodes,
+        private readonly SignUp $signUp,
     ) {}
 
     /**
@@ -82,6 +86,76 @@ final class DeviceSignIn
         return $this->create($user, $workspaceId, $data, $ip, $country, 'password');
     }
 
+    /**
+     * POST /api/auth/code/verify (since v1.6): the emailed code. An account signs in (with its two-step code when it has
+     * one: without it `401 otp_required`, and the same email code stays good); a new address gets the one-time sign-up
+     * token for POST /api/auth/sign-up. The code proves the address, so an account not confirmed yet is confirmed.
+     *
+     * @param  array{email: string, code: string, otp?: string|null, name: string, platform: string, app_version?: string|null, os_version?: string|null, install_id?: string|null}  $data
+     * @return array{0: Device, 1: NewAccessToken}|array{sign_up_token: string}
+     */
+    public function withEmailCode(array $data, ?string $ip, ?string $country): array
+    {
+        $email = EmailCodes::normalize($data['email']);
+        $row = $this->emailCodes->check($email, $data['code']);
+        $user = User::query()->where('email', $email)->first();
+        if (! $user instanceof User) {
+            $this->emailCodes->assertMaySignUp($email);
+
+            return ['sign_up_token' => $this->emailCodes->signUpToken($row)];
+        }
+        if ($user->hasTwoFactor()) {
+            $this->guard->assertNotLocked($email);
+            $otp = trim((string) ($data['otp'] ?? ''));
+            if ($otp === '') {
+                throw new ApiError(401, 'otp_required', 'Enter the code from your authenticator app.');
+            }
+            if (! $this->codes->verify($user, $otp)) {
+                $this->failed($email, $user);
+
+                throw new ApiError(422, 'invalid_otp', 'That code is wrong or was used already.');
+            }
+        }
+        $this->emailCodes->useUp($row);
+        if (! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+        }
+        $workspaceId = $this->assertCanSignIn($user);
+        $this->guard->clear($email);
+
+        return $this->create($user, $workspaceId, $data, $ip, $country, 'code');
+    }
+
+    /**
+     * POST /api/auth/sign-up (since v1.6): the account of the address the code proved (confirmed, Terms accepted), its
+     * personal workspace on the default plan, and the device signed in. `name` is the person's; the device is named
+     * `device_name`, or after the platform when the app sends none.
+     *
+     * @param  array{sign_up_token: string, name: string, device_name?: string|null, platform: string, app_version?: string|null, os_version?: string|null, install_id?: string|null}  $data
+     * @return array{0: Device, 1: NewAccessToken}
+     */
+    public function signUp(array $data, ?string $ip, ?string $country): array
+    {
+        $this->emailCodes->assertSignUpQuota($ip);
+        $user = DB::transaction(function () use ($data): User {
+            $email = $this->emailCodes->redeemSignUpToken($data['sign_up_token']);
+            if (User::query()->where('email', $email)->exists()) {
+                throw new ApiError(422, 'invalid_code', 'An account with this email exists already. Sign in instead.');
+            }
+            $this->emailCodes->assertMaySignUp($email);
+
+            return $this->signUp->create(['name' => $data['name'], 'email' => $email, 'password' => Str::password(40)], emailVerified: true, via: 'code', acceptedTerms: true);
+        });
+        $this->emailCodes->countSignUp($ip);
+        $deviceName = trim((string) ($data['device_name'] ?? ''));
+        $device = [
+            ...$data,
+            'name' => $deviceName !== '' ? $deviceName : DeviceNames::fallback($data['platform'], $data['os_version'] ?? null),
+        ];
+
+        return $this->create($user, $this->assertCanSignIn($user), $device, $ip, $country, 'code');
+    }
+
     /** A hash at the server's current cost that no password matches; made again only when the hashing settings change. */
     private static function dummyHash(): string
     {
@@ -100,6 +174,10 @@ final class DeviceSignIn
      */
     public function assertCanSignIn(User $user): int
     {
+        // Since v1.6: the super admin's suspend switch.
+        if ($user->isSuspended()) {
+            throw new ApiError(403, 'account_suspended', EnsureNotSuspended::MESSAGE);
+        }
         if (! $user->hasVerifiedEmail()) {
             throw new ApiError(403, 'email_not_verified', 'Confirm your email first: open the link in the email the console sent you.');
         }
@@ -178,12 +256,12 @@ final class DeviceSignIn
     }
 
     /**
-     * @param  array{name: string, platform: string, app_version?: string|null, os_version?: string|null}  $data
+     * @param  array{name: string, platform: string, app_version?: string|null, os_version?: string|null, install_id?: string|null}  $data
      * @return array{0: Device, 1: NewAccessToken}
      */
     private function create(User $user, int $workspaceId, array $data, ?string $ip, ?string $country, string $via): array
     {
-        $attributes = ['name' => $data['name'], 'platform' => $data['platform'], 'app_version' => $data['app_version'] ?? null, 'os_version' => $data['os_version'] ?? null];
+        $attributes = ['name' => $data['name'], 'platform' => $data['platform'], 'app_version' => $data['app_version'] ?? null, 'os_version' => $data['os_version'] ?? null, 'install_id' => $data['install_id'] ?? null];
         [$device, $token] = DB::transaction(fn (): array => $this->pairing->createDevice($workspaceId, $user->id, $attributes, $ip, $country, $via));
         $this->alerts->deviceSignedIn($device);
 

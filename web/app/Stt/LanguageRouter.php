@@ -9,7 +9,9 @@ use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Models\CaptureSession;
 use App\Services\CredentialVault;
+use App\Services\Entitlements\Features;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\PlanLimits;
 use App\Stt\Drivers\AssemblyAiDriver;
 
 /**
@@ -143,6 +145,11 @@ final class LanguageRouter
             }
         }
 
+        // Since v1.6 the use case's engine may be a premium one the person's plan leaves out: the first one it allows.
+        if ($session !== null && ! $this->fits($default, $session)) {
+            $default = $this->candidates($language, $session)[0] ?? $default;
+        }
+
         return new RouteDecision($default, $wanted, $language, $default !== $wanted);
     }
 
@@ -256,6 +263,11 @@ final class LanguageRouter
     {
         if ($session === null) {
             return true;
+        }
+        // Since v1.6 ElevenLabs and Gemini are premium engines: only for plans with `premium_engines`.
+        if (in_array($key->value, Features::PREMIUM_ENGINES, true)
+            && ! app(PlanLimits::class)->allows((int) $session->workspace_id, 'premium_engines', (int) $session->user_id)) {
+            return false;
         }
         $caps = app(SttManager::class)->driver($key)->capabilities();
         if (! $caps->needsChannelArtifacts) {

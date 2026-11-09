@@ -47,6 +47,10 @@ final class EngineFallbackJob implements ShouldQueue
         if ($code === null || ! $code->retryable() || $session === null || $session->trashed()) {
             return;
         }
+        // Since v1.6 a transcript made with the person's own key never goes to one of the server's engines.
+        if ((bool) (($transcript->meta ?? [])['own_key'] ?? false)) {
+            return;
+        }
 
         $meta = $transcript->meta ?? [];
         $route = is_array($meta['route'] ?? null) ? $meta['route'] : [];

@@ -12,10 +12,14 @@
     @forelse ($devices as $device)
         <div class="row">
             <div class="grow">
-                <div>{{ $device['name'] }} <span class="muted">· {{ $device['platform'] }}</span></div>
-                <div class="muted">{{ $device['workspace'] }} · {{ $device['last_seen'] ? 'last seen '.$device['last_seen'] : 'never seen' }}@if ($device['country']) · {{ $device['country'] }}@endif</div>
+                <div>{{ $device['name'] }} <span class="muted">· {{ $device['platform'] }}</span> <span class="badge">{{ $device['status_label'] }}</span></div>
+                <div class="muted">{{ $device['workspace'] }} · @if ($device['signed_out']) signed out {{ $device['signed_out'] }} @else {{ $device['last_seen'] ? 'last seen '.$device['last_seen'] : 'never seen' }} @endif @if ($device['country']) · {{ $device['country'] }}@endif</div>
             </div>
-            <x-filament::button size="sm" color="gray" wire:click="revokeDevice('{{ $device['id'] }}')" wire:confirm="Revoke {{ $device['name'] }}? It loses access at once; its recordings stay.">Revoke</x-filament::button>
+            @if ($device['signed_out'])
+                <x-filament::button size="sm" color="gray" wire:click="removeDevice('{{ $device['id'] }}')">Remove from list</x-filament::button>
+            @else
+                <x-filament::button size="sm" color="gray" wire:click="revokeDevice('{{ $device['id'] }}')" wire:confirm="Sign out {{ $device['name'] }}? It loses access at once; its recordings stay.">Sign out</x-filament::button>
+            @endif
         </div>
     @empty
         <p class="muted">No phone or computer is signed in. Use "Sign in a device" below, or sign in from the app.</p>

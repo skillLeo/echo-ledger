@@ -11,10 +11,13 @@ use App\Mail\TestMail;
 use App\Models\User;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
+use App\Services\Accounts\EmailCodes;
+use App\Services\Accounts\EmailGate;
 use App\Services\Accounts\SignUp;
 use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\EngineWait;
+use App\Services\Entitlements\UnusualUsage;
 use App\Services\MailSettings;
 use App\Services\RetentionPolicy;
 use App\Services\SessionMarkers;
@@ -160,6 +163,9 @@ class Settings extends Page
             'vocabulary_replacements' => TextReplacements::rules($all['vocabulary.replacements'] ?? []),
             'display_timezone' => is_string($zone) && in_array($zone, timezone_identifiers_list(), true) ? $zone : 'UTC',
             'signup_mode' => isset(SignUp::MODES[$all['signup.mode'] ?? '']) ? $all['signup.mode'] : SignUp::NOBODY,
+            'signup_allowed_domains' => EmailGate::cleanDomains((array) ($all['signup.allowed_domains'] ?? [])),
+            'signup_per_ip_day' => app(EmailCodes::class)->signUpsPerIpDay(),
+            'abuse_hours_per_day' => app(UnusualUsage::class)->hoursPerDay(),
             'console_members' => (bool) ($all['console.members'] ?? true),
             'mail_host' => $all['mail.host'] ?? null,
             'mail_port' => (int) ($all['mail.port'] ?? 587) ?: 587,
@@ -427,6 +433,13 @@ class Settings extends Page
                         Select::make('signup_mode')->label('Who can sign up')->options(SignUp::SETTING_LABELS)->selectablePlaceholder(false)->required()
                             // Since v1.5 (Phase 1C): what On and Off mean for family and friends, in plain words.
                             ->helperText(SignUp::SETTING_HELP),
+                        // Since v1.6 (P1.5): who may sign up, and how many accounts one network makes a day.
+                        TagsInput::make('signup_allowed_domains')->label('Allowed email domains')->placeholder('company.com')
+                            ->helperText('Empty: any address. Otherwise only addresses of these domains (and their subdomains) can make an account. Throwaway addresses are always refused.'),
+                        TextInput::make('signup_per_ip_day')->label('New accounts a day from one network')->integer()->minValue(1)->maxValue(1000)->required()
+                            ->helperText('Slows down someone making many accounts. Default 5.'),
+                        TextInput::make('abuse_hours_per_day')->label('Tell me when one person records more than (hours a day)')->integer()->minValue(1)->maxValue(168)->required()
+                            ->helperText('An email and a notification, at most once a day per person. Default 6.'),
                         Toggle::make('console_members')->label('Members can use the console')
                             ->helperText('On: members and viewers open their own library, Shared with me, their profile and devices here, to read. Off: the console shows them the apps instead. Owners and admins always have it.'),
                     ]),
@@ -777,6 +790,9 @@ class Settings extends Page
             'vocabulary.replacements' => TextReplacements::rules(array_values((array) ($state['vocabulary_replacements'] ?? []))),
             'display.timezone' => in_array($state['display_timezone'] ?? null, timezone_identifiers_list(), true) ? $state['display_timezone'] : 'UTC',
             'signup.mode' => isset(SignUp::MODES[$state['signup_mode'] ?? '']) ? $state['signup_mode'] : SignUp::NOBODY,
+            'signup.allowed_domains' => EmailGate::cleanDomains((array) ($state['signup_allowed_domains'] ?? [])),
+            'signup.per_ip_day' => max(1, min(1000, (int) ($state['signup_per_ip_day'] ?? EmailCodes::DEFAULT_SIGN_UPS_PER_IP_DAY))),
+            'abuse.hours_per_day' => max(1, min(168, (int) ($state['abuse_hours_per_day'] ?? UnusualUsage::DEFAULT_HOURS))),
             'console.members' => (bool) ($state['console_members'] ?? true),
             'mail.host' => filled($state['mail_host'] ?? null) ? mb_strtolower(trim((string) $state['mail_host'])) : null,
             'mail.port' => (int) ($state['mail_port'] ?? 587) ?: 587,

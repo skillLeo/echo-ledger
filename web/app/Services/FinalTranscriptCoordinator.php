@@ -15,6 +15,8 @@ use App\Enums\UploadStatus;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Services\Entitlements\Entitlements;
+use App\Services\Usage\UsageLedger;
 use App\Stt\LanguageRouter;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
@@ -39,6 +41,16 @@ final class FinalTranscriptCoordinator
     {
         return SttProviderKey::tryFrom((string) $session->final_provider)
             ?? $this->settings->providerFor(self::useCaseFor($session));
+    }
+
+    /**
+     * Whether [$provider] would be the server's engine for a person whose plan leaves transcription on EchoLedger out
+     * (and who has no trial minutes left): their own key is used instead (since v1.6). On-device and self-hosted
+     * engines cost the server nothing and stay as they are.
+     */
+    public static function needsOwnKey(CaptureSession $session, SttProviderKey $provider): bool
+    {
+        return UsageLedger::isBillable($provider) && ! app(Entitlements::class)->platformTranscription((int) $session->workspace_id, (int) $session->user_id);
     }
 
     public function maybeStart(CaptureSession $session, bool $sync = false): ?Transcript
@@ -79,6 +91,11 @@ final class FinalTranscriptCoordinator
         $route = $router->final($language, self::useCaseFor($session), $session);
         // Automatic keeps the engine chosen when the session was created (the device uploaded the files it needs).
         $provider = $language === null ? $this->providerFor($session) : $route->provider;
+        // Since v1.6 (the Free plan): without transcription on EchoLedger, a server engine is the person's own Groq key.
+        $ownKey = self::needsOwnKey($session, $provider);
+        if ($ownKey) {
+            $provider = SttProviderKey::Groq;
+        }
         // A retry starts a new provider job: the copy kept by the provider for the previous attempt is deleted.
         $oldJob = $existing?->provider_job_id;
         $oldProvider = $existing?->providerKey();
@@ -95,7 +112,7 @@ final class FinalTranscriptCoordinator
             'error_code' => null,
             'attempts' => 0,
             'language' => $language,
-            'meta' => ['route' => $route->toArray()],
+            'meta' => ['route' => $route->toArray(), ...($ownKey ? ['own_key' => true] : [])],
         ];
 
         $transcript = $existing ?? $session->transcripts()->firstOrNew(['kind' => TranscriptKind::Final]);

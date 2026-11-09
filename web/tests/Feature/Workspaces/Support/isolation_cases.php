@@ -27,6 +27,10 @@ const ISO_API_BYPASS = [
     'api.auth.options' => 'sign-in options: server-wide settings (password, Google, sign-up), no workspace data',
     'api.auth.password' => 'signing in: the account decides the workspace (its current one)',
     'api.auth.device.token' => 'signing in: the approved one-time code decides the workspace',
+    'api.auth.start' => 'signing in (v1.6): whether an address has an account and its ways in, no workspace data',
+    'api.auth.code' => 'signing in (v1.6): emails a code to the address typed, no workspace data',
+    'api.auth.code.verify' => 'signing in (v1.6): the emailed code decides the account, then its current workspace',
+    'api.auth.sign-up' => 'signing up (v1.6): the new account and its own new workspace',
     'api.webhooks.stt' => 'provider callback: found by transcript id and verified signature',
     'api.recordings.audio' => 'signed, expiring URL issued to a device of the workspace',
 ];
@@ -67,6 +71,7 @@ const ISO_WEB_BYPASS = [
     'account.delete.store' => 'deleting one\'s own account: the signed-in person only, no workspace data',
     'account.export.download' => 'signed, expiring link of one person\'s own data export',
     'legal.terms' => 'public legal page: no workspace data',
+    'sign-up' => 'a redirect to the sign-up or sign-in page, before any workspace',
     'legal.privacy' => 'public legal page: no workspace data',
     'mcp.oauth.protected-resource' => 'the connector\'s OAuth discovery: addresses and the scope, no workspace data',
     'mcp.oauth.protected-resource.nested' => 'the connector\'s OAuth discovery: addresses and the scope, no workspace data',
@@ -179,6 +184,7 @@ function isoApiCases(array $b): array
         'api.sessions.notes.make' => ['POST', "/api/sessions/{$s}/notes", [], 404],
         'api.transcripts.suggestions' => ['POST', "/api/transcripts/{$t}/suggestions/0", ['accept' => true], 404],
         'api.devices.revoke' => ['DELETE', "/api/devices/{$b['device']->id}", [], 404],
+        'api.devices.rename' => ['PATCH', "/api/devices/{$b['device']->id}", ['name' => 'hijacked'], 404],
         'api.sessions.restore' => ['POST', "/api/sessions/{$b['binned']->id}/restore", [], 404],
         'api.bin.destroy' => ['DELETE', "/api/bin/{$b['binned']->id}", [], 404],
         'api.sessions.markers.store' => ['POST', "/api/sessions/{$s}/markers", ['at_ms' => 10], 404],
@@ -241,6 +247,15 @@ function isoApiCases(array $b): array
         // Your account (v1.5): only the device's own person, never workspace B. Signing out everywhere ends this
         // device's token too, so it comes last.
         'api.account' => ['GET', '/api/account', [], 'list'],
+        // Entitlements (v1.6): only the device's own person in its own workspace, never B's numbers or names.
+        'api.me.entitlements' => ['GET', '/api/me/entitlements', [], 'list'],
+        // A person's own key: only ever their own (no id in the request); a wrong key says so and changes nothing of B.
+        'api.me.transcription-key.put' => ['PUT', '/api/me/transcription-key', ['provider' => 'groq', 'key' => 'short'],
+            fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'invalid_key'],
+        'api.me.transcription-key.delete' => ['DELETE', '/api/me/transcription-key', [], fn (TestResponse $r): bool => $r->status() === 204],
+        // B's upgrade request is never A's: A has none, whatever B asked for.
+        'api.upgrade-requests.latest' => ['GET', '/api/upgrade-requests/latest', [], 404],
+        'api.upgrade-requests.store' => ['POST', '/api/upgrade-requests', ['plan' => 'no-such-plan'], fn (TestResponse $r): bool => $r->status() === 422],
         'api.account.destroy' => ['DELETE', '/api/account', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
         'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],

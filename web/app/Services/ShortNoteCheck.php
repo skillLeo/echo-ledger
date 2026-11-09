@@ -83,7 +83,8 @@ final class ShortNoteCheck
             && $transcript->status === TranscriptStatus::Completed
             && ! isset(($transcript->meta ?? [])['short_check'])
             && trim((string) $transcript->text) !== ''
-            && self::lengthMs($transcript) <= self::MAX_MS;
+            && self::lengthMs($transcript) <= self::MAX_MS
+            && DoubleCheck::entitled($transcript);
     }
 
     /**
@@ -149,7 +150,7 @@ final class ShortNoteCheck
         }
         $skip = match (true) {
             ! $reuse && ! $this->prep->available() => 'no_ffmpeg',
-            app(BudgetGuard::class)->limitReached() || app(PlanLimits::class)->minutesReached($session->workspace_id) => 'limit_reached',
+            app(BudgetGuard::class)->limitReached() || app(PlanLimits::class)->minutesReached($session->workspace_id, $session->user_id) => 'limit_reached',
             default => null,
         };
         if ($skip !== null) {

@@ -140,14 +140,14 @@ it('locks a revoked device out of the API straight away', function () {
     $this->withToken($token)->getJson('/api/config')->assertUnauthorized();
 });
 
-it('labels the revoke action and warns that past recordings stay', function () {
+it('labels Remove from list and warns that past recordings stay (since v1.6 Sign out keeps the row)', function () {
     $admin = $this->signInAsAdmin();
     $device = Device::factory()->create(['user_id' => $admin->id]);
 
     $list = $this->panelComponent(ListDevices::class)->mountAction(TestAction::make(DeleteAction::class)->table($device));
     $modal = strip_tags($this->modalHtml($list));
 
-    expect($modal)->toContain('Revoke device')->toContain('Its past recordings stay in the library.');
+    expect($modal)->toContain('Remove from the list')->toContain('Its past recordings stay in the library.');
 });
 
 it('keeps a revoked device\'s sessions in the library without calling them web uploads', function () {
@@ -184,8 +184,9 @@ it('creates a one-time pairing code in XXXX-XXXX form when the dialog opens', fu
     expect(DevicePairingCode::query()->first())
         ->user_id->toBe($admin->id)
         ->used_at->toBeNull();
+    // Since v1.6 in plain words, with the live status.
     expect($html)->toContain('Sign-in QR code')
-        ->toContain('The code is stored only as a hash and cannot be shown again.');
+        ->toContain('It works once, for 10 minutes.')->toContain('Waiting for the app');
 });
 
 it('stores only a hash of the code and expires it after ten minutes', function () {

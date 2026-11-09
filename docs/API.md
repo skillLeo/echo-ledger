@@ -351,6 +351,32 @@ for the plan (then the default plan). Every route checks them; the apps only sho
   Transcription key"). Retry and Re-transcribe use the same key. (The desktop has no on-device engine today: a Free
   computer uses the person's key too.)
 
+### Errors and counting rules (since v1.6)
+| `code` | Status | When |
+|---|---|---|
+| `sign_up_closed` | 403 | A new email while sign-up is off |
+| `email_not_allowed` | 422 | A disposable address, or outside the allowed domains |
+| `resend_too_soon` | 429 | A code again before 60 s (`resend_after` in the body) |
+| `sign_up_limit` | 429 | Too many new accounts from one network today |
+| `turnstile_failed` | 422 | The web sign-up's anti-bot check failed |
+| `invalid_code` | 422 | A wrong email code (`attempts_left`) or an old sign-up token |
+| `code_expired` | 422 | The code is used up (5 wrong) or older than 10 minutes |
+| `limit_reached` | 403 | A plan limit (`limit`: the key in entitlements); to apps older than v1.6 the old code plus `limit` |
+| `invalid_key` | 422 | Groq refused the person's key |
+| `provider_error` | 502 | Groq could not be asked about the key (try again) |
+| `request_pending` | 409 | An upgrade request is already waiting (`request` holds it) |
+| `account_suspended` | 403 | The account is suspended: every call of its devices |
+
+- Devices are counted per person (active, not expired); "recordings a day" is recordings started in the last 24 hours
+  by that person in that workspace; "longest recording" is checked when a recording is created and finished.
+- `GET /api/security` devices carry readable names ("Galaxy S25 Ultra", "Windows 11 PC"), `status` (`active` |
+  `signed_out` | `revoked` | `expired`, 90 days without use) and `signed_out_at`. `DELETE /api/devices/{id}` signs the
+  device out and keeps its row (Remove from list deletes it in the console).
+- `GET /api/upgrade-requests/latest` also has `approved_plan` and `approved_until` once approved.
+- Activity kinds for the super admin only: `upgrade_requested`, `unusual_usage`.
+- `GET /api/config` keeps its v1.5 `plan.features` (`live_translate`, `screen_moments`, `ai_notes`, `connector`);
+  everything else is in entitlements.
+
 ### Renaming a device (since v1.6, P3)
 - `PATCH /api/devices/{id}` — `sessions:write`: `{"name": "…"}` (1–60 characters, trimmed) → `200` with the device as
   `GET /api/security` lists it. Another person's device `404 not_found`. An older server answers `404`/`405`: the apps

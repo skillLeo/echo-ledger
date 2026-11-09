@@ -2,16 +2,20 @@
 
 declare(strict_types=1);
 
+use App\Mail\EmailCodeMail;
 use App\Models\CaptureSession;
 use App\Models\Screen;
 use App\Models\Transcript;
 use App\Models\User;
+use App\Services\Accounts\SignUp;
 use App\Services\CredentialVault;
 use App\Services\RecordingIngestor;
+use App\Services\SettingsRepository;
 use App\Services\Views\TranscriptConverter;
 use Database\Seeders\DemoSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Testing\TestResponse;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -206,6 +210,28 @@ it('keeps the shape of every answer the apps read', function () {
     $record('account', $api()->getJson('/api/account'));
     $record('storage', $api()->getJson('/api/storage'));
     $record('security', $api()->getJson('/api/security'));
+
+    // Since v1.6 (P1): the email first, a code by email, a new address's sign-up token; entitlements, the person's own
+    // key, an upgrade request; (P3) a device renamed.
+    Mail::fake();
+    app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+    $record('auth_start', $this->api()->postJson('/api/auth/start', ['email' => 'sample@example.test']));
+    $record('auth_start_new', $this->api()->postJson('/api/auth/start', ['email' => 'new.sample@example.test']));
+    $record('auth_code', $this->api()->postJson('/api/auth/code', ['email' => 'new.sample@example.test', 'purpose' => 'sign_up']));
+    $emailed = '';
+    Mail::assertQueued(EmailCodeMail::class, function (EmailCodeMail $mail) use (&$emailed): bool {
+        $emailed = $mail->code;
+
+        return true;
+    });
+    $record('auth_code_verify_new', $this->api()->postJson('/api/auth/code/verify', [
+        'email' => 'new.sample@example.test', 'code' => $emailed, 'name' => 'Sample phone', 'platform' => 'android', 'install_id' => '3f1c2b9e-7a44-4d61-9c1e-2f0b8a7d6e51',
+    ]));
+    $record('entitlements', $api()->getJson('/api/me/entitlements'));
+    $record('transcription_key', $api()->putJson('/api/me/transcription-key', ['provider' => 'groq', 'key' => 'gsk_sample_key_00000000000000001234']));
+    $record('upgrade_request', $api()->postJson('/api/upgrade-requests', ['plan' => 'business', 'message' => 'For the team']));
+    $record('upgrade_request_latest', $api()->getJson('/api/upgrade-requests/latest'));
+    $record('device_rename', $api()->patchJson('/api/devices/'.$signedIn['device']['id'], ['name' => 'Sample phone']));
 
     // The library, with the demo recordings and their transcripts.
     $record('library', $api()->getJson('/api/library?limit=100'));

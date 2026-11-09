@@ -8,13 +8,15 @@ use App\Filament\Pages\AccountBeingDeleted;
 use App\Filament\Pages\RecordingConsentNotice;
 use App\Models\User;
 use Closure;
+use Filament\Facades\Filament;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Console pages for an account in its 7-day deletion grace (since v1.5): "disabled for sign-in except to cancel", so
  * every page leads to "Your account is being deleted" with "Keep my account". A new account sees the
- * recording-consent notice once before anything else. Signing out and the email confirmation stay open.
+ * recording-consent notice once before anything else. Signing out and the email confirmation stay open. Since v1.6 a
+ * suspended account is signed out on its next page.
  */
 final class AccountGate
 {
@@ -25,7 +27,20 @@ final class AccountGate
     {
         $user = $request->user();
         $route = (string) $request->route()?->getName();
-        if (! $user instanceof User || in_array($route, self::OPEN, true)) {
+        if (! $user instanceof User) {
+            return $next($request);
+        }
+        // Since v1.6: a suspended account is signed out of the console at once, with the reason on the sign-in page.
+        if ($user->isSuspended()) {
+            Filament::auth()->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            $request->session()->flash('account.suspended', true);
+            abort_unless($this->isPage($request), 403, 'This account is suspended.');
+
+            return redirect()->to(Filament::getPanel('admin')->getLoginUrl() ?? '/admin/login');
+        }
+        if (in_array($route, self::OPEN, true)) {
             return $next($request);
         }
         if ($user->isBeingDeleted() && $route !== AccountBeingDeleted::getRouteName()) {

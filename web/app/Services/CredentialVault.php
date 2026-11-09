@@ -26,6 +26,8 @@ final class CredentialVault
         'openai' => ['api_key' => 'API key (optional, future driver)'],
         // Since v1.5: "Sign in with Google" on the console (an OAuth client of the Google Cloud console).
         'google' => ['client_id' => 'Client ID', 'client_secret' => 'Client secret'],
+        // Since v1.6: Cloudflare Turnstile, the anti-bot check of the web sign-up (skipped while either is empty).
+        'turnstile' => ['site_key' => 'Site key', 'secret_key' => 'Secret key'],
     ];
 
     /** Secrets that EchoLedger can generate for the admin. */

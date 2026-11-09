@@ -127,7 +127,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 32;
+const LATER_MIGRATIONS = 39;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
@@ -203,7 +203,7 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
 const PHASE2_STEPS = 5;
 
 /** Migrations that came after them (rolled back first); add yours here as for LATER_MIGRATIONS. */
-const AFTER_PHASE2 = 17;
+const AFTER_PHASE2 = 24;
 
 /** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
 function seedPhase2Library(Connection $db): array
@@ -301,7 +301,7 @@ it('refuses to roll projects back while one person has two projects of the same 
 /** The v1.5 Phase 3 migration (screen moments), and how many came after it (rolled back first). */
 const PHASE3_STEPS = 1;
 
-const AFTER_PHASE3 = 15;
+const AFTER_PHASE3 = 22;
 
 it('runs the v1.5 Phase 3 migration down and up again on a library with screen moments', function () {
     $db = cycleConnection();
@@ -348,7 +348,7 @@ it('runs the v1.5 Phase 3 migration down and up again on a library with screen m
 /** The v1.5 account migrations (accounts, data exports), and how many came after them (rolled back first). */
 const ACCOUNT_STEPS = 2;
 
-const AFTER_ACCOUNTS = 13;
+const AFTER_ACCOUNTS = 20;
 
 it('runs the v1.5 account migrations down and up again without touching the library', function () {
     $db = cycleConnection();
@@ -404,12 +404,12 @@ it('runs the v1.5 account migrations down and up again without touching the libr
 });
 
 /** The v1.5 plans, roles and privacy migration; add later ones to the count as for LATER_MIGRATIONS. */
-const AFTER_PLANS = 12;
+const AFTER_PLANS = 19;
 
 /** Passport's four tables and Connected apps (v1.5, the Claude and ChatGPT connector); add later ones as for LATER_MIGRATIONS. */
 const CONNECTOR_STEPS = 5;
 
-const AFTER_CONNECTOR = 5;
+const AFTER_CONNECTOR = 12;
 
 const CONNECTOR_TABLES = ['oauth_auth_codes', 'oauth_access_tokens', 'oauth_refresh_tokens', 'oauth_clients', 'connected_apps'];
 
@@ -467,7 +467,8 @@ it('runs the v1.5 plans and roles migration down and up again without touching t
         // Every feature and no limits on Personal; the placeholders on Free.
         ->and($db->table('plans')->where('key', 'personal')->value('monthly_minutes'))->toBeNull()
         ->and(json_decode((string) $db->table('plans')->where('key', 'personal')->value('features'), true))->toBe(['live_translate' => true, 'screen_moments' => true, 'ai_notes' => true, 'connector' => true])
-        ->and((int) $db->table('plans')->where('key', 'free')->value('monthly_minutes'))->toBe(300)
+        // Since v1.6 the default plans' migration gives Free its own limits (no minutes of the server's own engines).
+        ->and((int) $db->table('plans')->where('key', 'free')->value('monthly_minutes'))->toBe(0)
         ->and((int) $db->table('plans')->where('key', 'free')->value('seats'))->toBe(1);
     // A rule made before the migration was back-filled to its project's maker when the seed ran after it; do it by hand here.
     $db->table('filing_rules')->update(['user_id' => $seeded['user']]);
@@ -602,7 +603,7 @@ it('gives each person a project of their own for what they filed or nested in so
 });
 
 /** Migrations after the sent items' one (rolled back first): the title and preferences ones and the cheapest-first engine routes; add later ones here. */
-const AFTER_SENT_ITEMS = 3;
+const AFTER_SENT_ITEMS = 10;
 
 it('fills what a project sent before this release holds, keeps every row and can go back', function () {
     $db = cycleConnection();
@@ -668,7 +669,7 @@ it('fills what a project sent before this release holds, keeps every row and can
 });
 
 /** Migrations after the automatic titles' one (rolled back first); add later ones here. */
-const AFTER_TITLE_AUTO = 2;
+const AFTER_TITLE_AUTO = 9;
 
 it('marks automatic titles with a flag that starts false for every recording and can go back', function () {
     $db = cycleConnection();
@@ -697,7 +698,7 @@ it('marks automatic titles with a flag that starts false for every recording and
 });
 
 /** Migrations after the preferences one (the cheapest-first engine routes); add later ones here. */
-const AFTER_PREFERENCES = 1;
+const AFTER_PREFERENCES = 8;
 
 it('adds the email and Library choices empty for everyone and can go back', function () {
     $db = cycleConnection();
@@ -714,4 +715,222 @@ it('adds the email and Library choices empty for everyone and can go back', func
         ->and($db->table('users')->count())->toBe(1);
     cycleArtisan('migrate', ['--step' => 1]);
     expect($db->getSchemaBuilder()->hasColumns('users', ['email_preferences', 'console_preferences']))->toBeTrue();
+});
+
+/** Migrations after v1.6's email codes (P1.1); add later ones here. */
+const AFTER_EMAIL_CODES = 6;
+
+it('adds the email codes and keeps every older account\'s password, and can go back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_EMAIL_CODES]);
+    expect($db->getSchemaBuilder()->hasTable('email_codes'))->toBeFalse();
+    $now = now();
+    $db->table('users')->insert(['name' => 'A', 'email' => 'a@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->table('users')->where('has_password', true)->whereNull('terms_accepted_at')->count())->toBe(1);
+    $db->table('email_codes')->insert(['email' => 'a@example.test', 'purpose' => 'sign_in', 'code_hash' => str_repeat('a', 64), 'expires_at' => $now, 'created_at' => $now, 'updated_at' => $now]);
+
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_EMAIL_CODES]);
+    expect($db->getSchemaBuilder()->hasTable('email_codes'))->toBeFalse()
+        ->and($db->getSchemaBuilder()->hasColumn('users', 'has_password'))->toBeFalse()
+        ->and($db->table('users')->count())->toBe(1);
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumns('users', ['has_password', 'terms_accepted_at']))->toBeTrue();
+});
+
+/** Migrations after v1.6's entitlements (P1.2); add later ones here. */
+const AFTER_ENTITLEMENTS = 5;
+
+it('adds what plans show and limit, plan end dates and a person\'s overrides, changing no workspace, and can go back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_ENTITLEMENTS]);
+    expect($db->getSchemaBuilder()->hasColumn('plans', 'badge'))->toBeFalse();
+    $now = now();
+    // A plan the admin made: the later default plans' migration leaves its workspaces where they are.
+    $plan = $db->table('plans')->insertGetId(['key' => 'team', 'name' => 'Team', 'created_at' => $now, 'updated_at' => $now]);
+    $workspace = $db->table('workspaces')->insertGetId(['name' => 'Team', 'plan_id' => $plan, 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('users')->insert(['name' => 'A', 'email' => 'a@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect((int) $db->table('workspaces')->where('id', $workspace)->value('plan_id'))->toBe($plan)
+        ->and($db->table('workspaces')->where('id', $workspace)->value('plan_expires_at'))->toBeNull()
+        ->and($db->table('users')->whereNull('entitlement_overrides')->count())->toBe(1)
+        // (`migrate --step` runs every later migration too: the default plans then put three plans on offer.)
+        ->and($db->table('plans')->where('on_offer', true)->pluck('key')->sort()->values()->all())->toBe(['business', 'free', 'pro'])
+        ->and((int) $db->table('plans')->where('id', $plan)->value('trial_minutes'))->toBe(0)
+        ->and($db->table('plans')->where('id', $plan)->value('retention_from'))->toBeNull();
+    $db->table('users')->update(['entitlement_overrides' => json_encode(['limits' => ['devices' => 9]])]);
+    $db->table('workspaces')->update(['plan_expires_at' => $now]);
+
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_ENTITLEMENTS]);
+    expect($db->getSchemaBuilder()->hasColumn('users', 'entitlement_overrides'))->toBeFalse()
+        ->and($db->getSchemaBuilder()->hasColumn('workspaces', 'plan_expires_at'))->toBeFalse()
+        ->and($db->table('workspaces')->where('id', $workspace)->exists())->toBeTrue();
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumns('plans', ['badge', 'color', 'engines', 'retention_from']))->toBeTrue();
+});
+
+/** Migrations after v1.6's own transcription keys (P1.3); add later ones here. */
+const AFTER_TRANSCRIPTION_KEYS = 4;
+
+it('adds a person\'s own transcription key, empty for everyone, and can go back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_TRANSCRIPTION_KEYS]);
+    $now = now();
+    $db->table('users')->insert(['name' => 'A', 'email' => 'a@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->table('users')->whereNull('transcription_key')->whereNull('transcription_key_last4')->count())->toBe(1);
+    $db->table('users')->update(['transcription_key' => 'encrypted-value', 'transcription_key_provider' => 'groq', 'transcription_key_last4' => 'ab12']);
+
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_TRANSCRIPTION_KEYS]);
+    expect($db->getSchemaBuilder()->hasColumn('users', 'transcription_key'))->toBeFalse()->and($db->table('users')->count())->toBe(1);
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumns('users', ['transcription_key', 'transcription_key_provider', 'transcription_key_last4', 'transcription_key_checked_at']))->toBeTrue();
+});
+
+/** Migrations after v1.6's default plans (P1.3); add later ones here. */
+const AFTER_DEFAULT_PLANS = 3;
+
+it('makes Free, Pro and Business, moves Personal and v1.5 Free workspaces to Business, frees the super admins, and puts it all back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_DEFAULT_PLANS]);
+    $now = now();
+    $personal = (int) $db->table('plans')->where('key', 'personal')->value('id');
+    $oldFree = (int) $db->table('plans')->where('key', 'free')->value('id');
+    $custom = $db->table('plans')->insertGetId(['key' => 'team', 'name' => 'Team', 'monthly_minutes' => 100, 'retention_days' => 90, 'created_at' => $now, 'updated_at' => $now]);
+    $workspaces = [];
+    foreach (['admin' => $personal, 'friend' => $oldFree, 'custom' => $custom] as $name => $plan) {
+        $workspaces[$name] = $db->table('workspaces')->insertGetId(['name' => $name, 'plan_id' => $plan, 'created_at' => $now, 'updated_at' => $now]);
+    }
+    $admin = $db->table('users')->insertGetId(['name' => 'Op', 'email' => 'op@example.test', 'password' => 'x', 'is_super_admin' => true, 'created_at' => $now, 'updated_at' => $now]);
+    $plain = $db->table('users')->insertGetId(['name' => 'P', 'email' => 'p@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    $session = (string) Str::ulid();
+    $db->table('capture_sessions')->insert(['id' => $session, 'workspace_id' => $workspaces['friend'], 'user_id' => $plain, 'client_ref' => 'r1', 'source_device' => 'phone',
+        'source_app' => 'whatsapp', 'started_at' => $now->copy()->subYears(2), 'status' => 'completed', 'created_at' => $now->copy()->subYears(2), 'updated_at' => $now]);
+
+    cycleArtisan('migrate', ['--step' => 1]);
+    $plans = $db->table('plans')->whereIn('key', ['free', 'pro', 'business'])->get()->keyBy('key');
+    $business = (int) $plans['business']->id;
+    expect($plans->keys()->sort()->values()->all())->toBe(['business', 'free', 'pro'])
+        ->and((bool) $plans['free']->is_default)->toBeTrue()
+        ->and((int) $plans['free']->max_devices)->toBe(2)
+        ->and((int) $plans['free']->storage_bytes)->toBe(1024 ** 3)
+        ->and((int) $plans['free']->retention_days)->toBe(30)
+        ->and((int) $plans['free']->trial_minutes)->toBe(0)
+        ->and(json_decode((string) $plans['free']->features, true))->each->toBeFalse()
+        ->and(json_decode((string) $plans['pro']->features, true))->toMatchArray(['platform_transcription' => true, 'views' => true, 'double_check' => true, 'screen_moments' => true, 'connector' => true, 'team' => false])
+        ->and((int) $plans['pro']->storage_bytes)->toBe(20 * 1024 ** 3)
+        ->and((int) $plans['pro']->retention_days)->toBe(365)
+        ->and(json_decode((string) $plans['business']->features, true))->each->toBeTrue()
+        ->and((int) $plans['business']->storage_bytes)->toBe(100 * 1024 ** 3)
+        ->and($plans['business']->retention_from)->not->toBeNull()
+        ->and($db->table('plans')->where('is_default', true)->count())->toBe(1)
+        // Nobody loses what they have: Personal and the old Free go to Business; a plan the admin made stays.
+        ->and((int) $db->table('workspaces')->where('id', $workspaces['admin'])->value('plan_id'))->toBe($business)
+        ->and((int) $db->table('workspaces')->where('id', $workspaces['friend'])->value('plan_id'))->toBe($business)
+        ->and((int) $db->table('workspaces')->where('id', $workspaces['custom'])->value('plan_id'))->toBe($custom)
+        ->and($db->table('plans')->where('id', $custom)->value('retention_from'))->toBeNull()
+        ->and(json_decode((string) $db->table('users')->where('id', $admin)->value('entitlement_overrides'), true)['limits'])->each->toBeNull()
+        ->and($db->table('users')->where('id', $plain)->value('entitlement_overrides'))->toBeNull()
+        // The two-year-old recording is untouched.
+        ->and($db->table('capture_sessions')->where('id', $session)->whereNull('deleted_at')->exists())->toBeTrue();
+
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_DEFAULT_PLANS]);
+    expect((int) $db->table('workspaces')->where('id', $workspaces['admin'])->value('plan_id'))->toBe($personal)
+        ->and((int) $db->table('workspaces')->where('id', $workspaces['friend'])->value('plan_id'))->toBe($oldFree)
+        ->and((int) $db->table('plans')->where('key', 'free')->value('max_devices'))->toBe(3)
+        ->and((int) $db->table('plans')->where('key', 'free')->value('monthly_minutes'))->toBe(300)
+        ->and($db->table('plans')->whereIn('key', ['pro', 'business'])->exists())->toBeFalse()
+        ->and($db->table('users')->where('id', $admin)->value('entitlement_overrides'))->toBeNull()
+        ->and($db->getSchemaBuilder()->hasTable('plans_before_v16'))->toBeFalse();
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->table('plans')->whereIn('key', ['free', 'pro', 'business'])->count())->toBe(3);
+});
+
+/** Migrations after v1.6's upgrade requests (P1.4); add later ones here. */
+const AFTER_UPGRADE_REQUESTS = 2;
+
+it('adds the upgrade requests, and can go back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    $now = now();
+    $user = $db->table('users')->insertGetId(['name' => 'A', 'email' => 'a@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    $workspace = $db->table('workspaces')->insertGetId(['name' => 'A', 'plan_id' => $db->table('plans')->value('id'), 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('upgrade_requests')->insert(['id' => (string) Str::ulid(), 'user_id' => $user, 'workspace_id' => $workspace, 'plan' => 'pro', 'status' => 'pending', 'created_at' => $now, 'updated_at' => $now]);
+
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_UPGRADE_REQUESTS]);
+    expect($db->getSchemaBuilder()->hasTable('upgrade_requests'))->toBeFalse()->and($db->table('users')->count())->toBe(1);
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasTable('upgrade_requests'))->toBeTrue();
+    // A person's requests go with their account.
+    $db->table('upgrade_requests')->insert(['id' => (string) Str::ulid(), 'user_id' => $user, 'workspace_id' => $workspace, 'plan' => 'pro', 'status' => 'pending', 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('users')->where('id', $user)->delete();
+    expect($db->table('upgrade_requests')->count())->toBe(0);
+});
+
+/** Migrations after v1.6's suspend switch (P1.5); add later ones here. */
+const AFTER_SUSPENSION = 1;
+
+it('adds the suspend switch, off for everyone, and can go back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_SUSPENSION]);
+    $now = now();
+    $db->table('users')->insert(['name' => 'A', 'email' => 'a@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->table('users')->whereNull('suspended_at')->count())->toBe(1);
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_SUSPENSION]);
+    expect($db->getSchemaBuilder()->hasColumn('users', 'suspended_at'))->toBeFalse()->and($db->table('users')->count())->toBe(1);
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumns('users', ['suspended_at', 'suspended_reason']))->toBeTrue();
+});
+
+/** Migrations after v1.6's device identity (P3); add later ones here. */
+const AFTER_DEVICE_IDENTITY = 0;
+
+it('merges one person\'s duplicate devices into the newest, moving what they hold, and puts them back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_DEVICE_IDENTITY]);
+    $now = now();
+    $plan = $db->table('plans')->value('id');
+    $workspace = $db->table('workspaces')->insertGetId(['name' => 'A', 'plan_id' => $plan, 'created_at' => $now, 'updated_at' => $now]);
+    $user = $db->table('users')->insertGetId(['name' => 'A', 'email' => 'a@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    $other = $db->table('users')->insertGetId(['name' => 'B', 'email' => 'b@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    $device = function (int $owner, string $name, string $seen, string $platform = 'android') use ($db, $workspace, $now): string {
+        $id = strtolower((string) Str::ulid());
+        $db->table('devices')->insert(['id' => $id, 'workspace_id' => $workspace, 'user_id' => $owner, 'name' => $name, 'platform' => $platform, 'last_seen_at' => $seen, 'created_at' => $now, 'updated_at' => $now]);
+        $db->table('personal_access_tokens')->insert(['tokenable_type' => 'App\\Models\\Device', 'tokenable_id' => $id, 'name' => 'device', 'token' => hash('sha256', $id), 'abilities' => '[]', 'created_at' => $now, 'updated_at' => $now]);
+
+        return $id;
+    };
+    $old = $device($user, 'samsung SM-S938B', '2026-10-01 10:00:00');
+    $newest = $device($user, 'samsung SM-S938B', '2026-11-01 10:00:00');
+    $laptop = $device($user, 'samsung SM-S938B', '2026-09-01 10:00:00', 'windows'); // another platform: not a duplicate
+    $theirs = $device($other, 'samsung SM-S938B', '2026-08-01 10:00:00');         // another person: not a duplicate
+    $session = (string) Str::ulid();
+    $db->table('capture_sessions')->insert(['id' => $session, 'workspace_id' => $workspace, 'user_id' => $user, 'device_id' => $old, 'client_ref' => 'r-1', 'source_device' => 'phone',
+        'source_app' => 'whatsapp', 'started_at' => $now, 'status' => 'completed', 'created_at' => $now, 'updated_at' => $now]);
+
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->table('devices')->where('user_id', $user)->where('platform', 'android')->pluck('id')->all())->toBe([$newest])
+        ->and($db->table('devices')->whereIn('id', [$laptop, $theirs])->count())->toBe(2)
+        ->and($db->table('capture_sessions')->where('id', $session)->value('device_id'))->toBe($newest)
+        ->and($db->table('personal_access_tokens')->where('tokenable_id', $old)->count())->toBe(0)
+        ->and($db->table('personal_access_tokens')->where('tokenable_id', $newest)->count())->toBe(1)
+        ->and($db->table('device_merges')->count())->toBe(1);
+
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_DEVICE_IDENTITY]);
+    expect($db->table('devices')->where('id', $old)->exists())->toBeTrue()
+        ->and($db->table('capture_sessions')->where('id', $session)->value('device_id'))->toBe($old)
+        ->and($db->getSchemaBuilder()->hasColumn('devices', 'install_id'))->toBeFalse()
+        ->and($db->getSchemaBuilder()->hasTable('device_merges'))->toBeFalse();
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($db->getSchemaBuilder()->hasColumns('devices', ['install_id', 'name_chosen', 'signed_out_at', 'signed_out_by']))->toBeTrue();
 });

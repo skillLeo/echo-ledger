@@ -214,7 +214,7 @@ final class ConnectorLibrary
             $out[] = "Files\n".$names->map(fn (ClientFile $f): string => '- '.$f->name)->implode("\n");
         }
 
-        if (! $this->plans->allows($workspaceId, 'ai_notes')) {
+        if (! $this->plans->allows($workspaceId, 'ai_notes', $project->user_id)) {
             $out[] = 'Memory and call notes are not in your plan.';
 
             return implode("\n\n", $out);

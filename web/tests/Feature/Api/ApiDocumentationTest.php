@@ -83,17 +83,18 @@ function registeredApiRoutes(): array
  * phase removes its own lines when it serves them; nothing else may be documented without a route.
  */
 /** v1.6 P1: the contract is written first; each route leaves this list when it is served. */
+/** Routes served before docs/API.md names them (a branch ahead of the contract); empty when they agree. */
+const SERVED_BEFORE_DOCUMENTED = [];
+
 const NOT_SERVED_YET = [
-    'POST /api/auth/start', 'POST /api/auth/code', 'POST /api/auth/code/verify', 'POST /api/auth/sign-up',
-    'GET /api/me/entitlements', 'PUT /api/me/transcription-key', 'DELETE /api/me/transcription-key',
-    'POST /api/upgrade-requests', 'GET /api/upgrade-requests/latest',
 ];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();
     $served = collect(array_keys(registeredApiRoutes()))->reject(fn (string $key) => str_contains($key, '/webhooks/'))->sort()->values()->all();
 
-    expect(array_values(array_diff($served, $documented)))->toBe([], 'served but not documented')
+    expect(array_values(array_diff($served, $documented, SERVED_BEFORE_DOCUMENTED)))->toBe([], 'served but not documented')
+        ->and(array_values(array_intersect(SERVED_BEFORE_DOCUMENTED, $documented)))->toBe([], 'documented now: remove it from SERVED_BEFORE_DOCUMENTED')
         ->and(array_values(array_diff($documented, $served, NOT_SERVED_YET)))->toBe([], 'documented but not served')
         // A line that stays after its phase served the route would hide a missing one later.
         ->and(array_values(array_intersect(NOT_SERVED_YET, $served)))->toBe([], 'served now: remove it from NOT_SERVED_YET');

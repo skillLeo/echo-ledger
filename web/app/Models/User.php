@@ -47,11 +47,20 @@ use Laravel\Passport\HasApiTokens;
  * @property bool $notify_transcript_ready an email when a transcript of theirs is ready (off by default)
  * @property array<string, bool>|null $email_preferences Profile → Emails per category (since v1.5, Phase 1C; App\Services\Accounts\EmailPreferences)
  * @property array<string, mixed>|null $console_preferences the console's Library group and sort per view (since v1.5, Phase 1C)
+ * @property bool $has_password whether its owner chose a password (since v1.6: an account made with a code or Google has none)
+ * @property array{features?: array<string, bool>, limits?: array<string, int|float|null>}|null $entitlement_overrides the super admin's own settings for this person (since v1.6)
+ * @property string|null $transcription_key the person's own Groq key, encrypted (since v1.6; never sent back)
+ * @property string|null $transcription_key_provider
+ * @property string|null $transcription_key_last4
+ * @property Carbon|null $transcription_key_checked_at
+ * @property Carbon|null $suspended_at since v1.6: the super admin's suspend switch (signs in nowhere, devices refused)
+ * @property string|null $suspended_reason
+ * @property Carbon|null $terms_accepted_at when the Terms and the Privacy Policy were accepted at sign-up (since v1.6)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
  */
 #[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides'])]
 class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery, MustVerifyEmail, OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -63,6 +72,10 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         static::updating(function (User $user): void {
             if ($user->isDirty('email') && ! $user->isDirty('email_verified_at')) {
                 $user->email_verified_at = null;
+            }
+            // Since v1.6: a password set later (the reset link, the profile) is one the owner knows.
+            if ($user->isDirty('password') && ! $user->isDirty('has_password')) {
+                $user->has_password = true;
             }
         });
     }
@@ -78,6 +91,12 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     public function isBeingDeleted(): bool
     {
         return $this->deletes_at !== null;
+    }
+
+    /** Suspended by the super admin (since v1.6): no sign-in anywhere, every API call of its devices refused. */
+    public function isSuspended(): bool
+    {
+        return $this->suspended_at !== null;
     }
 
     public function hasTwoFactor(): bool
@@ -141,6 +160,12 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'notify_transcript_ready' => 'boolean',
             'email_preferences' => 'array',
             'console_preferences' => 'array',
+            'has_password' => 'boolean',
+            'entitlement_overrides' => 'array',
+            'transcription_key' => 'encrypted',
+            'transcription_key_checked_at' => 'datetime',
+            'suspended_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
         ];
     }
 }

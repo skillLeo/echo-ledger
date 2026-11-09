@@ -1,0 +1,240 @@
+{
+    "plan": {
+        "key": "personal",
+        "name": "Personal",
+        "badge": "PERSONAL",
+        "color": "#64748b",
+        "expires_at": null,
+        "trial_minutes_left": 0
+    },
+    "features": {
+        "record": {
+            "enabled": true,
+            "name": "Record and upload",
+            "description": "Record calls, meetings and voice notes on your phone and computer, and upload files.",
+            "cost": "free",
+            "lowest_plan": null
+        },
+        "organise": {
+            "enabled": true,
+            "name": "Organise",
+            "description": "Projects, labels, pins and filing rules for your recordings.",
+            "cost": "free",
+            "lowest_plan": null
+        },
+        "search": {
+            "enabled": true,
+            "name": "Search",
+            "description": "Find any word in your recordings and transcripts.",
+            "cost": "free",
+            "lowest_plan": null
+        },
+        "share_links": {
+            "enabled": true,
+            "name": "Share links",
+            "description": "Links to a recording or a project that you can take back at any time.",
+            "cost": "free",
+            "lowest_plan": null
+        },
+        "export": {
+            "enabled": true,
+            "name": "Export",
+            "description": "Transcripts as text and subtitles.",
+            "cost": "free",
+            "lowest_plan": null
+        },
+        "ready_check": {
+            "enabled": true,
+            "name": "Ready check",
+            "description": "Checks that your phone or computer will record your calls.",
+            "cost": "free",
+            "lowest_plan": null
+        },
+        "platform_transcription": {
+            "enabled": true,
+            "name": "Transcription on EchoLedger",
+            "description": "Your recordings are transcribed for you, with no key of your own.",
+            "cost": "paid",
+            "lowest_plan": "pro"
+        },
+        "views": {
+            "enabled": true,
+            "name": "Roman Urdu, English and Urdu",
+            "description": "Read any call in Roman Urdu, English or Urdu, side by side with what was said.",
+            "cost": "paid",
+            "lowest_plan": "pro"
+        },
+        "double_check": {
+            "enabled": true,
+            "name": "Double-check",
+            "description": "A second engine listens again to the words the first one was unsure of, and to every short note.",
+            "cost": "paid",
+            "lowest_plan": "pro"
+        },
+        "screen_moments": {
+            "enabled": true,
+            "name": "Screen moments",
+            "description": "What was on the screen during a meeting, next to the words that were said.",
+            "cost": "paid",
+            "lowest_plan": "pro"
+        },
+        "connector": {
+            "enabled": true,
+            "name": "Claude and ChatGPT",
+            "description": "Ask Claude or ChatGPT about your recordings.",
+            "cost": "paid",
+            "lowest_plan": "pro"
+        },
+        "team": {
+            "enabled": true,
+            "name": "Team workspace",
+            "description": "Invite people to a shared workspace, with roles and seats.",
+            "cost": "paid",
+            "lowest_plan": "business"
+        },
+        "premium_engines": {
+            "enabled": true,
+            "name": "Premium engines",
+            "description": "ElevenLabs and Gemini for the hardest calls and languages.",
+            "cost": "paid",
+            "lowest_plan": "business"
+        },
+        "live_translate": {
+            "enabled": true,
+            "name": "Live Translate",
+            "description": "Live subtitles in your language for games and videos.",
+            "cost": "paid",
+            "lowest_plan": "business"
+        },
+        "ai_notes": {
+            "enabled": true,
+            "name": "AI notes",
+            "description": "Project notes, memory and Ask about a project.",
+            "cost": "paid",
+            "lowest_plan": "business"
+        }
+    },
+    "limits": {
+        "monthly_minutes": {
+            "limit": null,
+            "used": 0
+        },
+        "devices": {
+            "limit": null,
+            "used": 3
+        },
+        "storage_bytes": {
+            "limit": null,
+            "used": 4332716
+        },
+        "retention_days": {
+            "limit": null
+        },
+        "seats": {
+            "limit": null,
+            "used": 2
+        },
+        "max_file_minutes": {
+            "limit": null
+        },
+        "uploads_per_day": {
+            "limit": null,
+            "used": 5
+        },
+        "ai_usd_month": {
+            "limit": null,
+            "used": 0
+        }
+    },
+    "engines": [
+        "own_groq",
+        "on_device",
+        "assemblyai",
+        "groq",
+        "soniox",
+        "azure_mai",
+        "elevenlabs",
+        "gemini"
+    ],
+    "transcription_key": {
+        "provider": "groq",
+        "set": false,
+        "last4": null
+    },
+    "upgrade_request": null,
+    "plans": [
+        {
+            "key": "free",
+            "name": "Free",
+            "badge": "FREE",
+            "color": "#64748b",
+            "price": "Free",
+            "description": "Record, organise, search and share. Transcripts with your own free Groq key, or on your computer.",
+            "features": [],
+            "limits": {
+                "monthly_minutes": 0,
+                "devices": 2,
+                "storage_bytes": 1073741824,
+                "retention_days": 30,
+                "seats": 1,
+                "max_file_minutes": 180,
+                "uploads_per_day": 50,
+                "ai_usd_month": 0
+            }
+        },
+        {
+            "key": "pro",
+            "name": "Pro",
+            "badge": "PRO",
+            "color": "#7c3aed",
+            "price": "Ask for the price",
+            "description": "Transcripts made for you, Roman Urdu and English views, double-check, screen moments and Claude or ChatGPT.",
+            "features": [
+                "platform_transcription",
+                "views",
+                "double_check",
+                "screen_moments",
+                "connector"
+            ],
+            "limits": {
+                "monthly_minutes": 600,
+                "devices": 5,
+                "storage_bytes": 21474836480,
+                "retention_days": 365,
+                "seats": 1,
+                "max_file_minutes": 240,
+                "uploads_per_day": 200,
+                "ai_usd_month": 0
+            }
+        },
+        {
+            "key": "business",
+            "name": "Business",
+            "badge": "BUSINESS",
+            "color": "#0369a1",
+            "price": "Ask for the price",
+            "description": "Everything in Pro, and a team with roles, premium engines, Live Translate and AI notes.",
+            "features": [
+                "platform_transcription",
+                "views",
+                "double_check",
+                "screen_moments",
+                "connector",
+                "team",
+                "premium_engines",
+                "live_translate",
+                "ai_notes"
+            ],
+            "limits": {
+                "monthly_minutes": 3000,
+                "devices": 5,
+                "storage_bytes": 107374182400,
+                "retention_days": 365,
+                "seats": 10,
+                "max_file_minutes": 480,
+                "uploads_per_day": 500,
+                "ai_usd_month": 10
+            }
+        }
+    ]
+}

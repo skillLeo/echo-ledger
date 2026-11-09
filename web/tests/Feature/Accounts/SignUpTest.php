@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
 use App\Filament\Auth\EmailVerificationPrompt;
+use App\Filament\Auth\Login;
 use App\Filament\Auth\Register;
 use App\Filament\Auth\RequestPasswordReset;
+use App\Filament\Pages\GetTheApps;
 use App\Filament\Pages\Settings;
 use App\Filament\Pages\WorkspaceSettings;
+use App\Mail\EmailCodeMail;
 use App\Mail\InvitationMail;
 use App\Mail\ResetPasswordMail;
 use App\Mail\VerifyEmailMail;
@@ -33,10 +36,21 @@ function openSignUp(string $mode = SignUp::ANYONE): void
     app(SettingsRepository::class)->set('signup.mode', $mode);
 }
 
-/** @return array<string, string> */
-function signUpForm(array $overrides = []): array
+/** The console's sign-up of [$email] (since v1.6: email → code → name and Terms) on [$page], a Login or Register test. */
+function consoleSignUp(mixed $page, string $email, string $name = 'Ayesha Malik', bool $accept = true): mixed
 {
-    return array_merge(['name' => 'Ayesha Malik', 'email' => 'ayesha@example.test', 'password' => 'a-good-password-42', 'passwordConfirmation' => 'a-good-password-42'], $overrides);
+    $page->fillForm(['email' => $email])->call('authenticate')->assertHasNoFormErrors();
+    $code = null;
+    Mail::assertQueued(EmailCodeMail::class, function (EmailCodeMail $mail) use ($email, &$code): bool {
+        if ($mail->hasTo(strtolower($email))) {
+            $code = $mail->code;
+        }
+
+        return true;
+    });
+
+    return $page->fillForm(['code' => $code])->call('authenticate')->assertSet('step', Login::STEP_PROFILE)
+        ->fillForm(['name' => $name, 'accept_terms' => $accept])->call('authenticate');
 }
 
 it('keeps sign-up closed by default: no page and no link on the sign-in page', function () {
@@ -44,38 +58,43 @@ it('keeps sign-up closed by default: no page and no link on the sign-in page', f
 
     $this->get('/admin/register')->assertNotFound();
     expect($this->get('/admin/login')->assertOk()->getContent())->not->toContain('/admin/register');
+    $this->get('/sign-up')->assertRedirect(route('filament.admin.auth.login'));
+    // A new address is told sign-up is closed; nothing is emailed.
+    Livewire::test(Login::class)->fillForm(['email' => 'new.person@example.test'])->call('authenticate')->assertHasFormErrors(['email'])->assertSet('step', Login::STEP_EMAIL);
+    Mail::assertNotQueued(EmailCodeMail::class);
 });
 
-it('lets anyone make an account when sign-up is open, with a personal workspace and an unconfirmed email', function () {
+it('lets anyone make an account when sign-up is open: confirmed by the code, a personal workspace, then Get the apps', function () {
     openSignUp();
-    expect($this->get('/admin/login')->getContent())->toContain('/admin/register');
-    $this->get('/admin/register')->assertOk();
+    $this->get('/sign-up')->assertRedirect(route('filament.admin.auth.register'));
+    $this->get('/admin/register')->assertOk()->assertSee('Create your free account');
 
-    Livewire::test(Register::class)->fillForm(signUpForm(['email' => 'Ayesha@Example.test']))->call('register')->assertHasNoFormErrors();
+    consoleSignUp(Livewire::test(Register::class), 'Ayesha@Example.test')->assertHasNoFormErrors()->assertRedirect(GetTheApps::getUrl(panel: 'admin'));
 
     $user = User::query()->where('email', 'ayesha@example.test')->firstOrFail();
-    expect($user->hasVerifiedEmail())->toBeFalse()
+    expect($user->hasVerifiedEmail())->toBeTrue()
+        ->and($user->name)->toBe('Ayesha Malik')
+        ->and($user->has_password)->toBeFalse()
+        ->and($user->terms_accepted_at)->not->toBeNull()
         ->and($user->is_super_admin)->toBeFalse()
         ->and($user->workspaces()->count())->toBe(1)
         ->and(Workspace::query()->findOrFail($user->current_workspace_id)->roleOf($user))->toBe(WorkspaceRole::Owner)
-        ->and($user->consent_seen_at)->toBeNull();
+        ->and($user->consent_seen_at)->not->toBeNull();
     $this->assertAuthenticatedAs($user, 'web');
-    Mail::assertQueued(VerifyEmailMail::class, fn (VerifyEmailMail $mail): bool => $mail->hasTo('ayesha@example.test') && str_contains($mail->url, '/email-verification/verify/'));
+    Mail::assertNotQueued(VerifyEmailMail::class);
     expect(AuditEvent::query()->where('event', 'account_created')->where('user_id', $user->id)->exists())->toBeTrue();
+    $this->get(GetTheApps::getUrl(panel: 'admin'))->assertOk()->assertSee('Get the apps')->assertSee('downloads');
 });
 
-it('asks for 12 characters with letters and numbers, and no address that has an account already', function (array $form, string $field) {
+it('makes the account from the sign-in page too, and needs a name and the Terms', function () {
     openSignUp();
     User::factory()->create(['email' => 'taken@example.test']);
 
-    Livewire::test(Register::class)->fillForm(signUpForm($form))->call('register')->assertHasFormErrors([$field]);
-    expect(User::query()->where('name', 'Ayesha Malik')->exists())->toBeFalse();
-})->with([
-    'short' => [['password' => 'short-pw-1', 'passwordConfirmation' => 'short-pw-1'], 'password'],
-    'no numbers' => [['password' => 'only-letters-here', 'passwordConfirmation' => 'only-letters-here'], 'password'],
-    'no letters' => [['password' => '123456789012', 'passwordConfirmation' => '123456789012'], 'password'],
-    'taken, other case' => [['email' => 'Taken@Example.test'], 'email'],
-]);
+    consoleSignUp(Livewire::test(Login::class), 'nida@example.test', 'Nida', accept: false)->assertHasFormErrors(['accept_terms']);
+    expect(User::query()->where('email', 'nida@example.test')->exists())->toBeFalse();
+    // An address with an account goes to the password, not to a sign-up.
+    Livewire::test(Register::class)->fillForm(['email' => 'Taken@Example.test'])->call('authenticate')->assertSet('step', Login::STEP_PASSWORD);
+});
 
 it('keeps an unconfirmed account out of the console until its email is confirmed', function () {
     $user = User::factory()->unverified()->create();
@@ -102,19 +121,14 @@ it('signs up by invitation only for the invited address, joins the workspace and
     parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
     Mail::assertQueued(InvitationMail::class, fn (InvitationMail $mail): bool => $mail->hasTo('guest@example.test') && $mail->signUp && $mail->url === $url);
 
-    // Without the link the page only explains, and nothing can be registered.
+    // Without the link the page only explains.
     $this->get('/admin/register')->assertOk()->assertSee('by invitation');
-    Livewire::test(Register::class)->fillForm(signUpForm(['email' => 'guest@example.test']))->call('register')->assertNotified('Sign-up here is by invitation');
-    expect(User::query()->where('email', 'guest@example.test')->exists())->toBeFalse();
+    // Someone else's address is refused on the sign-in page: sign-up is by invitation.
+    Livewire::test(Login::class)->fillForm(['email' => 'someone.else@example.test'])->call('authenticate')->assertHasFormErrors(['email']);
 
-    // The link fills in its address; another address is refused even when the field is changed by hand.
+    // The link fills in its address and keeps it.
     $page = Livewire::withQueryParams(['invite' => $query['invite']])->test(Register::class)->assertSet('data.email', 'guest@example.test');
-    $page->set('data.email', 'someone.else@example.test')->set('data.name', 'G')->set('data.password', 'a-good-password-42')->set('data.passwordConfirmation', 'a-good-password-42')
-        ->call('register')->assertHasErrors();
-    expect(User::query()->where('email', 'someone.else@example.test')->exists())->toBeFalse();
-
-    Livewire::withQueryParams(['invite' => $query['invite']])->test(Register::class)
-        ->fillForm(signUpForm(['email' => 'guest@example.test', 'name' => 'Guest']))->call('register')->assertHasNoFormErrors();
+    consoleSignUp($page, 'guest@example.test', 'Guest')->assertHasNoFormErrors();
     $guest = User::query()->where('email', 'guest@example.test')->firstOrFail();
     expect($guest->hasVerifiedEmail())->toBeTrue()
         ->and($workspace->roleOf($guest))->toBe(WorkspaceRole::Member)
@@ -125,24 +139,19 @@ it('signs up by invitation only for the invited address, joins the workspace and
     Mail::assertNotQueued(VerifyEmailMail::class);
 });
 
-it('does not let an open sign-up take an invited address without the invitation link', function () {
+it('joins a waiting invitation when an open sign-up proves the invited address with the code', function () {
     openSignUp();
     $owner = Fx::user();
     $workspace = Workspace::query()->findOrFail($owner->current_workspace_id);
-    $url = app(Invitations::class)->invite($workspace, $owner, 'bob@company.test', WorkspaceRole::Member);
-    parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+    app(Invitations::class)->invite($workspace, $owner, 'bob@company.test', WorkspaceRole::Member);
 
-    // Someone who only knows the address types it in: the account is theirs to confirm, not the team's.
-    Livewire::test(Register::class)->fillForm(signUpForm(['email' => 'bob@company.test', 'name' => 'Not Bob']))->call('register')->assertHasNoFormErrors();
+    // Since v1.6 the emailed code proves the address, as Google does: the invitation waiting for it is accepted.
+    consoleSignUp(Livewire::test(Register::class), 'bob@company.test', 'Bob')->assertHasNoFormErrors();
 
     $user = User::query()->where('email', 'bob@company.test')->firstOrFail();
-    expect($user->hasVerifiedEmail())->toBeFalse()
-        ->and($workspace->fresh()->roleOf($user))->toBeNull()
-        ->and($user->current_workspace_id)->not->toBe($workspace->id)
-        ->and($user->workspaces()->count())->toBe(1)
-        ->and(WorkspaceInvitation::query()->firstOrFail()->accepted_at)->toBeNull()
-        ->and(app(Invitations::class)->find($query['invite']))->not->toBeNull();
-    Mail::assertQueued(VerifyEmailMail::class, fn (VerifyEmailMail $mail): bool => $mail->hasTo('bob@company.test'));
+    expect($user->hasVerifiedEmail())->toBeTrue()
+        ->and($workspace->fresh()->roleOf($user))->toBe(WorkspaceRole::Member)
+        ->and(WorkspaceInvitation::query()->firstOrFail()->accepted_at)->not->toBeNull();
 });
 
 it('refuses an expired or used invitation link', function () {

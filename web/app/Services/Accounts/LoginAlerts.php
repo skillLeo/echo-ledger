@@ -23,7 +23,7 @@ final class LoginAlerts
     {
         $user = User::query()->find($device->user_id);
         if ($user instanceof User) {
-            $this->send($user, "{$device->name}, {$device->platform->getLabel()}", $device->last_ip, $device->last_country);
+            $this->send($user, "{$device->readableName()}, {$device->platform->getLabel()}", $device->last_ip, $device->last_country);
         }
     }
 

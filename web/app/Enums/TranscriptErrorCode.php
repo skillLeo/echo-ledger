@@ -18,6 +18,8 @@ enum TranscriptErrorCode: string
     case ProviderTimeout = 'provider_timeout';
     case Interrupted = 'interrupted';
     case RecordingMissing = 'recording_missing';
+    /** Since v1.6: the plan leaves transcription on EchoLedger out and the person has no key of their own. */
+    case NeedsTranscriptionKey = 'needs_transcription_key';
 
     /** Longest provider reason quoted in a `provider_rejected` message. */
     public const MAX_REASON_CHARS = 200;
@@ -34,6 +36,7 @@ enum TranscriptErrorCode: string
             self::ProviderTimeout => 'The speech provider did not finish within 6 hours.',
             self::Interrupted => 'Transcription was interrupted. Retry it from the console.',
             self::RecordingMissing => 'The recording is missing or not ready.',
+            self::NeedsTranscriptionKey => 'Add your free Groq key in Account → Transcription key',
         };
     }
 

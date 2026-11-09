@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\ClientWorkspaceController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\DeviceReportController;
+use App\Http\Controllers\Api\EntitlementsController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FilingRuleController;
 use App\Http\Controllers\Api\LibraryController;
@@ -29,9 +30,11 @@ use App\Http\Controllers\Api\SttWebhookController;
 use App\Http\Controllers\Api\TeammateController;
 use App\Http\Controllers\Api\TranscriptEditController;
 use App\Http\Controllers\Api\TranscriptViewsController;
+use App\Http\Controllers\Api\UpgradeRequestController;
 use App\Http\Controllers\Api\UsageController;
 use App\Http\Controllers\Api\VocabularyController;
 use App\Http\Middleware\EnsureCanRecord;
+use App\Http\Middleware\EnsureNotSuspended;
 use App\Http\Middleware\TouchDevice;
 use Illuminate\Support\Facades\Route;
 
@@ -51,6 +54,15 @@ Route::post('auth/password', [AuthController::class, 'password'])
     ->middleware('throttle:auth-password')->name('api.auth.password');
 Route::post('auth/device/token', [AuthController::class, 'deviceToken'])
     ->middleware('throttle:auth-token')->name('api.auth.device.token');
+// Since v1.6 (P1): the email first, then a 6-digit code by email; a new address then makes its account.
+Route::post('auth/start', [AuthController::class, 'start'])
+    ->middleware('throttle:auth-start')->name('api.auth.start');
+Route::post('auth/code', [AuthController::class, 'code'])
+    ->middleware('throttle:auth-code')->name('api.auth.code');
+Route::post('auth/code/verify', [AuthController::class, 'verifyCode'])
+    ->middleware('throttle:auth-code-verify')->name('api.auth.code.verify');
+Route::post('auth/sign-up', [AuthController::class, 'signUp'])
+    ->middleware('throttle:auth-sign-up')->name('api.auth.sign-up');
 
 Route::post('webhooks/stt/{provider}', SttWebhookController::class)
     ->middleware('throttle:webhooks')->name('api.webhooks.stt');
@@ -58,7 +70,8 @@ Route::post('webhooks/stt/{provider}', SttWebhookController::class)
 Route::get('recordings/{recording}/audio', [RecordingController::class, 'audio'])
     ->middleware(['signed', 'throttle:device'])->name('api.recordings.audio');
 
-Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void {
+// Since v1.6 a suspended account's devices are refused on every call (403 account_suspended).
+Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class])->group(function (): void {
     // Every authenticated route except the upload routes counts against the general per-device limit.
     Route::middleware('throttle:device')->group(function (): void {
         Route::post('devices/rotate-token', [DeviceController::class, 'rotateToken'])->name('api.devices.rotate');
@@ -66,6 +79,10 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
 
         Route::get('config', [ConfigController::class, 'show'])->middleware('abilities:config:read')->name('api.config');
         Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');
+        // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
+        Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
+        // Upgrade requests (v1.6): the newest one of this device's person.
+        Route::get('upgrade-requests/latest', [UpgradeRequestController::class, 'latest'])->middleware('abilities:config:read')->name('api.upgrade-requests.latest');
         Route::get('security', [SecurityController::class, 'index'])->middleware('abilities:config:read')->name('api.security');
         Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
 
@@ -104,7 +121,14 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('sessions/{id}/notes', [ClientWorkspaceController::class, 'makeNotes'])->middleware($own)->name('api.sessions.notes.make');
             Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->middleware($own)->name('api.transcripts.suggestions');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
+            // Since v1.6 (P3): a readable name of the person's own choosing.
+            Route::patch('devices/{id}', [SecurityController::class, 'renameDevice'])->name('api.devices.rename');
             // Your account (v1.5): sign out every device and console session; delete the account after 7 days.
+            // Your own transcription key (v1.6, the Free plan): checked with Groq once, kept encrypted, never sent back.
+            Route::put('me/transcription-key', [EntitlementsController::class, 'putKey'])->middleware('throttle:transcription-key')->name('api.me.transcription-key.put');
+            Route::delete('me/transcription-key', [EntitlementsController::class, 'deleteKey'])->name('api.me.transcription-key.delete');
+            // Upgrade requests (v1.6): ask for a plan, one waiting at a time.
+            Route::post('upgrade-requests', [UpgradeRequestController::class, 'store'])->middleware('throttle:upgrade-request')->name('api.upgrade-requests.store');
             Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
             Route::delete('account', [AccountController::class, 'destroy'])->name('api.account.destroy');
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->middleware($own)->name('api.sessions.restore');

@@ -1,0 +1,8 @@
+{
+    "account": "existing",
+    "methods": [
+        "password",
+        "code"
+    ],
+    "sign_up": true
+}

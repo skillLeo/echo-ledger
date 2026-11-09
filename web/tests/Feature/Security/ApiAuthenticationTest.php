@@ -23,6 +23,12 @@ function secDeviceGuardedRoutes(): array
         'POST devices/rotate-token' => ['POST', '/api/devices/rotate-token', null],
         'POST devices/report' => ['POST', '/api/devices/report', null],
         'GET config' => ['GET', '/api/config', 'config:read'],
+        'GET me/entitlements' => ['GET', '/api/me/entitlements', 'config:read'],
+        'PUT me/transcription-key' => ['PUT', '/api/me/transcription-key', 'sessions:write'],
+        'DELETE me/transcription-key' => ['DELETE', '/api/me/transcription-key', 'sessions:write'],
+        'POST upgrade-requests' => ['POST', '/api/upgrade-requests', 'sessions:write'],
+        'PATCH devices/{id}' => ['PATCH', '/api/devices/'.Fx::MISSING_ID, 'sessions:write'],
+        'GET upgrade-requests/latest' => ['GET', '/api/upgrade-requests/latest', 'config:read'],
         'GET clients' => ['GET', '/api/clients', 'library:read'],
         'DELETE clients/{id}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID, 'sessions:write'],
         'GET clients/{id}/rules' => ['GET', '/api/clients/'.Fx::MISSING_ID.'/rules', 'library:read'],
@@ -147,13 +153,18 @@ it('exposes exactly the documented public API routes and guards every other one'
         'GET api/auth/options',
         'GET api/recordings/{recording}/audio',
         // Since v1.5: signing in with an account (the email and password, or the browser sign-in's code).
+        // Since v1.6: the email first, a code by email, and the new account's sign-up.
+        'POST api/auth/code',
+        'POST api/auth/code/verify',
         'POST api/auth/device/token',
         'POST api/auth/password',
+        'POST api/auth/sign-up',
+        'POST api/auth/start',
         'POST api/devices/register',
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(91);
+    expect($guarded)->toBe(97);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

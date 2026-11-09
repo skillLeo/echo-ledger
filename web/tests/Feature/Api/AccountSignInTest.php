@@ -324,6 +324,8 @@ describe('GET /api/auth/options (since v1.5, Phase 1C)', function () {
             'sign_up_url' => null,
             'reset_url' => route('filament.admin.auth.password-reset.request'),
             'browser_sign_in' => true,
+            'code' => true,
+            'server' => 'https://echoledger.test',
         ]);
     });
 
@@ -338,6 +340,6 @@ describe('GET /api/auth/options (since v1.5, Phase 1C)', function () {
 
     it('needs no token and reads nothing of anyone', function () {
         $body = $this->getJson('/api/auth/options')->assertOk()->json();
-        expect(array_keys($body))->toBe(['password', 'google', 'sign_up', 'sign_up_url', 'reset_url', 'browser_sign_in']);
+        expect(array_keys($body))->toBe(['password', 'google', 'sign_up', 'sign_up_url', 'reset_url', 'browser_sign_in', 'code', 'server']);
     });
 });

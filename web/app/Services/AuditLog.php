@@ -68,6 +68,20 @@ final class AuditLog
         'workspace_renamed' => 'Workspace renamed',
         'settings_changed' => 'Settings changed',
         'test_email_sent' => 'Test email sent',
+        // Since v1.6: plans and a person's own features and limits.
+        'entitlements_changed' => 'Features and limits changed for a person',
+        'transcription_key_set' => 'Own transcription key saved',
+        'transcription_key_removed' => 'Own transcription key removed',
+        'upgrade_requested' => 'Upgrade asked for',
+        'upgrade_approved' => 'Upgrade approved',
+        'upgrade_declined' => 'Upgrade declined',
+        'unusual_usage' => 'Unusual use',
+        'device_signed_in_again' => 'Signed in again',
+        'device_signed_out' => 'Device signed out',
+        'device_removed' => 'Device removed from the list',
+        'device_renamed' => 'Device renamed',
+        'account_suspended' => 'Account suspended',
+        'account_unsuspended' => 'Account suspension lifted',
         // Since v1.5: the Claude and ChatGPT connector.
         'connector_connected' => 'App connected',
         'connector_disconnected' => 'App disconnected',
@@ -163,7 +177,8 @@ final class AuditLog
         Device::created(fn (Device $d) => $d->signedInWith === null
             ? $log()->record('device_paired', $d->user_id, $d, "Device signed in with a code: {$d->name}")
             : $log()->record('device_signed_in', $d->user_id, $d, "Signed in on {$d->name} ({$d->platform->getLabel()}) ".($d->signedInWith === 'browser' ? 'through the browser' : 'with a password'), ['via' => $d->signedInWith]));
-        Device::deleted(fn (Device $d) => $log()->record('device_revoked', $d->user_id, $d, "Device revoked: {$d->name}"));
+        // Since v1.6 a revoke signs the device out (Device::signOut); deleting the row is "Remove from list".
+        Device::deleted(fn (Device $d) => $log()->record($d->signed_out_at !== null ? 'device_removed' : 'device_revoked', $d->user_id, $d, ($d->signed_out_at !== null ? 'Device removed from the list: ' : 'Device revoked: ').$d->name));
         // A link opens a recording or (since v1.5) a project: the log names whichever it is.
         $shared = fn (ShareLink $l): array => $l->client_id !== null
             ? [$l->client?->user_id, $l->client, 'project '.$l->client?->name]

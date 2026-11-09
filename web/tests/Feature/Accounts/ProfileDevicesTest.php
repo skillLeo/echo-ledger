@@ -68,9 +68,13 @@ it('revokes one of the person\'s devices but never someone else\'s', function ()
     $theirs = Device::factory()->create(['user_id' => $other->id]);
     $this->actingAs($member, 'web');
 
-    Livewire::test(EditProfile::class)->call('revokeDevice', $theirs->id)->assertNotified('That device was already revoked')
-        ->call('revokeDevice', $mine->id)->assertNotified('Device revoked');
+    Livewire::test(EditProfile::class)->call('revokeDevice', $theirs->id)->assertNotified('That device was already signed out')
+        ->call('revokeDevice', $mine->id)->assertNotified('Device signed out');
 
+    // Since v1.6 the person's row stays, signed out; Remove from list takes it away. Someone else's is never touched.
+    expect(unscoped(fn () => $mine->fresh()->status()))->toBe(Device::SIGNED_OUT)->and(unscoped(fn () => $theirs->fresh()->status()))->toBe(Device::ACTIVE);
+    Livewire::test(EditProfile::class)->call('removeDevice', $theirs->id)->assertNotified('That device was already removed')
+        ->call('removeDevice', $mine->id)->assertNotified('Removed from the list');
     expect(unscoped(fn () => Device::query()->pluck('id')->all()))->toBe([$theirs->id]);
 });
 
@@ -87,7 +91,9 @@ it('signs out everywhere from the profile: every device, token and browser, this
     Livewire::test(EditProfile::class)->callAction(TestAction::make('signOutEverywhere')->schemaComponent('device-actions', schema: 'content'))
         ->assertRedirect(Filament::getPanel('admin')->getLoginUrl());
 
-    expect(unscoped(fn () => Device::query()->where('user_id', $member->id)->count()))->toBe(0)
+    // Since v1.6 the rows stay, signed out, with no token left.
+    expect(unscoped(fn () => Device::query()->where('user_id', $member->id)->whereNull('signed_out_at')->count()))->toBe(0)
+        ->and(DB::table('personal_access_tokens')->where('tokenable_type', Device::class)->whereIn('tokenable_id', unscoped(fn () => Device::query()->where('user_id', $member->id)->pluck('id')))->count())->toBe(0)
         ->and(PersonalAccessToken::findToken($token))->toBeNull()
         ->and(DB::table('sessions')->where('user_id', $member->id)->count())->toBe(0)
         ->and(DB::table('sessions')->count())->toBe(1)
@@ -121,7 +127,9 @@ it('pairs no device for an account in its deletion grace', function () {
 
     $this->postJson('/api/devices/register', ['pairing_code' => $display, 'name' => 'Pixel', 'platform' => 'android', 'app_version' => '1.5.0', 'os_version' => '16'])
         ->assertStatus(422)->assertJsonPath('code', 'validation_failed');
-    expect(unscoped(fn () => Device::query()->where('user_id', $member->id)->count()))->toBe(0);
+    // Since v1.6 the rows stay, signed out, with no token left.
+    expect(unscoped(fn () => Device::query()->where('user_id', $member->id)->whereNull('signed_out_at')->count()))->toBe(0)
+        ->and(DB::table('personal_access_tokens')->where('tokenable_type', Device::class)->whereIn('tokenable_id', unscoped(fn () => Device::query()->where('user_id', $member->id)->pluck('id')))->count())->toBe(0);
 });
 
 it('signs out everywhere from the API, the asking device included (204)', function () {
@@ -135,7 +143,9 @@ it('signs out everywhere from the API, the asking device included (204)', functi
 
     $this->asToken($token)->postJson('/api/account/sign-out-everywhere')->assertNoContent();
 
-    expect(unscoped(fn () => Device::query()->where('user_id', $member->id)->count()))->toBe(0)
+    // Since v1.6 the rows stay, signed out, with no token left.
+    expect(unscoped(fn () => Device::query()->where('user_id', $member->id)->whereNull('signed_out_at')->count()))->toBe(0)
+        ->and(DB::table('personal_access_tokens')->where('tokenable_type', Device::class)->whereIn('tokenable_id', unscoped(fn () => Device::query()->where('user_id', $member->id)->pluck('id')))->count())->toBe(0)
         ->and(unscoped(fn () => Device::query()->where('user_id', $bystander->id)->count()))->toBe(1)
         ->and(DB::table('sessions')->where('user_id', $member->id)->count())->toBe(0);
     app('auth')->forgetGuards();

@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\DevicePlatform;
 use App\Models\Device;
 use App\Models\DevicePairingCode;
+use App\Models\Scopes\WorkspaceScope;
 use App\Models\User;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
@@ -32,7 +33,7 @@ final class PairingService
         }
 
         // The device joins the workspace the user is working in when they make the code (B20).
-        app(PlanLimits::class)->assertDevices((int) $user->current_workspace_id);
+        app(PlanLimits::class)->assertDevices((int) $user->current_workspace_id, $user->id);
         DevicePairingCode::query()->create([
             'workspace_id' => $user->current_workspace_id,
             'user_id' => $user->id,
@@ -76,7 +77,7 @@ final class PairingService
             // Since v1.5 an account in its deletion grace signs nothing in, nor someone no longer in the code's workspace
             // (their codes are dropped then; this covers a race).
             $owner = $pairing === null ? null : User::query()->find($pairing->user_id);
-            if ($pairing === null || $pairing->used_at !== null || $pairing->expires_at->isPast() || ! $owner instanceof User || $owner->isBeingDeleted()
+            if ($pairing === null || $pairing->used_at !== null || $pairing->expires_at->isPast() || ! $owner instanceof User || $owner->isBeingDeleted() || $owner->isSuspended()
                 || app(Workspaces::class)->roleOf($owner, $pairing->workspace_id) === null) {
                 throw ValidationException::withMessages(['pairing_code' => 'This code is invalid, expired, or already used.']);
             }
@@ -92,12 +93,41 @@ final class PairingService
      * A new device of [$userId] in [$workspaceId] with its token, within the plan's device limit: a pairing code, or
      * since v1.5 its owner signing in (`$signedInWith` = password or browser). Exactly the same device either way.
      *
-     * @param  array{name: string, platform: string, app_version?: string|null, os_version?: string|null}  $attributes
+     * @param  array{name: string, platform: string, app_version?: string|null, os_version?: string|null, install_id?: string|null}  $attributes
      * @return array{0: Device, 1: NewAccessToken}
      */
     public function createDevice(int $workspaceId, int $userId, array $attributes, ?string $ip, ?string $country = null, ?string $signedInWith = null): array
     {
-        app(PlanLimits::class)->assertDevices($workspaceId);
+        // Since v1.6 (P3): the same install of the same person signs in again on its own row ("Signed in again").
+        $installId = $attributes['install_id'] ?? null;
+        $again = is_string($installId) && $installId !== ''
+            ? Device::query()->withoutGlobalScope(WorkspaceScope::class)->where('user_id', $userId)->where('install_id', $installId)->lockForUpdate()->first()
+            : null;
+        if ($again instanceof Device) {
+            if ($again->workspace_id !== $workspaceId || $again->status() !== Device::ACTIVE) {
+                app(PlanLimits::class)->assertDevices($workspaceId, $userId);
+            }
+            $again->tokens()->delete();
+            $again->forceFill([
+                'workspace_id' => $workspaceId,
+                'name' => $again->name_chosen ? $again->name : $attributes['name'],
+                'platform' => DevicePlatform::from($attributes['platform']),
+                'app_version' => $attributes['app_version'] ?? null,
+                'os_version' => $attributes['os_version'] ?? null,
+                'last_seen_at' => now(),
+                'last_ip' => $ip,
+                'last_country' => $country,
+                'signed_out_at' => null,
+                'signed_out_by' => null,
+            ])->save();
+            $again->signedInWith = $signedInWith;
+            $again->signedInAgain = true;
+            app(AuditLog::class)->record('device_signed_in_again', $userId, $again, "Signed in again: {$again->readableName()}");
+
+            return [$again, $this->issueToken($again)];
+        }
+
+        app(PlanLimits::class)->assertDevices($workspaceId, $userId);
 
         $device = new Device([
             'workspace_id' => $workspaceId,
@@ -109,6 +139,7 @@ final class PairingService
             'last_seen_at' => now(),
             'last_ip' => $ip,
             'last_country' => $country,
+            'install_id' => is_string($installId) && $installId !== '' ? $installId : null,
         ]);
         $device->signedInWith = $signedInWith;
         $device->save();

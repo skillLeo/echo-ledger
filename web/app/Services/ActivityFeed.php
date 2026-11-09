@@ -22,6 +22,7 @@ use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\ClientAi\ClientWorkspace;
+use App\Services\Entitlements\UnusualUsage;
 use App\Services\Usage\UsagePeriod;
 use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\PlanLimits;
@@ -48,7 +49,9 @@ final class ActivityFeed
 
     public const LIMIT_AI_CREDITS = 'ai_credits';
 
-    public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you'];
+    /** Since v1.6 also the person's upgrade request decided, the super admin's new request and unusual use. */
+    public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you',
+        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage'];
 
     /** Read notifications are kept this long, unread ones twice as long. */
     public const KEEP_DAYS = 90;
@@ -64,12 +67,14 @@ final class ActivityFeed
                 $feed()->uploadFailed($r);
             }
             if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Ready) {
-                $workspace = CaptureSession::acrossPeople()->withTrashed()->whereKey($r->capture_session_id)->value('workspace_id');
-                $workspace === null || $feed()->planLimitChanged((int) $workspace, self::LIMIT_STORAGE);
+                $session = CaptureSession::acrossPeople()->withTrashed()->whereKey($r->capture_session_id)->first(['id', 'workspace_id', 'user_id']);
+                $session === null || $feed()->planLimitChanged((int) $session->workspace_id, self::LIMIT_STORAGE);
+                // Since v1.6: more hours in a day than the super admin's alert (UnusualUsage).
+                $session === null || app(UnusualUsage::class)->check((int) $session->user_id);
             }
         });
         Screen::created(fn (Screen $s) => $feed()->planLimitChanged($s->workspace_id, self::LIMIT_STORAGE));
-        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->name} signed in", 'It can now record, sync and see the library.', null, $d->sourceDevice() === SourceDevice::Desktop ? 'heroicon-o-computer-desktop' : 'heroicon-o-device-phone-mobile'));
+        Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->readableName()} signed in", 'It can now record, sync and see the library.', null, $d->sourceDevice() === SourceDevice::Desktop ? 'heroicon-o-computer-desktop' : 'heroicon-o-device-phone-mobile'));
         UsageLedgerEntry::created(fn (UsageLedgerEntry $e) => $feed()->budgetChanged($e));
     }
 
@@ -104,7 +109,8 @@ final class ActivityFeed
     /** True when a failure of this final transcript is handed to another engine before anyone is told. */
     public static function fallsBack(Transcript $transcript): bool
     {
-        return TranscriptErrorCode::tryFrom((string) $transcript->error_code)?->retryable() === true;
+        // Since v1.6 one made with the person's own key does not go to another engine: they hear of it at once.
+        return TranscriptErrorCode::tryFrom((string) $transcript->error_code)?->retryable() === true && ! (bool) (($transcript->meta ?? [])['own_key'] ?? false);
     }
 
     public function transcriptFailed(Transcript $transcript, ?CaptureSession $session = null): void

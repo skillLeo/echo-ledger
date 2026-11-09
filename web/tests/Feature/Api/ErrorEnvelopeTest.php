@@ -305,8 +305,9 @@ it('produces each documented code with its status, a message and nothing interna
 
     $response->assertStatus($status)->assertJsonPath('code', $code);
     expect($response->json('message'))->toBeString()->not->toBe('');
-    // Since v1.5 rule_exists names the project that has the rule and feature_not_in_plan the feature.
-    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id', 'client_id', 'client_name', 'feature']))->toBe([]);
+    // Since v1.5 rule_exists names the project that has the rule and feature_not_in_plan the feature; since v1.6 a limit
+    // names its key (`limit`) and feature_not_in_plan the plan that has it (`lowest_plan`).
+    expect(array_diff(array_keys($response->json()), ['message', 'code', 'errors', 'missing_chunks', 'session_id', 'client_id', 'client_name', 'feature', 'lowest_plan', 'limit']))->toBe([]);
     expectNoInternals($response);
 })->with(array_diff_key(documentedErrorCodes(), array_flip(ENVELOPE_PENDING_CODES)));
 

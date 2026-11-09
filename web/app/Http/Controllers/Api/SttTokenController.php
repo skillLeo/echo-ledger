@@ -74,7 +74,7 @@ final class SttTokenController extends Controller
         if ($budget->limitReached()) {
             throw new ApiError(403, 'budget_exceeded', 'Monthly transcription limit reached');
         }
-        $limits->assertMinutes($device->workspace_id);
+        $limits->assertMinutes($device->workspace_id, $device->user_id);
 
         // The language picks the engine for live captions too (App\Stt\LanguageRouter): the device's choice (the chip
         // on the pill or the notification), else the recording's, the client's, the console default.

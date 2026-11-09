@@ -6,8 +6,10 @@ namespace App\Exceptions;
 
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Models\Device;
 use App\Models\Recording;
 use App\Models\Transcript;
+use App\Services\Workspaces\PlanLimits;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -40,13 +42,37 @@ final class ApiExceptionRenderer
         Client::class => ['client_not_found', 'Project not found.'],
     ];
 
+    /** The first app version that knows `403 limit_reached` (since v1.6, docs/API.md "Entitlements"). */
+    public const LIMIT_REACHED_SINCE = '1.6.0';
+
+    private ?Request $request = null;
+
     public function __invoke(Throwable $e, Request $request): ?JsonResponse
     {
         if (! $request->is('api/*')) {
             return null;
         }
+        $this->request = $request;
 
         return $this->render($e);
+    }
+
+    /**
+     * Whether the app asking knows `limit_reached`: a device of version 1.6 or later, or (signing in) the version it
+     * sends. Apps older than v1.6 keep the codes they know.
+     */
+    public static function knowsLimitReached(?Request $request): bool
+    {
+        if ($request === null) {
+            return false;
+        }
+        $device = $request->user();
+        $version = $device instanceof Device ? $device->app_version : $request->input('app_version');
+        if (! is_string($version) || preg_match('/^(\d+)\.(\d+)(?:\.(\d+))?/', $version, $m) !== 1) {
+            return false;
+        }
+
+        return version_compare("{$m[1]}.{$m[2]}.".($m[3] ?? '0'), self::LIMIT_REACHED_SINCE, '>=');
     }
 
     /**
@@ -59,7 +85,12 @@ final class ApiExceptionRenderer
             return null; // a ready response chosen by the code that threw it
         }
         if ($e instanceof ApiError) {
-            return $this->json($e->getStatusCode(), $e->apiCode(), $e->getMessage(), $e->extra(), $e->getHeaders());
+            $code = $e->apiCode();
+            if (in_array($code, PlanLimits::LEGACY_CODES, true) && isset($e->extra()['limit']) && self::knowsLimitReached($this->request)) {
+                $code = 'limit_reached';
+            }
+
+            return $this->json($e->getStatusCode(), $code, $e->getMessage(), $e->extra(), $e->getHeaders());
         }
         if ($e instanceof ValidationException) {
             if ($e->response !== null) {

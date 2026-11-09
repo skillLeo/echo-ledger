@@ -75,7 +75,18 @@ final class DoubleCheck
         $forClient = $this->enabledForClients()
             && CaptureSession::query()->withoutGlobalScopes()->whereKey($transcript->capture_session_id)->whereNotNull('client_id')->exists();
 
-        return ($this->enabled() || $forClient) && self::linesToCheck($transcript->segments ?? []) !== [];
+        return ($this->enabled() || $forClient) && self::linesToCheck($transcript->segments ?? []) !== [] && self::entitled($transcript);
+    }
+
+    /**
+     * Whether the person whose recording it is has the double-check (since v1.6, the plan's `double_check`, also for
+     * the short-note check): it costs a second engine's minutes.
+     */
+    public static function entitled(Transcript $transcript): bool
+    {
+        $session = CaptureSession::acrossPeople()->withTrashed()->find($transcript->capture_session_id, ['id', 'workspace_id', 'user_id']);
+
+        return $session instanceof CaptureSession && app(PlanLimits::class)->allows($session->workspace_id, 'double_check', $session->user_id);
     }
 
     /** The engine that listens again: Whisper on Groq, or ElevenLabs Scribe when Whisper wrote the transcript; null without a key. */
@@ -169,7 +180,7 @@ final class DoubleCheck
         }
         $skip = match (true) {
             ! $this->prep->available() => 'no_ffmpeg',
-            app(BudgetGuard::class)->limitReached() || app(PlanLimits::class)->minutesReached($session->workspace_id) => 'limit_reached',
+            app(BudgetGuard::class)->limitReached() || app(PlanLimits::class)->minutesReached($session->workspace_id, $session->user_id) => 'limit_reached',
             default => null,
         };
         if ($skip !== null) {

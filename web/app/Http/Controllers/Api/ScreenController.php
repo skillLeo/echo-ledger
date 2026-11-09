@@ -49,7 +49,7 @@ final class ScreenController extends Controller
     {
         $session = $this->ownSession($request, $id);
         // Since v1.5 the plan decides: 403 feature_not_in_plan, the desktop keeps recording without screens.
-        app(PlanLimits::class)->assertFeature($session->workspace_id, 'screen_moments');
+        app(PlanLimits::class)->assertFeature($session->workspace_id, 'screen_moments', $session->user_id);
         $upload = $request->file('image');
         if ($upload instanceof UploadedFile && (in_array($upload->getError(), [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
             || ($upload->isValid() && (int) $upload->getSize() > ScreenStore::MAX_BYTES))) {

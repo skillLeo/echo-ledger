@@ -46,6 +46,9 @@ class UsageLedgerEntry extends Model
 
     public const SOURCE_SERVER = 'server';
 
+    /** Since v1.6: a final transcript made with the person's own key (the Free plan): never billed to the server. */
+    public const SOURCE_OWN_KEY = 'own_key';
+
     /** Rows are kept a little over a year, long enough to compare a month with the same month last year. */
     public const RETENTION_DAYS = 400;
 

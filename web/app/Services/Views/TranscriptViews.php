@@ -10,9 +10,11 @@ use App\Models\CaptureSession;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Services\CredentialVault;
+use App\Services\Entitlements\Entitlements;
 use App\Services\FastPath;
 use App\Services\SettingsRepository;
 use App\Services\ShortNoteCheck;
+use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
 use App\Support\UnsureMarkers;
@@ -299,7 +301,7 @@ final class TranscriptViews
      */
     public function autoMake(Transcript $transcript): void
     {
-        if (! $this->configured() || $transcript->status !== TranscriptStatus::Completed) {
+        if (! $this->configured() || $transcript->status !== TranscriptStatus::Completed || ! self::entitled($transcript)) {
             return;
         }
         $available = self::available($transcript);
@@ -339,17 +341,29 @@ final class TranscriptViews
         if ($state['status'] === 'unavailable') {
             throw new RuntimeException('This transcript has no Show as view yet: it is not finished.');
         }
-        if (! $this->configured()) {
-            throw new RuntimeException(self::missingKeyMessage());
-        }
         if (in_array($state['status'], ['ready', 'making'], true)) {
             return $state;
+        }
+        // Since v1.6 the views are a paid feature (403 feature_not_in_plan with the plan that has them).
+        if (! self::entitled($transcript)) {
+            throw Entitlements::locked('views');
+        }
+        if (! $this->configured()) {
+            throw new RuntimeException(self::missingKeyMessage());
         }
         $this->remember($transcript, ['status' => 'making', 'fingerprint' => self::fingerprint($transcript), 'started_at' => now()->toAtomString()]);
         // Since v1.5: a note of a minute or less gets its views on the fast path, not after the next queue run.
         FastPath::dispatch(new MakeTranscriptViewsJob($transcript->id), FastPath::isShortTranscript($transcript));
 
         return $this->state($transcript->refresh());
+    }
+
+    /** Whether the person whose recording it is may have views made (since v1.6, the plan's `views`). */
+    public static function entitled(Transcript $transcript): bool
+    {
+        $session = CaptureSession::acrossPeople()->withTrashed()->find($transcript->capture_session_id, ['id', 'workspace_id', 'user_id']);
+
+        return $session instanceof CaptureSession && app(PlanLimits::class)->allows($session->workspace_id, 'views', $session->user_id);
     }
 
     /** Makes the views (on the queue) and stores them with the transcript, or the reason they failed. */

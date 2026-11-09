@@ -153,7 +153,8 @@ final class ConsoleUploads
         }
 
         // The transcript would fail at once: say so before the file is sent, in the words the plan limit uses.
-        app(PlanLimits::class)->assertMinutes($workspaceId);
+        app(PlanLimits::class)->assertMinutes($workspaceId, $user->id);
+        app(PlanLimits::class)->assertUploadsToday($workspaceId, $user->id);
         $this->assertOpenUploadCapacity($user, $workspaceId);
 
         $recording = DB::transaction(function () use ($user, $workspaceId, $file, $client, $mime, $size, $sha, $chunkSize): Recording {

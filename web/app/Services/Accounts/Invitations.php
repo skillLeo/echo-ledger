@@ -47,11 +47,14 @@ final class Invitations
             throw new InvalidArgumentException('That person is in this workspace already.');
         }
 
+        // Since v1.6 a team is a paid feature of the workspace's plan (the inviter's overrides count).
+        $this->limits->assertFeature($workspace->id, 'team', $inviter->id);
+
         return DB::transaction(function () use ($workspace, $inviter, $email, $role, $existing): string {
             // One invitation of the workspace at a time, so two cannot both take its last seat.
             Workspace::query()->whereKey($workspace->id)->lockForUpdate()->first();
             WorkspaceInvitation::query()->where('workspace_id', $workspace->id)->where('email', $email)->whereNull('accepted_at')->delete();
-            $this->limits->assertSeat($workspace->id);
+            $this->limits->assertSeat($workspace->id, null, $inviter->id);
             $token = Str::random(48);
             $invitation = WorkspaceInvitation::query()->create([
                 'workspace_id' => $workspace->id, 'email' => $email, 'role' => $role->value, 'token_hash' => hash('sha256', $token),

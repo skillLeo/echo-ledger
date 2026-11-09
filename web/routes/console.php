@@ -31,6 +31,8 @@ Schedule::command('recordings:retention')->hourly()->withoutOverlapping(30);
 Schedule::command('echoledger:erase-accounts')->hourly()->withoutOverlapping(60);
 Schedule::command('echoledger:prune-exports')->hourly()->withoutOverlapping(30);
 Schedule::command('model:prune')->daily()->withoutOverlapping(60);
+// Since v1.6: a plan given until a date ends then; the workspace goes back to the default plan.
+Schedule::command('echoledger:end-plans')->hourly()->withoutOverlapping(30);
 
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
 

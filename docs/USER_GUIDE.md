@@ -109,6 +109,16 @@ they are tested. Send your admin the report from Device check if something diffe
 
 ## 3. Sign in on your devices
 
+**One way in, everywhere (since v1.6).** Type your email and press **Continue**.
+
+- **New here?** We email you a 6-digit code (it works for 10 minutes). Type it, then your name, accept the Terms and
+  the Privacy Policy, and your free account is ready, with its own private workspace. The console then shows **Get
+  the apps**: the phone and computer apps, signed in with the same email.
+- **You have an account?** Type your password, or press **Email me a code** to sign in without it. When your account
+  has two-step sign-in, the code from your authenticator app comes next.
+- **Continue with Google** works when the server offers it. A new code can be asked for after a minute; after 5 wrong
+  tries ask for a new one.
+
 **Sign in (phone, since v1.5).** On the phone's first screen, **Sign in to EchoLedger**: type the server address,
 your email and password, then the code from your authenticator app when it asks. **Sign in in the browser** does the
 same with Google or a passkey: the browser opens, you sign in there, and the phone is signed in when you come back.
@@ -155,7 +165,13 @@ need the web console.
 3. **Windows:** type the server address and the code.
 4. The library appears. Repeat for each device.
 
-To remove a device, open **Profile → Devices** in the console and revoke it. It is signed out at once.
+**Your devices (since v1.6).** **Profile → Devices** (and **Devices** in the menu) lists each phone and computer
+once, by a name you can read ("Galaxy S25 Ultra", "Windows 11 PC", "MacBook Pro"), with its status: **Active** (and
+when it was last seen), **Signed out by you**, **Revoked by admin**, or **Expired** (not used for 90 days). Signing in
+again on the same phone or computer uses the same row. **Rename** gives it your own name; **Sign out** stops it at
+once (its recordings stay) and keeps it in the list until you **Remove from list**; the **Show** filter shows the
+signed-out ones. While the **Sign in a device** code is open, it says **Waiting for the app…**, then "✓ Galaxy S25
+Ultra signed in" and closes by itself. Your plan says how many devices can be signed in at once.
 
 **Your devices (computer, since v1.6).** **Settings → Account → Devices** lists every phone and computer signed in to
 your account, with when each was last active. **Rename** gives any of them a name of your own; **Revoke** signs another
@@ -165,6 +181,27 @@ computer keeps its one place in the list instead of adding another.
 **Changing your email:** on your profile, type the new address. It takes effect when you open the link sent to it, signed
 in; the old address is told, and your devices stay signed in. **Forgot password?** on the sign-in page signs your account
 out everywhere when you set the new password: every browser, device and connected app. Sign your devices in again.
+
+## 3b. Plans and your own transcription key (since v1.6)
+
+Your plan decides what you can use; locked things show a small badge (**PRO ✦** or **BUSINESS ✦**) with the plan
+that has them. **Free** records, organises, searches, shares and exports, and checks your phone or computer is
+ready. It has 2 devices, 1 GB and keeps recordings 30 days.
+
+**Transcripts on Free** are made with your own free Groq key (or by the computer app itself):
+
+1. Open **console.groq.com** and sign in (with Google is fine).
+2. Open **API Keys**, press **Create API Key**, and copy the key.
+3. In EchoLedger open **Profile → Transcription key** (or **Account → Transcription key** in the apps), paste it and
+   press **Save**.
+
+We check the key with Groq once, keep it locked, never show it again (only its last four characters), and use it for
+your own recordings only. Without a key a new recording says "Add your free Groq key in Account → Transcription
+key". **Pro** and **Business** transcribe for you, with no key of your own.
+
+**Upgrading.** Tap a badge (or **Profile → Your plan → Compare plans**): you see what the feature does and the plans
+side by side. **Request upgrade** (a message is optional) shows how to pay; we switch the plan on once the payment is
+confirmed, and you get an email and a notification.
 
 ## 4. Record automatically
 

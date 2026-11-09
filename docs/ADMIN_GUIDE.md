@@ -91,17 +91,59 @@ Open **Workspace** in the console.
 Each person sees their devices under **Profile → Devices** (phones, computers and console browsers, with Revoke) and
 can **Sign out everywhere**. A new device or a console sign-in from a new browser sends that person an email.
 
+### Sign-up (since v1.6)
+
+**Settings → Privacy & security → Sign-up.** Everyone signs up the same way: their email, a 6-digit code by email,
+their name and the Terms (no password needed; they can set one later with **Forgot password?**).
+
+- **Who can sign up:** On (anyone), Off (only people you add), or Invite only (an address with an invitation waiting;
+  the code proves it is theirs).
+- **Allowed email domains:** empty for any address, or only these domains. Throwaway addresses (the list in
+  `web/resources/data/disposable-email-domains.txt`, one domain a line) are always refused.
+- **New accounts a day from one network:** default 5.
+- **Turnstile** (Cloudflare's free check against robots) protects the web sign-up once its site key and secret are
+  saved in **API Credentials → Turnstile** (dash.cloudflare.com → Turnstile → Add widget for the console's domain).
+  Without them it is skipped. The apps do not show it; the limits per address and network protect them.
+- Codes: 10 minutes, 5 tries, a new one after 60 seconds, at most 5 an hour per address and 20 an hour per network.
+- **Tell me when one person records more than … hours a day** (default 6): an email and a notification to you, at
+  most once a day per person. Only the lengths are counted.
+- **Suspend or restore a person** (System → Plans): a suspended person cannot sign in anywhere (the console and the
+  apps say "This account is suspended"), and their phones and computers are refused on every call. They stay signed
+  in, so lifting the suspension brings them straight back.
+- **Device limit:** each plan's devices per person; one more is refused with "Your plan signs in 2 devices. Sign one
+  out (Account → Devices), or upgrade."
+
 ## 4. Plans (super admin)
 
-**System → Plans.** Prices stay at 0 until billing comes (backlog).
+**System → Plans.** Prices stay at 0 until billing comes (backlog); **Price as shown** is the text the apps show
+("Rs 2,000 a month").
 
-- **New plan** / **Edit:** name, price, minutes a month, storage (GB), devices, retention (days), seats, AI credits
-  (US$ a month), and the features: Live Translate, Screen moments, AI notes (client notes, memory, Ask) and Connector
-  (Claude and ChatGPT). An empty number means no limit.
-- **Assign** puts a workspace on a plan. **Delete** works only for a plan no workspace uses.
-- What a plan leaves out disappears from the apps, and its routes answer "… is not in your plan". Roman Urdu and the
-  other transcript views, suggested fixes and screen descriptions are in every plan.
-- At a limit people see a message in plain words: minutes, storage, seats or AI credits used up for the month.
+- **New plan** / **Edit:** name, badge (PRO) and its colour, price, description, order on the comparison, **On offer**
+  (listed in the apps' plan comparison), **Default for sign-ups** (one plan; a plan that ends falls back to it), trial
+  minutes, and the limits: minutes a month, storage (GB), devices per person, retention (days), seats, AI credits (US$
+  a month), longest recording (minutes), recordings a day. An empty number means no limit. **Engines** says which
+  speech engines the plan may use (the person's own Groq key and the computer's own transcription cost you nothing).
+- **Features** (since v1.6): every paid feature is a switch: transcription on EchoLedger, Roman Urdu/English/Urdu
+  views, double-check, screen moments, the Claude and ChatGPT connector, team workspace, premium engines (ElevenLabs,
+  Gemini), Live Translate, AI notes. Recording, organising, search, share links, export and the Ready check are free
+  and in every plan. A new plan starts with every paid feature off.
+- **Assign** puts a workspace on a plan, **until** a date if you like (then it goes back to the default plan; checked
+  every hour). **Delete** works only for a plan no workspace uses, and not for the default one.
+- **Overrides for a person:** for one person only, on top of their workspace's plan: a feature on or off, a limit
+  higher, lower or `none` (no limit). Setting everything back to "The plan's" clears them. Retention counts for the
+  workspaces the person owns.
+- What a plan leaves out shows a lock in the apps, and its routes answer "… is not in your plan" with the plan that
+  has it. At a limit people see a message in plain words (apps of v1.6 and later get one code for every limit).
+- Retention of a plan applies only to recordings made after it was set; older recordings are never deleted by it.
+- **Payment instructions** (since v1.6): the text people read after **Request upgrade** (bank or JazzCash details and
+  what to write as the reference), followed by "We'll activate it once confirmed".
+
+### Upgrade requests (since v1.6)
+
+**System → Upgrade requests** lists who asked for which plan, with their message (the badge counts the waiting ones;
+the bell tells you too). Once the payment is confirmed press **Approve**: choose the plan and, if you like, until when
+(then it goes back to the default plan). **Decline** needs a reply. Either way the person gets an email and a
+notification in the apps. One request waits at a time per person.
 
 ## 5. Usage and costs
 

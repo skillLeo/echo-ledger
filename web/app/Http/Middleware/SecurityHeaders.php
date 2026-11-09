@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Middleware;
 
+use App\Services\Accounts\Turnstile;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,7 +15,9 @@ use Symfony\Component\HttpFoundation\Response;
  * Console pages also get a Content-Security-Policy that only allows this origin. Filament's Alpine.js
  * evaluates its directives with `new Function()`, and Filament renders inline <style>/<script> blocks,
  * so scripts need 'unsafe-inline' and 'unsafe-eval' (Livewire's `csp_safe` build cannot run Filament's
- * expressions); avatars are inline SVG data URIs and the player reads audio from this origin.
+ * expressions); avatars are inline SVG data URIs and the player reads audio from this origin. Since v1.6 the sign-in
+ * and sign-up pages also allow Cloudflare Turnstile's script and frame, only while Turnstile is set
+ * (App\Services\Accounts\Turnstile): it is the one other origin the console ever loads.
  */
 final class SecurityHeaders
 {
@@ -42,7 +45,7 @@ final class SecurityHeaders
             'X-Frame-Options' => 'DENY',
         ];
         if (! $request->is('api/*')) {
-            $defaults['Content-Security-Policy'] = self::CONSOLE_CSP;
+            $defaults['Content-Security-Policy'] = self::wantsTurnstile($request) ? self::turnstileCsp() : self::CONSOLE_CSP;
         }
         if ($request->isSecure()) {
             $defaults['Strict-Transport-Security'] = 'max-age=31536000';
@@ -55,5 +58,24 @@ final class SecurityHeaders
         }
 
         return $response;
+    }
+
+    public static function turnstileCsp(): string
+    {
+        $origin = 'https://challenges.cloudflare.com';
+
+        return str_replace("script-src 'self' 'unsafe-inline' 'unsafe-eval'; ", "script-src 'self' 'unsafe-inline' 'unsafe-eval' {$origin}; frame-src {$origin}; ", self::CONSOLE_CSP);
+    }
+
+    private static function wantsTurnstile(Request $request): bool
+    {
+        if (! $request->routeIs('filament.admin.auth.login', 'filament.admin.auth.register')) {
+            return false;
+        }
+        try {
+            return app(Turnstile::class)->configured();
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }

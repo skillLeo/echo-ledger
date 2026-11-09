@@ -6,6 +6,7 @@ namespace App\Filament\Pages;
 
 use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
+use App\Filament\Support\PlanLock;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Models\WorkspaceInvitation;
@@ -154,7 +155,10 @@ class WorkspaceSettings extends Page implements HasTable
                         $this->redirect(Dashboard::getUrl());
                     }
                 }),
+            // Since v1.6 a team is a paid feature: without it Invite carries the plan's badge and opens the sheet.
+            ...(PlanLock::allows('team') ? [] : [PlanLock::sheet('upgradeForTeam', 'team', 'Invite')->authorize(fn (): bool => $this->can('invite'))]),
             Action::make('addMember')->label('Invite')->icon(Heroicon::OutlinedUserPlus)
+                ->visible(fn (): bool => PlanLock::allows('team'))
                 ->authorize(fn (): bool => $this->can('invite'))
                 ->modalDescription(fn (): string => app(SignUp::class)->open()
                     ? 'They get an email with a link to join, for 7 days; someone without an account makes one with it.'
@@ -302,7 +306,8 @@ class WorkspaceSettings extends Page implements HasTable
     {
         $workspace = $this->workspaceOrFail();
         try {
-            app(PlanLimits::class)->assertSeat($workspace->id);
+            app(PlanLimits::class)->assertFeature($workspace->id, 'team', $this->user()->id);
+            app(PlanLimits::class)->assertSeat($workspace->id, null, $this->user()->id);
         } catch (ApiError $e) {
             Notification::make()->title($e->getMessage())->danger()->send();
 
