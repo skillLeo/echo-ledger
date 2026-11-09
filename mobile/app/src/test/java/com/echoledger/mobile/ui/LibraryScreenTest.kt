@@ -160,6 +160,40 @@ class LibraryScreenTest : ScreenTest() {
     }
 
     @Test
+    fun `an update, maintenance and the admin's announcement show at the top, and the announcement closes (v1_6 P2_7)`() {
+        seed(item("a"))
+        runBlocking {
+            app.graph.settings.update {
+                it.copy(
+                    serverNotices = com.echoledger.mobile.core.ServerNotices(
+                        com.echoledger.mobile.data.AppUpdateDto(
+                            "1.6.0",
+                            required = true,
+                            message = "Please update EchoLedger to 1.6.0 or later."
+                        ),
+                        com.echoledger.mobile.data.AnnouncementDto("New: plans and badges."),
+                        com.echoledger.mobile.data.MaintenanceDto("Back at 11:00.")
+                    )
+                )
+            }
+        }
+        showLibrary()
+
+        compose.onNodeWithText("Please update EchoLedger to 1.6.0 or later.").assertExists()
+        compose.onNodeWithText("Update").assertExists()
+        compose.onNodeWithText("Back at 11:00.").assertExists()
+        compose.onNodeWithText("New: plans and badges.").assertExists()
+
+        compose.onNodeWithContentDescription("Dismiss").performClick()
+        pumpUntil("the announcement to close") { runBlocking { app.graph.settings.current() }.closedAnnouncements.isNotEmpty() }
+        pumpUntil("it to go") {
+            compose.waitForIdle()
+            compose.onAllNodesWithText("New: plans and badges.").fetchSemanticsNodes().isEmpty()
+        }
+        compose.onNodeWithText("Back at 11:00.").assertExists()
+    }
+
+    @Test
     fun `the View sheet groups by project, remembers it for this view, and None has no headers (Phase 1C D1 D4)`() {
         seed(item("a", title = "Call with Acme", client = "Acme Holdings"), item("b", title = "Call with Zed"))
         showLibrary()

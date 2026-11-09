@@ -63,7 +63,8 @@ class UploadPlanningTest {
         val transient = (100..599).filterNot { UploadWorker.isPermanent(it) }.toSet()
         val permanent = (100..599).filter { UploadWorker.isPermanent(it) }
 
-        assertEquals((400..499).toSet() - setOf(408, 429), permanent.toSet())
+        // 426 (since v1.6): the app waits for its update; the recording is kept and sent afterwards.
+        assertEquals((400..499).toSet() - setOf(408, 426, 429), permanent.toSet())
         assertTrue(transient.containsAll(listOf(408, 429, 500, 502, 503, 504)))
         assertFalse(UploadWorker.isPermanent(200))
         assertFalse(UploadWorker.isPermanent(0))

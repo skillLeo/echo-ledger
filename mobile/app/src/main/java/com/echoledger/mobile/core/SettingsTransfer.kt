@@ -90,6 +90,9 @@ object SettingsTransfer {
         // How this phone shows the Library, and what was opened on it (since v1.6).
         "libraryViews",
         "libraryOpened",
+        // What the server says now, and what was closed on this phone (since v1.6).
+        "serverNotices",
+        "closedAnnouncements",
         // The server says what the plan allows and the role (since v1.5).
         "plan",
         // Whose waiting recordings these are (since v1.5): this phone's sign-in, never another's.

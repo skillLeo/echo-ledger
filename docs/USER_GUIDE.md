@@ -250,6 +250,11 @@ transcripts, and every look shows in your activity log. **Stop now** ends it at 
   **Calls & meetings**, **Voice notes & dictation** and **This computer**. **Saved · just now** at the top right says a
   change was kept.
 
+**Updates and server notices (since v1.6).** When the server asks for a newer EchoLedger, the Library says so with
+**Update**. If the server no longer takes recordings from your version, they wait on the phone or computer and are sent
+after you update; nothing is lost. During maintenance the Library says so and recordings wait the same way. A notice
+from the server's owner shows at the top of the Library until you close it.
+
 ## 4. Record automatically
 
 EchoLedger can start recording when a call starts.

@@ -345,6 +345,42 @@ class UploadWorkerTest : AppTest() {
     }
 
     @Test
+    fun `an app the server no longer takes waits for an update instead of failing (v1_6)`() {
+        app.storeRecording(bytes = payload)
+        server.on(
+            "POST",
+            "/api/sessions",
+            FakeServer.json(
+                426,
+                """{"message":"Please update EchoLedger to 1.6.0 or later.","code":"update_required","minimum":"1.6.0","url":"https://x/downloads"}"""
+            )
+        )
+
+        assertEquals(ListenableWorker.Result.success(), run())
+
+        assertEquals("queued", recording()!!.state)
+        assertEquals(UploadWorker.WAITS_FOR_UPDATE, recording()!!.lastError)
+        val again = androidx.work.WorkManager.getInstance(app).getWorkInfosForUniqueWork("upload-$id").get()
+        assertTrue("it tries again later", again.any { !it.state.isFinished })
+    }
+
+    @Test
+    fun `maintenance makes the upload wait for Retry-After, not count as a failed attempt (v1_6)`() {
+        app.storeRecording(bytes = payload)
+        server.on(
+            "POST",
+            "/api/sessions",
+            MockResponse.Builder().code(503).addHeader("Content-Type", "application/json").addHeader("Retry-After", "900")
+                .body("""{"message":"Back soon.","code":"maintenance","until":null}""").build()
+        )
+
+        assertEquals(ListenableWorker.Result.success(), run(attempt = 11))
+
+        assertEquals("queued", recording()!!.state)
+        assertEquals(UploadWorker.WAITS_FOR_MAINTENANCE, recording()!!.lastError)
+    }
+
+    @Test
     fun `a chunk rejected with a server error is retried and earlier chunks stay uploaded`() {
         app.storeRecording(bytes = payload)
         serveHealthyUpload()

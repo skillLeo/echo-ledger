@@ -55,8 +55,32 @@ data class ServerConfig(
     @SerialName("live_translate") val liveTranslate: LiveTranslateConfig? = null,
     /** The workspace plan and this person's role there (since v1.5); null on older servers. */
     val plan: PlanDto? = null,
-    val workspace: ConfigWorkspaceDto? = null
+    val workspace: ConfigWorkspaceDto? = null,
+    /** Since v1.6 (P2.7): this app is older than the admin's minimum; null when it is not. */
+    @SerialName("app_update") val appUpdate: AppUpdateDto? = null,
+    /** Since v1.6: the admin's banner for everyone; null when there is none. */
+    val announcement: AnnouncementDto? = null,
+    /** Since v1.6: the server is in maintenance; null when it is not. */
+    val maintenance: MaintenanceDto? = null
 )
+
+/** `GET /api/config` `app_update` (since v1.6). [refused]: the server no longer takes this version's uploads. */
+@Serializable
+data class AppUpdateDto(
+    val minimum: String = "",
+    val required: Boolean = false,
+    val refused: Boolean = false,
+    val message: String = "",
+    val url: String? = null
+)
+
+/** `GET /api/config` `announcement` (since v1.6): [level] `info` or `warning`, shown until [until] (ISO) or for good. */
+@Serializable
+data class AnnouncementDto(val text: String = "", val level: String = "info", val until: String? = null)
+
+/** `GET /api/config` `maintenance` (since v1.6). */
+@Serializable
+data class MaintenanceDto(val message: String = "", val until: String? = null)
 
 @Serializable
 data class LiveTranslateConfig(

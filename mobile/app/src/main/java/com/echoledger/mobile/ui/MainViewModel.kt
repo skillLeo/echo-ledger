@@ -479,6 +479,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Whether this phone has finished at least one library sync since it was paired. */
     fun hasSynced(): Boolean = graph.library.hasSynced()
 
+    /** Closes the admin's announcement on this phone (since v1.6); a new text shows again. */
+    fun closeAnnouncement(key: String) =
+        updateSettings { s -> s.copy(closedAnnouncements = (s.closedAnnouncements - key + key).takeLast(20)) }
+
     /** "Notify me when ready" on a recording page (since v1.6): one notice when its transcript is ready. */
     fun notifyWhenReady(sessionId: String) = com.echoledger.mobile.notify.ReadyWatchWorker.enqueue(getApplication<Application>(), sessionId)
 
@@ -507,7 +511,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                     it.liveTranslate,
                                     config.liveTranslate
                                 ),
-                                plan = com.echoledger.mobile.core.PlanState.from(config.plan, config.workspace)
+                                plan = com.echoledger.mobile.core.PlanState.from(config.plan, config.workspace),
+                                serverNotices = com.echoledger.mobile.core.ServerNotices(
+                                    config.appUpdate,
+                                    config.announcement,
+                                    config.maintenance
+                                )
                             )
                         }
                     }

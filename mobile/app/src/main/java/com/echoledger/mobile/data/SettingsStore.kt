@@ -31,6 +31,10 @@ data class AppSettings(
     val lockAfterMs: Long = 0L,
     /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
     val secureScreen: Boolean = false,
+    /** What the server last said about updates, an announcement and maintenance (since v1.6, P2.7). */
+    val serverNotices: com.echoledger.mobile.core.ServerNotices = com.echoledger.mobile.core.ServerNotices(),
+    /** The announcement texts the person closed (their hashes), the latest 20. */
+    val closedAnnouncements: List<String> = emptyList(),
     /** The home-screen widget shows "WhatsApp call" instead of each recording's title (since v1.6). */
     val widgetHideTitles: Boolean = false,
     /** Absent in settings stored before v1.1.1, which also reset the old default "hide content" (on) to off. */

@@ -75,6 +75,7 @@ import com.echoledger.mobile.core.LibraryViewChoice
 import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.Readiness
 import com.echoledger.mobile.core.ReadyChip
+import com.echoledger.mobile.core.ServerBanners
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.LocalRecording
@@ -316,6 +317,32 @@ fun LibraryScreen(
                                 kind = BannerKind.Warning,
                                 action = "Retry",
                                 onAction = { vm.refresh() }
+                            )
+                        }
+                    }
+                    // Since v1.6 (P2.7): an update the server asks for, maintenance, and the admin's announcement.
+                    ServerBanners.of(appSettings.serverNotices, appSettings.closedAnnouncements).forEach { banner ->
+                        item(key = "server-${banner.kind}") {
+                            InlineBanner(
+                                banner.text,
+                                Modifier.padding(horizontal = Space.screen, vertical = Space.s2),
+                                kind = if (banner.warning) BannerKind.Warning else BannerKind.Info,
+                                action = if (banner.kind == ServerBanners.Kind.UPDATE) "Update" else null,
+                                onAction = {
+                                    // The website build updates itself from the server; the store build opens the page.
+                                    val url = appSettings.serverNotices.appUpdate?.url
+                                    if (com.echoledger.mobile.BuildConfig.CAPTURE_HELPER || url.isNullOrBlank()) {
+                                        vm.checkForUpdates()
+                                    } else {
+                                        runCatching {
+                                            context.startActivity(
+                                                android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                                                    .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            )
+                                        }
+                                    }
+                                },
+                                onDismiss = banner.key?.let { key -> { vm.closeAnnouncement(key) } }
                             )
                         }
                     }

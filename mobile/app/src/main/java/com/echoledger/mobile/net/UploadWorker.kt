@@ -274,6 +274,17 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             graph.recordings.update(id) { it.copy(state = "duplicate", lastError = ALREADY_THERE) }
             return Result.success()
         }
+        // Since v1.6 (P2.7): an app below the server's minimum, or the server in maintenance, waits; never a failure.
+        if (e.status == 426 || e.code == UPDATE_REQUIRED) {
+            graph.recordings.update(id) { it.copy(state = "queued", lastError = WAITS_FOR_UPDATE) }
+            enqueueAfter(applicationContext, id, UPDATE_RECHECK_SECONDS)
+            return Result.success()
+        }
+        if (e.status == 503 && e.code == MAINTENANCE) {
+            graph.recordings.update(id) { it.copy(state = "queued", lastError = WAITS_FOR_MAINTENANCE) }
+            enqueueAfter(applicationContext, id, (e.retryAfterSeconds ?: MAINTENANCE_RECHECK_SECONDS).coerceIn(60, 6 * 3600))
+            return Result.success()
+        }
         if (e.status == 429) {
             graph.recordings.update(id) { it.copy(state = "queued", lastError = e.message) }
             val wait = e.retryAfterSeconds ?: 0
@@ -298,6 +309,12 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         private const val MAX_ATTEMPTS = 12
         const val MISSING_FILE = "The recording file is missing on this phone, so it cannot be uploaded."
         const val DUPLICATE = "duplicate_recording"
+        const val UPDATE_REQUIRED = "update_required"
+        const val MAINTENANCE = "maintenance"
+        const val WAITS_FOR_UPDATE = "Waits for an update of EchoLedger: the server no longer takes this version."
+        const val WAITS_FOR_MAINTENANCE = "The server is in maintenance. It sends by itself afterwards."
+        private const val UPDATE_RECHECK_SECONDS = 6 * 3600L
+        private const val MAINTENANCE_RECHECK_SECONDS = 600L
         const val ALREADY_THERE = "Already in your Library"
         const val NO_CONNECTION = "No connection to your server. It uploads by itself when the phone is back online."
         const val INTERRUPTED = "The upload was interrupted. It tries again by itself; tap Retry to try now."
@@ -332,7 +349,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         @Volatile internal var verifyWaitMs = 120_000L
 
         /** 4xx responses are final (bad request, validation, forbidden); 408/429 and 5xx are worth retrying. */
-        fun isPermanent(status: Int): Boolean = status in 400..499 && status != 408 && status != 429
+        fun isPermanent(status: Int): Boolean = status in 400..499 && status != 408 && status != 426 && status != 429
 
         fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 

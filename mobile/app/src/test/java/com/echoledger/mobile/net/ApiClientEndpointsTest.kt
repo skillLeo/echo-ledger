@@ -111,6 +111,29 @@ class ApiClientEndpointsTest {
     }
 
     @Test
+    fun `config reads the update, the announcement and maintenance (v1_6 P2_7)`() = runBlocking {
+        val body = ServerFixtures.config().trim().removePrefix("{")
+        server.on(
+            "GET",
+            "/api/config",
+            FakeServer.json(
+                200,
+                """{"app_update":{"minimum":"1.6.0","required":true,"refused":false,"message":"Please update EchoLedger to 1.6.0 or later.","url":"https://x/downloads"},
+                   "announcement":{"text":"New: plans.","level":"warning","until":null},
+                   "maintenance":{"message":"Back soon.","until":"2026-11-09T11:00:00Z"},""" + body
+            )
+        )
+
+        val config = client().config()
+
+        assertEquals("1.6.0", config.appUpdate!!.minimum)
+        assertTrue(config.appUpdate!!.required)
+        assertEquals("https://x/downloads", config.appUpdate!!.url)
+        assertEquals("warning", config.announcement!!.level)
+        assertEquals("2026-11-09T11:00:00Z", config.maintenance!!.until)
+    }
+
+    @Test
     fun `config accepts the minimal body and falls back to defaults`() = runBlocking {
         server.on(
             "GET",
