@@ -38,6 +38,9 @@ use Illuminate\Support\Carbon;
  * @property int|null $uploads_per_day
  * @property list<string>|null $engines null = every engine
  * @property Carbon|null $retention_from the plan's retention applies to recordings made since; null = to every one
+ * @property Carbon|null $archived_at since v1.6 (P2.3): no longer offered or given to anyone new; its workspaces keep it
+ * @property string|null $price_amount since v1.6 (P2.3): the display price's amount, with $currency
+ * @property string|null $currency ISO 4217, e.g. PKR or USD
  */
 class Plan extends Model
 {
@@ -84,7 +87,7 @@ class Plan extends Model
             'team' => false, 'premium_engines' => false, 'live_translate' => false, 'ai_notes' => false]];
 
     protected $fillable = ['key', 'name', 'price_usd', 'monthly_minutes', 'storage_bytes', 'max_devices', 'retention_days', 'seats', 'ai_credits_usd', 'features',
-        'badge', 'color', 'description', 'price_label', 'sort_order', 'on_offer', 'is_default', 'trial_minutes', 'max_file_minutes', 'uploads_per_day', 'engines', 'retention_from'];
+        'badge', 'color', 'description', 'price_label', 'sort_order', 'on_offer', 'is_default', 'trial_minutes', 'max_file_minutes', 'uploads_per_day', 'engines', 'retention_from', 'archived_at', 'price_amount', 'currency'];
 
     protected static function booted(): void
     {
@@ -109,7 +112,35 @@ class Plan extends Model
     /** The plan new sign-ups get and an expired plan falls back to (since v1.6): the one marked default, else Free. */
     public static function defaultPlan(): self
     {
-        return self::query()->where('is_default', true)->orderBy('id')->first() ?? self::free();
+        return self::query()->where('is_default', true)->whereNull('archived_at')->orderBy('id')->first() ?? self::free();
+    }
+
+    /** Currencies the display price may be in (since v1.6, P2.3). */
+    public const CURRENCIES = ['PKR' => 'Rs', 'USD' => '$', 'EUR' => '€', 'GBP' => '£', 'AED' => 'AED', 'SAR' => 'SAR', 'INR' => '₹'];
+
+    /**
+     * The price as the apps show it: the plan's own text, else its amount and currency ("Rs 2,000 a month"), else its US
+     * dollars, else Free.
+     */
+    public function displayPrice(): string
+    {
+        if (filled($this->price_label)) {
+            return (string) $this->price_label;
+        }
+        if ($this->price_amount !== null && (float) $this->price_amount > 0) {
+            $amount = (float) $this->price_amount;
+            $formatted = number_format($amount, fmod($amount, 1.0) === 0.0 ? 0 : 2);
+            $symbol = self::CURRENCIES[(string) $this->currency] ?? (string) $this->currency;
+
+            return trim($symbol.' '.$formatted).' a month';
+        }
+
+        return (float) $this->price_usd > 0 ? '$'.number_format((float) $this->price_usd, 2).' a month' : 'Free';
+    }
+
+    public function isArchived(): bool
+    {
+        return $this->archived_at !== null;
     }
 
     /**
@@ -180,6 +211,7 @@ class Plan extends Model
             'seats' => 'integer', 'price_usd' => 'decimal:2', 'ai_credits_usd' => 'decimal:2', 'features' => 'array',
             'sort_order' => 'integer', 'on_offer' => 'boolean', 'is_default' => 'boolean', 'trial_minutes' => 'integer',
             'max_file_minutes' => 'integer', 'uploads_per_day' => 'integer', 'engines' => 'array', 'retention_from' => 'datetime',
+            'archived_at' => 'datetime', 'price_amount' => 'decimal:2',
         ];
     }
 }

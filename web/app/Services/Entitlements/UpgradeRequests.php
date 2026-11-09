@@ -54,7 +54,7 @@ final class UpgradeRequests
      */
     public function create(User $user, int $workspaceId, string $planKey, ?string $message): UpgradeRequest
     {
-        $plan = Plan::query()->where('key', $planKey)->where('on_offer', true)->first();
+        $plan = Plan::query()->where('key', $planKey)->where('on_offer', true)->whereNull('archived_at')->first();
         if (! $plan instanceof Plan) {
             throw ValidationException::withMessages(['plan' => 'Choose one of the plans on offer.']);
         }

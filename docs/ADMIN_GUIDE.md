@@ -145,8 +145,9 @@ or when they press **Stop now**.
 
 ## 4. Plans (super admin)
 
-**Admin panel → Plans.** Prices stay at 0 until billing comes (backlog); **Price as shown** is the text the apps show
-("Rs 2,000 a month").
+**Admin panel → Plans.** Prices are only shown until billing comes (backlog): the apps show **Price a month** with its
+**Currency** ("Rs 2,000 a month"), or **Price as shown** when you write your own text; **Price in US$** is for the
+reports.
 
 - **New plan** / **Edit:** name, badge (PRO) and its colour, price, description, order on the comparison, **On offer**
   (listed in the apps' plan comparison), **Default for sign-ups** (one plan; a plan that ends falls back to it), trial
@@ -159,6 +160,12 @@ or when they press **Stop now**.
   and in every plan. A new plan starts with every paid feature off.
 - **Assign** puts a workspace on a plan, **until** a date if you like (then it goes back to the default plan; checked
   every hour). **Delete** works only for a plan no workspace uses, and not for the default one.
+- **Duplicate** (since v1.6) makes a copy with every limit, feature and engine, not on offer and not the default, to
+  change before you offer it. **Archive** takes a plan off offer and out of Assign and upgrade requests; workspaces on
+  it keep it until you move them. **Show → Archived** lists them, with **Bring back**. Free and the default plan cannot
+  be archived.
+- **Features and plans** (since v1.6), under the list: a box per paid feature and plan. Ticking one changes the plan
+  at once for every workspace on it, and goes in the activity log.
 - **Overrides for a person:** for one person only, on top of their workspace's plan: a feature on or off, a limit
   higher, lower or `none` (no limit). Setting everything back to "The plan's" clears them. Retention counts for the
   workspaces the person owns.

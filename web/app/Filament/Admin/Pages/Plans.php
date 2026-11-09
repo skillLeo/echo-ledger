@@ -27,13 +27,16 @@ use Filament\Pages\Page;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Colors\Color;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -72,19 +75,60 @@ class Plans extends Page implements HasTable
 
     public function content(Schema $schema): Schema
     {
-        return $schema->components([EmbeddedTable::make()]);
+        return $schema->components([
+            EmbeddedTable::make(),
+            View::make('filament.admin.plans-matrix')->viewData(fn (): array => $this->matrix()),
+        ]);
+    }
+
+    /**
+     * Features × plans (since v1.6, P2.3): which plan grants which paid feature; the free ones are in every plan.
+     *
+     * @return array{plans: list<Plan>, features: array<string, string>, free: array<string, string>, canManage: bool}
+     */
+    private function matrix(): array
+    {
+        return [
+            'plans' => Plan::query()->whereNull('archived_at')->orderBy('sort_order')->orderBy('id')->get()->all(),
+            'features' => array_combine(Plan::FEATURES, array_map(fn (string $f): string => Plan::FEATURE_LABELS[$f], Plan::FEATURES)),
+            'free' => collect(Features::ALL)->filter(fn (array $f): bool => $f['cost'] === Features::FREE)->map(fn (array $f): string => $f['name'])->all(),
+            'canManage' => StaffAccess::can('plans.manage'),
+        ];
+    }
+
+    /** One box of the matrix: [$feature] on or off in [$plan]. */
+    public function toggleFeature(int $plan, string $feature): void
+    {
+        abort_unless(StaffAccess::can('plans.manage'), 403);
+        abort_unless(in_array($feature, Plan::FEATURES, true), 404);
+        $record = Plan::query()->whereNull('archived_at')->findOrFail($plan);
+        $features = $record->featureMap();
+        $features[$feature] = ! $features[$feature];
+        $record->forceFill(['features' => $features])->save();
+        app(Entitlements::class)->forget();
+        app(AuditLog::class)->record('plan_changed', (int) auth()->id(), $record, Plan::FEATURE_LABELS[$feature].($features[$feature] ? ' added to ' : ' taken out of ')."the {$record->name} plan");
+        Notification::make()->title(e(Plan::FEATURE_LABELS[$feature].($features[$feature] ? ' is in ' : ' is not in ').$record->name.' now'))->success()->send();
     }
 
     public function table(Table $table): Table
     {
         return $table
             ->query(fn () => Plan::query()->withCount('workspaces'))
+            ->filters([
+                SelectFilter::make('shown')->label('Show')->options(['current' => 'Current plans', 'archived' => 'Archived', 'all' => 'All'])
+                    ->default('current')->selectablePlaceholder(false)
+                    ->query(fn (Builder $query, array $data): Builder => match ($data['value'] ?? 'current') {
+                        'archived' => $query->whereNotNull('archived_at'),
+                        'all' => $query,
+                        default => $query->whereNull('archived_at'),
+                    }),
+            ])
             ->defaultSort('id')
             ->columns([
-                TextColumn::make('name')->description(fn (Plan $record): string => $record->key.($record->is_default ? ' · default for sign-ups' : '').($record->on_offer ? ' · on offer' : '')),
+                TextColumn::make('name')->description(fn (Plan $record): string => $record->key.($record->is_default ? ' · default for sign-ups' : '').($record->on_offer && ! $record->isArchived() ? ' · on offer' : '').($record->isArchived() ? ' · archived' : '')),
                 TextColumn::make('badge')->label('Badge')->state(fn (Plan $record): string => $record->badgeText())->badge()
                     ->color(fn (Plan $record): array => Color::hex($record->colorOrDefault())),
-                TextColumn::make('price_usd')->label('Price')->state(fn (Plan $record): string => Entitlements::planCard($record)['price']),
+                TextColumn::make('price_usd')->label('Price')->state(fn (Plan $record): string => $record->displayPrice()),
                 TextColumn::make('monthly_minutes')->label('Minutes')->numeric()->placeholder('No limit'),
                 TextColumn::make('storage_bytes')->label('Storage')->formatStateUsing(fn ($state): string => round((int) $state / 1024 ** 3, 1).' GB')->placeholder('No limit'),
                 TextColumn::make('max_devices')->label('Devices')->placeholder('No limit'),
@@ -100,6 +144,7 @@ class Plans extends Page implements HasTable
             ->headerActions([
                 // Since v1.6: what people read after "Request upgrade" (bank or JazzCash details, what to write).
                 Action::make('paymentInstructions')->label('Payment instructions')->icon(Heroicon::OutlinedBanknotes)->color('gray')
+                    ->authorize(fn (): bool => StaffAccess::can('settings.manage'))
                     ->modalDescription('Shown after someone presses "Request upgrade", in the apps and the console, with "We\'ll activate it once confirmed".')
                     ->fillForm(fn (): array => ['text' => app(SettingsRepository::class)->get('upgrade.payment_instructions')])
                     ->schema([Textarea::make('text')->label('Payment instructions')->rows(6)->maxLength(2000)
@@ -112,6 +157,7 @@ class Plans extends Page implements HasTable
                     }),
                 // The suspend switch (since v1.6): signs the person in nowhere; their devices are refused on every call.
                 Action::make('suspend')->label('Suspend or restore a person')->icon(Heroicon::OutlinedNoSymbol)->color('gray')
+                    ->authorize(fn (): bool => StaffAccess::can('customers.manage'))
                     ->modalDescription('A suspended person cannot sign in anywhere, and their phones and computers are refused on every call (they stay signed in, so lifting it brings them back).')
                     ->schema(fn (): array => [
                         Select::make('user_id')->label('Person')->required()->searchable()->live()
@@ -138,6 +184,7 @@ class Plans extends Page implements HasTable
                     }),
                 // A person's own features and limits (since v1.6): on top of their workspace's plan, for them only.
                 Action::make('overrides')->label('Overrides for a person')->icon(Heroicon::OutlinedAdjustmentsHorizontal)->color('gray')
+                    ->authorize(fn (): bool => StaffAccess::can('customers.manage'))
                     ->modalDescription('For one person, on top of the plan of the workspace they work in. "The plan\'s" keeps what the plan says. Retention counts for the workspaces the person owns.')
                     ->schema(fn (): array => [
                         Select::make('user_id')->label('Person')->required()->searchable()->live()
@@ -158,6 +205,7 @@ class Plans extends Page implements HasTable
                         Notification::make()->title(e("Saved for {$user->email}"))->success()->send();
                     }),
                 Action::make('create')->label('New plan')->icon(Heroicon::OutlinedPlus)
+                    ->authorize(fn (): bool => StaffAccess::can('plans.manage'))
                     ->schema(fn (): array => [
                         TextInput::make('key')->required()->maxLength(32)->regex('/^[a-z0-9][a-z0-9_-]*$/')
                             ->helperText('A short name for the apps; it cannot change later.')
@@ -176,15 +224,55 @@ class Plans extends Page implements HasTable
             ])
             ->recordActions([
                 Action::make('edit')->label('Edit')->icon(Heroicon::OutlinedPencilSquare)->color('gray')
+                    ->authorize(fn (): bool => StaffAccess::can('plans.manage'))
                     ->schema(fn (): array => $this->planFields())
                     ->fillForm(fn (Plan $record): array => self::toForm($record))
                     ->action(function (Plan $record, array $data): void {
-                        $record->update(self::fromForm($data));
+                        // An archived plan is neither offered nor the default until it is brought back.
+                        $record->update([...self::fromForm($data), ...($record->isArchived() ? ['is_default' => false, 'on_offer' => false] : [])]);
                         self::keepOneDefault($record);
                         app(AuditLog::class)->record('plan_changed', (int) auth()->id(), $record, "Plan {$record->name} changed");
                         Notification::make()->title("Plan {$record->name} saved")->success()->send();
                     }),
+                Action::make('duplicate')->label('Duplicate')->icon(Heroicon::OutlinedDocumentDuplicate)->color('gray')
+                    ->authorize(fn (): bool => StaffAccess::can('plans.manage'))
+                    ->modalDescription('A copy with every limit, feature and engine, not on offer and not the default, to change before you offer it.')
+                    ->schema([
+                        TextInput::make('key')->required()->maxLength(32)->regex('/^[a-z0-9][a-z0-9_-]*$/')
+                            ->helperText('A short name for the apps; it cannot change later.')
+                            ->rule(fn (): Unique => Rule::unique('plans', 'key')),
+                        TextInput::make('name')->required()->maxLength(80),
+                    ])
+                    ->fillForm(fn (Plan $record): array => ['key' => self::freeKey($record->key.'-copy'), 'name' => $record->name.' (copy)'])
+                    ->action(function (Plan $record, array $data): void {
+                        $copy = $record->replicate(['workspaces_count', 'retention_from']);
+                        $copy->forceFill(['key' => (string) $data['key'], 'name' => trim((string) $data['name']), 'is_default' => false, 'on_offer' => false, 'archived_at' => null])->save();
+                        app(AuditLog::class)->record('plan_created', (int) auth()->id(), $copy, "Plan {$copy->name} made as a copy of {$record->name}");
+                        Notification::make()->title(e("Plan {$copy->name} made"))->success()->send();
+                    }),
+                Action::make('archive')->label(fn (Plan $record): string => $record->isArchived() ? 'Bring back' : 'Archive')
+                    ->icon(Heroicon::OutlinedArchiveBox)->color('gray')
+                    ->authorize(fn (): bool => StaffAccess::can('plans.manage'))
+                    ->visible(fn (Plan $record): bool => $record->isArchived() || (! $record->is_default && $record->key !== Plan::FREE))
+                    ->requiresConfirmation()
+                    ->modalDescription(fn (Plan $record): string => $record->isArchived()
+                        ? 'It can be offered and given to people again (turn On offer back on to list it in the apps).'
+                        : 'No longer offered or given to anyone new. Workspaces on it keep it, with everything it has, until you move them.')
+                    ->action(function (Plan $record): void {
+                        $archive = ! $record->isArchived();
+                        if ($archive && $record->is_default) {
+                            Notification::make()->title('Make another plan the default first')->danger()->send();
+
+                            return;
+                        }
+                        $record->forceFill(['archived_at' => $archive ? now() : null, 'on_offer' => $archive ? false : $record->on_offer])->save();
+                        app(Entitlements::class)->forget();
+                        app(AuditLog::class)->record('plan_changed', (int) auth()->id(), $record, "Plan {$record->name} ".($archive ? 'archived' : 'brought back'));
+                        Notification::make()->title(e("Plan {$record->name} ".($archive ? 'archived' : 'brought back')))->success()->send();
+                    }),
                 Action::make('assign')->label('Assign')->icon(Heroicon::OutlinedArrowRightCircle)->color('gray')
+                    ->authorize(fn (): bool => StaffAccess::can('customers.manage'))
+                    ->visible(fn (Plan $record): bool => ! $record->isArchived())
                     ->modalDescription('The workspace is on this plan from now on: its limits and features apply at once. With an end date it goes back to the default plan then.')
                     ->schema([
                         Select::make('workspace_id')->label('Workspace')->required()->searchable()->options(fn (): array => self::workspaceOptions()),
@@ -201,6 +289,7 @@ class Plans extends Page implements HasTable
                         }
                     }),
                 Action::make('delete')->label('Delete')->icon(Heroicon::OutlinedTrash)->color('danger')
+                    ->authorize(fn (): bool => StaffAccess::can('plans.manage'))
                     ->visible(fn (Plan $record): bool => ! in_array($record->key, [Plan::PERSONAL, Plan::FREE], true) && ! $record->is_default && (int) $record->getAttribute('workspaces_count') === 0)
                     ->requiresConfirmation()
                     ->action(function (Plan $record): void {
@@ -227,8 +316,11 @@ class Plans extends Page implements HasTable
             Grid::make(['default' => 2])->schema([
                 TextInput::make('badge')->label('Badge')->maxLength(16)->helperText('Shown on locked features, e.g. PRO.'),
                 ColorPicker::make('color')->label('Badge colour')->regex('/^#[0-9a-fA-F]{6}$/'),
-                TextInput::make('price_label')->label('Price as shown')->maxLength(80)->placeholder('Rs 2,000 a month'),
-                TextInput::make('price_usd')->label('Price (US$ a month)')->numeric()->minValue(0)->maxValue(100000)->required(),
+                TextInput::make('price_amount')->label('Price a month')->numeric()->minValue(0)->maxValue(100000000),
+                Select::make('currency')->label('Currency')->options(array_combine(array_keys(Plan::CURRENCIES), array_keys(Plan::CURRENCIES)))->placeholder('—'),
+                TextInput::make('price_label')->label('Price as shown (optional)')->maxLength(80)->placeholder('Rs 2,000 a month')
+                    ->helperText('Leave empty to show the price and currency above.'),
+                TextInput::make('price_usd')->label('Price in US$ (for reports)')->numeric()->minValue(0)->maxValue(100000)->required(),
                 TextInput::make('sort_order')->label('Order on the comparison')->integer()->minValue(0)->maxValue(1000)->required(),
                 TextInput::make('trial_minutes')->label('Trial minutes')->integer()->minValue(0)->maxValue(100000)->required()
                     ->helperText('Transcription on EchoLedger a person may try once without that feature.'),
@@ -273,6 +365,18 @@ class Plans extends Page implements HasTable
             ->mapWithKeys(fn (Workspace $w): array => [$w->id => $w->name.(isset($owners[$w->id]) ? ' · '.$owners[$w->id] : '')])->all();
     }
 
+    /** [$key], or [$key]-2, -3… while a plan has it. */
+    private static function freeKey(string $key): string
+    {
+        $key = substr($key, 0, 28);
+        $candidate = $key;
+        for ($n = 2; Plan::query()->where('key', $candidate)->exists(); $n++) {
+            $candidate = $key.'-'.$n;
+        }
+
+        return $candidate;
+    }
+
     /** One plan is the default for sign-ups: marking another one moves it. */
     private static function keepOneDefault(Plan $plan): void
     {
@@ -290,6 +394,8 @@ class Plans extends Page implements HasTable
             'badge' => $plan->badge,
             'color' => $plan->colorOrDefault(),
             'price_label' => $plan->price_label,
+            'price_amount' => $plan->price_amount,
+            'currency' => $plan->currency,
             'sort_order' => $plan->sort_order,
             'trial_minutes' => $plan->trial_minutes,
             'description' => $plan->description,
@@ -324,6 +430,8 @@ class Plans extends Page implements HasTable
             'badge' => filled($data['badge'] ?? null) ? mb_strtoupper(trim((string) $data['badge'])) : null,
             'color' => is_string($data['color'] ?? null) && preg_match('/^#[0-9a-fA-F]{6}$/', $data['color']) === 1 ? strtolower($data['color']) : null,
             'price_label' => filled($data['price_label'] ?? null) ? trim((string) $data['price_label']) : null,
+            'price_amount' => filled($data['price_amount'] ?? null) ? round((float) $data['price_amount'], 2) : null,
+            'currency' => is_string($data['currency'] ?? null) && isset(Plan::CURRENCIES[$data['currency']]) ? $data['currency'] : null,
             'sort_order' => max(0, (int) ($data['sort_order'] ?? 0)),
             'trial_minutes' => max(0, (int) ($data['trial_minutes'] ?? 0)),
             'description' => filled($data['description'] ?? null) ? trim((string) $data['description']) : null,
