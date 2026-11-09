@@ -119,7 +119,13 @@ final class UpgradeRequests
                 'message' => filled($message) ? mb_substr(trim((string) $message), 0, 1000) : null,
                 'promo_code' => $promo?->code,
                 'percent' => $promo?->percent,
-                'amount_due' => $promo instanceof PromoCode ? PromoCodes::discounted($plan, $promo->percent) : $plan->displayPrice(),
+                // Since v1.7 written from the rupee price when the plan has one, so the text and the number agree.
+                'amount_due' => match (true) {
+                    $free => 'Free',
+                    $duePkr !== null => Plan::rupees($duePkr).' a month',
+                    $promo instanceof PromoCode => PromoCodes::discounted($plan, $promo->percent),
+                    default => $plan->displayPrice(),
+                },
                 'amount_due_pkr' => $duePkr,
                 'status' => $free ? UpgradeRequest::APPROVED : UpgradeRequest::PENDING,
             ]);

@@ -85,10 +85,10 @@ final class PaymentProofs
         if ($twin instanceof UpgradeRequestProof) {
             return $twin;
         }
+        $kind = self::sniff($path);
         // Cheaper than decoding a picture only to find there is no room for it.
         $this->assertRoom($request);
 
-        $kind = self::sniff($path);
         $id = strtolower((string) Str::ulid()); // as the model's own ids are
         $folder = 'payment-proofs/'.now()->format('Y/m');
         $stored = RecordingFiles::tempPath('proof');
@@ -204,7 +204,9 @@ final class PaymentProofs
                 throw new ApiError(422, 'proof_required', 'Add a receipt or the transaction ID first.');
             }
             $before = $current->stage();
-            $now = now();
+            // Strictly after staff's last ask, also within the same second, so the stage is never ambiguous.
+            $now = $current->proof_requested_at !== null && $current->proof_requested_at->gte(now()->startOfSecond())
+                ? $current->proof_requested_at->copy()->addSecond() : now();
             $unsent->update(['locked_at' => $now]);
             $current->forceFill([
                 'paid_at' => $now,
@@ -261,7 +263,9 @@ final class PaymentProofs
         $request = DB::transaction(function () use ($request, $note): UpgradeRequest {
             $current = $this->lock($request);
             self::assertOpen($current);
-            $current->forceFill(['proof_requested_at' => now(), 'proof_request_note' => $note])->save();
+            // Strictly after the last receipt sent, also within the same second (see markPaid).
+            $at = $current->paid_at !== null && $current->paid_at->gte(now()->startOfSecond()) ? $current->paid_at->copy()->addSecond() : now();
+            $current->forceFill(['proof_requested_at' => $at, 'proof_request_note' => $note])->save();
 
             return $current;
         });
