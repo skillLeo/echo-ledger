@@ -2,9 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Filament\Admin\Pages\ActivityLog;
 use App\Filament\Admin\Pages\ApiCredentials;
 use App\Filament\Admin\Pages\Plans;
 use App\Filament\Admin\Pages\Settings;
+use App\Filament\Admin\Pages\Staff;
 use App\Filament\Admin\Pages\UpgradeRequestsPage;
 use App\Http\Controllers\LegacyConsoleRedirect;
 use App\Models\User;
@@ -145,4 +147,22 @@ it('lists no server page in a customer\'s app, and the server pages are not in t
         $this->get($gone)->assertNotFound();
     }
     expect(User::query()->whereKey($owner->id)->value('is_super_admin'))->toBeFalsy();
+});
+
+it('refuses a customer every page of the admin panel as a component too, so none of their actions can run', function () {
+    $this->actingAs(Fx::user(), 'web');
+    Filament::setCurrentPanel('admin');
+    $panel = Filament::getPanel('admin');
+    $components = [...$panel->getPages()];
+    foreach ($panel->getResources() as $resource) {
+        foreach ($resource::getPages() as $registration) {
+            $components[] = $registration->getPage();
+        }
+    }
+    $customer = Fx::user();
+    expect($components)->toContain(Staff::class, ActivityLog::class);
+    foreach ($components as $page) {
+        $params = str_contains($page, 'ViewCustomer') ? ['record' => $customer->id] : [];
+        Livewire::test($page, $params)->assertForbidden();
+    }
 });
