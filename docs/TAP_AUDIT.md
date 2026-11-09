@@ -93,3 +93,39 @@ desktop: the three ways of sending are different things, so the console asks rat
 What the declutter cost: a smart view or folder is now 2 clicks (the **All recordings** or **All folders** menu → the
 choice) where its chip was 1. In return the list starts three rows higher, the toolbar is one line on a phone, and
 **Failed uploads** says itself above the list when something failed (1 click to see why).
+
+## Console (counted 2026-11-09, v1.6 app shell)
+
+Before: the console of the P5 pass above (`c686ade`: the one Library toolbar, the selection bar, no shell). After: branch
+`v16-web-shell` (the sidebar with Find a page, the top bar with + and Ctrl/⌘+K, the Library's column, the drawer on
+the right, Account in tabs, the phone's bottom tabs). Clicks from the Library page on a wide screen (1440 px) unless
+said; a key that does the same is named in How.
+
+| # | Task | Before | After | How |
+|---|---|---|---|---|
+| 1 | Record a voice note now | — | **2** (phone) | On a phone's browser: **Record** (bottom tab) → **Record a voice note**: the phone's recorder opens and the note uploads when it stops. On a computer the console still does not record (**Ctrl/⌘+K** "record" opens the apps' page); **Upload** is 1 + the file. |
+| 2 | Stop a recording | — | — | The phone's recorder, or the device that records. |
+| 3 | Open the latest recording | 1 | 1 | Its row: it opens in the drawer on the right (**Enter** after **J**/**K**); **Open** there is the full page (2). |
+| 4 | Read it in Roman Urdu or English | 1 | 1 | The drawer shows the start of the transcript in the view it opens in (Roman Urdu for Urdu), and says which. Another view: **Open** → **Show as** (3). |
+| 5 | Copy the transcript | 2 | 2 | Row → **Copy text** in the drawer (the whole transcript in that view). |
+| 6 | Send it to WhatsApp | 3 | 3 | Row → **Send to WhatsApp…** in the drawer → Text only, Text and voice, or Link; or the row's **More** → **Send to WhatsApp…** → the choice. |
+| 7 | Find a recording by a word in it | 2 | 2 | The top bar's search (always there now) → (type) → the result, which plays from that moment; **Ctrl/⌘+K** → (type) → the result is 1. |
+| 8 | Keep or discard after a call (Ask me) | — | — | The device decides; **Waiting** in the column lists them (1). |
+| 9 | Retry a failed transcription | 2 | 2 | **Failed uploads** in the column (or **Failed uploads (2) · See why**) → **Retry**. |
+| 10 | Fix "Not ready" | — | — | On the device (its Ready check). |
+| 11 | Rename a recording | 3 | 3 | The row's **More** → **Rename** → **Save** (or open → the pencil → **Save**). |
+| 12 | Move a recording to a project | 4 | **1** | Drag the row onto the project in the Library's column (or onto a pinned project in the sidebar); several: their boxes, then drag one of them. The selection bar's **Move** → the project → **Move** stays (4 with the box). |
+| 13 | Delete a recording | 3 | 3 | The row's **More** → **Delete** → confirm (Recently deleted keeps it 48 hours). |
+| 14 | Play from a line | 2 | 2 | Open → the line. |
+| 15 | Group or sort the Library | 2 | 2 | **Group by** or **Sort by** → the choice; **List** / **Table** is 1. |
+
+Of the top 10 the console now does 7 itself (Record from a phone's browser joins), and 6 of them take 2 clicks or
+fewer. The exception is still **Send to WhatsApp** (3), as on the phone and the desktop: the three ways of sending are
+different things, so the console asks rather than guesses.
+
+Other paths the shell shortened: a smart folder or view is 1 click again (the column; it was 2 through the toolbar's
+menus after the P5 declutter), **Plan & usage** is 2 from any page (the avatar menu; before: Profile and scrolling),
+**Devices** is 2 (**Account → Devices**) or one search (**Find a page** or **Ctrl/⌘+K** "devices"), **Shared with
+me** is 1 (the sidebar's Shared → With me), a new project or a request link is 2 from any page (**+**), the
+**Preferences** are 2 (**Account → Preferences**) and **Help & shortcuts** is 1 (**?**). In the admin panel a customer's
+numbers are 1 (a row opens the quick look; **Open** in it is the full page).
