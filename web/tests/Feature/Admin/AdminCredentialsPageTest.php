@@ -8,6 +8,7 @@ use App\Services\CredentialVault;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
 uses(AdminTestHelpers::class);
@@ -277,4 +278,46 @@ it('refuses a non-admin account', function () {
 
     $this->get('/admin/api-credentials')->assertForbidden();
     expect(ApiCredentials::canAccess())->toBeFalse();
+});
+
+it('refuses the admin\'s own sign-in password filled into a key box by the browser, and saves nothing', function () {
+    $admin = $this->signInAsAdmin();
+    $admin->forceFill(['password' => Hash::make('Autofill9')])->save();
+
+    $this->panelComponent(ApiCredentials::class)
+        ->fillForm(['soniox__api_key' => 'Autofill9', 'gemini__api_key' => 'AIzaSyD-a-real-looking-gemini-key-000'])
+        ->call('save')
+        ->assertHasErrors(['data.soniox__api_key'])
+        ->assertNotified('Nothing saved');
+
+    expect(Credential::query()->count())->toBe(0);
+});
+
+it('refuses the same text in two boxes, the way a browser fills one saved password into every box', function () {
+    $this->signInAsAdmin();
+
+    $this->panelComponent(ApiCredentials::class)
+        ->fillForm(['soniox__api_key' => 'same-text-in-both-boxes-01', 'elevenlabs__api_key' => 'same-text-in-both-boxes-01'])
+        ->call('save')
+        ->assertHasErrors(['data.soniox__api_key', 'data.elevenlabs__api_key']);
+
+    expect(Credential::query()->count())->toBe(0);
+});
+
+it('refuses an API key too short to be one', function () {
+    $this->signInAsAdmin();
+
+    $this->panelComponent(ApiCredentials::class)
+        ->fillForm(['elevenlabs__api_key' => 'abc123XYZ'])
+        ->call('save')
+        ->assertHasErrors(['data.elevenlabs__api_key']);
+
+    expect(Credential::query()->count())->toBe(0);
+});
+
+it('tells password managers to leave the key boxes alone', function () {
+    $this->signInAsAdmin();
+
+    expect($this->panelComponent(ApiCredentials::class)->html())
+        ->toContain('data-1p-ignore')->toContain('data-lpignore')->toContain('data-form-type="other"');
 });

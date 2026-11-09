@@ -22,6 +22,7 @@ use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontFamily;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Hash;
 use UnitEnum;
 
 /**
@@ -76,6 +77,8 @@ class ApiCredentials extends Page
                     ->password()
                     ->revealable()
                     ->autocomplete('new-password')
+                    // Password managers fill saved passwords into password boxes despite new-password; these opt out.
+                    ->extraInputAttributes(['data-1p-ignore' => 'true', 'data-lpignore' => 'true', 'data-bwignore' => 'true', 'data-form-type' => 'other'])
                     ->maxLength(4096)
                     ->helperText(fn (): string => $vault->describe($provider, $key));
                 if (in_array("{$provider}.{$key}", CredentialVault::GENERATABLE, true)) {
@@ -161,20 +164,51 @@ class ApiCredentials extends Page
         ]);
     }
 
+    /** An API key shorter than this is not one (the shortest real ones are 32); a saved password usually is. */
+    public const MIN_API_KEY_LENGTH = 16;
+
     public function save(CredentialVault $vault): void
     {
-        $saved = 0;
+        $typed = [];
         foreach ($this->form->getState() as $field => $value) {
             if (! is_string($value) || trim($value) === '' || ! str_contains($field, '__')) {
                 continue; // only overwrite what the admin actually typed
             }
             [$provider, $key] = explode('__', $field, 2);
-            if (! isset(CredentialVault::FIELDS[$provider][$key])) {
-                continue;
+            if (isset(CredentialVault::FIELDS[$provider][$key])) {
+                $typed[$field] = trim($value);
             }
-            $vault->put($provider, $key, trim($value), (int) auth()->id());
-            $saved++;
         }
+
+        // A browser that fills a saved password into these boxes must not end up in the vault (since v1.6.3): nothing
+        // is saved while any box holds the person's own password, the same text as another box, or a too-short key.
+        $errors = [];
+        $password = auth()->user()?->getAuthPassword();
+        $seen = [];
+        foreach ($typed as $field => $value) {
+            if (is_string($password) && $password !== '' && Hash::check($value, $password)) {
+                $errors[$field] = 'This is your sign-in password, probably filled in by the browser. Paste the key from the provider instead.';
+            } elseif (isset($seen[$value])) {
+                $errors[$field] = $errors[$seen[$value]] = 'Two boxes got the same text, probably a password the browser filled in. Paste each key again.';
+            } elseif (str_ends_with($field, '__api_key') && mb_strlen($value) < self::MIN_API_KEY_LENGTH) {
+                $errors[$field] = 'Too short to be an API key. Copy the whole key from the provider.';
+            }
+            $seen[$value] ??= $field;
+        }
+        if ($errors !== []) {
+            foreach ($errors as $field => $message) {
+                $this->addError("data.{$field}", $message);
+            }
+            Notification::make()->title('Nothing saved')->body('Check the boxes marked in red.')->danger()->send();
+
+            return;
+        }
+
+        foreach ($typed as $field => $value) {
+            [$provider, $key] = explode('__', $field, 2);
+            $vault->put($provider, $key, $value, (int) auth()->id());
+        }
+        $saved = count($typed);
         $this->form->fill();
 
         Notification::make()->title($saved > 0 ? "Saved {$saved} credential(s)" : 'Nothing to save')->success()->send();
