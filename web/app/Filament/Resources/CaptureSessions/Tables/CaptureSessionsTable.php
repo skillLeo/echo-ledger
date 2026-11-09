@@ -196,7 +196,9 @@ final class CaptureSessionsTable
             TextColumn::make('duration_ms')->label('Length')->formatStateUsing(fn (?int $state): string => self::duration($state))->toggleable(),
             TextColumn::make('started_at')->label('Date')->toggleable()
                 ->formatStateUsing(fn (CaptureSession $r): string => $r->started_at->copy()->setTimezone($zone())->format('M j, Y · '.Shell::timeFormat())),
-            TextColumn::make('status')->label('Status')->badge()->toggleable(),
+            // A status only when it needs the person, as in the list: never "Completed".
+            TextColumn::make('status')->label('Status')->badge()->toggleable()
+                ->state(fn (CaptureSession $r): ?SessionStatus => $r->status === SessionStatus::Completed ? null : $r->status),
             TextColumn::make('labels.label')->label('Labels')->badge()->color('gray')->toggleable(isToggledHiddenByDefault: true),
         ];
     }

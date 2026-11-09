@@ -371,6 +371,7 @@ final class Shell
         $all = fn (): int => self::counts()['all'];
 
         return match ($page) {
+            Dashboard::class => 'What needs you, your recordings by device, and this month\'s minutes.',
             ListCaptureSessions::class => ($all() === 1 ? '1 recording' : number_format($all()).' recordings').' from your phone, your computer and the web.',
             ListClients::class => 'A folder for each customer: their calls, files, notes and the words to get right.',
             Activity::class => 'Uploads, transcripts, devices and what needs you.',

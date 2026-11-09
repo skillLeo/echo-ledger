@@ -30,6 +30,7 @@ use Filament\GlobalSearch\GlobalSearchResult;
 use Filament\GlobalSearch\GlobalSearchResults;
 use Filament\GlobalSearch\Providers\Contracts\GlobalSearchProvider;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\HtmlString;
 use Throwable;
 
 /**
@@ -49,11 +50,14 @@ final class CommandPalette implements GlobalSearchProvider
         }
         $actions = array_filter(self::actions(), fn (array $c): bool => self::matches($query, $c[0].' '.$c[3]));
         if ($actions !== []) {
-            $results->category('Commands', array_map(fn (array $c): GlobalSearchResult => new GlobalSearchResult($c[0], $c[1], ['' => $c[2]]), array_values($actions)));
+            // The line about a command sits beside its name, quiet (Filament would write a details label before it).
+            $results->category('Commands', array_map(fn (array $c): GlobalSearchResult => new GlobalSearchResult(
+                new HtmlString(e($c[0]).'<span class="el-palette-hint"> · '.e($c[2]).'</span>'), $c[1]), array_values($actions)));
         }
         $commands = array_filter($this->commands(), fn (array $c): bool => self::matches($query, $c[0].' '.$c[2]));
         if ($commands !== []) {
-            $results->category('Go to', array_map(fn (array $c): GlobalSearchResult => new GlobalSearchResult($c[0], $c[1], ['' => $c[2]]), array_values($commands)));
+            // The words a page answers to are for matching only; the page's name says enough.
+            $results->category('Go to', array_map(fn (array $c): GlobalSearchResult => new GlobalSearchResult($c[0], $c[1]), array_values($commands)));
         }
         if (mb_strlen($query) >= 2 && LibrarySearch::terms($query) !== []) {
             $recordings = $this->recordings($query);
@@ -76,7 +80,7 @@ final class CommandPalette implements GlobalSearchProvider
     {
         // Since v1.5 only the pages the person may open (the small console has fewer).
         $list = [
-            ['Dashboard', Dashboard::getUrl(), 'home overview usage chart', true],
+            ['Home', Dashboard::getUrl(), 'dashboard home overview usage chart', true],
             ['Search recordings', Search::getUrl(), 'find transcript text words', Search::canAccess()],
             ['Library', CaptureSessionResource::getUrl('index'), 'recordings calls library voice notes upload', CaptureSessionResource::canAccess()],
             ['Projects', ClientResource::getUrl('index'), 'clients customers folders keyterms vocabulary corrections', ClientResource::canAccess()],

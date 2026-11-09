@@ -23,7 +23,8 @@
             <span class="el-tb-admin-label">Admin panel</span>
         @endif
 
-        @if (filament()->isGlobalSearchEnabled())
+        {{-- The admin panel finds its pages in the sidebar's Find a page and its customers on Customers. --}}
+        @if ($inApp && filament()->isGlobalSearchEnabled())
             <div class="el-tb-search">
                 @livewire(GlobalSearch::class)
             </div>

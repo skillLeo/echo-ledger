@@ -291,9 +291,10 @@ describe('the top bar (P4.3)', function () {
         $palette = app(CommandPalette::class);
 
         $record = $palette->getResults('record')->getCategories()['Commands'][0];
-        expect($record->title)->toBe('Record now')->and($record->url)->toBe(GetTheApps::getUrl(panel: 'app'));
-        expect($palette->getResults('upload')->getCategories()['Commands'][0]->title)->toBe('Upload')
-            ->and($palette->getResults('new project')->getCategories()['Commands'][0]->title)->toBe('New project')
+        $title = fn ($result): string => strip_tags((string) (is_string($result->title) ? $result->title : $result->title->toHtml()));
+        expect($title($record))->toStartWith('Record now ·')->and($record->url)->toBe(GetTheApps::getUrl(panel: 'app'));
+        expect($title($palette->getResults('upload')->getCategories()['Commands'][0]))->toStartWith('Upload ·')
+            ->and($title($palette->getResults('new project')->getCategories()['Commands'][0]))->toStartWith('New project ·')
             ->and(collect($palette->getResults('devices')->getCategories()['Go to'])->pluck('title')->all())->toContain('Devices')
             ->and(collect($palette->getResults('preferences')->getCategories()['Go to'])->pluck('title')->all())->toContain('Preferences');
 
@@ -355,6 +356,16 @@ describe('the page pattern (P4.4)', function () {
         $this->actingAs($b, 'web');
 
         Livewire::test(ListCaptureSessions::class)->set('selected', $theirs->id)->call('mountAction', 'drawerWhatsapp')->assertNotFound();
+    });
+
+    it('copies the whole transcript from the drawer, the person\'s own only', function () {
+        $a = Fx::user();
+        $session = Fx::session($a, null, ['title' => 'Budget review']);
+        Fx::transcript($session, 'The budget is final for the quarter.');
+        $this->actingAs($a, 'web');
+
+        $html = Livewire::test(ListCaptureSessions::class)->call('selectRecording', $session->id)->html();
+        expect($html)->toContain('Copy text')->toContain('The budget is final for the quarter.');
     });
 
     it('counts the project\'s recordings, files and rules on its tabs', function () {

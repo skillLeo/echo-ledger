@@ -2594,10 +2594,11 @@ textarea.el-field-input {
         padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + var(--space-4));
     }
 
-    /* The phone's top bar: the workspace, search, the bell and you; More and Record hold the rest. */
-    .el-tb .el-tb-menu,
-    .el-tb .el-tb-help,
-    .el-tb .el-tb-create {
+    /* The app's phone top bar: the workspace, search, the bell and you; More and Record hold the rest. The admin
+       panel has no bottom tabs, so it keeps its menu button. */
+    .fi-panel-app .el-tb .el-tb-menu,
+    .fi-panel-app .el-tb .el-tb-help,
+    .fi-panel-app .el-tb .el-tb-create {
         display: none;
     }
 }
@@ -4231,7 +4232,7 @@ html[data-density='compact'] .el-library .fi-ta-cell {
 }
 
 @media (max-width: 600px) {
-    .el-tb .el-tb-spacer {
+    .fi-panel-app .el-tb .el-tb-spacer {
         display: none;
     }
 }
@@ -4282,4 +4283,23 @@ html[data-density='compact'] .el-library .fi-ta-cell {
     padding: var(--space-2) 0;
     border-bottom: 1px solid var(--border);
     font-size: 14px;
+}
+
+/* On a phone the drawer ends above the bottom tabs, so Help, Account and Collapse stay in reach. */
+@media (max-width: 600px) {
+    .fi-sidebar.el-sb {
+        padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+    }
+}
+
+/* The rail is the desktop's: the drawer on phones and tablets has no Collapse sidebar. */
+@media (max-width: 1023.98px) {
+    .el-sb .el-sb-collapse {
+        display: none;
+    }
+}
+
+.el-palette-hint {
+    font-weight: 400;
+    color: var(--text-muted);
 }

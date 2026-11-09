@@ -1,7 +1,7 @@
 {{--
     The chosen recording in a drawer on the right (since v1.6, P4.4; beside the list since v1.5): where it came from,
     its title, when and how long, its project, language and labels, what needs you, the actions (Open, Send to
-    WhatsApp, Copy text) and the start of its transcript. Esc or the close button closes it; the list stays where it
+    WhatsApp, Copy text: the whole transcript) and the start of its transcript, in the view it opens in. Esc or the close button closes it; the list stays where it
     was. Below 1024 px a row opens the recording page instead.
 --}}
 @if ($detail === null)
@@ -11,19 +11,23 @@
         $row = \App\Filament\Support\RecordingRow::for($detail);
         $zone = app(\App\Services\SettingsRepository::class)->displayTimezone();
         $final = $detail->finalTranscript;
-        $segments = $final?->status === \App\Enums\TranscriptStatus::Completed ? ($final->segments ?? []) : [];
-        $names = app(\App\Services\TranscriptEditor::class)->speakerNames($detail);
+        $completed = $final?->status === \App\Enums\TranscriptStatus::Completed;
+        // The view the recording opens in (Roman Urdu for Urdu, unless Settings says otherwise) once it is made.
+        $view = $completed ? \App\Services\Sharing\WhatsAppMessage::defaultView($detail) : null;
+        $lines = $completed ? app(\App\Services\TranscriptExporter::class)->lines($final, $detail, $view) : [];
         $turns = [];
-        foreach (array_slice($segments, 0, 40) as $segment) {
-            $speaker = (string) ($segment['speaker'] ?? 'Speaker');
+        foreach (array_slice($lines, 0, 40) as $line) {
             $last = array_key_last($turns);
-            if ($last !== null && $turns[$last]['speaker'] === $speaker) {
-                $turns[$last]['text'] .= ' '.$segment['text'];
+            if ($last !== null && $turns[$last]['name'] === $line['speaker']) {
+                $turns[$last]['text'] .= ' '.$line['text'];
             } else {
-                $turns[] = ['speaker' => $speaker, 'name' => $names[$speaker] ?? $speaker, 'channel' => (int) ($segment['channel'] ?? 1) === 2 ? 2 : 1,
-                    'at' => \App\Services\ClientAi\ClientWorkspace::clock((int) ($segment['start_ms'] ?? 0)), 'text' => (string) ($segment['text'] ?? '')];
+                $turns[] = ['name' => $line['speaker'], 'channel' => $line['channel'] === 2 ? 2 : 1,
+                    'at' => \App\Services\ClientAi\ClientWorkspace::clock($line['start_ms']), 'text' => $line['text']];
             }
         }
+        $segments = $lines;
+        // Copy text copies the whole transcript in that view, as on the recording page.
+        $fullText = $completed ? \App\Services\Sharing\WhatsAppMessage::transcriptText($detail, $view) : null;
         $url = \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('view', ['record' => $detail]);
         $time = \App\Filament\Support\Shell::timeFormat();
     @endphp
@@ -61,9 +65,9 @@
                     @if (! \App\Services\Workspaces\ConsoleAccess::readOnly())
                         {{ $this->drawerWhatsappAction }}
                     @endif
-                    @if ($turns !== [])
-                        <button type="button" class="el-pill" x-data="{ done: false }"
-                            x-on:click="navigator.clipboard.writeText($root.closest('.el-drawer').querySelector('.el-turns').innerText).then(() => { done = true; setTimeout(() => done = false, 2000) })">
+                    @if ($fullText !== null)
+                        <button type="button" class="el-pill" x-data="{ done: false, text: @js($fullText) }"
+                            x-on:click="navigator.clipboard.writeText(text).then(() => { done = true; setTimeout(() => done = false, 2000) })">
                             @svg('heroicon-o-clipboard-document', ['aria-hidden' => 'true'])
                             <span x-text="done ? 'Copied' : 'Copy text'">Copy text</span>
                         </button>
@@ -74,7 +78,7 @@
                 @if ($turns === [])
                     <p class="el-muted">No transcript yet.</p>
                 @else
-                    <p class="el-caption" style="margin-bottom: var(--space-3)">Transcript{{ count($segments) > 40 ? ' · the first 40 lines' : '' }}</p>
+                    <p class="el-caption" style="margin-bottom: var(--space-3)">Transcript{{ $view !== null ? ' · '.\App\Services\Views\TranscriptViews::VIEWS[$view] : '' }}{{ count($segments) > 40 ? ' · the first 40 lines' : '' }}</p>
                     <div class="el-turns">
                         @foreach ($turns as $turn)
                             <div class="el-turn el-speaker-{{ $turn['channel'] }}">

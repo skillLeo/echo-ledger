@@ -67,7 +67,8 @@ class SignUpSettings extends Page
             'per_ip_day' => app(EmailCodes::class)->signUpsPerIpDay(),
             'default_plan' => Plan::defaultPlan()->id,
             'payment_instructions' => $settings->get('upgrade.payment_instructions'),
-            'turnstile' => app(Turnstile::class)->switchedOn(),
+            // Shown off while it cannot run (no keys), whatever the switch says.
+            'turnstile' => app(Turnstile::class)->active(),
         ]);
     }
 
