@@ -23,10 +23,24 @@ See `docs/SIGNING.md`: the certificate options and costs, the GitHub secrets the
 
 ## Signed auto-updates (since v1.5)
 The app looks for updates on the server it is signed in to: `<server>/downloads/desktop.json` (Tauri's static
-manifest, served by the web app from the builds `echoledger:publish-release` stored). It checks every 12 hours and on
-Settings → About → Check for updates, downloads a newer version through the server's pinned TLS (only from that same
-server), verifies its minisign signature against the public key in `tauri.conf.json → plugins.updater.pubkey`, and
-installs it the next time EchoLedger starts, or at once on "Restart now" (never while recording).
+manifest, served by the web app from the builds `echoledger:publish-release` stored). It checks soon after it starts
+and every 6 hours (since v1.6), and on Settings → About → Check for updates, downloads a newer version through the
+server's pinned TLS (only from that same server), verifies its minisign signature against the public key in
+`tauri.conf.json → plugins.updater.pubkey`, shows "Update ready — Restart", and installs it the next time EchoLedger
+starts, or at once on "Restart" (never while recording).
+
+What an installed app needs to update itself (v1.6, P3.2):
+- A build that has the updater: 1.5.0 and later. **1.1.0 has none** (the updater came in v1.5), so a computer on 1.1.0
+  is updated once by hand: download the Windows installer from `<server>/downloads` and run it over the old one (the
+  per-user install keeps the settings and the sign-in). From then on it updates itself.
+- Signed in to the https server whose `/downloads/desktop.json` lists the new version (the app reads the manifest of
+  the server it is signed in to, and only takes a package from that server).
+- A version above the installed one in `tauri.conf.json` and `Cargo.toml` (semver: `1.6.0-beta.1` is below `1.6.0`).
+- The `.sig` beside the package: made only when `TAURI_SIGNING_PRIVATE_KEY` (and `_PASSWORD`, empty for our key) is
+  set, in the release shell or as the repository secrets; without them CI skips "Turn on the signed updater package" and
+  makes no `.sig`. The key must be the private half of the public key in `tauri.conf.json` (key id `FBF4156A0A9B5B35`).
+- Publishing: nothing in CI uploads to the server. Run `echoledger:publish-release` on the server with the installer
+  and its `.sig` (below); only then does `/downloads/desktop.json` offer it.
 
 - `requireSignedVersion: true`: each signature names the version it was made for (`tauri build` records it), so an
   old signed package cannot be offered under a newer version number.

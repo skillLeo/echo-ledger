@@ -585,7 +585,7 @@ pub fn update_check(app: AppHandle) -> crate::updates::UpdateStatus {
     app.state::<AppState>().updates.status()
 }
 
-/// "Restart now": installs the update that is ready and starts the new version (never while recording).
+/// "Restart": installs the update that is ready and starts the new version (never while recording).
 #[tauri::command]
 pub async fn update_install(app: AppHandle) -> AppResult<()> {
     crate::updates::install_now(&app).await

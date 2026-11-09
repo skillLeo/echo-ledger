@@ -1267,7 +1267,7 @@ export const api = {
   // Updates (since v1.5): checked every 12 hours and on request; `update:status` follows the check and the download.
   updateStatus: () => invoke<UpdateStatus>("update_status"),
   checkForUpdates: () => invoke<UpdateStatus>("update_check"),
-  /** "Restart now": installs the ready update and starts the new version. */
+  /** "Restart": installs the ready update and starts the new version. */
   installUpdate: () => invoke<void>("update_install"),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),

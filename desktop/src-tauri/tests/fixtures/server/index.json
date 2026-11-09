@@ -109,6 +109,11 @@
     "path": "/api/config",
     "status": 200
   },
+  "downloads_desktop_200": {
+    "method": "GET",
+    "path": "/downloads/desktop.json",
+    "status": 200
+  },
   "errors_401_expired_token": {
     "method": "GET",
     "path": "/api/library",
