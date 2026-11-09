@@ -67,15 +67,21 @@ describe('navigation', function () {
 });
 
 describe('library', function () {
-    it('draws the smart views as chips that switch the list', function () {
+    it('puts the smart views and folders in one compact toolbar menu instead of rows of chips', function () {
         CaptureSession::factory()->create(['user_id' => $this->admin->id, 'pinned' => true]);
 
         $list = $this->panelComponent(ListCaptureSessions::class);
-        expect($list->html())->toContain('el-view-chips')->toContain('aria-pressed="true"')
-            ->toContain("wire:click=\"\$set('activeTab', 'pinned')\"");
+        $html = $list->html();
+        expect($html)->toContain('el-library-toolbar')->toContain('data-menu="view"')->toContain('data-menu="folder"')
+            ->toContain('data-menu="group"')->toContain('data-menu="sort"')->toContain('All recordings')
+            ->toContain("wire:click=\"\$set('activeTab', 'pinned')\"")
+            ->not->toContain('el-view-chips')->not->toContain('el-folder-chips')
+            // Exactly one toolbar row.
+            ->and(substr_count($html, 'class="el-library-toolbar"'))->toBe(1);
 
         $list->set('activeTab', 'pinned');
-        expect($list->html())->toMatch('/aria-pressed="true"\s+wire:click="\$set\(\'activeTab\', \'pinned\'\)"/');
+        expect($list->html())->toMatch('/class="el-tool el-on" data-menu="view"/')
+            ->toMatch('/data-option="view-pinned" aria-checked="true"/');
     });
 
     it('shows the chosen recording beside the list, with its transcript and Open', function () {

@@ -93,7 +93,7 @@ it('only lists the signed-in admin\'s sessions and hides deleted ones', function
         ->assertCountTableRecords(1);
 });
 
-it('shows the newest session first by default and can sort by start time both ways', function () {
+it('shows the newest session first by default and sorts oldest or newest first from Sort by', function () {
     $admin = $this->signInAsAdmin();
     $old = CaptureSession::factory()->create(['user_id' => $admin->id, 'started_at' => now()->subDays(3)]);
     $mid = CaptureSession::factory()->create(['user_id' => $admin->id, 'started_at' => now()->subDays(2)]);
@@ -101,8 +101,10 @@ it('shows the newest session first by default and can sort by start time both wa
 
     $list = $this->panelComponent(ListCaptureSessions::class);
     $list->assertCanSeeTableRecords([$new, $mid, $old], inOrder: true);
-    $list->sortTable('started_at')->assertCanSeeTableRecords([$old, $mid, $new], inOrder: true);
-    $list->sortTable('started_at', 'desc')->assertCanSeeTableRecords([$new, $mid, $old], inOrder: true);
+    $list->call('setLibraryGroup', 'none')->call('setLibrarySort', 'oldest')->assertCanSeeTableRecords([$old, $mid, $new], inOrder: true);
+    $list->call('setLibrarySort', 'newest')->assertCanSeeTableRecords([$new, $mid, $old], inOrder: true);
+    // The table's own sort selector ("Sort by –") is gone.
+    expect($list->html())->not->toContain('fi-ta-sorting-settings')->not->toContain('fi-ta-table-stacked-sorting');
 });
 
 it('searches sessions by title', function () {
@@ -294,7 +296,8 @@ it('folds the device and the transcript state into the row instead of extra colu
 
     expect($columns->get('device.name')->isHidden())->toBeTrue()
         ->and($columns->get('finalTranscript.status')->isHidden())->toBeTrue()
-        ->and($columns->get('started_at')->isSortable())->toBeTrue();
+        // Since v1.6 the order comes only from the toolbar's Sort by: no column offers a second "Sort by".
+        ->and($columns->filter(fn ($column): bool => $column->isSortable()))->toBeEmpty();
     // The row names the device (for screen readers, beside the tile) and shows a status only when it needs the person.
     expect($list->html())->toContain('Work laptop')->toContain('el-status-danger');
     $session->update(['status' => SessionStatus::Completed]);

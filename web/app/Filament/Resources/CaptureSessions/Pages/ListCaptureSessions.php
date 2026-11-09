@@ -33,6 +33,7 @@ use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Url;
+use Livewire\Livewire;
 
 class ListCaptureSessions extends ListRecords
 {
@@ -126,24 +127,6 @@ class ListCaptureSessions extends ListRecords
         }
     }
 
-    /** A click on the Date column is the menu's Newest or Oldest, so the days follow it too. */
-    public function sortTable(?string $column = null, ?string $direction = null): void
-    {
-        parent::sortTable($column, $direction);
-        if ($column !== 'started_at') {
-            return;
-        }
-        $sort = $this->getTableSortDirection() === 'asc' ? 'oldest' : 'newest';
-        $this->librarySort = $sort;
-        if ($this->libraryGroup !== 'none') {
-            $this->tableGrouping = $this->libraryGroup.':'.LibraryView::groupDirection($this->libraryGroup, $sort);
-        }
-        $user = auth()->user();
-        if ($user instanceof User) {
-            LibraryView::remember($user, $this->libraryViewKey(), $this->libraryGroup, $sort);
-        }
-    }
-
     /**
      * The group's select box selects the whole group (every page), read for all the groups with one query instead of
      * one per header.
@@ -225,12 +208,28 @@ class ListCaptureSessions extends ListRecords
         return $folders;
     }
 
+    /** The empty state's "Show all recordings": no smart view and no folder. */
+    public function showAllRecordings(): void
+    {
+        $this->folder = null;
+        $this->activeTab = 'all';
+        $this->updatedActiveTab();
+    }
+
     /** Picks a smart folder, or clears it when it is picked again. */
     public function setFolder(?string $folder): void
     {
         $this->folder = $folder !== null && $folder !== $this->folder && array_key_exists($folder, self::FOLDER_LABELS) && $folder !== 'shared' ? $folder : null;
         $this->resetPage();
         $this->loadLibraryView();
+    }
+
+    /** The toolbar's Folder menu (since v1.6): picks a smart folder, or none; picking the chosen one keeps it. */
+    public function chooseFolder(?string $folder): void
+    {
+        if ($folder === null || $folder !== $this->folder) {
+            $this->setFolder($folder);
+        }
     }
 
     /**
@@ -265,7 +264,7 @@ class ListCaptureSessions extends ListRecords
             View::make('filament.library.uploader')->visible(fn (): bool => ! ConsoleAccess::readOnly())
                 ->viewData(fn (): array => ['config' => self::uploaderConfig(), 'compact' => true]),
             Grid::make(['default' => 1, 'xl' => 2])->extraAttributes(['class' => 'el-library'])->schema([
-                // The smart views are drawn as chips under the search pill (filament.library.view-chips).
+                // The search pill, then one compact toolbar (filament.library.toolbar), then the rows.
                 Group::make([
                     RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
                     EmbeddedTable::make(),
@@ -277,13 +276,16 @@ class ListCaptureSessions extends ListRecords
     }
 
     /**
-     * The smart views as the phone's filter chips, drawn between the search pill and the rows. Registered when the
-     * page boots, so the chips are there however the page is rendered.
+     * The Library's one compact toolbar (Show, Folder, Group by, Sort by) under the search pill, and the bulk actions in
+     * the selection bar (since v1.6, P5.2). Registered when the page boots, so they are there however the page is
+     * rendered. The toolbar's hook is not scoped by Filament, so it draws only for this page.
      */
     public function boot(): void
     {
-        if (! FilamentView::hasRenderHook(TablesRenderHook::CONTENT_BEFORE, self::class)) {
-            FilamentView::registerRenderHook(TablesRenderHook::CONTENT_BEFORE, fn (): ViewContract => view('filament.library.view-chips'), scopes: self::class);
+        // Both are registered together: the scoped one says whether this panel's views have them already.
+        if (! FilamentView::hasRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, self::class)) {
+            FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_AFTER, fn (): string => Livewire::current() instanceof self ? view('filament.library.toolbar')->render() : '');
+            FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view('filament.library.bulk-bar'), scopes: self::class);
         }
     }
 

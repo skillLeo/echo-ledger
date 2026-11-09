@@ -9,6 +9,7 @@ use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
+use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Filament\Support\LibraryView;
 use App\Models\CaptureSession;
@@ -30,6 +31,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Enums\Size;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\Layout\Split;
@@ -70,8 +72,6 @@ final class CaptureSessionsTable
                 Split::make([
                     ViewColumn::make('title')->label('Title')->view('filament.library.row')
                         ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
-                    // Sorting by date needs a visible column; the row already shows the time.
-                    ViewColumn::make('started_at')->label('Date')->view('filament.library.sort-anchor')->sortable()->grow(false),
                     IconColumn::make('pinned')->label('Pinned')->boolean()->trueIcon(Heroicon::Star)->falseIcon(Heroicon::OutlinedStar)
                         ->trueColor('warning')->falseColor('gray')->grow(false)
                         ->tooltip(fn (CaptureSession $record): string => $record->pinned ? 'Unpin' : 'Pin to the top')
@@ -127,29 +127,92 @@ final class CaptureSessionsTable
                     DeleteAction::make()->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for 48 hours.'),
                 ])->label('More')->tooltip('More')->color('gray'),
             ])
-            ->toolbarActions(ConsoleAccess::readOnly() ? [] : [BulkActionGroup::make([...self::bulkActions(), DeleteBulkAction::make()->authorizeIndividualRecords('delete')])])
-            ->emptyStateIcon(Heroicon::OutlinedFilm)
-            ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => match (true) {
-                $livewire->hasTableSearch() => 'No recordings match your search',
-                $table->isFiltered() => 'No recordings match these filters',
-                default => 'No recordings yet',
-            })
-            ->emptyStateDescription(fn (HasTable $livewire, Table $table): string => $livewire->hasTableSearch() || $table->isFiltered()
-                ? 'Try other words, or clear the search and filters.'
-                : 'Calls, meetings and voice notes you capture will appear here. Sign in a phone or computer under Devices, or upload a voice note.')
-            // C3: one clear next step in the empty state.
+            // Since v1.6 (P5.2) the selection bar holds them: "8 selected · Move · Label · Export · Delete · More · Clear".
+            ->toolbarActions(ConsoleAccess::readOnly() ? [] : self::bulkBar())
+            // Since v1.6 (P5.2): an empty state for each way the list can be empty, with one clear next step.
+            ->emptyStateIcon(fn (HasTable $livewire, Table $table): string => self::emptyState($livewire, $table)['icon'])
+            ->emptyStateHeading(fn (HasTable $livewire, Table $table): string => self::emptyState($livewire, $table)['heading'])
+            ->emptyStateDescription(fn (HasTable $livewire, Table $table): string => self::emptyState($livewire, $table)['description'])
             ->emptyStateActions([
                 Action::make('clearSearchAndFilters')->label('Clear search and filters')->color('gray')
-                    ->visible(fn (HasTable $livewire, Table $table): bool => $livewire->hasTableSearch() || $table->isFiltered())
+                    ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'search')
                     // Only the sessions list page shows this table, and its page has the filter form.
                     ->action(function (ListRecords $livewire): void {
                         $livewire->resetTableSearch();
                         $livewire->removeTableFilters();
                     }),
-                Action::make('pairDevice')->label('Sign in a device')->icon(Heroicon::OutlinedQrCode)
-                    ->visible(fn (HasTable $livewire, Table $table): bool => ! $livewire->hasTableSearch() && ! $table->isFiltered())
+                Action::make('showAll')->label('Show all recordings')->color('gray')
+                    ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'view')
+                    ->action(function (HasTable $livewire): void {
+                        if (method_exists($livewire, 'showAllRecordings')) {
+                            $livewire->showAllRecordings();
+                        }
+                    }),
+                Action::make('uploadFirst')->label('Upload a voice note')->icon(Heroicon::OutlinedArrowUpTray)
+                    ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'empty' && ! ConsoleAccess::readOnly())
+                    ->alpineClickHandler("\$dispatch('el-upload-pick')"),
+                Action::make('pairDevice')->label('Sign in a device')->icon(Heroicon::OutlinedQrCode)->color('gray')
+                    ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'empty')
                     ->url(fn (): string => DeviceResource::getUrl('index')),
             ]);
+    }
+
+    /**
+     * Why the list is empty and what to say (since v1.6, P5.2): a search or filter that matches nothing, a smart view or
+     * folder that holds nothing, or a Library with nothing in it yet.
+     *
+     * @return array{kind: string, icon: string, heading: string, description: string}
+     */
+    public static function emptyState(HasTable $livewire, Table $table): array
+    {
+        if ($livewire->hasTableSearch() || $table->isFiltered()) {
+            return ['kind' => 'search', 'icon' => 'heroicon-o-magnifying-glass', 'heading' => $livewire->hasTableSearch() ? 'No recordings match your search' : 'No recordings match these filters',
+                'description' => 'Try other words, or clear the search and filters.'];
+        }
+        $view = property_exists($livewire, 'activeTab') ? (string) ($livewire->activeTab ?: 'all') : 'all';
+        $folder = property_exists($livewire, 'folder') && is_string($livewire->folder) ? $livewire->folder : null;
+        if ($view !== 'all') {
+            return ['kind' => 'view', ...match ($view) {
+                'today' => ['icon' => 'heroicon-o-calendar', 'heading' => 'Nothing recorded today', 'description' => 'Calls and voice notes from today show here as soon as they are uploaded.'],
+                'this_week' => ['icon' => 'heroicon-o-calendar-days', 'heading' => 'Nothing recorded this week', 'description' => 'This week starts on Monday.'],
+                'waiting' => ['icon' => 'heroicon-o-clock', 'heading' => 'No calls waiting for a decision', 'description' => 'When the phone or computer asks whether to keep a call, it waits here until you decide.'],
+                'bookmarked' => ['icon' => 'heroicon-o-bookmark', 'heading' => 'No bookmarks yet', 'description' => 'Add a bookmark while recording, or on a recording\'s page, to find a moment again.'],
+                'failed' => ['icon' => 'heroicon-o-check-circle', 'heading' => 'No failed uploads', 'description' => 'Every recording reached the server and was transcribed.'],
+                'pinned' => ['icon' => 'heroicon-o-star', 'heading' => 'Nothing pinned', 'description' => 'Pin a recording with its star to keep it here and at the top of the list.'],
+                default => ['icon' => 'heroicon-o-funnel', 'heading' => 'Nothing to show here', 'description' => 'Choose All recordings to see everything.'],
+            }];
+        }
+        if ($folder !== null) {
+            $name = ListCaptureSessions::FOLDER_LABELS[$folder] ?? 'this folder';
+
+            return ['kind' => 'view', 'icon' => 'heroicon-o-folder-open', 'heading' => $folder === 'inbox' ? 'The Inbox is empty' : 'No recordings in '.$name,
+                'description' => $folder === 'inbox' ? 'Every recording is filed in a project.' : 'Recordings from '.$name.' show here once there are some.'];
+        }
+
+        return ['kind' => 'empty', 'icon' => 'heroicon-o-microphone', 'heading' => 'No recordings yet',
+            'description' => 'Calls, meetings and voice notes you capture will appear here. Sign in a phone or computer under Devices, or upload a voice note.'];
+    }
+
+    /**
+     * The selection bar's actions (since v1.6, P5.2), in the order it shows them: Move, Label (add or remove), Export,
+     * Delete, and More (pin, unpin, keep forever, stop keeping). The table shows them only while something is selected.
+     *
+     * @return list<BulkAction|BulkActionGroup>
+     */
+    public static function bulkBar(): array
+    {
+        $actions = collect(self::bulkActions())->keyBy(fn (BulkAction $action): string => (string) $action->getName());
+        $small = fn (BulkAction $action): BulkAction => $action->button()->size(Size::Small);
+
+        return [
+            $small($actions['move'])->label('Move')->color('gray'),
+            BulkActionGroup::make([$actions['label'], $actions['unlabel']])->label('Label')->icon(Heroicon::OutlinedTag)
+                ->button()->size(Size::Small)->color('gray'),
+            $small($actions['export'])->label('Export')->color('gray'),
+            $small(DeleteBulkAction::make()->authorizeIndividualRecords('delete'))->label('Delete'),
+            BulkActionGroup::make([$actions['pin'], $actions['unpin'], $actions['keep'], $actions['unkeep']])->label('More')
+                ->icon(Heroicon::OutlinedEllipsisHorizontal)->button()->size(Size::Small)->color('gray'),
+        ];
     }
 
     /**
@@ -170,7 +233,7 @@ final class CaptureSessionsTable
         };
 
         return [
-            BulkAction::make('move')->label('Move to project')->icon(Heroicon::OutlinedFolder)
+            BulkAction::make('move')->label('Move to project')->icon(Heroicon::OutlinedFolder)->modalHeading('Move to project')
                 ->schema([Select::make('client_id')->label('Project')->placeholder('No project')
                     ->options(fn (): array => Client::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->orderByDesc('pinned')->orderBy('name')->pluck('name', 'id')->all())])
                 ->action(fn (Collection $records, array $data) => $run($records, 'move', $data['client_id'] ?? null))
@@ -193,7 +256,7 @@ final class CaptureSessionsTable
                 ->action(fn (Collection $records) => $run($records, 'keep'))->deselectRecordsAfterCompletion(),
             BulkAction::make('unkeep')->label('Stop keeping')->icon(Heroicon::OutlinedLockOpen)
                 ->action(fn (Collection $records) => $run($records, 'unkeep'))->deselectRecordsAfterCompletion(),
-            BulkAction::make('export')->label('Export transcripts')->icon(Heroicon::OutlinedArrowDownTray)
+            BulkAction::make('export')->label('Export transcripts')->icon(Heroicon::OutlinedArrowDownTray)->modalHeading('Export transcripts')
                 ->schema([
                     Select::make('format')->label('Format')->required()->default('docx')->selectablePlaceholder(false)
                         ->options(['docx' => 'Word (.docx)', 'txt' => 'Text (.txt)', 'md' => 'Markdown (.md)', 'srt' => 'Subtitles (.srt)', 'vtt' => 'Web subtitles (.vtt)', 'json' => 'JSON']),

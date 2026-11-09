@@ -380,6 +380,14 @@ selects the whole group for **Move**, **Label**, **Export** or **Delete**; it sh
 own choice on this phone. Tap a header's name or arrow to fold it; while selecting, its box selects the whole group, and a
 long press on a header starts selecting with that group.
 
+**In the web console (since v1.6)** the Library has one toolbar under the search box: **All recordings** (or the smart
+view you chose: Today, This week, Waiting for decision, Bookmarked, Failed uploads, Pinned, each with its count),
+**All folders** (Inbox, WhatsApp, Zoom, Phone, Voice notes, Imported and the others that hold recordings, and Shared
+with me), then **Group by** and **Sort by** with the same choices as the phone and the computer. A header's box only
+selects its group (a dash when only some are selected); its name and arrow fold it. Select recordings and one bar shows
+what you can do with them: **8 selected · Move · Label · Export · Delete · More · Clear** (**More** pins, unpins, keeps
+forever or stops keeping). An empty view says why it is empty and offers **Show all recordings**.
+
 ## 10. Import, rename, export and share
 
 ### Import files

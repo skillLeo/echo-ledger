@@ -27,7 +27,7 @@ final class LibraryView
     /** @var array<string, string> */
     public const GROUPS = [
         'date' => 'Date',
-        'app' => 'App/Type',
+        'app' => 'App / Type',
         'project' => 'Project',
         'language' => 'Language',
         'status' => 'Status',

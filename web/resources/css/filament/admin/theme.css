@@ -684,18 +684,6 @@ thead .fi-ta-selection-cell {
     border-bottom-width: 0;
 }
 
-/* The row of smart-view chips under the search pill. */
-.el-view-chips {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: var(--space-3);
-    scrollbar-width: none;
-}
-
-.el-view-chips::-webkit-scrollbar {
-    display: none;
-}
-
 .el-chip-count {
     display: inline-flex;
     align-items: center;
@@ -2816,16 +2804,110 @@ textarea.el-field-input {
     }
 }
 
-/* Group by and Sort by (since v1.5, Phase 1C): two toolbar menus; group headers with a count, sticky under the top bar. */
-.el-library-menus {
+/*
+ * The Library's one compact toolbar (since v1.6, P5.2): Show and Folder on the left, Group by and Sort by on the right,
+ * one line under the search pill (it scrolls sideways on a phone instead of wrapping into rows of chips).
+ */
+.el-library-toolbar {
     display: flex;
-    flex-wrap: wrap;
+    align-items: center;
     gap: var(--space-2);
-    margin-top: var(--space-2);
+    padding-bottom: var(--space-3);
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.el-library-toolbar::-webkit-scrollbar {
+    display: none;
+}
+
+.el-library-toolbar .el-tool-spacer {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.el-tool {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background-color: transparent;
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+    color: var(--text-muted);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.el-tool:hover,
+.el-tool:focus-visible {
+    background-color: var(--surface-2);
+}
+
+.el-tool svg {
+    flex: none;
+    width: 16px;
+    height: 16px;
+}
+
+.el-tool.el-on {
+    border-color: transparent;
+    background-color: var(--accent-soft);
+    color: var(--accent-text);
+}
+
+.el-tool.el-on .el-chip-count {
+    background-color: var(--surface);
+    color: var(--accent-text);
 }
 
 .el-menu-trigger strong {
     font-weight: 600;
+}
+
+/* The toolbar's copy of the bulk actions is hidden: they are drawn in the selection bar. */
+.el-library-list .fi-ta-header-toolbar > .fi-ta-actions {
+    display: none;
+}
+
+/* The selection bar: "8 selected · Move · Label · Export · Delete · More · Select all · Clear", only while selected. */
+.el-library-list .fi-ta-selection-indicator {
+    position: sticky;
+    top: 4rem;
+    z-index: 3;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    margin-bottom: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background-color: var(--accent-soft);
+    color: var(--accent-text);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.el-library-list .fi-ta-selection-indicator > div:last-child {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+}
+
+.el-bulk-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-inline-end: auto;
 }
 
 .el-library .fi-ta-group-header {
