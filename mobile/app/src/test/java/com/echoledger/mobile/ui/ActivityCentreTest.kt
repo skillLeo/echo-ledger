@@ -1,14 +1,18 @@
 package com.echoledger.mobile.ui
 
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -208,6 +212,52 @@ class ActivityCentreTest : ScreenTest() {
         compose.onNodeWithText("To").performTextClearance()
         compose.onNodeWithText("To").performTextInput("6")
         assertEquals("07:00", settings().quietTo)
+    }
+
+    private fun showKinds() = show {
+        androidx.compose.foundation.layout.Column(
+            androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+        ) { NotificationsSection(vm.settings.collectAsState().value) { vm.updateSettings(it) } }
+    }
+
+    @Test
+    fun `each kind of notification has its own switch, and Recording has none (Phase 1C B2)`() {
+        showKinds()
+
+        compose.onNodeWithContentDescription("Sharing").performScrollTo().performClick()
+        pumpUntil("sharing off") { "sharing" in settings().notifyOff }
+        compose.onNodeWithContentDescription("Sharing").performScrollTo().performClick()
+        pumpUntil("sharing on again") { "sharing" !in settings().notifyOff }
+        compose.onNodeWithText("Always on").assertExists()
+        compose.onAllNodesWithContentDescription("Recording").assertCountEquals(0)
+    }
+
+    @Test
+    fun `Test shows one notification of that kind, marked as a test`() {
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        com.echoledger.mobile.notify.Notifications.createChannels(app)
+        showKinds()
+
+        compose.onNodeWithContentDescription("Test Transcription").performScrollTo().performClick()
+
+        val posted = org.robolectric.Shadows.shadowOf(app.getSystemService(android.app.NotificationManager::class.java)).allNotifications
+        val test = posted.single { it.extras.getString("android.title") == "Transcript ready" }
+        assertEquals("transcription", test.channelId)
+    }
+
+    @Test
+    fun `a kind switched off in Android's settings says so, with the way back (Phase 1C B4)`() {
+        com.echoledger.mobile.notify.Notifications.createChannels(app)
+        val manager = app.getSystemService(android.app.NotificationManager::class.java)
+        // As if the person had switched the Uploads channel off in Android's settings.
+        manager.deleteNotificationChannel("uploads")
+        manager.createNotificationChannel(
+            android.app.NotificationChannel("uploads", "Uploads", android.app.NotificationManager.IMPORTANCE_NONE)
+        )
+        showKinds()
+
+        compose.onNodeWithText("Off in Android's settings, so none of these show.").performScrollTo().assertExists()
+        compose.onNodeWithText("Turn on in Android").assertExists()
     }
 
     @Test

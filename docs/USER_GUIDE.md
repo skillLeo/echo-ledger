@@ -587,6 +587,11 @@ and **Other**. Turn each kind on or off, choose **Sound** or **Silent**, and pre
 notifications** turns them all off. **Quiet hours** (from and to) hold notifications back, except **Call capture &
 readiness**, which is Critical: a call that will not be recorded is always said.
 
+**On the phone (since v1.6)**, **Settings → Notifications → Kinds of notification** lists each kind with its own switch,
+**Test** (one sample notification) and **Sound & vibration** (Android's own page for that kind). If you switched a kind off
+in Android's settings, it says so here with **Turn on in Android**. **Recording** cannot be switched off: Android shows it
+while a recording runs.
+
 ## 14. Keep recordings for a set time (retention)
 
 - In **Settings → Storage and retention**, choose how long recordings are kept: **7**, **14**, **30** days or a

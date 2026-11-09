@@ -86,9 +86,9 @@ Never miss a recording:
 
 Notifications:
 - [x] B1 One Android channel per category (Recording, Transcription, Enhancement, Uploads, Call capture & readiness (Critical), Sharing, Account & security, Usage & limits, Live Translate, App updates, Other), mirrored in Settings → Notifications on phone and desktop; web: email preferences. **Phone done** 2026-11-08 (NotifyCategory; the old "Transcripts ready" channel is split, and kept off if it was off).
-- [ ] B2 Per category on/off, sound and vibration where the OS allows, a Test button.
+- [ ] B2 Per category on/off, sound and vibration where the OS allows, a Test button. **Phone done** 2026-11-09 (Settings → Notifications → Kinds of notification: a switch each, Recording always on, Test, Sound & vibration opens Android's page of that channel; ActivityCentreTest).
 - [x] B3 Quiet hours with start and end; Critical bypasses them. **Phone done** 2026-11-08 (NotifyGate).
-- [ ] B4 A category turned off in Android's own settings is shown with a link to that channel.
+- [ ] B4 A category turned off in Android's own settings is shown with a link to that channel. **Phone done** 2026-11-09 ("Off in Android's settings, so none of these show" with Turn on in Android, read again on every return to the app).
 
 Clear progress:
 - [ ] C1 Sharing several notes at once shows all of them, each with its own status.

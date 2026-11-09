@@ -169,13 +169,19 @@ class LibraryScreenTest : ScreenTest() {
         compose.onAllNodesWithText("Project").onLast().performClick()
         compose.waitForIdle()
 
-        compose.onNodeWithText("Acme Holdings · 1").assertExists()
+        pumpUntil("the project headers") {
+            compose.waitForIdle()
+            compose.onAllNodesWithText("Acme Holdings · 1").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithText("No project · 1").assertExists()
         pumpUntil("the choice to be kept") { runBlocking { app.graph.settings.current() }.libraryViews["all"]?.group == "project" }
 
         compose.onNodeWithText("None").performClick()
-        compose.waitForIdle()
-        compose.onAllNodesWithText("No project · 1").assertCountEquals(0)
+        // The choice is saved first; the list follows once the settings say so (slower under a loaded machine).
+        pumpUntil("the headers to go") {
+            compose.waitForIdle()
+            compose.onAllNodesWithText("No project · 1").fetchSemanticsNodes().isEmpty()
+        }
         compose.onAllNodesWithText("Acme Holdings · 1").assertCountEquals(0)
         compose.onNodeWithText("Call with Zed").assertExists()
     }
