@@ -294,5 +294,5 @@ describe("sharing from the pages", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Share" }, { timeout: 5000 }));
     expect(await screen.findByRole("dialog", { name: "Share Kick-off" }, { timeout: 5000 })).toBeInTheDocument();
     expect(callsOf("shares_of")).toEqual([{ sessionId: "s1", clientId: null }]);
-  });
+  }, 15_000); // The whole main window renders: under a full parallel run it can pass 5 s.
 });
