@@ -35,10 +35,10 @@
         @endif
 
         <x-el.section title="Progress">
-            <ol class="el-steps">
+            <ol class="el-timeline">
                 @foreach ($steps as $step)
-                    <li @class(['el-step', 'is-'.$step['state']]) aria-label="{{ $step['label'] }}, {{ match ($step['state']) { 'done' => 'done', 'current' => 'current', default => 'not yet' } }}{{ $step['at'] ? ', '.$step['at'] : '' }}">
-                        <span class="el-step-mark" aria-hidden="true">@if ($step['state'] === 'done')@svg('heroicon-m-check')@endif</span>
+                    <li @class(['el-tl-step', 'is-'.$step['state']]) aria-label="{{ $step['label'] }}, {{ match ($step['state']) { 'done' => 'done', 'current' => 'current', default => 'not yet' } }}{{ $step['at'] ? ', '.$step['at'] : '' }}">
+                        <span class="el-tl-step-mark" aria-hidden="true">@if ($step['state'] === 'done')@svg('heroicon-m-check')@endif</span>
                         <span class="el-set-text">
                             <span class="el-set-title">{{ $step['label'] }}</span>
                             @if ($step['at'])<span class="el-set-sub">{{ $step['at'] }}</span>@endif
@@ -70,7 +70,7 @@
                 @if ($erased)
                     <p class="el-prose is-muted" style="margin:0;padding:16px">Receipts were deleted 90 days after our decision.</p>
                 @else
-                    <div class="el-tiles">
+                    <div class="el-rtiles">
                         @foreach ($proofs as $proof)
                             @include('filament.upgrade._tile', ['proof' => $proof, 'number' => $loop->iteration])
                         @endforeach

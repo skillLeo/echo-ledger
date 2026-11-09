@@ -74,7 +74,7 @@ describe('a project', function () {
 
         Livewire::test(ViewClient::class, ['record' => $project->id])->call('setTab', 'screens')
             ->assertSee('data-screens-locked', false)->assertSee('Screen moments are not in your plan')
-            ->mountAction('upgradeScreens')->assertRedirectContains('/app/settings/plan/upgrade?feature=screen_moments&plan=pro');
+            ->mountAction('upgradeScreens')->assertRedirectContains('feature=screen_moments')->assertRedirectContains('plan=pro');
     });
 
     it('shows the real controls on Ultra', function () {

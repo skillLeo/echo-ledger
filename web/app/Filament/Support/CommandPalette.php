@@ -126,6 +126,7 @@ final class CommandPalette implements GlobalSearchProvider
     public static function actions(): array
     {
         $readOnly = ConsoleAccess::readOnly();
+        $context = SettingsContext::current();
         $user = auth()->user();
         $hasDevice = $user instanceof User && Device::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', $user->id)->whereNull('signed_out_at')->exists();
         $list = [
@@ -141,7 +142,7 @@ final class CommandPalette implements GlobalSearchProvider
                 : ['Invite', WorkspaceSettings::getUrl(['action' => 'upgradeForTeam'], panel: 'app'), 'Team workspaces are in '.(app(Entitlements::class)->lowestPlan('team')->name ?? 'a bigger plan').': see plans', 'member team people add upgrade', WorkspaceSettings::canAccess() && self::mayInvite($user instanceof User ? $user : null)],
             ['New request link', RequestLinksPage::getUrl(['action' => 'create'], panel: 'app'), 'A link people use to send you files', 'ask upload files', ! $readOnly && RequestLinksPage::canAccess()],
             // Since v1.7: Upgrade, or the request while one is open (never "Upgrade" then), and Settings.
-            ($open = ($context = SettingsContext::current())?->openRequest()) !== null
+            ($open = $context?->openRequest()) !== null
                 ? ['Your upgrade request', UpgradeFlow::statusUrl($open), 'See where your request is', 'upgrade plan pro ultra payment receipt status', true]
                 : ['Upgrade plan', UpgradeFlow::chooseUrl(), 'Choose a plan and pay by bank transfer', 'pro ultra premium buy price plan', $context !== null && $context->flag('can_upgrade') && ! $context->flag('member')],
         ];

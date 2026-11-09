@@ -61,7 +61,7 @@ it('lets an admin without two-factor use the app without being forced to enrol; 
     $this->get('/app')->assertOk();
     $this->get('/app/sessions')->assertOk();
     // Since v1.6 (P2.5) every member of staff has it on before /admin opens.
-    $this->get('/admin/settings')->assertRedirect('/app/profile?tab=sign-in#two-step-sign-in');
+    $this->get('/admin/settings')->assertRedirect(App\Filament\Auth\EditProfile::settingsUrl('security', 'security.two_step'));
 });
 
 it('lets an admin without two-factor sign in with only a password', function () {

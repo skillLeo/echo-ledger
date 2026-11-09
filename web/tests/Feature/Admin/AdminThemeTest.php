@@ -36,9 +36,9 @@ it('lets the visitor choose light, dark or system from the account menu', functi
     $html = $this->get('/app')->assertOk()->getContent();
 
     foreach (['light', 'dark', 'system'] as $mode) {
-        expect($html)->toContain("(theme = '{$mode}') && close()");
+        expect($html)->toContain("new CustomEvent('theme-changed', { detail: '{$mode}' })");
     }
-    expect($html)->toContain("localStorage.getItem('filament:theme:mode') ?? 'system'");
+    expect($html)->toContain("localStorage.getItem('filament:theme:mode') || 'system'")->toContain('role="radiogroup" aria-labelledby="el-um-theme"');
 });
 
 it('applies the stored theme before first paint to avoid a flash of the wrong theme', function () {

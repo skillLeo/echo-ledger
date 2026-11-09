@@ -31,9 +31,9 @@
                 @if (! $this->promoOpen && ! $promoOk)
                     <x-el.row title="Promo code" value="Add" click="$set('promoOpen', true)" />
                 @else
-                    <form class="el-field" wire:submit="applyPromo">
+                    <form class="el-form-field" wire:submit="applyPromo">
                         <label for="el-promo">Promo code</label>
-                        <div class="el-field-inline">
+                        <div class="el-form-inline">
                             <input id="el-promo" type="text" wire:model="promo" maxlength="24" autocomplete="off" spellcheck="false" autocapitalize="characters"
                                 style="text-transform:uppercase" x-on:input="$event.target.value = $event.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '')"
                                 @if ($this->promoError) aria-invalid="true" aria-describedby="el-promo-error" @endif>
@@ -46,7 +46,7 @@
                         @if ($this->promoError)
                             <p class="el-error" id="el-promo-error" role="alert">{{ $this->promoError }}</p>
                         @elseif ($promoLine)
-                            <p class="el-help" style="color:var(--success);font-size:14px;line-height:20px" role="status">{{ $promoLine }}</p>
+                            <p class="el-field-help" style="color:var(--success);font-size:14px;line-height:20px" role="status">{{ $promoLine }}</p>
                         @endif
                     </form>
                 @endif
@@ -55,7 +55,7 @@
 
         <section class="el-set-section">
             <div class="el-set-box">
-                <div class="el-field">
+                <div class="el-form-field">
                     <label for="el-note">Note for our team (optional)</label>
                     <textarea id="el-note" rows="2" maxlength="500" wire:model="note" placeholder="For example, an invoice in my company's name"></textarea>
                 </div>
@@ -65,7 +65,7 @@
         <div class="el-flow-bar">
             <span class="el-set-text">
                 <span class="el-copy-label">To pay</span>
-                <span class="el-to-pay">{{ $toPay ?? '—' }}@if ($percent > 0 && $price && ! $free)<s>{{ $price }}</s>@endif</span>
+                <span class="el-to-pay">{{ $toPay ?? '' }}@if ($percent > 0 && $price && ! $free)<s>{{ $price }}</s>@endif</span>
                 @if ($percent > 0 && ! $free)<span class="el-copy-label">{{ $firstMonths }}</span>@endif
             </span>
             <button type="button" class="el-btn el-btn-primary" wire:click="submit" wire:loading.attr="disabled" @disabled($selected === null)>

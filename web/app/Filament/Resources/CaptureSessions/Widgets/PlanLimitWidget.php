@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\Widgets;
 
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\Usage;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
-use Filament\Facades\Filament;
 use Filament\Widgets\Widget;
 
 /**
@@ -52,7 +52,7 @@ class PlanLimitWidget extends Widget
         return [
             'limit' => $limit,
             'label' => $limit === 'storage' ? 'Your plan\'s storage is full' : 'This month\'s minutes are used up',
-            'url' => Usage::canAccess() ? Usage::getUrl() : (Filament::getPanel('app')->getProfileUrl() ?? '/app/profile').'?tab=plan',
+            'url' => Usage::canAccess() ? Usage::getUrl() : EditProfile::settingsUrl('plan'),
             'state' => $limit.':'.now()->format('Y-m'),
         ];
     }

@@ -9,10 +9,11 @@ use App\Models\UpgradeRequest;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Entitlements\PaymentProofs;
+use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 /**
@@ -41,6 +42,9 @@ final class SettingsTourSeeder extends Seeder
             throw new RuntimeException('SettingsTourSeeder makes sample accounts with a known password: local only.');
         }
         Plan::query()->where('key', 'business')->where('name', 'Business')->update(['name' => 'Ultra']);
+        // Sample bank details (made up), as staff would enter them under Admin → Plans → Payment details.
+        app(SettingsRepository::class)->setMany(['payment.bank' => 'Example Bank', 'payment.branch' => 'Main Branch (0001)', 'payment.account_title' => 'EXAMPLE PRIVATE LIMITED',
+            'payment.account_number' => '0123456789', 'payment.iban' => 'PK36SCBL0000001123456702']);
         foreach (self::PEOPLE as $email => [$name, $planKey, $minutes, $stage]) {
             $user = User::query()->firstOrNew(['email' => $email]);
             $user->forceFill(['name' => $name, 'password' => Hash::make(DatabaseSeeder::LOCAL_DEMO_PASSWORD), 'email_verified_at' => now(), 'consent_seen_at' => now()])->save();
@@ -65,17 +69,42 @@ final class SettingsTourSeeder extends Seeder
     {
         $pro = Plan::query()->where('key', 'pro')->firstOrFail();
         $request = UpgradeRequest::query()->create(['user_id' => $user->id, 'workspace_id' => $workspace->id, 'plan' => 'pro', 'status' => UpgradeRequest::PENDING,
-            'amount_due' => $pro->displayPrice(), 'message' => null]);
+            'amount_due' => $pro->priceText(), 'amount_due_pkr' => $pro->pricePkr(), 'message' => null]);
         $request->forceFill(['created_at' => now()->subHours(3)])->save();
-        $columns = array_flip(Schema::getColumnListing('upgrade_requests'));
-        $set = fn (array $values) => $request->forceFill(array_intersect_key($values, $columns))->save();
+        $proofs = app(PaymentProofs::class);
+        $staff = User::query()->where('is_super_admin', true)->first() ?? $user;
+        if (in_array($stage, ['in_review', 'needs_receipt'], true)) {
+            $proofs->add($request, $user, $this->receiptPicture('Rs 2,999'), 'Screenshot_bank.png');
+            $proofs->markPaid($request->fresh(), 'FT26313ABC7781', null);
+        }
+        if ($stage === 'needs_receipt') {
+            $proofs->requestNewReceipt($request->fresh(), $staff, 'The screenshot is cut off at the amount. Please send one that shows the whole receipt.');
+        }
         match ($stage) {
-            'in_review' => $set(['paid_at' => now()->subHour(), 'payment_reference' => 'FT26313ABC7781']),
-            'needs_receipt' => $set(['paid_at' => now()->subHours(2), 'payment_reference' => 'FT26313ABC7781', 'proof_requested_at' => now()->subMinutes(30),
-                'proof_request_note' => 'The screenshot is cut off at the amount. Please send one that shows the whole receipt.', 'round' => 2]),
-            'declined' => $set(['status' => UpgradeRequest::DECLINED, 'decided_at' => now()->subDay(), 'reply' => 'We could not find this transfer in our account.']),
-            'approved' => $set(['status' => UpgradeRequest::APPROVED, 'approved_plan' => 'pro', 'approved_until' => now()->addMonth()->startOfDay(), 'decided_at' => now()->subHour(), 'paid_at' => now()->subHours(2)]),
+            'declined' => $request->forceFill(['status' => UpgradeRequest::DECLINED, 'decided_at' => now()->subDay(), 'reply' => 'We could not find this transfer in our account.'])->save(),
+            'approved' => $request->forceFill(['status' => UpgradeRequest::APPROVED, 'approved_plan' => 'pro', 'approved_until' => now()->addMonth()->startOfDay(),
+                'decided_at' => now()->subHour(), 'paid_at' => now()->subHours(2), 'payment_reference' => 'FT26313ABC7781'])->save(),
             default => null,
         };
+    }
+
+    /** A plain picture of a bank app's receipt, for the sample receipts. */
+    private function receiptPicture(string $amount): string
+    {
+        $image = imagecreatetruecolor(540, 960);
+        imagefill($image, 0, 0, (int) imagecolorallocate($image, 246, 247, 249));
+        $dark = (int) imagecolorallocate($image, 28, 32, 36);
+        $muted = (int) imagecolorallocate($image, 96, 100, 108);
+        imagefilledrectangle($image, 0, 0, 540, 120, (int) imagecolorallocate($image, 18, 110, 84));
+        imagestring($image, 5, 30, 50, 'Transfer successful', (int) imagecolorallocate($image, 255, 255, 255));
+        foreach ([['Amount', $amount], ['To', 'EXAMPLE PRIVATE LIMITED'], ['Account', '0123456789'], ['Transaction ID', 'FT26313ABC7781'], ['Date', now()->format('d M Y, H:i')]] as $i => [$label, $value]) {
+            imagestring($image, 3, 30, 180 + $i * 70, $label, $muted);
+            imagestring($image, 5, 30, 200 + $i * 70, $value, $dark);
+        }
+        $path = (string) tempnam(sys_get_temp_dir(), 'receipt');
+        imagepng($image, $path);
+        imagedestroy($image);
+
+        return $path;
     }
 }

@@ -446,7 +446,7 @@ label.el-set-row:hover {
 }
 
 /* ---------- switch (the whole row is the label) ---------- */
-.el-switch {
+.el-toggle {
     position: relative;
     flex: none;
     width: 40px;
@@ -456,7 +456,7 @@ label.el-set-row:hover {
     transition: background-color 150ms var(--ease-out);
 }
 
-.el-switch::after {
+.el-toggle::after {
     content: '';
     position: absolute;
     top: 3px;
@@ -469,13 +469,13 @@ label.el-set-row:hover {
     transition: transform 150ms var(--ease-out);
 }
 
-[aria-checked='true'] > .el-switch,
-.el-switch[aria-checked='true'] {
+[aria-checked='true'] > .el-toggle,
+.el-toggle[aria-checked='true'] {
     background-color: var(--accent);
 }
 
-[aria-checked='true'] > .el-switch::after,
-.el-switch[aria-checked='true']::after {
+[aria-checked='true'] > .el-toggle::after,
+.el-toggle[aria-checked='true']::after {
     transform: translateX(16px);
 }
 
@@ -1025,9 +1025,6 @@ details.el-set-group[open] > summary .el-set-chevron {
 }
 
 .el-flow-bar {
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -1040,8 +1037,17 @@ details.el-set-group[open] > summary .el-set-chevron {
     box-shadow: inset 0 0 0 1px var(--border), 0 -8px 24px -16px rgba(0, 0, 0, 0.2);
 }
 
-.fi-body:has(.el-bottom-nav) .el-flow-bar {
-    bottom: calc(var(--bottom-nav-height) + 8px);
+/* On a phone the step's button stays in reach: the bar sticks above the bottom tabs. */
+@media (max-width: 640px) {
+    .el-flow-bar {
+        position: sticky;
+        bottom: 8px;
+        z-index: 5;
+    }
+
+    .fi-body:has(.el-bottom-nav) .el-flow-bar {
+        bottom: calc(var(--bottom-nav-height) + 8px);
+    }
 }
 
 .el-flow-bar .el-set-text {
@@ -1074,11 +1080,11 @@ details.el-set-group[open] > summary .el-set-chevron {
     color: var(--danger);
 }
 
-.el-field {
+.el-form-field {
     padding: 12px 16px 16px;
 }
 
-.el-field label {
+.el-form-field label {
     display: block;
     margin-bottom: 6px;
     font-size: 14px;
@@ -1087,9 +1093,9 @@ details.el-set-group[open] > summary .el-set-chevron {
     color: var(--text);
 }
 
-.el-field input,
-.el-field textarea,
-.el-field select {
+.el-form-field input,
+.el-form-field textarea,
+.el-form-field select {
     display: block;
     width: 100%;
     min-height: 44px;
@@ -1104,52 +1110,52 @@ details.el-set-group[open] > summary .el-set-chevron {
     outline: none;
 }
 
-.el-field textarea {
+.el-form-field textarea {
     resize: vertical;
 }
 
-.el-field input:focus,
-.el-field textarea:focus,
-.el-field select:focus {
+.el-form-field input:focus,
+.el-form-field textarea:focus,
+.el-form-field select:focus {
     box-shadow: inset 0 0 0 2px var(--accent-ring);
 }
 
-.el-field .el-help {
+.el-form-field .el-field-help {
     margin-top: 6px;
     font-size: 12px;
     line-height: 18px;
     color: var(--text-muted);
 }
 
-.el-field-inline {
+.el-form-inline {
     display: flex;
     gap: 8px;
 }
 
-.el-field-inline input {
+.el-form-inline input {
     flex: 1 1 auto;
     min-width: 0;
 }
 
 /* ---------- the request's steps ---------- */
-.el-steps {
+.el-timeline {
     margin: 0;
     padding: 16px;
     list-style: none;
 }
 
-.el-step {
+.el-tl-step {
     position: relative;
     display: flex;
     gap: 12px;
     padding-bottom: 16px;
 }
 
-.el-step:last-child {
+.el-tl-step:last-child {
     padding-bottom: 0;
 }
 
-.el-step:not(:last-child)::before {
+.el-tl-step:not(:last-child)::before {
     content: '';
     position: absolute;
     top: 22px;
@@ -1159,7 +1165,7 @@ details.el-set-group[open] > summary .el-set-chevron {
     background-color: var(--border);
 }
 
-.el-step-mark {
+.el-tl-step-mark {
     position: relative;
     display: inline-flex;
     flex: none;
@@ -1171,22 +1177,22 @@ details.el-set-group[open] > summary .el-set-chevron {
     box-shadow: inset 0 0 0 1.5px var(--border-strong);
 }
 
-.el-step.is-done .el-step-mark {
+.el-tl-step.is-done .el-tl-step-mark {
     background-color: var(--text);
     box-shadow: none;
     color: var(--surface);
 }
 
-.el-step.is-done .el-step-mark svg {
+.el-tl-step.is-done .el-tl-step-mark svg {
     width: 14px;
     height: 14px;
 }
 
-.el-step.is-current .el-step-mark {
+.el-tl-step.is-current .el-tl-step-mark {
     box-shadow: inset 0 0 0 2px var(--accent);
 }
 
-.el-step.is-current .el-step-mark::after {
+.el-tl-step.is-current .el-tl-step-mark::after {
     content: '';
     width: 8px;
     height: 8px;
@@ -1194,19 +1200,19 @@ details.el-set-group[open] > summary .el-set-chevron {
     background-color: var(--accent);
 }
 
-.el-step.is-upcoming .el-set-title {
+.el-tl-step.is-upcoming .el-set-title {
     color: var(--text-muted);
 }
 
 /* ---------- receipt tiles ---------- */
-.el-tiles {
+.el-rtiles {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
     padding: 16px;
 }
 
-.el-tile {
+.el-rtile {
     position: relative;
     display: flex;
     flex-direction: column;
@@ -1214,7 +1220,7 @@ details.el-set-group[open] > summary .el-set-chevron {
     width: 104px;
 }
 
-.el-tile-pic {
+.el-rtile-pic {
     position: relative;
     display: flex;
     flex-direction: column;
@@ -1233,18 +1239,18 @@ details.el-set-group[open] > summary .el-set-chevron {
     text-align: center;
 }
 
-.el-tile-pic img {
+.el-rtile-pic img {
     width: 100%;
     height: 100%;
     object-fit: cover;
 }
 
-.el-tile-pic svg {
+.el-rtile-pic svg {
     width: 28px;
     height: 28px;
 }
 
-.el-tile-pic .el-tile-name {
+.el-rtile-pic .el-rtile-name {
     max-width: 92px;
     overflow: hidden;
     color: var(--text);
@@ -1252,7 +1258,7 @@ details.el-set-group[open] > summary .el-set-chevron {
     white-space: nowrap;
 }
 
-.el-tile-x {
+.el-rtile-x {
     position: absolute;
     top: 2px;
     right: 2px;
@@ -1267,24 +1273,24 @@ details.el-set-group[open] > summary .el-set-chevron {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.el-tile-x svg {
+.el-rtile-x svg {
     width: 16px;
     height: 16px;
 }
 
-.el-tile-meta {
+.el-rtile-meta {
     font-size: 12px;
     line-height: 16px;
     color: var(--text-muted);
 }
 
-.el-tile.is-error .el-tile-pic {
+.el-rtile.is-error .el-rtile-pic {
     box-shadow: inset 0 0 0 1px var(--danger);
     color: var(--danger);
     padding: 8px;
 }
 
-.el-drop {
+.el-rdrop {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1303,12 +1309,12 @@ details.el-set-group[open] > summary .el-set-chevron {
     cursor: pointer;
 }
 
-.el-drop.is-over {
+.el-rdrop.is-over {
     background-color: var(--accent-soft);
     box-shadow: inset 0 0 0 2px var(--accent);
 }
 
-.el-drop strong {
+.el-rdrop strong {
     color: var(--accent-text);
     font-weight: 600;
 }
@@ -1336,11 +1342,11 @@ details.el-set-group[open] > summary .el-set-chevron {
     background-color: var(--surface-2);
 }
 
-.el-empty {
+.el-set-empty {
     padding: 24px 16px;
 }
 
-.el-empty-title {
+.el-set-empty-title {
     font-size: 14px;
     line-height: 20px;
     font-weight: 600;
@@ -1366,8 +1372,8 @@ details.el-set-group[open] > summary .el-set-chevron {
 @media (prefers-reduced-motion: reduce) {
     .el-set-row,
     [id^='setting-'].is-fading,
-    .el-switch,
-    .el-switch::after {
+    .el-toggle,
+    .el-toggle::after {
         transition: none;
     }
 }

@@ -10,7 +10,6 @@ use App\Models\Workspace;
 use App\Services\Accounts\Invitations;
 use App\Services\Accounts\SignUp;
 use App\Services\SettingsRepository;
-use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
@@ -151,16 +150,16 @@ it('links and unlinks from the profile, never a Google account another account u
 
     fakeGoogle(id: 'google-sub-taken');
     $this->get('/auth/google/redirect?intent=link')->assertRedirect();
-    $this->get('/auth/google/callback')->assertRedirect('/app/profile');
+    $this->get('/auth/google/callback')->assertRedirect(url('/app/settings/security'));
     expect($user->fresh()->google_id)->toBeNull();
 
     fakeGoogle(id: 'google-sub-mine');
     $this->get('/auth/google/redirect?intent=link');
-    $this->get('/auth/google/callback')->assertRedirect('/app/profile');
+    $this->get('/auth/google/callback')->assertRedirect(url('/app/settings/security'));
     expect($user->fresh()->google_id)->toBe('google-sub-mine');
 
     $this->actingAs($user->fresh(), 'web');
-    Livewire::test(EditProfile::class)->assertSee('A Google account is linked')->callAction(TestAction::make('unlinkGoogle')->schemaComponent('google-actions', schema: 'content'))->assertNotified('Google unlinked');
+    Livewire::test(EditProfile::class, ['subpage' => 'security'])->assertSee('Google sign-in')->assertSee('Connected')->callAction('unlinkGoogle')->assertNotified('Google unlinked');
     expect($user->fresh()->google_id)->toBeNull()
         ->and(AuditEvent::query()->where('event', 'google_unlinked')->exists())->toBeTrue();
 });

@@ -37,9 +37,9 @@
                         try { const options = await $wire.passkeyOptions(); const credential = await window.elPasskeys.create(options); await $wire.savePasskey(credential, this.name); this.name = ''; }
                         catch (e) { this.error = e && e.name === 'NotAllowedError' ? 'Adding the passkey was cancelled.' : 'That passkey could not be added. Try again.'; }
                         finally { this.busy = false; } } }">
-                <form class="el-field" x-show="supported" x-on:submit.prevent="add()">
+                <form class="el-form-field" x-show="supported" x-on:submit.prevent="add()">
                     <label for="el-passkey-name">Add a passkey</label>
-                    <div class="el-field-inline">
+                    <div class="el-form-inline">
                         <input id="el-passkey-name" type="text" maxlength="80" placeholder="Name, for example Work laptop" x-model="name">
                         <button type="submit" class="el-btn el-btn-outline" x-bind:disabled="busy">Add</button>
                     </div>

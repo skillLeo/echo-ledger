@@ -9,6 +9,7 @@ use App\Filament\Admin\Pages\ApiCredentials;
 use App\Filament\Admin\Pages\ServerUsage;
 use App\Filament\Admin\Pages\UpgradeRequestsPage;
 use App\Filament\Admin\Resources\Customers\CustomerResource;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\Activity;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Pages\Usage;
@@ -36,7 +37,7 @@ final class NoticeTargets
         $item = ActivityFeed::payload($notification);
         $stored = Notice::internal(is_string($notification->data['viewData']['url'] ?? null) ? $notification->data['viewData']['url'] : null);
         $session = $item['session_id'];
-        $account = Filament::getPanel('app')->getProfileUrl() ?? '/app/profile';
+        $plan = EditProfile::settingsUrl('plan');
         $staff = fn (string $permission): bool => StaffAccess::can($permission, $viewer);
 
         return match ($item['kind']) {
@@ -45,9 +46,9 @@ final class NoticeTargets
                 ? CaptureSessionResource::getUrl('view', ['record' => $session], panel: 'app')
                 : ($item['kind'] === 'transcript_ready' ? null : CaptureSessionResource::getUrl('index', ['tab' => 'failed'], panel: 'app')),
             'shared_with_you' => SharedWithMe::getUrl(panel: 'app'),
-            'device_paired' => DeviceResource::canAccess() ? DeviceResource::getUrl('index', panel: 'app') : $account.'?tab=devices',
-            'budget_warn', 'budget_reached' => Usage::canAccess() ? Usage::getUrl(panel: 'app') : $account.'?tab=plan',
-            'upgrade_approved', 'upgrade_declined', 'upgrade_receipt_requested' => $account.'?tab=plan',
+            'device_paired' => DeviceResource::canAccess() ? DeviceResource::getUrl('index', panel: 'app') : EditProfile::settingsUrl('devices'),
+            'budget_warn', 'budget_reached' => Usage::canAccess() ? Usage::getUrl(panel: 'app') : $plan,
+            'upgrade_approved', 'upgrade_declined', 'upgrade_receipt_requested' => $plan,
             'upgrade_requested' => $staff('upgrades.manage') ? UpgradeRequestsPage::getUrl(panel: 'admin') : null,
             'unusual_usage' => $staff('customers.view') ? ($stored ?? CustomerResource::getUrl('index', panel: 'admin')) : null,
             'cost_alert' => $staff('usage.view') ? ServerUsage::getUrl(panel: 'admin') : null,
@@ -64,11 +65,11 @@ final class NoticeTargets
         if (! $e instanceof ApiError) {
             return null;
         }
-        $account = Filament::getPanel('app')->getProfileUrl() ?? '/app/profile';
+        $plan = EditProfile::settingsUrl('plan');
 
         return match ($e->apiCode()) {
-            'budget_exceeded', 'storage_limit_reached', 'ai_budget_reached' => Usage::canAccess() ? Usage::getUrl(panel: 'app') : $account.'?tab=plan',
-            'feature_not_in_plan', 'seat_limit_reached', 'device_limit_reached' => $account.'?tab=plan',
+            'budget_exceeded', 'storage_limit_reached', 'ai_budget_reached' => Usage::canAccess() ? Usage::getUrl(panel: 'app') : $plan,
+            'feature_not_in_plan', 'seat_limit_reached', 'device_limit_reached' => $plan,
             'provider_not_configured' => ApiCredentials::canAccess() ? ApiCredentials::getUrl(panel: 'admin') : null,
             default => null,
         };

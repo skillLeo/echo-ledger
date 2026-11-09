@@ -15,7 +15,6 @@ use App\Services\ClientAi\ClientWorkspace;
 use App\Services\RecordingCipher;
 use App\Services\Screens\ScreenStore;
 use App\Services\Views\TranscriptViews;
-use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
@@ -159,12 +158,12 @@ it('starts an export from the profile and offers the download once it is ready',
     $user = Fx::user();
     $this->actingAs($user, 'web');
 
-    Livewire::test(EditProfile::class)->assertSee('Your data')
-        ->callAction(TestAction::make('exportData')->schemaComponent('data-actions', schema: 'content'))->assertNotified('Your export is being made');
+    Livewire::test(EditProfile::class, ['subpage' => 'privacy'])->assertSee('Export my data')
+        ->callAction('exportData')->assertNotified('Making your export');
 
     $export = AccountExport::query()->where('user_id', $user->id)->sole();
     expect($export->status)->toBe('ready');
-    Livewire::test(EditProfile::class)->assertSee('Your export is ready until')->assertSee('Download my export')->assertSee('Delete my account');
+    Livewire::test(EditProfile::class, ['subpage' => 'privacy'])->assertSee('Ready until')->assertSeeHtml('href="'.e((string) $export->fresh()->downloadUrl()).'"')->assertSee('Delete my account');
 });
 
 it('includes a recording\'s other engines and live captions, never trial runs', function () {

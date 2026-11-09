@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Entitlements;
 
 use App\Exceptions\ApiError;
+use App\Filament\Auth\EditProfile;
 use App\Mail\UpgradeDecidedMail;
 use App\Models\Plan;
 use App\Models\PromoCode;
@@ -17,7 +18,6 @@ use App\Services\ActivityFeed;
 use App\Services\AuditLog;
 use App\Services\SettingsRepository;
 use App\Services\Staff\StaffAccess;
-use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -52,12 +52,10 @@ final class UpgradeRequests
     public static function accountUrl(): string
     {
         try {
-            $profile = Filament::getPanel('app')->getProfileUrl();
+            return EditProfile::settingsUrl('plan');
         } catch (\Throwable) {
-            $profile = null;
+            return url('/app/settings/plan');
         }
-
-        return ($profile ?? url('/app/profile')).'?tab=plan';
     }
 
     /** A notice in the bell of every member of staff who answers upgrade requests. */

@@ -24,7 +24,7 @@ dataset('admin urls', [
     'devices list' => ['/app/devices'],
     'settings' => ['/admin/settings'],
     'api credentials' => ['/admin/api-credentials'],
-    'profile' => ['/app/profile'],
+    'settings' => ['/app/settings'],
 ]);
 
 it('shows the landing page at the site root, whose Sign in leads to the admin console', function () {
@@ -216,7 +216,7 @@ it('signs the admin out and protects the console afterwards', function () {
     expect(User::query()->find($admin->id))->not->toBeNull();
 });
 
-it('offers Profile and Sign out in the account menu', function () {
+it('offers Settings and Sign out in the account menu', function () {
     $this->signInAsAdmin(['name' => 'Farah Khan']);
 
     $html = $this->get('/app')->assertOk()->getContent();

@@ -17,7 +17,7 @@
         <section class="el-set-section">
             <div class="el-set-box">
                 @if ($sent !== [] || $unsent !== [] || $this->failed !== [])
-                    <div class="el-tiles">
+                    <div class="el-rtiles">
                         @foreach ($sent as $proof)
                             @include('filament.upgrade._tile', ['proof' => $proof, 'number' => $loop->iteration])
                         @endforeach
@@ -25,19 +25,19 @@
                             @include('filament.upgrade._tile', ['proof' => $proof, 'number' => count($sent) + $loop->iteration, 'removable' => true])
                         @endforeach
                         @foreach ($this->failed as $i => $failed)
-                            <div class="el-tile is-error" role="alert">
-                                <div class="el-tile-pic">
+                            <div class="el-rtile is-error" role="alert">
+                                <div class="el-rtile-pic">
                                     <span>Couldn't upload</span>
-                                    <span class="el-tile-name" style="color:inherit">{{ $failed['name'] }}</span>
+                                    <span class="el-rtile-name" style="color:inherit">{{ $failed['name'] }}</span>
                                 </div>
-                                <span class="el-tile-meta" style="color:var(--danger)">{{ $failed['message'] }}</span>
-                                <button type="button" class="el-tile-x" wire:click="dismissFailed({{ $i }})" aria-label="Remove">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
+                                <span class="el-rtile-meta" style="color:var(--danger)">{{ $failed['message'] }}</span>
+                                <button type="button" class="el-rtile-x" wire:click="dismissFailed({{ $i }})" aria-label="Remove">@svg('heroicon-o-x-mark', ['aria-hidden' => 'true'])</button>
                             </div>
                         @endforeach
                     </div>
                 @endif
                 @if ($room > 0)
-                    <label class="el-drop" x-data="{ over: false, progress: null }" x-bind:class="{ 'is-over': over }"
+                    <label class="el-rdrop" x-data="{ over: false, progress: null }" x-bind:class="{ 'is-over': over }"
                         x-on:dragover.prevent="over = true" x-on:dragleave.prevent="over = false"
                         x-on:drop.prevent="over = false; const input = $refs.files; const dt = new DataTransfer(); [...$event.dataTransfer.files].slice(0, {{ $room }}).forEach((f) => dt.items.add(f)); input.files = dt.files; input.dispatchEvent(new Event('change', { bubbles: true }))"
                         x-on:livewire-upload-start="progress = 0" x-on:livewire-upload-progress="progress = $event.detail.progress"
@@ -60,15 +60,15 @@
 
         <section class="el-set-section">
             <div class="el-set-box">
-                <div class="el-field">
+                <div class="el-form-field">
                     <label for="el-tid">Transaction ID (optional)</label>
                     <input id="el-tid" type="text" wire:model.live.debounce.300ms="transactionId" maxlength="64" autocomplete="off" spellcheck="false" aria-describedby="el-tid-help">
-                    <p class="el-help" id="el-tid-help">On your receipt as Transaction ID, TID or Reference no.</p>
+                    <p class="el-field-help" id="el-tid-help">On your receipt as Transaction ID, TID or Reference no.</p>
                 </div>
-                <div class="el-field" style="border-top:1px solid var(--border)">
+                <div class="el-form-field" style="border-top:1px solid var(--border)">
                     <label for="el-payer">Paid from (optional)</label>
                     <input id="el-payer" type="text" wire:model="payerName" maxlength="120" autocomplete="name" aria-describedby="el-payer-help">
-                    <p class="el-help" id="el-payer-help">The name on the account you paid from, if it isn't yours.</p>
+                    <p class="el-field-help" id="el-payer-help">The name on the account you paid from, if it isn't yours.</p>
                 </div>
             </div>
             <p class="el-set-foot">Only our payments team sees your receipt. We delete it 90 days after we decide.</p>

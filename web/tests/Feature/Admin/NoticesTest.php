@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
 use App\Filament\Admin\Pages\UpgradeRequestsPage;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\Activity;
 use App\Filament\Pages\RecentlyDeleted;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
@@ -148,17 +149,17 @@ describe('the targets', function () {
         $staff = Fx::superAdmin(twoFactor: false);
         $this->actingAs($staff, 'web');
 
-        $this->get('/admin')->assertRedirect('/app/profile?tab=sign-in#two-step-sign-in');
+        $this->get('/admin')->assertRedirect(url('/app/settings/security?highlight=security.two_step'));
         $notice = noticeTitled('Turn on two-step sign-in');
-        expect($notice?->getUrl())->toEndWith('/app/profile?tab=sign-in#two-step-sign-in')->and($notice?->getDuration())->toBe('persistent');
-        expect((string) $this->get('/app/profile?tab=sign-in')->assertOk()->getContent())->toContain('id="two-step-sign-in"');
+        expect($notice?->getUrl())->toEndWith('/app/settings/security?highlight=security.two_step')->and($notice?->getDuration())->toBe('persistent');
+        expect((string) $this->get('/app/settings/security?highlight=security.two_step')->assertOk()->getContent())->toContain('id="setting-security.two_step"');
     });
 
     it('opens the page that fixes an error: a used-up plan to Usage, a missing feature to Plan & usage', function () {
         $this->actingAs(Fx::user(), 'web');
 
         expect(NoticeTargets::forError(new ApiError(403, 'budget_exceeded', 'Monthly limit reached')))->toContain('/app/usage')
-            ->and(NoticeTargets::forError(new ApiError(403, 'feature_not_in_plan', 'Not in your plan')))->toEndWith('/app/profile?tab=plan')
+            ->and(NoticeTargets::forError(new ApiError(403, 'feature_not_in_plan', 'Not in your plan')))->toEndWith('/app/settings/plan')
             ->and(NoticeTargets::forError(new ApiError(503, 'provider_not_configured', 'No key')))->toBeNull() // not staff
             ->and(NoticeTargets::forError(new RuntimeException('Something else')))->toBeNull();
     });
@@ -236,7 +237,7 @@ describe('the bell', function () {
 
         app(ActivityFeed::class)->post($a, 'upgrade_approved', 'You are on Pro now', 'Thank you!', null, 'heroicon-o-check-badge');
         $plan = noticeOfKind($a, 'upgrade_approved');
-        $this->get(route('notices.open', $plan))->assertRedirect(Filament::getPanel('app')->getProfileUrl().'?tab=plan');
+        $this->get(route('notices.open', $plan))->assertRedirect(EditProfile::settingsUrl('plan'));
         app(ActivityFeed::class)->post($a, 'some_old_kind', 'Something', 'x', null, 'heroicon-o-bell');
         $other = noticeOfKind($a, 'some_old_kind');
         $this->get(route('notices.open', $other))->assertRedirect(Activity::getUrl(panel: 'app'));

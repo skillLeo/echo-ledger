@@ -37,15 +37,7 @@ final class UpgradeFlow
 
     public static function stage(UpgradeRequest $request): string
     {
-        if (method_exists($request, 'stage')) {
-            return (string) $request->stage();
-        }
-
-        return match ($request->status) {
-            UpgradeRequest::APPROVED => 'approved',
-            UpgradeRequest::DECLINED => 'declined',
-            default => 'awaiting_payment',
-        };
+        return $request->stage();
     }
 
     public static function isOpen(UpgradeRequest $request): bool

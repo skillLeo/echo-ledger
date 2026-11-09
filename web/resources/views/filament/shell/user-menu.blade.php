@@ -51,7 +51,7 @@
             @endif
         </x-filament::dropdown.list>
         <x-filament::dropdown.list>
-            <form method="post" action="{{ filament()->getLogoutUrl() }}">
+            <form action="{{ filament()->getLogoutUrl() }}" method="post">
                 @csrf
                 <x-filament::dropdown.list.item tag="button" type="submit" icon="heroicon-o-arrow-left-start-on-rectangle">Sign out</x-filament::dropdown.list.item>
             </form>

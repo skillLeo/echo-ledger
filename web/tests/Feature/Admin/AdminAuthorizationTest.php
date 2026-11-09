@@ -33,7 +33,7 @@ function adminConsoleUrls(): array
 
     return [
         '/app', '/app/sessions', '/app/sessions/'.$session->id, '/app/clients', '/app/clients/create',
-        '/app/clients/'.$client->id.'/edit', '/app/devices', '/admin/settings', '/admin/api-credentials', '/app/profile',
+        '/app/clients/'.$client->id.'/edit', '/app/devices', '/admin/settings', '/admin/api-credentials', '/app/settings',
     ];
 }
 

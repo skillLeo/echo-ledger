@@ -48,8 +48,8 @@
     @endif
 
     @if ($count === 0)
-        <div class="el-set-box el-empty" data-settings-empty>
-            <p class="el-empty-title">No settings match “{{ $query }}”</p>
+        <div class="el-set-box el-set-empty" data-settings-empty>
+            <p class="el-set-empty-title">No settings match “{{ $query }}”</p>
             <p class="el-set-sub" style="margin-top:4px">Check the spelling or try another word.</p>
         </div>
         @if ($results['closest'] !== [])

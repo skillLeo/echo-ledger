@@ -15,9 +15,9 @@
                 Open console.groq.com @svg('heroicon-o-arrow-top-right-on-square', ['style' => 'width:16px;height:16px', 'aria-hidden' => 'true'])
             </a>
         </div>
-        <form class="el-field" wire:submit="saveGroqKey" style="border-top:1px solid var(--border)" x-data="{ key: '' }">
+        <form class="el-form-field" wire:submit="saveGroqKey" style="border-top:1px solid var(--border)" x-data="{ key: '' }">
             <label for="el-groq-key">Groq key</label>
-            <div class="el-field-inline">
+            <div class="el-form-inline">
                 <input id="el-groq-key" type="password" wire:model="groqKey" x-model="key" placeholder="gsk_…" autocomplete="off" spellcheck="false" maxlength="300"
                     @if ($this->groqKeyError) aria-invalid="true" aria-describedby="el-groq-error" @endif>
                 <button type="submit" class="el-btn el-btn-primary" x-bind:disabled="key.trim().length < 20">Save</button>

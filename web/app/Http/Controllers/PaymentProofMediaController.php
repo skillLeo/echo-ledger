@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Api\UpgradeRequestController;
 use App\Models\UpgradeRequest;
 use App\Models\UpgradeRequestProof;
 use App\Services\Entitlements\PaymentProofs;
@@ -18,22 +19,10 @@ final class PaymentProofMediaController
 {
     public function __invoke(string $proof, string $variant): Response
     {
-        $file = UpgradeRequestProof::query()->whereKey($proof)->first();
+        $file = UpgradeRequestProof::query()->whereKey($proof)->where('user_id', (int) auth()->id())->whereNull('erased_at')->first();
         abort_if($file === null, 404);
-        abort_unless(UpgradeRequest::query()->whereKey((string) $file->getAttribute('upgrade_request_id'))->where('user_id', (int) auth()->id())->exists(), 404);
+        abort_unless(UpgradeRequest::query()->whereKey($file->upgrade_request_id)->where('user_id', (int) auth()->id())->exists(), 404);
 
-        $read = app(PaymentProofs::class)->read($file, $variant);
-        $inline = (bool) $read['inline'];
-        $headers = [
-            'Content-Type' => (string) $read['mime'],
-            'Cache-Control' => 'private, no-store',
-            'X-Content-Type-Options' => 'nosniff',
-            'Content-Disposition' => ($inline ? 'inline' : 'attachment').'; filename="'.addcslashes((string) $read['filename'], '"\\').'"',
-        ];
-        if (! $inline) {
-            $headers['Content-Security-Policy'] = "default-src 'none'; sandbox";
-        }
-
-        return response((string) $read['bytes'], 200, $headers);
+        return UpgradeRequestController::fileResponse(app(PaymentProofs::class)->read($file, $variant));
     }
 }

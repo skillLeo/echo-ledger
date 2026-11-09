@@ -50,7 +50,7 @@ it('emails the account when the console is opened from a browser it has not used
     // Another browser (no token of this account).
     auth('web')->logout();
     $this->withHeader('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15')->get('/auth/google/callback')->assertRedirect();
-    Mail::assertQueued(LoginAlertMail::class, fn (LoginAlertMail $mail): bool => $mail->hasTo('farah@example.test') && $mail->what === 'Safari on macOS' && str_contains($mail->devicesUrl, '/app/profile#devices'));
+    Mail::assertQueued(LoginAlertMail::class, fn (LoginAlertMail $mail): bool => $mail->hasTo('farah@example.test') && $mail->what === 'Safari on macOS' && str_contains($mail->devicesUrl, '/app/settings/devices'));
 
     // The first browser again, with its token.
     auth('web')->logout();
@@ -95,8 +95,8 @@ it('emails a teammate who was sent a recording and logs the sending', function (
 it('emails a finished transcript only to people who asked for it in their profile', function () {
     $user = Fx::user(['email' => 'reader@example.test']);
     $this->actingAs($user, 'web');
-    Livewire::test(EditProfile::class)->call('toggleEmail', 'transcription')
-        ->assertNotified('Transcription emails on');
+    Livewire::test(EditProfile::class, ['subpage' => 'notifications'])->call('toggleEmail', 'transcription')
+        ->assertSeeHtml('id="setting-notifications.email.transcription" data-setting="notifications.email.transcription"');
     expect($user->fresh()->notify_transcript_ready)->toBeTrue();
 
     $session = CaptureSession::factory()->create(['user_id' => $user->id, 'title' => 'Site visit']);
@@ -131,16 +131,16 @@ it('puts admin actions in the audit log: members, roles, the workspace name and 
 it('lets a person choose their emails per category, and always sends account and security ones (since v1.5, Phase 1C)', function () {
     $user = Fx::user(['email' => 'chooser@example.test']);
     $this->actingAs($user, 'web');
-    $html = Livewire::test(EditProfile::class)->html();
+    $html = Livewire::test(EditProfile::class, ['subpage' => 'notifications'])->html();
     expect($html)->toContain('Transcription')->toContain('Enhancement')->toContain('Sharing')->toContain('Usage &amp; limits')
-        ->toContain('App updates')->toContain('Other')->toContain('Account &amp; security')->toContain('Always on')
-        ->toContain('data-email="sharing"');
+        ->toContain('App updates')->toContain('Other')->toContain('Account &amp; security')->toContain('Plan &amp; payments')->toContain('Always on')
+        ->toContain('id="setting-notifications.email.sharing"');
 
-    Livewire::test(EditProfile::class)->call('toggleEmail', 'sharing')->assertNotified('Sharing emails off');
+    Livewire::test(EditProfile::class, ['subpage' => 'notifications'])->call('toggleEmail', 'sharing');
     expect(EmailPreferences::wants($user->fresh(), 'sharing'))->toBeFalse()
         ->and(EmailPreferences::wants($user->fresh(), 'usage'))->toBeTrue()
         ->and(EmailPreferences::wants($user->fresh(), 'account'))->toBeTrue();
-    Livewire::test(EditProfile::class)->call('toggleEmail', 'account')->assertNotNotified();
+    Livewire::test(EditProfile::class, ['subpage' => 'notifications'])->call('toggleEmail', 'account')->assertNotNotified();
 
     // Sharing off: the bell still says so, no email comes; a sign-in alert still does.
     $sender = Fx::user(['name' => 'Farah']);

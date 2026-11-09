@@ -2,12 +2,11 @@
 
 declare(strict_types=1);
 
-use App\Filament\Auth\EditProfile;
 use App\Filament\Resources\Clients\Pages\ViewClient;
+use App\Filament\Support\SettingsContext;
 use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\Entitlements\Entitlements;
-use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -31,13 +30,13 @@ function badgePlanFor(Workspace|int $workspace, string $key): void
 it('shows the badge and See plans on a project\'s Overview and Ask when the plan leaves AI notes out', function () {
     badgePlanFor((int) $this->person->current_workspace_id, 'free');
     $project = Fx::client($this->person, 'Acme');
-    $badge = app(Entitlements::class)->lowestPlan('ai_notes')->badgeText();
+    $badge = 'el-plan-badge">'.app(Entitlements::class)->lowestPlan('ai_notes')->name.'</span>';
 
     $html = (string) $this->get('/app/clients/'.$project->id)->assertOk()->getContent();
     expect($html)->toContain('data-ai-locked')->toContain($badge)->toContain('not in your plan')->toContain("mountAction('upgradeAiNotes')");
 
     $page = Livewire::test(ViewClient::class, ['record' => $project->id])->call('setTab', 'ask')->assertSee('data-ai-locked', false);
-    $page->mountAction('upgradeAiNotes')->assertActionMounted('upgradeAiNotes');
+    $page->mountAction('upgradeAiNotes')->assertRedirectContains('feature=ai_notes');
 });
 
 it('shows no lock on a plan with AI notes', function () {
@@ -49,10 +48,10 @@ it('shows no lock on a plan with AI notes', function () {
 
 it('shows the badge and the sheet on Connected apps when the plan leaves the connector out', function () {
     badgePlanFor((int) $this->person->current_workspace_id, 'free');
-    $this->get('/app/profile')->assertOk()->assertSee('Asking Claude or ChatGPT about your recordings is not in your plan.');
-    Livewire::test(EditProfile::class)->mountAction(TestAction::make('upgradeConnector')->schemaComponent('connector-actions', schema: 'content'))
-        ->assertActionMounted(TestAction::make('upgradeConnector')->schemaComponent('connector-actions', schema: 'content'));
+    $html = (string) $this->get('/app/settings/devices')->assertOk()->getContent();
+    expect($html)->toContain('id="setting-devices.connected"')->toContain('<span class="el-tag">Pro</span>')->toContain('/app/settings/plan/upgrade?feature=connector');
 
     badgePlanFor((int) $this->person->current_workspace_id, 'business');
-    $this->get('/app/profile')->assertOk()->assertDontSee('Asking Claude or ChatGPT about your recordings is not in your plan.');
+    SettingsContext::forget();
+    expect((string) $this->get('/app/settings/devices')->assertOk()->getContent())->toContain('Not connected')->not->toContain('feature=connector');
 });
