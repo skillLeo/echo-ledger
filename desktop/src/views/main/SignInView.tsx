@@ -57,7 +57,12 @@ function useCountdown(until: number | null): number {
   useEffect(() => {
     if (until === null) return;
     setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    // Ticks until the wait is over, then stops.
+    const timer = window.setInterval(() => {
+      const at = Date.now();
+      setNow(at);
+      if (at >= until) window.clearInterval(timer);
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [until]);
   // The clock as of this render too, so a fresh countdown never shows a second more than it was given.

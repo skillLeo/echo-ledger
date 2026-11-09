@@ -212,6 +212,19 @@ describe("SignInView: one flow, the email first (v1.6)", () => {
     expect(button(/^Send a new code in (41|40) s$/)).toBeDisabled();
   });
 
+  it("offers a new code once the wait is over, and sends it", async () => {
+    respond("auth_start", { account: "existing", methods: ["code"], signUp: true });
+    respond("auth_code_send", { resendAfter: 1, expiresIn: 600, sent: true });
+    setup();
+    await continueWith("sam@example.test");
+    expect(await screen.findByRole("button", { name: "Send a new code in 1 s" })).toBeDisabled();
+    const again = await screen.findByRole("button", { name: "Send a new code" }, { timeout: 3000 });
+    expect(again).toBeEnabled();
+    fireEvent.click(again);
+    await waitFor(() => expect(callsOf("auth_code_send")).toHaveLength(2));
+    expect(callsOf("auth_code_send")[1]).toEqual({ serverUrl: BUILT_IN, email: "sam@example.test", purpose: "sign_in" });
+  });
+
   it.each([
     ["sign-up is closed", "New accounts are not open on this server. Ask its owner for an invitation."],
     ["the address is not allowed", "This email address can't be used for an account here. Use another address."],
