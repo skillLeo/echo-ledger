@@ -99,8 +99,8 @@ final class SignUp
                 'terms_accepted_at' => $acceptedTerms ? now() : null,
                 'email_verified_at' => $emailVerified || ($invitation !== null && $this->invitations->matches($invitation, $email)) ? now() : null,
             ])->save();
-            // Since v1.5 a new account's own workspace is on the Free plan.
-            $this->workspaces->createFor($user, 'Personal', Plan::free());
+            // Since v1.5 a new account's own workspace is on the Free plan; since v1.6 on the default plan (Free).
+            $this->workspaces->createFor($user, 'Personal', Plan::defaultPlan());
             if ($invitation !== null && $this->invitations->matches($invitation, $email)) {
                 try {
                     $this->invitations->accept($invitation, $user);

@@ -80,6 +80,18 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
     /** Chunks asked again because their first answer failed WhisperChecks (meta.guard_retries). */
     private int $guardRetries = 0;
 
+    /** Since v1.6: a person's own key (the Free plan) instead of the server's; never logged or stored here. */
+    private ?string $ownKey = null;
+
+    /** A copy of this driver that sends a person's own Groq key (since v1.6, docs/API.md "Your own transcription key"). */
+    public function withKey(#[\SensitiveParameter] string $key): self
+    {
+        $copy = clone $this;
+        $copy->ownKey = $key;
+
+        return $copy;
+    }
+
     public function __construct(
         private readonly CredentialVault $vault,
         private readonly SettingsRepository $settings,
@@ -381,7 +393,7 @@ final class GroqWhisperDriver implements ClipTranscriber, SttProvider
         if ($kept !== null) {
             return $kept;
         }
-        $key = $this->vault->require('groq', 'api_key');
+        $key = $this->ownKey ?? $this->vault->require('groq', 'api_key');
         $keyId = GroqPacer::keyId($key);
         $billedMs = max(self::MIN_BILLED_MS, (int) round(max(0.0, $chunk['end'] - $chunk['start']) * 1000));
         $wait = $this->pacer->waitFor($keyId, $billedMs);

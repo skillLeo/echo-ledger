@@ -152,6 +152,23 @@ To remove a device, open **Profile → Devices** in the console and revoke it. I
 in; the old address is told, and your devices stay signed in. **Forgot password?** on the sign-in page signs your account
 out everywhere when you set the new password: every browser, device and connected app. Sign your devices in again.
 
+## 3b. Plans and your own transcription key (since v1.6)
+
+Your plan decides what you can use; locked things show a small badge (**PRO ✦** or **BUSINESS ✦**) with the plan
+that has them. **Free** records, organises, searches, shares and exports, and checks your phone or computer is
+ready. It has 2 devices, 1 GB and keeps recordings 30 days.
+
+**Transcripts on Free** are made with your own free Groq key (or by the computer app itself):
+
+1. Open **console.groq.com** and sign in (with Google is fine).
+2. Open **API Keys**, press **Create API Key**, and copy the key.
+3. In EchoLedger open **Profile → Transcription key** (or **Account → Transcription key** in the apps), paste it and
+   press **Save**.
+
+We check the key with Groq once, keep it locked, never show it again (only its last four characters), and use it for
+your own recordings only. Without a key a new recording says "Add your free Groq key in Account → Transcription
+key". **Pro** and **Business** transcribe for you, with no key of your own.
+
 ## 4. Record automatically
 
 EchoLedger can start recording when a call starts.

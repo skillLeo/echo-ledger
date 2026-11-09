@@ -49,12 +49,16 @@ use Laravel\Passport\HasApiTokens;
  * @property array<string, mixed>|null $console_preferences the console's Library group and sort per view (since v1.5, Phase 1C)
  * @property bool $has_password whether its owner chose a password (since v1.6: an account made with a code or Google has none)
  * @property array{features?: array<string, bool>, limits?: array<string, int|float|null>}|null $entitlement_overrides the super admin's own settings for this person (since v1.6)
+ * @property string|null $transcription_key the person's own Groq key, encrypted (since v1.6; never sent back)
+ * @property string|null $transcription_key_provider
+ * @property string|null $transcription_key_last4
+ * @property Carbon|null $transcription_key_checked_at
  * @property Carbon|null $terms_accepted_at when the Terms and the Privacy Policy were accepted at sign-up (since v1.6)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
  */
 #[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides'])]
 class User extends Authenticatable implements FilamentUser, HasAppAuthentication, HasAppAuthenticationRecovery, MustVerifyEmail, OAuthenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -150,6 +154,8 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'console_preferences' => 'array',
             'has_password' => 'boolean',
             'entitlement_overrides' => 'array',
+            'transcription_key' => 'encrypted',
+            'transcription_key_checked_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
         ];
     }

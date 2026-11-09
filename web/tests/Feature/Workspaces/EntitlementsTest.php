@@ -35,6 +35,8 @@ uses(ApiClient::class);
 beforeEach(function () {
     Mail::fake();
     Fx::fakeRecordingsDisk();
+    // The tests make their own plans on offer; the default plans stay out of the comparison.
+    Plan::query()->update(['on_offer' => false, 'is_default' => false]);
 });
 
 afterEach(fn () => Fx::cleanupDisks());
@@ -104,8 +106,9 @@ describe('GET /api/me/entitlements', function () {
             ->and($mine['features']['record']['enabled'])->toBeTrue()
             ->and($mine['limits']['devices']['limit'])->toBe(10)
             ->and($mine['limits']['storage_bytes']['limit'])->toBeNull()
-            // Retention is the workspace's: no person's override changes it.
-            ->and($mine['limits']['retention_days']['limit'])->toBeNull()
+            // Retention is the workspace's: its owner's override counts, for everyone in it.
+            ->and($mine['limits']['retention_days']['limit'])->toBe(1)
+            ->and($theirs['limits']['retention_days']['limit'])->toBe(1)
             ->and($theirs['features']['views']['enabled'])->toBeFalse()
             ->and($theirs['limits']['devices']['limit'])->toBe(2)
             ->and($theirs['limits']['storage_bytes']['limit'])->toBe(1000);

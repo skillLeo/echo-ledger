@@ -117,6 +117,9 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             Route::post('transcripts/{id}/suggestions/{suggestion}', [TranscriptEditController::class, 'suggestion'])->middleware($own)->name('api.transcripts.suggestions');
             Route::delete('devices/{id}', [SecurityController::class, 'revokeDevice'])->name('api.devices.revoke');
             // Your account (v1.5): sign out every device and console session; delete the account after 7 days.
+            // Your own transcription key (v1.6, the Free plan): checked with Groq once, kept encrypted, never sent back.
+            Route::put('me/transcription-key', [EntitlementsController::class, 'putKey'])->middleware('throttle:transcription-key')->name('api.me.transcription-key.put');
+            Route::delete('me/transcription-key', [EntitlementsController::class, 'deleteKey'])->name('api.me.transcription-key.delete');
             Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
             Route::delete('account', [AccountController::class, 'destroy'])->name('api.account.destroy');
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->middleware($own)->name('api.sessions.restore');

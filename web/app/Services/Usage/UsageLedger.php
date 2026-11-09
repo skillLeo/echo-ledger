@@ -112,9 +112,11 @@ final class UsageLedger
             default => $recordingChannels,
         };
 
-        // A transcript computed on the device (Parakeet) cost the server nothing, whatever provider it names.
-        $billable = self::isBillable($provider) && ($meta['source'] ?? null) !== 'device';
-        $model = $meta['speech_model_used'] ?? $meta['model'] ?? null;
+        // A transcript computed on the device (Parakeet) cost the server nothing, whatever provider it names; since v1.6
+        // nor one made with the person's own key (the Free plan), kept as such.
+        $ownKey = (bool) (($transcript->meta ?? [])['own_key'] ?? false);
+        $billable = self::isBillable($provider) && ($meta['source'] ?? null) !== 'device' && ! $ownKey;
+        $model = $ownKey ? 'own key' : ($meta['speech_model_used'] ?? $meta['model'] ?? null);
 
         return UsageLedgerEntry::query()->firstOrCreate(
             ['user_id' => $session->user_id, 'report_id' => self::finalReportId($transcript)],
@@ -123,7 +125,7 @@ final class UsageLedger
                 'device_id' => $session->device_id,
                 'capture_session_id' => $session->id,
                 'transcript_id' => $transcript->id,
-                'source' => UsageLedgerEntry::SOURCE_SERVER,
+                'source' => $ownKey ? UsageLedgerEntry::SOURCE_OWN_KEY : UsageLedgerEntry::SOURCE_SERVER,
                 ...$this->pricing($provider, $useCase, max(0, $duration), $channels, $billable),
                 'model' => is_string($model) ? mb_substr($model, 0, 64) : null,
                 'occurred_at' => now(),

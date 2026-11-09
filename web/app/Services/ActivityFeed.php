@@ -104,7 +104,8 @@ final class ActivityFeed
     /** True when a failure of this final transcript is handed to another engine before anyone is told. */
     public static function fallsBack(Transcript $transcript): bool
     {
-        return TranscriptErrorCode::tryFrom((string) $transcript->error_code)?->retryable() === true;
+        // Since v1.6 one made with the person's own key does not go to another engine: they hear of it at once.
+        return TranscriptErrorCode::tryFrom((string) $transcript->error_code)?->retryable() === true && ! (bool) (($transcript->meta ?? [])['own_key'] ?? false);
     }
 
     public function transcriptFailed(Transcript $transcript, ?CaptureSession $session = null): void

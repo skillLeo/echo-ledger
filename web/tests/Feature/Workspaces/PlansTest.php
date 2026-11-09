@@ -339,7 +339,8 @@ describe('retention per plan', function () {
     it('moves recordings past the plan\'s days to the bin, per workspace, leaving kept ones', function () {
         app(SettingsRepository::class)->set('retention_days', 365);
         $short = Fx::user();
-        onPlan($short, ['retention_days' => 30]);
+        // Since v1.6 a plan's retention applies to recordings made since it was set: here, before them.
+        onPlan($short, ['retention_days' => 30, 'retention_from' => now()->subYear()]);
         $long = Fx::user();
         $old = Fx::session($short, $device = Fx::device($short), ['title' => 'Old']);
         $kept = Fx::session($short, $device, ['title' => 'Kept', 'keep_forever' => true]);
@@ -362,7 +363,7 @@ describe('retention per plan', function () {
     it('goes by a shorter general setting too, and runs through the existing command', function () {
         app(SettingsRepository::class)->set('retention_days', 7);
         $owner = Fx::user();
-        onPlan($owner, ['retention_days' => 30]);
+        onPlan($owner, ['retention_days' => 30, 'retention_from' => now()->subYear()]);
         $old = Fx::session($owner, Fx::device($owner));
         CaptureSession::query()->withoutGlobalScopes()->whereKey($old->id)->update(['created_at' => now()->subDays(8)]);
         $this->app['auth']->forgetGuards();
@@ -375,7 +376,7 @@ describe('retention per plan', function () {
 
     it('takes a client\'s longer days down to the plan\'s', function () {
         $owner = Fx::user();
-        onPlan($owner, ['retention_days' => 30]);
+        onPlan($owner, ['retention_days' => 30, 'retention_from' => now()->subYear()]);
         $client = Fx::client($owner, 'Acme');
         $client->forceFill(['retention_days' => 200])->save();
         $old = Fx::session($owner, Fx::device($owner), ['client_id' => $client->id]);
@@ -385,6 +386,35 @@ describe('retention per plan', function () {
         app(RetentionPolicy::class)->applyRetention();
 
         expect(unscoped(fn () => CaptureSession::onlyTrashed()->find($old->id)))->not->toBeNull();
+    });
+});
+
+describe('retention since v1.6', function () {
+    it('never moves a recording made before the plan\'s retention was set, nor one of an owner who has their own', function () {
+        app(SettingsRepository::class)->set('retention_days', 365);
+        $owner = Fx::user();
+        $plan = onPlan($owner, ['retention_days' => 30]);
+        expect($plan->retention_from)->not->toBeNull();
+        $before = Fx::session($owner, $device = Fx::device($owner), ['title' => 'Before']);
+        CaptureSession::query()->withoutGlobalScopes()->whereKey($before->id)->update(['created_at' => now()->subDays(40)]);
+        $this->travel(40)->days();
+        $after = Fx::session($owner, $device, ['title' => 'After']);
+        $this->travel(31)->days();
+        $this->app['auth']->forgetGuards();
+
+        expect(app(RetentionPolicy::class)->applyRetention())->toBe(1);
+        unscoped(fn () => expect(CaptureSession::query()->find($before->id))->not->toBeNull()->and(CaptureSession::query()->find($after->id))->toBeNull());
+
+        // The super admin's own retention (an override: none) keeps everything of the workspaces they own.
+        $admin = Fx::superAdmin();
+        Workspace::query()->whereKey($admin->current_workspace_id)->update(['plan_id' => $plan->id]);
+        $admin->forceFill(['entitlement_overrides' => ['limits' => ['retention_days' => null]]])->save();
+        $mine = Fx::session($admin, Fx::device($admin));
+        $this->travel(31)->days();
+        $this->app['auth']->forgetGuards();
+        app(RetentionPolicy::class)->applyRetention();
+        unscoped(fn () => expect(CaptureSession::query()->find($mine->id))->not->toBeNull());
+        expect(app(RetentionPolicy::class)->daysForWorkspace((int) $admin->current_workspace_id))->toBe(365);
     });
 });
 

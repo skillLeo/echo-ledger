@@ -70,6 +70,8 @@ final class AuditLog
         'test_email_sent' => 'Test email sent',
         // Since v1.6: plans and a person's own features and limits.
         'entitlements_changed' => 'Features and limits changed for a person',
+        'transcription_key_set' => 'Own transcription key saved',
+        'transcription_key_removed' => 'Own transcription key removed',
         // Since v1.5: the Claude and ChatGPT connector.
         'connector_connected' => 'App connected',
         'connector_disconnected' => 'App disconnected',

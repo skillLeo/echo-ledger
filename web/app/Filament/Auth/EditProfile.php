@@ -16,15 +16,18 @@ use App\Services\Accounts\EmailPreferences;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
+use App\Services\Entitlements\TranscriptionKeys;
 use App\Services\PairingService;
 use App\Services\SettingsRepository;
 use App\Services\WebSessions;
+use App\Services\Workspaces\PlanLimits;
 use App\Support\ClientCountry;
 use App\Support\RecordingConsent;
 use chillerlan\QRCode\QRCode;
 use Filament\Actions\Action;
 use Filament\Auth\Pages\EditProfile as BaseEditProfile;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
@@ -57,6 +60,7 @@ class EditProfile extends BaseEditProfile
             $this->getFormContentComponent(),
             ...Arr::wrap($this->getMultiFactorAuthenticationContentComponent()),
             $this->googleSection(),
+            $this->transcriptionKeySection(),
             $this->devicesSection(),
             $this->connectedAppsSection(),
             Section::make('Recording consent')->schema([
@@ -65,6 +69,64 @@ class EditProfile extends BaseEditProfile
             $this->emailsSection(),
             $this->dataSection(),
         ]);
+    }
+
+    /**
+     * Profile → Transcription key (since v1.6, the Free plan): the person's own free Groq key, set up in three steps.
+     * Groq is asked once whether it takes the key; it is kept encrypted and only its last four characters are shown.
+     */
+    private function transcriptionKeySection(): Section
+    {
+        return Section::make('Transcription key')
+            ->description('On the Free plan your recordings are transcribed with your own free Groq key. Only your recordings use it.')
+            ->schema([
+                Text::make(fn (): string => $this->keyStatus()),
+                Actions::make([
+                    Action::make('addTranscriptionKey')
+                        ->label(fn (): string => app(TranscriptionKeys::class)->describe($this->account())['set'] ? 'Change key' : 'Add your Groq key')
+                        ->icon(Heroicon::OutlinedKey)
+                        ->modalHeading('Add your free Groq key')
+                        ->modalDescription('Three steps, about two minutes. Groq is free for this.')
+                        ->schema([
+                            Text::make('1. Open console.groq.com and sign in (with Google is fine).'),
+                            Text::make('2. Open API Keys, press Create API Key, give it a name such as EchoLedger, and copy the key.'),
+                            Text::make('3. Paste it here and press Save. We check it with Groq once and keep it locked; only your recordings use it.'),
+                            TextInput::make('key')->label('Your Groq key')->placeholder('gsk_…')->password()->revealable()->required()->maxLength(300)->autocomplete('off'),
+                        ])
+                        ->modalSubmitActionLabel('Save')
+                        ->action(function (array $data, Action $action): void {
+                            try {
+                                app(TranscriptionKeys::class)->put($this->account(), TranscriptionKeys::PROVIDER, (string) $data['key']);
+                            } catch (ApiError $e) {
+                                Notification::make()->title($e->getMessage())->danger()->send();
+                                $action->halt();
+                            }
+                            Notification::make()->title('Your Groq key is saved')->body('New recordings are transcribed with it.')->success()->send();
+                        }),
+                    Action::make('removeTranscriptionKey')->label('Remove')->icon(Heroicon::OutlinedTrash)->color('danger')->link()
+                        ->visible(fn (): bool => app(TranscriptionKeys::class)->describe($this->account())['set'])
+                        ->requiresConfirmation()
+                        ->modalDescription('New recordings are not transcribed until you add a key again (on the Free plan).')
+                        ->action(function (): void {
+                            app(TranscriptionKeys::class)->forget($this->account());
+                            Notification::make()->title('Your Groq key is removed')->success()->send();
+                        }),
+                ])->key('transcription-key-actions'),
+            ]);
+    }
+
+    private function keyStatus(): string
+    {
+        $key = app(TranscriptionKeys::class)->describe($this->account());
+        $workspace = (int) ($this->account()->current_workspace_id ?? 0);
+        $platform = $workspace > 0 && app(PlanLimits::class)->allows($workspace, 'platform_transcription', $this->account()->id);
+
+        return match (true) {
+            $key['set'] && $platform => "Saved: the key ending in {$key['last4']}. Your plan transcribes for you, so it is not used now.",
+            $key['set'] => "Saved: the key ending in {$key['last4']}. New recordings are transcribed with it.",
+            $platform => 'Your plan transcribes for you: no key needed.',
+            default => 'No key yet: new recordings are not transcribed until you add one (or transcribe them on your computer).',
+        };
     }
 
     /** "Export my data" (one ZIP, emailed, 24 hours) and "Delete my account" (the public page Google Play links to). */

@@ -110,6 +110,8 @@ function abilityRoutes(): array
         'sign out everywhere' => ['POST', '/api/account/sign-out-everywhere', 'sessions:write'],
         'your account' => ['GET', '/api/account', 'config:read'],
         'your entitlements' => ['GET', '/api/me/entitlements', 'config:read'],
+        'set your transcription key' => ['PUT', '/api/me/transcription-key', 'sessions:write'],
+        'remove your transcription key' => ['DELETE', '/api/me/transcription-key', 'sessions:write'],
         'delete your account' => ['DELETE', '/api/account', 'sessions:write'],
         'export your data' => ['POST', '/api/account/export', 'library:read'],
         'your export' => ['GET', "/api/account/export/{$id}", 'library:read'],

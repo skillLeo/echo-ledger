@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Usage\UsageLedger;
 use App\Services\Workspaces\PlanLimits;
+use Illuminate\Support\Facades\DB;
 
 /**
  * What a person may use (since v1.6, P1, docs/API.md "Entitlements"): the server alone decides. A person acting in a
@@ -70,7 +71,7 @@ final class Entitlements
         $features = is_array($raw['features'] ?? null) ? array_filter($raw['features'], fn ($v, $k): bool => is_bool($v) && isset(Features::ALL[$k]), ARRAY_FILTER_USE_BOTH) : [];
         $limits = [];
         foreach (is_array($raw['limits'] ?? null) ? $raw['limits'] : [] as $key => $value) {
-            if (isset(Features::LIMITS[$key]) && $key !== 'retention_days' && ($value === null || is_numeric($value))) {
+            if (isset(Features::LIMITS[$key]) && ($value === null || is_numeric($value))) {
                 $limits[$key] = $value === null ? null : ($key === 'ai_usd_month' ? (float) $value : (int) $value);
             }
         }
@@ -99,12 +100,25 @@ final class Entitlements
         return $map;
     }
 
-    /** A limit of the registry for this person in this workspace; null = no limit. */
+    /**
+     * A limit of the registry for this person in this workspace; null = no limit. Retention belongs to the workspace:
+     * its owner's override counts, whoever asks.
+     */
     public function limit(int $workspaceId, ?int $userId, string $key): int|float|null
     {
+        if ($key === 'retention_days') {
+            $userId = self::ownerOf($workspaceId);
+        }
         $overrides = $this->overrides($userId)['limits'];
 
         return array_key_exists($key, $overrides) ? $overrides[$key] : $this->plan($workspaceId)->limit($key);
+    }
+
+    public static function ownerOf(int $workspaceId): ?int
+    {
+        $owner = DB::table('workspace_user')->where('workspace_id', $workspaceId)->where('role', 'owner')->orderBy('id')->value('user_id');
+
+        return $owner === null ? null : (int) $owner;
     }
 
     /** `403 feature_not_in_plan` with `feature` and `lowest_plan` (the plan whose badge the apps show). */

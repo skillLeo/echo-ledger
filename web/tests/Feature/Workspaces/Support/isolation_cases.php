@@ -248,6 +248,10 @@ function isoApiCases(array $b): array
         'api.account' => ['GET', '/api/account', [], 'list'],
         // Entitlements (v1.6): only the device's own person in its own workspace, never B's numbers or names.
         'api.me.entitlements' => ['GET', '/api/me/entitlements', [], 'list'],
+        // A person's own key: only ever their own (no id in the request); a wrong key says so and changes nothing of B.
+        'api.me.transcription-key.put' => ['PUT', '/api/me/transcription-key', ['provider' => 'groq', 'key' => 'short'],
+            fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'invalid_key'],
+        'api.me.transcription-key.delete' => ['DELETE', '/api/me/transcription-key', [], fn (TestResponse $r): bool => $r->status() === 204],
         'api.account.destroy' => ['DELETE', '/api/account', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
         'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],

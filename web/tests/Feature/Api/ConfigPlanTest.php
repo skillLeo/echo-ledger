@@ -66,8 +66,9 @@ it('says the features the plan leaves out and its retention and seats', function
         'plan' => [
             'key' => 'free',
             'name' => 'Free',
-            'features' => ['live_translate' => false, 'screen_moments' => true, 'ai_notes' => false, 'connector' => true],
-            'limits' => ['monthly_minutes' => 300, 'storage_bytes' => 5 * 1024 ** 3, 'retention_days' => 30, 'seats' => 1],
+            // Since v1.6 Free has the free features only, no minutes of the server's engines and 1 GB.
+            'features' => ['live_translate' => false, 'screen_moments' => false, 'ai_notes' => false, 'connector' => false],
+            'limits' => ['monthly_minutes' => 0, 'storage_bytes' => 1024 ** 3, 'retention_days' => 30, 'seats' => 1],
         ],
     ]);
 });

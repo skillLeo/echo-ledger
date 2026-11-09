@@ -99,7 +99,7 @@ class Plans extends Page implements HasTable
             ->headerActions([
                 // A person's own features and limits (since v1.6): on top of their workspace's plan, for them only.
                 Action::make('overrides')->label('Overrides for a person')->icon(Heroicon::OutlinedAdjustmentsHorizontal)->color('gray')
-                    ->modalDescription('For one person, on top of the plan of the workspace they work in. "The plan\'s" keeps what the plan says.')
+                    ->modalDescription('For one person, on top of the plan of the workspace they work in. "The plan\'s" keeps what the plan says. Retention counts for the workspaces the person owns.')
                     ->schema(fn (): array => [
                         Select::make('user_id')->label('Person')->required()->searchable()->live()
                             ->getSearchResultsUsing(fn (string $search): array => User::query()->where('email', 'like', '%'.str_replace(['%', '_'], ['\\%', '\\_'], $search).'%')
@@ -110,7 +110,7 @@ class Plans extends Page implements HasTable
                             ->options(['plan' => 'The plan\'s', 'on' => 'On', 'off' => 'Off'])->default('plan')->selectablePlaceholder(false), Plan::FEATURES)),
                         Grid::make(['default' => 2])->schema(array_map(fn (string $l): TextInput => TextInput::make("override_limit_{$l}")->label(Features::LIMIT_LABELS[$l])
                             ->placeholder('The plan\'s')->helperText($l === 'storage_bytes' ? 'In GB. "none" for no limit.' : '"none" for no limit.')
-                            ->regex('/^(none|\d+(\.\d+)?)$/i'), array_values(array_diff(array_keys(Features::LIMITS), ['retention_days'])))),
+                            ->regex('/^(none|\d+(\.\d+)?)$/i'), array_keys(Features::LIMITS))),
                     ])
                     ->action(function (array $data): void {
                         $user = User::query()->find((int) $data['user_id']);
@@ -276,7 +276,7 @@ class Plans extends Page implements HasTable
         $limits = [];
         foreach (array_keys(Features::LIMITS) as $limit) {
             $value = trim((string) ($data["override_limit_{$limit}"] ?? ''));
-            if ($value === '' || $limit === 'retention_days') {
+            if ($value === '') {
                 continue;
             }
             $limits[$limit] = strtolower($value) === 'none' ? null : match ($limit) {

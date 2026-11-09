@@ -123,8 +123,8 @@ their name and the Terms (no password needed; they can set one later with **Forg
 - **Assign** puts a workspace on a plan, **until** a date if you like (then it goes back to the default plan; checked
   every hour). **Delete** works only for a plan no workspace uses, and not for the default one.
 - **Overrides for a person:** for one person only, on top of their workspace's plan: a feature on or off, a limit
-  higher, lower or `none` (no limit). Setting everything back to "The plan's" clears them. Retention stays the
-  workspace's.
+  higher, lower or `none` (no limit). Setting everything back to "The plan's" clears them. Retention counts for the
+  workspaces the person owns.
 - What a plan leaves out shows a lock in the apps, and its routes answer "… is not in your plan" with the plan that
   has it. At a limit people see a message in plain words (apps of v1.6 and later get one code for every limit).
 - Retention of a plan applies only to recordings made after it was set; older recordings are never deleted by it.

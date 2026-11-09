@@ -14,6 +14,8 @@ use App\Models\Transcript;
 use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
 use App\Services\EngineWait;
+use App\Services\Entitlements\TranscriptionKeys;
+use App\Services\FinalTranscriptCoordinator;
 use App\Services\ProviderCopyEraser;
 use App\Services\SettingsRepository;
 use App\Services\TranscriptStore;
@@ -23,6 +25,7 @@ use App\Services\Workspaces\PlanLimits;
 use App\Stt\Contracts\SttProvider;
 use App\Stt\Data\FinalJobRequest;
 use App\Stt\Data\SubmitResult;
+use App\Stt\Drivers\GroqWhisperDriver;
 use App\Stt\Exceptions\ProviderBusy;
 use App\Stt\Exceptions\ProviderJobFailed;
 use App\Stt\Exceptions\ProviderNotConfigured;
@@ -96,15 +99,32 @@ final class TranscribeFinalJob implements ShouldQueue
         }
 
         $provider = SttProviderKey::from($transcript->provider);
+        // Since v1.6 (the Free plan): a person without transcription on EchoLedger has their own Groq key used, also for
+        // a transcript started before their plan changed or re-transcribed; without one it fails with what to do.
+        $ownKey = (bool) (($transcript->meta ?? [])['own_key'] ?? false);
+        if (! $ownKey && FinalTranscriptCoordinator::needsOwnKey($session, $provider)) {
+            $provider = SttProviderKey::Groq;
+            $ownKey = true;
+            $transcript->forceFill(['provider' => $provider->value, 'meta' => [...($transcript->meta ?? []), 'own_key' => true]])->save();
+        }
+        $key = $ownKey ? app(TranscriptionKeys::class)->keyFor($session->user_id) : null;
+        if ($ownKey && $key === null) {
+            $store->failWith($transcript, TranscriptErrorCode::NeedsTranscriptionKey);
+
+            return;
+        }
         // Monthly limit (A5 server cap or the workspace plan, B20): nothing is sent to a paid provider once it is reached
-        // (Retry from the console after raising it).
-        if (UsageLedger::isBillable($provider) && (app(BudgetGuard::class)->limitReached() || app(PlanLimits::class)->minutesReached($session->workspace_id, $session->user_id))) {
+        // (Retry from the console after raising it). A person's own key is theirs: no limit of the server applies to it.
+        if (! $ownKey && UsageLedger::isBillable($provider) && (app(BudgetGuard::class)->limitReached() || app(PlanLimits::class)->minutesReached($session->workspace_id, $session->user_id))) {
             $store->failWith($transcript, TranscriptErrorCode::BudgetExceeded);
 
             return;
         }
 
         $driver = $stt->driver($provider);
+        if ($key !== null && $driver instanceof GroqWhisperDriver) {
+            $driver = $driver->withKey($key);
+        }
         $temps = [];
         try {
             $primaryPath = $temps[] = $uploads->decryptToTemp($primary);

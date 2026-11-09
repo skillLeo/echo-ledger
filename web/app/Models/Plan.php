@@ -73,12 +73,15 @@ class Plan extends Model
         'retention_days' => null, 'seats' => null, 'ai_credits_usd' => null, 'price_usd' => 0];
 
     /**
-     * Free: placeholders until the prices are decided (300 minutes a month, 5 GB, 30 days, one seat, US$1 of AI work,
-     * no Live Translate and no AI notes).
+     * Free (since v1.6, the default plan; the migration of the v1.6 plans sets the same): the free features only, 2
+     * devices, 1 GB, 30 days, one seat, no minutes of the server's own transcription (the person's own Groq key or the
+     * computer), no AI work.
      */
-    public const FREE_DEFAULTS = ['name' => 'Free', 'monthly_minutes' => 300, 'storage_bytes' => 5 * 1024 ** 3, 'max_devices' => 3,
-        'retention_days' => 30, 'seats' => 1, 'ai_credits_usd' => 1, 'price_usd' => 0,
-        'features' => ['live_translate' => false, 'screen_moments' => true, 'ai_notes' => false, 'connector' => true]];
+    public const FREE_DEFAULTS = ['name' => 'Free', 'badge' => 'FREE', 'color' => '#64748b', 'price_label' => 'Free', 'monthly_minutes' => 0, 'storage_bytes' => 1024 ** 3,
+        'max_devices' => 2, 'retention_days' => 30, 'seats' => 1, 'ai_credits_usd' => 0, 'price_usd' => 0, 'max_file_minutes' => 180, 'uploads_per_day' => 50,
+        'on_offer' => true, 'engines' => ['own_groq', 'on_device'],
+        'features' => ['platform_transcription' => false, 'views' => false, 'double_check' => false, 'screen_moments' => false, 'connector' => false,
+            'team' => false, 'premium_engines' => false, 'live_translate' => false, 'ai_notes' => false]];
 
     protected $fillable = ['key', 'name', 'price_usd', 'monthly_minutes', 'storage_bytes', 'max_devices', 'retention_days', 'seats', 'ai_credits_usd', 'features',
         'badge', 'color', 'description', 'price_label', 'sort_order', 'on_offer', 'is_default', 'trial_minutes', 'max_file_minutes', 'uploads_per_day', 'engines', 'retention_from'];

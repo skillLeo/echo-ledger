@@ -614,12 +614,14 @@ describe('sign-up', function () {
         $user = app(SignUp::class)->create(['name' => 'New', 'email' => 'new@example.test', 'password' => 'correct-horse-9']);
 
         $plan = Workspace::query()->findOrFail($user->current_workspace_id)->plan;
+        // Since v1.6 the Free plan of the default plans: the free features, 2 devices, 1 GB, 30 days, one seat.
         expect($plan->key)->toBe(Plan::FREE)
-            ->and($plan->monthly_minutes)->toBe(300)
-            ->and($plan->storage_bytes)->toBe(5 * 1024 ** 3)
+            ->and($plan->monthly_minutes)->toBe(0)
+            ->and($plan->storage_bytes)->toBe(1024 ** 3)
+            ->and($plan->max_devices)->toBe(2)
             ->and($plan->retention_days)->toBe(30)
             ->and($plan->seats)->toBe(1)
-            ->and($plan->aiCredits())->toBe(1.0)
-            ->and(array_intersect_key($plan->featureMap(), array_flip(Plan::V15_FEATURES)))->toBe(['screen_moments' => true, 'connector' => true, 'live_translate' => false, 'ai_notes' => false]);
+            ->and($plan->aiCredits())->toBe(0.0)
+            ->and(array_filter($plan->featureMap()))->toBe([]);
     });
 });
