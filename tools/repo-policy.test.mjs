@@ -135,6 +135,19 @@ describe('secrets and local files', () => {
     assert.deepEqual(offenders, []);
   });
 
+  test("another client's design reference, people's recordings and local plans are never tracked", () => {
+    // docs/design/reference/ holds another client's design (patterns only); recordings used as fixtures are a person's
+    // own; the PLAN_V1_x files are local working notes.
+    const offenders = tracked.filter(
+      (p) =>
+        p.startsWith('docs/design/reference/') ||
+        p.startsWith('fixtures-private/') ||
+        /\.(opus|m4a|aac)$/i.test(p) ||
+        /^docs\/PLAN_V1_\d+\.md$/.test(p),
+    );
+    assert.deepEqual(offenders, []);
+  });
+
   test('tracked text files contain no private key blocks, device tokens or provider key values', () => {
     // A token or key value that is an obvious placeholder is not a secret, so tests may use one: a single repeated
     // character, or at most three straight runs such as 0123456789abcdefABCDEF. Random values break into many runs.
